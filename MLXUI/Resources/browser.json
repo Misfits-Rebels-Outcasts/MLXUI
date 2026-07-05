@@ -1,0 +1,1892 @@
+{
+  "version": "6.0-mvp",
+  "generatedAt": "2026-06-26T03:59:07Z",
+  "sidebarSections": [
+    {
+      "id": "chat-text",
+      "name": "Chat & Text",
+      "sfSymbol": "bubble.left.and.bubble.right.fill",
+      "domainIds": [
+        "llm"
+      ]
+    },
+    {
+      "id": "images",
+      "name": "Images",
+      "sfSymbol": "photo.on.rectangle.angled.fill",
+      "domainIds": [
+        "vision",
+        "ocr"
+      ]
+    },
+    {
+      "id": "audio",
+      "name": "Audio",
+      "sfSymbol": "waveform.circle.fill",
+      "domainIds": [
+        "asr",
+        "tts"
+      ]
+    },
+    {
+      "id": "video",
+      "name": "Video",
+      "sfSymbol": "film.fill",
+      "domainIds": [
+        "video"
+      ]
+    },
+    {
+      "id": "infrastructure",
+      "name": "Infrastructure",
+      "sfSymbol": "gearshape.2.fill",
+      "domainIds": [
+        "embedding"
+      ]
+    }
+  ],
+  "domainIndex": {
+    "llm": {
+      "icon": "text.bubble.fill",
+      "description": "Chat & Text"
+    },
+    "vision": {
+      "icon": "camera.fill",
+      "description": "Vision"
+    },
+    "ocr": {
+      "icon": "doc.text.viewfinder",
+      "description": "OCR"
+    },
+    "asr": {
+      "icon": "waveform",
+      "description": "Speech-to-Text"
+    },
+    "tts": {
+      "icon": "mouth",
+      "description": "Text-to-Speech"
+    },
+    "embedding": {
+      "icon": "square.grid.3x3",
+      "description": "Embeddings"
+    },
+    "video": {
+      "icon": "film",
+      "description": "Video"
+    }
+  },
+  "domains": [
+    {
+      "id": "llm",
+      "name": "Chat & Text",
+      "sfSymbol": "bubble.left.and.bubble.right.fill",
+      "children": null,
+      "models": [
+        {
+          "id": "mlx-community--gemma-3-1b-it-qat-4bit",
+          "family": "gemma",
+          "displayName": "gemma-3-1b-it-qat",
+          "paramSize": "1B",
+          "paramCountB": 1.0,
+          "modelType": "llm",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/gemma-3-1b-it-qat-4bit",
+          "ramGB": 0.84,
+          "downloadSizeGB": 0.56,
+          "contextWindow": null,
+          "license": "gemma",
+          "licenseUrl": null,
+          "description": "# mlx-community/gemma-3-1b-it-qat-4bit\n\nThe Model [mlx-community/gemma-3-1b-it-qat-4bit](https://huggingface.co/mlx-community/gemma-3-1b-it-qat-4bit) was\nconverted to MLX format from [google/gemma-3-1b-it-qat-q4_0](https://huggingface.co/google/gemma-3-1b-it-qat-q4_0)\nusing mlx-lm version **0.22.5**.\n\n## Use with mlx",
+          "architecture": "Gemma3ForCausalLM",
+          "languages": null,
+          "lastUpdated": "2025-04-18",
+          "taskTags": [
+            "text-generation"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": 679,
+          "speedHardware": "M2 Max",
+          "speedEstimated": true,
+          "communityDownloads": 42072,
+          "communityLikes": 5,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 0.84,
+              "downloadSizeGB": 0.56,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/gemma-3-1b-it-qat-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/gemma-3-1b-it-qat-4bit",
+          "summary": "The Model mlx-community/gemma-3-1b-it-qat-4bit was"
+        },
+        {
+          "id": "mlx-community--Ministral-3-3B-Instruct-2512-4bit",
+          "family": "Ministral",
+          "displayName": "Ministral-3-3B-Instruct-2512",
+          "paramSize": "3B",
+          "paramCountB": 3.0,
+          "modelType": "llm",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Ministral-3-3B-Instruct-2512-4bit",
+          "ramGB": 2.53,
+          "downloadSizeGB": 1.69,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "# Ministral 3 3B Instruct 2512\nThe smallest model in the Ministral 3 family, **Ministral 3 3B** is a powerful, efficient tiny language model with vision capabilities.\n\nThis model is the instruct post-trained version in **FP8**, fine-tuned for instruction tasks, making it ideal for chat and instruction based use cases.\n\nThe Ministral 3 family is designed for edge deployment, capable of running on a wide range of hardware. Ministral 3 3B can even be deployed locally, capable of fitting in 8GB of VRAM in FP8, and less if further quantized.\n\nLearn more in our [blog post](https://mistral.ai/news/mistral-3) and [paper](https://arxiv.org/abs/2601.08584).\n\n## Key Features\nMinistral 3 3B consists of two main architectural components:\n- **3.4B Language Model**\n- **0.4B Vision Encoder**\n\nThe Ministral 3 3B Instruct model offers the following capabilities:\n- **Vision**: Enables the model to analyze images and provide insights based on visual content, in addition to text.\n- **Multilingual**: Supports dozens of languages, including English, French, Spanish, German, Italian, Portuguese, Dutch, Chinese, Japanese, Korean, Arabic.\n- **System Prompt**: Maintains strong adherence and support for system prompts.\n- **Agentic**: Offers best-in-class agentic capabilities with native function calling and JSON outputting.\n- **Edge-Optimized**: Delivers best-in-class performance at a small scale, deployable anywhere.\n- **Apache 2.0 License**: Open-source license allowing usage and modification for both commercial and non-commercial purposes.\n- **Large Context Window**: Supports a 256k context window.\n\n### Use Cases\nIdeal for lightweight, real-time applications on edge or low-resource devices, such as:\n- Image captioning\n- Text classification\n- Real-time efficient translation\n- Data extraction\n- Short content generation\n- Fine-tuning and specialization\n- And more...\n  \nBringing advanced AI capabilities to edge and distributed environments for embedded systems.\n\n### Recommended Settings\n\nWe recommend deploying with the following best practices:\n- System Prompt: Define a clear environment and use case, including guidance on how to effectively leverage tools in agentic systems.\n- Sampling Parameters: Use a **temperature below 0.1** for daily-driver and production environments ; Higher temperatures may be explored for creative use cases - developers are encouraged to experiment with alternative settings.\n- Tools: Keep the set of tools well-defined and limit their number to the minimum required for the use case - Avoiding overloading the model with an excessive number of tools.\n- Vision: When deploying with vision capabilities, we recommend maintaining an aspect ratio close to 1:1 (width-to-height) for images. Avoiding the use of overly thin or wide images - crop them as needed to ensure optimal performance.\n\n### Recommended Sampling\n\n* We recommend starting with a Temperature of 0.1 for most use cases. Feel free to experiment with different settings to best suit your specific needs.\n\n## Ministral 3 Family\n\n| Model Name                     | Type               | Precision | Link                                                                                     |\n|--------------------------------|--------------------|-----------|------------------------------------------------------------------------------------------|\n| Ministral 3 3B Base 2512       | Base pre-trained   | BF16      | [Hugging Face](https://huggingface.co/mistralai/Ministral-3-3B-Base-2512)                |\n| **Ministral 3 3B Instruct 2512**   | **Instruct post-trained** | **FP8**   | [**Hugging Face**](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512)            |\n| Ministral 3 3B Reasoning 2512  | Reasoning capable  | BF16      | [Hugging Face](https://huggingface.co/mistralai/Ministral-3-3B-Reasoning-2512)           |\n| Ministral 3 8B Base 2512       | Base pre-trained   | BF16      | [Hugging Face](https://huggingface.co/mistralai/Ministral-3-8B-Base-2512)                |\n| Ministral 3 8B Instruct 2512   | Instruct post-trained | FP8    | [Hugging Face](https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512)            |\n| Ministral 3 8B Reasoning 2512  | Reasoning capable  | BF16      | [Hugging Face](https://huggingface.co/mistralai/Ministral-3-8B-Reasoning-2512)           |\n| Ministral 3 14B Base 2512      | Base pre-trained**   | BF16      | [Hugging Face](https://huggingface.co/mistralai/Ministral-3-14B-Base-2512)               |\n| Ministral 3 14B Instruct 2512  | Instruct post-trained | FP8    | [Hugging Face](https://huggingface.co/mistralai/Ministral-3-14B-Instruct-2512)           |\n| Ministral 3 14B Reasoning 2512 | Reasoning capable  | BF16      | [Hugging Face](https://huggingface.co/mistralai/Ministral-3-14B-Reasoning-2512)          |\n\nOther formats available [here](https://huggingface.co/collections/mistralai/ministral-3-additional-checkpoints).\n\n## Benchmark Results\n\nWe compare Ministral 3 to similar sized models.\n\n### Reasoning\n\n| Model                     | AIME25      | AIME24      | GPQA Diamond | LiveCodeBench |\n|---------------------------|-------------|-------------|--------------|---------------|\n| **Ministral 3 14B**       | 0.850| 0.898| 0.712 | 0.646  |\n| Qwen3-14B (Thinking)      | 0.737       | 0.837       | 0.663        | 0.593         |\n|                           |             |             |              |               |\n| **Ministral 3 8B**        | 0.787       | 0.860| 0.668        | 0.616  |\n| Qwen3-VL-8B-Thinking      | 0.798| 0.860| 0.671 | 0.580         |\n|                           |             |             |              |               |\n| **Ministral 3 3B**        | 0.721| 0.775| 0.534        | 0.548  |\n| Qwen3-VL-4B-Thinking      | 0.697       | 0.729       | 0.601 | 0.513         |\n\n### Instruct\n\n| Model                     | Arena Hard  | WildBench  | MATH Maj@1  | MM MTBench       |\n|---------------------------|-------------|------------|-------------|------------------|\n| **Minis",
+          "architecture": "Mistral3ForConditionalGeneration",
+          "languages": [
+            "en",
+            "fr",
+            "es",
+            "de",
+            "it",
+            "pt",
+            "nl",
+            "zh",
+            "ja",
+            "ko",
+            "ar"
+          ],
+          "lastUpdated": "2025-12-03",
+          "taskTags": null,
+          "benchmarks": null,
+          "speedTokensPerSec": 225,
+          "speedHardware": "M2 Max",
+          "speedEstimated": true,
+          "communityDownloads": 24687,
+          "communityLikes": 5,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 2.53,
+              "downloadSizeGB": 1.69,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/Ministral-3-3B-Instruct-2512-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mistralai/Ministral-3-3B-Instruct-2512",
+          "summary": "The smallest model in the Ministral 3 family, Ministral 3 3B is a powerful, efficient tiny language model with vision capabilities."
+        },
+        {
+          "id": "mlx-community--Qwen3-8B-4bit",
+          "family": "Qwen3",
+          "displayName": "Qwen3-8B",
+          "paramSize": "8B",
+          "paramCountB": 8.0,
+          "modelType": "llm",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Qwen3-8B-4bit",
+          "ramGB": 6.75,
+          "downloadSizeGB": 4.5,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": "https://huggingface.co/Qwen/Qwen3-8B/blob/main/LICENSE",
+          "description": "# mlx-community/Qwen3-8B-4bit\n\nThis model [mlx-community/Qwen3-8B-4bit](https://huggingface.co/mlx-community/Qwen3-8B-4bit) was\nconverted to MLX format from [Qwen/Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B)\nusing mlx-lm version **0.24.0**.\n\n## Use with mlx",
+          "architecture": "Qwen3ForCausalLM",
+          "languages": null,
+          "lastUpdated": "2025-04-28",
+          "taskTags": [
+            "text-generation"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": 84,
+          "speedHardware": "M2 Max",
+          "speedEstimated": true,
+          "communityDownloads": 26492,
+          "communityLikes": 10,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 6.75,
+              "downloadSizeGB": 4.5,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/Qwen3-8B-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/Qwen3-8B-4bit",
+          "summary": "This model mlx-community/Qwen3-8B-4bit was"
+        },
+        {
+          "id": "mlx-community--Meta-Llama-3.1-8B-Instruct-4bit",
+          "family": "Meta",
+          "displayName": "Meta-Llama-3.1-8B-Instruct",
+          "paramSize": "8B",
+          "paramCountB": 8.0,
+          "modelType": "llm",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit",
+          "ramGB": 6.75,
+          "downloadSizeGB": 4.5,
+          "contextWindow": null,
+          "license": "llama3.1",
+          "licenseUrl": null,
+          "description": "Llama 3.1 is Meta's family of open large language models. The 8B Instruct model is tuned for dialogue and instruction following, supports a 128K-token context and multiple languages, and is one of the most widely adopted open models for assistants, RAG and tool use. This is a 4-bit MLX build for Apple Silicon.",
+          "architecture": "LlamaForCausalLM",
+          "languages": [
+            "en",
+            "de",
+            "fr",
+            "it",
+            "pt",
+            "hi",
+            "es",
+            "th"
+          ],
+          "lastUpdated": "2024-11-26",
+          "taskTags": [
+            "text-generation"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": 84,
+          "speedHardware": "M2 Max",
+          "speedEstimated": true,
+          "communityDownloads": 22498,
+          "communityLikes": 19,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 6.75,
+              "downloadSizeGB": 4.5,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "curated",
+          "summary": "Meta's Llama 3.1 8B Instruct — a widely used general-purpose chat model with a 128K context window."
+        },
+        {
+          "id": "mlx-community--gemma-2-9b-it-4bit",
+          "family": "gemma",
+          "displayName": "gemma-2-9b-it",
+          "paramSize": "9B",
+          "paramCountB": 9.0,
+          "modelType": "llm",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/gemma-2-9b-it-4bit",
+          "ramGB": 7.59,
+          "downloadSizeGB": 5.06,
+          "contextWindow": null,
+          "license": "gemma",
+          "licenseUrl": null,
+          "description": "Gemma 2 is Google's family of lightweight open models built from the same research and technology behind Gemini. The 9B instruction-tuned variant delivers strong general-purpose chat and reasoning for its size and runs well on consumer hardware. This is a 4-bit MLX build for Apple Silicon.",
+          "architecture": "Gemma2ForCausalLM",
+          "languages": null,
+          "lastUpdated": "2024-11-06",
+          "taskTags": [
+            "text-generation"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": 75,
+          "speedHardware": "M2 Max",
+          "speedEstimated": true,
+          "communityDownloads": 22043,
+          "communityLikes": 1,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 7.59,
+              "downloadSizeGB": 5.06,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/gemma-2-9b-it-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "curated",
+          "summary": "Google's Gemma 2 9B (instruction-tuned), a capable open-weight LLM from the Gemma 2 family."
+        },
+        {
+          "id": "mlx-community--Qwen2.5-14B-Instruct-4bit",
+          "family": "Qwen2",
+          "displayName": "Qwen2.5-14B-Instruct",
+          "paramSize": "14B",
+          "paramCountB": 14.0,
+          "modelType": "llm",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Qwen2.5-14B-Instruct-4bit",
+          "ramGB": 11.81,
+          "downloadSizeGB": 7.88,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-14B-Instruct/blob/main/LICENSE",
+          "description": "# Qwen2.5-14B-Instruct\n\n## Introduction\n\nQwen2.5 is the latest series of Qwen large language models. For Qwen2.5, we release a number of base language models and instruction-tuned language models ranging from 0.5 to 72 billion parameters. Qwen2.5 brings the following improvements upon Qwen2:\n\n- Significantly **more knowledge** and has greatly improved capabilities in **coding** and **mathematics**, thanks to our specialized expert models in these domains.\n- Significant improvements in **instruction following**, **generating long texts** (over 8K tokens), **understanding structured data** (e.g, tables), and **generating structured outputs** especially JSON. **More resilient to the diversity of system prompts**, enhancing role-play implementation and condition-setting for chatbots.\n- **Long-context Support** up to 128K tokens and can generate up to 8K tokens.\n- **Multilingual support** for over 29 languages, including Chinese, English, French, Spanish, Portuguese, German, Italian, Russian, Japanese, Korean, Vietnamese, Thai, Arabic, and more. \n\n**This repo contains the instruction-tuned 14B Qwen2.5 model**, which has the following features:\n- Type: Causal Language Models\n- Training Stage: Pretraining & Post-training\n- Architecture: transformers with RoPE, SwiGLU, RMSNorm, and Attention QKV bias\n- Number of Parameters: 14.7B\n- Number of Paramaters (Non-Embedding): 13.1B\n- Number of Layers: 48\n- Number of Attention Heads (GQA): 40 for Q and 8 for KV\n- Context Length: Full 131,072 tokens and generation 8192 tokens\n  - Please refer to [this section](#processing-long-texts) for detailed instructions on how to deploy Qwen2.5 for handling long texts.\n\nFor more details, please refer to our [blog](https://qwenlm.github.io/blog/qwen2.5/), [GitHub](https://github.com/QwenLM/Qwen2.5), and [Documentation](https://qwen.readthedocs.io/en/latest/).\n\n## Requirements\n\nThe code of Qwen2.5 has been in the latest Hugging face `transformers` and we advise you to use the latest version of `transformers`.\n\nWith `transformers<4.37.0`, you will encounter the following error:\n\n## Quickstart\n\nHere provides a code snippet with `apply_chat_template` to show you how to load the tokenizer and model and how to generate contents.\n\n### Processing Long Texts\n\nThe current `config.json` is set for context length up to 32,768 tokens.\nTo handle extensive inputs exceeding 32,768 tokens, we utilize [YaRN](https://arxiv.org/abs/2309.00071), a technique for enhancing model length extrapolation, ensuring optimal performance on lengthy texts.\n\nFor supported frameworks, you could add the following to `config.json` to enable YaRN:\n\nFor deployment, we recommend using vLLM. \nPlease refer to our [Documentation](https://qwen.readthedocs.io/en/latest/deployment/vllm.html) for usage if you are not familar with vLLM.\nPresently, vLLM only supports static YARN, which means the scaling factor remains constant regardless of input length, **potentially impacting performance on shorter texts**. \nWe advise adding the `rope_scaling` configuration only when processing long contexts is required.\n\n## Evaluation & Performance\n\nDetailed evaluation results are reported in this [📑 blog](https://qwenlm.github.io/blog/qwen2.5/).\n\nFor requirements on GPU memory and the respective throughput, see results [here](https://qwen.readthedocs.io/en/latest/benchmark/speed_benchmark.html).\n\n## Citation\n\nIf you find our work helpful, feel free to give us a cite.",
+          "architecture": "Qwen2ForCausalLM",
+          "languages": [
+            "en"
+          ],
+          "lastUpdated": "2024-09-18",
+          "taskTags": [
+            "text-generation"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": 48,
+          "speedHardware": "M2 Max",
+          "speedEstimated": true,
+          "communityDownloads": 147160,
+          "communityLikes": 11,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 11.81,
+              "downloadSizeGB": 7.88,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/Qwen2.5-14B-Instruct-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "Qwen/Qwen2.5-14B-Instruct",
+          "summary": "Qwen2.5 is the latest series of Qwen large language models."
+        },
+        {
+          "id": "mlx-community--gpt-oss-20b-MXFP4-Q8",
+          "family": "gpt",
+          "displayName": "gpt-oss-20b-MXFP4-Q8",
+          "paramSize": "20.9148B",
+          "paramCountB": 20.9148,
+          "modelType": "llm",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/gpt-oss-20b-MXFP4-Q8",
+          "ramGB": 17.65,
+          "downloadSizeGB": 11.76,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "# mlx-community/gpt-oss-20b-MXFP4-Q8\n\nThis model [mlx-community/gpt-oss-20b-MXFP4-Q8](https://huggingface.co/mlx-community/gpt-oss-20b-MXFP4-Q8) was\nconverted to MLX format from [openai/gpt-oss-20b](https://huggingface.co/openai/gpt-oss-20b)\nusing mlx-lm version **0.27.0**.\n\n## Use with mlx",
+          "architecture": "GptOssForCausalLM",
+          "languages": null,
+          "lastUpdated": "2026-03-19",
+          "taskTags": [
+            "text-generation"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": 32,
+          "speedHardware": "M2 Max",
+          "speedEstimated": true,
+          "communityDownloads": 389387,
+          "communityLikes": 67,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 17.65,
+              "downloadSizeGB": 11.76,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/gpt-oss-20b-MXFP4-Q8",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/gpt-oss-20b-MXFP4-Q8",
+          "summary": "This model mlx-community/gpt-oss-20b-MXFP4-Q8 was"
+        },
+        {
+          "id": "mlx-community--Devstral-Small-2-24B-Instruct-2512-4bit",
+          "family": "Devstral",
+          "displayName": "Devstral-Small-2-24B-Instruct-2512",
+          "paramSize": "24B",
+          "paramCountB": 24.0,
+          "modelType": "llm",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit",
+          "ramGB": 20.25,
+          "downloadSizeGB": 13.5,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "# Devstral Small 2 24B Instruct 2512\nDevstral is an agentic LLM for software engineering tasks. **Devstral Small 2** excels at using tools to explore codebases, editing multiple files and power software engineering agents.  \nThe model achieves remarkable performance on SWE-bench. \n\nThis model is an Instruct model in **FP8**, fine-tuned to follow instructions, making it ideal for chat, agentic and instruction based tasks for SWE use cases.\n\nFor enterprises requiring specialized capabilities (increased context, domain-specific knowledge, etc.), we invite companies to [reach out to us](https://mistral.ai/contact).\n\n## Key Features\nThe Devstral Small 2 Instruct model offers the following capabilities:\n- **Agentic Coding**: Devstral is designed to excel at agentic coding tasks, making it a great choice for software engineering agents.\n- **Lightweight**: with its compact size of just 24 billion parameters, Devstral is light enough to run on a single RTX 4090 or a Mac with 32GB RAM, making it an appropriate model for local deployment and on-device use.\n- **Apache 2.0 License**: Open-source license allowing usage and modification for both commercial and non-commercial purposes.\n- **Context Window**: A 256k context window.\n\nUpdates compared to [`Devstral Small 1.1`](https://huggingface.co/mistralai/Devstral-Small-2507):\n- **Vision Capabilities**: Enables the model to analyze images and provide insights based on visual content, in addition to text.\n- **Improved Performance**: Devstral Small 2 is a step-up compared to its predecessors.\n- **Attention Softmax Temperature**: Devstral Small 2 uses the same architecture as Ministral 3 using rope-scaling as introduced by Llama 4 and [Scalable-Softmax Is Superior for Attention](https://arxiv.org/abs/2501.19399).\n- **Better Generalization**: Generalises better to diverse prompts and coding environments.\n\n### Use Cases\n\nAI Code Assistants, Agentic Coding, and Software Engineering Tasks. Leveraging advanced AI capabilities for complex tool integration and deep codebase understanding in coding environments.\n\n## Benchmark Results\n\n| Model/Benchmark               | Size (B Parameters) | SWE Bench Verified | SWE Bench Multilingual | Terminal Bench 2 |\n|-------------------------------|-----------------|--------------------|------------------------|------------------|\n| **Devstral 2**                | 123             | 72.2%              | 61.3%                  | 32.6%            |\n| **Devstral Small 2**          | 24              | 68.0%              | 55.7%                  | 22.5%            |\n|                               |                 |                    |                        |                  |\n| GLM 4.6                       | 355             | 68.0%              | --                     | 24.6%            |\n| Qwen 3 Coder Plus             | 480             | 69.6%              | 54.7%                  | 25.4%            |\n| MiniMax M2                    | 230             | 69.4%              | 56.5%                  | 30.0%            |\n| Kimi K2 Thinking              | 1000            | 71.3%              | 61.1%                  | 35.7%            |\n| DeepSeek v3.2                 | 671             | 73.1%              | 70.2%                  | 46.4%            |\n|                               |                 |                    |                        |                  |\n| GPT 5.1 Codex High            | --              | 73.7%              | --                     | 52.8%            |\n| GPT 5.1 Codex Max             | --              | 77.9%              | --                     | 60.4%            |\n| Gemini 3 Pro                  | --              | 76.2%              | --                     | 54.2%            |\n| Claude Sonnet 4.5             | --              | 77.2%              | 68.0%                  | 42.8%            |\n\n*Benchmark results presented are based on publicly reported values for competitor models.\n\n## Usage\n\n### Scaffolding\n\nTogether with Devstral 2, we are releasing **Mistral Vibe**, a CLI tool allowing developers to leverage Devstral capabilities directly in your terminal.\n- [Mistral Vibe (recommended)](https://github.com/mistralai/mistral-vibe): Learn how to use it [here](#mistral-vibe)\n\nDevstral 2 can also be used with the following scaffoldings:\n- [Cline](https://github.com/cline/cline)\n- [Kilo Code](https://github.com/Kilo-Org/kilocode)\n- [Claude Code](https://github.com/anthropics/claude-code)\n- [OpenHands](https://github.com/All-Hands-AI/OpenHands/tree/main)\n- [SWE Agent](https://github.com/SWE-agent/SWE-agent)\n\nYou can use Devstral 2 either through our API or by running locally.\n\n#### Mistral Vibe\n\nThe [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) is a command-line tool designed to help developers leverage Devstral’s capabilities directly from their terminal.\n\nWe recommend installing Mistral Vibe using `uv` for faster and more reliable dependency management:\n\nYou can also run:\n\nIf you prefer using pip, use:\n\nTo launch the CLI, navigate to your project's root directory and simply execute:\n\nIf this is your first time running Vibe, it will:\n- Create a default configuration file at `~/.vibe/config.toml`.\n- Prompt you to enter your API key if it's not already configured, follow these [instructions](https://docs.mistral.ai/getting-started/quickstart/#account-setup) to create an Account and get an API key.\n- Save your API key to `~/.vibe/.env` for future use.\n\n### Local Deployment\n\nThe model can also be deployed with the following libraries:\n- [`vllm (recommended)`](https://github.com/vllm-project/vllm): See [here](#vllm-recommended)\n- [`sglang`](https://github.com/sgl-project/sglang): See [here](#sglang)\n- [`transformers`](https://github.com/huggingface/transformers): See [here](#transformers)\n\nWe're thankful to the llama.cpp team and their community as well as the LM Studio and Ollama teams that worked hard to make these models also available for their frameworks.\n\nYou can now also run Devstra",
+          "architecture": "Mistral3ForConditionalGeneration",
+          "languages": null,
+          "lastUpdated": "2025-12-10",
+          "taskTags": null,
+          "benchmarks": null,
+          "speedTokensPerSec": 28,
+          "speedHardware": "M2 Max",
+          "speedEstimated": true,
+          "communityDownloads": 138248,
+          "communityLikes": 5,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 20.25,
+              "downloadSizeGB": 13.5,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mistralai/Devstral-Small-2-24B-Instruct-2512",
+          "summary": "Devstral is an agentic LLM for software engineering tasks."
+        }
+      ]
+    },
+    {
+      "id": "vision",
+      "name": "Vision",
+      "sfSymbol": "photo.on.rectangle.angled.fill",
+      "children": null,
+      "models": [
+        {
+          "id": "mlx-community--LFM2-VL-1.6B-4bit",
+          "family": "LFM2",
+          "displayName": "LFM2-VL-1.6B",
+          "paramSize": "0.5831B",
+          "paramCountB": 0.5831,
+          "modelType": "vision",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/LFM2-VL-1.6B-4bit",
+          "ramGB": 0.49,
+          "downloadSizeGB": 0.33,
+          "contextWindow": null,
+          "license": "other",
+          "licenseUrl": "LICENSE",
+          "description": "Try LFM • Docs • LEAP • Discord\n\n# LFM2‑VL-1.6B\n\nLFM2‑VL is [Liquid AI](https://www.liquid.ai/)'s first series of multimodal models, designed to process text and images with variable resolutions. \nBuilt on the [LFM2](https://huggingface.co/collections/LiquidAI/lfm2-686d721927015b2ad73eaa38) backbone, it is optimized for low-latency and edge AI applications. \n\nWe're releasing the weights of two post-trained checkpoints with [450M](https://huggingface.co/LiquidAI/LFM2-VL-450M) (for highly constrained devices) and [1.6B](https://huggingface.co/LiquidAI/LFM2-VL-1.6B) (more capable yet still lightweight) parameters.\n\n* **2× faster inference speed** on GPUs compared to existing VLMs while maintaining competitive accuracy\n* **Flexible architecture** with user-tunable speed-quality tradeoffs at inference time\n* **Native resolution processing** up to 512×512 with intelligent patch-based handling for larger images, avoiding upscaling and distortion\n\nFind more about our vision-language model in the [LFM2-VL post](https://www.liquid.ai/blog/lfm2-vl-efficient-vision-language-models) and its language backbone in the [LFM2 blog post](https://www.liquid.ai/blog/liquid-foundation-models-v2-our-second-series-of-generative-ai-models).\n\n## 📄 Model details\n\nDue to their small size, **we recommend fine-tuning LFM2-VL models on narrow use cases** to maximize performance. \nThey were trained for instruction following and lightweight agentic flows. \nNot intended for safety‑critical decisions.\n\n| Property | [**LFM2-VL-450M**](https://huggingface.co/LiquidAI/LFM2-VL-450M) | [**LFM2-VL-1.6B**](https://huggingface.co/LiquidAI/LFM2-VL-1.6B) |\n|---|---:|---:|\n| **Parameters (LM only)** | 350M | 1.2B |\n| **Vision encoder** | SigLIP2 NaFlex base (86M) | SigLIP2 NaFlex shape‑optimized (400M) |\n| **Backbone layers** | hybrid conv+attention | hybrid conv+attention |\n| **Context (text)** | 32,768 tokens | 32,768 tokens |\n| **Image tokens** | dynamic, user‑tunable | dynamic, user‑tunable |\n| **Vocab size** | 65,536 | 65,536 |\n| **Precision** | bfloat16 | bfloat16 |\n| **License** | LFM Open License v1.0 | LFM Open License v1.0 |\n\n**Supported languages:** English\n\n**Generation parameters**: We recommend the following parameters:\n- Text: `temperature=0.1`, `min_p=0.15`, `repetition_penalty=1.05`\n- Vision: `min_image_tokens=64` `max_image_tokens=256`, `do_image_splitting=True`\n\n**Chat template**: LFM2-VL uses a ChatML-like chat template as follows:  \n\nImages are referenced with a sentinel (``), which is automatically replaced with the image tokens by the processor.\n\nYou can apply it using the dedicated [`.apply_chat_template()`](https://huggingface.co/docs/transformers/en/chat_templating#applychattemplate) function from Hugging Face transformers.\n\n**Architecture**\n- **Hybrid backbone**: Language model tower (LFM2-1.2B or LFM2-350M) paired with SigLIP2 NaFlex vision encoders (400M shape-optimized or 86M base variant)\n- **Native resolution processing**: Handles images up to 512×512 pixels without upscaling and preserves non-standard aspect ratios without distortion\n- **Tiling strategy**: Splits large images into non-overlapping 512×512 patches and includes thumbnail encoding for global context (in 1.6B model)\n- **Efficient token mapping**: 2-layer MLP connector with pixel unshuffle reduces image tokens (e.g., 256×384 image → 96 tokens, 1000×3000 → 1,020 tokens)\n- **Inference-time flexibility**: User-tunable maximum image tokens and patch count for speed/quality tradeoff without retraining\n\n**Training approach**\n- Builds on the LFM2 base model with joint mid-training that fuses vision and language capabilities using a gradually adjusted text-to-image ratio\n- Applies joint SFT with emphasis on image understanding and vision tasks\n- Leverages large-scale open-source datasets combined with in-house synthetic vision data, selected for balanced task coverage\n- Follows a progressive training strategy: base model → joint mid-training → supervised fine-tuning\n\n## 🏃 How to run LFM2-VL\n\nYou can run LFM2-VL with Hugging Face [`transformers`](https://github.com/huggingface/transformers) v4.57 or more recent as follows:\n\nHere is an example of how to generate an answer with transformers in Python:\n\nYou can directly run and test the model with this [Colab notebook](https://colab.research.google.com/drive/11EMJhcVB6OTEuv--OePyGK86k-38WU3q?usp=sharing).\n\n## 🔧 How to fine-tune\n\nWe recommend fine-tuning LFM2-VL models on your use cases to maximize performance.\n\n| Notebook  | Description                                                          | Link |\n|-----------|----------------------------------------------------------------------|------|\n| SFT (TRL) | Supervised Fine-Tuning (SFT) notebook with a LoRA adapter using TRL. |  |\n\n## 📈 Performance\n\n| Model             | RealWorldQA | MM-IFEval | InfoVQA (Val) | OCRBench | BLINK | MMStar | MMMU (Val) | MathVista | SEEDBench_IMG | MMVet | MME      | MMLU  |\n|-------------------|-------------|-----------|---------------|----------|-------|--------|------------|-----------|---------------|-------|----------|-------|\n| InternVL3-2B      | 65.10       | 38.49     | 66.10         | 831      | 53.10 | 61.10  | 48.70      | 57.60     | 75.00         | 67.00 | 2186.40  | 64.80 |\n| InternVL3-1B      | 57.00       | 31.14     | 54.94         | 798      | 43.00 | 52.30  | 43.20      | 46.90     | 71.20         | 58.70 | 1912.40  | 49.80 |\n| SmolVLM2-2.2B     | 57.50       | 19.42     | 37.75         | 725      | 42.30 | 46.00  | 41.60      | 51.50     | 71.30         | 34.90 | 1792.50  | -     |\n| LFM2-VL-1.6B      | 65.75       | 46.35     | 58.35         | 729      | 44.50 | 49.87  | 39.67      | 51.70     | 72.00         | 47.75 | 1756.72  | 50.99 |\n\n| Model             | RealWorldQA | MM-IFEval | InfoVQA (Val) | OCRBench | BLINK | MMStar | MMMU (Val) | MathVista | SEEDBench_IMG | MMVet | MME      | MMLU  |\n|-------------------|-------------|-----------|---------------|----------|-------|--------|------------|---",
+          "architecture": "Lfm2VlForConditionalGeneration",
+          "languages": [
+            "en"
+          ],
+          "lastUpdated": "2025-08-16",
+          "taskTags": [
+            "image-text-to-text"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 8798,
+          "communityLikes": 1,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 0.49,
+              "downloadSizeGB": 0.33,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/LFM2-VL-1.6B-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "LiquidAI/LFM2-VL-1.6B",
+          "summary": "Try LFM • Docs • LEAP • Discord"
+        },
+        {
+          "id": "mlx-community--gemma-3-4b-it-4bit",
+          "family": "gemma",
+          "displayName": "gemma-3-4b-it",
+          "paramSize": "4B",
+          "paramCountB": 4.0,
+          "modelType": "vision",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/gemma-3-4b-it-4bit",
+          "ramGB": 3.38,
+          "downloadSizeGB": 2.25,
+          "contextWindow": null,
+          "license": "gemma",
+          "licenseUrl": null,
+          "description": "Gemma 3 is Google's latest generation of open models, adding image understanding and a longer context window to the Gemma family. The 4B instruction-tuned variant is a compact multimodal model suitable for on-device text and vision tasks. This is a 4-bit MLX build for Apple Silicon.",
+          "architecture": "Gemma3ForConditionalGeneration",
+          "languages": null,
+          "lastUpdated": "2025-03-21",
+          "taskTags": [
+            "image-text-to-text"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 3556,
+          "communityLikes": 7,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 3.38,
+              "downloadSizeGB": 2.25,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/gemma-3-4b-it-4bit",
+              "recommended": true
+            }
+          ],
+          "summary": "Google's Gemma 3 4B (instruction-tuned), a compact multimodal model handling text and images.",
+          "descriptionSource": "curated"
+        },
+        {
+          "id": "mlx-community--Qwen3-VL-4B-Instruct-4bit",
+          "family": "Qwen3",
+          "displayName": "Qwen3-VL-4B-Instruct",
+          "paramSize": "4B",
+          "paramCountB": 4.0,
+          "modelType": "vision",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Qwen3-VL-4B-Instruct-4bit",
+          "ramGB": 3.38,
+          "downloadSizeGB": 2.25,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "# Qwen3-VL-4B-Instruct\n\nMeet Qwen3-VL — the most powerful vision-language model in the Qwen series to date.\n\nThis generation delivers comprehensive upgrades across the board: superior text understanding & generation, deeper visual perception & reasoning, extended context length, enhanced spatial and video dynamics comprehension, and stronger agent interaction capabilities.\n\nAvailable in Dense and MoE architectures that scale from edge to cloud, with Instruct and reasoning‑enhanced Thinking editions for flexible, on‑demand deployment.\n\n#### Key Enhancements:\n\n* **Visual Agent**: Operates PC/mobile GUIs—recognizes elements, understands functions, invokes tools, completes tasks.\n\n* **Visual Coding Boost**: Generates Draw.io/HTML/CSS/JS from images/videos.\n\n* **Advanced Spatial Perception**: Judges object positions, viewpoints, and occlusions; provides stronger 2D grounding and enables 3D grounding for spatial reasoning and embodied AI.\n\n* **Long Context & Video Understanding**: Native 256K context, expandable to 1M; handles books and hours-long video with full recall and second-level indexing.\n\n* **Enhanced Multimodal Reasoning**: Excels in STEM/Math—causal analysis and logical, evidence-based answers.\n\n* **Upgraded Visual Recognition**: Broader, higher-quality pretraining is able to “recognize everything”—celebrities, anime, products, landmarks, flora/fauna, etc.\n\n* **Expanded OCR**: Supports 32 languages (up from 19); robust in low light, blur, and tilt; better with rare/ancient characters and jargon; improved long-document structure parsing.\n\n* **Text Understanding on par with pure LLMs**: Seamless text–vision fusion for lossless, unified comprehension.\n\n#### Model Architecture Updates:\n\n    \n\n1. **Interleaved-MRoPE**: Full‑frequency allocation over time, width, and height via robust positional embeddings, enhancing long‑horizon video reasoning.\n\n2. **DeepStack**: Fuses multi‑level ViT features to capture fine‑grained details and sharpen image–text alignment.\n\n3. **Text–Timestamp Alignment:** Moves beyond T‑RoPE to precise, timestamp‑grounded event localization for stronger video temporal modeling.\n\nThis is the weight repository for Qwen3-VL-4B-Instruct.\n\n---\n\n## Model Performance\n\n**Multimodal performance**\n\n**Pure text performance**\n\n## Quickstart\n\nBelow, we provide simple examples to show how to use Qwen3-VL with 🤖 ModelScope and 🤗 Transformers.\n\nThe code of Qwen3-VL has been in the latest Hugging Face transformers and we advise you to build from source with command:\n\n### Using 🤗 Transformers to Chat\n\nHere we show a code snippet to show how to use the chat model with `transformers`:\n\n### Generation Hyperparameters\n#### VL\n\n#### Text\n\n## Citation\n\nIf you find our work helpful, feel free to give us a cite.",
+          "architecture": "Qwen3VLForConditionalGeneration",
+          "languages": null,
+          "lastUpdated": "2025-10-16",
+          "taskTags": [
+            "image-text-to-text"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 13318,
+          "communityLikes": 7,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 3.38,
+              "downloadSizeGB": 2.25,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/Qwen3-VL-4B-Instruct-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "Qwen/Qwen3-VL-4B-Instruct",
+          "summary": "Meet Qwen3-VL — the most powerful vision-language model in the Qwen series to date."
+        },
+        {
+          "id": "mlx-community--gemma-3-12b-it-4bit",
+          "family": "gemma",
+          "displayName": "gemma-3-12b-it",
+          "paramSize": "12B",
+          "paramCountB": 12.0,
+          "modelType": "vision",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/gemma-3-12b-it-4bit",
+          "ramGB": 10.12,
+          "downloadSizeGB": 6.75,
+          "contextWindow": null,
+          "license": "gemma",
+          "licenseUrl": null,
+          "description": "Gemma 3 is Google's latest generation of open models with multimodal (text + image) capability and extended context. The 12B instruction-tuned variant balances quality and footprint for richer vision-language tasks while staying runnable on consumer Apple Silicon. This is a 4-bit MLX build.",
+          "architecture": "Gemma3ForConditionalGeneration",
+          "languages": null,
+          "lastUpdated": "2025-03-19",
+          "taskTags": [
+            "image-text-to-text"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 8263,
+          "communityLikes": 6,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 10.12,
+              "downloadSizeGB": 6.75,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/gemma-3-12b-it-4bit",
+              "recommended": true
+            }
+          ],
+          "summary": "Google's Gemma 3 12B (instruction-tuned), a mid-size multimodal open model for text and vision.",
+          "descriptionSource": "curated"
+        }
+      ]
+    },
+    {
+      "id": "ocr",
+      "name": "OCR",
+      "sfSymbol": "doc.text.viewfinder",
+      "children": null,
+      "models": [
+        {
+          "id": "mlx-community--PaddleOCR-VL-1.5-4bit",
+          "family": "PaddleOCR",
+          "displayName": "PaddleOCR-VL-1.5",
+          "paramSize": "0.2554B",
+          "paramCountB": 0.2554,
+          "modelType": "ocr",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/PaddleOCR-VL-1.5-4bit",
+          "ramGB": 0.22,
+          "downloadSizeGB": 0.14,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "PaddleOCR-VL-1.5: Towards a Multi-Task 0.9B VLM for Robust In-the-Wild Document Parsing\n\n**🔥 [Official Website](https://www.paddleocr.com)**\n**📝 [Technical Report](https://arxiv.org/abs/2601.21957)**\n\n## Introduction\n\n**PaddleOCR-VL-1.5 is an advanced next-generation model of PaddleOCR-VL, achieving a new state-of-the-art accuracy of 94.5% on OmniDocBench v1.5.** To rigorously evaluate robustness against real-world physical distortions—including scanning artifacts, skew, warping, screen photography, and illumination—we propose the Real5-OmniDocBench benchmark. Experimental results demonstrate that this enhanced model attains SOTA performance on the newly curated benchmark. Furthermore, we extend the model’s capabilities by incorporating seal recognition and text spotting tasks, while remaining a 0.9B ultra-compact VLM with high efficiency.\n\n### **Key Capabilities of PaddleOCR-VL-1.5**\n\n1. With a **parameter size of 0.9B**, PaddleOCR-VL-1.5 **achieves 94.5% accuracy on OmniDocBench v1.5**, surpassing the previous SOTA model PaddleOCR-VL. Significant improvements are observed in **table, formula, and text recognition.**\n\n2. **It introduces an innovative approach to document parsing by supporting irregular-shaped localization**, enabling accurate polygonal detection under skewed and warped document conditions. Evaluations across five real-world scenarios—scanning, skew, warping, screen-photography, and illumination—demonstrate superior performance over mainstream open-source and proprietary models.\n\n3. The model introduces **text spotting (text-line localization and recognition)**, along with **seal recognition**, with all corresponding metrics **setting new SOTA results** in their respective tasks.\n\n4. PaddleOCR-VL-1.5 further strengthens its capability in **specialized scenarios and multilingual recognition.** Recognition performance is improved for **rare characters, ancient texts, multilingual tables, underlines, and checkboxes,** and language coverage is extended to include **China's Tibetan script and Bengali.**\n\n5. The model supports **automatic cross-page table merging** and **cross-page paragraph heading recognition**, effectively mitigating content fragmentation issues in **long-document parsing.**\n\n### **Model Architecture** \n\n## News \n\n*  🚀 Support llama.cpp inference for the VLM component in PaddleOCR-VL-1.5. Click [here](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.5-GGUF) for details.\n*  🚀 We release [PaddleOCR-VL-1.5](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.5), —a Multi-Task 0.9B VLM for Robust In-the-Wild Document Parsing.\n\n## Usage    \n\n### Install Dependencies\n\nInstall [PaddlePaddle](https://www.paddlepaddle.org.cn/install/quick) and [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR):\n\n### Basic Usage\n\nCLI usage:\n\nPython API usage:\n\n### Accelerate VLM Inference via Optimized Inference Servers\n\n1. Start the VLM inference server:\n\n    You can start the vLLM inference service using one of two methods:\n    - Method 1: PaddleOCR method\n\n        \n    - Method 2: vLLM method\n\n    \n2. Call the PaddleOCR CLI or Python API:\n    \n    \n  \n**For more usage details and parameter explanations, see the [documentation](https://www.paddleocr.ai/latest/en/version3.x/pipeline_usage/PaddleOCR-VL.html).**\n## PaddleOCR-VL-1.5-0.9B Usage with transformers\n\nCurrently, the PaddleOCR-VL-1.5-0.9B model facilitates seamless inference via the `transformers` library, supporting **comprehensive text spotting** and the recognition of complex elements including formulas, tables, charts, and seals. Below is a simple script we provide to support inference using the PaddleOCR-VL-1.5-0.9B model with `transformers`. \n\n> [!NOTE]\n> Note: We currently recommend using the official method for inference, as it is faster and supports page-level document parsing. The example code below only supports element-level recognition and text spotting.\n\n👉 Click to expand: Use flash-attn to boost performance and reduce memory usage\n\n## Performance\n\n### Document Parsing \n\n#### 1. OmniDocBench v1.5\n\n##### PaddleOCR-VL-1.5 achieves SOTA performance for overall, text, formula, tables and reading order on OmniDocBench v1.5\n\n> **Notes:** \n> - Performance metrics are cited from the [OmniDocBench official leaderboard](https://opendatalab.com/omnidocbench), except for Gemini-3 Pro, Qwen3-VL-235B-A22B-Instruct and our model, which were evaluated independently.\n\n####  2. Real5-OmniDocBench\n\n##### Across all five diverse and challenging scenarios—scanning, warping, screen-photography, illumination, and skew—PaddleOCR-VL-1.5 consistently sets new SOTA records\n\n> **Notes:** \n> - Real5-OmniDocBench is a brand-new benchmark oriented toward real-world scenarios, which we constructed based on the OmniDocBench v1.5 dataset. The dataset comprises five distinct scenarios: Scanning, Warping, Screen-photography, Illumination, and Skew. For further details, please refer to [Real5-OmniDocBench](https://huggingface.co/datasets/PaddlePaddle/Real5-OmniDocBench).\n\n### Inference Performance\n\n> **Notes:** \n> - End-to-End Inference Performance Comparison on OmniDocBench v1.5. PDF documents were processed in batches of 512 on a single NVIDIA A100 GPU. The reported end-to-end runtime includes both PDF rendering and Markdown generation. All methods rely on their built-in PDF parsing modules and default DPI settings to reflect out-of-the-box performance. \n\n## Visualization\n\n### Real-word Document Parsing\n\n#### Illumination\n\n#### Skew\n\n#### Screen Photography\n\n#### Scanning\n\n#### Warping\n\n### Text Spotting\n\n### Seal Recognition\n\n## Acknowledgments\n\nWe would like to thank [PaddleFormers](https://github.com/PaddlePaddle/PaddleFormers), [Keye](https://github.com/Kwai-Keye/Keye), [MinerU](https://github.com/opendatalab/MinerU), [OmniDocBench](https://github.com/opendatalab/OmniDocBench) for providing valuable code, model weights and benchmarks. We also appreciate everyone's contribution to this open-source project!\n\n## Citation\n\nIf you find Paddle",
+          "architecture": "PaddleOCRVLForConditionalGeneration",
+          "languages": [
+            "en",
+            "zh",
+            "multilingual"
+          ],
+          "lastUpdated": "2026-01-29",
+          "taskTags": [
+            "image-text-to-text"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 203,
+          "communityLikes": 3,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 0.22,
+              "downloadSizeGB": 0.14,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/PaddleOCR-VL-1.5-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "PaddlePaddle/PaddleOCR-VL-1.5",
+          "summary": "PaddleOCR-VL-1.5: Towards a Multi-Task 0.9B VLM for Robust In-the-Wild Document Parsing"
+        },
+        {
+          "id": "mlx-community--DeepSeek-OCR-2-bf16",
+          "family": "DeepSeek",
+          "displayName": "DeepSeek-OCR-2",
+          "paramSize": "3.389B",
+          "paramCountB": 3.389,
+          "modelType": "ocr",
+          "source": "mlx",
+          "format": "mlx-bf16",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/DeepSeek-OCR-2-bf16",
+          "ramGB": 10.2,
+          "downloadSizeGB": 6.79,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "DeepSeek-OCR-2: Contexts Optical Compression (v2).\n\nA document-OCR vision-language model whose `deepseekocr_2` architecture pairs a SAM ViT-B tower + Qwen2-0.5B decoder-as-encoder with a DeepSeek-V2 MoE text decoder. Image → extracted text. This is the bf16 checkpoint (no quantization), so it is memory-heavy; runs on a from-reference Swift/MLX port registered into MLXVLM.\n\nSee https://github.com/deepseek-ai/DeepSeek-OCR/ and the DeepSeek-OCR paper (arXiv:2510.18234).",
+          "architecture": "DeepseekOCR2ForCausalLM",
+          "languages": [
+            "multilingual"
+          ],
+          "lastUpdated": "2026-01-28",
+          "taskTags": [
+            "image-text-to-text"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 945,
+          "communityLikes": 8,
+          "variants": [
+            {
+              "quantization": "bf16",
+              "format": "mlx-bf16",
+              "ramGB": 10.2,
+              "downloadSizeGB": 6.79,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/DeepSeek-OCR-2-bf16",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/DeepSeek-OCR-2-bf16",
+          "summary": "DeepSeek-OCR-2: SAM + Qwen2 encoder document OCR (DeepSeek-V2 MoE decoder)"
+        },
+        {
+          "id": "mlx-community--dots.ocr-4bit",
+          "family": "dots",
+          "displayName": "dots.ocr",
+          "paramSize": "1.5399B",
+          "paramCountB": 1.5399,
+          "modelType": "ocr",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/dots.ocr-4bit",
+          "ramGB": 1.3,
+          "downloadSizeGB": 0.87,
+          "contextWindow": null,
+          "license": "mit",
+          "licenseUrl": null,
+          "description": "dots.ocr: Multilingual Document Layout Parsing in a Single Vision-Language Model\n\n  🖥️ Live Demo | \n  💬 WeChat | \n  📕 rednote\n\n## Introduction\n\n**dots.ocr** is a powerful, multilingual document parser that unifies layout detection and content recognition within a single vision-language model while maintaining good reading order. Despite its compact 1.7B-parameter LLM foundation, it achieves state-of-the-art(SOTA) performance.\n\n1. **Powerful Performance:** **dots.ocr** achieves SOTA performance for text, tables, and reading order on [OmniDocBench](https://github.com/opendatalab/OmniDocBench), while delivering formula recognition results comparable to much larger models like Doubao-1.5 and gemini2.5-pro.\n2. **Multilingual Support:** **dots.ocr** demonstrates robust parsing capabilities for low-resource languages, achieving decisive advantages across both layout detection and content recognition on our in-house multilingual documents benchmark.\n3. **Unified and Simple Architecture:** By leveraging a single vision-language model, **dots.ocr** offers a significantly more streamlined architecture than conventional methods that rely on complex, multi-model pipelines. Switching between tasks is accomplished simply by altering the input prompt, proving that a VLM can achieve competitive detection results compared to traditional detection models like DocLayout-YOLO.\n4.  **Efficient and Fast Performance:** Built upon a compact 1.7B LLM, **dots.ocr** provides faster inference speeds than many other high-performing models based on larger foundations.\n\n## Usage with transformers\n\n### Performance Comparison: dots.ocr vs. Competing Models\n\n> **Notes:** \n> - The EN, ZH metrics are the end2end evaluation results of [OmniDocBench](https://github.com/opendatalab/OmniDocBench), and Multilingual metric is the end2end evaluation results of dots.ocr-bench.\n\n## News \n*  🚀 We release [dots.ocr](https://github.com/rednote-hilab/dots.ocr), — a multilingual documents parsing model based on 1.7b llm, with SOTA performance.\n\n## Benchmark Results\n\n### 1. OmniDocBench\n\n#### The end-to-end evaluation results of different tasks.\n\nModelType\nMethods\nOverallEdit↓\nTextEdit↓\nFormulaEdit↓\nTableTEDS↑\nTableEdit↓\nRead OrderEdit↓\n\nEN\nZH\nEN\nZH\nEN\nZH\nEN\nZH\nEN\nZH\nEN\nZH\n\nPipelineTools\nMinerU\n0.150\n0.357\n0.061\n0.215\n0.278\n0.577\n78.6\n62.1\n0.180\n0.344\n0.079\n0.292\n\nMarker\n0.336\n0.556\n0.080\n0.315\n0.530\n0.883\n67.6\n49.2\n0.619\n0.685\n0.114\n0.340\n\nMathpix\n0.191\n0.365\n0.105\n0.384\n0.306\n0.454\n77.0\n67.1\n0.243\n0.320\n0.108\n0.304\n\nDocling\n0.589\n0.909\n0.416\n0.987\n0.999\n1\n61.3\n25.0\n0.627\n0.810\n0.313\n0.837\n\nPix2Text\n0.320\n0.528\n0.138\n0.356\n0.276\n0.611\n73.6\n66.2\n0.584\n0.645\n0.281\n0.499\n\nUnstructured\n0.586\n0.716\n0.198\n0.481\n0.999\n1\n0\n0.06\n1\n0.998\n0.145\n0.387\n\nOpenParse\n0.646\n0.814\n0.681\n0.974\n0.996\n1\n64.8\n27.5\n0.284\n0.639\n0.595\n0.641\n\nPPStruct-V3\n0.145\n0.206\n0.058\n0.088\n0.295\n0.535\n-\n-\n0.159\n0.109\n0.069\n0.091\n\nExpertVLMs\nGOT-OCR\n0.287\n0.411\n0.189\n0.315\n0.360\n0.528\n53.2\n47.2\n0.459\n0.520\n0.141\n0.280\n\nNougat\n0.452\n0.973\n0.365\n0.998\n0.488\n0.941\n39.9\n0\n0.572\n1.000\n0.382\n0.954\n\nMistral OCR\n0.268\n0.439\n0.072\n0.325\n0.318\n0.495\n75.8\n63.6\n0.600\n0.650\n0.083\n0.284\n\nOLMOCR-sglang\n0.326\n0.469\n0.097\n0.293\n0.455\n0.655\n68.1\n61.3\n0.608\n0.652\n0.145\n0.277\n\nSmolDocling-256M\n0.493\n0.816\n0.262\n0.838\n0.753\n0.997\n44.9\n16.5\n0.729\n0.907\n0.227\n0.522\n\nDolphin\n0.206\n0.306\n0.107\n0.197\n0.447\n0.580\n77.3\n67.2\n0.180\n0.285\n0.091\n0.162\n\nMinerU 2\n0.139\n0.240\n0.047\n0.109\n0.297\n0.536\n82.5\n79.0\n0.141\n0.195\n0.069\n0.118\n\nOCRFlux\n0.195\n0.281\n0.064\n0.183\n0.379\n0.613\n71.6\n81.3\n0.253\n0.139\n0.086\n0.187\n\nMonkeyOCR-pro-3B\n0.138\n0.206\n0.067\n0.107\n0.246\n0.421\n81.5\n87.5\n0.139\n0.111\n0.100\n0.185\n\nGeneralVLMs\nGPT4o\n0.233\n0.399\n0.144\n0.409\n0.425\n0.606\n72.0\n62.9\n0.234\n0.329\n0.128\n0.251\n\n    \n      Qwen2-VL-72B\n      0.252\n      0.327\n      0.096\n      0.218\n      0.404\n      0.487\n      76.8\n      76.4\n      0.387\n      0.408\n      0.119\n      0.193\n    \n    \n      Qwen2.5-VL-72B\n      0.214\n      0.261\n      0.092\n      0.18\n      0.315\n      0.434\n      82.9\n      83.9\n      0.341\n      0.262\n      0.106\n      0.168\n    \n    \n      Gemini2.5-Pro\n      0.148\n      0.212\n      0.055\n      0.168\n      0.356\n      0.439\n      85.8\n      86.4\n      0.13\n      0.119\n      0.049\n      0.121\n    \n    \n      doubao-1-5-thinking-vision-pro-250428\n      0.140\n      0.162\n      0.043\n      0.085\n      0.295\n      0.384\n      83.3\n      89.3\n      0.165\n      0.085\n      0.058\n      0.094\n    \n\nExpert VLMs\ndots.ocr\n0.125\n0.160\n0.032\n0.066\n0.329\n0.416\n88.6\n89.0\n0.099\n0.092\n0.040\n0.067\n\n#### The end-to-end text recognition performance across 9 PDF page types.\n\nModelType\nModels\nBook\nSlides\nFinancialReport\nTextbook\nExamPaper\nMagazine\nAcademicPapers\nNotes\nNewspaper\nOverall\n\nPipelineTools\nMinerU\n0.055\n0.124\n0.033\n0.102\n0.159\n0.072\n0.025\n0.984\n0.171\n0.206\n\nMarker\n0.074\n0.340\n0.089\n0.319\n0.452\n0.153\n0.059\n0.651\n0.192\n0.274\n\nMathpix\n0.131\n0.220\n0.202\n0.216\n0.278\n0.147\n0.091\n0.634\n0.690\n0.300\n\nExpertVLMs\nGOT-OCR\n0.111\n0.222\n0.067\n0.132\n0.204\n0.198\n0.179\n0.388\n0.771\n0.267\n\nNougat\n0.734\n0.958\n1.000\n0.820\n0.930\n0.830\n0.214\n0.991\n0.871\n0.806\n\nDolphin\n0.091\n0.131\n0.057\n0.146\n0.231\n0.121\n0.074\n0.363\n0.307\n0.177\n\nOCRFlux\n0.068\n0.125\n0.092\n0.102\n0.119\n0.083\n0.047\n0.223\n0.536\n0.149\n\nMonkeyOCR-pro-3B\n0.084\n0.129\n0.060\n0.090\n0.107\n0.073\n0.050\n0.171\n0.107\n0.100\n\nGeneralVLMs\nGPT4o\n0.157\n0.163\n0.348\n0.187\n0.281\n0.173\n0.146\n0.607\n0.751\n0.316\n\nQwen2.5-VL-7B\n0.148\n0.053\n0.111\n0.137\n0.189\n0.117\n0.134\n0.204\n0.706\n0.205\n\nInternVL3-8B\n0.163\n0.056\n0.107\n0.109\n0.129\n0.100\n0.159\n0.150\n0.681\n0.188\n\ndoubao-1-5-thinking-vision-pro-250428\n0.048\n0.048\n0.024\n0.062\n0.085\n0.051\n0.039\n0.096\n0.181\n0.073\n\nExpert VLMs\ndots.ocr\n0.031\n0.047\n0.011\n0.082\n0.079\n0.028\n0.029\n0.109\n0.056\n0.055\n\n> **Notes:** \n> - The metrics are from [MonkeyOCR](https://github.com/Yuliang-Liu/MonkeyOCR), [OmniDocBench](https://github.com/opendatalab/OmniDocBench), and our own internal evaluations.\n> - We delete the Page-header and Page-footer cells in the result markdown.\n> - We use tikz_prepro",
+          "architecture": "DotsOCRForCausalLM",
+          "languages": [
+            "en",
+            "zh",
+            "multilingual"
+          ],
+          "lastUpdated": "2026-02-16",
+          "taskTags": [
+            "image-text-to-text"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 106,
+          "communityLikes": 0,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 1.3,
+              "downloadSizeGB": 0.87,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/dots.ocr-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "rednote-hilab/dots.ocr",
+          "summary": "dots.ocr: Multilingual Document Layout Parsing in a Single Vision-Language Model"
+        },
+        {
+          "id": "mlx-community--olmOCR-2-7B-1025-mlx-4bit",
+          "family": "olmOCR",
+          "displayName": "olmOCR-2-7B-1025-mlx",
+          "paramSize": "7B",
+          "paramCountB": 7.0,
+          "modelType": "ocr",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/olmOCR-2-7B-1025-mlx-4bit",
+          "ramGB": 5.91,
+          "downloadSizeGB": 3.94,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "# olmOCR-2-7B-1025\n\nFull BF16 version of [olmOCR-2-7B-1025-FP8](https://huggingface.co/allenai/olmOCR-2-7B-1025-FP8).\nWe recommend using the FP8 version for all practical purposes except further fine tuning.\n\nThis is a release of the olmOCR model that's fine tuned from Qwen2.5-VL-7B-Instruct using the \n[olmOCR-mix-1025](https://huggingface.co/datasets/allenai/olmOCR-mix-1025) dataset. It has been additionally\nfine tuned using GRPO RL training to boost its performance at math equations, tables, and other tricky OCR cases.\n\nQuick links:\n- 📃 [Paper](https://olmocr.allenai.org/papers/olmocr.pdf)\n- 🤗 [SFT Dataset](https://huggingface.co/datasets/allenai/olmOCR-mix-1025)\n- 🤗 [RL Dataset](https://huggingface.co/datasets/allenai/olmOCR-synthmix-1025)\n- 🛠️ [Code](https://github.com/allenai/olmocr)\n- 🎮 [Demo](https://olmocr.allenai.org/)\n\nThe best way to use this model is via the [olmOCR toolkit](https://github.com/allenai/olmocr).\nThe toolkit comes with an efficient inference setup via VLLM that can handle millions of documents\nat scale.\n\n## olmOCR-Bench Scores\n\nThis model scores the following scores on [olmOCR-bench](https://huggingface.co/datasets/allenai/olmOCR-bench) when used with the\n[olmOCR toolkit](https://github.com/allenai/olmocr) toolkit which automatically renders, rotates, and retries pages as needed.\n\n  \n    \n      Model\n      ArXiv\n      Old Scans Math\n      Tables\n      Old Scans\n      Headers and Footers\n      Multi column\n      Long tiny text\n      Base\n      Overall\n    \n  \n   \n     \n      olmOCR pipeline v0.4.0 with olmOCR-2-7B-1025\n      82.9\n      82.1\n      84.3\n      48.3\n      95.7\n      84.3\n      81.4\n      99.7\n      82.3 ± 1.1\n      \n    \n      olmOCR pipeline v0.4.0 with olmOCR-2-7B-1025-FP8\n      83.0\n      82.3\n      84.9\n      47.7\n      96.1\n      83.7\n      81.9\n      99.7\n      82.4 ± 1.1\n      \n  \n\n## Usage\n\nThis model expects as input a single document image, rendered such that the longest dimension is 1288 pixels.\n\nThe prompt must then contain the additional metadata from the document, and the easiest way to generate this\nis to use the methods provided by the [olmOCR toolkit](https://github.com/allenai/olmocr).\n\n## Manual Prompting\n\nIf you want to prompt this model manually instead of using the [olmOCR toolkit](https://github.com/allenai/olmocr), please see the code below.\n\nIn normal usage, the olmOCR toolkit builds the prompt by rendering the PDF page, and\nextracting relevant text blocks and image metadata. To duplicate that you will need to\n\nand then run the following sample code.\n\n## License and use\n\nThis model is licensed under Apache 2.0. It is intended for research and educational use in accordance with Ai2's [Responsible Use Guidelines](https://allenai.org/responsible-use).",
+          "architecture": "Qwen2_5_VLForConditionalGeneration",
+          "languages": [
+            "en"
+          ],
+          "lastUpdated": "2025-10-29",
+          "taskTags": [
+            "image-text-to-text"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 95,
+          "communityLikes": 1,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 5.91,
+              "downloadSizeGB": 3.94,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/olmOCR-2-7B-1025-mlx-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "allenai/olmOCR-2-7B-1025",
+          "summary": "Full BF16 version of olmOCR-2-7B-1025-FP8."
+        }
+      ]
+    },
+    {
+      "id": "asr",
+      "name": "Speech-to-Text",
+      "sfSymbol": "waveform.circle.fill",
+      "children": null,
+      "models": [
+        {
+          "id": "mlx-community--whisper-tiny-asr-fp16",
+          "family": "whisper",
+          "displayName": "whisper-tiny-asr",
+          "paramSize": "0.0372B",
+          "paramCountB": 0.0372,
+          "modelType": "asr",
+          "source": "mlx",
+          "format": "mlx-fp16",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/whisper-tiny-asr-fp16",
+          "ramGB": 0.11,
+          "downloadSizeGB": 0.07,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "# Whisper\n\nWhisper is a pre-trained model for automatic speech recognition (ASR) and speech translation. Trained on 680k hours \nof labelled data, Whisper models demonstrate a strong ability to generalise to many datasets and domains **without** the need \nfor fine-tuning.\n\nWhisper was proposed in the paper [Robust Speech Recognition via Large-Scale Weak Supervision](https://arxiv.org/abs/2212.04356) \nby Alec Radford et al from OpenAI. The original code repository can be found [here](https://github.com/openai/whisper).\n\n**Disclaimer**: Content for this model card has partly been written by the Hugging Face team, and parts of it were \ncopied and pasted from the original model card.\n\n## Model details\n\nWhisper is a Transformer based encoder-decoder model, also referred to as a _sequence-to-sequence_ model. \nIt was trained on 680k hours of labelled speech data annotated using large-scale weak supervision. \n\nThe models were trained on either English-only data or multilingual data. The English-only models were trained \non the task of speech recognition. The multilingual models were trained on both speech recognition and speech \ntranslation. For speech recognition, the model predicts transcriptions in the *same* language as the audio. \nFor speech translation, the model predicts transcriptions to a *different* language to the audio.\n\nWhisper checkpoints come in five configurations of varying model sizes.\nThe smallest four are trained on either English-only or multilingual data.\nThe largest checkpoints are multilingual only. All ten of the pre-trained checkpoints \nare available on the [Hugging Face Hub](https://huggingface.co/models?search=openai/whisper). The \ncheckpoints are summarised in the following table with links to the models on the Hub:\n\n| Size     | Parameters | English-only                                         | Multilingual                                        |\n|----------|------------|------------------------------------------------------|-----------------------------------------------------|\n| tiny     | 39 M       | [✓](https://huggingface.co/openai/whisper-tiny.en)   | [✓](https://huggingface.co/openai/whisper-tiny)     |\n| base     | 74 M       | [✓](https://huggingface.co/openai/whisper-base.en)   | [✓](https://huggingface.co/openai/whisper-base)     |\n| small    | 244 M      | [✓](https://huggingface.co/openai/whisper-small.en)  | [✓](https://huggingface.co/openai/whisper-small)    |\n| medium   | 769 M      | [✓](https://huggingface.co/openai/whisper-medium.en) | [✓](https://huggingface.co/openai/whisper-medium)   |\n| large    | 1550 M     | x                                                    | [✓](https://huggingface.co/openai/whisper-large)    |\n| large-v2 | 1550 M     | x                                                    | [✓](https://huggingface.co/openai/whisper-large-v2) |\n\n# Usage\n\nTo transcribe audio samples, the model has to be used alongside a [`WhisperProcessor`](https://huggingface.co/docs/transformers/model_doc/whisper#transformers.WhisperProcessor).\n\nThe `WhisperProcessor` is used to:\n1. Pre-process the audio inputs (converting them to log-Mel spectrograms for the model)\n2. Post-process the model outputs (converting them from tokens to text)\n\nThe model is informed of which task to perform (transcription or translation) by passing the appropriate \"context tokens\". These context tokens \nare a sequence of tokens that are given to the decoder at the start of the decoding process, and take the following order:\n1. The transcription always starts with the `` token\n2. The second token is the language token (e.g. `` for English)\n3. The third token is the \"task token\". It can take one of two values: `` for speech recognition or `` for speech translation\n4. In addition, a `` token is added if the model should not include timestamp prediction\n\nThus, a typical sequence of context tokens might look as follows:\n\nWhich tells the model to decode in English, under the task of speech recognition, and not to predict timestamps.\n\nThese tokens can either be forced or un-forced. If they are forced, the model is made to predict each token at \neach position. This allows one to control the output language and task for the Whisper model. If they are un-forced, \nthe Whisper model will automatically predict the output langauge and task itself.\n\nThe context tokens can be set accordingly:\n\nWhich forces the model to predict in English under the task of speech recognition.\n\n## Transcription\n\n### English to English \nIn this example, the context tokens are 'unforced', meaning the model automatically predicts the output language\n(English) and task (transcribe).\n\nThe context tokens can be removed from the start of the transcription by setting `skip_special_tokens=True`.\n\n### French to French \nThe following example demonstrates French to French transcription by setting the decoder ids appropriately. \n\n## Translation \nSetting the task to \"translate\" forces the Whisper model to perform speech translation.\n\n### French to English\n\n## Evaluation\n\nThis code snippet shows how to evaluate Whisper Tiny on [LibriSpeech test-clean](https://huggingface.co/datasets/librispeech_asr):\n \n\n## Long-Form Transcription\n\nThe Whisper model is intrinsically designed to work on audio samples of up to 30s in duration. However, by using a chunking \nalgorithm, it can be used to transcribe audio samples of up to arbitrary length. This is possible through Transformers \nmethod. Chunking is enabled by setting `chunk_length_s=30` when instantiating the pipeline. With chunking enabled, the pipeline \ncan be run with batched inference. It can also be extended to predict sequence level timestamps by passing `return_timestamps=True`:\n\nRefer to the blog post [ASR Chunking](https://huggingface.co/blog/asr-chunking) for more details on the chunking algorithm.\n\n## Fine-Tuning\n\nThe pre-trained Whisper model demonstrates a strong ability to generalise to different datasets and domains. However, \nits predictive capabilities can be improv",
+          "architecture": "WhisperForConditionalGeneration",
+          "languages": [
+            "en",
+            "zh",
+            "de",
+            "es",
+            "ru",
+            "ko",
+            "fr",
+            "ja",
+            "pt",
+            "tr",
+            "pl",
+            "ca",
+            "nl",
+            "ar",
+            "sv",
+            "it",
+            "id",
+            "hi",
+            "fi",
+            "vi",
+            "he",
+            "uk",
+            "el",
+            "ms",
+            "cs",
+            "ro",
+            "da",
+            "hu",
+            "ta",
+            "no",
+            "th",
+            "ur",
+            "hr",
+            "bg",
+            "lt",
+            "la",
+            "mi",
+            "ml",
+            "cy",
+            "sk",
+            "te",
+            "fa",
+            "lv",
+            "bn",
+            "sr",
+            "az",
+            "sl",
+            "kn",
+            "et",
+            "mk",
+            "br",
+            "eu",
+            "is",
+            "hy",
+            "ne",
+            "mn",
+            "bs",
+            "kk",
+            "sq",
+            "sw",
+            "gl",
+            "mr",
+            "pa",
+            "si",
+            "km",
+            "sn",
+            "yo",
+            "so",
+            "af",
+            "oc",
+            "ka",
+            "be",
+            "tg",
+            "sd",
+            "gu",
+            "am",
+            "yi",
+            "lo",
+            "uz",
+            "fo",
+            "ht",
+            "ps",
+            "tk",
+            "nn",
+            "mt",
+            "sa",
+            "lb",
+            "my",
+            "bo",
+            "tl",
+            "mg",
+            "as",
+            "tt",
+            "haw",
+            "ln",
+            "ha",
+            "ba",
+            "jw",
+            "su"
+          ],
+          "lastUpdated": "2026-01-15",
+          "taskTags": [
+            "automatic-speech-recognition"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 166,
+          "communityLikes": 0,
+          "variants": [
+            {
+              "quantization": "fp16",
+              "format": "mlx-fp16",
+              "ramGB": 0.11,
+              "downloadSizeGB": 0.07,
+              "qualityPercent": 100,
+              "hfModelId": "mlx-community/whisper-tiny-asr-fp16",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "openai/whisper-tiny",
+          "summary": "Whisper is a pre-trained model for automatic speech recognition (ASR) and speech translation."
+        },
+        {
+          "id": "mlx-community--whisper-small-asr-fp16",
+          "family": "whisper",
+          "displayName": "whisper-small-asr",
+          "paramSize": "0.2406B",
+          "paramCountB": 0.2406,
+          "modelType": "asr",
+          "source": "mlx",
+          "format": "mlx-fp16",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/whisper-small-asr-fp16",
+          "ramGB": 0.72,
+          "downloadSizeGB": 0.48,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "# Whisper\n\nWhisper is a pre-trained model for automatic speech recognition (ASR) and speech translation. Trained on 680k hours \nof labelled data, Whisper models demonstrate a strong ability to generalise to many datasets and domains **without** the need \nfor fine-tuning.\n\nWhisper was proposed in the paper [Robust Speech Recognition via Large-Scale Weak Supervision](https://arxiv.org/abs/2212.04356) \nby Alec Radford et al from OpenAI. The original code repository can be found [here](https://github.com/openai/whisper).\n\n**Disclaimer**: Content for this model card has partly been written by the Hugging Face team, and parts of it were \ncopied and pasted from the original model card.\n\n## Model details\n\nWhisper is a Transformer based encoder-decoder model, also referred to as a _sequence-to-sequence_ model. \nIt was trained on 680k hours of labelled speech data annotated using large-scale weak supervision. \n\nThe models were trained on either English-only data or multilingual data. The English-only models were trained \non the task of speech recognition. The multilingual models were trained on both speech recognition and speech \ntranslation. For speech recognition, the model predicts transcriptions in the *same* language as the audio. \nFor speech translation, the model predicts transcriptions to a *different* language to the audio.\n\nWhisper checkpoints come in five configurations of varying model sizes.\nThe smallest four are trained on either English-only or multilingual data.\nThe largest checkpoints are multilingual only. All ten of the pre-trained checkpoints \nare available on the [Hugging Face Hub](https://huggingface.co/models?search=openai/whisper). The \ncheckpoints are summarised in the following table with links to the models on the Hub:\n\n| Size     | Parameters | English-only                                         | Multilingual                                        |\n|----------|------------|------------------------------------------------------|-----------------------------------------------------|\n| tiny     | 39 M       | [✓](https://huggingface.co/openai/whisper-tiny.en)   | [✓](https://huggingface.co/openai/whisper-tiny)     |\n| base     | 74 M       | [✓](https://huggingface.co/openai/whisper-base.en)   | [✓](https://huggingface.co/openai/whisper-base)     |\n| small    | 244 M      | [✓](https://huggingface.co/openai/whisper-small.en)  | [✓](https://huggingface.co/openai/whisper-small)    |\n| medium   | 769 M      | [✓](https://huggingface.co/openai/whisper-medium.en) | [✓](https://huggingface.co/openai/whisper-medium)   |\n| large    | 1550 M     | x                                                    | [✓](https://huggingface.co/openai/whisper-large)    |\n| large-v2 | 1550 M     | x                                                    | [✓](https://huggingface.co/openai/whisper-large-v2) |\n\n# Usage\n\nTo transcribe audio samples, the model has to be used alongside a [`WhisperProcessor`](https://huggingface.co/docs/transformers/model_doc/whisper#transformers.WhisperProcessor).\n\nThe `WhisperProcessor` is used to:\n1. Pre-process the audio inputs (converting them to log-Mel spectrograms for the model)\n2. Post-process the model outputs (converting them from tokens to text)\n\nThe model is informed of which task to perform (transcription or translation) by passing the appropriate \"context tokens\". These context tokens \nare a sequence of tokens that are given to the decoder at the start of the decoding process, and take the following order:\n1. The transcription always starts with the `` token\n2. The second token is the language token (e.g. `` for English)\n3. The third token is the \"task token\". It can take one of two values: `` for speech recognition or `` for speech translation\n4. In addition, a `` token is added if the model should not include timestamp prediction\n\nThus, a typical sequence of context tokens might look as follows:\n\nWhich tells the model to decode in English, under the task of speech recognition, and not to predict timestamps.\n\nThese tokens can either be forced or un-forced. If they are forced, the model is made to predict each token at \neach position. This allows one to control the output language and task for the Whisper model. If they are un-forced, \nthe Whisper model will automatically predict the output langauge and task itself.\n\nThe context tokens can be set accordingly:\n\nWhich forces the model to predict in English under the task of speech recognition.\n\n## Transcription\n\n### English to English \nIn this example, the context tokens are 'unforced', meaning the model automatically predicts the output language\n(English) and task (transcribe).\n\nThe context tokens can be removed from the start of the transcription by setting `skip_special_tokens=True`.\n\n### French to French \nThe following example demonstrates French to French transcription by setting the decoder ids appropriately. \n\n## Translation \nSetting the task to \"translate\" forces the Whisper model to perform speech translation.\n\n### French to English\n\n## Evaluation\n\nThis code snippet shows how to evaluate Whisper Small on [LibriSpeech test-clean](https://huggingface.co/datasets/librispeech_asr):\n \n\n## Long-Form Transcription\n\nThe Whisper model is intrinsically designed to work on audio samples of up to 30s in duration. However, by using a chunking \nalgorithm, it can be used to transcribe audio samples of up to arbitrary length. This is possible through Transformers \nmethod. Chunking is enabled by setting `chunk_length_s=30` when instantiating the pipeline. With chunking enabled, the pipeline \ncan be run with batched inference. It can also be extended to predict sequence level timestamps by passing `return_timestamps=True`:\n\nRefer to the blog post [ASR Chunking](https://huggingface.co/blog/asr-chunking) for more details on the chunking algorithm.\n\n## Fine-Tuning\n\nThe pre-trained Whisper model demonstrates a strong ability to generalise to different datasets and domains. However, \nits predictive capabilities can be impro",
+          "architecture": "WhisperForConditionalGeneration",
+          "languages": [
+            "en",
+            "zh",
+            "de",
+            "es",
+            "ru",
+            "ko",
+            "fr",
+            "ja",
+            "pt",
+            "tr",
+            "pl",
+            "ca",
+            "nl",
+            "ar",
+            "sv",
+            "it",
+            "id",
+            "hi",
+            "fi",
+            "vi",
+            "he",
+            "uk",
+            "el",
+            "ms",
+            "cs",
+            "ro",
+            "da",
+            "hu",
+            "ta",
+            "no",
+            "th",
+            "ur",
+            "hr",
+            "bg",
+            "lt",
+            "la",
+            "mi",
+            "ml",
+            "cy",
+            "sk",
+            "te",
+            "fa",
+            "lv",
+            "bn",
+            "sr",
+            "az",
+            "sl",
+            "kn",
+            "et",
+            "mk",
+            "br",
+            "eu",
+            "is",
+            "hy",
+            "ne",
+            "mn",
+            "bs",
+            "kk",
+            "sq",
+            "sw",
+            "gl",
+            "mr",
+            "pa",
+            "si",
+            "km",
+            "sn",
+            "yo",
+            "so",
+            "af",
+            "oc",
+            "ka",
+            "be",
+            "tg",
+            "sd",
+            "gu",
+            "am",
+            "yi",
+            "lo",
+            "uz",
+            "fo",
+            "ht",
+            "ps",
+            "tk",
+            "nn",
+            "mt",
+            "sa",
+            "lb",
+            "my",
+            "bo",
+            "tl",
+            "mg",
+            "as",
+            "tt",
+            "haw",
+            "ln",
+            "ha",
+            "ba",
+            "jw",
+            "su"
+          ],
+          "lastUpdated": "2026-01-15",
+          "taskTags": [
+            "automatic-speech-recognition"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 39,
+          "communityLikes": 0,
+          "variants": [
+            {
+              "quantization": "fp16",
+              "format": "mlx-fp16",
+              "ramGB": 0.72,
+              "downloadSizeGB": 0.48,
+              "qualityPercent": 100,
+              "hfModelId": "mlx-community/whisper-small-asr-fp16",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "openai/whisper-small",
+          "summary": "Whisper is a pre-trained model for automatic speech recognition (ASR) and speech translation."
+        },
+        {
+          "id": "mlx-community--Voxtral-Mini-4B-Realtime-2602-4bit",
+          "family": "Voxtral",
+          "displayName": "Voxtral-Mini-4B-Realtime-2602",
+          "paramSize": "1.0624B",
+          "paramCountB": 1.0624,
+          "modelType": "asr",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
+          "ramGB": 0.9,
+          "downloadSizeGB": 0.6,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "# Voxtral Mini 4B Realtime \n\nThis is a **4-bit quantized** [MLX](https://github.com/ml-explore/mlx) conversion of [mistralai/Voxtral-Mini-4B-Realtime-2602](https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602), Mistral AI's streaming speech-to-text model.\n\nRuns via [mlx-audio](https://github.com/Blaizzy/mlx-audio).\n\n## Key Details\n\n| | |\n|---|---|\n| **Parameters** | 4B (~3.4B LM + ~0.6B Audio Encoder) |\n| **Quantization** | int4 |\n| **Base model** | [mistralai/Voxtral-Mini-4B-Realtime-2602](https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602) |\n| **Languages** | 13 (Arabic, German, English, Spanish, French, Hindi, Italian, Dutch, Portuguese, Chinese, Japanese, Korean, Russian) |\n| **License** | Apache 2.0 |\n\nSee also: [fp16 variant](https://huggingface.co/mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16)\n\n## Usage\n\n## Recommended Settings\n\n| Setting | Value | Notes |\n|---|---|---|\n| Temperature | `0.0` | Always use greedy decoding |\n| Transcription delay | `480ms` | Sweet spot of accuracy vs. latency |\n| Delay range | `80ms` – `2400ms` | Multiples of 80ms |\n\n## Benchmarks (from upstream)\n\n### FLEURS (13 languages, WER%)\n\n| Delay | AVG | EN | FR | DE | ES | ZH | JA | KO |\n|---|---|---|---|---|---|---|---|---|\n| 160ms | 12.60 | 6.46 | 9.75 | 9.50 | 5.34 | 17.67 | 19.17 | 19.81 |\n| **480ms** | **8.72** | **4.90** | **6.42** | **6.19** | **3.31** | **10.45** | **9.59** | **15.74** |\n| 960ms | 7.70 | 4.34 | 5.68 | 4.87 | 2.98 | 8.99 | 6.80 | 14.90 |\n| 2400ms | 6.73 | 4.05 | 5.23 | 4.15 | 2.71 | 8.48 | 5.50 | 14.30 |\n\n### Long-form English (WER%)\n\n| Delay | Meanwhile | Earnings-21 | Earnings-22 | TEDLIUM |\n|---|---|---|---|---|\n| **480ms** | **5.05** | **10.23** | **12.30** | **3.17** |\n\n## Architecture\n\n- **Causal audio encoder** (~0.6B) with sliding window attention — enables true streaming\n- **Language model decoder** (~3.4B) based on Ministral-3B with adaptive RMS norm conditioned on transcription delay\n- **4x downsampling** from encoder to decoder (frame rate = 12.5 Hz)\n- Both components use sliding window attention for unbounded audio length\n\n## More Info\n\n- [Original model card](https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602)\n- [mlx-audio GitHub](https://github.com/Blaizzy/mlx-audio)\n- [Mistral announcement](https://mistral.ai/news/voxtral-transcribe-2)",
+          "architecture": null,
+          "languages": [
+            "ar",
+            "de",
+            "en",
+            "es",
+            "fr",
+            "hi",
+            "it",
+            "nl",
+            "pt",
+            "zh",
+            "ja",
+            "ko",
+            "ru"
+          ],
+          "lastUpdated": "2026-02-10",
+          "taskTags": [
+            "automatic-speech-recognition"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 783,
+          "communityLikes": 14,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 0.9,
+              "downloadSizeGB": 0.6,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
+          "summary": "This is a 4-bit quantized MLX conversion of mistralai/Voxtral-Mini-4B-Realtime-2602, Mistral AI's streaming speech-to-text model."
+        },
+        {
+          "id": "mlx-community--whisper-large-v3-asr-fp16",
+          "family": "whisper",
+          "displayName": "whisper-large-v3-asr",
+          "paramSize": "1.5416B",
+          "paramCountB": 1.5416,
+          "modelType": "asr",
+          "source": "mlx",
+          "format": "mlx-fp16",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/whisper-large-v3-asr-fp16",
+          "ramGB": 4.62,
+          "downloadSizeGB": 3.08,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "# Whisper\n\nWhisper is a state-of-the-art model for automatic speech recognition (ASR) and speech translation, proposed in the paper \n[Robust Speech Recognition via Large-Scale Weak Supervision](https://huggingface.co/papers/2212.04356) by Alec Radford \net al. from OpenAI. Trained on >5M hours of labeled data, Whisper demonstrates a strong ability to generalise to many \ndatasets and domains in a zero-shot setting.\n\nWhisper large-v3 has the same architecture as the previous [large](https://huggingface.co/openai/whisper-large) and [large-v2](https://huggingface.co/openai/whisper-large-v2) \nmodels, except for the following minor differences:\n\n1. The spectrogram input uses 128 Mel frequency bins instead of 80\n2. A new language token for Cantonese\n\nThe Whisper large-v3 model was trained on 1 million hours of weakly labeled audio and 4 million hours of pseudo-labeled \naudio collected using Whisper [large-v2](https://huggingface.co/openai/whisper-large-v2) . The model was trained for 2.0 epochs over this mixture dataset.\n\nThe large-v3 model shows improved performance over a wide variety of languages, showing 10% to 20% reduction of errors \ncompared to Whisper [large-v2](https://huggingface.co/openai/whisper-large-v2) . For more details on the different checkpoints available, refer to the section [Model details](#model-details).\n\n**Disclaimer**: Content for this model card has partly been written by the 🤗 Hugging Face team, and partly copied and \npasted from the original model card.\n\n## Usage\n\nWhisper large-v3 is supported in Hugging Face 🤗 Transformers. To run the model, first install the Transformers \nlibrary. For this example, we'll also install 🤗 Datasets to load toy audio dataset from the Hugging Face Hub, and \n🤗 Accelerate to reduce the model loading time:\n\nThe model can be used with the [`pipeline`](https://huggingface.co/docs/transformers/main_classes/pipelines#transformers.AutomaticSpeechRecognitionPipeline)\nclass to transcribe audios of arbitrary length:\n\nTo transcribe a local audio file, simply pass the path to your audio file when you call the pipeline:\n\nMultiple audio files can be transcribed in parallel by specifying them as a list and setting the `batch_size` parameter:\n\nTransformers is compatible with all Whisper decoding strategies, such as temperature fallback and condition on previous \ntokens. The following example demonstrates how to enable these heuristics:\n\nWhisper predicts the language of the source audio automatically. If the source audio language is known *a-priori*, it \ncan be passed as an argument to the pipeline:\n\nBy default, Whisper performs the task of *speech transcription*, where the source audio language is the same as the target\ntext language. To perform *speech translation*, where the target text is in English, set the task to `\"translate\"`:\n\nFinally, the model can be made to predict timestamps. For sentence-level timestamps, pass the `return_timestamps` argument:\n\nAnd for word-level timestamps:\n\nThe above arguments can be used in isolation or in combination. For example, to perform the task of speech transcription \nwhere the source audio is in French, and we want to return sentence-level timestamps, the following can be used:\n\n For more control over the generation parameters, use the model + processor API directly: \n\n## Additional Speed & Memory Improvements\n\nYou can apply additional speed and memory improvements to Whisper to further reduce the inference speed and VRAM \nrequirements.\n\n### Chunked Long-Form\n\nWhisper has a receptive field of 30-seconds. To transcribe audios longer than this, one of two long-form algorithms are\nrequired:\n1. **Sequential:** uses a \"sliding window\" for buffered inference, transcribing 30-second slices one after the other\n2. **Chunked:** splits long audio files into shorter ones (with a small overlap between segments), transcribes each segment independently, and stitches the resulting transcriptions at the boundaries\n\nThe sequential long-form algorithm should be used in either of the following scenarios:\n1. Transcription accuracy is the most important factor, and speed is less of a consideration\n2. You are transcribing **batches** of long audio files, in which case the latency of sequential is comparable to chunked, while being up to 0.5% WER more accurate\n\nConversely, the chunked algorithm should be used when:\n1. Transcription speed is the most important factor\n2. You are transcribing a **single** long audio file\n\nBy default, Transformers uses the sequential algorithm. To enable the chunked algorithm, pass the `chunk_length_s` \nparameter to the `pipeline`. For large-v3, a chunk length of 30-seconds is optimal. To activate batching over long \naudio files, pass the argument `batch_size`:\n\n#### Torch compile\n\nThe Whisper forward pass is compatible with [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html)\nfor 4.5x speed-ups.\n\n**Note:** `torch.compile` is currently not compatible with the Chunked long-form algorithm or Flash Attention 2 ⚠️\n\n#### Flash Attention 2\n\nWe recommend using [Flash-Attention 2](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#flashattention-2) if your GPU supports it and you are not using [torch.compile](#torch-compile). \nTo do so, first install [Flash Attention](https://github.com/Dao-AILab/flash-attention):\n\nThen pass `attn_implementation=\"flash_attention_2\"` to `from_pretrained`:\n\n#### Torch Scale-Product-Attention (SDPA)\n\nIf your GPU does not support Flash Attention, we recommend making use of PyTorch [scaled dot-product attention (SDPA)](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html). \nThis attention implementation is activated **by default** for PyTorch versions 2.1.1 or greater. To check \nwhether you have a compatible PyTorch version, run the following Python code snippet:\n\nIf the above returns `True`, you have a valid version of PyTorch installed and SDPA is activated by default. If it \nreturns `False`, you ne",
+          "architecture": "WhisperForConditionalGeneration",
+          "languages": [
+            "en",
+            "zh",
+            "de",
+            "es",
+            "ru",
+            "ko",
+            "fr",
+            "ja",
+            "pt",
+            "tr",
+            "pl",
+            "ca",
+            "nl",
+            "ar",
+            "sv",
+            "it",
+            "id",
+            "hi",
+            "fi",
+            "vi",
+            "he",
+            "uk",
+            "el",
+            "ms",
+            "cs",
+            "ro",
+            "da",
+            "hu",
+            "ta",
+            "no",
+            "th",
+            "ur",
+            "hr",
+            "bg",
+            "lt",
+            "la",
+            "mi",
+            "ml",
+            "cy",
+            "sk",
+            "te",
+            "fa",
+            "lv",
+            "bn",
+            "sr",
+            "az",
+            "sl",
+            "kn",
+            "et",
+            "mk",
+            "br",
+            "eu",
+            "is",
+            "hy",
+            "ne",
+            "mn",
+            "bs",
+            "kk",
+            "sq",
+            "sw",
+            "gl",
+            "mr",
+            "pa",
+            "si",
+            "km",
+            "sn",
+            "yo",
+            "so",
+            "af",
+            "oc",
+            "ka",
+            "be",
+            "tg",
+            "sd",
+            "gu",
+            "am",
+            "yi",
+            "lo",
+            "uz",
+            "fo",
+            "ht",
+            "ps",
+            "tk",
+            "nn",
+            "mt",
+            "sa",
+            "lb",
+            "my",
+            "bo",
+            "tl",
+            "mg",
+            "as",
+            "tt",
+            "haw",
+            "ln",
+            "ha",
+            "ba",
+            "jw",
+            "su"
+          ],
+          "lastUpdated": "2026-01-13",
+          "taskTags": [
+            "automatic-speech-recognition"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 83,
+          "communityLikes": 0,
+          "variants": [
+            {
+              "quantization": "fp16",
+              "format": "mlx-fp16",
+              "ramGB": 4.62,
+              "downloadSizeGB": 3.08,
+              "qualityPercent": 100,
+              "hfModelId": "mlx-community/whisper-large-v3-asr-fp16",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "openai/whisper-large-v3",
+          "summary": "Whisper is a state-of-the-art model for automatic speech recognition (ASR) and speech translation, proposed in the paper"
+        }
+      ]
+    },
+    {
+      "id": "tts",
+      "name": "Text-to-Speech",
+      "sfSymbol": "mouth.fill",
+      "children": null,
+      "models": [
+        {
+          "id": "mlx-community--Kokoro-82M-bf16",
+          "family": "Kokoro",
+          "displayName": "Kokoro-82M",
+          "paramSize": "0.082B",
+          "paramCountB": 0.082,
+          "modelType": "tts",
+          "source": "mlx",
+          "format": "mlx-bf16",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Kokoro-82M-bf16",
+          "ramGB": 0.25,
+          "downloadSizeGB": 0.16,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "Kokoro is a compact, high-quality open text-to-speech model with just 82M parameters, offering 50+ voices across multiple languages and accents. Its small size makes it fast to run on-device while producing natural speech, which is why it's a popular default for local TTS. This is an MLX (bf16) build for Apple Silicon.",
+          "architecture": null,
+          "languages": [
+            "en"
+          ],
+          "lastUpdated": "2025-12-02",
+          "taskTags": [
+            "text-to-speech"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 15136,
+          "communityLikes": 53,
+          "variants": [
+            {
+              "quantization": "bf16",
+              "format": "mlx-bf16",
+              "ramGB": 0.25,
+              "downloadSizeGB": 0.16,
+              "qualityPercent": 100,
+              "hfModelId": "mlx-community/Kokoro-82M-bf16",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "curated",
+          "summary": "Kokoro-82M: a lightweight 82M-parameter text-to-speech model with dozens of voices across several languages."
+        },
+        {
+          "id": "mlx-community--Qwen3-TTS-12Hz-0.6B-Base-bf16",
+          "family": "Qwen3",
+          "displayName": "Qwen3-TTS-12Hz-0.6B-Base",
+          "paramSize": "0.9146B",
+          "paramCountB": 0.9146,
+          "modelType": "tts",
+          "source": "mlx",
+          "format": "mlx-bf16",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16",
+          "ramGB": 2.74,
+          "downloadSizeGB": 1.83,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "# Qwen3-TTS-12Hz-0.6B-Base\n\n[**Qwen3-TTS Technical Report**](https://huggingface.co/papers/2601.15621) | [**GitHub Repository**](https://github.com/QwenLM/Qwen3-TTS) | [**Hugging Face Demo**](https://huggingface.co/spaces/Qwen/Qwen3-TTS)\n\nQwen3-TTS is a family of advanced multilingual, controllable, robust, and streaming text-to-speech models. Trained on over 5 million hours of speech data spanning 10 languages, Qwen3-TTS supports state-of-the-art 3-second voice cloning and description-based control.\n\nThis specific checkpoint is the **0.6B Base model**, which is capable of rapid voice cloning from a user-provided audio input.\n\n## Quickstart\n\n### Installation\n\n### Sample Usage (Voice Clone)\n\nTo clone a voice and synthesize new content using the Base model, you can use the following code snippet:\n\n## Overview\n### Introduction\n\n    \n\nQwen3-TTS covers 10 major languages (Chinese, English, Japanese, Korean, German, French, Russian, Portuguese, Spanish, and Italian) as well as multiple dialectal voice profiles to meet global application needs. Key features:\n\n* **Powerful Speech Representation**: Powered by the self-developed Qwen3-TTS-Tokenizer-12Hz, it achieves efficient acoustic compression and high-dimensional semantic modeling.\n* **Universal End-to-End Architecture**: Utilizing a discrete multi-codebook LM architecture, it realizes full-information end-to-end speech modeling.\n* **Extreme Low-Latency Streaming Generation**: End-to-end synthesis latency as low as 97ms, meeting the rigorous demands of real-time interactive scenarios.\n* **Intelligent Text Understanding and Voice Control**: Supports speech generation driven by natural language instructions, allowing for flexible control over multi-dimensional acoustic attributes.\n\n### Model Architecture\n\n    \n\n## Citation\n\nIf you find this work useful, please consider citing the technical report:",
+          "architecture": "Qwen3TTSForConditionalGeneration",
+          "languages": null,
+          "lastUpdated": "2026-01-25",
+          "taskTags": [
+            "text-to-speech"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 3469,
+          "communityLikes": 3,
+          "variants": [
+            {
+              "quantization": "bf16",
+              "format": "mlx-bf16",
+              "ramGB": 2.74,
+              "downloadSizeGB": 1.83,
+              "qualityPercent": 100,
+              "hfModelId": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+          "summary": "Qwen3-TTS is a family of advanced multilingual, controllable, robust, and streaming text-to-speech models."
+        },
+        {
+          "id": "mlx-community--chatterbox-fp16",
+          "family": "chatterbox",
+          "displayName": "chatterbox",
+          "paramSize": "1.285B",
+          "paramCountB": 1.285,
+          "modelType": "tts",
+          "source": "mlx",
+          "format": "mlx-fp16",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/chatterbox-fp16",
+          "ramGB": 3.85,
+          "downloadSizeGB": 2.57,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "# mlx-community/chatterbox-fp16\nThis model was converted to MLX format from [`ResembleAI/chatterbox`](https://huggingface.co/ResembleAI/chatterbox) using mlx-audio version **0.2.7**.\nRefer to the [original model card](https://huggingface.co/ResembleAI/chatterbox) for more details on the model.\n\n## Use with mlx\n\n### CLI Example:\n\n### Python Example:\n\n### Voice Cloning: \n\n## Multilingual Quickstart\n\nGenerate speech in 23 languages by specifying the `lang_code` parameter. The model automatically handles pronunciation, intonation, and language-specific phonemes.\n\n### Supported Languages\n\n| Code | Language   | Code | Language   | Code | Language   |\n|------|------------|------|------------|------|------------|\n| `ar` | Arabic     | `he` | Hebrew     | `no` | Norwegian  |\n| `da` | Danish     | `hi` | Hindi      | `pl` | Polish     |\n| `de` | German     | `it` | Italian    | `pt` | Portuguese |\n| `el` | Greek      | `ja` | Japanese   | `ru` | Russian    |\n| `en` | English    | `ko` | Korean     | `sv` | Swedish    |\n| `es` | Spanish    | `ms` | Malay      | `sw` | Swahili    |\n| `fi` | Finnish    | `nl` | Dutch      | `tr` | Turkish    |\n| `fr` | French     | `zh` | Chinese    |      |            |",
+          "architecture": null,
+          "languages": [
+            "ar",
+            "da",
+            "de",
+            "el",
+            "en",
+            "es",
+            "fi",
+            "fr",
+            "he",
+            "hi",
+            "it",
+            "ja",
+            "ko",
+            "ms",
+            "nl",
+            "no",
+            "pl",
+            "pt",
+            "ru",
+            "sv",
+            "sw",
+            "tr",
+            "zh"
+          ],
+          "lastUpdated": "2026-01-05",
+          "taskTags": [
+            "text-to-speech"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 719,
+          "communityLikes": 5,
+          "variants": [
+            {
+              "quantization": "fp16",
+              "format": "mlx-fp16",
+              "ramGB": 3.85,
+              "downloadSizeGB": 2.57,
+              "qualityPercent": 100,
+              "hfModelId": "mlx-community/chatterbox-fp16",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/chatterbox-fp16",
+          "summary": "Generate speech in 23 languages by specifying the langcode parameter."
+        },
+        {
+          "id": "mlx-community--orpheus-3b-0.1-ft-bf16",
+          "family": "orpheus",
+          "displayName": "orpheus-3b-0.1-ft",
+          "paramSize": "3B",
+          "paramCountB": 3.0,
+          "modelType": "tts",
+          "source": "mlx",
+          "format": "mlx-bf16",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/orpheus-3b-0.1-ft-bf16",
+          "ramGB": 9.0,
+          "downloadSizeGB": 6.0,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "# mlx-community/orpheus-3b-0.1-ft-bf16\n\nThis model [mlx-community/orpheus-3b-0.1-ft-bf16](https://huggingface.co/mlx-community/orpheus-3b-0.1-ft-bf16) was\nconverted to MLX format from [canopylabs/orpheus-3b-0.1-ft](https://huggingface.co/canopylabs/orpheus-3b-0.1-ft)\nusing mlx-audio version **0.0.3**.\n\n## Use with mlx",
+          "architecture": "LlamaForCausalLM",
+          "languages": [
+            "en"
+          ],
+          "lastUpdated": "2025-03-21",
+          "taskTags": [
+            "text-to-speech"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 6129,
+          "communityLikes": 3,
+          "variants": [
+            {
+              "quantization": "bf16",
+              "format": "mlx-bf16",
+              "ramGB": 9.0,
+              "downloadSizeGB": 6.0,
+              "qualityPercent": 100,
+              "hfModelId": "mlx-community/orpheus-3b-0.1-ft-bf16",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/orpheus-3b-0.1-ft-bf16",
+          "summary": "This model mlx-community/orpheus-3b-0.1-ft-bf16 was"
+        }
+      ]
+    },
+    {
+      "id": "embedding",
+      "name": "Embeddings",
+      "sfSymbol": "square.grid.3x3.fill",
+      "children": null,
+      "models": [
+        {
+          "id": "mlx-community--all-MiniLM-L6-v2-4bit",
+          "family": "all",
+          "displayName": "all-MiniLM-L6-v2",
+          "paramSize": "0.0178B",
+          "paramCountB": 0.0178,
+          "modelType": "embedding",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/all-MiniLM-L6-v2-4bit",
+          "ramGB": 0.01,
+          "downloadSizeGB": 0.01,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "# all-MiniLM-L6-v2\nThis is a [sentence-transformers](https://www.SBERT.net) model: It maps sentences & paragraphs to a 384 dimensional dense vector space and can be used for tasks like clustering or semantic search.\n\n## Usage (Sentence-Transformers)\nUsing this model becomes easy when you have [sentence-transformers](https://www.SBERT.net) installed:\n\nThen you can use the model like this:\n\n## Usage (HuggingFace Transformers)\nWithout [sentence-transformers](https://www.SBERT.net), you can use the model like this: First, you pass your input through the transformer model, then you have to apply the right pooling-operation on-top of the contextualized word embeddings.\n\n------\n\n## Background\n\nThe project aims to train sentence embedding models on very large sentence level datasets using a self-supervised \ncontrastive learning objective. We used the pretrained [`nreimers/MiniLM-L6-H384-uncased`](https://huggingface.co/nreimers/MiniLM-L6-H384-uncased) model and fine-tuned in on a \n1B sentence pairs dataset. We use a contrastive learning objective: given a sentence from the pair, the model should predict which out of a set of randomly sampled other sentences, was actually paired with it in our dataset.\n\nWe developed this model during the \n[Community week using JAX/Flax for NLP & CV](https://discuss.huggingface.co/t/open-to-the-community-community-week-using-jax-flax-for-nlp-cv/7104), \norganized by Hugging Face. We developed this model as part of the project:\n[Train the Best Sentence Embedding Model Ever with 1B Training Pairs](https://discuss.huggingface.co/t/train-the-best-sentence-embedding-model-ever-with-1b-training-pairs/7354). We benefited from efficient hardware infrastructure to run the project: 7 TPUs v3-8, as well as intervention from Googles Flax, JAX, and Cloud team member about efficient deep learning frameworks.\n\n## Intended uses\n\nOur model is intended to be used as a sentence and short paragraph encoder. Given an input text, it outputs a vector which captures \nthe semantic information. The sentence vector may be used for information retrieval, clustering or sentence similarity tasks.\n\nBy default, input text longer than 256 word pieces is truncated.\n\n## Training procedure\n\n### Pre-training \n\nWe use the pretrained [`nreimers/MiniLM-L6-H384-uncased`](https://huggingface.co/nreimers/MiniLM-L6-H384-uncased) model. Please refer to the model card for more detailed information about the pre-training procedure.\n\n### Fine-tuning \n\nWe fine-tune the model using a contrastive objective. Formally, we compute the cosine similarity from each possible sentence pairs from the batch.\nWe then apply the cross entropy loss by comparing with true pairs.\n\n#### Hyper parameters\n\nWe trained our model on a TPU v3-8. We train the model during 100k steps using a batch size of 1024 (128 per TPU core).\nWe use a learning rate warm up of 500. The sequence length was limited to 128 tokens. We used the AdamW optimizer with\na 2e-5 learning rate. The full training script is accessible in this current repository: `train_script.py`.\n\n#### Training data\n\nWe use the concatenation from multiple datasets to fine-tune our model. The total number of sentence pairs is above 1 billion sentences.\nWe sampled each dataset given a weighted probability which configuration is detailed in the `data_config.json` file.\n\n| Dataset                                                  | Paper                                    | Number of training tuples  |\n|--------------------------------------------------------|:----------------------------------------:|:--------------------------:|\n| [Reddit comments (2015-2018)](https://github.com/PolyAI-LDN/conversational-datasets/tree/master/reddit) | [paper](https://arxiv.org/abs/1904.06472) | 726,484,430 |\n| [S2ORC](https://github.com/allenai/s2orc) Citation pairs (Abstracts) | [paper](https://aclanthology.org/2020.acl-main.447/) | 116,288,806 |\n| [WikiAnswers](https://github.com/afader/oqa#wikianswers-corpus) Duplicate question pairs | [paper](https://doi.org/10.1145/2623330.2623677) | 77,427,422 |\n| [PAQ](https://github.com/facebookresearch/PAQ) (Question, Answer) pairs | [paper](https://arxiv.org/abs/2102.07033) | 64,371,441 |\n| [S2ORC](https://github.com/allenai/s2orc) Citation pairs (Titles) | [paper](https://aclanthology.org/2020.acl-main.447/) | 52,603,982 |\n| [S2ORC](https://github.com/allenai/s2orc) (Title, Abstract) | [paper](https://aclanthology.org/2020.acl-main.447/) | 41,769,185 |\n| [Stack Exchange](https://huggingface.co/datasets/flax-sentence-embeddings/stackexchange_xml) (Title, Body) pairs  | - | 25,316,456 |\n| [Stack Exchange](https://huggingface.co/datasets/flax-sentence-embeddings/stackexchange_xml) (Title+Body, Answer) pairs  | - | 21,396,559 |\n| [Stack Exchange](https://huggingface.co/datasets/flax-sentence-embeddings/stackexchange_xml) (Title, Answer) pairs  | - | 21,396,559 |\n| [MS MARCO](https://microsoft.github.io/msmarco/) triplets | [paper](https://doi.org/10.1145/3404835.3462804) | 9,144,553 |\n| [GOOAQ: Open Question Answering with Diverse Answer Types](https://github.com/allenai/gooaq) | [paper](https://arxiv.org/pdf/2104.08727.pdf) | 3,012,496 |\n| [Yahoo Answers](https://www.kaggle.com/soumikrakshit/yahoo-answers-dataset) (Title, Answer) | [paper](https://proceedings.neurips.cc/paper/2015/hash/250cf8b51c773f3f8dc8b4be867a9a02-Abstract.html) | 1,198,260 |\n| [Code Search](https://huggingface.co/datasets/code_search_net) | - | 1,151,414 |\n| [COCO](https://cocodataset.org/#home) Image captions | [paper](https://link.springer.com/chapter/10.1007%2F978-3-319-10602-1_48) | 828,395|\n| [SPECTER](https://github.com/allenai/specter) citation triplets | [paper](https://doi.org/10.18653/v1/2020.acl-main.207) | 684,100 |\n| [Yahoo Answers](https://www.kaggle.com/soumikrakshit/yahoo-answers-dataset) (Question, Answer) | [paper](https://proceedings.neurips.cc/paper/2015/hash/250cf8b51c773f3f8dc8b4be867a9a02-Abstract.html) | 681,164 |\n| [Yahoo Answers](https://www.kaggle.com/soumikrakshi",
+          "architecture": "BertModel",
+          "languages": [
+            "en"
+          ],
+          "lastUpdated": "2025-04-02",
+          "taskTags": [
+            "sentence-similarity"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 1337,
+          "communityLikes": 6,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 0.01,
+              "downloadSizeGB": 0.01,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/all-MiniLM-L6-v2-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "sentence-transformers/all-MiniLM-L6-v2",
+          "summary": "This is a sentence-transformers model: It maps sentences & paragraphs to a 384 dimensional dense vector space and can be used for tasks like clustering or semantic search."
+        },
+        {
+          "id": "mlx-community--embeddinggemma-300m-4bit",
+          "family": "embeddinggemma",
+          "displayName": "embeddinggemma-300m",
+          "paramSize": "0.0481B",
+          "paramCountB": 0.0481,
+          "modelType": "embedding",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/embeddinggemma-300m-4bit",
+          "ramGB": 0.04,
+          "downloadSizeGB": 0.03,
+          "contextWindow": null,
+          "license": "gemma",
+          "licenseUrl": null,
+          "description": "EmbeddingGemma is a 300M-parameter open text-embedding model from Google, built on the Gemma architecture and trained for high-quality multilingual semantic representations. Its small size suits on-device retrieval, semantic search and RAG. This is a 4-bit MLX build for Apple Silicon.",
+          "architecture": null,
+          "languages": null,
+          "lastUpdated": "2025-09-04",
+          "taskTags": [
+            "sentence-similarity"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 1899,
+          "communityLikes": 5,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 0.04,
+              "downloadSizeGB": 0.03,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/embeddinggemma-300m-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "curated",
+          "summary": "Google's EmbeddingGemma 300M, a compact multilingual text-embedding model for search and RAG."
+        },
+        {
+          "id": "mlx-community--nomicai-modernbert-embed-base-bf16",
+          "family": "nomicai",
+          "displayName": "nomicai-modernbert-embed-base",
+          "paramSize": "0.15B",
+          "paramCountB": 0.15,
+          "modelType": "embedding",
+          "source": "mlx",
+          "format": "mlx-bf16",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/nomicai-modernbert-embed-base-bf16",
+          "ramGB": 0.45,
+          "downloadSizeGB": 0.3,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "# ModernBERT Embed\n\nModernBERT Embed is an embedding model trained from [ModernBERT-base](https://huggingface.co/answerdotai/ModernBERT-base), bringing the new advances of ModernBERT to embeddings!\n\nTrained on the [Nomic Embed](https://arxiv.org/abs/2402.01613) weakly-supervised and supervised datasets, `modernbert-embed` also supports Matryoshka Representation Learning dimensions of 256, reducing memory by 3x with minimal performance loss.\n\n## Performance\n\n| Model                 | Dimensions | Average (56) | Classification (12) | Clustering (11) | Pair Classification (3) | Reranking (4) | Retrieval (15) | STS (10)  | Summarization (1) |\n|-----------------------|------------|--------------|---------------------|-----------------|-------------------------|---------------|----------------|-----------|------------------|\n| nomic-embed-text-v1   | 768        | 62.4         | 74.1                | 43.9            | **85.2**                | 55.7          | 52.8           | 82.1      | 30.1             |\n| nomic-embed-text-v1.5 | 768        | 62.28        | 73.55               | 43.93           | 84.61                   | 55.78         | **53.01**      | **81.94** | 30.4             |\n| modernbert-embed-base      | 768        | **62.62**    | **74.31**           | **44.98**       | 83.96                   | **56.42**     | 52.89          | 81.78     | **31.39**        |\n| nomic-embed-text-v1.5 | 256        | 61.04        | 72.1                | 43.16           | 84.09                   | 55.18         | 50.81          | 81.34     |   30.05               |\n| modernbert-embed-base      | 256        | 61.17        | 72.40               | 43.82           | 83.45                   | 55.69         | 50.62          | 81.12     | 31.27            |\n\n## Usage\n\nYou can use these models directly with the latest transformers release and requires installing `transformers>=4.48.0`:\n\nReminder, this model is trained similarly to Nomic Embed and **REQUIRES** prefixes to be added to the input. For more information, see the instructions in [Nomic Embed](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5#task-instruction-prefixes).\n\nMost use cases, adding `search_query: ` to the query and `search_document: ` to the documents will be sufficient.\n\n### Sentence Transformers\n\nClick to see Sentence Transformers usage with Matryoshka Truncation\n\nIn Sentence Transformers, you can truncate embeddings to a smaller dimension by using the `truncate_dim` parameter when loading the `SentenceTransformer` model.\n\nNote the small differences compared to the full 768-dimensional similarities.\n\n### Transformers\n\nClick to see Transformers usage with Matryoshka Truncation\n\nIn `transformers`, you can truncate embeddings to a smaller dimension by slicing the mean pooled embeddings, prior to normalization.\n\nNote the small differences compared to the full 768-dimensional similarities.\n\n### Transformers.js\n\nIf you haven't already, you can install the [Transformers.js](https://huggingface.co/docs/transformers.js) JavaScript library from [NPM](https://www.npmjs.com/package/@huggingface/transformers) using:\n\nThen, you can compute embeddings as follows:\n\n## Training\n\nClick the Nomic Atlas map below to visualize a 5M sample of our contrastive pretraining data!\n\nWe train our embedder using a multi-stage training pipeline. Starting from a long-context [BERT model](https://huggingface.co/nomic-ai/nomic-bert-2048),\nthe first unsupervised contrastive stage trains on a dataset generated from weakly related text pairs, such as question-answer pairs from forums like StackExchange and Quora, title-body pairs from Amazon reviews, and summarizations from news articles.\n\nIn the second finetuning stage, higher quality labeled datasets such as search queries and answers from web searches are leveraged. Data curation and hard-example mining is crucial in this stage.\n\nFor more details, see the Nomic Embed [Technical Report](https://static.nomic.ai/reports/2024_Nomic_Embed_Text_Technical_Report.pdf) and corresponding [blog post](https://blog.nomic.ai/posts/nomic-embed-text-v1).\n\nTraining data to train the models is released in its entirety. For more details, see the `contrastors` [repository](https://github.com/nomic-ai/contrastors)\n\n## Join the Nomic Community\n\n- Nomic: [https://nomic.ai](https://nomic.ai)\n- Discord: [https://discord.gg/myY5YDR8z8](https://discord.gg/myY5YDR8z8)\n- Twitter: [https://twitter.com/nomic_ai](https://twitter.com/nomic_ai)\n\n## Citation\n\nIf you find the model, dataset, or training code useful, please cite our work",
+          "architecture": "ModernBertModel",
+          "languages": [
+            "en"
+          ],
+          "lastUpdated": "2025-04-02",
+          "taskTags": [
+            "sentence-similarity"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 148523,
+          "communityLikes": 1,
+          "variants": [
+            {
+              "quantization": "bf16",
+              "format": "mlx-bf16",
+              "ramGB": 0.45,
+              "downloadSizeGB": 0.3,
+              "qualityPercent": 100,
+              "hfModelId": "mlx-community/nomicai-modernbert-embed-base-bf16",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "nomic-ai/modernbert-embed-base",
+          "summary": "ModernBERT Embed is an embedding model trained from ModernBERT-base, bringing the new advances of ModernBERT to embeddings!"
+        },
+        {
+          "id": "mlx-community--bge-m3-mlx-fp16",
+          "family": "bge",
+          "displayName": "bge-m3-mlx",
+          "paramSize": "0.5678B",
+          "paramCountB": 0.5678,
+          "modelType": "embedding",
+          "source": "mlx",
+          "format": "mlx-fp16",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/bge-m3-mlx-fp16",
+          "ramGB": 1.7,
+          "downloadSizeGB": 1.14,
+          "contextWindow": null,
+          "license": "mit",
+          "licenseUrl": null,
+          "description": "# BGE-M3 MLX (FP16)\n\nThis is the [BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3) model converted to MLX format for Apple Silicon.\n\n## Model Description\n\nBGE-M3 is a versatile embedding model capable of:\n- Dense retrieval\n- Sparse retrieval\n- Multi-vector (ColBERT) retrieval\n\nThis MLX conversion enables efficient inference on Apple Silicon Macs.\n\n## Model Details\n\n| Property | Value |\n|----------|-------|\n| Architecture | XLM-RoBERTa |\n| Precision | FP16 (float16) |\n| Embedding Dimension | 1024 |\n| Max Sequence Length | 8192 |\n| Model Size | ~1.1 GB |\n| Languages | 100+ languages |\n\n## Usage\n\n### With MLX\n\n### With oMLX\n\n### With Python (OpenAI-compatible)\n\n## Performance\n\nTested on macOS with Apple Silicon:\n- Successfully generates 1024-dimensional embeddings\n- Supports multilingual text (English, Chinese, Japanese, Korean, etc.)\n- Compatible with oMLX embedding endpoint\n\n## Conversion Details\n\nThis model was converted from the original BAAI/bge-m3 using:\n- mlx-embeddings conversion tool\n- FP16 precision for balanced size and quality\n\n## License\n\nThis model inherits the MIT license from the original BAAI/bge-m3 model.\n\n## Citation\n\n## Disclaimer\n\nThis is an unofficial MLX conversion of the BAAI/bge-m3 model. For the original model and official implementations, please refer to [BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3).",
+          "architecture": "XLMRobertaModel",
+          "languages": [
+            "multilingual",
+            "en",
+            "zh",
+            "de",
+            "es",
+            "fr",
+            "it",
+            "ja",
+            "ko",
+            "pt",
+            "ru"
+          ],
+          "lastUpdated": "2026-03-16",
+          "taskTags": [
+            "feature-extraction"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 4194,
+          "communityLikes": 2,
+          "variants": [
+            {
+              "quantization": "fp16",
+              "format": "mlx-fp16",
+              "ramGB": 1.7,
+              "downloadSizeGB": 1.14,
+              "qualityPercent": 100,
+              "hfModelId": "mlx-community/bge-m3-mlx-fp16",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/bge-m3-mlx-fp16",
+          "summary": "BGE-M3 is a versatile embedding model capable of:"
+        }
+      ]
+    },
+    {
+      "id": "video",
+      "name": "Video",
+      "sfSymbol": "film.fill",
+      "children": null,
+      "models": [
+        {
+          "id": "mlx-community--Molmo2-8B-4bit",
+          "family": "Molmo2",
+          "displayName": "Molmo2-8B",
+          "paramSize": "2.2761B",
+          "paramCountB": 2.2761,
+          "modelType": "video",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Molmo2-8B-4bit",
+          "ramGB": 1.92,
+          "downloadSizeGB": 1.28,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "# Molmo2-8B\n\nMolmo2 is a family of open vision-language models developed by the Allen Institute for AI (Ai2) that support image, video and multi-image understanding and grounding.\nMolmo2 models are trained on publicly available third party datasets as referenced in [our technical report](https://allenai.org/papers/molmo2) and [Molmo2 data](https://huggingface.co/collections/allenai/molmo2-data), \na collection of datasets with highly-curated image-text and video-text pairs.\nIt has state-of-the-art performance among multimodal models with a similar size.\nYou can find all models in the Molmo2 family [here](https://huggingface.co/collections/allenai/molmo2).\n\n**Learn more** about the Molmo2 family [in our announcement blog post](https://allenai.org/blog/molmo2).\n\nMolmo2-8B is based on [Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B) and uses [SigLIP 2](https://huggingface.co/google/siglip-so400m-patch14-384) as vision backbone. \nIt outperforms others in the class of open weight and data models on short videos, counting, and captioning, and is competitive on long-videos.\n\nAi2 is commited to open science. The Molmo2 datasets are available [here](https://huggingface.co/collections/allenai/molmo2-data). \nAll other artifacts used in creating Molmo2 (training code, evaluations, intermediate checkpoints) will be made available at a later date, furthering our commitment to open-source AI development and reproducibility.\n\nQuick links:\n- 💬 [Demo](https://playground.allenai.org/?model=molmo2-8b)\n- 📂 [All Models](https://huggingface.co/collections/allenai/molmo2)\n- 📃 [Paper](https://allenai.org/papers/molmo2)\n- 🎥 [Blog with Videos](https://allenai.org/blog/molmo2)\n\n## Quick Start\n\n### Setup Conda Environment\n\n### General Video QA\n\n### Pointing Video QA\n\n### Tracking Video QA (best with max_fps=8)\n\n### Multi-image QA\n\n### Multi-Image Point QA\n\n## Evaluations\n\nWe report the Average Score on 15 Academic Benchmarks here.\nFor details on the evals, refer to the main video results table in our [technical report](https://allenai.org/papers/molmo2).\n\n| Model | Average Score on 15 Academic Benchmarks |\n|-----------------------------|-----------------------------------------|\n| GPT-5 | 70.6 |\n| GPT-5 mini | 65.0 |\n| Gemini 3 Pro | 70.0 |\n| Gemini 2.5 Pro | 71.2 |\n| Gemini 2.5 Flash | 66.7 |\n| Claude Sonnet 4.5 | 59.6 |\n| InternVL3.5-4B | 53.4 |\n| InternVL3.5-8B | 54.1 |\n| Qwen3-VL-4B | 58.1 |\n| Qwen3-VL-8B | 59.5 |\n| Keye-VL-1.5-8B | 55.7 |\n| GLM-4.1V-9B | 56.9 |\n| MiniCPM-V-4.5-8B | 56.6 |\n| Eagle2.5-8B | 60.7 |\n| PLM-3B | 53.9 |\n| PLM-8B | 56.2 |\n| LLaVA-Video-7B | 52.7 |\n| VideoChat-Flash-7B | 56.1 |\n| Molmo2-4B | 62.8 |\n| **Molmo2-8B (this model)** | 63.1 |\n| Molmo2-7B | 59.7 |\n\n## License and Use\n\nThis model is licensed under Apache 2.0. It is intended for research and educational use in accordance with Ai2’s [Responsible Use Guidelines](https://allenai.org/responsible-use).\nThis model is trained on third party datasets that are subject to academic and non-commercial research use only. Please review the sources to determine if this model is appropriate for your use case.",
+          "architecture": "Molmo2ForConditionalGeneration",
+          "languages": [
+            "en"
+          ],
+          "lastUpdated": "2026-01-11",
+          "taskTags": [
+            "video-text-to-text"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 109,
+          "communityLikes": 2,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 1.92,
+              "downloadSizeGB": 1.28,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/Molmo2-8B-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "allenai/Molmo2-8B",
+          "summary": "Molmo2 is a family of open vision-language models developed by the Allen Institute for AI (Ai2) that support image, video and multi-image understanding and grounding."
+        }
+      ]
+    }
+  ]
+}

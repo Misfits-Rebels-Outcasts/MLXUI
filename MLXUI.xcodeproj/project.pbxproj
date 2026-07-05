@@ -1,0 +1,602 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 110;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		203CC01D2FF0E29F007A6D30 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 203CC01C2FF0E29F007A6D30 /* WhisperKit */; };
+		20913E352FF390DC0005E86D /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = 20913E342FF390DC0005E86D /* MLXVLM */; };
+		20AACD442FEBC4C50098B372 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = B00000030001FEB616500 /* MLX */; };
+		20AACD452FEBC4C50098B372 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = B00000040001FEB616500 /* MLXLLM */; };
+		20B366A22FF3373F00682B99 /* MLXAudioTTS in Frameworks */ = {isa = PBXBuildFile; productRef = 20B366A12FF3373F00682B99 /* MLXAudioTTS */; };
+		20ED052A2FF2A3C6009036F2 /* MLXAudioSTT in Frameworks */ = {isa = PBXBuildFile; productRef = 20ED05292FF2A3C6009036F2 /* MLXAudioSTT */; };
+		20F5D7BF2FF61BCF005F7423 /* PaddleOCRVL in Frameworks */ = {isa = PBXBuildFile; productRef = 20F5D7BE2FF61BCF005F7423 /* PaddleOCRVL */; };
+		20FAFC272FF4866E00DC6CCD /* MLXEmbedders in Frameworks */ = {isa = PBXBuildFile; productRef = 20FAFC262FF4866E00DC6CCD /* MLXEmbedders */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		2041A3A52FECB7DD0090F7DA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 207EF29B2FEB616500A0AC5F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 207EF2A22FEB616500A0AC5F;
+			remoteInfo = MLXUI;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		2041A3A12FECB7DD0090F7DA /* MLXUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MLXUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		207EF2A32FEB616500A0AC5F /* MLXUI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MLXUI.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		20AACD862FEBC5AA0098B372 /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		2041A3A22FECB7DD0090F7DA /* MLXUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MLXUITests;
+			sourceTree = "<group>";
+		};
+		207EF2A52FEB616500A0AC5F /* MLXUI */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MLXUI;
+			sourceTree = "<group>";
+		};
+		2087814E2FECF603004B3FBE /* RSI */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = RSI;
+			sourceTree = "<group>";
+		};
+		20AACD812FEBC4E10098B372 /* Design */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Design;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		2041A39E2FECB7DD0090F7DA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
+		207EF2A02FEB616500A0AC5F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				20B366A22FF3373F00682B99 /* MLXAudioTTS in Frameworks */,
+				203CC01D2FF0E29F007A6D30 /* WhisperKit in Frameworks */,
+				20913E352FF390DC0005E86D /* MLXVLM in Frameworks */,
+				20F5D7BF2FF61BCF005F7423 /* PaddleOCRVL in Frameworks */,
+				20FAFC272FF4866E00DC6CCD /* MLXEmbedders in Frameworks */,
+				20ED052A2FF2A3C6009036F2 /* MLXAudioSTT in Frameworks */,
+				20AACD452FEBC4C50098B372 /* MLXLLM in Frameworks */,
+				20AACD442FEBC4C50098B372 /* MLX in Frameworks */,
+			);
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		203CC01B2FF0E29F007A6D30 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		207EF29A2FEB616500A0AC5F = {
+			isa = PBXGroup;
+			children = (
+				2087814E2FECF603004B3FBE /* RSI */,
+				20AACD812FEBC4E10098B372 /* Design */,
+				207EF2A52FEB616500A0AC5F /* MLXUI */,
+				2041A3A22FECB7DD0090F7DA /* MLXUITests */,
+				207EF2A42FEB616500A0AC5F /* Products */,
+				20AACD862FEBC5AA0098B372 /* CLAUDE.md */,
+				203CC01B2FF0E29F007A6D30 /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		207EF2A42FEB616500A0AC5F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				207EF2A32FEB616500A0AC5F /* MLXUI.app */,
+				2041A3A12FECB7DD0090F7DA /* MLXUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2041A3A02FECB7DD0090F7DA /* MLXUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2041A3A72FECB7DD0090F7DA /* Build configuration list for PBXNativeTarget "MLXUITests" */;
+			buildPhases = (
+				2041A39D2FECB7DD0090F7DA /* Sources */,
+				2041A39E2FECB7DD0090F7DA /* Frameworks */,
+				2041A39F2FECB7DD0090F7DA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				2041A3A62FECB7DD0090F7DA /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				2041A3A22FECB7DD0090F7DA /* MLXUITests */,
+			);
+			name = MLXUITests;
+			productName = MLXUITests;
+			productReference = 2041A3A12FECB7DD0090F7DA /* MLXUITests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		207EF2A22FEB616500A0AC5F /* MLXUI */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 207EF2AE2FEB616700A0AC5F /* Build configuration list for PBXNativeTarget "MLXUI" */;
+			buildPhases = (
+				207EF29F2FEB616500A0AC5F /* Sources */,
+				207EF2A02FEB616500A0AC5F /* Frameworks */,
+				207EF2A12FEB616500A0AC5F /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				207EF2A52FEB616500A0AC5F /* MLXUI */,
+			);
+			name = MLXUI;
+			packageProductDependencies = (
+				B00000030001FEB616500 /* MLX */,
+				B00000040001FEB616500 /* MLXLLM */,
+				203CC01C2FF0E29F007A6D30 /* WhisperKit */,
+				20ED05292FF2A3C6009036F2 /* MLXAudioSTT */,
+				20B366A12FF3373F00682B99 /* MLXAudioTTS */,
+				20913E342FF390DC0005E86D /* MLXVLM */,
+				20FAFC262FF4866E00DC6CCD /* MLXEmbedders */,
+				20F5D7BE2FF61BCF005F7423 /* PaddleOCRVL */,
+			);
+			productName = MLXUI;
+			productReference = 207EF2A32FEB616500A0AC5F /* MLXUI.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		207EF29B2FEB616500A0AC5F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2700;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					2041A3A02FECB7DD0090F7DA = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = 207EF2A22FEB616500A0AC5F;
+					};
+					207EF2A22FEB616500A0AC5F = {
+						CreatedOnToolsVersion = 27.0;
+					};
+				};
+			};
+			buildConfigurationList = 207EF29E2FEB616500A0AC5F /* Build configuration list for PBXProject "MLXUI" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 207EF29A2FEB616500A0AC5F;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B00000010001FEB616500 /* XCRemoteSwiftPackageReference "mlx-swift" */,
+				B00000020001FEB616500 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
+				203CC0132FF0DFAA007A6D30 /* XCRemoteSwiftPackageReference "WhisperKit" */,
+				20ED05282FF2A3C6009036F2 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */,
+				20F5D7BD2FF61BCF005F7423 /* XCLocalSwiftPackageReference "Vendor/PaddleOCRVL" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 207EF2A42FEB616500A0AC5F /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				207EF2A22FEB616500A0AC5F /* MLXUI */,
+				2041A3A02FECB7DD0090F7DA /* MLXUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		2041A39F2FECB7DD0090F7DA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+		207EF2A12FEB616500A0AC5F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		2041A39D2FECB7DD0090F7DA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
+		207EF29F2FEB616500A0AC5F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		2041A3A62FECB7DD0090F7DA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 207EF2A22FEB616500A0AC5F /* MLXUI */;
+			targetProxy = 2041A3A52FECB7DD0090F7DA /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		2041A3A82FECB7DD0090F7DA /* Debug configuration for PBXNativeTarget "MLXUITests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = B93L2R82PL;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ConnectCode.MLXUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MLXUI.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MLXUI";
+			};
+			name = Debug;
+		};
+		2041A3A92FECB7DD0090F7DA /* Release configuration for PBXNativeTarget "MLXUITests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = B93L2R82PL;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ConnectCode.MLXUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MLXUI.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MLXUI";
+			};
+			name = Release;
+		};
+		207EF2AC2FEB616700A0AC5F /* Debug configuration for PBXProject "MLXUI" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = B93L2R82PL;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		207EF2AD2FEB616700A0AC5F /* Release configuration for PBXProject "MLXUI" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = B93L2R82PL;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		207EF2AF2FEB616700A0AC5F /* Debug configuration for PBXNativeTarget "MLXUI" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MLXUI/MLXUI.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = B93L2R82PL;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ConnectCode.MLXUI;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Debug;
+		};
+		207EF2B02FEB616700A0AC5F /* Release configuration for PBXNativeTarget "MLXUI" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MLXUI/MLXUI.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = B93L2R82PL;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ConnectCode.MLXUI;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		2041A3A72FECB7DD0090F7DA /* Build configuration list for PBXNativeTarget "MLXUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2041A3A82FECB7DD0090F7DA /* Debug configuration for PBXNativeTarget "MLXUITests" */,
+				2041A3A92FECB7DD0090F7DA /* Release configuration for PBXNativeTarget "MLXUITests" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		207EF29E2FEB616500A0AC5F /* Build configuration list for PBXProject "MLXUI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				207EF2AC2FEB616700A0AC5F /* Debug configuration for PBXProject "MLXUI" */,
+				207EF2AD2FEB616700A0AC5F /* Release configuration for PBXProject "MLXUI" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		207EF2AE2FEB616700A0AC5F /* Build configuration list for PBXNativeTarget "MLXUI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				207EF2AF2FEB616700A0AC5F /* Debug configuration for PBXNativeTarget "MLXUI" */,
+				207EF2B02FEB616700A0AC5F /* Release configuration for PBXNativeTarget "MLXUI" */,
+			);
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		20F5D7BD2FF61BCF005F7423 /* XCLocalSwiftPackageReference "Vendor/PaddleOCRVL" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Vendor/PaddleOCRVL;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		203CC0132FF0DFAA007A6D30 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+		20ED05282FF2A3C6009036F2 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Blaizzy/mlx-audio-swift";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+		B00000010001FEB616500 /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.31.4;
+			};
+		};
+		B00000020001FEB616500 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 3.31.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		203CC01C2FF0E29F007A6D30 /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 203CC0132FF0DFAA007A6D30 /* XCRemoteSwiftPackageReference "WhisperKit" */;
+			productName = WhisperKit;
+		};
+		20913E342FF390DC0005E86D /* MLXVLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B00000020001FEB616500 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXVLM;
+		};
+		20B366A12FF3373F00682B99 /* MLXAudioTTS */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 20ED05282FF2A3C6009036F2 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */;
+			productName = MLXAudioTTS;
+		};
+		20ED05292FF2A3C6009036F2 /* MLXAudioSTT */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 20ED05282FF2A3C6009036F2 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */;
+			productName = MLXAudioSTT;
+		};
+		20F5D7BE2FF61BCF005F7423 /* PaddleOCRVL */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PaddleOCRVL;
+		};
+		20FAFC262FF4866E00DC6CCD /* MLXEmbedders */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B00000020001FEB616500 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXEmbedders;
+		};
+		B00000030001FEB616500 /* MLX */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B00000010001FEB616500 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLX;
+		};
+		B00000040001FEB616500 /* MLXLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B00000020001FEB616500 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLLM;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 207EF29B2FEB616500A0AC5F /* Project object */;
+	validationLevel = 1;
+}

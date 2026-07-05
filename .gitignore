@@ -1,0 +1,28 @@
+# === macOS ===
+.DS_Store
+
+# === Xcode / Swift build output ===
+DerivedData/
+build/
+.build/
+*.xcuserstate
+**/xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# === Internal dev harness & planning (not shipped, kept private) ===
+RSI/
+Design/
+catalog-audit/
+scripts/
+
+# === Python tooling cruft ===
+__pycache__/
+*.pyc
+
+# === App user data (never in-repo; lives in ~/Library/Application Support) ===
+# installed.json, models/, downloads/ — belt-and-suspenders in case a path is symlinked in
+installed.json
