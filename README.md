@@ -43,7 +43,7 @@ contributor adding image-generation support doesn't need to understand the chat 
 
 | Browse | Model Detail | Run |
 |--------|-------------|-----|
-| ![Browse](docs/screenshots/browse.png) | ![Detail](docs/screenshots/detail.png) | ![Run](docs/screenshots/run.png) |
+| ![Browse](docs/screenshots/MLXUI_Local_AI_Browser.png) | ![Detail](docs/screenshots/MLX_UI.png) | 
 
 ---
 
@@ -73,7 +73,7 @@ contributor adding image-generation support doesn't need to understand the chat 
 
 ## Supported Models
 
-### browser2.json — MVP catalog (29 models)
+### browser2.json — MVP catalog (28 models)
 
 The app ships `browser2.json`, a hand-curated set of 29 models across 7 categories.
 Every model listed here is downloadable and has a working Run UI.
@@ -312,7 +312,7 @@ Select the **PipelineStudio** scheme, pick My Mac as the target, and press ⌘R.
 
 ### First run
 
-1. The app opens with a catalog of ~435 models organized by category
+1. The app opens with a catalog of ~28 models organized by category
 2. Browse or search with ⌘K
 3. Click **Install** on any model — it downloads from Hugging Face
 4. Once installed, click **Run** to open the model's dedicated interface
