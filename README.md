@@ -7,6 +7,10 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-required-333333)](https://developer.apple.com/macos/)
 
+<a href="https://apps.apple.com/us/app/mlxui-local-llm-ai-browser/id6787626220">
+  <img src="https://tools.applemediaservices.com/api/badges/download-on-the-mac-app-store/black/en-us?size=250x83" alt="Download on the Mac App Store" height="60">
+</a>
+
 MLXUI is the **SwiftUI user interface layer for MLX models** — a native macOS app built on
 [`mlx-swift`](https://github.com/ml-explore/mlx-swift) that lets you browse, install, and
 run local AI models on Apple Silicon. It ships a curated catalog of MLX-optimized models
