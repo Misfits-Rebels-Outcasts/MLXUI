@@ -41,8 +41,8 @@ contributor adding image-generation support doesn't need to understand the chat 
 
 <!-- TODO: add screenshots once you have them -->
 
-| Browse | Model Detail | Run |
-|--------|-------------|-----|
+| Browse | Model Detail |
+|--------|-------------|
 | ![Browse](docs/screenshots/MLXUI_Local_AI_Browser.png) | ![Detail](docs/screenshots/MLX_UI.png) | 
 
 ---
@@ -73,9 +73,9 @@ contributor adding image-generation support doesn't need to understand the chat 
 
 ## Supported Models
 
-### browser2.json — MVP catalog (28 models)
+### browser.json — MVP catalog (28 models)
 
-The app ships `browser2.json`, a hand-curated set of 29 models across 7 categories.
+The app ships `browser.json`, a hand-curated set of 28 models across 7 categories.
 Every model listed here is downloadable and has a working Run UI.
 
 | Category | Models | Sizes |
