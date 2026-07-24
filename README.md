@@ -1,4 +1,4 @@
-# MLXUI &middot; Local AI Workbench
+# MLXUI &middot; Local AI Browser
 
 *Run MLX models visually — no terminal, no Python, no command-line flags.*
 
@@ -20,6 +20,8 @@ them with one click, and provides a purpose-built Run UI for each model type.
 ---
 
 ## What this is
+
+**The ultimate native SwiftUI cockpit for local AI, built exclusively for MLX and Apple Silicon.**
 
 There are thousands of MLX models on Hugging Face. Using them today means finding the
 right repo, reading the README, managing Python dependencies, figuring out CLI flags,
