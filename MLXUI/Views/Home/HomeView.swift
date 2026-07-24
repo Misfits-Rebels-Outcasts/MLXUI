@@ -22,7 +22,7 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 32) {
                     systemStatusSection
                     quickStartSection
-                    trendingSection
+                    installedSection
                 }
                 .padding(24)
             }
@@ -85,19 +85,25 @@ struct HomeView: View {
         }
     }
 
-    private var trendingSection: some View {
+    private var installedSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Trending")
+            Text("Installed")
                 .font(.headline)
 
-            if let data = appState.browserData {
-                let trending = data.domains
-                    .flatMap { $0.allModels }
-                    .sorted { ($0.communityDownloads ?? 0) > ($1.communityDownloads ?? 0) }
-                    .prefix(8)
-
+            let installed = appState.installedEntries
+            if installed.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "square.and.arrow.down")
+                        .foregroundStyle(.secondary)
+                    Text("No models installed yet. Browse the catalog to download one.")
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(20)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+            } else {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 12) {
-                    ForEach(Array(trending)) { model in
+                    ForEach(installed) { model in
                         NavigationLink(destination: ModelDetailView(model: model)) {
                             ModelCard(model: model, showCompare: false)
                         }

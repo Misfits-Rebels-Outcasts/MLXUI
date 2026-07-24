@@ -2,6 +2,16 @@ import SwiftUI
 
 @main
 struct MLXUIApp: App {
+    //Terminate app when window closed
+    //https://developer.apple.com/forums/thread/710376
+    class AppDelegate: NSObject, NSApplicationDelegate {
+        func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+            return true
+        }
+    }
+    @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
+
+    
     @State private var appState = AppState()
 
     var body: some Scene {
@@ -62,10 +72,6 @@ struct MLXUIApp: App {
                 SettingsView()
                     .environment(appState)
             }
-            .sheet(isPresented: $appState.showPipelineRunner) {
-                PipelineRunView()
-                    .environment(appState)
-            }
             .onChange(of: appState.filterSource) { _, _ in appState.saveFilters() }
             .onChange(of: appState.sortOrder) { _, _ in appState.saveFilters() }
         }
@@ -85,11 +91,8 @@ struct MLXUIApp: App {
                 }
                 .keyboardShortcut("k", modifiers: .command)
             }
-            CommandMenu("Pipeline") {
-                Button("Summarize Audio…") {
-                    appState.showPipelineRunner = true
-                }
-                .keyboardShortcut("r", modifiers: [.command, .shift])
+            CommandGroup(replacing: .help) {
+                Link("AI Browser Help", destination: URL(string: "https://connectcode.net/mlxui_local_llm_ai_browser.html")!)
             }
         }
     }

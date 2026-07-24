@@ -15,8 +15,7 @@ import Foundation
 /// isn't load-bearing.
 ///
 /// Coverage (browser.json): chat (LLM) · ASR (Whisper, Voxtral) · TTS (Kokoro + generic) ·
-/// Vision (VLM) · OCR (MLXVLM + PaddleOCR-VL + dots.ocr + DeepSeek-OCR) · Embeddings. Only video
-/// (Molmo2) is intentionally unsupported.
+/// Vision (VLM) · OCR (MLXVLM + PaddleOCR-VL + dots.ocr + DeepSeek-OCR) · Embeddings.
 @MainActor
 let installedModules: [ModelModule.Type] = [
     MLXWhisperModule.self,

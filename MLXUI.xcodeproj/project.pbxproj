@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 110;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -59,11 +59,14 @@
 /* Begin PBXFrameworksBuildPhase section */
 		2041A39E2FECB7DD0090F7DA /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
 			files = (
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 		207EF2A02FEB616500A0AC5F /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
 			files = (
 				20B366A22FF3373F00682B99 /* MLXAudioTTS in Frameworks */,
 				203CC01D2FF0E29F007A6D30 /* WhisperKit in Frameworks */,
@@ -74,6 +77,7 @@
 				20AACD452FEBC4C50098B372 /* MLXLLM in Frameworks */,
 				20AACD442FEBC4C50098B372 /* MLX in Frameworks */,
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
@@ -140,6 +144,8 @@
 				207EF2A12FEB616500A0AC5F /* Resources */,
 			);
 			buildRules = (
+			);
+			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
 				207EF2A52FEB616500A0AC5F /* MLXUI */,
@@ -208,26 +214,34 @@
 /* Begin PBXResourcesBuildPhase section */
 		2041A39F2FECB7DD0090F7DA /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
 			files = (
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 		207EF2A12FEB616500A0AC5F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
 			files = (
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		2041A39D2FECB7DD0090F7DA /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
 			files = (
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 		207EF29F2FEB616500A0AC5F /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
 			files = (
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
@@ -240,7 +254,7 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		2041A3A82FECB7DD0090F7DA /* Debug configuration for PBXNativeTarget "MLXUITests" */ = {
+		2041A3A82FECB7DD0090F7DA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -262,7 +276,7 @@
 			};
 			name = Debug;
 		};
-		2041A3A92FECB7DD0090F7DA /* Release configuration for PBXNativeTarget "MLXUITests" */ = {
+		2041A3A92FECB7DD0090F7DA /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -284,7 +298,7 @@
 			};
 			name = Release;
 		};
-		207EF2AC2FEB616700A0AC5F /* Debug configuration for PBXProject "MLXUI" */ = {
+		207EF2AC2FEB616700A0AC5F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -346,7 +360,7 @@
 			};
 			name = Debug;
 		};
-		207EF2AD2FEB616700A0AC5F /* Release configuration for PBXProject "MLXUI" */ = {
+		207EF2AD2FEB616700A0AC5F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -400,20 +414,21 @@
 			};
 			name = Release;
 		};
-		207EF2AF2FEB616700A0AC5F /* Debug configuration for PBXNativeTarget "MLXUI" */ = {
+		207EF2AF2FEB616700A0AC5F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = MLXUI/MLXUI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = B93L2R82PL;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -426,8 +441,8 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ConnectCode.MLXUI;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = net.connectcode.mlxui;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -442,20 +457,21 @@
 			};
 			name = Debug;
 		};
-		207EF2B02FEB616700A0AC5F /* Release configuration for PBXNativeTarget "MLXUI" */ = {
+		207EF2B02FEB616700A0AC5F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = MLXUI/MLXUI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = B93L2R82PL;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -468,8 +484,8 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ConnectCode.MLXUI;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = net.connectcode.mlxui;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -490,25 +506,28 @@
 		2041A3A72FECB7DD0090F7DA /* Build configuration list for PBXNativeTarget "MLXUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				2041A3A82FECB7DD0090F7DA /* Debug configuration for PBXNativeTarget "MLXUITests" */,
-				2041A3A92FECB7DD0090F7DA /* Release configuration for PBXNativeTarget "MLXUITests" */,
+				2041A3A82FECB7DD0090F7DA /* Debug */,
+				2041A3A92FECB7DD0090F7DA /* Release */,
 			);
+			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		207EF29E2FEB616500A0AC5F /* Build configuration list for PBXProject "MLXUI" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				207EF2AC2FEB616700A0AC5F /* Debug configuration for PBXProject "MLXUI" */,
-				207EF2AD2FEB616700A0AC5F /* Release configuration for PBXProject "MLXUI" */,
+				207EF2AC2FEB616700A0AC5F /* Debug */,
+				207EF2AD2FEB616700A0AC5F /* Release */,
 			);
+			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		207EF2AE2FEB616700A0AC5F /* Build configuration list for PBXNativeTarget "MLXUI" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				207EF2AF2FEB616700A0AC5F /* Debug configuration for PBXNativeTarget "MLXUI" */,
-				207EF2B02FEB616700A0AC5F /* Release configuration for PBXNativeTarget "MLXUI" */,
+				207EF2AF2FEB616700A0AC5F /* Debug */,
+				207EF2B02FEB616700A0AC5F /* Release */,
 			);
+			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
@@ -598,5 +617,4 @@
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 207EF29B2FEB616500A0AC5F /* Project object */;
-	validationLevel = 1;
 }

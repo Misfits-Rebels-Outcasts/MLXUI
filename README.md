@@ -86,7 +86,6 @@ Every model listed here is downloadable and has a working Run UI.
 | **Speech-to-Text** (4) | Whisper tiny/small/large-v3, Voxtral-Mini | 37M – 1.5B |
 | **Text-to-Speech** (4) | Kokoro, Qwen3-TTS, Chatterbox, Orpheus | 82M – 3B |
 | **Embeddings** (4) | all-MiniLM-L6, embeddinggemma, ModernBERT-embed, bge-m3 | 18M – 568M |
-| **Video** (1) | Molmo2 | 2.3B |
 
 The full `browser.json` catalog tracks **~435 models** from mlx-community. New models
 and Run UIs are added with every release.
@@ -105,7 +104,6 @@ and Run UIs are added with every release.
 | Vision | OCR (PaddleOCR, DeepSeek-OCR, dots.ocr, olmOCR) | ✅ | ✅ | ✅ | MLXVLM + native |
 | Embeddings | Text embeddings | ✅ | ✅ | ✅ | MLX + ModernBERT |
 | Image | Diffusion (Flux, SDXL, ...) | ✅ | ✅ | ⬜ | — |
-| Video | Video models (Molmo2) | ✅ | ✅ | ⬜ | — |
 | Audio | Music generation | ✅ | ✅ | ⬜ | — |
 
 ✅ = built &emsp; ⬜ = available for contribution
@@ -352,8 +350,6 @@ Every model in the catalog should eventually have a working Run button.
 - **Image generation Run UI** (Flux, SDXL) — browse + install already work, needs a
   prompt → image Run view
 - **Music generation Run UI** — same pattern, different output type
-- **Video model Run UI** (Molmo2) — browse + install work, needs a video player +
-  controls Run view
 - **Pipeline stages** — wire up existing modules into longer chains (e.g. OCR →
   summarize)
 - **Model architecture ports** — PaddleOCR, DeepSeek-OCR, dots.ocr (see
@@ -397,7 +393,6 @@ Every model in the catalog should eventually have a working Run button.
 ### Up for grabs
 - [ ] Image generation Run UI (Flux, SDXL, etc.)
 - [ ] Music generation Run UI
-- [ ] Video model Run UI (Molmo2)
 - [ ] Model comparison benchmark runner
 - [ ] Export pipeline as standalone app
 - [ ] Architecture ports (PaddleOCR, DeepSeek-OCR, dots.ocr — flagged in

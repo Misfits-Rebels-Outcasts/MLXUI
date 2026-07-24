@@ -5,8 +5,7 @@ import UniformTypeIdentifiers
 /// Reusable run surface for any audio→text (ASR) stage. The model module supplies the
 /// concrete `stage`; this view is model-agnostic glue (`plan-whisper-aiui.md` W2): pick an
 /// audio file, Run, watch an indeterminate spinner (ASR only reports 0.1→1.0, so a
-/// determinate bar would be misleading), then read and copy the transcript. Mirrors
-/// `Views/Pipeline/PipelineRunView.swift`.
+/// determinate bar would be misleading), then read and copy the transcript.
 struct ASRRunView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -156,9 +155,8 @@ struct ASRRunView: View {
 }
 
 /// View-model driving one ASR run: reads the chosen file to a buffer, runs the stage
-/// off-actor, and folds the transcript back onto the main actor. Mirrors
-/// `PipelineRunModel`. Reads the file directly via `AudioFileReader` (the summary
-/// pipeline's `ReadAudioStage` expects a `.text(path)`, not a `Media`).
+/// off-actor, and folds the transcript back onto the main actor. Reads the file directly
+/// via `AudioFileReader`.
 @MainActor
 @Observable
 final class ASRRunModel {

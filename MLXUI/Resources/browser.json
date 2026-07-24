@@ -29,14 +29,6 @@
       ]
     },
     {
-      "id": "video",
-      "name": "Video",
-      "sfSymbol": "film.fill",
-      "domainIds": [
-        "video"
-      ]
-    },
-    {
       "id": "infrastructure",
       "name": "Infrastructure",
       "sfSymbol": "gearshape.2.fill",
@@ -69,10 +61,6 @@
     "embedding": {
       "icon": "square.grid.3x3",
       "description": "Embeddings"
-    },
-    "video": {
-      "icon": "film",
-      "description": "Video"
     }
   },
   "domains": [
@@ -1828,63 +1816,6 @@
           ],
           "descriptionSource": "mlx-community/bge-m3-mlx-fp16",
           "summary": "BGE-M3 is a versatile embedding model capable of:"
-        }
-      ]
-    },
-    {
-      "id": "video",
-      "name": "Video",
-      "sfSymbol": "film.fill",
-      "children": null,
-      "models": [
-        {
-          "id": "mlx-community--Molmo2-8B-4bit",
-          "family": "Molmo2",
-          "displayName": "Molmo2-8B",
-          "paramSize": "2.2761B",
-          "paramCountB": 2.2761,
-          "modelType": "video",
-          "source": "mlx",
-          "format": "mlx-4bit",
-          "platforms": [
-            "macOS 13+"
-          ],
-          "minMacOSVersion": "13.0",
-          "hfRepo": "mlx-community",
-          "hfModelId": "mlx-community/Molmo2-8B-4bit",
-          "ramGB": 1.92,
-          "downloadSizeGB": 1.28,
-          "contextWindow": null,
-          "license": "apache-2.0",
-          "licenseUrl": null,
-          "description": "# Molmo2-8B\n\nMolmo2 is a family of open vision-language models developed by the Allen Institute for AI (Ai2) that support image, video and multi-image understanding and grounding.\nMolmo2 models are trained on publicly available third party datasets as referenced in [our technical report](https://allenai.org/papers/molmo2) and [Molmo2 data](https://huggingface.co/collections/allenai/molmo2-data), \na collection of datasets with highly-curated image-text and video-text pairs.\nIt has state-of-the-art performance among multimodal models with a similar size.\nYou can find all models in the Molmo2 family [here](https://huggingface.co/collections/allenai/molmo2).\n\n**Learn more** about the Molmo2 family [in our announcement blog post](https://allenai.org/blog/molmo2).\n\nMolmo2-8B is based on [Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B) and uses [SigLIP 2](https://huggingface.co/google/siglip-so400m-patch14-384) as vision backbone. \nIt outperforms others in the class of open weight and data models on short videos, counting, and captioning, and is competitive on long-videos.\n\nAi2 is commited to open science. The Molmo2 datasets are available [here](https://huggingface.co/collections/allenai/molmo2-data). \nAll other artifacts used in creating Molmo2 (training code, evaluations, intermediate checkpoints) will be made available at a later date, furthering our commitment to open-source AI development and reproducibility.\n\nQuick links:\n- 💬 [Demo](https://playground.allenai.org/?model=molmo2-8b)\n- 📂 [All Models](https://huggingface.co/collections/allenai/molmo2)\n- 📃 [Paper](https://allenai.org/papers/molmo2)\n- 🎥 [Blog with Videos](https://allenai.org/blog/molmo2)\n\n## Quick Start\n\n### Setup Conda Environment\n\n### General Video QA\n\n### Pointing Video QA\n\n### Tracking Video QA (best with max_fps=8)\n\n### Multi-image QA\n\n### Multi-Image Point QA\n\n## Evaluations\n\nWe report the Average Score on 15 Academic Benchmarks here.\nFor details on the evals, refer to the main video results table in our [technical report](https://allenai.org/papers/molmo2).\n\n| Model | Average Score on 15 Academic Benchmarks |\n|-----------------------------|-----------------------------------------|\n| GPT-5 | 70.6 |\n| GPT-5 mini | 65.0 |\n| Gemini 3 Pro | 70.0 |\n| Gemini 2.5 Pro | 71.2 |\n| Gemini 2.5 Flash | 66.7 |\n| Claude Sonnet 4.5 | 59.6 |\n| InternVL3.5-4B | 53.4 |\n| InternVL3.5-8B | 54.1 |\n| Qwen3-VL-4B | 58.1 |\n| Qwen3-VL-8B | 59.5 |\n| Keye-VL-1.5-8B | 55.7 |\n| GLM-4.1V-9B | 56.9 |\n| MiniCPM-V-4.5-8B | 56.6 |\n| Eagle2.5-8B | 60.7 |\n| PLM-3B | 53.9 |\n| PLM-8B | 56.2 |\n| LLaVA-Video-7B | 52.7 |\n| VideoChat-Flash-7B | 56.1 |\n| Molmo2-4B | 62.8 |\n| **Molmo2-8B (this model)** | 63.1 |\n| Molmo2-7B | 59.7 |\n\n## License and Use\n\nThis model is licensed under Apache 2.0. It is intended for research and educational use in accordance with Ai2’s [Responsible Use Guidelines](https://allenai.org/responsible-use).\nThis model is trained on third party datasets that are subject to academic and non-commercial research use only. Please review the sources to determine if this model is appropriate for your use case.",
-          "architecture": "Molmo2ForConditionalGeneration",
-          "languages": [
-            "en"
-          ],
-          "lastUpdated": "2026-01-11",
-          "taskTags": [
-            "video-text-to-text"
-          ],
-          "benchmarks": null,
-          "speedTokensPerSec": null,
-          "speedHardware": null,
-          "speedEstimated": null,
-          "communityDownloads": 109,
-          "communityLikes": 2,
-          "variants": [
-            {
-              "quantization": "4-bit",
-              "format": "mlx-4bit",
-              "ramGB": 1.92,
-              "downloadSizeGB": 1.28,
-              "qualityPercent": 90,
-              "hfModelId": "mlx-community/Molmo2-8B-4bit",
-              "recommended": true
-            }
-          ],
-          "descriptionSource": "allenai/Molmo2-8B",
-          "summary": "Molmo2 is a family of open vision-language models developed by the Allen Institute for AI (Ai2) that support image, video and multi-image understanding and grounding."
         }
       ]
     }

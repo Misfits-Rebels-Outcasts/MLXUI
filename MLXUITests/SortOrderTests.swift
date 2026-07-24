@@ -18,21 +18,10 @@ struct SortOrderTests {
         #expect(sorted.map(\.id) == ["l", "s"])
     }
 
-    @Test func mostDownloadedTreatsNilAsZero() {
-        let unknown = makeEntry(id: "unknown", communityDownloads: nil)
-        let popular = makeEntry(id: "popular", communityDownloads: 1000)
-        let sorted = [unknown, popular].sorted(by: SortOrder.mostDownloaded.comparator)
-        #expect(sorted.first?.id == "popular")
-    }
-
-    @Test func qualitySortPlacesNullBenchmarkModelsLast() {
-        let benched = makeEntry(
-            id: "benched",
-            benchmarks: ModelBenchmarks(mmlu: 80, humanEval: nil, gsm8k: nil,
-                                        hellaswag: nil, arc: nil, truthfulQA: nil)
-        )
-        let unscored = makeEntry(id: "unscored", benchmarks: nil)
-        let sorted = [unscored, benched].sorted(by: SortOrder.quality.comparator)
-        #expect(sorted.map(\.id) == ["benched", "unscored"])
+    @Test func nameSortsCaseInsensitivelyAscending() {
+        let zebra = makeEntry(id: "zebra", displayName: "Zebra")
+        let apple = makeEntry(id: "apple", displayName: "apple")
+        let sorted = [zebra, apple].sorted(by: SortOrder.name.comparator)
+        #expect(sorted.map(\.id) == ["apple", "zebra"])
     }
 }

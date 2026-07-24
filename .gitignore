@@ -19,6 +19,10 @@ Design/
 catalog-audit/
 scripts/
 
+# === Xcode project backups & stray build logs ===
+*.bak
+.derived-data-log-*
+
 # === Python tooling cruft ===
 __pycache__/
 *.pyc

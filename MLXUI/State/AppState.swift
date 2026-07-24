@@ -14,7 +14,7 @@ final class AppState {
     var filterSource: ModelSource?
     var filterRAMLimitGB: Double
     var filterCapabilities: Set<String> = []
-    var sortOrder: SortOrder = .mostDownloaded
+    var sortOrder: SortOrder = .ramLowToHigh
 
     // Navigation
     var selectedModel: ModelEntry?
@@ -45,9 +45,6 @@ final class AppState {
     // Settings sheet
     var showSettings = false
 
-    // Pipeline run sheet (audio → summary)
-    var showPipelineRunner = false
-
     init() {
         filterRAMLimitGB = SystemInfo.detect().totalRAMGB
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -72,13 +69,14 @@ final class AppState {
         return [.mlx, .coreai, .coreml, .research].filter { present.contains($0) }
     }
 
-    // ── Installed LLMs (for the summarize step of the audio→summary pipeline) ──
-    var installedLLMEntries: [ModelEntry] {
+    // ── Installed models (catalog entries the user has downloaded) ──
+    var installedEntries: [ModelEntry] {
         guard let data = browserData else { return [] }
         var seen = Set<String>()
         return data.domains.flatMap { $0.allModels }
-            .filter { installedModelIDs.contains($0.id) && $0.runnerKind == .llm }
+            .filter { installedModelIDs.contains($0.id) }
             .filter { seen.insert($0.id).inserted }
+            .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
     }
 
     // ── RAM slider upper bound, scaled to this machine ──
@@ -301,26 +299,20 @@ enum SidebarItem: Hashable {
 }
 
 enum SortOrder: String, CaseIterable, Identifiable {
-    case mostDownloaded, ramLowToHigh, ramHighToLow, name, newest, quality
+    case ramLowToHigh, ramHighToLow, name
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .mostDownloaded: "Downloads"
         case .ramLowToHigh: "RAM: Low→High"
         case .ramHighToLow: "RAM: High→Low"
         case .name: "Name"
-        case .newest: "Newest"
-        case .quality: "Quality"
         }
     }
     func comparator(_ a: ModelEntry, _ b: ModelEntry) -> Bool {
         switch self {
-        case .mostDownloaded: (a.communityDownloads ?? 0) > (b.communityDownloads ?? 0)
         case .ramLowToHigh: a.ramGB < b.ramGB
         case .ramHighToLow: a.ramGB > b.ramGB
         case .name: a.displayName.localizedStandardCompare(b.displayName) == .orderedAscending
-        case .newest: (a.lastUpdated ?? "") > (b.lastUpdated ?? "")
-        case .quality: (a.qualityScore ?? 0) > (b.qualityScore ?? 0)
         }
     }
 }
