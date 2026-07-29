@@ -71,6 +71,53 @@
       "children": null,
       "models": [
         {
+          "id": "prism-ml--Ternary-Bonsai-27B-mlx-2bit",
+          "family": "Ternary-Bonsai",
+          "displayName": "Ternary-Bonsai-27B",
+          "paramSize": "27B",
+          "paramCountB": 27.0,
+          "modelType": "llm",
+          "source": "mlx",
+          "format": "mlx-2bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "prism-ml",
+          "hfModelId": "prism-ml/Ternary-Bonsai-27B-mlx-2bit",
+          "ramGB": 12.66,
+          "downloadSizeGB": 8.44,
+          "contextWindow": 262144,
+          "license": "apache-2.0",
+          "licenseUrl": "https://huggingface.co/prism-ml/Ternary-Bonsai-27B-mlx-2bit/blob/main/LICENSE.txt",
+          "description": "# Ternary-Bonsai-27B (MLX 2-bit)\n\nA 27B hybrid-attention model (`qwen3_5`): ~75% GatedDeltaNet linear-attention layers and ~25% gated full-attention layers, shipped as a 2-bit \"ternary\" MLX quantization by prism-ml. Runs on Apple Silicon via MLX. This multimodal checkpoint runs text-only here (the MLX Swift runner uses the language tower).",
+          "architecture": "Qwen3_5ForConditionalGeneration",
+          "languages": null,
+          "lastUpdated": "2026-07-14",
+          "taskTags": [
+            "text-generation"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": 30,
+          "speedHardware": "M2 Max",
+          "speedEstimated": true,
+          "communityDownloads": 32672,
+          "communityLikes": 154,
+          "variants": [
+            {
+              "quantization": "2-bit",
+              "format": "mlx-2bit",
+              "ramGB": 12.66,
+              "downloadSizeGB": 8.44,
+              "qualityPercent": 85,
+              "hfModelId": "prism-ml/Ternary-Bonsai-27B-mlx-2bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "prism-ml/Ternary-Bonsai-27B-mlx-2bit",
+          "summary": "A 27B hybrid GatedDeltaNet + full-attention model shipped as a 2-bit ternary MLX quantization; runs text-only on Apple Silicon via MLX."
+        },
+        {
           "id": "mlx-community--gemma-3-1b-it-qat-4bit",
           "family": "gemma",
           "displayName": "gemma-3-1b-it-qat",
