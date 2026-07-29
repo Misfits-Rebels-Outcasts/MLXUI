@@ -76,8 +76,8 @@ nonisolated final class Qwen35Attention: Module {
         var keys = kNorm(wk(x).reshaped(B, L, numKVHeads, headDim)).transposed(0, 2, 1, 3)
         let values = wv(x).reshaped(B, L, numKVHeads, headDim).transposed(0, 2, 1, 3)
 
-        queries = Qwen35RoPEApply.partialInterleaved(queries, cos: cos, sin: sin, rotaryDim: rotaryDim)
-        keys = Qwen35RoPEApply.partialInterleaved(keys, cos: cos, sin: sin, rotaryDim: rotaryDim)
+        queries = Qwen35RoPEApply.partialRotateHalf(queries, cos: cos, sin: sin, rotaryDim: rotaryDim)
+        keys = Qwen35RoPEApply.partialRotateHalf(keys, cos: cos, sin: sin, rotaryDim: rotaryDim)
 
         let out = attentionWithCacheUpdate(
             queries: queries, keys: keys, values: values, cache: cache, scale: scale, mask: mask
@@ -90,33 +90,25 @@ nonisolated final class Qwen35Attention: Module {
     }
 }
 
-/// Applies interleaved rotary embedding to the first `rotaryDim` dims of the head axis,
-/// passing the remainder through unchanged (partial rotary). Mirrors the interleaved
-/// `apply_multimodal_rotary_pos_emb` path. `cos`/`sin` cover `rotaryDim/2` frequencies.
+/// Applies rotary embedding to the first `rotaryDim` dims of the head axis, passing the
+/// remainder through unchanged (partial rotary). Uses the NeoX half-split `rotate_half`
+/// convention that Qwen3.5's `style="interleaved"` mrope resolves to (the "interleaved"
+/// naming refers to the per-axis frequency selection in `Qwen35RoPE`, not the pairing).
+/// `cos`/`sin` are width `rotaryDim` (freqs duplicated) and broadcast to `[B, 1, T, rotaryDim]`.
 nonisolated enum Qwen35RoPEApply {
-    static func partialInterleaved(
+    static func partialRotateHalf(
         _ x: MLXArray, cos: MLXArray, sin: MLXArray, rotaryDim: Int
     ) -> MLXArray {
         let d = x.dim(-1)
         guard rotaryDim > 0, rotaryDim <= d else { return x }
 
-        let rot = x[0..., 0..., 0..., 0 ..< rotaryDim]
+        let rot = x[0..., 0..., 0..., 0 ..< rotaryDim]      // [B,H,L,rotaryDim]
         let half = rotaryDim / 2
+        let x1 = rot[0..., 0..., 0..., 0 ..< half]           // first half
+        let x2 = rot[0..., 0..., 0..., half ..< rotaryDim]   // second half
+        let rotateHalf = concatenated([-x2, x1], axis: -1)   // [-x2, x1]
 
-        // Ensure cos/sin broadcast over the head axis: [B,L,half] -> [B,1,L,half].
-        let c = cos.ndim == 3 ? cos.reshaped(cos.dim(0), 1, cos.dim(1), cos.dim(2)) : cos
-        let s = sin.ndim == 3 ? sin.reshaped(sin.dim(0), 1, sin.dim(1), sin.dim(2)) : sin
-
-        // Split interleaved pairs: [...,rotaryDim] -> [...,half,2].
-        let B = rot.dim(0), H = rot.dim(1), L = rot.dim(2)
-        let paired = rot.reshaped(B, H, L, half, 2)
-        let x1 = paired[0..., 0..., 0..., 0..., 0]  // even lanes  [B,H,L,half]
-        let x2 = paired[0..., 0..., 0..., 0..., 1]  // odd lanes   [B,H,L,half]
-
-        let out1 = x1 * c - x2 * s
-        let out2 = x1 * s + x2 * c
-        let rotated = stacked([out1, out2], axis: -1).reshaped(B, H, L, rotaryDim)
-
+        let rotated = rot * cos + rotateHalf * sin
         if rotaryDim == d { return rotated }
         let passthrough = x[0..., 0..., 0..., rotaryDim ..< d]
         return concatenated([rotated, passthrough], axis: -1)
