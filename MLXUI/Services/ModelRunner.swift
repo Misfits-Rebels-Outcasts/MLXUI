@@ -11,21 +11,40 @@ import MLXLMCommon
 
 // MARK: - Chat Message
 
-struct ChatMessage: Identifiable {
-    enum Role { case user, assistant }
+struct ChatMessage: Identifiable, Sendable {
+    enum Role: Sendable { case user, assistant }
     let id = UUID()
     let role: Role
     var text: String
+}
+
+// MARK: - Pending approval
+
+/// A tool call awaiting the user's decision in the approval sheet (AG1). `respond` resumes the
+/// `AgentSession` approval continuation.
+struct PendingApproval: Identifiable {
+    let id = UUID()
+    let toolName: String
+    let toolDescription: String
+    let arguments: [String: JSONValue]
+    let respond: (Bool) -> Void
 }
 
 // MARK: - Model Runner
 
 @Observable
 final class ModelRunner {
-    /// Conversation shown in the Run chat sheet.
-    var transcript: [ChatMessage] = []
+    /// Renderable transcript (text bubbles + tool-call cards), assembled by the pure reducer.
+    private(set) var transcript = TranscriptBuilder()
     var isRunning = false
     var errorMessage: String?
+
+    /// A tool call currently blocked on user approval (drives the approval sheet).
+    var pendingApproval: PendingApproval?
+
+    /// Tools available to the agent this build, and which are currently enabled (toggles).
+    let availableTools: [any AgentTool] = ModelRunner.defaultTools()
+    var enabledToolNames: Set<String> = Set(ModelRunner.defaultTools().map(\.name))
 
     private var currentTask: Task<Void, Never>?
 
@@ -33,19 +52,29 @@ final class ModelRunner {
     private var loadedContainer: ModelContainer?
     private var loadedModelID: String?
 
+    /// Tools that ship in this build. DEBUG carries a demo tool so the AG1 chat UI has a live
+    /// subject; release advertises none until the real tools land (AG2–AG5).
+    static func defaultTools() -> [any AgentTool] {
+        #if DEBUG
+        [EchoDemoTool()]
+        #else
+        []
+        #endif
+    }
+
     /// Called when the chat sheet opens. Resets history when switching models and
     /// frees the previously loaded model's weights.
     func prepare(for model: ModelEntry) {
         if loadedModelID != model.id {
             loadedContainer = nil
             loadedModelID = nil
-            transcript.removeAll()
+            transcript.reset()
         }
         errorMessage = nil
     }
 
-    /// Generate a reply to `prompt` for the given (LLM) model, streaming tokens into
-    /// the transcript as they arrive.
+    /// Generate a reply to `prompt`, running the agent tool loop via `AgentSession` and
+    /// streaming assistant text + tool-call cards into the transcript as they arrive.
     func send(_ prompt: String, for model: ModelEntry) {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isRunning else { return }
@@ -60,47 +89,43 @@ final class ModelRunner {
         }
 
         errorMessage = nil
-        transcript.append(ChatMessage(role: .user, text: trimmed))
-        let assistant = ChatMessage(role: .assistant, text: "")
-        transcript.append(assistant)
-        let assistantID = assistant.id
+        transcript.addUserMessage(trimmed)
         isRunning = true
 
-        currentTask = Task {
+        // Snapshot the enabled tools for this turn (Sendable to hand to the nonisolated session).
+        let registry = ToolRegistry(availableTools.filter { enabledToolNames.contains($0.name) })
+
+        currentTask = Task { [weak self] in
+            guard let self else { return }
             do {
-                let container = try await containerForModel(model, dir: modelDir)
-                let result = try await container.perform { context in
-                    let input = try await context.processor.prepare(input: UserInput(prompt: trimmed))
-                    return try MLXLMCommon.generate(
-                        input: input,
-                        parameters: GenerateParameters(maxTokens: 512, temperature: 0.7),
-                        context: context
-                    ) { tokens in
-                        // `tokens` is cumulative — decode the whole reply and replace
-                        // the assistant message text (don't append, or it duplicates).
-                        let text = context.tokenizer.decode(tokenIds: tokens)
-                        Task { @MainActor in
-                            self.updateAssistant(id: assistantID, text: text)
-                        }
-                        return tokens.count >= 512 ? .stop : .more
+                let container = try await self.containerForModel(model, dir: modelDir)
+
+                let session = AgentSession(
+                    model: container,
+                    registry: registry,
+                    parameters: GenerateParameters(maxTokens: 512, temperature: 0.7),
+                    approve: { [weak self] _, tool in
+                        await self?.requestApproval(for: tool) ?? false
+                    },
+                    onEvent: { [weak self] event in
+                        Task { @MainActor in self?.transcript.apply(event) }
                     }
+                )
+
+                for try await chunk in session.streamResponse(to: trimmed) {
+                    self.transcript.appendAssistantChunk(chunk)
                 }
-                await MainActor.run {
-                    if !result.output.isEmpty {
-                        self.updateAssistant(id: assistantID, text: result.output)
-                    }
-                }
+            } catch is CancellationError {
+                // stopped by the user — leave the partial transcript in place
             } catch {
                 if !Task.isCancelled {
-                    await MainActor.run {
-                        self.errorMessage = "Failed: \(error.localizedDescription)"
-                    }
+                    self.errorMessage = "Failed: \(error.localizedDescription)"
                 }
             }
-            await MainActor.run {
-                self.isRunning = false
-                self.currentTask = nil
-            }
+            self.isRunning = false
+            self.currentTask = nil
+            self.pendingApproval?.respond(false)  // release any in-flight approval
+            self.pendingApproval = nil
         }
     }
 
@@ -108,7 +133,33 @@ final class ModelRunner {
         currentTask?.cancel()
         currentTask = nil
         isRunning = false
+        pendingApproval?.respond(false)
+        pendingApproval = nil
     }
+
+    // MARK: - Approval
+
+    /// Present the approval sheet and await the user's decision. Called by `AgentSession` for
+    /// tools whose `requiresApproval` is true.
+    private func requestApproval(for tool: any AgentTool) async -> Bool {
+        await withCheckedContinuation { continuation in
+            self.pendingApproval = PendingApproval(
+                toolName: tool.name,
+                toolDescription: tool.toolDescription,
+                arguments: [:],
+                respond: { continuation.resume(returning: $0) }
+            )
+        }
+    }
+
+    /// Called by the approval sheet's Allow/Deny buttons.
+    func resolveApproval(_ approved: Bool) {
+        let pending = pendingApproval
+        pendingApproval = nil
+        pending?.respond(approved)
+    }
+
+    // MARK: - Non-LLM entry point
 
     /// Entry point for non-LLM model types — shows the "unsupported" alert.
     func run(_ model: ModelEntry) {
@@ -134,15 +185,28 @@ final class ModelRunner {
         }
         let loader = HFTokenizerLoader()
         let container = try await LLMModelFactory.shared.loadContainer(from: dir, using: loader)
+
+        // Wire the tool-call parser to match the model family. Qwen3.5 emits the XML
+        // `<tool_call><function=…>` form (`ToolCallFormat.xmlFunction`); without this the
+        // generate path parses tool calls as `.json` and never fires them (AG0 finding).
+        if let format = AgentSession.toolCallFormat(forModelType: Self.modelTypeString(model, dir: dir)) {
+            await container.update { $0.configuration.toolCallFormat = format }
+        }
+
         loadedContainer = container
         loadedModelID = model.id
         return container
     }
 
-    @MainActor
-    private func updateAssistant(id: UUID, text: String) {
-        guard let idx = transcript.firstIndex(where: { $0.id == id }) else { return }
-        transcript[idx].text = text
+    /// The checkpoint's `model_type` (from `config.json`), falling back to the catalog
+    /// architecture string. Used to pick the tool-call format.
+    nonisolated private static func modelTypeString(_ model: ModelEntry, dir: URL) -> String {
+        if let data = try? Data(contentsOf: dir.appendingPathComponent("config.json")),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let modelType = obj["model_type"] as? String {
+            return modelType
+        }
+        return model.architecture ?? ""
     }
 
     private func showUnsupported(_ type: String, _ model: ModelEntry) {

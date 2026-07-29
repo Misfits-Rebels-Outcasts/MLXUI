@@ -1,8 +1,9 @@
 import SwiftUI
+import MLXLMCommon
 
 /// Chat sheet for running an installed LLM locally via MLX. Surfaces the streaming
-/// output, loading/stop/error states, and a prompt field so the user drives the
-/// conversation (instead of the previous hardcoded prompt).
+/// output, loading/stop/error states, a prompt field, and — for agentic models — inline
+/// tool-call cards, an approval sheet for side-effecting tools, and per-tool toggles.
 struct RunChatView: View {
     let model: ModelEntry
 
@@ -26,6 +27,12 @@ struct RunChatView: View {
         .frame(width: 560, height: 620)
         .onAppear { appState.modelRunner.prepare(for: model) }
         .onDisappear { appState.stopModel() }
+        .sheet(item: Binding(
+            get: { runner.pendingApproval },
+            set: { if $0 == nil { runner.resolveApproval(false) } }
+        )) { pending in
+            approvalSheet(pending)
+        }
     }
 
     // MARK: - Header
@@ -42,6 +49,9 @@ struct RunChatView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            if !runner.availableTools.isEmpty {
+                toolsMenu
+            }
             Button("Done") {
                 appState.stopModel()
                 dismiss()
@@ -49,6 +59,28 @@ struct RunChatView: View {
             .keyboardShortcut(.cancelAction)
         }
         .padding(12)
+    }
+
+    /// Per-tool on/off toggles for the agent's available tools.
+    private var toolsMenu: some View {
+        Menu {
+            ForEach(runner.availableTools, id: \.name) { tool in
+                Toggle(isOn: Binding(
+                    get: { runner.enabledToolNames.contains(tool.name) },
+                    set: { on in
+                        if on { runner.enabledToolNames.insert(tool.name) }
+                        else { runner.enabledToolNames.remove(tool.name) }
+                    }
+                )) {
+                    Text(tool.name)
+                }
+            }
+        } label: {
+            Image(systemName: "wrench.and.screwdriver")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Tools the model may call")
     }
 
     // MARK: - Transcript
@@ -60,20 +92,25 @@ struct RunChatView: View {
                     if runner.transcript.isEmpty {
                         emptyState
                     }
-                    ForEach(runner.transcript) { message in
-                        messageRow(message)
-                            .id(message.id)
+                    ForEach(runner.transcript.items) { item in
+                        transcriptRow(item)
+                            .id(item.id)
+                    }
+                    if showsThinkingSpinner {
+                        thinkingRow.id("thinking")
                     }
                 }
                 .padding(16)
             }
-            .onChange(of: runner.transcript.count) { _, _ in
-                scrollToEnd(proxy)
-            }
-            .onChange(of: runner.transcript.last?.text) { _, _ in
-                scrollToEnd(proxy)
-            }
+            .onChange(of: runner.transcript.items.count) { _, _ in scrollToEnd(proxy) }
+            .onChange(of: runner.transcript.lastAssistantText) { _, _ in scrollToEnd(proxy) }
+            .onChange(of: runner.isRunning) { _, _ in scrollToEnd(proxy) }
         }
+    }
+
+    /// Show a spinner while generating and no assistant text has streamed yet.
+    private var showsThinkingSpinner: Bool {
+        runner.isRunning && (runner.transcript.lastAssistantText?.isEmpty ?? true)
     }
 
     private var emptyState: some View {
@@ -89,35 +126,151 @@ struct RunChatView: View {
         .padding(.top, 40)
     }
 
+    @ViewBuilder
+    private func transcriptRow(_ item: TranscriptItem) -> some View {
+        switch item {
+        case .message(let message):
+            messageRow(message)
+        case .tool(let activity):
+            toolCard(activity)
+        }
+    }
+
     private func messageRow(_ message: ChatMessage) -> some View {
         let isUser = message.role == .user
         return HStack {
             if isUser { Spacer(minLength: 40) }
-            Group {
-                if message.text.isEmpty && runner.isRunning && message.role == .assistant {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                } else {
-                    Text(message.text)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                isUser ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.12),
-                in: RoundedRectangle(cornerRadius: 10)
-            )
+            Text(message.text)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    isUser ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.12),
+                    in: RoundedRectangle(cornerRadius: 10)
+                )
             if !isUser { Spacer(minLength: 40) }
         }
     }
 
-    private func scrollToEnd(_ proxy: ScrollViewProxy) {
-        guard let lastID = runner.transcript.last?.id else { return }
-        withAnimation(.easeOut(duration: 0.15)) {
-            proxy.scrollTo(lastID, anchor: .bottom)
+    private var thinkingRow: some View {
+        HStack {
+            ProgressView().scaleEffect(0.7)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+            Spacer(minLength: 40)
         }
+    }
+
+    // MARK: - Tool card
+
+    private func toolCard(_ activity: ToolActivity) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: toolIcon(activity.status))
+                    .foregroundStyle(toolTint(activity.status))
+                Text(activity.name)
+                    .font(.caption.monospaced().weight(.semibold))
+                Spacer()
+                Text(toolStatusLabel(activity.status))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if !activity.arguments.isEmpty, let args = argumentSummary(activity.arguments) {
+                Text(args)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            if let result = activity.result, !result.isEmpty {
+                Text(result)
+                    .font(.caption)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(toolTint(activity.status).opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(toolTint(activity.status).opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    private func toolIcon(_ status: ToolActivity.Status) -> String {
+        switch status {
+        case .running: return "gearshape.2"
+        case .finished: return "checkmark.circle.fill"
+        case .failed: return "exclamationmark.triangle.fill"
+        case .denied: return "hand.raised.fill"
+        case .unknownTool: return "questionmark.circle"
+        case .budgetExceeded: return "hourglass"
+        }
+    }
+
+    private func toolTint(_ status: ToolActivity.Status) -> Color {
+        switch status {
+        case .running: return .blue
+        case .finished: return .green
+        case .failed, .unknownTool: return .red
+        case .denied, .budgetExceeded: return .orange
+        }
+    }
+
+    private func toolStatusLabel(_ status: ToolActivity.Status) -> String {
+        switch status {
+        case .running: return "Running…"
+        case .finished: return "Done"
+        case .failed: return "Failed"
+        case .denied: return "Declined"
+        case .unknownTool: return "Unknown tool"
+        case .budgetExceeded: return "Budget exceeded"
+        }
+    }
+
+    private func argumentSummary(_ arguments: [String: JSONValue]) -> String? {
+        guard let data = try? JSONEncoder().encode(arguments),
+              let string = String(data: data, encoding: .utf8) else { return nil }
+        return string
+    }
+
+    private func scrollToEnd(_ proxy: ScrollViewProxy) {
+        let target = showsThinkingSpinner ? "thinking" : runner.transcript.items.last?.id.uuidString
+        guard let target else { return }
+        withAnimation(.easeOut(duration: 0.15)) {
+            proxy.scrollTo(target, anchor: .bottom)
+        }
+    }
+
+    // MARK: - Approval sheet
+
+    private func approvalSheet(_ pending: PendingApproval) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label("Allow tool call?", systemImage: "wrench.and.screwdriver")
+                .font(.headline)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(pending.toolName)
+                    .font(.callout.monospaced().weight(.semibold))
+                Text(pending.toolDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text("The model wants to run this tool. Allow it to proceed?")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("Deny") { runner.resolveApproval(false) }
+                    .keyboardShortcut(.cancelAction)
+                Button("Allow") { runner.resolveApproval(true) }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(20)
+        .frame(width: 360)
     }
 
     // MARK: - Error
