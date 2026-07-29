@@ -72,6 +72,7 @@ struct Qwen35TextConfig: Codable, Sendable {
     var fullAttentionInterval: Int
     var attentionBias: Bool
     var attnOutputGate: Bool
+    var tieWordEmbeddings: Bool
     var partialRotaryFactor: Double
     var ropeParameters: Qwen35RopeParameters
 
@@ -110,6 +111,7 @@ struct Qwen35TextConfig: Codable, Sendable {
         case fullAttentionInterval = "full_attention_interval"
         case attentionBias = "attention_bias"
         case attnOutputGate = "attn_output_gate"
+        case tieWordEmbeddings = "tie_word_embeddings"
         case partialRotaryFactor = "partial_rotary_factor"
         case ropeParameters = "rope_parameters"
         case linearNumValueHeads = "linear_num_value_heads"
@@ -137,6 +139,7 @@ struct Qwen35TextConfig: Codable, Sendable {
         self.fullAttentionInterval = try i(.fullAttentionInterval, 4)
         self.attentionBias = try c.decodeIfPresent(Bool.self, forKey: .attentionBias) ?? false
         self.attnOutputGate = try c.decodeIfPresent(Bool.self, forKey: .attnOutputGate) ?? true
+        self.tieWordEmbeddings = try c.decodeIfPresent(Bool.self, forKey: .tieWordEmbeddings) ?? false
         self.partialRotaryFactor = try c.decodeIfPresent(Double.self, forKey: .partialRotaryFactor) ?? 0.25
         self.ropeParameters = try c.decodeIfPresent(Qwen35RopeParameters.self, forKey: .ropeParameters)
             ?? Qwen35RopeParameters()
