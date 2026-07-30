@@ -52,9 +52,9 @@ final class ModelRunner {
     private var loadedContainer: ModelContainer?
     private var loadedModelID: String?
 
-    /// Tools that ship in this build. `fetch_url` (AG2), the AG3 compute tools, and the AG4a
-    /// in-app MLX tools (`embed_text`, `summarize`) ship in all builds; DEBUG additionally
-    /// carries the `echo` demo tool. More MLX tools land in AG4b–AG4c.
+    /// Tools that ship in this build. `fetch_url` (AG2), the AG3 compute tools, and the AG4a/AG4b
+    /// in-app MLX tools (`embed_text`, `summarize`, `semantic_search`) ship in all builds; DEBUG
+    /// additionally carries the `echo` demo tool. The AG4c media tools land next.
     static func defaultTools() -> [any AgentTool] {
         var tools: [any AgentTool] = [
             FetchURLTool(),
@@ -65,6 +65,7 @@ final class ModelRunner {
             WriteClipboardTool(),
             EmbedTextTool(),
             SummarizeTool(),
+            SemanticSearchTool(),
         ]
         #if DEBUG
         tools.append(EchoDemoTool())
