@@ -14,9 +14,11 @@ ENABLE_APP_SANDBOX = NO
 CODE_SIGN_ENTITLEMENTS = MLXUI/MLXUI-Direct.entitlements
 
 // ── Signing ──
-// Set explicitly: automatic signing otherwise picks the Mac App Distribution
-// cert when archiving, which cannot be notarized.
-CODE_SIGN_IDENTITY = Developer ID Application
+// Release only: automatic signing otherwise picks the Mac App Distribution cert
+// when archiving, which cannot be notarized. Scoped to Release so day-to-day
+// Debug builds still sign with Apple Development and don't require a Developer
+// ID certificate to be present.
+CODE_SIGN_IDENTITY[config=Release] = Developer ID Application
 
 // ── Feature flags ──
 // DIRECT_BUILD compiles in ProcessShell + the shell/file agent tools. The

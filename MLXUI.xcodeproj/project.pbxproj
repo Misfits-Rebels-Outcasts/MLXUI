@@ -7,6 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2032034F301B7DB30003B32E /* MLXAudioTTS in Frameworks */ = {isa = PBXBuildFile; productRef = 20320349301B7DB30003B32E /* MLXAudioTTS */; };
+		20320350301B7DB30003B32E /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 20320345301B7DB30003B32E /* WhisperKit */; };
+		20320351301B7DB30003B32E /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = 2032034A301B7DB30003B32E /* MLXVLM */; };
+		20320352301B7DB30003B32E /* PaddleOCRVL in Frameworks */ = {isa = PBXBuildFile; productRef = 2032034C301B7DB30003B32E /* PaddleOCRVL */; };
+		20320353301B7DB30003B32E /* MLXEmbedders in Frameworks */ = {isa = PBXBuildFile; productRef = 2032034B301B7DB30003B32E /* MLXEmbedders */; };
+		20320354301B7DB30003B32E /* MLXAudioSTT in Frameworks */ = {isa = PBXBuildFile; productRef = 20320347301B7DB30003B32E /* MLXAudioSTT */; };
+		20320355301B7DB30003B32E /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 20320343301B7DB30003B32E /* MLXLLM */; };
+		20320356301B7DB30003B32E /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 20320341301B7DB30003B32E /* MLX */; };
 		203CC01D2FF0E29F007A6D30 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 203CC01C2FF0E29F007A6D30 /* WhisperKit */; };
 		20913E352FF390DC0005E86D /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = 20913E342FF390DC0005E86D /* MLXVLM */; };
 		20AACD442FEBC4C50098B372 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = B00000030001FEB616500 /* MLX */; };
@@ -28,6 +36,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		2032035B301B7DB30003B32E /* MLXUI-Direct.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "MLXUI-Direct.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2041A3A12FECB7DD0090F7DA /* MLXUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MLXUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		207EF2A32FEB616500A0AC5F /* MLXUI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MLXUI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		20AACD862FEBC5AA0098B372 /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
@@ -49,6 +58,16 @@
 			path = RSI;
 			sourceTree = "<group>";
 		};
+		2098BCAB301B835900CA4BBC /* Apps */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Apps;
+			sourceTree = "<group>";
+		};
+		2098BCB2301B850B00CA4BBC /* Config */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Config;
+			sourceTree = "<group>";
+		};
 		20AACD812FEBC4E10098B372 /* Design */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Design;
@@ -57,6 +76,21 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		2032034E301B7DB30003B32E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2032034F301B7DB30003B32E /* MLXAudioTTS in Frameworks */,
+				20320350301B7DB30003B32E /* WhisperKit in Frameworks */,
+				20320351301B7DB30003B32E /* MLXVLM in Frameworks */,
+				20320352301B7DB30003B32E /* PaddleOCRVL in Frameworks */,
+				20320353301B7DB30003B32E /* MLXEmbedders in Frameworks */,
+				20320354301B7DB30003B32E /* MLXAudioSTT in Frameworks */,
+				20320355301B7DB30003B32E /* MLXLLM in Frameworks */,
+				20320356301B7DB30003B32E /* MLX in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		2041A39E2FECB7DD0090F7DA /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -92,6 +126,8 @@
 		207EF29A2FEB616500A0AC5F = {
 			isa = PBXGroup;
 			children = (
+				2098BCB2301B850B00CA4BBC /* Config */,
+				2098BCAB301B835900CA4BBC /* Apps */,
 				2087814E2FECF603004B3FBE /* RSI */,
 				20AACD812FEBC4E10098B372 /* Design */,
 				207EF2A52FEB616500A0AC5F /* MLXUI */,
@@ -107,6 +143,7 @@
 			children = (
 				207EF2A32FEB616500A0AC5F /* MLXUI.app */,
 				2041A3A12FECB7DD0090F7DA /* MLXUITests.xctest */,
+				2032035B301B7DB30003B32E /* MLXUI-Direct.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -114,6 +151,37 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		20320340301B7DB30003B32E /* MLXUI-Direct */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 20320358301B7DB30003B32E /* Build configuration list for PBXNativeTarget "MLXUI-Direct" */;
+			buildPhases = (
+				2032034D301B7DB30003B32E /* Sources */,
+				2032034E301B7DB30003B32E /* Frameworks */,
+				20320357301B7DB30003B32E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				207EF2A52FEB616500A0AC5F /* MLXUI */,
+				2098BCAB301B835900CA4BBC /* Apps */,
+			);
+			name = "MLXUI-Direct";
+			packageProductDependencies = (
+				20320341301B7DB30003B32E /* MLX */,
+				20320343301B7DB30003B32E /* MLXLLM */,
+				20320345301B7DB30003B32E /* WhisperKit */,
+				20320347301B7DB30003B32E /* MLXAudioSTT */,
+				20320349301B7DB30003B32E /* MLXAudioTTS */,
+				2032034A301B7DB30003B32E /* MLXVLM */,
+				2032034B301B7DB30003B32E /* MLXEmbedders */,
+				2032034C301B7DB30003B32E /* PaddleOCRVL */,
+			);
+			productName = MLXUI;
+			productReference = 2032035B301B7DB30003B32E /* MLXUI-Direct.app */;
+			productType = "com.apple.product-type.application";
+		};
 		2041A3A02FECB7DD0090F7DA /* MLXUITests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 2041A3A72FECB7DD0090F7DA /* Build configuration list for PBXNativeTarget "MLXUITests" */;
@@ -207,11 +275,19 @@
 			targets = (
 				207EF2A22FEB616500A0AC5F /* MLXUI */,
 				2041A3A02FECB7DD0090F7DA /* MLXUITests */,
+				20320340301B7DB30003B32E /* MLXUI-Direct */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		20320357301B7DB30003B32E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		2041A39F2FECB7DD0090F7DA /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -229,6 +305,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		2032034D301B7DB30003B32E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		2041A39D2FECB7DD0090F7DA /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -254,6 +337,22 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		20320359301B7DB30003B32E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 2098BCB2301B850B00CA4BBC /* Config */;
+			baseConfigurationReferenceRelativePath = Direct.xcconfig;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		2032035A301B7DB30003B32E /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 2098BCB2301B850B00CA4BBC /* Config */;
+			baseConfigurationReferenceRelativePath = Direct.xcconfig;
+			buildSettings = {
+			};
+			name = Release;
+		};
 		2041A3A82FECB7DD0090F7DA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -416,93 +515,32 @@
 		};
 		207EF2AF2FEB616700A0AC5F /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 2098BCB2301B850B00CA4BBC /* Config */;
+			baseConfigurationReferenceRelativePath = AppStore.xcconfig;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = MLXUI/MLXUI.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_TEAM = B93L2R82PL;
-				ENABLE_APP_SANDBOX = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = net.connectcode.mlxui;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				REGISTER_APP_GROUPS = YES;
-				SDKROOT = auto;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = macosx;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 2;
 			};
 			name = Debug;
 		};
 		207EF2B02FEB616700A0AC5F /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 2098BCB2301B850B00CA4BBC /* Config */;
+			baseConfigurationReferenceRelativePath = AppStore.xcconfig;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = MLXUI/MLXUI.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_TEAM = B93L2R82PL;
-				ENABLE_APP_SANDBOX = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = net.connectcode.mlxui;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				REGISTER_APP_GROUPS = YES;
-				SDKROOT = auto;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = macosx;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 2;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		20320358301B7DB30003B32E /* Build configuration list for PBXNativeTarget "MLXUI-Direct" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				20320359301B7DB30003B32E /* Debug */,
+				2032035A301B7DB30003B32E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		2041A3A72FECB7DD0090F7DA /* Build configuration list for PBXNativeTarget "MLXUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -540,6 +578,38 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		20320342301B7DB30003B32E /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.31.4;
+			};
+		};
+		20320344301B7DB30003B32E /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 3.31.3;
+			};
+		};
+		20320346301B7DB30003B32E /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+		20320348301B7DB30003B32E /* XCRemoteSwiftPackageReference "mlx-audio-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Blaizzy/mlx-audio-swift";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
 		203CC0132FF0DFAA007A6D30 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
@@ -575,6 +645,45 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		20320341301B7DB30003B32E /* MLX */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 20320342301B7DB30003B32E /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLX;
+		};
+		20320343301B7DB30003B32E /* MLXLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 20320344301B7DB30003B32E /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLLM;
+		};
+		20320345301B7DB30003B32E /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 20320346301B7DB30003B32E /* XCRemoteSwiftPackageReference "WhisperKit" */;
+			productName = WhisperKit;
+		};
+		20320347301B7DB30003B32E /* MLXAudioSTT */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 20320348301B7DB30003B32E /* XCRemoteSwiftPackageReference "mlx-audio-swift" */;
+			productName = MLXAudioSTT;
+		};
+		20320349301B7DB30003B32E /* MLXAudioTTS */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 20320348301B7DB30003B32E /* XCRemoteSwiftPackageReference "mlx-audio-swift" */;
+			productName = MLXAudioTTS;
+		};
+		2032034A301B7DB30003B32E /* MLXVLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 20320344301B7DB30003B32E /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXVLM;
+		};
+		2032034B301B7DB30003B32E /* MLXEmbedders */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 20320344301B7DB30003B32E /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXEmbedders;
+		};
+		2032034C301B7DB30003B32E /* PaddleOCRVL */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PaddleOCRVL;
+		};
 		203CC01C2FF0E29F007A6D30 /* WhisperKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 203CC0132FF0DFAA007A6D30 /* XCRemoteSwiftPackageReference "WhisperKit" */;
