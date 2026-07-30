@@ -1,0 +1,35 @@
+// Direct.xcconfig
+// Direct-download edition: Developer ID signed + notarized, NOT sandboxed,
+// ships the shell / filesystem / subprocess tools.
+// Target: MLXUI-Direct   Product: "AI Browser Pro.app"
+
+#include "Shared.xcconfig"
+
+PRODUCT_NAME = AI Browser Pro
+PRODUCT_BUNDLE_IDENTIFIER = net.connectcode.mlxui-pro
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon-Direct
+
+// ── No sandbox; Hardened Runtime only (required for notarization) ──
+ENABLE_APP_SANDBOX = NO
+CODE_SIGN_ENTITLEMENTS = MLXUI/MLXUI-Direct.entitlements
+
+// ── Signing ──
+// Set explicitly: automatic signing otherwise picks the Mac App Distribution
+// cert when archiving, which cannot be notarized.
+CODE_SIGN_IDENTITY = Developer ID Application
+
+// ── Feature flags ──
+// DIRECT_BUILD compiles in ProcessShell + the shell/file agent tools. The
+// App Store target never sees these files (target membership) and never
+// evaluates this flag, so the sandboxed binary cannot contain them.
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) DIRECT_BUILD
+
+// ── TCC purpose strings ──
+// Without the sandbox, reading these locations still triggers a consent prompt.
+// The prompt shows these strings; with no string, macOS silently denies on
+// some releases. Full Disk Access cannot be entitled — the user grants it in
+// System Settings > Privacy & Security.
+INFOPLIST_KEY_NSDocumentsFolderUsageDescription = AI Browser Pro needs access to your Documents folder so local models and agent tools can read and write files you point them at.
+INFOPLIST_KEY_NSDesktopFolderUsageDescription = AI Browser Pro needs access to your Desktop so local models and agent tools can read and write files you point them at.
+INFOPLIST_KEY_NSDownloadsFolderUsageDescription = AI Browser Pro needs access to your Downloads folder so local models and agent tools can read and write files you point them at.
+INFOPLIST_KEY_NSRemovableVolumesUsageDescription = AI Browser Pro needs access to removable volumes so you can keep model weights on an external drive.

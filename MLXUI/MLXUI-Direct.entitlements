@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Direct-download edition: Developer ID signed + notarized.
+	     Deliberately NO com.apple.security.app-sandbox key — the sandbox is what
+	     blocks exec'ing binaries outside the app bundle and reading arbitrary
+	     paths, which is the whole point of this edition.
+
+	     Notarization requires Hardened Runtime (ENABLE_HARDENED_RUNTIME = YES in
+	     Shared.xcconfig). Hardened Runtime does NOT need an entitlement to
+	     posix_spawn/Process a child: the child gets its own runtime policy.
+	     So an empty-ish entitlements file is correct and is the most reviewable
+	     starting point — add keys only when something concrete fails. -->
+
+	<!-- Uncomment when the app loads code it did not sign — e.g. a Python
+	     interpreter's .so extensions pulled into the app's address space, or a
+	     user-supplied plugin dylib. NOT needed to merely *spawn* python.
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+	-->
+
+	<!-- Uncomment if a tool drives other apps via AppleScript / osascript.
+	     Also requires INFOPLIST_KEY_NSAppleEventsUsageDescription.
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+	-->
+
+	<!-- Uncomment only if a spawned child must inherit DYLD_* overrides set by
+	     this process (e.g. injecting a library path into a helper).
+	<key>com.apple.security.cs.allow-dyld-environment-variables</key>
+	<true/>
+	-->
+
+	<!-- MLX runs on Metal and does not need JIT entitlements. Do not add
+	     allow-jit / allow-unsigned-executable-memory without a demonstrated
+	     crash: they materially weaken the runtime and invite notarization
+	     questions. -->
+</dict>
+</plist>

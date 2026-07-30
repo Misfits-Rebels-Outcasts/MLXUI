@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Mac App Store edition. Sandbox is mandatory for App Store distribution. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+
+	<!-- HuggingFace model downloads. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+
+	<!-- Read/write access to files the user picks in an NSOpenPanel/NSSavePanel.
+	     Matches ENABLE_USER_SELECTED_FILES = readwrite in AppStore.xcconfig;
+	     needed by SaveTextStage and any future save-to-disk pipeline stage. -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+
+	<!-- Add only when a module actually needs them, and pair each with the
+	     matching INFOPLIST_KEY_NS*UsageDescription:
+	     com.apple.security.device.audio-input   (Whisper / ASR from the mic)
+	     com.apple.security.device.camera        (live VLM capture)
+	-->
+</dict>
+</plist>

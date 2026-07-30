@@ -1,0 +1,50 @@
+// Shared.xcconfig
+// Build settings common to both editions of the app (App Store + Direct).
+// Edition-specific settings live in AppStore.xcconfig / Direct.xcconfig, which
+// both #include this file.
+//
+// IMPORTANT: a build setting defined at the *target* level in Xcode's editor
+// overrides anything set here. After wiring these files up, select each target,
+// find every setting listed below in the Build Settings tab, and delete the
+// target-level override (select the row, press Delete) so the xcconfig wins.
+// See Design/dual-distribution.md § "Phase 2".
+
+// ── Deployment ──
+SDKROOT = macosx
+SUPPORTED_PLATFORMS = macosx
+MACOSX_DEPLOYMENT_TARGET = 14.0
+LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/../Frameworks
+
+// ── Versioning ──
+// One counter for both editions: App Store builds must increase monotonically,
+// and a shared number keeps bug reports unambiguous across editions.
+MARKETING_VERSION = 0.1
+CURRENT_PROJECT_VERSION = 2
+
+// ── Signing (edition files set the certificate + entitlements) ──
+DEVELOPMENT_TEAM = B93L2R82PL
+CODE_SIGN_STYLE = Automatic
+ENABLE_HARDENED_RUNTIME = YES
+
+// ── Info.plist generation ──
+GENERATE_INFOPLIST_FILE = YES
+INFOPLIST_KEY_LSApplicationCategoryType = public.app-category.productivity
+
+// ── Assets ──
+ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor
+
+// ── Swift ──
+SWIFT_VERSION = 5.0
+SWIFT_APPROACHABLE_CONCURRENCY = YES
+SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
+SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES
+SWIFT_EMIT_LOC_STRINGS = YES
+STRING_CATALOG_GENERATE_SYMBOLS = YES
+ENABLE_PREVIEWS = YES
+
+// Dropped from the original target settings on purpose (dead on macOS):
+//   TARGETED_DEVICE_FAMILY = 2
+//   INFOPLIST_KEY_UI*[sdk=iphoneos*] / [sdk=iphonesimulator*]
+//   REGISTER_APP_GROUPS = YES   (no app group is used; macOS app groups
+//                                additionally require BOTH sides sandboxed,
+//                                so they cannot bridge the two editions)

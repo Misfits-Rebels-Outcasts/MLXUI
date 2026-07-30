@@ -1,0 +1,23 @@
+// AppStore.xcconfig
+// Mac App Store edition: sandboxed, no shell capability.
+// Target: MLXUI          Product: "AI Browser.app"
+
+#include "Shared.xcconfig"
+
+PRODUCT_NAME = AI Browser
+PRODUCT_BUNDLE_IDENTIFIER = net.connectcode.mlxui
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
+
+// ── Sandbox ──
+ENABLE_APP_SANDBOX = YES
+CODE_SIGN_ENTITLEMENTS = MLXUI/MLXUI-AppStore.entitlements
+
+// User-selected file access. Was `readonly`; the pipeline's SaveTextStage (and any
+// future save-to-disk stage) writes to a user-chosen URL, which fails under
+// `readonly`. See Design/dual-distribution.md § "Divergence hazards".
+ENABLE_USER_SELECTED_FILES = readwrite
+
+// ── Feature flags ──
+// APPSTORE_BUILD gates anything that must not ship in the sandboxed edition
+// (shell tools, Sparkle, links to the direct download).
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) APPSTORE_BUILD
