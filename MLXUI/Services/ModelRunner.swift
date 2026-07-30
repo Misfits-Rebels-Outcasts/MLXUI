@@ -44,7 +44,7 @@ final class ModelRunner {
 
     /// Tools available to the agent this build, and which are currently enabled (toggles).
     let availableTools: [any AgentTool] = ModelRunner.defaultTools()
-    var enabledToolNames: Set<String> = Set(ModelRunner.defaultTools().map(\.name))
+    var enabledToolNames: Set<String> = ModelRunner.defaultEnabledToolNames()
 
     private var currentTask: Task<Void, Never>?
 
@@ -72,7 +72,27 @@ final class ModelRunner {
         #if DEBUG
         tools.append(EchoDemoTool())
         #endif
+        // Shell, filesystem and subprocess tools ship only in the notarized
+        // direct-download edition — the sandbox blocks them anyway, and the
+        // implementations aren't compiled into the App Store target at all
+        // (`Apps/Direct/` is synchronized into MLXUI-Direct only).
+        // See Design/dual-distribution.md.
+        #if DIRECT_BUILD
+        tools.append(contentsOf: DirectTools.all())
+        #endif
         return tools
+    }
+
+    /// Which tools start enabled. Everything except the ones a user should have to
+    /// opt into: `run_shell` and `write_file` are visible in the tool list but
+    /// unticked, so a model can never propose a shell command on first launch.
+    /// Per-call approval still gates them once enabled.
+    static func defaultEnabledToolNames() -> Set<String> {
+        var names = Set(defaultTools().map(\.name))
+        #if DIRECT_BUILD
+        names.subtract(DirectTools.disabledByDefault)
+        #endif
+        return names
     }
 
     /// Called when the chat sheet opens. Resets history when switching models and
