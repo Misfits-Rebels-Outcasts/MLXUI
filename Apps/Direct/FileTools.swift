@@ -15,7 +15,6 @@
 
 import Foundation
 import MLXLMCommon
-import MLXUIKit
 
 // MARK: - Policy
 

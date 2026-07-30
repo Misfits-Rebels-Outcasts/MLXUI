@@ -15,7 +15,6 @@
 
 import Foundation
 import MLXLMCommon
-import MLXUIKit
 
 nonisolated struct ShellTool: AgentTool {
     let shell: any ShellCapability
@@ -108,4 +107,10 @@ nonisolated enum DirectTools {
             ListDirectoryTool(),
         ]
     }
+
+    /// Present in the tool list but unticked until the user opts in. Reading is
+    /// enabled by default; running a command or overwriting a file is not — a
+    /// model shouldn't be able to propose either on first launch. Per-call
+    /// approval still applies once they're on.
+    static let disabledByDefault: Set<String> = ["run_shell", "write_file"]
 }

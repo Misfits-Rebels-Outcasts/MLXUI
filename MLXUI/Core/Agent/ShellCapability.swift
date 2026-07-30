@@ -7,12 +7,18 @@
 //  process. `ProcessShell` (the real one) lives in the MLXUI-Direct app target
 //  only — see Apps/Direct/ProcessShell.swift and Design/dual-distribution.md.
 //
-//  Why a protocol rather than `#if DIRECT_BUILD` inside shared code: a Swift
-//  package target is compiled once per configuration and linked by both apps,
-//  so a compilation condition set on an app target does NOT reach package
-//  sources. Injection is the only split that actually holds — and it has the
-//  stronger property that the App Store binary cannot contain the subprocess
-//  code at all, which is exactly what you want to be able to say in review.
+//  The split is enforced two ways, and the first is the one that matters:
+//
+//   1. Target membership. `Apps/Direct/` is a file-system synchronized group on
+//      the MLXUI-Direct target only, so the App Store binary cannot contain the
+//      subprocess code — verifiable with `nm -u | grep posix_spawn`, which is a
+//      much better answer in review than "it's behind a flag".
+//   2. `#if DIRECT_BUILD` around the three-line registration in
+//      `ModelRunner.defaultTools()`, where the excluded branch names a type that
+//      doesn't exist in the App Store target.
+//
+//  Hence a protocol here rather than a concrete no-op: shared code can hold a
+//  `ShellCapability` and never know which edition it's in.
 //
 
 import Foundation

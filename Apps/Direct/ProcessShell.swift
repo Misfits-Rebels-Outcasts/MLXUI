@@ -16,7 +16,6 @@
 //
 
 import Foundation
-import MLXUIKit
 
 nonisolated struct ProcessShell: ShellCapability {
 
