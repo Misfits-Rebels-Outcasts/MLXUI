@@ -32,11 +32,13 @@ nonisolated struct RunJavaScriptTool: AgentTool {
         .required("script", type: .string, description: "The JavaScript source to evaluate.")
     ]
 
-    // NOTE: JavaScriptCore's public API exposes no execution-time limit (the C
+    // JavaScriptCore's public API exposes no execution-time limit (the C
     // `JSContextGroupSetExecutionTimeLimit` lives in a private header), so a runaway script
-    // (e.g. `while (true) {}`) is not interrupted here. Runs off the MainActor, so it can't
-    // freeze the UI, but the tool call won't return. A per-call dispatch-level timeout that
-    // bounds *every* tool uniformly is deferred to AG6 (safety rails).
+    // (e.g. `while (true) {}`) can't be interrupted *inside* the tool. AG6's dispatch-level
+    // timeout bounds it instead: after this many seconds the agent loop abandons the call and
+    // reports a timeout to the model. Caveat — the JS keeps spinning on its background task
+    // until the process exits (cancellation-deaf); this rail unblocks the loop, not the thread.
+    var executionTimeout: TimeInterval? { 15 }
 
     func execute(arguments: [String: JSONValue]) async throws -> String {
         Self.evaluate(arguments.string("script") ?? "")

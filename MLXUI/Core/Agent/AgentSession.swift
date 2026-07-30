@@ -102,13 +102,46 @@ nonisolated final class AgentSession {
 
         onEvent(.started(name: name, arguments: arguments))
         do {
-            let output = try await tool.execute(arguments: arguments)
+            let output: String
+            if let timeout = tool.executionTimeout {
+                guard let result = try await withTimeout(
+                    seconds: timeout, operation: { try await tool.execute(arguments: arguments) })
+                else {
+                    let message = "timed out after \(Int(timeout))s"
+                    onEvent(.failed(name: name, message: message))
+                    return .failed(message)
+                }
+                output = result
+            } else {
+                output = try await tool.execute(arguments: arguments)
+            }
             onEvent(.finished(name: name, result: output))
             return .ok(output)
         } catch {
             let message = error.localizedDescription
             onEvent(.failed(name: name, message: message))
             return .failed(message)
+        }
+    }
+
+    /// Runs `operation`, returning its result, or `nil` if it exceeds `seconds` (AG6 safety rail).
+    /// This bounds the AGENT LOOP: on timeout the caller reports a `.failed` and the model
+    /// continues. It does NOT interrupt a cancellation-deaf synchronous body — a runaway
+    /// `run_javascript` loop keeps spinning on its background task until the process exits, since
+    /// JavaScriptCore has no public interrupt (see journal 2026-56). Pure, so it is unit-testable.
+    static func withTimeout<T: Sendable>(
+        seconds: Double,
+        operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T? {
+        try await withThrowingTaskGroup(of: T?.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
+                return nil
+            }
+            let first = try await group.next() ?? nil
+            group.cancelAll()
+            return first
         }
     }
 
