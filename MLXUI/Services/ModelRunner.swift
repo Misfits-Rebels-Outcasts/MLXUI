@@ -52,15 +52,21 @@ final class ModelRunner {
     private var loadedContainer: ModelContainer?
     private var loadedModelID: String?
 
-    /// Tools that ship in this build. `fetch_url` (AG2) is the first real tool and ships in all
-    /// builds; DEBUG additionally carries the `echo` demo tool so the approval/toggle UI has a
-    /// gated subject to render. More real tools land in AG3–AG5.
+    /// Tools that ship in this build. `fetch_url` (AG2) plus the AG3 compute tools ship in all
+    /// builds; DEBUG additionally carries the `echo` demo tool. More real tools land in AG4–AG5.
     static func defaultTools() -> [any AgentTool] {
+        var tools: [any AgentTool] = [
+            FetchURLTool(),
+            RunJavaScriptTool(),
+            CalculatorTool(),
+            DateTimeTool(),
+            ReadClipboardTool(),
+            WriteClipboardTool(),
+        ]
         #if DEBUG
-        [FetchURLTool(), EchoDemoTool()]
-        #else
-        [FetchURLTool()]
+        tools.append(EchoDemoTool())
         #endif
+        return tools
     }
 
     /// Called when the chat sheet opens. Resets history when switching models and
