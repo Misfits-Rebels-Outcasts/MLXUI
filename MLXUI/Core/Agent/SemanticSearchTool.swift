@@ -45,10 +45,7 @@ nonisolated struct SemanticIndex: Codable, Sendable, Equatable {
     // MARK: Persistence (app container — no entitlement needed)
 
     private static var storeURL: URL {
-        (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory)
-            .appendingPathComponent("AI Browser/agent-index", isDirectory: true)
-            .appendingPathComponent("index.json")
+        ModelStore.shared.agentIndexDirectory.appendingPathComponent("index.json")
     }
 
     static func load() -> SemanticIndex? {

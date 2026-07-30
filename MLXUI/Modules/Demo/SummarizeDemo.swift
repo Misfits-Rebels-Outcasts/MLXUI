@@ -9,10 +9,7 @@ enum SummarizeDemo {
 
     /// Default output location in the app's container.
     nonisolated static func defaultOutputURL() -> URL {
-        let base = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        return base.appendingPathComponent("AI Browser/demo-summary.txt")
+        ModelStore.shared.file(named: "demo-summary.txt")
     }
 
     /// Assemble `[Template → LLM → Save]`. `llm` is injectable so the chain can run with

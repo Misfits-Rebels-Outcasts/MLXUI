@@ -16,9 +16,7 @@ enum WhisperEngine {
             // as `TokenizerError.missingConfig`. Giving the CoreML model *and* the tokenizer
             // one explicit writable home fixes that; `.debug` logging makes any remaining
             // download failure visible in the console.
-            let downloadBase = FileManager.default
-                .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-                .appendingPathComponent("AI Browser/WhisperKit", isDirectory: true)
+            let downloadBase = ModelStore.shared.whisperKitDirectory
             try? FileManager.default.createDirectory(at: downloadBase, withIntermediateDirectories: true)
 
             let config = WhisperKitConfig(

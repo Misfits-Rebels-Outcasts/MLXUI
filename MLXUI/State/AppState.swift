@@ -47,8 +47,7 @@ final class AppState {
 
     init() {
         filterRAMLimitGB = SystemInfo.detect().totalRAMGB
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        installedURL = appSupport.appendingPathComponent("AI Browser/installed.json")
+        installedURL = ModelStore.shared.installedRegistryURL
         loadInstalledModels()
         for module in installedModules { module.register(into: registry) }
     }

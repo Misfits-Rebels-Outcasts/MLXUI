@@ -19,9 +19,7 @@ enum DotsOCREngine {
 
     /// Installed-model directory (`Application Support/AI Browser/models/{id}`), like `VLMEngine`.
     nonisolated static func installedModelDirectory(id: String) -> URL {
-        FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("AI Browser/models/\(id)", isDirectory: true)
+        ModelStore.shared.directory(forModelID: id)
     }
 
     nonisolated static func generate(image: CGImage, modelDir: URL, maxTokens: Int) async throws -> String {

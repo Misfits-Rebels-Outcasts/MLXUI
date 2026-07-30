@@ -12,9 +12,7 @@ enum PaddleOCREngine {
     /// The installed-model directory for a catalog id, mirroring `InstallManager`'s layout
     /// (`Application Support/AI Browser/models/{id}`) — same as `VLMEngine`.
     nonisolated static func installedModelDirectory(id: String) -> URL {
-        FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("AI Browser/models/\(id)", isDirectory: true)
+        ModelStore.shared.directory(forModelID: id)
     }
 
     /// Load the PaddleOCR-VL model at `modelDir` and transcribe `image`. Loads per call

@@ -92,9 +92,7 @@ final class ModelRunner {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isRunning else { return }
 
-        let modelDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first!
-            .appendingPathComponent("AI Browser/models/\(model.id)")
+        let modelDir = ModelStore.shared.directory(forModelID: model.id)
 
         guard FileManager.default.fileExists(atPath: modelDir.path) else {
             errorMessage = "Model files not found. Please reinstall."

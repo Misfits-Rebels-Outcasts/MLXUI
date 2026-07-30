@@ -20,9 +20,7 @@ enum DeepSeekOCREngine {
     nonisolated static let eosTokenId = 1
 
     nonisolated static func installedModelDirectory(id: String) -> URL {
-        FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("AI Browser/models/\(id)", isDirectory: true)
+        ModelStore.shared.directory(forModelID: id)
     }
 
     nonisolated static func generate(image: CGImage, modelDir: URL, maxTokens: Int) async throws -> String {

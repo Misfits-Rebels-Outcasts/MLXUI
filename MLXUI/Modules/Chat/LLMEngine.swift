@@ -10,10 +10,7 @@ import MLXLMCommon
 enum LLMEngine {
     /// Where `InstallManager` places a model's files.
     nonisolated static func modelDirectory(for modelID: String) -> URL {
-        let base = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        return base.appendingPathComponent("AI Browser/models/\(modelID)")
+        ModelStore.shared.directory(forModelID: modelID)
     }
 
     /// Load the model at `modelDir` and generate a reply to `prompt`.

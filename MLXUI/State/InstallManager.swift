@@ -32,11 +32,10 @@ final class InstallManager {
     var onInstallComplete: ((String) -> Void)?
 
     init() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let baseDir = appSupport.appendingPathComponent("AI Browser")
-        modelsDir = baseDir.appendingPathComponent("models")
-        downloadsDir = baseDir.appendingPathComponent("downloads")
-        installedURL = baseDir.appendingPathComponent("installed.json")
+        let store = ModelStore.shared
+        modelsDir = store.modelsDirectory
+        downloadsDir = store.downloadsDirectory
+        installedURL = store.installedRegistryURL
 
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30

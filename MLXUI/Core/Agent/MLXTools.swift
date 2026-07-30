@@ -97,9 +97,7 @@ nonisolated struct InstalledModelIndex: Sendable {
     }
 
     private static var modelsBase: URL {
-        (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory)
-            .appendingPathComponent("AI Browser/models", isDirectory: true)
+        ModelStore.shared.modelsDirectory
     }
 
     /// Ids whose `.installed` marker exists on disk (the atomic "install succeeded" signal).

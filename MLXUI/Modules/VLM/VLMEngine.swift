@@ -18,9 +18,7 @@ enum VLMEngine {
     /// The installed-model directory for a catalog id, mirroring `InstallManager`'s layout
     /// (`Application Support/AI Browser/models/{id}`).
     nonisolated static func installedModelDirectory(id: String) -> URL {
-        FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("AI Browser/models/\(id)", isDirectory: true)
+        ModelStore.shared.directory(forModelID: id)
     }
 
     /// Load the VLM at `modelDir` and answer `prompt` about `image`. Loads per call
