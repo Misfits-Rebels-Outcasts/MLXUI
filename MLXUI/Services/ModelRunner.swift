@@ -52,13 +52,14 @@ final class ModelRunner {
     private var loadedContainer: ModelContainer?
     private var loadedModelID: String?
 
-    /// Tools that ship in this build. DEBUG carries a demo tool so the AG1 chat UI has a live
-    /// subject; release advertises none until the real tools land (AG2–AG5).
+    /// Tools that ship in this build. `fetch_url` (AG2) is the first real tool and ships in all
+    /// builds; DEBUG additionally carries the `echo` demo tool so the approval/toggle UI has a
+    /// gated subject to render. More real tools land in AG3–AG5.
     static func defaultTools() -> [any AgentTool] {
         #if DEBUG
-        [EchoDemoTool()]
+        [FetchURLTool(), EchoDemoTool()]
         #else
-        []
+        [FetchURLTool()]
         #endif
     }
 
