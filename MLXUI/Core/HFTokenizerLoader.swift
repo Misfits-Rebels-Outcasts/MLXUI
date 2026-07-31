@@ -11,16 +11,22 @@ import Tokenizers
 struct HFTokenizerLoader: TokenizerLoader {
     func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
         let upstream = try await AutoTokenizer.from(modelFolder: directory)
-        return HFTokenizerBridge(upstream)
+        // Strict Qwen3.5-style templates raise on ChatSession's tool-only restart render;
+        // pass a sanitized copy instead of the checkpoint's template when needed.
+        let override = ChatTemplateSanitizer.sanitizedTemplate(inModelDirectory: directory)
+        return HFTokenizerBridge(upstream, chatTemplateOverride: override)
     }
 }
 
 /// Adapts a swift-transformers `Tokenizers.Tokenizer` to `MLXLMCommon.Tokenizer`.
 private struct HFTokenizerBridge: MLXLMCommon.Tokenizer, @unchecked Sendable {
     private let upstream: any Tokenizers.Tokenizer
+    /// Sanitized chat template (`ChatTemplateSanitizer`); nil → use the model's own.
+    private let chatTemplateOverride: String?
 
-    init(_ upstream: any Tokenizers.Tokenizer) {
+    init(_ upstream: any Tokenizers.Tokenizer, chatTemplateOverride: String? = nil) {
         self.upstream = upstream
+        self.chatTemplateOverride = chatTemplateOverride
     }
 
     func encode(text: String, addSpecialTokens: Bool) -> [Int] {
@@ -45,6 +51,17 @@ private struct HFTokenizerBridge: MLXLMCommon.Tokenizer, @unchecked Sendable {
         additionalContext: [String: any Sendable]?
     ) throws -> [Int] {
         do {
+            if let chatTemplateOverride {
+                return try upstream.applyChatTemplate(
+                    messages: messages,
+                    chatTemplate: .literal(chatTemplateOverride),
+                    // Match the defaults of the no-template overload below.
+                    addGenerationPrompt: true,
+                    truncation: false,
+                    maxLength: nil,
+                    tools: tools,
+                    additionalContext: additionalContext)
+            }
             return try upstream.applyChatTemplate(
                 messages: messages, tools: tools, additionalContext: additionalContext)
         } catch Tokenizers.TokenizerError.missingChatTemplate {
