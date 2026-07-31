@@ -46,6 +46,9 @@ final class ModelRunner {
     let availableTools: [any AgentTool] = ModelRunner.defaultTools()
     var enabledToolNames: Set<String> = ModelRunner.defaultEnabledToolNames()
 
+    /// Persisted per-tool approval policy (AG6b): `.ask` (default) / `.always` / `.never`.
+    private(set) var agentToolSettings: AgentToolSettings = .load()
+
     private var currentTask: Task<Void, Never>?
 
     // Cache the loaded model so repeated sends in one session don't reload weights.
@@ -141,7 +144,11 @@ final class ModelRunner {
                     // chose not to call a tool" — reasoning text, then nothing.
                     parameters: GenerateParameters(maxTokens: 2048, temperature: 0.7),
                     approve: { [weak self] _, tool in
-                        await self?.requestApproval(for: tool) ?? false
+                        switch await self?.approvalDecision(for: tool) {
+                        case .autoApprove:     return true
+                        case .prompt:          return await self?.requestApproval(for: tool) ?? false
+                        case .autoDeny, .none: return false
+                        }
                     },
                     onEvent: { [weak self] event in
                         Task { @MainActor in self?.transcript.apply(event) }
@@ -174,6 +181,22 @@ final class ModelRunner {
     }
 
     // MARK: - Approval
+
+    /// The standing approval policy for a tool (drives the wrench-menu picker).
+    func toolPolicy(for toolName: String) -> ToolApprovalPolicy {
+        agentToolSettings.policy(for: toolName)
+    }
+
+    /// Set and persist a tool's approval policy (AG6b).
+    func setToolPolicy(_ policy: ToolApprovalPolicy, for toolName: String) {
+        agentToolSettings = agentToolSettings.setting(policy, for: toolName)
+        agentToolSettings.save()
+    }
+
+    /// The gate decision for an approval-required tool, from its persisted policy.
+    private func approvalDecision(for tool: any AgentTool) -> ApprovalDecision {
+        agentToolSettings.decision(for: tool.name)
+    }
 
     /// Present the approval sheet and await the user's decision. Called by `AgentSession` for
     /// tools whose `requiresApproval` is true.

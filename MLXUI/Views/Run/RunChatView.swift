@@ -61,18 +61,23 @@ struct RunChatView: View {
         .padding(12)
     }
 
-    /// Per-tool on/off toggles for the agent's available tools.
+    /// Per-tool on/off toggles for the agent's available tools. Tools that need approval also
+    /// expose a standing approval policy (ask / always / never) in a submenu.
     private var toolsMenu: some View {
         Menu {
             ForEach(runner.availableTools, id: \.name) { tool in
-                Toggle(isOn: Binding(
-                    get: { runner.enabledToolNames.contains(tool.name) },
-                    set: { on in
-                        if on { runner.enabledToolNames.insert(tool.name) }
-                        else { runner.enabledToolNames.remove(tool.name) }
+                if tool.requiresApproval {
+                    Menu(tool.name) {
+                        Toggle("Enabled", isOn: enabledBinding(tool.name))
+                        Divider()
+                        Picker("Approval", selection: policyBinding(tool.name)) {
+                            Text("Ask each time").tag(ToolApprovalPolicy.ask)
+                            Text("Always allow").tag(ToolApprovalPolicy.always)
+                            Text("Never allow").tag(ToolApprovalPolicy.never)
+                        }
                     }
-                )) {
-                    Text(tool.name)
+                } else {
+                    Toggle(isOn: enabledBinding(tool.name)) { Text(tool.name) }
                 }
             }
         } label: {
@@ -81,6 +86,23 @@ struct RunChatView: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .help("Tools the model may call")
+    }
+
+    private func enabledBinding(_ name: String) -> Binding<Bool> {
+        Binding(
+            get: { runner.enabledToolNames.contains(name) },
+            set: { on in
+                if on { runner.enabledToolNames.insert(name) }
+                else { runner.enabledToolNames.remove(name) }
+            }
+        )
+    }
+
+    private func policyBinding(_ name: String) -> Binding<ToolApprovalPolicy> {
+        Binding(
+            get: { runner.toolPolicy(for: name) },
+            set: { runner.setToolPolicy($0, for: name) }
+        )
     }
 
     // MARK: - Transcript
