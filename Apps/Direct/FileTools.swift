@@ -2,8 +2,9 @@
 //  FileTools.swift
 //  MLXUI-Direct target ONLY.
 //
-//  Arbitrary-filesystem tools for the un-sandboxed edition, plus the path policy
-//  that `ShellTool` also uses.
+//  Arbitrary-filesystem tools for the un-sandboxed edition. The path policy they
+//  enforce lives in shared code (`MLXUI/Core/Agent/PathPolicy.swift`) so the
+//  existing test target can cover it — see PathPolicyTests.
 //
 //  Reminder: no sandbox does not mean no gatekeeping. macOS still applies TCC to
 //  ~/Desktop, ~/Documents, ~/Downloads and removable volumes, so the first read
@@ -15,78 +16,6 @@
 
 import Foundation
 import MLXLMCommon
-
-// MARK: - Policy
-
-/// Where file tools may operate. Two layers: an allowlist of roots, and a
-/// denylist of paths that are inside those roots but must never be readable by
-/// a model — credentials, keys, browser profiles, shell history.
-nonisolated enum PathPolicy {
-    static var defaultRoots: [URL] {
-        [FileManager.default.homeDirectoryForCurrentUser]
-    }
-
-    /// Relative to the home directory.
-    static let deniedSubpaths: [String] = [
-        "Library/Keychains",
-        "Library/Application Support/com.apple.TCC",
-        "Library/Cookies",
-        "Library/Messages",
-        "Library/Mail",
-        "Library/Safari",
-        ".ssh",
-        ".gnupg",
-        ".aws",
-        ".config/gh",
-        ".netrc",
-        ".zsh_history",
-        ".bash_history",
-    ]
-
-    /// True when `url` sits inside an allowed root and outside every denied path.
-    ///
-    /// Resolves symlinks first: `~/link-to-ssh` and `~/../../etc/passwd` both
-    /// look fine as strings and both escape the allowlist without this.
-    static func isAllowed(_ url: URL, roots: [URL] = defaultRoots) -> Bool {
-        let target = url.standardizedFileURL.resolvingSymlinksInPath().path
-        let home = FileManager.default.homeDirectoryForCurrentUser
-            .standardizedFileURL.resolvingSymlinksInPath().path
-
-        for denied in deniedSubpaths {
-            let full = "\(home)/\(denied)"
-            if target == full || target.hasPrefix("\(full)/") { return false }
-        }
-        for root in roots {
-            let base = root.standardizedFileURL.resolvingSymlinksInPath().path
-            if target == base || target.hasPrefix("\(base)/") { return true }
-        }
-        return false
-    }
-
-    /// Outcome of `resolve`. Not `Result<URL, String>` — `Result.Failure` must
-    /// conform to `Error`, and the rejection here is a model-facing string, not
-    /// something worth minting an error type for.
-    enum Resolution {
-        case allowed(URL)
-        case rejected(String)
-    }
-
-    /// Shared argument handling: expand `~`, reject relative paths, apply policy.
-    static func resolve(_ path: String?, roots: [URL] = defaultRoots) -> Resolution {
-        guard let path, !path.isEmpty else {
-            return .rejected("Error: 'path' is required.")
-        }
-        let expanded = (path as NSString).expandingTildeInPath
-        guard expanded.hasPrefix("/") else {
-            return .rejected("Error: 'path' must be absolute (got \"\(path)\").")
-        }
-        let url = URL(fileURLWithPath: expanded)
-        guard isAllowed(url, roots: roots) else {
-            return .rejected("Error: access to \(url.path) is not permitted.")
-        }
-        return .allowed(url)
-    }
-}
 
 // MARK: - Read
 

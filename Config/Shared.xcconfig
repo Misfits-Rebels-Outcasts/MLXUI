@@ -26,6 +26,14 @@ DEVELOPMENT_TEAM = B93L2R82PL
 CODE_SIGN_STYLE = Automatic
 ENABLE_HARDENED_RUNTIME = YES
 
+// ── Swift module name ──
+// PRODUCT_MODULE_NAME defaults to PRODUCT_NAME sanitised for C99, so renaming the
+// products to "AI Browser" / "AI Browser Pro" would silently rename the Swift
+// module to AI_Browser / AI_Browser_Pro — breaking `@testable import MLXUI` in
+// MLXUITests, and making the two editions' symbol names differ for no reason.
+// Pin it. Both targets can share a module name; they're separate builds.
+PRODUCT_MODULE_NAME = MLXUI
+
 // ── Info.plist generation ──
 GENERATE_INFOPLIST_FILE = YES
 INFOPLIST_KEY_LSApplicationCategoryType = public.app-category.productivity
