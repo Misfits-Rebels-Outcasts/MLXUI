@@ -134,7 +134,12 @@ final class ModelRunner {
                 let session = AgentSession(
                     model: container,
                     registry: registry,
-                    parameters: GenerateParameters(maxTokens: 512, temperature: 0.7),
+                    // 512 was too tight once reasoning models entered the picture:
+                    // Qwen3's <think> block alone can run 250–500 tokens, so the
+                    // generation was being truncated *before* the tool call was
+                    // emitted. The symptom is indistinguishable from "the model
+                    // chose not to call a tool" — reasoning text, then nothing.
+                    parameters: GenerateParameters(maxTokens: 2048, temperature: 0.7),
                     approve: { [weak self] _, tool in
                         await self?.requestApproval(for: tool) ?? false
                     },

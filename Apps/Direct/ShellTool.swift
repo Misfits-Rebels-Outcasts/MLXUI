@@ -38,8 +38,9 @@ nonisolated struct ShellTool: AgentTool {
         """
         Run a shell command on the user's Mac and return its exit code, stdout and \
         stderr. The user must approve each command before it runs. Prefer a single \
-        non-interactive command; commands that wait for input will time out. Output \
-        is truncated at 64 KB.
+        non-interactive command; commands that wait for input will time out. Only \
+        the first 80 lines of output are returned, so filter in the command itself \
+        (head, tail, grep, wc -l) when a command could print a lot.
         """
     }
 
@@ -50,15 +51,26 @@ nonisolated struct ShellTool: AgentTool {
                 type: .string,
                 description: "The command line to run, e.g. 'git status --short'."
             ),
+            // Wording matters more than it looks: an earlier description that read
+            // "Must be inside the user's home directory" made a 4-bit model treat
+            // the parameter as mandatory, then stall trying to guess the user's
+            // home path. Say "omit it" explicitly and give the default.
             .optional(
                 "working_directory",
                 type: .string,
-                description: "Absolute path to run in. Must be inside the user's home directory."
+                description: """
+                    Optional — omit this unless the command must run somewhere \
+                    specific. Defaults to the user's home directory. If given, an \
+                    absolute path inside the home directory.
+                    """
             ),
             .optional(
                 "timeout_seconds",
                 type: .int,
-                description: "Kill the command after this many seconds (default 60, max 600)."
+                description: """
+                    Optional — omit this to use the 60 second default. Maximum 600. \
+                    The command is killed if it runs longer.
+                    """
             ),
         ]
     }
@@ -70,7 +82,10 @@ nonisolated struct ShellTool: AgentTool {
             return "Error: 'command' is required."
         }
 
-        var workingDirectory: URL?
+        // Default to the home directory rather than leaving it nil: an app launched
+        // from Finder has cwd `/`, so a relative command like `ls` would silently
+        // list the filesystem root and look like a bug in the tool.
+        var workingDirectory: URL? = FileManager.default.homeDirectoryForCurrentUser
         if let path = arguments.string("working_directory") {
             let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
             guard PathPolicy.isAllowed(url, roots: allowedRoots) else {
