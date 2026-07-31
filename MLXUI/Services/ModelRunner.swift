@@ -42,12 +42,20 @@ final class ModelRunner {
     /// A tool call currently blocked on user approval (drives the approval sheet).
     var pendingApproval: PendingApproval?
 
-    /// Tools available to the agent this build, and which are currently enabled (toggles).
+    /// Tools available to the agent this build, and which are currently enabled. The enabled
+    /// set is the build default with the user's persisted toggles applied (AG6b-2) — mutate it
+    /// through `setToolEnabled(_:for:)` so the choice sticks across launches.
     let availableTools: [any AgentTool] = ModelRunner.defaultTools()
-    var enabledToolNames: Set<String> = ModelRunner.defaultEnabledToolNames()
+    private(set) var enabledToolNames: Set<String> = AgentToolSettings.load()
+        .enabledToolNames(defaults: ModelRunner.defaultEnabledToolNames())
 
-    /// Persisted per-tool approval policy (AG6b): `.ask` (default) / `.always` / `.never`.
+    /// Persisted agent-tool configuration (AG6b): per-tool approval policy (`.ask` / `.always`
+    /// / `.never`), per-tool enabled overrides, and the per-reply tool-call limit.
     private(set) var agentToolSettings: AgentToolSettings = .load()
+
+    /// Session audit trail of tool activity (AG6b-2). In-memory only — tool results can
+    /// contain user file contents, so it is never written to disk.
+    private(set) var auditLog = AgentAuditLog()
 
     /// Folders the user has granted the file tools access to (AG5) — mirrors the persisted
     /// `FolderGrants` store so the wrench menu updates live.
@@ -153,6 +161,7 @@ final class ModelRunner {
                     // emitted. The symptom is indistinguishable from "the model
                     // chose not to call a tool" — reasoning text, then nothing.
                     parameters: GenerateParameters(maxTokens: 2048, temperature: 0.7),
+                    maxToolCalls: self.agentToolSettings.toolCallLimit,
                     approve: { [weak self] _, tool in
                         switch await self?.approvalDecision(for: tool) {
                         case .autoApprove:     return true
@@ -161,7 +170,10 @@ final class ModelRunner {
                         }
                     },
                     onEvent: { [weak self] event in
-                        Task { @MainActor in self?.transcript.apply(event) }
+                        Task { @MainActor [weak self] in
+                            self?.transcript.apply(event)
+                            self?.auditLog.record(event)
+                        }
                     }
                 )
 
@@ -206,6 +218,31 @@ final class ModelRunner {
     /// The gate decision for an approval-required tool, from its persisted policy.
     private func approvalDecision(for tool: any AgentTool) -> ApprovalDecision {
         agentToolSettings.decision(for: tool.name)
+    }
+
+    // MARK: - Tool enable / budget / audit (AG6b-2)
+
+    /// Toggle a tool for the agent and persist the choice across launches.
+    func setToolEnabled(_ enabled: Bool, for toolName: String) {
+        agentToolSettings = agentToolSettings.settingEnabled(
+            enabled, for: toolName,
+            defaultEnabled: Self.defaultEnabledToolNames().contains(toolName))
+        agentToolSettings.save()
+        if enabled { enabledToolNames.insert(toolName) }
+        else { enabledToolNames.remove(toolName) }
+    }
+
+    /// Per-reply tool-call budget (the `ToolBudget` limit handed to `AgentSession`).
+    var toolCallLimit: Int { agentToolSettings.toolCallLimit }
+
+    /// Set and persist the per-reply tool-call budget; applies from the next send.
+    func setToolCallLimit(_ limit: Int) {
+        agentToolSettings = agentToolSettings.settingToolCallLimit(limit)
+        agentToolSettings.save()
+    }
+
+    func clearAuditLog() {
+        auditLog.clear()
     }
 
     // MARK: - Folder grants (AG5)

@@ -11,6 +11,7 @@ struct RunChatView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @State private var prompt = ""
+    @State private var showAuditLog = false
 
     private var runner: ModelRunner { appState.modelRunner }
 
@@ -33,6 +34,9 @@ struct RunChatView: View {
             set: { if $0 == nil { runner.resolveApproval(false) } }
         )) { pending in
             approvalSheet(pending)
+        }
+        .sheet(isPresented: $showAuditLog) {
+            AuditLogView(runner: runner)
         }
     }
 
@@ -93,6 +97,13 @@ struct RunChatView: View {
                 Button("Grant Folder Access…") { grantFolderAccess() }
             }
             #endif
+            Divider()
+            Picker("Tool call limit", selection: limitBinding) {
+                ForEach(toolCallLimitOptions, id: \.self) { limit in
+                    Text("\(limit) per reply").tag(limit)
+                }
+            }
+            Button("Audit Log…") { showAuditLog = true }
         } label: {
             Image(systemName: "wrench.and.screwdriver")
         }
@@ -120,10 +131,7 @@ struct RunChatView: View {
     private func enabledBinding(_ name: String) -> Binding<Bool> {
         Binding(
             get: { runner.enabledToolNames.contains(name) },
-            set: { on in
-                if on { runner.enabledToolNames.insert(name) }
-                else { runner.enabledToolNames.remove(name) }
-            }
+            set: { runner.setToolEnabled($0, for: name) }
         )
     }
 
@@ -132,6 +140,21 @@ struct RunChatView: View {
             get: { runner.toolPolicy(for: name) },
             set: { runner.setToolPolicy($0, for: name) }
         )
+    }
+
+    private var limitBinding: Binding<Int> {
+        Binding(
+            get: { runner.toolCallLimit },
+            set: { runner.setToolCallLimit($0) }
+        )
+    }
+
+    /// Picker choices for the per-reply budget; a persisted off-list value stays selectable.
+    private var toolCallLimitOptions: [Int] {
+        let options = [2, 4, 8, 16, 32]
+        return options.contains(runner.toolCallLimit)
+            ? options
+            : (options + [runner.toolCallLimit]).sorted()
     }
 
     // MARK: - Transcript
@@ -380,5 +403,106 @@ struct RunChatView: View {
         guard !text.isEmpty, !runner.isRunning else { return }
         prompt = ""
         appState.sendPrompt(text)
+    }
+}
+
+// MARK: - Audit log sheet
+
+/// The session's tool audit trail (AG6b-2): one timestamped row per lifecycle event, newest
+/// first. Takes the runner directly (not via `@Environment`) so the sheet's fresh environment
+/// doesn't need a re-injection (B1).
+private struct AuditLogView: View {
+    @Environment(\.dismiss) private var dismiss
+    let runner: ModelRunner
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Label("Tool Audit Log", systemImage: "list.bullet.rectangle")
+                    .font(.headline)
+                Spacer()
+                Button("Clear") { runner.clearAuditLog() }
+                    .disabled(runner.auditLog.isEmpty)
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(12)
+            Divider()
+            if runner.auditLog.isEmpty {
+                Text("No tool calls yet this session.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 8) {
+                        ForEach(runner.auditLog.entries.reversed()) { entry in
+                            row(entry)
+                        }
+                    }
+                    .padding(12)
+                }
+            }
+        }
+        .frame(width: 480, height: 420)
+    }
+
+    private func row(_ entry: AuditEntry) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Image(systemName: icon(entry.outcome))
+                    .foregroundStyle(tint(entry.outcome))
+                Text(entry.toolName)
+                    .font(.caption.monospaced().weight(.semibold))
+                Text(label(entry.outcome))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(entry.date, style: .time)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if !entry.detail.isEmpty {
+                Text(entry.detail)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .textSelection(.enabled)
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func icon(_ outcome: AuditEntry.Outcome) -> String {
+        switch outcome {
+        case .started: return "play.circle"
+        case .finished: return "checkmark.circle.fill"
+        case .failed: return "exclamationmark.triangle.fill"
+        case .denied: return "hand.raised.fill"
+        case .unknownTool: return "questionmark.circle"
+        case .budgetExceeded: return "hourglass"
+        }
+    }
+
+    private func tint(_ outcome: AuditEntry.Outcome) -> Color {
+        switch outcome {
+        case .started: return .blue
+        case .finished: return .green
+        case .failed, .unknownTool: return .red
+        case .denied, .budgetExceeded: return .orange
+        }
+    }
+
+    private func label(_ outcome: AuditEntry.Outcome) -> String {
+        switch outcome {
+        case .started: return "started"
+        case .finished: return "finished"
+        case .failed: return "failed"
+        case .denied: return "declined"
+        case .unknownTool: return "unknown tool"
+        case .budgetExceeded: return "budget exceeded"
+        }
     }
 }
