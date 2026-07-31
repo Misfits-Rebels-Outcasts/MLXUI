@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import MLXLMCommon
 
 /// Chat sheet for running an installed LLM locally via MLX. Surfaces the streaming
@@ -62,7 +63,8 @@ struct RunChatView: View {
     }
 
     /// Per-tool on/off toggles for the agent's available tools. Tools that need approval also
-    /// expose a standing approval policy (ask / always / never) in a submenu.
+    /// expose a standing approval policy (ask / always / never) in a submenu. The sandboxed
+    /// edition additionally manages the folder grants that scope the file tools (AG5).
     private var toolsMenu: some View {
         Menu {
             ForEach(runner.availableTools, id: \.name) { tool in
@@ -80,6 +82,17 @@ struct RunChatView: View {
                     Toggle(isOn: enabledBinding(tool.name)) { Text(tool.name) }
                 }
             }
+            #if !DIRECT_BUILD
+            Divider()
+            Section("File access") {
+                ForEach(runner.folderGrantPaths, id: \.self) { path in
+                    Menu(path) {
+                        Button("Revoke Access") { runner.revokeFolderAccess(path: path) }
+                    }
+                }
+                Button("Grant Folder Access…") { grantFolderAccess() }
+            }
+            #endif
         } label: {
             Image(systemName: "wrench.and.screwdriver")
         }
@@ -87,6 +100,22 @@ struct RunChatView: View {
         .fixedSize()
         .help("Tools the model may call")
     }
+
+    #if !DIRECT_BUILD
+    /// Let the user pick a folder for the file tools; the panel's selection is what authorizes
+    /// the sandbox grant, persisted as a security-scoped bookmark.
+    private func grantFolderAccess() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a folder the model's file tools may access."
+        panel.prompt = "Grant Access"
+        if panel.runModal() == .OK, let url = panel.url {
+            runner.grantFolderAccess(to: url)
+        }
+    }
+    #endif
 
     private func enabledBinding(_ name: String) -> Binding<Bool> {
         Binding(

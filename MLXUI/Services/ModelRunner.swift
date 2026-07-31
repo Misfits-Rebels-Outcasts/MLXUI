@@ -49,6 +49,10 @@ final class ModelRunner {
     /// Persisted per-tool approval policy (AG6b): `.ask` (default) / `.always` / `.never`.
     private(set) var agentToolSettings: AgentToolSettings = .load()
 
+    /// Folders the user has granted the file tools access to (AG5) — mirrors the persisted
+    /// `FolderGrants` store so the wrench menu updates live.
+    private(set) var folderGrantPaths: [String] = FolderGrants.grantedPaths()
+
     private var currentTask: Task<Void, Never>?
 
     // Cache the loaded model so repeated sends in one session don't reload weights.
@@ -80,8 +84,12 @@ final class ModelRunner {
         // implementations aren't compiled into the App Store target at all
         // (`Apps/Direct/` is synchronized into MLXUI-Direct only).
         // See Design/dual-distribution.md.
+        // The sandboxed edition gets the same file-tool names scoped to
+        // user-granted folders instead (AG5 — security-scoped bookmarks).
         #if DIRECT_BUILD
         tools.append(contentsOf: DirectTools.all())
+        #else
+        tools.append(contentsOf: ScopedFileTools.all())
         #endif
         return tools
     }
@@ -94,6 +102,8 @@ final class ModelRunner {
         var names = Set(defaultTools().map(\.name))
         #if DIRECT_BUILD
         names.subtract(DirectTools.disabledByDefault)
+        #else
+        names.subtract(ScopedFileTools.disabledByDefault)
         #endif
         return names
     }
@@ -196,6 +206,24 @@ final class ModelRunner {
     /// The gate decision for an approval-required tool, from its persisted policy.
     private func approvalDecision(for tool: any AgentTool) -> ApprovalDecision {
         agentToolSettings.decision(for: tool.name)
+    }
+
+    // MARK: - Folder grants (AG5)
+
+    /// Persist a security-scoped grant for a folder the user picked in the open panel.
+    func grantFolderAccess(to url: URL) {
+        do {
+            try FolderGrants.addGrant(for: url)
+            folderGrantPaths = FolderGrants.grantedPaths()
+        } catch {
+            errorMessage = "Could not save folder access: \(error.localizedDescription)"
+        }
+    }
+
+    /// Remove a granted folder (takes effect on the next tool call).
+    func revokeFolderAccess(path: String) {
+        FolderGrants.removeGrant(path: path)
+        folderGrantPaths = FolderGrants.grantedPaths()
     }
 
     /// Present the approval sheet and await the user's decision. Called by `AgentSession` for
