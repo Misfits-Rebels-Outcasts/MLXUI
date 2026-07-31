@@ -106,9 +106,13 @@ struct AgentToolTests {
 
     // MARK: tool-call format mapping
 
-    @Test func qwenUsesXMLFunctionFormat() {
+    /// Only Qwen3.5 takes the XML form. Plain Qwen2/Qwen3 emit the default JSON
+    /// `<tool_call>{…}</tool_call>`, and parsing those with the XML parser drops the
+    /// call silently — the failure looks like "the model just didn't call the tool".
+    @Test func onlyQwen35UsesXMLFunctionFormat() {
         #expect(AgentSession.toolCallFormat(forModelType: "qwen3_5") == .xmlFunction)
-        #expect(AgentSession.toolCallFormat(forModelType: "qwen2") == .xmlFunction)
+        #expect(AgentSession.toolCallFormat(forModelType: "qwen2") == nil)
+        #expect(AgentSession.toolCallFormat(forModelType: "qwen3") == nil)
         #expect(AgentSession.toolCallFormat(forModelType: "llama") == nil)
     }
 }

@@ -146,11 +146,29 @@ nonisolated final class AgentSession {
     }
 
     /// Tool-call parser format for a given `modelType` string from the checkpoint config.
-    /// Qwen-family (incl. `qwen3_5`) uses the XML `<tool_call><function=…>` form. Returns
-    /// `nil` when the default (`.json`) is appropriate. Applied at load in AG1.
+    /// Returns `nil` when the default (`.json`) is appropriate. Applied at load in AG1.
+    ///
+    /// Only *some* of the Qwen family uses the XML form. Per MLXLMCommon's own
+    /// `ToolCallFormat` documentation:
+    ///
+    ///   - `.json`        — Llama, **Qwen** (incl. Qwen2.5 and Qwen3):
+    ///                      `<tool_call>{"name": "f", "arguments": {…}}</tool_call>`
+    ///   - `.xmlFunction` — Nemotron, **Qwen3 Coder, Qwen3.5**:
+    ///                      `<tool_call><function=f><parameter=k>v</parameter></function>`
+    ///
+    /// Matching all of `qwen*` to `.xmlFunction` made plain Qwen3 emit a JSON tool
+    /// call that the XML parser silently discarded — the model "decided" to call a
+    /// tool and the transcript showed nothing. Found while bringing up `run_shell`
+    /// on Qwen3-8B; see Design/dual-distribution.md § 5.
+    ///
+    /// Known gap: Qwen3-Coder and Qwen3-30B-A3B both report `qwen3_moe`, so the
+    /// Coder variant can't be told apart from `modelType` alone — it would need the
+    /// model id. Left as-is rather than guessed at; Coder is the rarer case and a
+    /// wrong `.xmlFunction` is worse than a wrong `.json` (the JSON parser at least
+    /// fails loudly on malformed input).
     static func toolCallFormat(forModelType modelType: String) -> ToolCallFormat? {
         let t = modelType.lowercased()
-        if t.hasPrefix("qwen") { return .xmlFunction }
+        if t.hasPrefix("qwen3_5") || t.hasPrefix("qwen3.5") { return .xmlFunction }
         return nil
     }
 }
