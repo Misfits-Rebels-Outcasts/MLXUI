@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "20320340301B7DB30003B32E"
-               BuildableName = "AI Browser Pro.app"
+               BuildableName = "MLXUI Pro.app"
                BlueprintName = "MLXUI-Direct"
                ReferencedContainer = "container:MLXUI.xcodeproj">
             </BuildableReference>
@@ -46,7 +46,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "20320340301B7DB30003B32E"
-            BuildableName = "AI Browser Pro.app"
+            BuildableName = "MLXUI Pro.app"
             BlueprintName = "MLXUI-Direct"
             ReferencedContainer = "container:MLXUI.xcodeproj">
          </BuildableReference>
@@ -63,7 +63,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "20320340301B7DB30003B32E"
-            BuildableName = "AI Browser Pro.app"
+            BuildableName = "MLXUI Pro.app"
             BlueprintName = "MLXUI-Direct"
             ReferencedContainer = "container:MLXUI.xcodeproj">
          </BuildableReference>

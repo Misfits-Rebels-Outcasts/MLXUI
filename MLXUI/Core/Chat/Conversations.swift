@@ -72,7 +72,13 @@ struct Conversation: Identifiable, Codable, Sendable, Equatable {
                 guard !message.text.isEmpty else { continue }
                 switch message.role {
                 case .user: history.append(.user(message.text))
-                case .assistant: history.append(.assistant(message.text))
+                case .assistant:
+                    // A tool card can open an assistant turn; subsequent text belongs to it.
+                    if let last = history.last, last.role == .assistant {
+                        history[history.count - 1].content += "\n" + message.text
+                    } else {
+                        history.append(.assistant(message.text))
+                    }
                 }
             case .tool(let activity):
                 guard case .finished = activity.status, let result = activity.result,

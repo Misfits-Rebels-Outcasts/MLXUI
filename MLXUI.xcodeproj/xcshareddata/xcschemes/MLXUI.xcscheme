@@ -15,7 +15,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "207EF2A52FEB616500A0AC5F"
+               BlueprintIdentifier = "207EF2A22FEB616500A0AC5F"
                BuildableName = "MLXUI.app"
                BlueprintName = "MLXUI"
                ReferencedContainer = "container:MLXUI.xcodeproj">
@@ -45,7 +45,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "207EF2A52FEB616500A0AC5F"
+            BlueprintIdentifier = "207EF2A22FEB616500A0AC5F"
             BuildableName = "MLXUI.app"
             BlueprintName = "MLXUI"
             ReferencedContainer = "container:MLXUI.xcodeproj">
@@ -62,7 +62,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "207EF2A52FEB616500A0AC5F"
+            BlueprintIdentifier = "207EF2A22FEB616500A0AC5F"
             BuildableName = "MLXUI.app"
             BlueprintName = "MLXUI"
             ReferencedContainer = "container:MLXUI.xcodeproj">

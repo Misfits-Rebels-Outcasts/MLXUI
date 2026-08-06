@@ -36,9 +36,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		2032035B301B7DB30003B32E /* AI Browser Pro.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "AI Browser Pro.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		2032035B301B7DB30003B32E /* MLXUI Pro.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "MLXUI Pro.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2041A3A12FECB7DD0090F7DA /* MLXUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MLXUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		207EF2A32FEB616500A0AC5F /* AI Browser.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "AI Browser.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		207EF2A32FEB616500A0AC5F /* MLXUI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MLXUI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		20AACD862FEBC5AA0098B372 /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -141,9 +141,9 @@
 		207EF2A42FEB616500A0AC5F /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				207EF2A32FEB616500A0AC5F /* AI Browser.app */,
+				207EF2A32FEB616500A0AC5F /* MLXUI.app */,
 				2041A3A12FECB7DD0090F7DA /* MLXUITests.xctest */,
-				2032035B301B7DB30003B32E /* AI Browser Pro.app */,
+				2032035B301B7DB30003B32E /* MLXUI Pro.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -179,7 +179,7 @@
 				2032034C301B7DB30003B32E /* PaddleOCRVL */,
 			);
 			productName = MLXUI;
-			productReference = 2032035B301B7DB30003B32E /* AI Browser Pro.app */;
+			productReference = 2032035B301B7DB30003B32E /* MLXUI Pro.app */;
 			productType = "com.apple.product-type.application";
 		};
 		2041A3A02FECB7DD0090F7DA /* MLXUITests */ = {
@@ -230,7 +230,7 @@
 				20F5D7BE2FF61BCF005F7423 /* PaddleOCRVL */,
 			);
 			productName = MLXUI;
-			productReference = 207EF2A32FEB616500A0AC5F /* AI Browser.app */;
+			productReference = 207EF2A32FEB616500A0AC5F /* MLXUI.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -342,6 +342,9 @@
 			baseConfigurationReferenceAnchor = 2098BCB2301B850B00CA4BBC /* Config */;
 			baseConfigurationReferenceRelativePath = Direct.xcconfig;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CURRENT_PROJECT_VERSION = 3;
+				MARKETING_VERSION = 0.10;
 			};
 			name = Debug;
 		};
@@ -350,6 +353,9 @@
 			baseConfigurationReferenceAnchor = 2098BCB2301B850B00CA4BBC /* Config */;
 			baseConfigurationReferenceRelativePath = Direct.xcconfig;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CURRENT_PROJECT_VERSION = 3;
+				MARKETING_VERSION = 0.10;
 			};
 			name = Release;
 		};
@@ -518,6 +524,8 @@
 			baseConfigurationReferenceAnchor = 2098BCB2301B850B00CA4BBC /* Config */;
 			baseConfigurationReferenceRelativePath = AppStore.xcconfig;
 			buildSettings = {
+				CURRENT_PROJECT_VERSION = 3;
+				MARKETING_VERSION = 0.10;
 			};
 			name = Debug;
 		};
@@ -526,6 +534,8 @@
 			baseConfigurationReferenceAnchor = 2098BCB2301B850B00CA4BBC /* Config */;
 			baseConfigurationReferenceRelativePath = AppStore.xcconfig;
 			buildSettings = {
+				CURRENT_PROJECT_VERSION = 3;
+				MARKETING_VERSION = 0.10;
 			};
 			name = Release;
 		};

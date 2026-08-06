@@ -23,6 +23,44 @@ them with one click, and provides a purpose-built Run UI for each model type.
 
 ---
 
+## ✨ What's New
+
+### Agentic Chat — Local AI that can actually *do* things
+
+Chat models can now call tools mid-conversation. A single local model can browse the web,
+run calculations, transcribe audio, read images, and work with files you grant — all on-device,
+all private. Every tool call is shown transparently; anything with side-effects waits for
+your explicit approval before it runs.
+
+| Tool | What it does | Requires approval |
+|------|-------------|:-----------------:|
+| `fetch_url` | Fetch any webpage and return its text | — |
+| `calculator` · `datetime` · `run_javascript` | Math, dates, and JS evaluation | — |
+| `embed_text` · `summarize` · `semantic_search` | Use your installed embedding and LLM models as tools | — |
+| `transcribe_audio` | Transcribe an audio URL with any installed Whisper model | — |
+| `ocr_image` | Extract text from an image URL using any installed OCR model | — |
+| `read_file` · `list_directory` · `search_files` | Browse and read inside folders you explicitly grant | — |
+| `write_file` | Write files inside granted folders | ✅ |
+| `write_clipboard` | Copy text to the clipboard | ✅ |
+| `run_shell` *(Direct build only)* | Run any shell command on your Mac | ✅ |
+
+### Ternary-Bonsai-27B — 27B parameters in ~8.4 GB
+
+Prism ML's [Ternary-Bonsai-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-27B-mlx-2bit) — a
+2-bit hybrid GatedDeltaNet model — is now in the catalog. Download it in one click and run a full
+27B-parameter chat model in roughly 8.4 GB of RAM.
+
+### Two builds, one codebase
+
+| | App Store | Direct Distribution |
+|---|---|---|
+| **Distribution** | Mac App Store | Notarized standalone `.app` |
+| **Sandbox** | ✅ Full sandbox | — |
+| **File tools** | Scoped to folders you grant | Full filesystem (denylist-guarded) |
+| **Shell tool** | — | ✅ `run_shell`, approval-gated |
+
+---
+
 ## What this is
 
 **The ultimate native SwiftUI cockpit for local AI, built exclusively for MLX and Apple Silicon.**
@@ -86,7 +124,7 @@ Every model listed here is downloadable and has a working Run UI.
 
 | Category | Models | Sizes |
 |----------|--------|-------|
-| **Chat & Text** (8) | Gemma 3, Ministral 3, Qwen3, Llama 3.1, Gemma 2, Qwen2.5, GPT-OSS, Devstral-Small 2 | 1B – 24B |
+| **Chat & Text** (9) | Gemma 3, Ministral 3, Qwen3, Llama 3.1, Gemma 2, Qwen2.5, GPT-OSS, Devstral-Small 2, **Ternary-Bonsai-27B** | 1B – 27B |
 | **Vision** (4) | LFM2-VL, Gemma 3, Qwen3-VL | 1.6B – 12B |
 | **OCR** (4) | PaddleOCR-VL, DeepSeek-OCR-2, dots.ocr, olmOCR 2 | 255M – 7B |
 | **Speech-to-Text** (4) | Whisper tiny/small/large-v3, Voxtral-Mini | 37M – 1.5B |
@@ -160,7 +198,14 @@ cd MLXUI
 open PipelineStudio.xcodeproj
 ```
 
-Select the **PipelineStudio** scheme, pick My Mac as the target, and press ⌘R.
+Two schemes are available:
+
+| Scheme | Distribution | Sandbox |
+|--------|-------------|:-------:|
+| **MLXUI** | Mac App Store | ✅ sandboxed |
+| **MLXUI-Direct** | Notarized standalone | — |
+
+Select your preferred scheme, pick **My Mac**, and press ⌘R.
 
 ### First run
 
@@ -237,6 +282,9 @@ Every model in the catalog should eventually have a working Run button.
 - [x] Embeddings Run UI (including ModernBERT standalone)
 - [x] Pipeline runner (audio → transcribe → summarize → speak)
 - [x] Command palette (⌘K) and keyboard shortcuts
+- [x] Agentic chat — 9 local tools (web fetch, compute, MLX model calls, file access, shell)
+- [x] Ternary-Bonsai-27B — 27B 2-bit hybrid attention model in ~8.4 GB RAM
+- [x] Dual build targets — App Store (sandboxed) + Direct Distribution (notarized standalone)
 
 ### In progress
 - [ ] Visual pipeline builder UI

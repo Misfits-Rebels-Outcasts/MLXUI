@@ -5,7 +5,7 @@ struct HomeView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("AI Browser")
+            Text("MLXUI")
                 .font(.largeTitle)
                 .fontWeight(.bold)
                 .padding(.horizontal, 24)

@@ -163,7 +163,7 @@ public enum ShellError: LocalizedError, Sendable, Equatable {
     public var errorDescription: String? {
         switch self {
         case .unavailable:
-            return "Shell commands are not available in this version of AI Browser."
+            return "Shell commands are not available in this version of MLXUI."
         case .executableNotFound(let name):
             return "Executable not found: \(name)"
         case .notExecutable(let path):

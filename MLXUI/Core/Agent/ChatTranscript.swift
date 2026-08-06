@@ -15,10 +15,11 @@
 import Foundation
 import MLXLMCommon
 
-/// One tool invocation shown inline in the chat transcript.
-struct ToolActivity: Identifiable, Sendable, Equatable {
+/// One tool invocation shown inline in the chat transcript. `Codable` so conversations can
+/// be persisted with their tool cards intact (`ConversationStore`).
+struct ToolActivity: Identifiable, Sendable, Equatable, Codable {
     /// Terminal + in-flight states a tool card can display.
-    enum Status: Sendable, Equatable {
+    enum Status: Sendable, Equatable, Codable {
         case running
         case finished
         case failed(String)
@@ -50,7 +51,7 @@ struct ToolActivity: Identifiable, Sendable, Equatable {
 }
 
 /// An ordered element of the chat transcript: a text message or a tool-call card.
-enum TranscriptItem: Identifiable, Sendable {
+enum TranscriptItem: Identifiable, Sendable, Equatable, Codable {
     case message(ChatMessage)
     case tool(ToolActivity)
 
@@ -79,6 +80,13 @@ struct TranscriptBuilder {
 
     mutating func reset() {
         items.removeAll()
+        openAssistantIndex = nil
+    }
+
+    /// Replace the transcript with a persisted conversation's items. No bubble is left open,
+    /// so the next assistant chunk starts a fresh bubble rather than extending a restored one.
+    mutating func load(_ items: [TranscriptItem]) {
+        self.items = items
         openAssistantIndex = nil
     }
 

@@ -24,6 +24,7 @@ import MLXLMCommon
 nonisolated final class AgentSession {
     private let model: ModelContainer
     private let instructions: String?
+    private let history: [Chat.Message]
     private let registry: ToolRegistry
     private let parameters: GenerateParameters
     private let maxToolCalls: Int
@@ -32,6 +33,7 @@ nonisolated final class AgentSession {
 
     /// - Parameters:
     ///   - model: a loaded `ModelContainer` (caller loads via the existing LLM path).
+    ///   - history: prior turns to rehydrate the chat with (persistent conversations).
     ///   - registry: tools available this session (empty → plain chat, no tools advertised).
     ///   - maxToolCalls: cap on tool invocations per response (runaway-loop guard).
     ///   - approve: gate invoked for `requiresApproval` tools; return false to decline.
@@ -39,6 +41,7 @@ nonisolated final class AgentSession {
     init(
         model: ModelContainer,
         instructions: String? = nil,
+        history: [Chat.Message] = [],
         registry: ToolRegistry = ToolRegistry(),
         parameters: GenerateParameters = .init(),
         maxToolCalls: Int = 8,
@@ -47,6 +50,7 @@ nonisolated final class AgentSession {
     ) {
         self.model = model
         self.instructions = instructions
+        self.history = history
         self.registry = registry
         self.parameters = parameters
         self.maxToolCalls = maxToolCalls
@@ -61,17 +65,27 @@ nonisolated final class AgentSession {
         let onEvent = onEvent
         let budget = ToolBudget(limit: maxToolCalls)
 
-        let session = ChatSession(
-            model,
-            instructions: instructions,
-            generateParameters: parameters,
-            tools: registry.isEmpty ? nil : registry.toolSpecs,
-            toolDispatch: { call in
-                let result = await AgentSession.dispatch(
-                    call, registry: registry, budget: budget, approve: approve, onEvent: onEvent)
-                return result.modelResult
-            }
-        )
+        let dispatch: @Sendable (ToolCall) async throws -> String = { call in
+            let result = await AgentSession.dispatch(
+                call, registry: registry, budget: budget, approve: approve, onEvent: onEvent)
+            return result.modelResult
+        }
+        // ChatSession's history initializer rehydrates prior turns for persistent
+        // conversations; the plain initializer starts fresh.
+        let session = history.isEmpty
+            ? ChatSession(
+                model,
+                instructions: instructions,
+                generateParameters: parameters,
+                tools: registry.isEmpty ? nil : registry.toolSpecs,
+                toolDispatch: dispatch)
+            : ChatSession(
+                model,
+                instructions: instructions,
+                history: history,
+                generateParameters: parameters,
+                tools: registry.isEmpty ? nil : registry.toolSpecs,
+                toolDispatch: dispatch)
         return session.streamResponse(to: prompt)
     }
 

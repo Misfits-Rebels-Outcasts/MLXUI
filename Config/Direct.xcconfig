@@ -5,7 +5,7 @@
 
 #include "Shared.xcconfig"
 
-PRODUCT_NAME = AI Browser Pro
+PRODUCT_NAME = MLXUI Pro
 PRODUCT_BUNDLE_IDENTIFIER = net.connectcode.mlxui-pro
 ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon-Direct
 
@@ -31,7 +31,7 @@ SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) DIRECT_BUILD
 // The prompt shows these strings; with no string, macOS silently denies on
 // some releases. Full Disk Access cannot be entitled — the user grants it in
 // System Settings > Privacy & Security.
-INFOPLIST_KEY_NSDocumentsFolderUsageDescription = AI Browser Pro needs access to your Documents folder so local models and agent tools can read and write files you point them at.
-INFOPLIST_KEY_NSDesktopFolderUsageDescription = AI Browser Pro needs access to your Desktop so local models and agent tools can read and write files you point them at.
-INFOPLIST_KEY_NSDownloadsFolderUsageDescription = AI Browser Pro needs access to your Downloads folder so local models and agent tools can read and write files you point them at.
-INFOPLIST_KEY_NSRemovableVolumesUsageDescription = AI Browser Pro needs access to removable volumes so you can keep model weights on an external drive.
+INFOPLIST_KEY_NSDocumentsFolderUsageDescription = MLXUI Pro needs access to your Documents folder so local models and agent tools can read and write files you point them at.
+INFOPLIST_KEY_NSDesktopFolderUsageDescription = MLXUI Pro needs access to your Desktop so local models and agent tools can read and write files you point them at.
+INFOPLIST_KEY_NSDownloadsFolderUsageDescription = MLXUI Pro needs access to your Downloads folder so local models and agent tools can read and write files you point them at.
+INFOPLIST_KEY_NSRemovableVolumesUsageDescription = MLXUI Pro needs access to removable volumes so you can keep model weights on an external drive.

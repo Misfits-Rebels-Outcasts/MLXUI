@@ -11,11 +11,17 @@ import MLXLMCommon
 
 // MARK: - Chat Message
 
-struct ChatMessage: Identifiable, Sendable {
-    enum Role: Sendable { case user, assistant }
-    let id = UUID()
+struct ChatMessage: Identifiable, Codable, Sendable, Equatable {
+    enum Role: String, Codable, Sendable { case user, assistant }
+    let id: UUID
     let role: Role
     var text: String
+
+    init(id: UUID = UUID(), role: Role, text: String) {
+        self.id = id
+        self.role = role
+        self.text = text
+    }
 }
 
 // MARK: - Pending approval
@@ -35,9 +41,17 @@ struct PendingApproval: Identifiable {
 @Observable
 final class ModelRunner {
     /// Renderable transcript (text bubbles + tool-call cards), assembled by the pure reducer.
+    /// This is the working copy of the **active conversation's** items.
     private(set) var transcript = TranscriptBuilder()
     var isRunning = false
     var errorMessage: String?
+
+    /// Persisted conversations for the current model, newest first, and the one on screen.
+    private(set) var conversations: [Conversation] = []
+    private(set) var activeConversationID: UUID?
+    /// The model whose conversations are loaded (set in `prepare`, independent of weight
+    /// loading, which happens lazily on the first send).
+    private var preparedModelID: String?
 
     /// A tool call currently blocked on user approval (drives the approval sheet).
     var pendingApproval: PendingApproval?
@@ -116,15 +130,96 @@ final class ModelRunner {
         return names
     }
 
-    /// Called when the chat sheet opens. Resets history when switching models and
-    /// frees the previously loaded model's weights.
+    /// Called when the chat sheet opens. Frees the previous model's weights when switching
+    /// models and loads the new model's persisted conversations (most recent selected, or a
+    /// fresh empty one). Reopening the same model keeps everything in place.
     func prepare(for model: ModelEntry) {
         if loadedModelID != model.id {
             loadedContainer = nil
             loadedModelID = nil
-            transcript.reset()
+        }
+        if preparedModelID != model.id {
+            preparedModelID = model.id
+            conversations = ConversationStore.conversations(forModelID: model.id)
+            if let mostRecent = conversations.first {
+                activeConversationID = mostRecent.id
+                transcript.load(mostRecent.items)
+            } else {
+                startNewConversation(modelID: model.id)
+            }
         }
         errorMessage = nil
+    }
+
+    // MARK: - Conversations
+
+    /// Start a new conversation (an existing empty one is reused instead of stacking blanks).
+    func newConversation() {
+        guard let modelID = preparedModelID else { return }
+        if isRunning { stop() }
+        saveActiveConversation()
+        if let existing = conversations.first(where: { $0.items.isEmpty }) {
+            activeConversationID = existing.id
+            transcript.load(existing.items)
+            return
+        }
+        startNewConversation(modelID: modelID)
+    }
+
+    /// Show another conversation; an in-flight generation is stopped and the partial
+    /// transcript saved first.
+    func selectConversation(_ id: UUID) {
+        guard id != activeConversationID,
+              let conversation = conversations.first(where: { $0.id == id })
+        else { return }
+        if isRunning { stop() }
+        saveActiveConversation()
+        activeConversationID = id
+        transcript.load(conversation.items)
+    }
+
+    /// Delete a conversation from the list and from disk. Deleting the one on screen moves
+    /// to the most recent remaining conversation, or a fresh empty one.
+    func deleteConversation(_ id: UUID) {
+        guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
+        if id == activeConversationID, isRunning { stop() }
+        ConversationStore.delete(id: id)
+        conversations.remove(at: index)
+        guard id == activeConversationID else { return }
+        if let next = conversations.first {
+            activeConversationID = next.id
+            transcript.load(next.items)
+        } else if let modelID = preparedModelID {
+            startNewConversation(modelID: modelID)
+        } else {
+            activeConversationID = nil
+            transcript.reset()
+        }
+    }
+
+    private func startNewConversation(modelID: String) {
+        let conversation = Conversation(modelID: modelID)
+        conversations.insert(conversation, at: 0)
+        activeConversationID = conversation.id
+        transcript.reset()
+    }
+
+    /// Sync the working transcript into the active conversation, bump it to the top, and
+    /// persist. No-op when nothing changed; empty conversations stay memory-only so blank
+    /// chats never litter the disk.
+    private func saveActiveConversation() {
+        guard let index = conversations.firstIndex(where: { $0.id == activeConversationID }),
+              conversations[index].items != transcript.items
+        else { return }
+        conversations[index].items = transcript.items
+        conversations[index].updatedAt = Date()
+        if !transcript.items.isEmpty {
+            ConversationStore.save(conversations[index])
+        }
+        if index != 0 {
+            let conversation = conversations.remove(at: index)
+            conversations.insert(conversation, at: 0)
+        }
     }
 
     /// Generate a reply to `prompt`, running the agent tool loop via `AgentSession` and
@@ -141,6 +236,19 @@ final class ModelRunner {
         }
 
         errorMessage = nil
+
+        // Prior turns become the model's rehydrated history; the new prompt goes on top.
+        if activeConversationID == nil {
+            preparedModelID = model.id
+            startNewConversation(modelID: model.id)
+        }
+        let history = Conversation.chatHistory(from: transcript.items)
+        if let index = conversations.firstIndex(where: { $0.id == activeConversationID }),
+           conversations[index].items.isEmpty, conversations[index].title == Conversation.untitled {
+            conversations[index].title = Conversation.title(forFirstPrompt: trimmed)
+        }
+        let turnConversationID = activeConversationID
+
         transcript.addUserMessage(trimmed)
         isRunning = true
 
@@ -154,6 +262,7 @@ final class ModelRunner {
 
                 let session = AgentSession(
                     model: container,
+                    history: history,
                     registry: registry,
                     // 512 was too tight once reasoning models entered the picture:
                     // Qwen3's <think> block alone can run 250–500 tokens, so the
@@ -171,13 +280,21 @@ final class ModelRunner {
                     },
                     onEvent: { [weak self] event in
                         Task { @MainActor [weak self] in
-                            self?.transcript.apply(event)
-                            self?.auditLog.record(event)
+                            guard let self else { return }
+                            // Late events stay out of a switched-to conversation; the
+                            // audit log records the session regardless.
+                            if self.activeConversationID == turnConversationID {
+                                self.transcript.apply(event)
+                            }
+                            self.auditLog.record(event)
                         }
                     }
                 )
 
                 for try await chunk in session.streamResponse(to: trimmed) {
+                    // A late chunk must not leak into a conversation the user switched to
+                    // (switching stops the task, but a chunk can already be in flight).
+                    guard self.activeConversationID == turnConversationID else { break }
                     self.transcript.appendAssistantChunk(chunk)
                 }
             } catch is CancellationError {
@@ -191,6 +308,11 @@ final class ModelRunner {
             self.currentTask = nil
             self.pendingApproval?.respond(false)  // release any in-flight approval
             self.pendingApproval = nil
+            // Persist the finished (or interrupted) turn. When the user already switched
+            // conversations, the switch saved the partial transcript itself.
+            if self.activeConversationID == turnConversationID {
+                self.saveActiveConversation()
+            }
         }
     }
 

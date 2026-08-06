@@ -4,7 +4,7 @@
 
 #include "Shared.xcconfig"
 
-PRODUCT_NAME = AI Browser
+PRODUCT_NAME = MLXUI
 PRODUCT_BUNDLE_IDENTIFIER = net.connectcode.mlxui
 ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
 

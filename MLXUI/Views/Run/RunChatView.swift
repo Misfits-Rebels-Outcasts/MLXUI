@@ -12,21 +12,27 @@ struct RunChatView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var prompt = ""
     @State private var showAuditLog = false
+    @State private var conversationToDelete: Conversation?
 
     private var runner: ModelRunner { appState.modelRunner }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
+        HStack(spacing: 0) {
+            conversationSidebar
+                .frame(width: 210)
             Divider()
-            transcript
-            if let error = runner.errorMessage {
-                errorBar(error)
+            VStack(spacing: 0) {
+                header
+                Divider()
+                transcript
+                if let error = runner.errorMessage {
+                    errorBar(error)
+                }
+                Divider()
+                inputBar
             }
-            Divider()
-            inputBar
         }
-        .frame(width: 560, height: 620)
+        .frame(width: 840, height: 620)
         .onAppear { appState.modelRunner.prepare(for: model) }
         .onDisappear { appState.stopModel() }
         .sheet(item: Binding(
@@ -38,6 +44,73 @@ struct RunChatView: View {
         .sheet(isPresented: $showAuditLog) {
             AuditLogView(runner: runner)
         }
+        .confirmationDialog(
+            "Delete this conversation?",
+            isPresented: Binding(
+                get: { conversationToDelete != nil },
+                set: { if !$0 { conversationToDelete = nil } }
+            ),
+            presenting: conversationToDelete
+        ) { conversation in
+            Button("Delete \"\(conversation.title)\"", role: .destructive) {
+                runner.deleteConversation(conversation.id)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("This permanently removes the conversation from this Mac.")
+        }
+    }
+
+    // MARK: - Conversation sidebar
+
+    private var conversationSidebar: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Chats")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    runner.newConversation()
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut("n", modifiers: .command)
+                .help("New conversation (⌘N)")
+            }
+            .padding(12)
+            Divider()
+            List(selection: conversationSelection) {
+                ForEach(runner.conversations) { conversation in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(conversation.title)
+                            .font(.callout)
+                            .lineLimit(1)
+                        if !conversation.items.isEmpty {
+                            Text(conversation.updatedAt, format: .relative(presentation: .named))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .tag(conversation.id)
+                    .contextMenu {
+                        Button("Delete…", role: .destructive) {
+                            conversationToDelete = conversation
+                        }
+                    }
+                }
+            }
+            .listStyle(.inset)
+            .scrollContentBackground(.hidden)
+        }
+        .background(.quaternary.opacity(0.25))
+    }
+
+    private var conversationSelection: Binding<UUID?> {
+        Binding(
+            get: { runner.activeConversationID },
+            set: { if let id = $0 { runner.selectConversation(id) } }
+        )
     }
 
     // MARK: - Header
