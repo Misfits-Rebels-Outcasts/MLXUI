@@ -27,6 +27,7 @@ final class InstallManager {
     private let installedURL: URL
     private let session: URLSession
     private var activeTasks: [String: [URLSessionDownloadTask]] = [:]
+    private var downloadTasks: [String: Task<Void, Never>] = [:]
 
     var modelStates: [String: InstallState] = [:]
     var onInstallComplete: ((String) -> Void)?
@@ -68,7 +69,8 @@ final class InstallManager {
         }
 
         modelStates[model.id] = .resolving
-        Task { await downloadModel(model, onComplete: onComplete) }
+        let task = Task { await downloadModel(model, onComplete: onComplete) }
+        downloadTasks[model.id] = task
     }
 
     /// Free space (GB) on the volume that holds the models directory. Measured fresh at
@@ -80,6 +82,8 @@ final class InstallManager {
     }
 
     func cancel(_ modelId: String) {
+        downloadTasks[modelId]?.cancel()
+        downloadTasks[modelId] = nil
         activeTasks[modelId]?.forEach { $0.cancel() }
         activeTasks[modelId] = nil
         modelStates[modelId] = .idle
@@ -162,6 +166,7 @@ final class InstallManager {
             var tempFiles: [(file: HFRemoteFile, localURL: URL)] = []
 
             for (fileIndex, file) in files.enumerated() {
+                guard !Task.isCancelled else { return }
                 guard let downloadURL = buildDownloadURL(model: variant, filename: file.filename) else {
                     await MainActor.run {
                         modelStates[modelId] = .error("Invalid URL for \(file.filename)", canRetry: false)
@@ -213,6 +218,7 @@ final class InstallManager {
                     totalExpectedSoFar += fileBytesExpected > 0 ? fileBytesExpected : actualSize
                     tempFiles.append((HFRemoteFile(filename: file.filename, size: actualSize), localURL))
                 } catch {
+                    if Task.isCancelled { return }
                     let msg = error.localizedDescription
                     print("[Install] Download failed: \(msg)")
                     await MainActor.run {
@@ -253,6 +259,7 @@ final class InstallManager {
                     "This model is gated. Add a HuggingFace token in Settings, then retry.")
             }
         } catch {
+            if Task.isCancelled { return }
             print("[Install] Error: \(error.localizedDescription)")
             await MainActor.run {
                 modelStates[modelId] = .error(error.localizedDescription, canRetry: true)
@@ -453,18 +460,22 @@ extension URLSession {
         try FileManager.default.createDirectory(at: safeDir, withIntermediateDirectories: true)
 
         let delegate = ProgressDelegate(onProgress: progress, safeDir: safeDir)
-        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        let downloadSession = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        let task = downloadSession.downloadTask(with: request)
 
-        return try await withCheckedThrowingContinuation { continuation in
-            delegate.onComplete = { location, response in
-                continuation.resume(returning: (location, response))
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                delegate.onComplete = { location, response in
+                    continuation.resume(returning: (location, response))
+                }
+                delegate.onError = { error in
+                    try? FileManager.default.removeItem(at: safeDir)
+                    continuation.resume(throwing: error)
+                }
+                task.resume()
             }
-            delegate.onError = { error in
-                try? FileManager.default.removeItem(at: safeDir)
-                continuation.resume(throwing: error)
-            }
-            let task = session.downloadTask(with: request)
-            task.resume()
+        } onCancel: {
+            task.cancel()
         }
     }
 }
