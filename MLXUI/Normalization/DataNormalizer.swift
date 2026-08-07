@@ -10,6 +10,7 @@ enum DataNormalizer {
             "llama3": "Llama 3 Community", "llama3.1": "Llama 3.1 Community",
             "gemma": "Gemma License", "other": "Custom", "openrail": "OpenRAIL",
             "bigcode-openrail-m": "BigCode OpenRAIL-M",
+            "flux-1-dev-non-commercial-license": "FLUX.1-dev Non-Commercial",
         ]
         let lower = raw.lowercased()
         for (key, value) in map where lower.contains(key) {

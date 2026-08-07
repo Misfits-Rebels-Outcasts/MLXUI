@@ -15,7 +15,8 @@ import Foundation
 /// isn't load-bearing.
 ///
 /// Coverage (browser.json): chat (LLM) · ASR (Whisper, Voxtral) · TTS (Kokoro + generic) ·
-/// Vision (VLM) · OCR (MLXVLM + PaddleOCR-VL + dots.ocr + DeepSeek-OCR) · Embeddings.
+/// Vision (VLM) · OCR (MLXVLM + PaddleOCR-VL + dots.ocr + DeepSeek-OCR) · Embeddings ·
+/// Image generation (FLUX.1).
 @MainActor
 let installedModules: [ModelModule.Type] = [
     MLXWhisperModule.self,
@@ -29,4 +30,5 @@ let installedModules: [ModelModule.Type] = [
     DeepSeekOCRModule.self,
     OCRModule.self,
     EmbeddingModule.self,
+    FluxModule.self,
 ]

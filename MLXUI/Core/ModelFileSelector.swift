@@ -44,6 +44,10 @@ enum ModelFileSelector {
         // template → no vision/image placeholders → run fails (journal/2026-38).
         "chat_template.json",
         "chat_template.jinja",
+        // FLUX.1-family T5 tokenizer ships as `tokenizer_2/spiece.model` (raw SentencePiece,
+        // no fast tokenizer.json). Without it the T5 text encoder can't tokenize → the diffusion
+        // pipeline can't build conditioning (AM3, journal/2026-67).
+        "spiece.model",
     ]
 
     /// Returns the subset of `siblings` (repo-relative filenames) to download.
@@ -53,13 +57,20 @@ enum ModelFileSelector {
         let hasSingleModel = lower.contains("model.safetensors")
         let hasStandardWeights = hasIndex || hasSingleModel
 
-        // Subfolders that ship model weights (e.g. `speech_tokenizer/`, `voices/`). A
-        // component whose weights don't download fails when the model loads it, so we pull
-        // every `*.safetensors` under such a folder plus the metadata it needs (its own
-        // `config.json` etc.). Keyed by the lowercased directory prefix incl. trailing "/".
+        // Subfolders that ship model weights (e.g. `speech_tokenizer/`, `voices/`) OR tokenizer
+        // assets (`tokenizer/`, `tokenizer_2/`). A component whose weights don't download fails
+        // when the model loads it, so we pull every `*.safetensors` under such a folder plus the
+        // metadata it needs (its own `config.json` etc.). A subfolder is a component if it holds
+        // a `.safetensors` **or** a recognized metadata file — FLUX's `tokenizer_2/` has only
+        // `spiece.model` + tokenizer configs (no weights), and must still come down or the T5
+        // encoder can't tokenize (AM3). Keyed by the lowercased directory prefix incl. trailing "/".
         let componentDirs: Set<String> = Set(lower.compactMap { l in
-            guard l.hasSuffix(".safetensors"), let slash = l.lastIndex(of: "/") else { return nil }
-            return String(l[...slash])
+            guard let slash = l.lastIndex(of: "/") else { return nil }
+            let basename = String(l[l.index(after: slash)...])
+            if l.hasSuffix(".safetensors") || metadataNames.contains(basename) {
+                return String(l[...slash])
+            }
+            return nil
         })
 
         return siblings.filter { name in

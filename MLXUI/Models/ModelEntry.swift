@@ -5,7 +5,7 @@ enum ModelSource: String, Codable {
 }
 
 enum ModelType: String, Codable {
-    case llm, asr, tts, embedding, vision, ocr, video
+    case llm, asr, tts, embedding, vision, ocr, video, image
     var sfSymbol: String {
         switch self {
         case .llm: "bubble.left.and.bubble.right"
@@ -15,6 +15,7 @@ enum ModelType: String, Codable {
         case .vision: "eye"
         case .ocr: "doc.text.viewfinder"
         case .video: "film"
+        case .image: "photo.artframe"
         }
     }
 }

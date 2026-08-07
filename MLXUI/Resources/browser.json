@@ -16,7 +16,8 @@
       "sfSymbol": "photo.on.rectangle.angled.fill",
       "domainIds": [
         "vision",
-        "ocr"
+        "ocr",
+        "imagegen"
       ]
     },
     {
@@ -61,6 +62,10 @@
     "embedding": {
       "icon": "square.grid.3x3",
       "description": "Embeddings"
+    },
+    "imagegen": {
+      "icon": "photo.artframe",
+      "description": "Image Generation"
     }
   },
   "domains": [
@@ -1863,6 +1868,64 @@
           ],
           "descriptionSource": "mlx-community/bge-m3-mlx-fp16",
           "summary": "BGE-M3 is a versatile embedding model capable of:"
+        }
+      ]
+    },
+    {
+      "id": "imagegen",
+      "name": "Image Generation",
+      "sfSymbol": "photo.artframe",
+      "children": null,
+      "models": [
+        {
+          "id": "mlx-community--Flux-1.lite-8B-MLX-Q4",
+          "family": "Flux",
+          "displayName": "Flux-1.lite-8B",
+          "paramSize": "8B",
+          "paramCountB": 8.0,
+          "modelType": "image",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Flux-1.lite-8B-MLX-Q4",
+          "ramGB": 6.75,
+          "downloadSizeGB": 7.5,
+          "contextWindow": null,
+          "license": "flux-1-dev-non-commercial-license",
+          "licenseUrl": "https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/LICENSE.md",
+          "description": "# Flux-1.lite-8B (MLX Q4)\n\nFlux-1.lite-8B is an 8B text-to-image diffusion model by Freepik, distilled from FLUX.1-dev (Black Forest Labs). It is a rectified-flow MMDiT — a diffusion transformer with dual T5 + CLIP text encoders and a VAE decoder — that generates an image from a text prompt.\n\nThis is the mlx-community 4-bit MLX conversion, so it runs on Apple Silicon with no Python or external runtime. Given a prompt like \"an astronaut riding a horse on Mars\", it produces an image after a small number of rectified-flow steps.\n\n**License:** the base model inherits the **FLUX.1-dev Non-Commercial** license — non-commercial use only.",
+          "architecture": "Flux",
+          "languages": [
+            "en"
+          ],
+          "lastUpdated": "2026-01-20",
+          "taskTags": [
+            "text-to-image",
+            "image-generation"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 0,
+          "communityLikes": 2,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 6.75,
+              "downloadSizeGB": 7.5,
+              "qualityPercent": 85,
+              "hfModelId": "mlx-community/Flux-1.lite-8B-MLX-Q4",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/Flux-1.lite-8B-MLX-Q4",
+          "summary": "Freepik's 8B FLUX.1-dev distillation as a 4-bit MLX text-to-image model — a text prompt generates an image on Apple Silicon (non-commercial license)."
         }
       ]
     }

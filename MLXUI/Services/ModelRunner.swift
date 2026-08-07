@@ -422,6 +422,8 @@ final class ModelRunner {
             showUnsupported("Vision/OCR", model)
         case .video:
             showUnsupported("Video", model)
+        case .image:
+            showUnsupported("Image generation", model)
         }
     }
 
