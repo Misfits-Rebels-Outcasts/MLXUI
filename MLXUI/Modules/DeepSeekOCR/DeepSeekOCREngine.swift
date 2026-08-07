@@ -39,18 +39,22 @@ enum DeepSeekOCREngine {
                 // Deterministic OCR decoding (temperature 0). No repetition penalty: it's a blunt tool
                 // here — it damaged the legitimately-repeated lines while barely denting the page loop,
                 // whose real cause is EOS not stopping generation (handled below).
-                let result = try MLXLMCommon.generate(
+                let stream = try MLXLMCommon.generate(
                     input: input,
                     parameters: GenerateParameters(maxTokens: maxTokens, temperature: 0),
-                    context: context
-                ) { tokens in
-                    // Stop on the checkpoint's end-of-sentence token even if the framework's stop set
-                    // missed it (see `eosTokenId`), else the model re-reads the page until `maxTokens`.
-                    if tokens.last == Self.eosTokenId { return .stop }
-                    return tokens.count >= maxTokens ? .stop : .more
+                    context: context)
+                var output = ""
+                // Stop on the checkpoint's EOS text form (see `eosTokenId`), else the model
+                // re-reads the page until `maxTokens`.
+                outerLoop: for await generation in stream {
+                    switch generation {
+                    case .chunk(let text):
+                        output += text
+                        if output.contains("<｜end▁of▁sentence｜>") { break outerLoop }
+                    case .info, .toolCall: break
+                    }
                 }
-                // Stopping via the closure includes the EOS token in the output; drop its literal form.
-                return result.output
+                return output
                     .replacingOccurrences(of: "<｜end▁of▁sentence｜>", with: "")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
             }

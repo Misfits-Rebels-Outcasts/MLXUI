@@ -11,7 +11,7 @@ import CoreImage
 /// Apple Vision. Isolates the MLXVLM/MLX imports for dots to this file.
 enum DotsOCREngine {
     /// Fixed OCR instruction (dots.ocr has no per-run prompt in the OCR run UI).
-    static let ocrPrompt = "Extract all text from this image, preserving reading order."
+    nonisolated static let ocrPrompt = "Extract all text from this image, preserving reading order."
 
     /// Cap input pixels before inference: dots' `max_pixels` is ~11 MP, which would OOM Metal on
     /// large scans. ~1 MP keeps the vision-token count safe while staying legible (mirrors `VLMEngine`).
@@ -36,14 +36,15 @@ enum DotsOCREngine {
                     input: UserInput(chat: [
                         .user(Self.ocrPrompt, images: [.ciImage(CIImage(cgImage: bounded))])
                     ]))
-                let result = try MLXLMCommon.generate(
+                let stream = try MLXLMCommon.generate(
                     input: input,
                     parameters: GenerateParameters(maxTokens: maxTokens),
-                    context: context
-                ) { tokens in
-                    tokens.count >= maxTokens ? .stop : .more
+                    context: context)
+                var output = ""
+                for await generation in stream {
+                    if case .chunk(let text) = generation { output += text }
                 }
-                return result.output
+                return output
             }
         } catch let error as StageError {
             throw error

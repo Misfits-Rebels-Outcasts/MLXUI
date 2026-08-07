@@ -90,7 +90,7 @@ struct DotsOCRConfig: Codable, Sendable {
     }
 
     /// Head dimension shared by the text decoder (Qwen2 GQA).
-    var headDim: Int { hiddenSize / numAttentionHeads }
+    nonisolated var headDim: Int { hiddenSize / numAttentionHeads }
 }
 
 /// Weight-key remapping from the HF checkpoint layout to our module's property layout — a 1:1
@@ -99,7 +99,7 @@ struct DotsOCRConfig: Codable, Sendable {
 /// `sanitize` (later slice). **Order matters:** `model.vision_tower.` must be checked before the
 /// broader `model.` prefix.
 enum DotsOCRWeights {
-    static func remapKey(_ key: String) -> String {
+    nonisolated static func remapKey(_ key: String) -> String {
         if key.hasPrefix("model.vision_tower.") {
             return "vision_tower." + key.dropFirst("model.vision_tower.".count)
         } else if key.hasPrefix("model.") {

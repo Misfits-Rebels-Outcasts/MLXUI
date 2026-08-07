@@ -5,7 +5,7 @@ import Foundation
 /// the run engine before any audio dependency (backlog M-demo). M11 generalizes this
 /// to the audio chain.
 enum SummarizeDemo {
-    static let defaultTemplate = "Summarize the following in 3 bullet points:\n\n{input}"
+    nonisolated static let defaultTemplate = "Summarize the following in 3 bullet points:\n\n{input}"
 
     /// Default output location in the app's container.
     nonisolated static func defaultOutputURL() -> URL {

@@ -25,6 +25,22 @@ them with one click, and provides a purpose-built Run UI for each model type.
 
 ## ✨ What's New
 
+### FLUX.1 Image Generation — text prompt → on-device image, no Python
+
+FLUX.1-Lite-8B (8-bit) is now in the catalog with a full native Run UI. Type a prompt,
+hit **Generate**, and watch a 512×512 image appear — CLIP + T5 text encoding, a native
+Flux transformer, and VAE decode all running on Apple Silicon via MLX. No Python
+environment, no API keys, no round-trips to the cloud.
+
+The image module follows the same isolated-module pattern as Whisper and Kokoro: the
+Flux folder is self-contained and can be updated independently of every other model type.
+
+### Cancel Install — mid-download cancel now reliably cleans up
+
+Canceling a model install while it was downloading could leave stale files in the
+temp `downloads/` folder. That's fixed: canceling now atomically removes the partial
+download so disk space is always reclaimed correctly.
+
 ### Agentic Chat — Local AI that can actually *do* things
 
 Chat models can now call tools mid-conversation. A single local model can browse the web,
@@ -107,6 +123,7 @@ contributor adding image-generation support doesn't need to understand the chat 
   - Vision (VLM) → image upload + Q&A
   - OCR (PaddleOCR, DeepSeek-OCR, dots.ocr, olmOCR) → image dropwell + extracted text
   - Embeddings → text input + vector output
+  - Image generation (Flux) → text prompt + on-device generated image
 - **Pipeline runner** — chain models together (transcribe → summarize → speak) in a
   single workflow
 - **Command palette (⌘K)** — find and run any model instantly
@@ -130,6 +147,7 @@ Every model listed here is downloadable and has a working Run UI.
 | **Speech-to-Text** (4) | Whisper tiny/small/large-v3, Voxtral-Mini | 37M – 1.5B |
 | **Text-to-Speech** (4) | Kokoro, Qwen3-TTS, Chatterbox, Orpheus | 82M – 3B |
 | **Embeddings** (4) | all-MiniLM-L6, embeddinggemma, ModernBERT-embed, bge-m3 | 18M – 568M |
+| **Image Generation** (1) | **FLUX.1-Lite-8B** | 8B |
 
 The full `browser.json` catalog tracks **~435 models** from mlx-community. New models
 and Run UIs are added with every release.
@@ -147,7 +165,8 @@ and Run UIs are added with every release.
 | Vision | VLM (Gemma, Qwen VL, LFM2-VL) | ✅ | ✅ | ✅ | MLXVLM |
 | Vision | OCR (PaddleOCR, DeepSeek-OCR, dots.ocr, olmOCR) | ✅ | ✅ | ✅ | MLXVLM + native |
 | Embeddings | Text embeddings | ✅ | ✅ | ✅ | MLX + ModernBERT |
-| Image | Diffusion (Flux, SDXL, ...) | ✅ | ✅ | ⬜ | — |
+| Image | Diffusion (Flux) | ✅ | ✅ | ✅ | Flux (native MLX) |
+| Image | Diffusion (SDXL, ...) | ✅ | ✅ | ⬜ | — |
 | Audio | Music generation | ✅ | ✅ | ⬜ | — |
 
 ✅ = built &emsp; ⬜ = available for contribution
@@ -244,8 +263,8 @@ Every model in the catalog should eventually have a working Run button.
 
 ### Good first issues
 
-- **Image generation Run UI** (Flux, SDXL) — browse + install already work, needs a
-  prompt → image Run view
+- **Image generation Run UI** (SDXL, etc.) — Flux is now done; SDXL and other diffusion
+  architectures still need a prompt → image Run view
 - **Music generation Run UI** — same pattern, different output type
 - **Pipeline stages** — wire up existing modules into longer chains (e.g. OCR →
   summarize)
@@ -285,13 +304,15 @@ Every model in the catalog should eventually have a working Run button.
 - [x] Agentic chat — 9 local tools (web fetch, compute, MLX model calls, file access, shell)
 - [x] Ternary-Bonsai-27B — 27B 2-bit hybrid attention model in ~8.4 GB RAM
 - [x] Dual build targets — App Store (sandboxed) + Direct Distribution (notarized standalone)
+- [x] Image generation Run UI — FLUX.1-Lite-8B: text prompt → on-device image via native MLX Flux module
+- [x] Fixed cancel-install mid-download leaving stale files in `downloads/`
 
 ### In progress
 - [ ] Visual pipeline builder UI
 - [ ] Improved gated-model auth flow
 
 ### Up for grabs
-- [ ] Image generation Run UI (Flux, SDXL, etc.)
+- [ ] Image generation Run UI (SDXL, etc.)
 - [ ] Music generation Run UI
 - [ ] Model comparison benchmark runner
 - [ ] Export pipeline as standalone app

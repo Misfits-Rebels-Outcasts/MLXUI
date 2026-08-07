@@ -30,7 +30,7 @@ enum EmbeddingEngine {
             let loader = HFTokenizerLoader()
             let container = try await EmbedderModelFactory.shared.loadContainer(
                 from: modelDirectory, using: loader)
-            return try await container.perform { context in
+            return await container.perform { context in
                 let tokenizer = context.tokenizer
                 let encoded = texts.map { tokenizer.encode(text: $0, addSpecialTokens: true) }
                 let maxLength = encoded.reduce(into: 1) { acc, elem in acc = max(acc, elem.count) }

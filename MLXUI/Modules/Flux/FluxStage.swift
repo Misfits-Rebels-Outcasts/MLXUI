@@ -13,14 +13,14 @@ nonisolated struct FluxStage: PipelineStage {
     var accepts: MediaKind { .text }
     var produces: MediaKind { .image }
 
-    private let generate: @Sendable (String, UInt64?, (Double) -> Void) async throws -> CGImage
+    private let generate: @Sendable (String, UInt64?, @Sendable (Double) -> Void) async throws -> CGImage
 
     /// Designated init with an injectable generator (tests pass a mock).
     init(
         id: String,
         name: String,
         seed: UInt64? = nil,
-        generate: @escaping @Sendable (String, UInt64?, (Double) -> Void) async throws -> CGImage
+        generate: @escaping @Sendable (String, UInt64?, @Sendable (Double) -> Void) async throws -> CGImage
     ) {
         self.id = id
         self.name = name

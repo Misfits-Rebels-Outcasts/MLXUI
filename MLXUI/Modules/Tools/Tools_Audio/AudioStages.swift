@@ -82,7 +82,7 @@ nonisolated struct SaveWAVStage: PipelineStage {
         progress(1.0)
         if openOnSave {
             let fileURL = url
-            await MainActor.run { NSWorkspace.shared.open(fileURL) }
+            _ = await MainActor.run { NSWorkspace.shared.open(fileURL) }
         }
         return input
     }

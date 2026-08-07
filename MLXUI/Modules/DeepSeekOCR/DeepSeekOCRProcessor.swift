@@ -42,7 +42,7 @@ struct DeepSeekOCRProcessor: UserInputProcessor {
 
     func prepare(input: UserInput) async throws -> LMInput {
         guard let image = input.images.first else {
-            let tokens = try tokenizer.encode(text: "Free OCR.")
+            let tokens = tokenizer.encode(text: "Free OCR.")
             return LMInput(tokens: MLXArray(tokens.map { Int32($0) }))
         }
 
@@ -80,7 +80,7 @@ struct DeepSeekOCRProcessor: UserInputProcessor {
         // "Free OCR." → plain reading-order text. The `<|grounding|>OCR this image.` prompt instead
         // emits layout markup (`<|ref|>text<|/ref|><|det|>[[bbox]]<|/det|>`); use that only when the
         // caller wants bounding boxes. Matches the no-image fallback above.
-        ids += try tokenizer.encode(text: "\nFree OCR.")
+        ids += tokenizer.encode(text: "\nFree OCR.")
 
         return LMInput(
             text: .init(tokens: MLXArray(ids.map { Int32($0) })),

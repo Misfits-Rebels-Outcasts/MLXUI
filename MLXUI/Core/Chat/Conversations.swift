@@ -49,6 +49,30 @@ struct Conversation: Identifiable, Codable, Sendable, Equatable {
 
     static let untitled = "New Chat"
 
+    private enum CodingKeys: String, CodingKey {
+        case id, modelID, title, createdAt, updatedAt, items
+    }
+
+    nonisolated init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        modelID = try c.decode(String.self, forKey: .modelID)
+        title = try c.decode(String.self, forKey: .title)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        items = try c.decode([TranscriptItem].self, forKey: .items)
+    }
+
+    nonisolated func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(modelID, forKey: .modelID)
+        try c.encode(title, forKey: .title)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
+        try c.encode(items, forKey: .items)
+    }
+
     /// A list title from the first prompt: first line, trimmed, capped.
     static func title(forFirstPrompt prompt: String) -> String {
         let firstLine = prompt

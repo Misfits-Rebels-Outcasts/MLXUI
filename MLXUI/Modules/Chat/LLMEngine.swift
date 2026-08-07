@@ -28,14 +28,15 @@ enum LLMEngine {
             let container = try await LLMModelFactory.shared.loadContainer(from: modelDir, using: loader)
             return try await container.perform { context in
                 let input = try await context.processor.prepare(input: UserInput(prompt: prompt))
-                let result = try MLXLMCommon.generate(
+                let stream = try MLXLMCommon.generate(
                     input: input,
                     parameters: GenerateParameters(maxTokens: maxTokens, temperature: temperature),
-                    context: context
-                ) { tokens in
-                    tokens.count >= maxTokens ? .stop : .more
+                    context: context)
+                var output = ""
+                for await generation in stream {
+                    if case .chunk(let text) = generation { output += text }
                 }
-                return result.output
+                return output
             }
         } catch let error as StageError {
             throw error

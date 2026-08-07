@@ -17,11 +17,11 @@ import MLXLMCommon
 /// A callable tool exposed to the chat model. Conformers are `nonisolated` (see `PipelineStage`).
 protocol AgentTool: Sendable {
     /// Function name the model calls (must be unique in a `ToolRegistry`).
-    var name: String { get }
+    nonisolated var name: String { get }
     /// Human/model-facing description of what the tool does.
-    var toolDescription: String { get }
+    nonisolated var toolDescription: String { get }
     /// Typed parameters, used to build the JSON schema.
-    var parameters: [ToolParameter] { get }
+    nonisolated var parameters: [ToolParameter] { get }
     /// When true, `AgentSession` awaits UI approval before executing (side-effecting tools).
     /// `nonisolated` so the nonisolated dispatcher can read it synchronously.
     nonisolated var requiresApproval: Bool { get }
@@ -42,7 +42,7 @@ extension AgentTool {
 
     /// OpenAI-style function schema (`{type:function, function:{name, description, parameters}}`)
     /// handed to the model as a `ToolSpec`.
-    var toolSpec: ToolSpec {
+    nonisolated var toolSpec: ToolSpec {
         var properties: [String: any Sendable] = [:]
         var required: [String] = []
         for p in parameters {
@@ -62,6 +62,11 @@ extension AgentTool {
         return ["type": "function", "function": function]
     }
 }
+
+// ToolParameter and ToolParameterType are immutable value types from mlx-swift-lm that predate
+// Sendable. They contain only Sendable-typed stored properties; the retroactive conformance is safe.
+extension ToolParameter: @retroactive @unchecked Sendable {}
+extension ToolParameterType: @retroactive @unchecked Sendable {}
 
 /// Convenience typed accessors for reading `ToolCall` arguments inside `execute`.
 extension Dictionary where Key == String, Value == JSONValue {

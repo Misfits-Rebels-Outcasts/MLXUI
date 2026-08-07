@@ -50,14 +50,15 @@ enum VLMEngine {
                     input: UserInput(chat: [
                         .user(prompt, images: [.ciImage(CIImage(cgImage: bounded))])
                     ]))
-                let result = try MLXLMCommon.generate(
+                let stream = try MLXLMCommon.generate(
                     input: input,
                     parameters: GenerateParameters(maxTokens: maxTokens),
-                    context: context
-                ) { tokens in
-                    tokens.count >= maxTokens ? .stop : .more
+                    context: context)
+                var output = ""
+                for await generation in stream {
+                    if case .chunk(let text) = generation { output += text }
                 }
-                return result.output
+                return output
             }
         } catch let error as StageError {
             throw error

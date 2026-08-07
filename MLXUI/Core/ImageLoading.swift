@@ -11,7 +11,7 @@ import ImageIO
 enum ImageLoader {
     /// Read a security-scoped file URL into memory and return an image that no longer
     /// references the file — safe to use after the scope closes and off the main actor.
-    static func decodedCGImage(fromSecurityScoped url: URL) -> CGImage? {
+    nonisolated static func decodedCGImage(fromSecurityScoped url: URL) -> CGImage? {
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
         guard let data = try? Data(contentsOf: url) else { return nil }
@@ -19,7 +19,7 @@ enum ImageLoader {
     }
 
     /// Decode image bytes into an owned bitmap (used by the drag-and-drop path too).
-    static func decodedCGImage(from data: Data) -> CGImage? {
+    nonisolated static func decodedCGImage(from data: Data) -> CGImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let image = CGImageSourceCreateImageAtIndex(
                 source, 0,
@@ -33,7 +33,7 @@ enum ImageLoader {
     /// patches, and their attention is O(patches²) — an un-capped 4K image (8 MP) explodes to a
     /// 34 GB allocation past Metal's ~10 GB buffer limit (journal/2026-39). The model's own
     /// `preprocessor_config.json` here has `max_pixels: null`, so we cap on the app side.
-    static func downscaled(_ image: CGImage, maxPixels: Int) -> CGImage {
+    nonisolated static func downscaled(_ image: CGImage, maxPixels: Int) -> CGImage {
         let width = image.width, height = image.height
         let pixels = width * height
         guard pixels > maxPixels, width > 0, height > 0 else { return image }
@@ -53,7 +53,7 @@ enum ImageLoader {
 
     /// Redraw into a fresh sRGB RGBA bitmap so the result owns its pixels (no lazy/mmap
     /// dependency on the original source). Falls back to the input if a context can't be made.
-    private static func forceDecoded(_ image: CGImage) -> CGImage {
+    private nonisolated static func forceDecoded(_ image: CGImage) -> CGImage {
         let width = image.width, height = image.height
         guard width > 0, height > 0,
               let space = CGColorSpace(name: CGColorSpace.sRGB),

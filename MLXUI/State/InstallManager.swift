@@ -177,14 +177,12 @@ final class InstallManager {
                 let localURL = downloadDir.appendingPathComponent(file.filename)
 
                 // Track this file's bytes separately
-                var fileBytesDownloaded: Int64 = 0
                 var fileBytesExpected: Int64 = file.size
                 // Catalog sizes of files not yet started, so the total denominator stays stable.
                 let remainingCatalogSize = files.dropFirst(fileIndex + 1).reduce(0) { $0 + $1.size }
 
                 do {
                     let (tempURL, response) = try await session.download(from: downloadURL) { bytesWritten, totalExpected in
-                        fileBytesDownloaded = bytesWritten
                         if totalExpected > 0 { fileBytesExpected = totalExpected }
                         let total = totalExpectedSoFar + max(fileBytesExpected, totalExpected) + remainingCatalogSize
                         let downloaded = downloadedSoFar + bytesWritten

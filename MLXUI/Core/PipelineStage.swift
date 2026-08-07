@@ -8,10 +8,10 @@ import Foundation
 /// `Sendable` (and the `nonisolated` members below) so stages run off the main
 /// actor — the app target otherwise defaults to main-actor isolation.
 protocol PipelineStage: Identifiable, Sendable {
-    var id: String { get }            // stable, e.g. the model id
-    var name: String { get }          // display name
-    var accepts: MediaKind { get }
-    var produces: MediaKind { get }
+    nonisolated var id: String { get }            // stable, e.g. the model id
+    nonisolated var name: String { get }          // display name
+    nonisolated var accepts: MediaKind { get }
+    nonisolated var produces: MediaKind { get }
 
     /// Execute the stage. Reports `0...1` progress. Throws `StageError`.
     func run(

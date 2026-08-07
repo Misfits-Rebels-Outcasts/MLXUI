@@ -17,13 +17,13 @@ enum FluxEngine {
         ModelStore.shared.directory(forModelID: id)
     }
 
-    private static let numTrainSteps: Float = 1000.0
-    private static let guidanceStrength: Float = 4.0
-    static let numSteps = 50
+    private nonisolated static let numTrainSteps: Float = 1000.0
+    private nonisolated static let guidanceStrength: Float = 4.0
+    nonisolated static let numSteps = 50
 
     // MARK: - Weight loading (A2 pattern)
 
-    private static func safetensorsBytes(_ dir: URL, subdirs: [String]) -> Int64 {
+    private nonisolated static func safetensorsBytes(_ dir: URL, subdirs: [String]) -> Int64 {
         var total: Int64 = 0
         for sub in subdirs {
             let componentDir = dir.appendingPathComponent(sub, isDirectory: true)
@@ -96,7 +96,7 @@ enum FluxEngine {
         let clip = FluxCLIPEncoder()
         let vae = FluxVAE()
         let totalBytes = safetensorsBytes(dir, subdirs: ["transformer", "text_encoder_2", "text_encoder", "vae"])
-        func loadProgress(_ fraction: Double) { progress(0.5 * fraction) }
+        let loadProgress: @Sendable (Double) -> Void = { progress(0.5 * $0) }
         try await loadWeights(transformer, dir, subdir: "transformer", totalBytes: totalBytes, progress: loadProgress)
         try await loadWeights(t5, dir, subdir: "text_encoder_2", totalBytes: totalBytes, progress: loadProgress)
         try await loadWeights(clip, dir, subdir: "text_encoder", totalBytes: totalBytes, progress: loadProgress)
@@ -169,7 +169,7 @@ enum FluxEngine {
         clip(x / 2 + 0.5, min: 0, max: 1)
     }
 
-    private static func cgImage(from nchw: MLXArray) throws -> CGImage {
+    private nonisolated static func cgImage(from nchw: MLXArray) throws -> CGImage {
         let h = nchw.dim(2), w = nchw.dim(3)
         let nhwc = nchw.transposed(0, 2, 3, 1).asType(.float32)
         let clamped = Self.denormalize(nhwc)
@@ -192,7 +192,7 @@ enum FluxEngine {
         return image
     }
 
-    private static func loadJSONDict(_ url: URL) throws -> [String: Int] {
+    private nonisolated static func loadJSONDict(_ url: URL) throws -> [String: Int] {
         let data = try Data(contentsOf: url)
         return try JSONDecoder().decode([String: Int].self, from: data)
     }

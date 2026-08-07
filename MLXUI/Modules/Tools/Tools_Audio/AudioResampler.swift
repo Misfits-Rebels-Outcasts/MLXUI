@@ -1,5 +1,5 @@
 import Foundation
-import AVFoundation
+@preconcurrency import AVFoundation
 
 /// Sample-rate conversion via `AVAudioConverter` — the format adapter that turns a
 /// 44.1 kHz recording into the 16 kHz mono Whisper expects (M8). See open-pipeline

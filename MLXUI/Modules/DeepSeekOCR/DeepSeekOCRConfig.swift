@@ -195,7 +195,7 @@ struct DeepSeekOCRConfig: Codable, Sendable {
 /// broad `model.layers`/`model.norm`/`model.embed_tokens` LM rewrites skip qwen2 keys via the guards),
 /// then LM, then vision/sam/projector, the `view_seperator`→`view_separator` typo fix, and `lm_head`.
 enum DeepSeekOCRWeights {
-    static func remapKey(_ key0: String) -> String {
+    nonisolated static func remapKey(_ key0: String) -> String {
         var key = key0
 
         if key.contains("qwen2_model.model.model.layers") {
