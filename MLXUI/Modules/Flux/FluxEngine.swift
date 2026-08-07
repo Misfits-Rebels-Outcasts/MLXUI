@@ -39,7 +39,7 @@ enum FluxEngine {
     private static func loadShardSet(
         _ dir: URL, subdir: String, totalBytes: Int64,
         progress: @Sendable (Double) -> Void
-    ) throws -> [String: MLXArray] {
+    ) async throws -> [String: MLXArray] {
         let componentDir = dir.appendingPathComponent(subdir, isDirectory: true)
         let files = try FileManager.default.contentsOfDirectory(
             at: componentDir, includingPropertiesForKeys: [.fileSizeKey])
@@ -56,6 +56,8 @@ enum FluxEngine {
             if totalBytes > 0 {
                 progress(Double(doneBytes) / Double(totalBytes))
             }
+            // Yield after each shard file so the main actor can flush progress updates to the UI.
+            await Task.yield()
         }
         guard !raw.isEmpty else {
             throw StageError.engineFailure(stage: "Flux", underlying: FluxEngineError.emptyWeights(subdir))
@@ -66,8 +68,8 @@ enum FluxEngine {
     private static func loadWeights(
         _ model: Module, _ dir: URL, subdir: String, totalBytes: Int64,
         progress: @Sendable (Double) -> Void
-    ) throws {
-        let raw = try loadShardSet(dir, subdir: subdir, totalBytes: totalBytes, progress: progress)
+    ) async throws {
+        let raw = try await loadShardSet(dir, subdir: subdir, totalBytes: totalBytes, progress: progress)
         try model.update(parameters: ModuleParameters.unflattened(raw), verify: .none)
         eval(model)
     }
@@ -95,10 +97,10 @@ enum FluxEngine {
         let vae = FluxVAE()
         let totalBytes = safetensorsBytes(dir, subdirs: ["transformer", "text_encoder_2", "text_encoder", "vae"])
         func loadProgress(_ fraction: Double) { progress(0.5 * fraction) }
-        try loadWeights(transformer, dir, subdir: "transformer", totalBytes: totalBytes, progress: loadProgress)
-        try loadWeights(t5, dir, subdir: "text_encoder_2", totalBytes: totalBytes, progress: loadProgress)
-        try loadWeights(clip, dir, subdir: "text_encoder", totalBytes: totalBytes, progress: loadProgress)
-        try loadWeights(vae, dir, subdir: "vae", totalBytes: totalBytes, progress: loadProgress)
+        try await loadWeights(transformer, dir, subdir: "transformer", totalBytes: totalBytes, progress: loadProgress)
+        try await loadWeights(t5, dir, subdir: "text_encoder_2", totalBytes: totalBytes, progress: loadProgress)
+        try await loadWeights(clip, dir, subdir: "text_encoder", totalBytes: totalBytes, progress: loadProgress)
+        try await loadWeights(vae, dir, subdir: "vae", totalBytes: totalBytes, progress: loadProgress)
         progress(0.5)
 
         // 2. Tokenize + encode conditioning.
