@@ -111,4 +111,85 @@ struct ModelFileSelectorTests {
         ])
         #expect(out.contains("chat_template.json"))
     }
+
+    @Test func sdxlTurboRepoIncludesComponentsOnly() {
+        // SD-DL1 — `stabilityai/sdxl-turbo` (diffusers layout). Every component subdir must
+        // download its **fp16** weights (the fp32 twin is redundant — the engine loads fp16),
+        // both tokenizers, and the JSON-only `scheduler/scheduler_config.json`. The root
+        // full checkpoints and docs/scripts must NOT come down.
+        let out = selected([
+            "model_index.json",
+            "README.md",
+            "convert.py",
+            "unet/config.json",
+            "unet/diffusion_pytorch_model.safetensors",
+            "unet/diffusion_pytorch_model.fp16.safetensors",
+            "text_encoder/config.json",
+            "text_encoder/model.safetensors",
+            "text_encoder/model.fp16.safetensors",
+            "text_encoder_2/config.json",
+            "text_encoder_2/model.safetensors",
+            "text_encoder_2/model.fp16.safetensors",
+            "vae/config.json",
+            "vae/diffusion_pytorch_model.safetensors",
+            "vae/diffusion_pytorch_model.fp16.safetensors",
+            "tokenizer/vocab.json",
+            "tokenizer/merges.txt",
+            "tokenizer/tokenizer_config.json",
+            "tokenizer/special_tokens_map.json",
+            "tokenizer_2/vocab.json",
+            "tokenizer_2/merges.txt",
+            "tokenizer_2/tokenizer_config.json",
+            "tokenizer_2/special_tokens_map.json",
+            "scheduler/scheduler_config.json",
+            "sd_xl_turbo_1.0.safetensors",
+            "sd_xl_turbo_1.0_fp16.safetensors",
+        ])
+        // fp16 component weights included…
+        #expect(out.contains("unet/diffusion_pytorch_model.fp16.safetensors"))
+        #expect(out.contains("text_encoder/model.fp16.safetensors"))
+        #expect(out.contains("text_encoder_2/model.fp16.safetensors"))
+        #expect(out.contains("vae/diffusion_pytorch_model.fp16.safetensors"))
+        // …their fp32 twins excluded…
+        #expect(!out.contains("unet/diffusion_pytorch_model.safetensors"))
+        #expect(!out.contains("text_encoder/model.safetensors"))
+        #expect(!out.contains("text_encoder_2/model.safetensors"))
+        #expect(!out.contains("vae/diffusion_pytorch_model.safetensors"))
+        // tokenizers + scheduler metadata included…
+        #expect(out.contains("tokenizer/vocab.json"))
+        #expect(out.contains("tokenizer/merges.txt"))
+        #expect(out.contains("tokenizer_2/vocab.json"))
+        #expect(out.contains("tokenizer_2/merges.txt"))
+        #expect(out.contains("scheduler/scheduler_config.json"))
+        // …and the redundant root full checkpoints + docs excluded.
+        #expect(!out.contains("sd_xl_turbo_1.0.safetensors"))
+        #expect(!out.contains("sd_xl_turbo_1.0_fp16.safetensors"))
+        #expect(!out.contains("README.md"))
+        #expect(!out.contains("convert.py"))
+    }
+
+    @Test func fp16TwinPreferenceDropsFp32Original() {
+        // The fp16-preference rule on its own: when a dir ships `X.safetensors` + the
+        // `X.fp16.safetensors` twin, only the fp16 file is selected.
+        let out = selected([
+            "unet/weights.safetensors",
+            "unet/weights.fp16.safetensors",
+            "config.json",
+        ])
+        #expect(out == ["unet/weights.fp16.safetensors", "config.json"])
+    }
+
+    @Test func diffusersLayoutSuppressesRootFallback() {
+        // A diffusers repo must not hit the top-level single-file fallback — its root
+        // `.safetensors` are full checkpoints duplicating the components. Kokoro-style repos
+        // (no model_index.json) keep the fallback (covered by kokoroRepoIncludesWeightsAndVoicesOnly).
+        let out = selected([
+            "model_index.json",
+            "config.json",
+            "sd_xl_turbo_1.0_fp16.safetensors",
+            "unet/diffusion_pytorch_model.fp16.safetensors",
+        ])
+        #expect(!out.contains("sd_xl_turbo_1.0_fp16.safetensors"))
+        #expect(out.contains("unet/diffusion_pytorch_model.fp16.safetensors"))
+    }
 }

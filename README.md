@@ -25,6 +25,15 @@ them with one click, and provides a purpose-built Run UI for each model type.
 
 ## ✨ What's New
 
+### SDXL-Turbo — a second image-generation engine, 4-step on-device diffusion
+
+Stability AI's SDXL-Turbo joins FLUX.1 in the Image Generation category. It's a from-reference
+Swift/MLX port of the SDXL UNet, dual CLIP text encoders (CLIP-L + OpenCLIP ViT-G/14), and the
+AutoencoderKL VAE, driven by a 4-step DDIM sampler with no classifier-free guidance — a text
+prompt becomes a 512×512 image in seconds, entirely on-device. Like Flux, it lives in its own
+isolated module folder (`Modules/StableDiffusion/`) so it can evolve independently of every
+other model type.
+
 ### FLUX.1 Image Generation — text prompt → on-device image, no Python
 
 FLUX.1-Lite-8B (8-bit) is now in the catalog with a full native Run UI. Type a prompt,
@@ -134,9 +143,9 @@ contributor adding image-generation support doesn't need to understand the chat 
 
 ## Supported Models
 
-### browser.json — MVP catalog (28 models)
+### browser.json — MVP catalog (29 models)
 
-The app ships `browser.json`, a hand-curated set of 28 models across 7 categories.
+The app ships `browser.json`, a hand-curated set of 29 models across 7 categories.
 Every model listed here is downloadable and has a working Run UI.
 
 | Category | Models | Sizes |
@@ -147,7 +156,7 @@ Every model listed here is downloadable and has a working Run UI.
 | **Speech-to-Text** (4) | Whisper tiny/small/large-v3, Voxtral-Mini | 37M – 1.5B |
 | **Text-to-Speech** (4) | Kokoro, Qwen3-TTS, Chatterbox, Orpheus | 82M – 3B |
 | **Embeddings** (4) | all-MiniLM-L6, embeddinggemma, ModernBERT-embed, bge-m3 | 18M – 568M |
-| **Image Generation** (1) | **FLUX.1-Lite-8B** | 8B |
+| **Image Generation** (2) | FLUX.1-Lite-8B, **SDXL-Turbo** | 3.5B – 8B |
 
 The full `browser.json` catalog tracks **~435 models** from mlx-community. New models
 and Run UIs are added with every release.
@@ -166,7 +175,7 @@ and Run UIs are added with every release.
 | Vision | OCR (PaddleOCR, DeepSeek-OCR, dots.ocr, olmOCR) | ✅ | ✅ | ✅ | MLXVLM + native |
 | Embeddings | Text embeddings | ✅ | ✅ | ✅ | MLX + ModernBERT |
 | Image | Diffusion (Flux) | ✅ | ✅ | ✅ | Flux (native MLX) |
-| Image | Diffusion (SDXL, ...) | ✅ | ✅ | ⬜ | — |
+| Image | Diffusion (SDXL-Turbo) | ✅ | ✅ | ✅ | SDXL-Turbo (native MLX) |
 | Audio | Music generation | ✅ | ✅ | ⬜ | — |
 
 ✅ = built &emsp; ⬜ = available for contribution
@@ -263,8 +272,8 @@ Every model in the catalog should eventually have a working Run button.
 
 ### Good first issues
 
-- **Image generation Run UI** (SDXL, etc.) — Flux is now done; SDXL and other diffusion
-  architectures still need a prompt → image Run view
+- **Image generation Run UI** (SD 2.1, etc.) — Flux and SDXL-Turbo are now done; other
+  diffusion architectures still need a prompt → image Run view
 - **Music generation Run UI** — same pattern, different output type
 - **Pipeline stages** — wire up existing modules into longer chains (e.g. OCR →
   summarize)
@@ -306,13 +315,15 @@ Every model in the catalog should eventually have a working Run button.
 - [x] Dual build targets — App Store (sandboxed) + Direct Distribution (notarized standalone)
 - [x] Image generation Run UI — FLUX.1-Lite-8B: text prompt → on-device image via native MLX Flux module
 - [x] Fixed cancel-install mid-download leaving stale files in `downloads/`
+- [x] SDXL-Turbo Run UI — a second image-generation engine: SDXL UNet + dual CLIP encoders +
+      4-step DDIM sampler, native MLX
 
 ### In progress
 - [ ] Visual pipeline builder UI
 - [ ] Improved gated-model auth flow
 
 ### Up for grabs
-- [ ] Image generation Run UI (SDXL, etc.)
+- [ ] Image generation Run UI (SD 2.1, etc.)
 - [ ] Music generation Run UI
 - [ ] Model comparison benchmark runner
 - [ ] Export pipeline as standalone app

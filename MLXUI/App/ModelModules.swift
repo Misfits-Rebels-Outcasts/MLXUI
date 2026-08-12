@@ -30,5 +30,6 @@ let installedModules: [ModelModule.Type] = [
     DeepSeekOCRModule.self,
     OCRModule.self,
     EmbeddingModule.self,
+    SDXLTurboModule.self,
     FluxModule.self,
 ]

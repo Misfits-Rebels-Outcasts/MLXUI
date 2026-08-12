@@ -1926,6 +1926,56 @@
           ],
           "descriptionSource": "mlx-community/Flux-1.lite-8B-MLX-Q4",
           "summary": "Freepik's 8B FLUX.1-dev distillation as a 4-bit MLX text-to-image model — a text prompt generates an image on Apple Silicon (non-commercial license)."
+        },
+        {
+          "id": "stabilityai--sdxl-turbo",
+          "family": "SDXL-Turbo",
+          "displayName": "SDXL-Turbo",
+          "paramSize": "3.5B",
+          "paramCountB": 3.5,
+          "modelType": "image",
+          "source": "mlx",
+          "format": "mlx-fp16",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "stabilityai",
+          "hfModelId": "stabilityai/sdxl-turbo",
+          "ramGB": 10.5,
+          "downloadSizeGB": 7.0,
+          "contextWindow": null,
+          "license": "stability-ai-community-license",
+          "licenseUrl": "https://huggingface.co/stabilityai/sdxl-turbo/blob/main/LICENSE.md",
+          "description": "# SDXL-Turbo (fp16)\n\nSDXL-Turbo is a real-time text-to-image model from Stability AI: a 3.5B UNet-based diffusion model distilled for 1–4 denoising steps via adversarial diffusion distillation (ADD). Unlike classic Stable Diffusion (20–50 steps), SDXL-Turbo renders a 512×512 image in ~4 steps with **no classifier-free guidance** (guidance = 0), so there is no negative prompt and no double forward pass.\n\nThis catalog entry runs the original **fp16** weights (`stabilityai/sdxl-turbo`) — dual CLIP text encoders (CLIP-L + OpenCLIP ViT-G/14) plus the SDXL UNet and AutoencoderKL VAE — loaded directly by MLX on Apple Silicon. No mlx-community 4-bit conversion exists for this model, so the app's from-reference SDXL-Turbo engine loads the fp16 safetensors as-is.\n\n**License:** the Stability AI Community License (RAIL++-M) — free for research, non-commercial, and limited commercial (< $1M annual revenue) use.",
+          "architecture": "SDXL-Turbo",
+          "languages": [
+            "en"
+          ],
+          "lastUpdated": "2024-07-10",
+          "taskTags": [
+            "text-to-image",
+            "image-generation"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 1168811,
+          "communityLikes": 2615,
+          "variants": [
+            {
+              "quantization": "fp16",
+              "format": "mlx-fp16",
+              "ramGB": 10.5,
+              "downloadSizeGB": 7.0,
+              "qualityPercent": 85,
+              "hfModelId": "stabilityai/sdxl-turbo",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "stabilityai/sdxl-turbo",
+          "summary": "Stability AI's 3.5B text-to-image diffusion model distilled to 4 denoising steps (no CFG) — the original fp16 weights run directly via MLX on Apple Silicon (Stability AI Community License)."
         }
       ]
     }

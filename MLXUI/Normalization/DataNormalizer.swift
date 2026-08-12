@@ -11,6 +11,7 @@ enum DataNormalizer {
             "gemma": "Gemma License", "other": "Custom", "openrail": "OpenRAIL",
             "bigcode-openrail-m": "BigCode OpenRAIL-M",
             "flux-1-dev-non-commercial-license": "FLUX.1-dev Non-Commercial",
+            "stability-ai-community-license": "Stability AI Community License (RAIL++-M)",
         ]
         let lower = raw.lowercased()
         for (key, value) in map where lower.contains(key) {

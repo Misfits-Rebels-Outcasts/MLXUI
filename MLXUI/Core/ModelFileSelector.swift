@@ -48,7 +48,23 @@ enum ModelFileSelector {
         // no fast tokenizer.json). Without it the T5 text encoder can't tokenize → the diffusion
         // pipeline can't build conditioning (AM3, journal/2026-67).
         "spiece.model",
+        // SDXL-Turbo's scheduler ships as `scheduler/scheduler_config.json` — a JSON-only
+        // component with no `.safetensors` of its own, so the dir wouldn't qualify as a
+        // component without this (SD-DL1). The engine parses `alphas_cumprod` from it.
+        "scheduler_config.json",
     ]
+
+    /// True when `l` (a lowercased `X.safetensors`) has an `X.fp16.safetensors` sibling —
+    /// the repo ships the same weights in both fp32 and fp16 (e.g. stabilityai/sdxl-turbo's
+    /// `unet/diffusion_pytorch_model[.fp16].safetensors`). The runtime loads the fp16 build
+    /// (MLX reads it natively), so the fp32 twin is redundant — downloading it wastes ~15 GB
+    /// and the engine would load both into memory. Kept inside the selector so the engine never
+    /// has to dedupe weight files (SD-DL1).
+    static func isFp16PreferredAway(_ l: String, _ lower: Set<String>) -> Bool {
+        guard l.hasSuffix(".safetensors"), !l.contains(".fp16.") else { return false }
+        let base = String(l.dropLast(".safetensors".count))
+        return lower.contains(base + ".fp16.safetensors")
+    }
 
     /// Returns the subset of `siblings` (repo-relative filenames) to download.
     static func filesToDownload(siblings: [String]) -> [String] {
@@ -56,6 +72,12 @@ enum ModelFileSelector {
         let hasIndex = lower.contains("model.safetensors.index.json")
         let hasSingleModel = lower.contains("model.safetensors")
         let hasStandardWeights = hasIndex || hasSingleModel
+        // A `model_index.json` marks a diffusers-layout repo (component subdirs carry the
+        // weights). SDXL-Turbo also ships redundant root full checkpoints
+        // (`sd_xl_turbo_1.0*.safetensors`) that duplicate every component — suppress the
+        // top-level fallback so they don't download (SD-DL1). Only repos without
+        // `model_index.json` (e.g. Kokoro's `kokoro-v1_0.safetensors`) keep the fallback.
+        let hasDiffusersLayout = lower.contains("model_index.json")
 
         // Subfolders that ship model weights (e.g. `speech_tokenizer/`, `voices/`) OR tokenizer
         // assets (`tokenizer/`, `tokenizer_2/`). A component whose weights don't download fails
@@ -83,6 +105,9 @@ enum ModelFileSelector {
                 return false
             }
 
+            // fp16 twin present → drop the fp32 original (the runtime loads fp16 only).
+            if isFp16PreferredAway(l, lower) { return false }
+
             if metadataNames.contains(l) { return true }
 
             // Files inside a weight-bearing subfolder: its `*.safetensors`, plus the metadata
@@ -98,7 +123,9 @@ enum ModelFileSelector {
             if hasIndex && l.hasPrefix("model-") && l.hasSuffix(".safetensors") { return true }
 
             // Fallback: non-standard top-level weight name (e.g. kokoro-v1_0.safetensors).
-            if !hasStandardWeights && !l.contains("/") && l.hasSuffix(".safetensors") { return true }
+            // Suppressed for diffusers repos — their components carry the weights and the
+            // root files are redundant full checkpoints.
+            if !hasStandardWeights && !hasDiffusersLayout && !l.contains("/") && l.hasSuffix(".safetensors") { return true }
 
             return false
         }
