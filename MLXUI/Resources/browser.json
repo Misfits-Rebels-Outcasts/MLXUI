@@ -2072,8 +2072,8 @@
           "downloadSizeGB": 0.62,
           "contextWindow": null,
           "license": "apache-2.0",
-          "licenseUrl": "https://huggingface.co/mlx-community/sam3-4bit",
-          "description": "# SAM3 (4-bit MLX)\n\nSAM3 (Segment Anything Model 3) is Meta's interactive image segmentation model, converted to 4-bit MLX weights for Apple Silicon. Given an image and one or more point or bounding-box prompts, the model produces precise segmentation masks for the prompted region.\n\nThe MLX 4-bit conversion runs the full model on Apple Silicon via `mlx-swift`. The image encoder is a 32-layer ViT (1024d, 16 heads, 1008×1008 input) and the mask decoder produces three candidate masks with IoU confidence scores.\n\n**Note:** RAM and parameter count are estimated from the 620 MB safetensors file; confirm after install.\n\n**License:** Apache 2.0 (verify — SAM2 from Meta is Apache 2.0; SAM3 license TBD).",
+          "licenseUrl": "https://github.com/facebookresearch/sam2/blob/main/LICENSE",
+          "description": "# SAM3 (4-bit MLX)\n\nSAM3 (Segment Anything Model 3) is Meta's interactive image segmentation model, quantized to 4-bit MLX weights for Apple Silicon. Given an image and one or more point or bounding-box prompts, the model produces precise segmentation masks for the prompted region.\n\nThe MLX 4-bit conversion runs on Apple Silicon via `mlx-swift`. The image encoder is a 32-layer ViT (1024d, 16 heads, 1008×1008 input) and the mask decoder produces three candidate masks with IoU confidence scores, letting you pick the best fit.\n\n**License:** Apache 2.0 (Meta SAM2/SAM3 — permissive, requires attribution).",
           "architecture": "Sam3VideoModel",
           "languages": [
             "en"

@@ -44,4 +44,15 @@ struct DataNormalizerTests {
         let tags = DataNormalizer.normalizeTaskTags([], domainId: "vision")
         #expect(tags == ["vision"])
     }
+
+    // SA-AM2: segmentation tag mappings
+    @Test func taskTagsMapsImageSegmentation() {
+        let tags = DataNormalizer.normalizeTaskTags(["image-segmentation", "segment-anything"], domainId: "segmentation")
+        #expect(tags == ["segmentation"])
+    }
+
+    @Test func taskTagsDomainFallbackSegmentation() {
+        let tags = DataNormalizer.normalizeTaskTags([], domainId: "segmentation")
+        #expect(tags == ["segmentation"])
+    }
 }

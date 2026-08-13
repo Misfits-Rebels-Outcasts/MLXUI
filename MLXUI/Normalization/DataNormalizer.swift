@@ -52,6 +52,7 @@ enum DataNormalizer {
             "text-to-speech": "text-to-speech", "image-to-text": "ocr",
             "visual-question-answering": "vision", "fill-mask": "nlp",
             "token-classification": "nlp",
+            "image-segmentation": "segmentation", "segment-anything": "segmentation",
         ]
         var tags = (raw ?? []).compactMap { tagMap[$0] }
         tags = Array(Set(tags))
@@ -61,6 +62,7 @@ enum DataNormalizer {
                 "code-software-engineering": ["code"],
                 "vision": ["vision"], "audio": ["speech-to-text"],
                 "music": ["music"], "video": ["video"],
+                "segmentation": ["segmentation"],
             ]
             tags = domainMap[domainId] ?? []
         }
