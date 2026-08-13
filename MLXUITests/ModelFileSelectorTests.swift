@@ -230,4 +230,27 @@ struct ModelFileSelectorTests {
                 == "mlx-community/encodec-32khz-float32")
         #expect(ModelFileSelector.companionRepo(for: "mlx-community/Kokoro-82M-bf16") == nil)
     }
+
+    @Test func sam3DownloadsWeightsAndProcessorConfig() {
+        // SA-AM3: mlx-community/sam3-4bit ships model.safetensors + config.json +
+        // processor_config.json + tokenizer files. All are covered by existing
+        // metadataNames / standard single-weight paths — no new selectors needed.
+        let out = selected([
+            "model.safetensors",
+            "config.json",
+            "processor_config.json",
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "special_tokens_map.json",
+            "README.md",
+            ".gitattributes",
+        ])
+        #expect(out.contains("model.safetensors"))
+        #expect(out.contains("config.json"))
+        #expect(out.contains("processor_config.json"))
+        #expect(out.contains("tokenizer.json"))
+        #expect(out.contains("tokenizer_config.json"))
+        #expect(!out.contains("README.md"))
+        #expect(!out.contains(".gitattributes"))
+    }
 }

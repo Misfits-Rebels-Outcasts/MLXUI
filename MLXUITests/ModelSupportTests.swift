@@ -20,4 +20,10 @@ struct ModelSupportTests {
             #expect(ModelSupport.unsupportedReason(for: makeEntry(id: id)) == nil)
         }
     }
+
+    // SA-AM3: SAM3 is flagged until the SegmentAnythingEngine port lands (SA-AM4).
+    @Test func sam3IsFlaggedAsUnsupported() {
+        let entry = makeEntry(id: "mlx-community--sam3-4bit")
+        #expect(ModelSupport.unsupportedReason(for: entry) != nil)
+    }
 }
