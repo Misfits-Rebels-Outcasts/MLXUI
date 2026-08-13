@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import MLXUI
 
@@ -24,6 +25,51 @@ struct RoutingTests {
     @Test func runnerKindMapsVideoToUnsupported() {
         // No video stage in the linear v1 pipeline.
         #expect(makeEntry(modelType: .video).runnerKind == .unsupported)
+    }
+
+    @Test func runnerKindMapsSegmentation() {
+        // SA-AM1: segmentation routes to .segmentation (engine: Modules/SegmentAnything, SA-AM4).
+        #expect(makeEntry(modelType: .segmentation).runnerKind == .segmentation)
+    }
+
+    @Test func sam3CatalogEntryDecodes() throws {
+        // Verifies the mlx-community/sam3-4bit entry shape decodes without throwing.
+        let json = """
+        {
+            "id": "mlx-community--sam3-4bit",
+            "family": "SAM3",
+            "displayName": "SAM3",
+            "paramSize": "~1.2B",
+            "paramCountB": null,
+            "modelType": "segmentation",
+            "source": "mlx",
+            "format": "mlx-4bit",
+            "platforms": ["macOS 13+"],
+            "minMacOSVersion": "13.0",
+            "hfRepo": "mlx-community",
+            "hfModelId": "mlx-community/sam3-4bit",
+            "ramGB": 0.93,
+            "downloadSizeGB": 0.62,
+            "contextWindow": null,
+            "variants": [
+                {
+                    "quantization": "4-bit",
+                    "format": "mlx-4bit",
+                    "ramGB": 0.93,
+                    "downloadSizeGB": 0.62,
+                    "qualityPercent": 85,
+                    "hfModelId": "mlx-community/sam3-4bit",
+                    "recommended": true
+                }
+            ]
+        }
+        """
+        let entry = try JSONDecoder().decode(ModelEntry.self, from: Data(json.utf8))
+        #expect(entry.modelType == .segmentation)
+        #expect(entry.runnerKind == .segmentation)
+        #expect(entry.source == .mlx)
+        #expect(entry.paramCountB == nil)
+        #expect(entry.ramGB == 0.93)
     }
 
     // MARK: runnerKind — catalog mislabel overrides (family beats modelType)

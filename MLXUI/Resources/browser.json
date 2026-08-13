@@ -17,7 +17,8 @@
       "domainIds": [
         "vision",
         "ocr",
-        "imagegen"
+        "imagegen",
+        "segmentation"
       ]
     },
     {
@@ -71,6 +72,10 @@
     "imagegen": {
       "icon": "photo.artframe",
       "description": "Image Generation"
+    },
+    "segmentation": {
+      "icon": "lasso",
+      "description": "Image Segmentation"
     }
   },
   "domains": [
@@ -2039,6 +2044,64 @@
           ],
           "descriptionSource": "stabilityai/sdxl-turbo",
           "summary": "Stability AI's 3.5B text-to-image diffusion model distilled to 4 denoising steps (no CFG) — the original fp16 weights run directly via MLX on Apple Silicon (Stability AI Community License)."
+        }
+      ]
+    },
+    {
+      "id": "segmentation",
+      "name": "Image Segmentation",
+      "sfSymbol": "lasso",
+      "children": null,
+      "models": [
+        {
+          "id": "mlx-community--sam3-4bit",
+          "family": "SAM3",
+          "displayName": "SAM3",
+          "paramSize": "~1.2B",
+          "paramCountB": null,
+          "modelType": "segmentation",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/sam3-4bit",
+          "ramGB": 0.93,
+          "downloadSizeGB": 0.62,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": "https://huggingface.co/mlx-community/sam3-4bit",
+          "description": "# SAM3 (4-bit MLX)\n\nSAM3 (Segment Anything Model 3) is Meta's interactive image segmentation model, converted to 4-bit MLX weights for Apple Silicon. Given an image and one or more point or bounding-box prompts, the model produces precise segmentation masks for the prompted region.\n\nThe MLX 4-bit conversion runs the full model on Apple Silicon via `mlx-swift`. The image encoder is a 32-layer ViT (1024d, 16 heads, 1008×1008 input) and the mask decoder produces three candidate masks with IoU confidence scores.\n\n**Note:** RAM and parameter count are estimated from the 620 MB safetensors file; confirm after install.\n\n**License:** Apache 2.0 (verify — SAM2 from Meta is Apache 2.0; SAM3 license TBD).",
+          "architecture": "Sam3VideoModel",
+          "languages": [
+            "en"
+          ],
+          "lastUpdated": "2025-01-01",
+          "taskTags": [
+            "image-segmentation",
+            "segment-anything"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 0,
+          "communityLikes": 0,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 0.93,
+              "downloadSizeGB": 0.62,
+              "qualityPercent": 85,
+              "hfModelId": "mlx-community/sam3-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/sam3-4bit",
+          "summary": "Meta's SAM3 interactive image segmentation model as 4-bit MLX — place a point or draw a box on an image and the model returns a precise segmentation mask on Apple Silicon (Apache 2.0)."
         }
       ]
     }

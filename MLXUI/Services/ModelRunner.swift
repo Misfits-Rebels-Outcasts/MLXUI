@@ -426,6 +426,8 @@ final class ModelRunner {
             showUnsupported("Image generation", model)
         case .music:
             showUnsupported("Music generation", model)
+        case .segmentation:
+            showUnsupported("Image segmentation", model)
         }
     }
 

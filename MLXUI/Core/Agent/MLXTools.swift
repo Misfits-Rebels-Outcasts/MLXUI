@@ -92,9 +92,10 @@ nonisolated struct InstalledModelIndex: Sendable {
         case "vision":    return .vision
         case "embedding": return .embedding
         case "ocr":       return .ocr
-        case "music":     return .music
-        case "image":     return .image
-        default:          return .unsupported  // video / unknown
+        case "music":         return .music
+        case "image":         return .image
+        case "segmentation":  return .segmentation
+        default:              return .unsupported  // video / unknown
         }
     }
 

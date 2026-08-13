@@ -5,7 +5,7 @@ import Foundation
 /// corrections live in `ModelEntry.runnerKind` below — the single source of truth.
 /// See `Design/pipeline-stage-sketch.md` §routing.
 nonisolated enum RunnerKind: String, Sendable {
-    case llm, asr, tts, vision, embedding, ocr, image, music, unsupported
+    case llm, asr, tts, vision, embedding, ocr, image, music, segmentation, unsupported
 }
 
 extension ModelEntry {
@@ -25,9 +25,10 @@ extension ModelEntry {
         case .vision:    return .vision
         case .embedding: return .embedding
         case .ocr:       return .ocr           // catalog OCR repos are MLX VLMs → run via MLXVLM (OCRModule), no Apple Vision
-        case .image:     return .image          // text → image (diffusion); engine lives in Modules/Flux
-        case .music:     return .music          // text → music (autoregressive); engine lives in Modules/MusicGen
-        case .video:     return .unsupported   // no video stage in the linear v1 pipeline
+        case .image:         return .image          // text → image (diffusion); engine lives in Modules/Flux
+        case .music:         return .music          // text → music (autoregressive); engine lives in Modules/MusicGen
+        case .segmentation:  return .segmentation   // image + prompts → masks; engine lives in Modules/SegmentAnything
+        case .video:         return .unsupported   // no video stage in the linear v1 pipeline
         }
     }
 }
