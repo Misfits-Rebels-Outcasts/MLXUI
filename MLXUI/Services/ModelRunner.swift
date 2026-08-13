@@ -424,6 +424,8 @@ final class ModelRunner {
             showUnsupported("Video", model)
         case .image:
             showUnsupported("Image generation", model)
+        case .music:
+            showUnsupported("Music generation", model)
         }
     }
 

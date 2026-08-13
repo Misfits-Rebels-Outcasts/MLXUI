@@ -26,7 +26,8 @@
       "sfSymbol": "waveform.circle.fill",
       "domainIds": [
         "asr",
-        "tts"
+        "tts",
+        "music"
       ]
     },
     {
@@ -58,6 +59,10 @@
     "tts": {
       "icon": "mouth",
       "description": "Text-to-Speech"
+    },
+    "music": {
+      "icon": "music.note",
+      "description": "Music Generation"
     },
     "embedding": {
       "icon": "square.grid.3x3",
@@ -1656,6 +1661,64 @@
           ],
           "descriptionSource": "mlx-community/orpheus-3b-0.1-ft-bf16",
           "summary": "This model mlx-community/orpheus-3b-0.1-ft-bf16 was"
+        }
+      ]
+    },
+    {
+      "id": "music",
+      "name": "Music Generation",
+      "sfSymbol": "music.note.fill",
+      "children": null,
+      "models": [
+        {
+          "id": "jasonvassallo--mlx-musicgen-small",
+          "family": "MusicGen",
+          "displayName": "MusicGen-small",
+          "paramSize": "0.6B",
+          "paramCountB": 0.615,
+          "modelType": "music",
+          "source": "mlx",
+          "format": "mlx-f32",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "jasonvassallo",
+          "hfModelId": "jasonvassallo/mlx-musicgen-small",
+          "ramGB": 3.7,
+          "downloadSizeGB": 2.5,
+          "contextWindow": null,
+          "license": "cc-by-nc-4.0",
+          "licenseUrl": "https://huggingface.co/jasonvassallo/mlx-musicgen-small/blob/main/LICENSE",
+          "description": "# MusicGen-small (MLX)\n\nMusicGen-small is Meta's 24-layer text-to-music model (300M-parameter decoder class, the smallest MusicGen variant), converted to MLX float32 weights. A musical description like \"happy rock with drums\" produces a short 32 kHz WAV of generated music.\n\nThis catalog entry runs the original **float32** MLX weights from `jasonvassallo/mlx-musicgen-small`: a T5-base text encoder (768d) plus a 24-layer causal decoder (1024d, 16 heads, 4 interleaved codebooks, learned positional embeddings) with classifier-free guidance, decoded through an EnCodec 32 kHz audio codec (4 codebooks).\n\n**License:** CC-BY-NC-4.0 for the model weights (non-commercial); the T5-base component is Apache-2.0.",
+          "architecture": "MusicgenForConditionalGeneration",
+          "languages": [
+            "en"
+          ],
+          "lastUpdated": "2024-01-01",
+          "taskTags": [
+            "text-to-music",
+            "music-generation"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 0,
+          "communityLikes": 0,
+          "variants": [
+            {
+              "quantization": "f32",
+              "format": "mlx-f32",
+              "ramGB": 3.7,
+              "downloadSizeGB": 2.5,
+              "qualityPercent": 100,
+              "hfModelId": "jasonvassallo/mlx-musicgen-small",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "jasonvassallo/mlx-musicgen-small",
+          "summary": "Meta's smallest MusicGen text-to-music model as MLX float32 — a prompt generates a short WAV of music on Apple Silicon (CC-BY-NC-4.0, non-commercial). The 32 kHz EnCodec codec ships bundled in the install."
         }
       ]
     },

@@ -146,7 +146,17 @@ final class InstallManager {
                 return
             }
 
-            print("[Install] Resolved \(files.count) files")
+            // 1b. Some models need weights from a second HF repo bundled into the install
+            // (e.g. MusicGen's EnCodec codec is a separate repo — MG-DL1). Their files land
+            // under `encodec/` inside the model dir, so the engine's A2-pattern load path
+            // finds them next to the model's own files.
+            let companion = ModelFileSelector.companionRepo(for: hfModelId)
+            var companionFiles: [HFRemoteFile] = []
+            if let companion {
+                companionFiles = try await resolveFiles(for: companion)
+            }
+
+            print("[Install] Resolved \(files.count) files" + (companion.map { " + \($0)" } ?? ""))
 
             await MainActor.run {
                 modelStates[modelId] = .downloading(progress: 0, downloaded: 0, total: 1)
@@ -160,26 +170,40 @@ final class InstallManager {
             try FileManager.default.createDirectory(at: downloadDir, withIntermediateDirectories: true)
             print("[Install] Download dir: \(downloadDir.path)")
 
-            // 3. Download files sequentially
+            // 3. Download files sequentially. A "plan" entry carries its own source repo (a
+            // companion repo's files come from a different HF id) and a destination subdir
+            // (`encodec/` for the companion, empty = model root).
+            struct DownloadPlanEntry {
+                let file: HFRemoteFile
+                let repo: String
+                let subdir: String
+            }
+            var plan: [DownloadPlanEntry] = files.map { .init(file: $0, repo: variant, subdir: "") }
+            if let companion {
+                plan += companionFiles.map { .init(file: $0, repo: companion, subdir: "encodec/") }
+            }
+
             var downloadedSoFar: Int64 = 0
             var totalExpectedSoFar: Int64 = 0
             var tempFiles: [(file: HFRemoteFile, localURL: URL)] = []
 
-            for (fileIndex, file) in files.enumerated() {
+            for (entryIndex, entry) in plan.enumerated() {
                 guard !Task.isCancelled else { return }
-                guard let downloadURL = buildDownloadURL(model: variant, filename: file.filename) else {
+                let file = entry.file
+                let localName = entry.subdir + file.filename
+                guard let downloadURL = buildDownloadURL(model: entry.repo, filename: file.filename) else {
                     await MainActor.run {
                         modelStates[modelId] = .error("Invalid URL for \(file.filename)", canRetry: false)
                     }
                     return
                 }
                 print("[Install] Downloading \(file.filename) from \(downloadURL.absoluteString)")
-                let localURL = downloadDir.appendingPathComponent(file.filename)
+                let localURL = downloadDir.appendingPathComponent(localName)
 
                 // Track this file's bytes separately
                 var fileBytesExpected: Int64 = file.size
                 // Catalog sizes of files not yet started, so the total denominator stays stable.
-                let remainingCatalogSize = files.dropFirst(fileIndex + 1).reduce(0) { $0 + $1.size }
+                let remainingCatalogSize = plan.dropFirst(entryIndex + 1).reduce(0) { $0 + $1.file.size }
 
                 do {
                     let (tempURL, response) = try await session.download(from: downloadURL) { bytesWritten, totalExpected in

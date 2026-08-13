@@ -192,4 +192,42 @@ struct ModelFileSelectorTests {
         #expect(!out.contains("sd_xl_turbo_1.0_fp16.safetensors"))
         #expect(out.contains("unet/diffusion_pytorch_model.fp16.safetensors"))
     }
+
+    @Test func musicgenRepoIncludesDecoderT5AndTokenizers() {
+        // MG-DL1 — `jasonvassallo/mlx-musicgen-small` ships the decoder + T5 as two
+        // non-standard top-level safetensors (both must download), the split-out
+        // `t5_config.json` (new metadata name), the fast tokenizer, and configs. Docs,
+        // licences and the SPM-less repo must NOT pull `spiece.model` (none ships).
+        let out = selected([
+            ".gitattributes",
+            "LICENSE",
+            "LICENSE.t5-apache-2.0",
+            "NOTICE",
+            "README.md",
+            "config.json",
+            "decoder.safetensors",
+            "t5.safetensors",
+            "t5_config.json",
+            "tokenizer.json",
+            "tokenizer_config.json",
+        ])
+        #expect(out.contains("decoder.safetensors"))
+        #expect(out.contains("t5.safetensors"))
+        #expect(out.contains("config.json"))
+        #expect(out.contains("t5_config.json"))
+        #expect(out.contains("tokenizer.json"))
+        #expect(out.contains("tokenizer_config.json"))
+        // Docs / licence / VCS files excluded.
+        #expect(!out.contains("README.md"))
+        #expect(!out.contains("LICENSE"))
+        #expect(!out.contains(".gitattributes"))
+    }
+
+    @Test func musicgenBundlesCompanionEncodecRepo() {
+        // MG-DL1 decision — the jasonvassallo repo has no EnCodec weights; the installer
+        // bundles the mlx-community EnCodec repo so the engine loads only installed files.
+        #expect(ModelFileSelector.companionRepo(for: "jasonvassallo/mlx-musicgen-small")
+                == "mlx-community/encodec-32khz-float32")
+        #expect(ModelFileSelector.companionRepo(for: "mlx-community/Kokoro-82M-bf16") == nil)
+    }
 }

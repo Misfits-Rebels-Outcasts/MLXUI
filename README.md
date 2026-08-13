@@ -25,6 +25,21 @@ them with one click, and provides a purpose-built Run UI for each model type.
 
 ## ✨ What's New
 
+### MusicGen — type a description, get music back
+
+MusicGen-small is now in the catalog. Type a musical description (e.g. "happy rock with drums"),
+pick Short / Medium / Long, and the model generates a WAV file entirely on-device using Apple
+Silicon. Playback is inline; you can also Save WAV to keep the file.
+
+The engine is a bespoke Swift/MLX port of the MusicGen autoregressive pipeline: a T5-base text
+encoder conditions a 24-layer causal transformer that predicts 4 interleaved EnCodec codebook
+streams, which are then decoded by a GPU-accelerated EnCodec decoder back to 32 kHz mono audio.
+The whole run — weights, encode, decode loop, audio decode — stays on-device.
+
+Model: [`jasonvassallo/mlx-musicgen-small`](https://huggingface.co/jasonvassallo/mlx-musicgen-small)
+(≈ 2.5 GB install including the bundled 32 kHz EnCodec weights, CC-BY-NC-4.0,
+non-commercial use only).
+
 ### SDXL-Turbo — a second image-generation engine, 4-step on-device diffusion
 
 Stability AI's SDXL-Turbo joins FLUX.1 in the Image Generation category. It's a from-reference
@@ -132,7 +147,8 @@ contributor adding image-generation support doesn't need to understand the chat 
   - Vision (VLM) → image upload + Q&A
   - OCR (PaddleOCR, DeepSeek-OCR, dots.ocr, olmOCR) → image dropwell + extracted text
   - Embeddings → text input + vector output
-  - Image generation (Flux) → text prompt + on-device generated image
+  - Image generation (Flux, SDXL-Turbo) → text prompt + on-device generated image
+  - Music generation (MusicGen) → text description + on-device generated WAV
 - **Pipeline runner** — chain models together (transcribe → summarize → speak) in a
   single workflow
 - **Command palette (⌘K)** — find and run any model instantly
@@ -143,9 +159,9 @@ contributor adding image-generation support doesn't need to understand the chat 
 
 ## Supported Models
 
-### browser.json — MVP catalog (29 models)
+### browser.json — MVP catalog (30 models)
 
-The app ships `browser.json`, a hand-curated set of 29 models across 7 categories.
+The app ships `browser.json`, a hand-curated set of 30 models across 8 categories.
 Every model listed here is downloadable and has a working Run UI.
 
 | Category | Models | Sizes |
@@ -157,6 +173,7 @@ Every model listed here is downloadable and has a working Run UI.
 | **Text-to-Speech** (4) | Kokoro, Qwen3-TTS, Chatterbox, Orpheus | 82M – 3B |
 | **Embeddings** (4) | all-MiniLM-L6, embeddinggemma, ModernBERT-embed, bge-m3 | 18M – 568M |
 | **Image Generation** (2) | FLUX.1-Lite-8B, **SDXL-Turbo** | 3.5B – 8B |
+| **Music Generation** (1) | **MusicGen-small** | 615M (float32, ~2.5 GB) |
 
 The full `browser.json` catalog tracks **~435 models** from mlx-community. New models
 and Run UIs are added with every release.
@@ -176,7 +193,7 @@ and Run UIs are added with every release.
 | Embeddings | Text embeddings | ✅ | ✅ | ✅ | MLX + ModernBERT |
 | Image | Diffusion (Flux) | ✅ | ✅ | ✅ | Flux (native MLX) |
 | Image | Diffusion (SDXL-Turbo) | ✅ | ✅ | ✅ | SDXL-Turbo (native MLX) |
-| Audio | Music generation | ✅ | ✅ | ⬜ | — |
+| Audio | Music generation (MusicGen) | ✅ | ✅ | ✅ | MusicGen (native MLX) |
 
 ✅ = built &emsp; ⬜ = available for contribution
 
@@ -274,7 +291,8 @@ Every model in the catalog should eventually have a working Run button.
 
 - **Image generation Run UI** (SD 2.1, etc.) — Flux and SDXL-Turbo are now done; other
   diffusion architectures still need a prompt → image Run view
-- **Music generation Run UI** — same pattern, different output type
+- **More music generation models** — MusicGen-small is done; medium and large variants need
+  catalog entries and engine config updates
 - **Pipeline stages** — wire up existing modules into longer chains (e.g. OCR →
   summarize)
 - **Model architecture ports** — PaddleOCR, DeepSeek-OCR, dots.ocr (see
@@ -317,6 +335,8 @@ Every model in the catalog should eventually have a working Run button.
 - [x] Fixed cancel-install mid-download leaving stale files in `downloads/`
 - [x] SDXL-Turbo Run UI — a second image-generation engine: SDXL UNet + dual CLIP encoders +
       4-step DDIM sampler, native MLX
+- [x] MusicGen Run UI — text description → on-device WAV; T5-base encoder + 24-layer causal
+      transformer + GPU-accelerated EnCodec decoder, native MLX port
 
 ### In progress
 - [ ] Visual pipeline builder UI
@@ -324,7 +344,7 @@ Every model in the catalog should eventually have a working Run button.
 
 ### Up for grabs
 - [ ] Image generation Run UI (SD 2.1, etc.)
-- [ ] Music generation Run UI
+- [ ] Additional music generation models (MusicGen-medium, MusicGen-large)
 - [ ] Model comparison benchmark runner
 - [ ] Export pipeline as standalone app
 - [ ] Architecture ports (PaddleOCR, DeepSeek-OCR, dots.ocr — flagged in

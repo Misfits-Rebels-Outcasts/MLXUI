@@ -24,6 +24,7 @@ let installedModules: [ModelModule.Type] = [
     VoxtralModule.self,
     KokoroModule.self,
     MLXAudioTTSModule.self,
+    MusicGenModule.self,
     VLMModule.self,
     PaddleOCRModule.self,
     DotsOCRModule.self,

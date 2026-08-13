@@ -52,7 +52,29 @@ enum ModelFileSelector {
         // component with no `.safetensors` of its own, so the dir wouldn't qualify as a
         // component without this (SD-DL1). The engine parses `alphas_cumprod` from it.
         "scheduler_config.json",
+        // MusicGen splits the T5-base text encoder's config out of the main `config.json`
+        // (MG-DL1). The engine builds the T5 encoder from it; without it the encoder's
+        // dimensions default to the wrong T5 variant.
+        "t5_config.json",
     ]
+
+    /// A second HF repo whose files must be bundled into an install, keyed by the catalog
+    /// `hfModelId`. Some models ship only part of their weights in their own repo; the rest
+    /// lives in a companion repo. Bundling (rather than a runtime fetch) keeps the MLX-first
+    /// A2 pattern — the runtime loads only files `InstallManager` already downloaded.
+    ///
+    /// MG-DL1 decision (backlog step 3): `jasonvassallo/mlx-musicgen-small` ships the decoder
+    /// and T5 encoder but **no EnCodec weights**; the 32 kHz / 4-codebook codec lives in its
+    /// own mlx-community repo (the same one the mlx-examples Python reference hardcodes).
+    /// Its files land under `encodec/` in the installed model dir.
+    static func companionRepo(for hfModelId: String) -> String? {
+        switch hfModelId {
+        case "jasonvassallo/mlx-musicgen-small":
+            return "mlx-community/encodec-32khz-float32"
+        default:
+            return nil
+        }
+    }
 
     /// True when `l` (a lowercased `X.safetensors`) has an `X.fp16.safetensors` sibling —
     /// the repo ships the same weights in both fp32 and fp16 (e.g. stabilityai/sdxl-turbo's
