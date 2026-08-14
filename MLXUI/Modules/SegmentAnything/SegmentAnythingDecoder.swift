@@ -43,34 +43,34 @@ nonisolated final class SAM3PromptEncoder: Module {
 ///              `mask_embedder.*`, `instance_projection.*`
 nonisolated final class SAM3PixelDecoder: Module {
     @ModuleInfo var convLayers: [Conv2d]
-    @ModuleInfo var maskEmbedder: Linear
-    @ModuleInfo var instanceProjection: Linear
+    @ModuleInfo var maskEmbedder: Linear        // quantized Linear: inChannels → numMasks
+    @ModuleInfo var instanceProjection: Conv2d  // 1×1 conv: inChannels → inChannels
     let numMasks: Int
 
     init(inChannels: Int = 256, numMasks: Int = 3) {
         self.numMasks = numMasks
-        var cs: [Conv2d] = []
-        var c = inChannels
-        for _ in 0 ..< 3 {
-            let out = max(c / 2, 32)
-            cs.append(Conv2d(inputChannels: c, outputChannels: out,
-                             kernelSize: .init(3), padding: .init(1)))
-            c = out
+        // Checkpoint conv layers maintain inChannels (256) throughout — no channel halving.
+        let cs: [Conv2d] = (0 ..< 3).map { _ in
+            Conv2d(inputChannels: inChannels, outputChannels: inChannels,
+                   kernelSize: .init(3), padding: .init(1))
         }
         _convLayers.wrappedValue         = cs
-        _maskEmbedder.wrappedValue       = Linear(c, numMasks)
-        _instanceProjection.wrappedValue = Linear(inChannels, inChannels)
+        _maskEmbedder.wrappedValue       = Linear(inChannels, numMasks)
+        _instanceProjection.wrappedValue = Conv2d(inputChannels: inChannels, outputChannels: inChannels,
+                                                   kernelSize: .init(1))
         super.init()
     }
 
     /// [B, H, W, C] → [B, H×8, W×8, numMasks]  (3 × 2× nearest-neighbour upsample)
     func callAsFunction(_ imageEmbed: MLXArray, promptTokens: MLXArray) -> MLXArray {
-        let q = instanceProjection(promptTokens.mean(axis: 1))   // [B, D]
-        var h = imageEmbed + q.reshaped([q.dim(0), 1, 1, q.dim(1)])
+        // Project image features with 1×1 conv, then add prompt conditioning
+        var h = instanceProjection(imageEmbed)           // (B, H, W, inChannels)
+        let ctx = promptTokens.mean(axis: 1)             // (B, promptDim)
+        h = h + ctx.reshaped([ctx.dim(0), 1, 1, ctx.dim(1)])
         for conv in convLayers {
             h = MLXNN.relu(conv(upsample2x(h)))
         }
-        return maskEmbedder(h)
+        return maskEmbedder(h)   // Linear applies to last dim: (B, H', W', inChannels) → (B, H', W', numMasks)
     }
 
     /// Nearest-neighbour 2× spatial upsample using `tiled`.
