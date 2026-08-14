@@ -144,4 +144,41 @@ nonisolated enum SegmentAnythingEngine {
         eval(masks, iouScores)
         return (masks, iouScores)
     }
+
+    // MARK: Mask rendering
+
+    /// Render the highest-IoU mask as a red-tinted overlay on the source image.
+    /// Kept here (nonisolated enum) so callers on any actor can invoke it without inference issues.
+    static func renderTopMask(
+        masks: MLXArray, iouScores: MLXArray, sourceImage: CGImage
+    ) -> CGImage {
+        let scores = iouScores[0].asArray(Float.self)
+        let bestIdx = scores.enumerated().max(by: { $0.element < $1.element })?.offset ?? 0
+
+        let (h, w) = (masks.dim(1), masks.dim(2))
+        let logits = masks[0, 0..., 0..., bestIdx]
+        let binary  = (logits .> 0).asArray(Float.self)
+
+        let W = sourceImage.width, H = sourceImage.height
+        guard let ctx = CGContext(
+            data: nil, width: W, height: H,
+            bitsPerComponent: 8, bytesPerRow: W * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return sourceImage }
+
+        ctx.draw(sourceImage, in: CGRect(x: 0, y: 0, width: W, height: H))
+        ctx.setBlendMode(.normal)
+        for py in 0 ..< H {
+            for px in 0 ..< W {
+                let mx = min(Int(Float(px) / Float(W) * Float(w)), w - 1)
+                let my = min(Int(Float(py) / Float(H) * Float(h)), h - 1)
+                if binary[my * w + mx] > 0.5 {
+                    ctx.setFillColor(red: 1.0, green: 0.0, blue: 0.0, alpha: 0.4)
+                    ctx.fill(CGRect(x: px, y: H - 1 - py, width: 1, height: 1))
+                }
+            }
+        }
+        return ctx.makeImage() ?? sourceImage
+    }
 }
