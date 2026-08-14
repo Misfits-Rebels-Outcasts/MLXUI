@@ -44,8 +44,10 @@ nonisolated final class SAM3ModelContainer: Module {
 /// Public interface for SAM3 image segmentation (SA-AM4).
 nonisolated enum SegmentAnythingEngine {
 
-    static let imageSize = 1008
-    static let gridSize  = imageSize / 14   // 72
+    // Positional embeddings in mlx-community/sam3-4bit have 576 = 24×24 tokens,
+    // so the patch grid must be 24×24: imageSize = 24 × patchSize(14) = 336.
+    static let imageSize = 336
+    static let gridSize  = imageSize / 14   // 24
 
     // MARK: Weight loading
 

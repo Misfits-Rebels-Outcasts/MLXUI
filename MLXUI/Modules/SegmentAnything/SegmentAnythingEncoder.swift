@@ -28,7 +28,13 @@ nonisolated final class SAM3Embeddings: Module {
     }
 
     func callAsFunction(_ x: MLXArray) -> MLXArray {
-        patchEmbeddings(x) + positionEmbeddings
+        let patches = patchEmbeddings(x)   // (B, H, W, D)
+        let (_, h, w, d) = (patches.dim(0), patches.dim(1), patches.dim(2), patches.dim(3))
+        // Checkpoint stores position embeddings flat (1, H*W, D); reshape to match spatial patches.
+        let pe = positionEmbeddings.ndim == 3
+            ? positionEmbeddings.reshaped([1, h, w, d])
+            : positionEmbeddings
+        return patches + pe
     }
 }
 
@@ -191,7 +197,7 @@ nonisolated final class SAM3ViTBackbone: Module {
          numLayers: Int = 32,
          numHeads: Int = 16,
          intermediateSize: Int = 4736,
-         imageSize: Int = 1008,
+         imageSize: Int = 336,
          patchSize: Int = 14,
          windowSize: Int = 14,
          globalAttnLayers: Set<Int> = [7, 15, 23, 31],
