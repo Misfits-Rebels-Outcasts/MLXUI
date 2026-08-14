@@ -231,6 +231,53 @@ struct ModelFileSelectorTests {
         #expect(ModelFileSelector.companionRepo(for: "mlx-community/Kokoro-82M-bf16") == nil)
     }
 
+    @Test func wan21RepoDownloadsAllThreeWeightFiles() {
+        // WAN-AM3: Wan-AI/Wan2.1-T2V-1.3B ships three top-level weight files — a .safetensors
+        // DiT, a .pth VAE, and a .pth T5 encoder — plus tokenizer JSON files under
+        // google/umt5-xxl/. All weight files must be selected; assets/ images must be excluded.
+        let siblings = [
+            ".gitattributes",
+            "LICENSE.txt",
+            "README.md",
+            "config.json",
+            "diffusion_pytorch_model.safetensors",
+            "Wan2.1_VAE.pth",
+            "models_t5_umt5-xxl-enc-bf16.pth",
+            "google/umt5-xxl/special_tokens_map.json",
+            "google/umt5-xxl/spiece.model",
+            "google/umt5-xxl/tokenizer.json",
+            "google/umt5-xxl/tokenizer_config.json",
+            "assets/logo.png",
+            "assets/video_dit_arch.jpg",
+            "examples/i2v_input.JPG",
+        ]
+        let out = selected(siblings)
+        // All three weight files selected.
+        #expect(out.contains("diffusion_pytorch_model.safetensors"))
+        #expect(out.contains("Wan2.1_VAE.pth"))
+        #expect(out.contains("models_t5_umt5-xxl-enc-bf16.pth"))
+        // Config and tokenizer files selected.
+        #expect(out.contains("config.json"))
+        #expect(out.contains("google/umt5-xxl/tokenizer.json"))
+        #expect(out.contains("google/umt5-xxl/tokenizer_config.json"))
+        #expect(out.contains("google/umt5-xxl/special_tokens_map.json"))
+        #expect(out.contains("google/umt5-xxl/spiece.model"))
+        // Docs, assets, and examples excluded.
+        #expect(!out.contains("README.md"))
+        #expect(!out.contains("LICENSE.txt"))
+        #expect(!out.contains(".gitattributes"))
+        #expect(!out.contains("assets/logo.png"))
+        #expect(!out.contains("examples/i2v_input.JPG"))
+    }
+
+    @Test func pthExcludedWhenStandardWeightsPresent() {
+        // A .pth file must NOT be pulled in when a standard model.safetensors is present —
+        // it may be a legacy or test checkpoint, not required at runtime.
+        let out = selected(["config.json", "model.safetensors", "old_weights.pth"])
+        #expect(out.contains("model.safetensors"))
+        #expect(!out.contains("old_weights.pth"))
+    }
+
     @Test func sam3DownloadsWeightsAndProcessorConfig() {
         // SA-AM3: mlx-community/sam3-4bit ships model.safetensors + config.json +
         // processor_config.json + tokenizer files. All are covered by existing

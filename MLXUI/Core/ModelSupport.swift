@@ -21,6 +21,9 @@ enum ModelSupport {
         // DeepSeek-OCR-2 → custom `deepseekocr_2` model registered into MLXVLM (SUP-2, journal/2026-47…51).
         // ModernBERT (nomicai-modernbert-embed) → standalone runner (SUP-4, journal/2026-41).
         // SAM3 (sam3_video / Sam3VideoModel) → SegmentAnythingEngine ported in SA-AM4.
+
+        // WAN 2.1 video generation engine not yet implemented — WAN-AM4.
+        Gap(idFragment: "wan2.1", reason: "Video generation engine not yet available (coming soon)."),
     ]
 
     /// A human-readable reason this model can't run yet, or `nil` if it should run.

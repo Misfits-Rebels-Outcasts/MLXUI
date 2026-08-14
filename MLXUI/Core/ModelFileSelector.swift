@@ -144,10 +144,13 @@ enum ModelFileSelector {
             if hasIndex && l == "model.safetensors.index.json" { return true }
             if hasIndex && l.hasPrefix("model-") && l.hasSuffix(".safetensors") { return true }
 
-            // Fallback: non-standard top-level weight name (e.g. kokoro-v1_0.safetensors).
+            // Fallback: non-standard top-level weight name (e.g. kokoro-v1_0.safetensors,
+            // Wan2.1_VAE.pth). Covers .safetensors and .pth (PyTorch checkpoint — some repos
+            // such as Wan-AI/Wan2.1-T2V-1.3B ship weights as .pth; MLX loads them natively).
             // Suppressed for diffusers repos — their components carry the weights and the
             // root files are redundant full checkpoints.
-            if !hasStandardWeights && !hasDiffusersLayout && !l.contains("/") && l.hasSuffix(".safetensors") { return true }
+            if !hasStandardWeights && !hasDiffusersLayout && !l.contains("/")
+                && (l.hasSuffix(".safetensors") || l.hasSuffix(".pth")) { return true }
 
             return false
         }
