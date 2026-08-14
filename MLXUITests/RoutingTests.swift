@@ -15,16 +15,16 @@ struct RoutingTests {
     @Test func runnerKindMapsEmbedding() { #expect(makeEntry(modelType: .embedding).runnerKind == .embedding) }
     @Test func runnerKindMapsVision()    { #expect(makeEntry(modelType: .vision).runnerKind == .vision) }
 
-    // MARK: runnerKind — OCR now runs on MLXVLM (OC1), video stays unsupported
+    // MARK: runnerKind — OCR now runs on MLXVLM (OC1), video routes to .video (WAN-AM1)
 
     @Test func runnerKindMapsOCRToOCR() {
         // OC1: catalog OCR repos are MLX VLMs → run via MLXVLM (OCRModule), not Apple Vision.
         #expect(makeEntry(modelType: .ocr).runnerKind == .ocr)
     }
 
-    @Test func runnerKindMapsVideoToUnsupported() {
-        // No video stage in the linear v1 pipeline.
-        #expect(makeEntry(modelType: .video).runnerKind == .unsupported)
+    @Test func runnerKindMapsVideoToVideo() {
+        // WAN-AM1: video generation routes to .video (engine: Modules/WanVideo, WAN-AM4).
+        #expect(makeEntry(modelType: .video).runnerKind == .video)
     }
 
     @Test func runnerKindMapsSegmentation() {
@@ -70,6 +70,46 @@ struct RoutingTests {
         #expect(entry.source == .mlx)
         #expect(entry.paramCountB == nil)
         #expect(entry.ramGB == 0.93)
+    }
+
+    @Test func wan21CatalogEntryDecodes() throws {
+        // WAN-AM1: verifies the Wan-AI/Wan2.1-T2V-1.3B entry shape decodes and routes correctly.
+        let json = """
+        {
+            "id": "Wan-AI--Wan2.1-T2V-1.3B",
+            "family": "Wan2.1",
+            "displayName": "Wan2.1-T2V-1.3B",
+            "paramSize": "1.3B",
+            "paramCountB": 1.3,
+            "modelType": "video",
+            "source": "mlx",
+            "format": "mlx-bf16",
+            "platforms": ["macOS 13+"],
+            "minMacOSVersion": "13.0",
+            "hfRepo": "Wan-AI",
+            "hfModelId": "Wan-AI/Wan2.1-T2V-1.3B",
+            "ramGB": 10.0,
+            "downloadSizeGB": 11.0,
+            "contextWindow": null,
+            "variants": [
+                {
+                    "quantization": "bfloat16",
+                    "format": "mlx-bf16",
+                    "ramGB": 10.0,
+                    "downloadSizeGB": 11.0,
+                    "qualityPercent": 100,
+                    "hfModelId": "Wan-AI/Wan2.1-T2V-1.3B",
+                    "recommended": true
+                }
+            ]
+        }
+        """
+        let entry = try JSONDecoder().decode(ModelEntry.self, from: Data(json.utf8))
+        #expect(entry.modelType == .video)
+        #expect(entry.runnerKind == .video)
+        #expect(entry.source == .mlx)
+        #expect(entry.paramCountB == 1.3)
+        #expect(entry.ramGB == 10.0)
     }
 
     // MARK: runnerKind — catalog mislabel overrides (family beats modelType)
