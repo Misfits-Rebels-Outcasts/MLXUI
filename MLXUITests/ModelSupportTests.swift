@@ -21,9 +21,9 @@ struct ModelSupportTests {
         }
     }
 
-    // SA-AM3: SAM3 is flagged until the SegmentAnythingEngine port lands (SA-AM4).
-    @Test func sam3IsFlaggedAsUnsupported() {
+    // SA-AM4: SAM3 engine ported — gap removed; sam3 resolves to SegmentAnythingEngine.
+    @Test func sam3NowHasARunner() {
         let entry = makeEntry(id: "mlx-community--sam3-4bit")
-        #expect(ModelSupport.unsupportedReason(for: entry) != nil)
+        #expect(ModelSupport.unsupportedReason(for: entry) == nil)
     }
 }

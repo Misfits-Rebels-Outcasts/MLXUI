@@ -1,0 +1,147 @@
+import CoreGraphics
+import Foundation
+import MLX
+import MLXNN
+
+// MARK: - Errors
+
+enum SegmentAnythingError: Error, LocalizedError {
+    case missingWeights(String)
+    case imageConversionFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .missingWeights(let f): "SAM3 weights not found: \(f)"
+        case .imageConversionFailed: "Failed to convert image to MLX tensor"
+        }
+    }
+}
+
+// MARK: - Model container
+
+/// Top-level module holding the three SAM3 inference components.
+/// Weight key mapping from mlx-community/sam3-4bit:
+///   `detector_model.vision_encoder.backbone.*` → backbone
+///   `detector_model.mask_decoder.*`            → maskDecoder / iouPredictor
+///   `tracker_model.prompt_encoder.*`           → promptEncoder
+nonisolated final class SAM3ModelContainer: Module {
+    let backbone: SAM3ViTBackbone
+    let maskDecoder: SAM3PixelDecoder
+    let iouPredictor: SAM3IoUPredictor
+    let promptEncoder: SAM3PromptEncoder
+
+    override init() {
+        backbone      = SAM3ViTBackbone()
+        maskDecoder   = SAM3PixelDecoder()
+        iouPredictor  = SAM3IoUPredictor()
+        promptEncoder = SAM3PromptEncoder()
+        super.init()
+    }
+}
+
+// MARK: - Engine
+
+/// Public interface for SAM3 image segmentation (SA-AM4).
+nonisolated enum SegmentAnythingEngine {
+
+    static let imageSize = 1008
+    static let gridSize  = imageSize / 14   // 72
+
+    // MARK: Weight loading
+
+    private static func loadModel(from dir: URL) async throws -> SAM3ModelContainer {
+        let url = dir.appendingPathComponent("model.safetensors")
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw SegmentAnythingError.missingWeights("model.safetensors")
+        }
+        let model = SAM3ModelContainer()
+        let raw = try MLX.loadArrays(url: url)
+        try model.update(parameters: ModuleParameters.unflattened(remapKeys(raw)), verify: .none)
+        eval(model)
+        return model
+    }
+
+    private static func remapKeys(_ raw: [String: MLXArray]) -> [String: MLXArray] {
+        var out: [String: MLXArray] = [:]
+        for (key, val) in raw {
+            let mapped: String
+            switch true {
+            case key.hasPrefix("detector_model.vision_encoder.backbone."):
+                mapped = "backbone." + key.dropFirst("detector_model.vision_encoder.backbone.".count)
+            case key.hasPrefix("detector_model.mask_decoder.pixel_decoder."):
+                mapped = "maskDecoder." + key.dropFirst("detector_model.mask_decoder.pixel_decoder.".count)
+            case key.hasPrefix("detector_model.mask_decoder.mask_embedder."):
+                mapped = "maskDecoder.maskEmbedder." + key.dropFirst("detector_model.mask_decoder.mask_embedder.".count)
+            case key.hasPrefix("detector_model.mask_decoder.instance_projection"):
+                mapped = "maskDecoder.instanceProjection" + key.dropFirst("detector_model.mask_decoder.instance_projection".count)
+            case key.hasPrefix("detector_model.mask_decoder.iou_predictor."):
+                mapped = "iouPredictor." + key.dropFirst("detector_model.mask_decoder.iou_predictor.".count)
+            case key.hasPrefix("tracker_model.prompt_encoder.point_embed"):
+                mapped = "promptEncoder.pointEmbed" + key.dropFirst("tracker_model.prompt_encoder.point_embed".count)
+            case key.hasPrefix("tracker_model.prompt_encoder.no_mask_embed"):
+                mapped = "promptEncoder.noMaskEmbed" + key.dropFirst("tracker_model.prompt_encoder.no_mask_embed".count)
+            default:
+                continue   // skip tracker/FPN weights not needed for still-image inference
+            }
+            out[mapped] = val
+        }
+        return out
+    }
+
+    // MARK: Image preprocessing
+
+    private static func preprocessImage(_ cgImage: CGImage) -> MLXArray? {
+        let side = imageSize
+        guard let ctx = CGContext(
+            data: nil, width: side, height: side,
+            bitsPerComponent: 8, bytesPerRow: side * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+        ) else { return nil }
+        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
+        guard let data = ctx.data else { return nil }
+
+        let byteCount = side * side * 4
+        let bytes = Array(UnsafeBufferPointer(
+            start: data.assumingMemoryBound(to: UInt8.self), count: byteCount))
+        let mean: [Float] = [0.485, 0.456, 0.406]
+        let std:  [Float] = [0.229, 0.224, 0.225]
+        var rgb = [Float](repeating: 0, count: side * side * 3)
+        for i in 0 ..< side * side {
+            rgb[i * 3 + 0] = (Float(bytes[i * 4 + 0]) / 255.0 - mean[0]) / std[0]
+            rgb[i * 3 + 1] = (Float(bytes[i * 4 + 1]) / 255.0 - mean[1]) / std[1]
+            rgb[i * 3 + 2] = (Float(bytes[i * 4 + 2]) / 255.0 - mean[2]) / std[2]
+        }
+        return MLXArray(rgb, [1, side, side, 3])
+    }
+
+    // MARK: Public API
+
+    /// Returns [1, gridSize, gridSize, 256]
+    static func encodeImage(_ image: CGImage, modelID: String) async throws -> MLXArray {
+        let model = try await loadModel(from: ModelStore.shared.directory(forModelID: modelID))
+        guard let tensor = preprocessImage(image) else {
+            throw SegmentAnythingError.imageConversionFailed
+        }
+        let embedding = model.backbone(tensor)
+        eval(embedding)
+        return embedding
+    }
+
+    /// Returns (masks: [1, H', W', 3], iouScores: [1, 3])
+    static func decodeMasks(
+        embedding: MLXArray,
+        points: [[Float]],
+        labels: [Int],
+        modelID: String
+    ) async throws -> (masks: MLXArray, iouScores: MLXArray) {
+        let model = try await loadModel(from: ModelStore.shared.directory(forModelID: modelID))
+        let pts = MLXArray(points.flatMap { $0 }, [points.count, 2])
+        let lbl = MLXArray(labels.map { Int32($0) })
+        let promptTokens = model.promptEncoder(points: pts, labels: lbl)
+        let masks        = model.maskDecoder(embedding, promptTokens: promptTokens)
+        let iouScores    = model.iouPredictor(embedding)
+        eval(masks, iouScores)
+        return (masks, iouScores)
+    }
+}

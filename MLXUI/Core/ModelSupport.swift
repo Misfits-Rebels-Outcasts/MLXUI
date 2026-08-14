@@ -20,10 +20,7 @@ enum ModelSupport {
         // dots.ocr / dots.mocr → custom `dots_ocr` model registered into MLXVLM (SUP-3, journal/2026-44/45).
         // DeepSeek-OCR-2 → custom `deepseekocr_2` model registered into MLXVLM (SUP-2, journal/2026-47…51).
         // ModernBERT (nomicai-modernbert-embed) → standalone runner (SUP-4, journal/2026-41).
-
-        // SA-AM3: SAM3 (`sam3_video` / `Sam3VideoModel`) — ViTDet + mask decoder port in SA-AM4.
-        // Remove this entry once `SegmentAnythingEngine` is registered in App/ModelModules.swift.
-        Gap(idFragment: "sam3", reason: "SAM3 image segmentation engine is being ported (SA-AM4). Check back in a future update."),
+        // SAM3 (sam3_video / Sam3VideoModel) → SegmentAnythingEngine ported in SA-AM4.
     ]
 
     /// A human-readable reason this model can't run yet, or `nil` if it should run.
