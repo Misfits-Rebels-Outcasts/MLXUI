@@ -55,4 +55,19 @@ struct DataNormalizerTests {
         let tags = DataNormalizer.normalizeTaskTags([], domainId: "segmentation")
         #expect(tags == ["segmentation"])
     }
+
+    // WAN-AM2: video tag mappings
+    @Test func taskTagsMapsTextToVideo() {
+        let tags = DataNormalizer.normalizeTaskTags(["text-to-video", "video-generation"], domainId: "videogen")
+        #expect(tags == ["video"])
+    }
+
+    @Test func taskTagsDomainFallbackVideogen() {
+        let tags = DataNormalizer.normalizeTaskTags([], domainId: "videogen")
+        #expect(tags == ["video"])
+    }
+
+    @Test func architectureMapsWanDiT() {
+        #expect(DataNormalizer.normalizeArchitecture("WanDiT") == "Wan DiT")
+    }
 }

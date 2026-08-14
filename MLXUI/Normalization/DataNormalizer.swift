@@ -31,6 +31,7 @@ enum DataNormalizer {
             "WhisperForConditionalGeneration": "Whisper", "BertModel": "BERT",
             "T5ForConditionalGeneration": "T5", "StableLmForCausalLM": "StableLM",
             "OlmoForCausalLM": "OLMo", "FalconForCausalLM": "Falcon",
+            "WanDiT": "Wan DiT",
         ]
         var result = classMap[raw] ?? raw
             .replacingOccurrences(of: "ForCausalLM", with: "")
@@ -53,6 +54,7 @@ enum DataNormalizer {
             "visual-question-answering": "vision", "fill-mask": "nlp",
             "token-classification": "nlp",
             "image-segmentation": "segmentation", "segment-anything": "segmentation",
+            "text-to-video": "video", "video-generation": "video",
         ]
         var tags = (raw ?? []).compactMap { tagMap[$0] }
         tags = Array(Set(tags))
@@ -62,6 +64,7 @@ enum DataNormalizer {
                 "code-software-engineering": ["code"],
                 "vision": ["vision"], "audio": ["speech-to-text"],
                 "music": ["music"], "video": ["video"],
+                "videogen": ["video"],
                 "segmentation": ["segmentation"],
             ]
             tags = domainMap[domainId] ?? []
