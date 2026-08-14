@@ -56,36 +56,81 @@ nonisolated enum SegmentAnythingEngine {
         }
         let model = SAM3ModelContainer()
         let raw = try MLX.loadArrays(url: url)
-        try model.update(parameters: ModuleParameters.unflattened(remapKeys(raw)), verify: .none)
+        let weights = remapKeys(raw)
+
+        // Convert Linear → QuantizedLinear for any layer present in the 4-bit checkpoint.
+        // The sam3-4bit repo uses standard 4-bit affine quantization (group_size=64).
+        // Layers without a corresponding .scales entry (Conv2d, LayerNorm) are left as-is.
+        quantize(model: model) { path, _ in
+            weights["\(path).scales"] != nil ? (64, 4, QuantizationMode.affine) : nil
+        }
+
+        try model.update(parameters: ModuleParameters.unflattened(weights), verify: .none)
         eval(model)
         return model
     }
 
+    /// Remap mlx-community/sam3-4bit weight keys to the Swift module path hierarchy.
+    /// Also converts snake_case path components to camelCase to match Swift property names
+    /// (e.g. `q_proj` → `qProj`, `layer_norm1` → `layerNorm1`, `neck_conv` → `neckConv`).
     private static func remapKeys(_ raw: [String: MLXArray]) -> [String: MLXArray] {
         var out: [String: MLXArray] = [:]
         for (key, val) in raw {
-            let mapped: String
+            let prefix: String
+            let suffix: Substring
             switch true {
             case key.hasPrefix("detector_model.vision_encoder.backbone."):
-                mapped = "backbone." + key.dropFirst("detector_model.vision_encoder.backbone.".count)
+                prefix = "backbone."
+                suffix = key.dropFirst("detector_model.vision_encoder.backbone.".count)
             case key.hasPrefix("detector_model.mask_decoder.pixel_decoder."):
-                mapped = "maskDecoder." + key.dropFirst("detector_model.mask_decoder.pixel_decoder.".count)
+                prefix = "maskDecoder."
+                suffix = key.dropFirst("detector_model.mask_decoder.pixel_decoder.".count)
             case key.hasPrefix("detector_model.mask_decoder.mask_embedder."):
-                mapped = "maskDecoder.maskEmbedder." + key.dropFirst("detector_model.mask_decoder.mask_embedder.".count)
+                prefix = "maskDecoder.maskEmbedder."
+                suffix = key.dropFirst("detector_model.mask_decoder.mask_embedder.".count)
             case key.hasPrefix("detector_model.mask_decoder.instance_projection"):
-                mapped = "maskDecoder.instanceProjection" + key.dropFirst("detector_model.mask_decoder.instance_projection".count)
+                prefix = "maskDecoder.instanceProjection"
+                suffix = key.dropFirst("detector_model.mask_decoder.instance_projection".count)
             case key.hasPrefix("detector_model.mask_decoder.iou_predictor."):
-                mapped = "iouPredictor." + key.dropFirst("detector_model.mask_decoder.iou_predictor.".count)
+                prefix = "iouPredictor."
+                suffix = key.dropFirst("detector_model.mask_decoder.iou_predictor.".count)
             case key.hasPrefix("tracker_model.prompt_encoder.point_embed"):
-                mapped = "promptEncoder.pointEmbed" + key.dropFirst("tracker_model.prompt_encoder.point_embed".count)
+                prefix = "promptEncoder.pointEmbed"
+                suffix = key.dropFirst("tracker_model.prompt_encoder.point_embed".count)
             case key.hasPrefix("tracker_model.prompt_encoder.no_mask_embed"):
-                mapped = "promptEncoder.noMaskEmbed" + key.dropFirst("tracker_model.prompt_encoder.no_mask_embed".count)
+                prefix = "promptEncoder.noMaskEmbed"
+                suffix = key.dropFirst("tracker_model.prompt_encoder.no_mask_embed".count)
             default:
                 continue   // skip tracker/FPN weights not needed for still-image inference
             }
-            out[mapped] = val
+            out[prefix + camelPath(suffix)] = val
         }
         return out
+    }
+
+    /// Convert a dot-separated path of snake_case segments to camelCase Swift property names.
+    /// "layers.0.q_proj.weight" → "layers.0.qProj.weight"
+    private static func camelPath(_ s: Substring) -> String {
+        s.split(separator: ".", omittingEmptySubsequences: false)
+            .map { snakeToCamel(String($0)) }
+            .joined(separator: ".")
+    }
+
+    private static func snakeToCamel(_ s: String) -> String {
+        guard s.contains("_") else { return s }
+        var result = ""
+        var capitalize = false
+        for ch in s {
+            if ch == "_" {
+                capitalize = true
+            } else if capitalize {
+                result.append(contentsOf: ch.uppercased())
+                capitalize = false
+            } else {
+                result.append(ch)
+            }
+        }
+        return result
     }
 
     // MARK: Image preprocessing
