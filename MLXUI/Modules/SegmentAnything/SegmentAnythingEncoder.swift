@@ -5,12 +5,12 @@ import MLXNN
 // MARK: - Patch Embedding
 
 nonisolated final class SAM3PatchEmbeddings: Module {
-    let projection: Conv2d
+    @ModuleInfo var projection: Conv2d
 
     init(hiddenSize: Int, patchSize: Int) {
-        projection = Conv2d(inputChannels: 3, outputChannels: hiddenSize,
-                            kernelSize: .init(patchSize), stride: .init(patchSize),
-                            bias: true)
+        _projection.wrappedValue = Conv2d(inputChannels: 3, outputChannels: hiddenSize,
+                                          kernelSize: .init(patchSize), stride: .init(patchSize),
+                                          bias: true)
         super.init()
     }
 
@@ -18,11 +18,11 @@ nonisolated final class SAM3PatchEmbeddings: Module {
 }
 
 nonisolated final class SAM3Embeddings: Module {
-    let patchEmbeddings: SAM3PatchEmbeddings
+    @ModuleInfo var patchEmbeddings: SAM3PatchEmbeddings
     var positionEmbeddings: MLXArray
 
     init(hiddenSize: Int, patchSize: Int, gridH: Int, gridW: Int) {
-        patchEmbeddings    = SAM3PatchEmbeddings(hiddenSize: hiddenSize, patchSize: patchSize)
+        _patchEmbeddings.wrappedValue = SAM3PatchEmbeddings(hiddenSize: hiddenSize, patchSize: patchSize)
         positionEmbeddings = MLXArray.zeros([1, gridH, gridW, hiddenSize])
         super.init()
     }
@@ -35,7 +35,7 @@ nonisolated final class SAM3Embeddings: Module {
 // MARK: - RoPE (2-D)
 
 private enum SAM3RoPE {
-    static func apply(_ x: MLXArray, positions: MLXArray, theta: Float = 10000.0) -> MLXArray {
+    nonisolated static func apply(_ x: MLXArray, positions: MLXArray, theta: Float = 10000.0) -> MLXArray {
         let headDim = x.dim(3)
         let halfDim = headDim / 2
         let idx = MLXArray.arange(0, halfDim).asType(.float32)
@@ -58,7 +58,7 @@ private enum SAM3RoPE {
 // MARK: - Grid position helper
 
 /// Build [H*W, 2] Int32 grid of (row, col) indices.
-private func makeGridPositions(h: Int, w: Int) -> MLXArray {
+private nonisolated func makeGridPositions(h: Int, w: Int) -> MLXArray {
     let rows = (0 ..< h).flatMap { r in [Int32](repeating: Int32(r), count: w) }
     let cols = (0 ..< h).flatMap { _ in (0 ..< w).map { Int32($0) } }
     return stacked([MLXArray(rows), MLXArray(cols)], axis: -1)   // [H*W, 2]
@@ -69,18 +69,18 @@ private func makeGridPositions(h: Int, w: Int) -> MLXArray {
 /// Weight keys (relative to layer root):
 ///   `attention.q_proj.*`, `attention.k_proj.*`, `attention.v_proj.*`, `attention.out_proj.*`
 nonisolated final class SAM3Attention: Module {
-    let qProj: Linear
-    let kProj: Linear
-    let vProj: Linear
-    let outProj: Linear
+    @ModuleInfo var qProj: Linear
+    @ModuleInfo var kProj: Linear
+    @ModuleInfo var vProj: Linear
+    @ModuleInfo var outProj: Linear
     let numHeads: Int
 
     init(hiddenSize: Int, numHeads: Int) {
         self.numHeads = numHeads
-        qProj   = Linear(hiddenSize, hiddenSize)
-        kProj   = Linear(hiddenSize, hiddenSize)
-        vProj   = Linear(hiddenSize, hiddenSize)
-        outProj = Linear(hiddenSize, hiddenSize)
+        _qProj.wrappedValue   = Linear(hiddenSize, hiddenSize)
+        _kProj.wrappedValue   = Linear(hiddenSize, hiddenSize)
+        _vProj.wrappedValue   = Linear(hiddenSize, hiddenSize)
+        _outProj.wrappedValue = Linear(hiddenSize, hiddenSize)
         super.init()
     }
 
@@ -104,12 +104,12 @@ nonisolated final class SAM3Attention: Module {
 
 /// Weight keys: `mlp.fc1.*`, `mlp.fc2.*`
 nonisolated final class SAM3MLP: Module {
-    let fc1: Linear
-    let fc2: Linear
+    @ModuleInfo var fc1: Linear
+    @ModuleInfo var fc2: Linear
 
     init(hiddenSize: Int, intermediateSize: Int) {
-        fc1 = Linear(hiddenSize, intermediateSize)
-        fc2 = Linear(intermediateSize, hiddenSize)
+        _fc1.wrappedValue = Linear(hiddenSize, intermediateSize)
+        _fc2.wrappedValue = Linear(intermediateSize, hiddenSize)
         super.init()
     }
 
@@ -124,17 +124,17 @@ nonisolated final class SAM3MLP: Module {
 /// Windowed attention is used when `windowSize > 0` AND the spatial grid is
 /// evenly divisible by `windowSize`; otherwise falls back to global attention.
 nonisolated final class SAM3ViTLayer: Module {
-    let layerNorm1: LayerNorm
-    let layerNorm2: LayerNorm
-    let attention: SAM3Attention
-    let mlp: SAM3MLP
+    @ModuleInfo var layerNorm1: LayerNorm
+    @ModuleInfo var layerNorm2: LayerNorm
+    @ModuleInfo var attention: SAM3Attention
+    @ModuleInfo var mlp: SAM3MLP
     let windowSize: Int   // 0 = global
 
     init(hiddenSize: Int, numHeads: Int, intermediateSize: Int, windowSize: Int) {
-        layerNorm1    = LayerNorm(dimensions: hiddenSize)
-        layerNorm2    = LayerNorm(dimensions: hiddenSize)
-        attention     = SAM3Attention(hiddenSize: hiddenSize, numHeads: numHeads)
-        mlp           = SAM3MLP(hiddenSize: hiddenSize, intermediateSize: intermediateSize)
+        _layerNorm1.wrappedValue = LayerNorm(dimensions: hiddenSize)
+        _layerNorm2.wrappedValue = LayerNorm(dimensions: hiddenSize)
+        _attention.wrappedValue  = SAM3Attention(hiddenSize: hiddenSize, numHeads: numHeads)
+        _mlp.wrappedValue        = SAM3MLP(hiddenSize: hiddenSize, intermediateSize: intermediateSize)
         self.windowSize = windowSize
         super.init()
     }
@@ -180,10 +180,10 @@ nonisolated final class SAM3ViTLayer: Module {
 /// (falling back to global when the grid is not evenly divisible by windowSize).
 /// Final 1×1 neck conv: hiddenSize → neckChannels (256).
 nonisolated final class SAM3ViTBackbone: Module {
-    let embeddings: SAM3Embeddings
-    let layers: [SAM3ViTLayer]
-    let layerNorm: LayerNorm
-    let neckConv: Conv2d
+    @ModuleInfo var embeddings: SAM3Embeddings
+    @ModuleInfo var layers: [SAM3ViTLayer]
+    @ModuleInfo var layerNorm: LayerNorm
+    @ModuleInfo var neckConv: Conv2d
     let gridH: Int
     let gridW: Int
 
@@ -198,16 +198,16 @@ nonisolated final class SAM3ViTBackbone: Module {
          neckChannels: Int = 256) {
         gridH = imageSize / patchSize
         gridW = imageSize / patchSize
-        embeddings = SAM3Embeddings(hiddenSize: hiddenSize, patchSize: patchSize,
-                                    gridH: gridH, gridW: gridW)
-        layers = (0 ..< numLayers).map { i in
+        _embeddings.wrappedValue = SAM3Embeddings(hiddenSize: hiddenSize, patchSize: patchSize,
+                                                   gridH: gridH, gridW: gridW)
+        _layers.wrappedValue = (0 ..< numLayers).map { i in
             SAM3ViTLayer(hiddenSize: hiddenSize, numHeads: numHeads,
                          intermediateSize: intermediateSize,
                          windowSize: globalAttnLayers.contains(i) ? 0 : windowSize)
         }
-        layerNorm = LayerNorm(dimensions: hiddenSize)
-        neckConv  = Conv2d(inputChannels: hiddenSize, outputChannels: neckChannels,
-                           kernelSize: .init(1), bias: false)
+        _layerNorm.wrappedValue = LayerNorm(dimensions: hiddenSize)
+        _neckConv.wrappedValue  = Conv2d(inputChannels: hiddenSize, outputChannels: neckChannels,
+                                          kernelSize: .init(1), bias: false)
         super.init()
     }
 

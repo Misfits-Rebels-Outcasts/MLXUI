@@ -25,16 +25,16 @@ enum SegmentAnythingError: Error, LocalizedError {
 ///   `detector_model.mask_decoder.*`            → maskDecoder / iouPredictor
 ///   `tracker_model.prompt_encoder.*`           → promptEncoder
 nonisolated final class SAM3ModelContainer: Module {
-    let backbone: SAM3ViTBackbone
-    let maskDecoder: SAM3PixelDecoder
-    let iouPredictor: SAM3IoUPredictor
-    let promptEncoder: SAM3PromptEncoder
+    @ModuleInfo var backbone: SAM3ViTBackbone
+    @ModuleInfo var maskDecoder: SAM3PixelDecoder
+    @ModuleInfo var iouPredictor: SAM3IoUPredictor
+    @ModuleInfo var promptEncoder: SAM3PromptEncoder
 
     override init() {
-        backbone      = SAM3ViTBackbone()
-        maskDecoder   = SAM3PixelDecoder()
-        iouPredictor  = SAM3IoUPredictor()
-        promptEncoder = SAM3PromptEncoder()
+        _backbone.wrappedValue      = SAM3ViTBackbone()
+        _maskDecoder.wrappedValue   = SAM3PixelDecoder()
+        _iouPredictor.wrappedValue  = SAM3IoUPredictor()
+        _promptEncoder.wrappedValue = SAM3PromptEncoder()
         super.init()
     }
 }

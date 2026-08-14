@@ -7,14 +7,14 @@ import MLXNN
 /// Encodes point prompts into token embeddings.
 /// Weight keys: `tracker_model.prompt_encoder.point_embed.*`, `no_mask_embed.*`
 nonisolated final class SAM3PromptEncoder: Module {
-    let pointEmbed: Embedding     // [2, promptDim]
-    let noMaskEmbed: Embedding    // [1, promptDim]
+    @ModuleInfo var pointEmbed: Embedding     // [2, promptDim]
+    @ModuleInfo var noMaskEmbed: Embedding    // [1, promptDim]
     let promptDim: Int
 
     init(promptDim: Int = 256) {
         self.promptDim = promptDim
-        pointEmbed  = Embedding(embeddingCount: 2, dimensions: promptDim)
-        noMaskEmbed = Embedding(embeddingCount: 1, dimensions: promptDim)
+        _pointEmbed.wrappedValue  = Embedding(embeddingCount: 2, dimensions: promptDim)
+        _noMaskEmbed.wrappedValue = Embedding(embeddingCount: 1, dimensions: promptDim)
         super.init()
     }
 
@@ -42,9 +42,9 @@ nonisolated final class SAM3PromptEncoder: Module {
 /// Weight keys: `detector_model.mask_decoder.pixel_decoder.conv_layers.N.*`,
 ///              `mask_embedder.*`, `instance_projection.*`
 nonisolated final class SAM3PixelDecoder: Module {
-    let convLayers: [Conv2d]
-    let maskEmbedder: Linear
-    let instanceProjection: Linear
+    @ModuleInfo var convLayers: [Conv2d]
+    @ModuleInfo var maskEmbedder: Linear
+    @ModuleInfo var instanceProjection: Linear
     let numMasks: Int
 
     init(inChannels: Int = 256, numMasks: Int = 3) {
@@ -57,9 +57,9 @@ nonisolated final class SAM3PixelDecoder: Module {
                              kernelSize: .init(3), padding: .init(1)))
             c = out
         }
-        convLayers         = cs
-        maskEmbedder       = Linear(c, numMasks)
-        instanceProjection = Linear(inChannels, inChannels)
+        _convLayers.wrappedValue         = cs
+        _maskEmbedder.wrappedValue       = Linear(c, numMasks)
+        _instanceProjection.wrappedValue = Linear(inChannels, inChannels)
         super.init()
     }
 
@@ -87,10 +87,10 @@ nonisolated final class SAM3PixelDecoder: Module {
 
 /// Weight keys: `detector_model.mask_decoder.iou_predictor.layers.N.*`
 nonisolated final class SAM3IoUPredictor: Module {
-    let layers: [Linear]
+    @ModuleInfo var layers: [Linear]
 
     init(inChannels: Int = 256, numMasks: Int = 3) {
-        layers = [Linear(inChannels, inChannels), Linear(inChannels, numMasks)]
+        _layers.wrappedValue = [Linear(inChannels, inChannels), Linear(inChannels, numMasks)]
         super.init()
     }
 
