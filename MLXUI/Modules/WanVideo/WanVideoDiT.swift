@@ -312,8 +312,8 @@ nonisolated final class WanDiTSelfAttn: Module {
 
     init(config: WanDiTConfig) {
         nH = config.heads; hD = config.dim / config.heads; D = config.dim
-        self._normQ.wrappedValue = RMSNorm(dimensions: hD)
-        self._normK.wrappedValue = RMSNorm(dimensions: hD)
+        self._normQ.wrappedValue = RMSNorm(dimensions: D)   // checkpoint norm_q: [1536]
+        self._normK.wrappedValue = RMSNorm(dimensions: D)
         self._toQ.wrappedValue   = Linear(D, D)
         self._toK.wrappedValue   = Linear(D, D)
         self._toV.wrappedValue   = Linear(D, D)
@@ -333,13 +333,12 @@ nonisolated final class WanDiTSelfAttn: Module {
         freqsT: MLXArray, freqsH: MLXArray, freqsW: MLXArray,
         tPos:   MLXArray, hPos:   MLXArray, wPos:   MLXArray
     ) -> MLXArray {
-        var q = splitH(toQ(x))   // [B, S, H, hD]
-        var k = splitH(toK(x))
+        // QK-norm on full [B,S,D] before head split (checkpoint norm weight = [D=1536])
+        var q = splitH(normQ(toQ(x)))   // [B, S, H, hD]
+        var k = splitH(normK(toK(x)))
         let v = splitH(toV(x))
 
-        // QK-norm then RoPE
-        q = normQ(q)
-        k = normK(k)
+        // RoPE
         q = wanApplyRoPE3D(q, freqsT: freqsT, freqsH: freqsH, freqsW: freqsW, tPos: tPos, hPos: hPos, wPos: wPos)
         k = wanApplyRoPE3D(k, freqsT: freqsT, freqsH: freqsH, freqsW: freqsW, tPos: tPos, hPos: hPos, wPos: wPos)
 
@@ -364,8 +363,8 @@ nonisolated final class WanDiTCrossAttn: Module {
 
     init(config: WanDiTConfig) {
         nH = config.heads; hD = config.dim / config.heads; D = config.dim
-        self._normQ.wrappedValue = RMSNorm(dimensions: hD)
-        self._normK.wrappedValue = RMSNorm(dimensions: hD)
+        self._normQ.wrappedValue = RMSNorm(dimensions: D)   // checkpoint norm_q: [1536]
+        self._normK.wrappedValue = RMSNorm(dimensions: D)
         self._toQ.wrappedValue   = Linear(D, D)
         self._toK.wrappedValue   = Linear(D, D)
         self._toV.wrappedValue   = Linear(D, D)
@@ -375,8 +374,9 @@ nonisolated final class WanDiTCrossAttn: Module {
 
     func callAsFunction(_ x: MLXArray, cross: MLXArray) -> MLXArray {
         let B = x.dim(0)
-        let q = normQ(toQ(x).reshaped([B, -1, nH, hD])).transposed(0, 2, 1, 3)
-        let k = normK(toK(cross).reshaped([B, -1, nH, hD])).transposed(0, 2, 1, 3)
+        // QK-norm on full [B,S,D] before head split (checkpoint norm weight = [D=1536])
+        let q = normQ(toQ(x)).reshaped([B, -1, nH, hD]).transposed(0, 2, 1, 3)
+        let k = normK(toK(cross)).reshaped([B, -1, nH, hD]).transposed(0, 2, 1, 3)
         let v = toV(cross).reshaped([B, -1, nH, hD]).transposed(0, 2, 1, 3)
         let scale = Float(1.0 / sqrt(Double(hD)))
         let w = softmax((matmul(q, k.transposed(0, 1, 3, 2)) * scale).asType(.float32), axis: -1).asType(x.dtype)
