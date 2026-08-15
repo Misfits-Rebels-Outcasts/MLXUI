@@ -64,8 +64,8 @@ nonisolated final class WanDiT: Module {
             return ("patchEmbed.weight", val.transposed(0, 2, 3, 4, 1))
         case "patch_embedding.bias":
             return ("patchEmbed.bias", val)
-        case "norm_out.linear.weight":
-            return ("outShiftTable", val.reshaped([2, val.dim(0) / 2]))
+        case "scale_shift_table":
+            return ("outShiftTable", val)
         case "proj_out.weight":
             return ("projOut.weight", val)
         case "proj_out.bias":
@@ -93,8 +93,8 @@ nonisolated final class WanDiT: Module {
         default: break
         }
         // Per-block keys: "transformer_blocks.{i}.*"
-        guard key.hasPrefix("transformer_blocks.") else { return nil }
-        let after = String(key.dropFirst("transformer_blocks.".count))
+        guard key.hasPrefix("blocks.") else { return nil }
+        let after = String(key.dropFirst("blocks.".count))
         guard let dot = after.firstIndex(of: ".") else { return nil }
         let i    = String(after[after.startIndex ..< dot])
         let rest = String(after[after.index(after: dot)...])
@@ -129,10 +129,10 @@ nonisolated final class WanDiT: Module {
         case "attn2.to_out.0.weight": return ("\(pfx).crossAttn.toOut.weight", val)
         case "attn2.to_out.0.bias":   return ("\(pfx).crossAttn.toOut.bias", val)
         // FFN — diffusers uses net.0.proj (gated proj) and net.2 (output)
-        case "ff.net.0.proj.weight": return ("\(pfx).ffn.fc1.weight", val)
-        case "ff.net.0.proj.bias":   return ("\(pfx).ffn.fc1.bias", val)
-        case "ff.net.2.weight":      return ("\(pfx).ffn.fc2.weight", val)
-        case "ff.net.2.bias":        return ("\(pfx).ffn.fc2.bias", val)
+        case "ffn.net.0.proj.weight": return ("\(pfx).ffn.fc1.weight", val)
+        case "ffn.net.0.proj.bias":   return ("\(pfx).ffn.fc1.bias", val)
+        case "ffn.net.2.weight":      return ("\(pfx).ffn.fc2.weight", val)
+        case "ffn.net.2.bias":        return ("\(pfx).ffn.fc2.bias", val)
         default:                     return nil
         }
     }
@@ -157,9 +157,9 @@ nonisolated final class WanDiT: Module {
         // 1. Patch embed: [B, nT, nH, nW, dim]
         var h = patchEmbed(x).reshaped([B, nT * nH * nW, c.dim])
 
-        // 2. Time conditioning [B, 6*dim]; cross-attn uses raw T5 [B, Seq, textDim=4096]
+        // 2. Time conditioning [B, 6*dim]; text projected to [B, Seq, dim] for cross-attn
         let temb = timeEmbed(timestep)         // [B, 6*dim]
-        let cross = textCond                   // [B, Seq, textDim] — toK/toV project textDim→D
+        let cross = textEmbed(textCond)        // [B, Seq, dim] — cross-attn toK/toV are Linear(D,D)
 
         // 3. Build 3-D RoPE
         let headDim = c.dim / c.heads
@@ -177,9 +177,10 @@ nonisolated final class WanDiT: Module {
                       tPos: tPos, hPos: hPos, wPos: wPos)
         }
 
-        // 5. Final norm + output projection
-        let shift = outShiftTable[0]
-        let scale = outShiftTable[1]
+        // 5. Final norm + output projection — outShiftTable: [1, 2, dim] from checkpoint
+        let st    = outShiftTable.reshaped([2, c.dim])
+        let shift = st[0]
+        let scale = st[1]
         h = outNorm(h) * (1 + scale) + shift
         h = projOut(h)   // [B, S, pT*pH*pW*outDim]
 
@@ -210,22 +211,22 @@ nonisolated final class WanPatchEmbed: Module {
 }
 
 nonisolated final class WanTimeEmbed: Module {
-    @ModuleInfo(key: "proj") var proj: Linear   // freq_dim → freq_dim
-    @ModuleInfo(key: "fc1")  var fc1:  Linear   // freq_dim → dim
-    @ModuleInfo(key: "fc2")  var fc2:  Linear   // dim → 6*dim
+    @ModuleInfo(key: "fc1")  var fc1:  Linear   // freqDim → dim      (time_embedder.linear_1)
+    @ModuleInfo(key: "fc2")  var fc2:  Linear   // dim → dim          (time_embedder.linear_2)
+    @ModuleInfo(key: "proj") var proj: Linear   // dim → 6*dim        (time_proj — final expansion)
     let freqDim: Int
 
     init(config: WanDiTConfig) {
         freqDim = config.freqDim
-        self._proj.wrappedValue = Linear(config.freqDim, config.freqDim)
         self._fc1.wrappedValue  = Linear(config.freqDim, config.dim)
-        self._fc2.wrappedValue  = Linear(config.dim, 6 * config.dim)
+        self._fc2.wrappedValue  = Linear(config.dim, config.dim)
+        self._proj.wrappedValue = Linear(config.dim, 6 * config.dim)
         super.init()
     }
 
     func callAsFunction(_ t: MLXArray) -> MLXArray {
         let sinEmb = sinusoidalEmbed(t, dim: freqDim)
-        return fc2(silu(fc1(silu(proj(sinEmb)))))
+        return proj(silu(fc2(silu(fc1(sinEmb)))))
     }
 
     private func sinusoidalEmbed(_ t: MLXArray, dim: Int) -> MLXArray {
@@ -273,7 +274,7 @@ nonisolated final class WanDiTBlock: Module {
         tPos:    MLXArray, hPos:   MLXArray, wPos:   MLXArray
     ) -> MLXArray {
         let B   = x.dim(0)
-        let mod = (shiftTable.expandedDimensions(axis: 0) + temb.reshaped([B, 6, -1]))
+        let mod = shiftTable + temb.reshaped([B, 6, -1])   // shiftTable: [1,6,dim] broadcasts
         // mod: [B, 6, dim] — split into 6 vectors each [B, 1, dim]
         let shiftMSA = mod[0..., 0, 0...]
         let scaleMSA = mod[0..., 1, 0...]
@@ -366,8 +367,8 @@ nonisolated final class WanDiTCrossAttn: Module {
         self._normQ.wrappedValue = RMSNorm(dimensions: hD)
         self._normK.wrappedValue = RMSNorm(dimensions: hD)
         self._toQ.wrappedValue   = Linear(D, D)
-        self._toK.wrappedValue   = Linear(config.textDim, D)
-        self._toV.wrappedValue   = Linear(config.textDim, D)
+        self._toK.wrappedValue   = Linear(D, D)
+        self._toV.wrappedValue   = Linear(D, D)
         self._toOut.wrappedValue = Linear(D, D)
         super.init()
     }
@@ -384,18 +385,14 @@ nonisolated final class WanDiTCrossAttn: Module {
 }
 
 nonisolated final class WanDiTFFN: Module {
-    @ModuleInfo(key: "fc1") var fc1: Linear   // dim → 2*ffnDim (GEGLU)
+    @ModuleInfo(key: "fc1") var fc1: Linear   // dim → ffnDim
     @ModuleInfo(key: "fc2") var fc2: Linear   // ffnDim → dim
     init(config: WanDiTConfig) {
-        self._fc1.wrappedValue = Linear(config.dim, 2 * config.ffnDim)
+        self._fc1.wrappedValue = Linear(config.dim, config.ffnDim)
         self._fc2.wrappedValue = Linear(config.ffnDim, config.dim)
         super.init()
     }
     func callAsFunction(_ x: MLXArray) -> MLXArray {
-        let g     = fc1(x)
-        let half  = g.dim(-1) / 2
-        let gate  = g[.ellipsis, 0 ..< half]
-        let value = g[.ellipsis, half ..< g.dim(-1)]
-        return fc2(gelu(gate) * value)
+        return fc2(gelu(fc1(x)))
     }
 }
