@@ -2113,7 +2113,7 @@
       "children": null,
       "models": [
         {
-          "id": "Wan-AI--Wan2.1-T2V-1.3B",
+          "id": "Wan-AI--Wan2.1-T2V-1.3B-Diffusers",
           "family": "Wan2.1",
           "displayName": "Wan2.1-T2V-1.3B",
           "paramSize": "1.3B",
@@ -2126,12 +2126,12 @@
           ],
           "minMacOSVersion": "13.0",
           "hfRepo": "Wan-AI",
-          "hfModelId": "Wan-AI/Wan2.1-T2V-1.3B",
+          "hfModelId": "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
           "ramGB": 10.0,
           "downloadSizeGB": 11.0,
           "contextWindow": null,
           "license": "apache-2.0",
-          "licenseUrl": "https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B/blob/main/LICENSE.txt",
+          "licenseUrl": "https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B-Diffusers/blob/main/LICENSE.txt",
           "description": "# Wan2.1-T2V-1.3B\n\nWan2.1 is Alibaba's open-source video generation model. Given a text prompt, it generates a short video clip using a bidirectional Diffusion Transformer (DiT) with 3D causal VAE decoding.\n\nThis is the 1.3B-parameter text-to-video variant, the only size that fits on a 16–18 GB Mac. The UMT5-XXL text encoder (~9 GB) is loaded, used to encode the prompt, then unloaded before denoising starts, so peak RAM is ~10 GB during encoding and ~3 GB during the denoising loop.\n\n**License:** Apache 2.0.",
           "architecture": "WanDiT",
           "languages": [
@@ -2156,11 +2156,11 @@
               "ramGB": 10.0,
               "downloadSizeGB": 11.0,
               "qualityPercent": 100,
-              "hfModelId": "Wan-AI/Wan2.1-T2V-1.3B",
+              "hfModelId": "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
               "recommended": true
             }
           ],
-          "descriptionSource": "Wan-AI/Wan2.1-T2V-1.3B",
+          "descriptionSource": "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
           "summary": "Alibaba's open-source text-to-video model (1.3B DiT) — enter a prompt and generate a short video clip on Apple Silicon. Peak RAM ~10 GB during text encoding, ~3 GB during denoising (Apache 2.0)."
         }
       ]

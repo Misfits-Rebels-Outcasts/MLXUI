@@ -16,7 +16,7 @@ import Foundation
 ///
 /// Coverage (browser.json): chat (LLM) · ASR (Whisper, Voxtral) · TTS (Kokoro + generic) ·
 /// Vision (VLM) · OCR (MLXVLM + PaddleOCR-VL + dots.ocr + DeepSeek-OCR) · Embeddings ·
-/// Image generation (FLUX.1) · Image segmentation (SAM3).
+/// Image generation (FLUX.1) · Image segmentation (SAM3) · Video generation (WAN 2.1).
 @MainActor
 let installedModules: [ModelModule.Type] = [
     MLXWhisperModule.self,
@@ -34,4 +34,5 @@ let installedModules: [ModelModule.Type] = [
     SDXLTurboModule.self,
     FluxModule.self,
     SegmentAnythingModule.self,
+    WanVideoModule.self,
 ]
