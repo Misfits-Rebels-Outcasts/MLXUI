@@ -184,8 +184,12 @@ nonisolated final class WanDiT: Module {
         h = outNorm(h) * (1 + scale) + shift
         h = projOut(h)   // [B, S, pT*pH*pW*outDim]
 
-        // 6. Reshape back to [B, nT, nH*pH, nW*pW, outDim]
-        return h.reshaped([B, nT, nH, nW, c.outDim])
+        // 6. Unpatch pixel-shuffle: [B, S, pT·pH·pW·outDim] → [B, nT·pT, nH·pH, nW·pW, outDim]
+        //    Reshape splits last dim into (pT,pH,pW,outDim), then interleave with spatial grid.
+        let pT = c.patchT, pH = c.patchH, pW = c.patchW
+        h = h.reshaped([B, nT, nH, nW, pT, pH, pW, c.outDim])
+        h = h.transposed(0, 1, 4, 2, 5, 3, 6, 7)  // [B, nT, pT, nH, pH, nW, pW, outDim]
+        return h.reshaped([B, nT * pT, nH * pH, nW * pW, c.outDim])
     }
 }
 
