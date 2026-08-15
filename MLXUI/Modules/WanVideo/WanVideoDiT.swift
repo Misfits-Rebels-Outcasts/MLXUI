@@ -157,9 +157,9 @@ nonisolated final class WanDiT: Module {
         // 1. Patch embed: [B, nT, nH, nW, dim]
         var h = patchEmbed(x).reshaped([B, nT * nH * nW, c.dim])
 
-        // 2. Time conditioning [B, 6*dim] and text cross-attention cond [B, Seq, dim]
+        // 2. Time conditioning [B, 6*dim]; cross-attn uses raw T5 [B, Seq, textDim=4096]
         let temb = timeEmbed(timestep)         // [B, 6*dim]
-        let cross = textEmbed(textCond)        // [B, Seq, dim]
+        let cross = textCond                   // [B, Seq, textDim] — toK/toV project textDim→D
 
         // 3. Build 3-D RoPE
         let headDim = c.dim / c.heads
@@ -267,7 +267,7 @@ nonisolated final class WanDiTBlock: Module {
 
     func callAsFunction(
         _ x:     MLXArray,    // [B, S, dim]
-        cross:   MLXArray,    // [B, Seq, dim]
+        cross:   MLXArray,    // [B, Seq, textDim=4096]
         temb:    MLXArray,    // [B, 6*dim]
         freqsT:  MLXArray, freqsH: MLXArray, freqsW: MLXArray,
         tPos:    MLXArray, hPos:   MLXArray, wPos:   MLXArray
@@ -395,7 +395,7 @@ nonisolated final class WanDiTFFN: Module {
         let g     = fc1(x)
         let half  = g.dim(-1) / 2
         let gate  = g[.ellipsis, 0 ..< half]
-        let value = g[.ellipsis, half...]
+        let value = g[.ellipsis, half ..< g.dim(-1)]
         return fc2(gelu(gate) * value)
     }
 }
