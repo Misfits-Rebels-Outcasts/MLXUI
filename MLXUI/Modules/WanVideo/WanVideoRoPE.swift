@@ -13,13 +13,24 @@ nonisolated func wanBuildFreqs(seqLen: Int, dim: Int, base: Float = 10000.0) -> 
 }
 
 /// Apply 1-D RoPE to x [..., D]. freqs [..., D/2] must be broadcastable to x.
+/// Uses the interleaved (view-as-complex) convention: pair k = (x[2k], x[2k+1]).
+/// This matches WAN 2.1's reference apply_rotary_emb which calls view_as_complex
+/// on consecutive element pairs — NOT the split (first-half / second-half) variant.
 nonisolated func wanApplyRoPE1D(_ x: MLXArray, freqs: MLXArray) -> MLXArray {
-    let d  = x.dim(-1)
-    let x1 = x[.ellipsis, 0 ..< d / 2]
-    let x2 = x[.ellipsis, d / 2 ..< d]    // explicit upper bound — PartialRangeFrom not supported
-    let c  = cos(freqs).asType(x.dtype)
-    let s  = sin(freqs).asType(x.dtype)
-    return MLX.concatenated([x1 * c - x2 * s, x2 * c + x1 * s], axis: -1)
+    let d = x.dim(-1)
+    // Reshape so consecutive pairs become (real, imaginary): [..., D] → [..., D/2, 2]
+    var pairShape = x.shape; pairShape[pairShape.count - 1] = d / 2; pairShape.append(2)
+    let xp  = x.reshaped(pairShape)
+    let xRe = xp[.ellipsis, 0]                 // [..., D/2] — even indices
+    let xIm = xp[.ellipsis, 1]                 // [..., D/2] — odd indices
+    let c   = cos(freqs).asType(x.dtype)
+    let s   = sin(freqs).asType(x.dtype)
+    let rRe = xRe * c - xIm * s
+    let rIm = xRe * s + xIm * c
+    // Interleave back: stack along a new last axis → [..., D/2, 2] → [..., D]
+    let out = MLX.concatenated([rRe.expandedDimensions(axis: -1),
+                                rIm.expandedDimensions(axis: -1)], axis: -1)
+    return out.reshaped(x.shape)
 }
 
 /// Build the (t, h, w) position index arrays for a flattened sequence of nT×nH×nW tokens.

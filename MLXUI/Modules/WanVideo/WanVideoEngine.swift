@@ -22,8 +22,12 @@ enum WanVideoEngineError: Error, LocalizedError {
 
 // MARK: - WanVideoEngine
 
-/// Orchestrates WAN 2.1 T2V-1.3B inference. Sequential load strategy:
-///   T5 (text_encoder/) → encode → release → DiT (transformer/) → denoise → VAE (vae/) → decode.
+/// Orchestrates WAN 2.1 T2V-1.3B inference.
+///
+/// Each stage (T5, DiT, VAE) runs inside its own private helper function so that
+/// the stage model + raw weight dictionaries go out of scope — and ARC frees them —
+/// before the next stage loads. `Memory.clearCache()` between stages then actually
+/// reclaims GPU memory rather than being a no-op while the previous model is alive.
 nonisolated enum WanVideoEngine {
 
     // MARK: Settings
@@ -35,86 +39,49 @@ nonisolated enum WanVideoEngine {
     static let latentT    = 21     // legacy constant used by WanVideoStage
     static let maxTextLen = 512
 
+    // VAE latent normalisation constants (from vae/config.json latents_mean / latents_std)
+    private static let vatMeanF: [Float] = [-0.7571, -0.7089, -0.9113,  0.1075, -0.1745,  0.9653,
+                                            -0.1517,  1.5508,  0.4134, -0.0715,  0.5517, -0.3632,
+                                            -0.1922, -0.9497,  0.2503, -0.2921]
+    private static let vatStdF:  [Float] = [ 2.8184,  1.4541,  2.3275,  2.6558,  1.2196,  1.7708,
+                                              2.6052,  2.0743,  3.2687,  2.1526,  2.8652,  1.5579,
+                                              1.6382,  1.1253,  2.8251,  1.9160]
+
     // MARK: Single-frame entry point (used by WanVideoStage)
 
     nonisolated static func generate(
-        prompt:  String,
-        modelID: String,
-        seed:    UInt64? = nil,
+        prompt:   String,
+        modelID:  String,
+        seed:     UInt64? = nil,
         progress: @Sendable (Double) -> Void
     ) async throws -> CGImage {
         let dir = ModelStore.shared.directory(forModelID: modelID)
         guard FileManager.default.fileExists(atPath: dir.path) else {
             throw StageError.modelNotInstalled(id: modelID)
         }
-
-        // ── 1. Tokenize ──────────────────────────────────────────────────────────
         progress(0.02)
         let spModel = try loadSentencePiece(dir: dir)
-        let tokenIDs = tokenize(prompt, model: spModel, maxLen: maxTextLen)
-        let tokenTensor = MLXArray(tokenIDs).reshaped([1, tokenIDs.count])
 
-        // ── 2. Load T5 + encode + release ────────────────────────────────────────
+        // ── T5: encode, release ──────────────────────────────────────────────────
         progress(0.04)
-        let t5Raw    = try await loadShards(dir: dir, subdir: "text_encoder")
-        let t5Params = WanT5Encoder.sanitize(t5Raw)
-        let t5       = WanT5Encoder()
-        try t5.update(parameters: ModuleParameters.unflattened(t5Params), verify: .none)
-        eval(t5)
-        progress(0.15)
-
-        let textCond = t5(tokenTensor)
-        eval(textCond)
-        Memory.clearCache()
-        await Task.yield()
+        let (textCond, negCond) = try await loadAndEncodeText(
+            dir: dir, spModel: spModel, prompt: prompt, negPrompt: "",
+            progress: { _, _ in }
+        )
+        Memory.clearCache(); await Task.yield()
         progress(0.20)
 
-        // ── 3. Load DiT + denoise loop ───────────────────────────────────────────
-        let ditRaw    = try await loadShards(dir: dir, subdir: "transformer")
-        let ditParams = WanDiT.sanitize(ditRaw)
-        let dit       = WanDiT()
-        try dit.update(parameters: ModuleParameters.unflattened(ditParams), verify: .none)
-        eval(dit)
-        progress(0.40)
-
-        let rng    = seed.map { MLXRandom.key($0) } ?? MLXRandom.key(UInt64(Date().timeIntervalSince1970 * 1000))
-        var latent = MLXRandom.normal([1, latentT, latentH, latentW, 16], key: rng).asType(.bfloat16)
-        eval(latent)
-
-        let numSteps  = 30
-        let sigmas    = WanSampler.buildSigmas(numSteps: numSteps)
-        let loopStart = 0.40, loopEnd = 0.82
-
-        for i in 0 ..< numSteps {
-            let sigmaFrom = sigmas[i]
-            let sigmaTo   = sigmas[i + 1]
-            let t = WanSampler.sigmaToTimestep(sigmaFrom)
-            let tBatch = MLXArray([t, t]).asType(.bfloat16)
-
-            let empty    = MLXArray.zeros(like: textCond)
-            let combined = MLX.concatenated([empty, textCond], axis: 0)
-            let xIn      = MLX.concatenated([latent, latent], axis: 0)
-
-            let pred = dit(xIn, timestep: tBatch, textCond: combined)
-            eval(pred)
-
-            let uncond = pred[0, 0..., 0..., 0..., 0...]
-            let cond   = pred[1, 0..., 0..., 0..., 0...]
-            let noisePred = (uncond + (cond - uncond) * cfgScale).expandedDimensions(axis: 0)
-
-            latent = WanSampler.eulerStep(x: latent, noisePred: noisePred, sigmaFrom: sigmaFrom, sigmaTo: sigmaTo)
-            eval(latent)
-
-            let p = loopStart + (loopEnd - loopStart) * Double(i + 1) / Double(numSteps)
-            progress(p)
-            await Task.yield()
-        }
-
-        Memory.clearCache()
-        await Task.yield()
-
-        // ── 4. Load VAE + decode ─────────────────────────────────────────────────
+        // ── DiT: denoise, release ────────────────────────────────────────────────
+        let latent = try await loadAndDenoise(
+            dir: dir, textCond: textCond, negCond: negCond,
+            latT: latentT, latH: latentH, latW: latentW,
+            numSteps: 20, seed: seed,
+            progress: { p, _ in progress(0.20 + p * 0.62) }
+        )
+        Memory.clearCache(); await Task.yield()
         progress(0.85)
+
+        // ── VAE: decode ──────────────────────────────────────────────────────────
         let vaeRaw    = try await loadShards(dir: dir, subdir: "vae")
         let vaeParams = WanVAEDecoder.sanitize(vaeRaw)
         let vae       = WanVAEDecoder()
@@ -122,7 +89,8 @@ nonisolated enum WanVideoEngine {
         eval(vae)
         progress(0.90)
 
-        let decoded = vae(latent.asType(.float32))
+        let latentVAE = latent.asType(.float32) * MLXArray(vatStdF) + MLXArray(vatMeanF)
+        let decoded   = vae(latentVAE)
         eval(decoded)
         progress(0.98)
 
@@ -133,16 +101,16 @@ nonisolated enum WanVideoEngine {
         return image
     }
 
-    // MARK: - Full video generation (AM5)
+    // MARK: - Full video generation
 
-    /// Generates all frames for a full video. latentT is derived from numFrames.
-    /// Progress callback receives (fraction 0-1, phase label).
     nonisolated static func generateAll(
         prompt:          String,
         negativePrompt:  String = "",
         modelID:         String,
         numSteps:        Int    = 20,
         numFrames:       Int    = 17,
+        latH:            Int    = latentH,
+        latW:            Int    = latentW,
         seed:            UInt64? = nil,
         progress:        @Sendable (Double, String) -> Void
     ) async throws -> [CGImage] {
@@ -150,87 +118,36 @@ nonisolated enum WanVideoEngine {
         guard FileManager.default.fileExists(atPath: dir.path) else {
             throw StageError.modelNotInstalled(id: modelID)
         }
-        // latentT × 4 ≈ numFrames (4× temporal upsampling in the VAE)
         let latT = max(1, (numFrames + 3) / 4)
 
         // ── 1. Tokenize ──────────────────────────────────────────────────────────
         progress(0.02, "Tokenizing prompt…")
-        let spModel     = try loadSentencePiece(dir: dir)
-        let tokenIDs    = tokenize(prompt, model: spModel, maxLen: maxTextLen)
-        let tokenTensor = MLXArray(tokenIDs).reshaped([1, tokenIDs.count])
+        let spModel = try loadSentencePiece(dir: dir)
 
-        // ── 2. Load T5 + encode pos + neg + release ───────────────────────────────
+        // ── 2. T5: encode, release before DiT loads ──────────────────────────────
+        // T5-XXL is ~5.5 GB at 4-bit. By loading it inside loadAndEncodeText,
+        // its weight dicts go out of scope when the function returns. The subsequent
+        // Memory.clearCache() then actually frees the GPU memory.
         progress(0.04, "Loading text encoder (T5-XXL)…")
-        let t5Raw    = try await loadShards(dir: dir, subdir: "text_encoder")
-        let t5Params = WanT5Encoder.sanitize(t5Raw)
-        let t5       = WanT5Encoder()
-        try t5.update(parameters: ModuleParameters.unflattened(t5Params), verify: .none)
-        eval(t5)
-        progress(0.15, "Encoding text…")
-
-        let textCond = t5(tokenTensor)
-        eval(textCond)
-
-        // Negative prompt: encode with T5 while it is still loaded; fall back to zeros.
-        let negCond: MLXArray
-        if negativePrompt.isEmpty {
-            negCond = MLXArray.zeros(like: textCond)
-        } else {
-            let negIDs  = tokenize(negativePrompt, model: spModel, maxLen: maxTextLen)
-            let negToks = MLXArray(negIDs).reshaped([1, negIDs.count])
-            negCond = t5(negToks)
-            eval(negCond)
-        }
-
-        Memory.clearCache()
-        await Task.yield()
+        let (textCond, negCond) = try await loadAndEncodeText(
+            dir: dir, spModel: spModel,
+            prompt: prompt, negPrompt: negativePrompt,
+            progress: { _, l in progress(0.15, l) }
+        )
+        Memory.clearCache(); await Task.yield()
         progress(0.20, "Text encoded. Loading DiT…")
 
-        // ── 3. Load DiT + denoise loop ───────────────────────────────────────────
-        let ditRaw    = try await loadShards(dir: dir, subdir: "transformer")
-        let ditParams = WanDiT.sanitize(ditRaw)
-        let dit       = WanDiT()
-        try dit.update(parameters: ModuleParameters.unflattened(ditParams), verify: .none)
-        eval(dit)
-        progress(0.40, "Denoising — step 0/\(numSteps)…")
-
-        let rng    = seed.map { MLXRandom.key($0) } ?? MLXRandom.key(UInt64(Date().timeIntervalSince1970 * 1000))
-        var latent = MLXRandom.normal([1, latT, latentH, latentW, 16], key: rng).asType(.bfloat16)
-        eval(latent)
-
-        let sigmas    = WanSampler.buildSigmas(numSteps: numSteps)
-        let loopStart = 0.40, loopEnd = 0.82
-
-        for i in 0 ..< numSteps {
-            let sigmaFrom = sigmas[i]
-            let sigmaTo   = sigmas[i + 1]
-            let t         = WanSampler.sigmaToTimestep(sigmaFrom)
-            let tBatch    = MLXArray([t, t]).asType(.bfloat16)
-
-            let combined = MLX.concatenated([negCond, textCond], axis: 0)
-            let xIn      = MLX.concatenated([latent, latent], axis: 0)
-
-            let pred = dit(xIn, timestep: tBatch, textCond: combined)
-            eval(pred)
-
-            let u         = pred[0, 0..., 0..., 0..., 0...]
-            let c         = pred[1, 0..., 0..., 0..., 0...]
-            let noisePred = (u + (c - u) * cfgScale).expandedDimensions(axis: 0)
-
-            latent = WanSampler.eulerStep(x: latent, noisePred: noisePred, sigmaFrom: sigmaFrom, sigmaTo: sigmaTo)
-            eval(latent)
-
-            let step = i + 1
-            let p    = loopStart + (loopEnd - loopStart) * Double(step) / Double(numSteps)
-            progress(p, "Denoising — step \(step)/\(numSteps)…")
-            await Task.yield()
-        }
-
-        Memory.clearCache()
-        await Task.yield()
-
-        // ── 4. Load VAE + decode all frames ──────────────────────────────────────
+        // ── 3. DiT: denoise, release before VAE loads ────────────────────────────
+        let latent = try await loadAndDenoise(
+            dir: dir, textCond: textCond, negCond: negCond,
+            latT: latT, latH: latH, latW: latW,
+            numSteps: numSteps, seed: seed,
+            progress: { p, l in progress(0.20 + p * 0.65, l) }
+        )
+        Memory.clearCache(); await Task.yield()
         progress(0.85, "Loading VAE decoder…")
+
+        // ── 4. VAE: decode all frames ────────────────────────────────────────────
         let vaeRaw    = try await loadShards(dir: dir, subdir: "vae")
         let vaeParams = WanVAEDecoder.sanitize(vaeRaw)
         let vae       = WanVAEDecoder()
@@ -238,8 +155,18 @@ nonisolated enum WanVideoEngine {
         eval(vae)
         progress(0.90, "Decoding frames…")
 
-        let decoded = vae(latent.asType(.float32))   // [1, T', H', W', 3]
+        let latentVAE = latent.asType(.float32) * MLXArray(vatStdF) + MLXArray(vatMeanF)
+
+        let vInMean = latentVAE.mean().item(Float.self)
+        let vInStd  = sqrt(pow(latentVAE - latentVAE.mean(), 2).mean()).item(Float.self)
+        print("[WAN-DBG] latentVAE: mean=\(String(format:"%.3f",vInMean)) std=\(String(format:"%.3f",vInStd))")
+
+        let decoded = vae(latentVAE)
         eval(decoded)
+
+        let decMean = decoded.mean().item(Float.self)
+        let decStd  = sqrt(pow(decoded - decoded.mean(), 2).mean()).item(Float.self)
+        print("[WAN-DBG] decoded: mean=\(String(format:"%.3f",decMean)) std=\(String(format:"%.3f",decStd)) min=\(String(format:"%.3f",decoded.min().item(Float.self))) max=\(String(format:"%.3f",decoded.max().item(Float.self)))")
         progress(0.97, "Extracting images…")
 
         let nDecoded = decoded.dim(1)
@@ -252,10 +179,111 @@ nonisolated enum WanVideoEngine {
         return frames
     }
 
+    // MARK: - Stage helpers
+
+    /// Loads T5-XXL, encodes prompt + negative prompt, returns materialized text embeddings.
+    /// All T5 weight arrays (t5Raw, t5Params, t5 model) are released when this returns.
+    private static func loadAndEncodeText(
+        dir:      URL,
+        spModel:  FluxSentencePiece.Model,
+        prompt:   String,
+        negPrompt: String,
+        progress: @Sendable (Double, String) -> Void
+    ) async throws -> (textCond: MLXArray, negCond: MLXArray) {
+        let t5Raw    = try await loadShards(dir: dir, subdir: "text_encoder")
+        let t5Params = WanT5Encoder.sanitize(t5Raw)
+        let t5       = WanT5Encoder()
+        try t5.update(parameters: ModuleParameters.unflattened(t5Params), verify: .none)
+        eval(t5)
+        progress(1.0, "Encoding text…")
+
+        let tokenIDs    = tokenize(prompt, model: spModel, maxLen: maxTextLen)
+        let tokenTensor = MLXArray(tokenIDs).reshaped([1, tokenIDs.count])
+        let textCond    = t5(tokenTensor)
+        eval(textCond)
+
+        let negText = negPrompt.isEmpty ? "" : negPrompt
+        let negIDs  = tokenize(negText, model: spModel, maxLen: maxTextLen)
+        let negToks = MLXArray(negIDs).reshaped([1, negIDs.count])
+        let negCond = t5(negToks)
+        eval(negCond)
+
+        let tcF = textCond.asType(.float32); eval(tcF)
+        let ncF = negCond.asType(.float32);  eval(ncF)
+        func stdOf(_ a: MLXArray) -> Float { sqrt(pow(a - a.mean(), 2).mean()).item(Float.self) }
+        print("[WAN-DBG] textCond: mean=\(String(format:"%.3f",tcF.mean().item(Float.self))) std=\(String(format:"%.3f",stdOf(tcF))) shape=\(textCond.shape)")
+        print("[WAN-DBG] negCond:  mean=\(String(format:"%.3f",ncF.mean().item(Float.self))) std=\(String(format:"%.3f",stdOf(ncF))) shape=\(negCond.shape)")
+
+        // t5Raw, t5Params, t5 released here; textCond/negCond are materialized and safe.
+        return (textCond, negCond)
+    }
+
+    /// Loads the DiT, runs the denoising loop, returns the final latent (normalized, in DiT space).
+    /// All DiT weight arrays are released when this returns.
+    private static func loadAndDenoise(
+        dir:      URL,
+        textCond: MLXArray,
+        negCond:  MLXArray,
+        latT:     Int,
+        latH:     Int,
+        latW:     Int,
+        numSteps: Int,
+        seed:     UInt64?,
+        progress: @Sendable (Double, String) -> Void
+    ) async throws -> MLXArray {
+        let ditRaw    = try await loadShards(dir: dir, subdir: "transformer")
+        let ditParams = WanDiT.sanitize(ditRaw)
+        let dit       = WanDiT()
+        try dit.update(parameters: ModuleParameters.unflattened(ditParams), verify: .none)
+        eval(dit)
+        progress(0.0, "Denoising — step 0/\(numSteps)…")
+
+        let rng    = seed.map { MLXRandom.key($0) }
+            ?? MLXRandom.key(UInt64(Date().timeIntervalSince1970 * 1000))
+        var latent = MLXRandom.normal([1, latT, latH, latW, 16], key: rng).asType(.bfloat16)
+        eval(latent)
+
+        let sigmas = WanSampler.buildSigmas(numSteps: numSteps)
+
+        let latInit = latent.asType(.float32); eval(latInit)
+        func stdOf(_ a: MLXArray) -> Float { sqrt(pow(a - a.mean(), 2).mean()).item(Float.self) }
+        print("[WAN-DBG] init latent: mean=\(String(format:"%.3f",latInit.mean().item(Float.self))) std=\(String(format:"%.3f",stdOf(latInit)))")
+
+        for i in 0 ..< numSteps {
+            let sigmaFrom = sigmas[i]
+            let sigmaTo   = sigmas[i + 1]
+            let t       = WanSampler.sigmaToTimestep(sigmaFrom)
+            let tSingle = MLXArray([t]).asType(.bfloat16)
+
+            let u = dit(latent, timestep: tSingle, textCond: negCond)
+            let c = dit(latent, timestep: tSingle, textCond: textCond)
+            eval(u); eval(c)
+
+            let noisePred = u + (c - u) * cfgScale
+
+            if i == 0 {
+                let uF = u.asType(.float32); let cF = c.asType(.float32)
+                let gF = noisePred.asType(.float32)
+                print("[WAN-DBG] step0: σ=\(String(format:"%.4f",sigmaFrom)) u_std=\(String(format:"%.3f",stdOf(uF))) c_std=\(String(format:"%.3f",stdOf(cF))) diff_std=\(String(format:"%.3f",stdOf(cF-uF))) guided_std=\(String(format:"%.3f",stdOf(gF)))")
+            }
+
+            latent = WanSampler.eulerStep(x: latent, noisePred: noisePred, sigmaFrom: sigmaFrom, sigmaTo: sigmaTo)
+            eval(latent)
+
+            progress(Double(i + 1) / Double(numSteps), "Denoising — step \(i+1)/\(numSteps)…")
+            await Task.yield()
+        }
+
+        let latF = latent.asType(.float32); eval(latF)
+        print("[WAN-DBG] final latent: mean=\(String(format:"%.3f",latF.mean().item(Float.self))) std=\(String(format:"%.3f",stdOf(latF))) min=\(String(format:"%.3f",latF.min().item(Float.self))) max=\(String(format:"%.3f",latF.max().item(Float.self)))")
+
+        // ditRaw, ditParams, dit released here; latent is materialized and safe.
+        return latent
+    }
+
     // MARK: - MP4 assembly
 
     /// Assembles CGImage frames into an H.264 MP4 at `outputURL`.
-    /// Uses a synchronous continuation so AVAssetWriter is never captured across suspensions.
     nonisolated static func assembleMp4(
         frames:    [CGImage],
         fps:       Int = 16,
@@ -362,10 +390,11 @@ nonisolated enum WanVideoEngine {
     }
 
     private static func tokenize(_ prompt: String, model: FluxSentencePiece.Model, maxLen: Int) -> [Int32] {
-        var ids = FluxT5Tokenizer.tokenize(prompt, model: model).prefix(maxLen - 1)
-        ids.append(1)    // EOS
-        let padded = Array(ids) + Array(repeating: 0, count: max(0, maxLen - ids.count))
-        return padded.map(Int32.init)
+        // pad:false → returns actual tokens + EOS only, no zero-padding to 512.
+        // The default pad:true floods T5 with ~500 PAD representations that collapse textVec
+        // to a near-zero mean, driving DiT gate modulation completely out of distribution.
+        let ids = FluxT5Tokenizer.tokenize(prompt, model: model, pad: false)
+        return Array(ids.prefix(maxLen)).map(Int32.init)
     }
 
     private static func cgImage(from decoded: MLXArray, frameIndex: Int) -> CGImage? {

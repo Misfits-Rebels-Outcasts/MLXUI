@@ -3,6 +3,18 @@ import AVKit
 import AppKit
 import UniformTypeIdentifiers
 
+// MARK: - Resolution presets
+
+enum WanResolution: String, CaseIterable {
+    case full   = "832×480"
+    case square = "480×480"
+    case medium = "512×288"
+    case small  = "320×192"
+
+    var latH: Int { switch self { case .full: return 60; case .square: return 60; case .medium: return 36; case .small: return 24 } }
+    var latW: Int { switch self { case .full: return 104; case .square: return 60; case .medium: return 64; case .small: return 40 } }
+}
+
 // MARK: - Run view
 
 struct WanVideoRunView: View {
@@ -15,8 +27,9 @@ struct WanVideoRunView: View {
     @State private var prompt         = "A cat walks on the grass, realistic style."
     @State private var showNeg        = false
     @State private var negativePrompt = ""
-    @State private var numFrames      = 17
+    @State private var numFrames      = 3
     @State private var numSteps       = 20
+    @State private var resolution     = WanResolution.square
     @State private var player: AVPlayer?
 
     var body: some View {
@@ -55,7 +68,7 @@ struct WanVideoRunView: View {
             Image(systemName: "film.stack").foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 1) {
                 Text(modelDisplayName).font(.headline)
-                Text("Text → video · 832 × 480 · 16 fps").font(.caption).foregroundStyle(.secondary)
+                Text("Text → video · \(resolution.rawValue) · 16 fps").font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
         }
@@ -94,8 +107,10 @@ struct WanVideoRunView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Frames").font(.caption).foregroundStyle(.secondary)
                 Picker("", selection: $numFrames) {
-                    Text("17 — speed").tag(17)
-                    Text("81 — quality").tag(81)
+                    Text("3 (0.25s)").tag(3)
+                    Text("5 (0.5s)").tag(5)
+                    Text("17 (1.25s)").tag(17)
+                    Text("81 (5s)").tag(81)
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 200)
@@ -107,7 +122,17 @@ struct WanVideoRunView: View {
                                    set: { numSteps = Int($0.rounded()) }),
                     in: 10...50, step: 5
                 )
-                .frame(width: 180)
+                .frame(width: 160)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Resolution").font(.caption).foregroundStyle(.secondary)
+                Picker("", selection: $resolution) {
+                    ForEach(WanResolution.allCases, id: \.self) { r in
+                        Text(r.rawValue).tag(r)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 280)
             }
             Spacer()
         }
@@ -177,7 +202,9 @@ struct WanVideoRunView: View {
             negativePrompt: showNeg ? negativePrompt : "",
             modelID:        modelID,
             numSteps:       numSteps,
-            numFrames:      numFrames
+            numFrames:      numFrames,
+            latH:           resolution.latH,
+            latW:           resolution.latW
         )
     }
 
@@ -207,7 +234,9 @@ final class WanRunModel {
         negativePrompt: String,
         modelID:        String,
         numSteps:       Int,
-        numFrames:      Int
+        numFrames:      Int,
+        latH:           Int = WanVideoEngine.latentH,
+        latW:           Int = WanVideoEngine.latentW
     ) {
         isRunning = true; progress = 0; progressLabel = "Starting…"
         thumbnail = nil; videoURL = nil; errorText = nil
@@ -220,6 +249,8 @@ final class WanRunModel {
                     modelID:        modelID,
                     numSteps:       numSteps,
                     numFrames:      numFrames,
+                    latH:           latH,
+                    latW:           latW,
                     progress: { fraction, label in
                         Task { @MainActor in
                             self.progress = fraction
@@ -230,7 +261,10 @@ final class WanRunModel {
                 if let first = frames.first { thumbnail = first }
                 progressLabel = "Assembling MP4…"
 
-                let tmpURL = FileManager.default.temporaryDirectory
+                // Use app-container Caches dir — AVAssetWriter fails on the global temp dir in sandbox
+                let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+                    ?? FileManager.default.temporaryDirectory
+                let tmpURL = cacheDir
                     .appendingPathComponent("wan-\(UInt64(Date().timeIntervalSince1970 * 1000)).mp4")
                 try await WanVideoEngine.assembleMp4(frames: frames, fps: WanVideoEngine.targetFPS, to: tmpURL)
 

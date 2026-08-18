@@ -10,19 +10,18 @@ nonisolated enum WanSampler {
 
     // MARK: Schedule
 
-    /// Build a linearly-spaced subset of the 1000-step training schedule.
-    /// Returns sigmas in descending order (σ_max ... σ_min) plus a terminal 0.
-    static func buildSigmas(numSteps: Int) -> [Float] {
-        // WAN training schedule: σ_t = sqrt(t / (T - t)) for t in 0..T-1 (flow-matching variant)
-        // Use simplified linear-beta schedule from the reference implementation.
-        let T: Float = 1000
-        let minSigma: Float = 0.001
-        let maxSigma: Float = 1.0
-        let sigmas = (0 ..< numSteps + 1).map { i -> Float in
-            let frac = Float(numSteps - i) / Float(numSteps)
-            return minSigma + (maxSigma - minSigma) * frac
+    /// Build flow-matching sigmas matching diffusers FlowMatchEulerDiscreteScheduler.
+    /// Linspace from t=1 down to t=1/num_train_timesteps (NOT to t=0), apply the WAN 2.1
+    /// shift formula, then append σ=0.  This keeps the penultimate denoising step at
+    /// timestep≈1 rather than timestep≈136, matching the model's training distribution.
+    static func buildSigmas(numSteps: Int, flowShift: Float = 3.0, numTrainTimesteps: Int = 1000) -> [Float] {
+        let tMin = 1.0 / Float(numTrainTimesteps)
+        var sigmas = (0 ..< numSteps).map { i -> Float in
+            let t = 1.0 - Float(i) / Float(numSteps - 1) * (1.0 - tMin)
+            return flowShift * t / (1 + (flowShift - 1) * t)
         }
-        return sigmas   // [σ_max, ..., σ_min, 0]
+        sigmas.append(0.0)
+        return sigmas
     }
 
     // MARK: Euler step
@@ -40,8 +39,8 @@ nonisolated enum WanSampler {
     // MARK: Timestep schedule
 
     /// Convert sigma values to discrete timesteps in [0, 1000] for the model.
+    /// Flow-matching: timestep = sigma * num_train_timesteps (linear, no DDPM inversion).
     static func sigmaToTimestep(_ sigma: Float) -> Float {
-        // t = σ / (1 + σ) * 1000  (inverse of the WAN noise schedule)
-        (sigma / (1.0 + sigma)) * 1000.0
+        sigma * 1000.0
     }
 }

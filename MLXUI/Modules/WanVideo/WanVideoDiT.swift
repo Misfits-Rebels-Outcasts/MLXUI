@@ -24,10 +24,12 @@ struct WanDiTConfig: Sendable {
 /// `Wan-AI/Wan2.1-T2V-1.3B-Diffusers/transformer/diffusion_pytorch_model-*.safetensors`.
 nonisolated final class WanDiT: Module {
     let c: WanDiTConfig
+    static var dbgDone = false   // print internals once
 
     @ModuleInfo(key: "patchEmbed")      var patchEmbed:     WanPatchEmbed
     @ModuleInfo(key: "timeEmbed")       var timeEmbed:      WanTimeEmbed
     @ModuleInfo(key: "textEmbed")       var textEmbed:      WanTextEmbed
+    @ModuleInfo(key: "textProj")        var textProj:       Linear          // condition_embedder.text_proj — simple Linear for cross-attn
     @ModuleInfo(key: "blocks")          var blocks:         [WanDiTBlock]
     @ModuleInfo(key: "outNorm")         var outNorm:        LayerNorm
     @ModuleInfo(key: "outShiftTable")   var outShiftTable:  MLXArray   // [2, dim]
@@ -38,6 +40,7 @@ nonisolated final class WanDiT: Module {
         self._patchEmbed.wrappedValue    = WanPatchEmbed(config: config)
         self._timeEmbed.wrappedValue     = WanTimeEmbed(config: config)
         self._textEmbed.wrappedValue     = WanTextEmbed(config: config)
+        self._textProj.wrappedValue      = Linear(config.textDim, config.dim)
         self._blocks.wrappedValue        = (0 ..< config.layers).map { _ in WanDiTBlock(config: config) }
         self._outNorm.wrappedValue       = LayerNorm(dimensions: config.dim, eps: 1e-6)
         self._outShiftTable.wrappedValue = MLXArray.zeros([2, config.dim])
@@ -70,10 +73,6 @@ nonisolated final class WanDiT: Module {
             return ("projOut.weight", val)
         case "proj_out.bias":
             return ("projOut.bias", val)
-        case "condition_embedder.time_proj.weight":
-            return ("timeEmbed.proj.weight", val)
-        case "condition_embedder.time_proj.bias":
-            return ("timeEmbed.proj.bias", val)
         case "condition_embedder.time_embedder.linear_1.weight":
             return ("timeEmbed.fc1.weight", val)
         case "condition_embedder.time_embedder.linear_1.bias":
@@ -90,9 +89,13 @@ nonisolated final class WanDiT: Module {
             return ("textEmbed.fc2.weight", val)
         case "condition_embedder.text_embedder.linear_2.bias":
             return ("textEmbed.fc2.bias", val)
+        case "condition_embedder.text_proj.weight":
+            return ("textProj.weight", val)
+        case "condition_embedder.text_proj.bias":
+            return ("textProj.bias", val)
         default: break
         }
-        // Per-block keys: "transformer_blocks.{i}.*"
+        // Per-block keys: "blocks.{i}.*"
         guard key.hasPrefix("blocks.") else { return nil }
         let after = String(key.dropFirst("blocks.".count))
         guard let dot = after.firstIndex(of: ".") else { return nil }
@@ -102,6 +105,10 @@ nonisolated final class WanDiT: Module {
         switch rest {
         case "scale_shift_table":
             return ("\(pfx).shiftTable", val)
+        case "time_embedder.weight":
+            return ("\(pfx).timeEmbedder.weight", val)
+        case "time_embedder.bias":
+            return ("\(pfx).timeEmbedder.bias", val)
         case "norm2.weight":
             return ("\(pfx).norm.weight", val)
         case "norm2.bias":
@@ -157,9 +164,15 @@ nonisolated final class WanDiT: Module {
         // 1. Patch embed: [B, nT, nH, nW, dim]
         var h = patchEmbed(x).reshaped([B, nT * nH * nW, c.dim])
 
-        // 2. Time conditioning [B, 6*dim]; text projected to [B, Seq, dim] for cross-attn
-        let temb = timeEmbed(timestep)         // [B, 6*dim]
-        let cross = textEmbed(textCond)        // [B, Seq, dim] — cross-attn toK/toV are Linear(D,D)
+        // 2. Conditioning (matching diffusers WanTransformer2DModel + WanTimeTextEmbed):
+        //    - textProj  (simple Linear 4096→1536): projects full T5 sequence for cross-attn
+        //    - textEmbed (MLP 4096→1536, pool-then-project): pooled T5 for time conditioning
+        //    - timeEmbed: sinusoidal→fc1+silu+fc2 → [B, dim=1536] (no 6× here — done per-block)
+        //    - each block's timeEmbedder: Linear(dim, 6*dim) expands timeVec for adaLN modulation
+        let cross    = textProj(textCond)                     // [B, Seq, 1536] — simple Linear for cross-attn
+        let pooledT5 = textCond.mean(axis: 1)                 // [B, 4096] — pool raw T5
+        let textVec  = textEmbed(pooledT5)                    // [B, 1536] — MLP on pooled T5 for time cond
+        let timeVec  = timeEmbed(timestep, textVec: textVec)  // [B, dim=1536]
 
         // 3. Build 3-D RoPE
         let headDim = c.dim / c.heads
@@ -170,15 +183,67 @@ nonisolated final class WanDiT: Module {
         let freqsH = wanBuildFreqs(seqLen: nH,   dim: dHW)
         let freqsW = wanBuildFreqs(seqLen: nW,   dim: dHW)
 
+        // [DIT-DBG] First-call diagnostics — temb, gate, and h-before-blocks
+        let dbgThisCall = !WanDiT.dbgDone
+        if dbgThisCall {
+            WanDiT.dbgDone = true
+            func std(_ a: MLXArray) -> Float {
+                let f = a.asType(.float32); eval(f)
+                return sqrt(pow(f - f.mean(), 2).mean()).item(Float.self)
+            }
+            func mn(_ a: MLXArray) -> Float { a.asType(.float32).mean().item(Float.self) }
+
+            // block0 temb = its own timeEmbedder(timeVec)
+            let b0temb = blocks[0].timeEmbedder(timeVec).asType(.float32); eval(b0temb)
+            print("[DIT-DBG] block0 temb: mean=\(String(format:"%.4f",mn(b0temb))) std=\(String(format:"%.4f",std(b0temb))) min=\(String(format:"%.4f",b0temb.min().item(Float.self))) max=\(String(format:"%.4f",b0temb.max().item(Float.self)))")
+
+            let st0rows = blocks[0].shiftTable.asType(.float32).reshaped([-1, c.dim])  // [6, dim]
+            let gateBias = st0rows[2]
+            print("[DIT-DBG] block0 shiftTable gateBias: mean=\(String(format:"%.4f",mn(gateBias))) std=\(String(format:"%.4f",std(gateBias)))")
+
+            let tembGate = b0temb.reshaped([B, 6, c.dim])[0, 2]
+            let fullGate = (gateBias + tembGate).asType(.float32); eval(fullGate)
+            print("[DIT-DBG] block0 gateMSA (bias+temb): mean=\(String(format:"%.4f",mn(fullGate))) std=\(String(format:"%.4f",std(fullGate)))")
+
+            print("[DIT-DBG] h after patchEmbed: std=\(String(format:"%.4f",std(h)))")
+        }
+
         // 4. Transformer blocks
         for block in blocks {
-            h = block(h, cross: cross, temb: temb,
+            h = block(h, cross: cross, timeVec: timeVec,
                       freqsT: freqsT, freqsH: freqsH, freqsW: freqsW,
                       tPos: tPos, hPos: hPos, wPos: wPos)
         }
 
-        // 5. Final norm + output projection — outShiftTable: [1, 2, dim] from checkpoint
-        let st    = outShiftTable.reshaped([2, c.dim])
+        // [DIT-DBG] Post-blocks diagnostics
+        if dbgThisCall {
+            func fmtStd(_ a: MLXArray) -> String {
+                let f = a.asType(.float32); eval(f)
+                let s = sqrt(pow(f - f.mean(), 2).mean()).item(Float.self)
+                return String(format:"%.4f", s)
+            }
+            func fmtMn(_ a: MLXArray) -> String {
+                String(format:"%.4f", a.asType(.float32).mean().item(Float.self))
+            }
+            print("[DIT-DBG] h after all blocks: std=\(fmtStd(h))")
+
+            // Block 0 scaleMSA — should be near 0 at σ=1 if weights are correct
+            let st0b = blocks[0].shiftTable.asType(.float32).reshaped([-1, c.dim])
+            let b0tembScale = blocks[0].timeEmbedder(timeVec).asType(.float32).reshaped([B, 6, c.dim])
+            let scaleMSA = (st0b[1] + b0tembScale[0, 1]).asType(.float32); eval(scaleMSA)
+            print("[DIT-DBG] block0 scaleMSA (full): mean=\(fmtMn(scaleMSA)) std=\(fmtStd(scaleMSA))")
+
+            // outNorm then scale/shift
+            let hNorm = outNorm(h)
+            print("[DIT-DBG] h after outNorm: std=\(fmtStd(hNorm))")
+            let stArr = outShiftTable.reshaped([-1, c.dim])
+            let hScaled = hNorm * (1 + stArr[1]) + stArr[0]
+            print("[DIT-DBG] h after scale+shift (pre-projOut): std=\(fmtStd(hScaled))")
+            print("[DIT-DBG] projOut(h) std=\(fmtStd(projOut(hScaled)))")
+        }
+
+        // 5. Final norm + output projection — outShiftTable: [2, dim] or [1, 2, dim] from checkpoint
+        let st    = outShiftTable.reshaped([-1, c.dim])
         let shift = st[0]
         let scale = st[1]
         h = outNorm(h) * (1 + scale) + shift
@@ -217,20 +282,21 @@ nonisolated final class WanPatchEmbed: Module {
 nonisolated final class WanTimeEmbed: Module {
     @ModuleInfo(key: "fc1")  var fc1:  Linear   // freqDim → dim      (time_embedder.linear_1)
     @ModuleInfo(key: "fc2")  var fc2:  Linear   // dim → dim          (time_embedder.linear_2)
-    @ModuleInfo(key: "proj") var proj: Linear   // dim → 6*dim        (time_proj — final expansion)
     let freqDim: Int
 
     init(config: WanDiTConfig) {
         freqDim = config.freqDim
         self._fc1.wrappedValue  = Linear(config.freqDim, config.dim)
         self._fc2.wrappedValue  = Linear(config.dim, config.dim)
-        self._proj.wrappedValue = Linear(config.dim, 6 * config.dim)
         super.init()
     }
 
-    func callAsFunction(_ t: MLXArray) -> MLXArray {
-        let sinEmb = sinusoidalEmbed(t, dim: freqDim)
-        return proj(silu(fc2(silu(fc1(sinEmb)))))
+    func callAsFunction(_ t: MLXArray, textVec: MLXArray? = nil) -> MLXArray {
+        let sinEmb  = sinusoidalEmbed(t, dim: freqDim)
+        // One activation between fc1 and fc2 only — mirrors TimestepEmbedding.forward()
+        var tv = fc2(silu(fc1(sinEmb)))
+        if let addVec = textVec { tv = tv + addVec }
+        return tv   // [B, dim=1536] — per-block timeEmbedder expands to 6*dim
     }
 
     private func sinusoidalEmbed(_ t: MLXArray, dim: Int) -> MLXArray {
@@ -250,36 +316,40 @@ nonisolated final class WanTextEmbed: Module {
         super.init()
     }
     func callAsFunction(_ x: MLXArray) -> MLXArray {
-        fc2(silu(fc1(x)))
+        // PixArtAlphaTextProjection uses gelu_tanh (approximate GELU)
+        fc2(geluApproximate(fc1(x)))
     }
 }
 
 nonisolated final class WanDiTBlock: Module {
-    @ModuleInfo(key: "norm")       var norm:       LayerNorm
-    @ModuleInfo(key: "shiftTable") var shiftTable: MLXArray    // [6, dim]
-    @ModuleInfo(key: "selfAttn")   var selfAttn:   WanDiTSelfAttn
-    @ModuleInfo(key: "crossAttn")  var crossAttn:  WanDiTCrossAttn
-    @ModuleInfo(key: "ffn")        var ffn:        WanDiTFFN
+    @ModuleInfo(key: "norm")         var norm:         LayerNorm    // loaded from norm2 in checkpoint
+    @ModuleInfo(key: "shiftTable")   var shiftTable:   MLXArray    // [6, dim] or [1, 6, dim]
+    @ModuleInfo(key: "timeEmbedder") var timeEmbedder: Linear      // dim → 6*dim (per-block adaLN expansion)
+    @ModuleInfo(key: "selfAttn")     var selfAttn:     WanDiTSelfAttn
+    @ModuleInfo(key: "crossAttn")    var crossAttn:    WanDiTCrossAttn
+    @ModuleInfo(key: "ffn")          var ffn:          WanDiTFFN
 
     init(config: WanDiTConfig) {
-        self._norm.wrappedValue       = LayerNorm(dimensions: config.dim, eps: 1e-6)
-        self._shiftTable.wrappedValue = MLXArray.zeros([6, config.dim])
-        self._selfAttn.wrappedValue   = WanDiTSelfAttn(config: config)
-        self._crossAttn.wrappedValue  = WanDiTCrossAttn(config: config)
-        self._ffn.wrappedValue        = WanDiTFFN(config: config)
+        self._norm.wrappedValue         = LayerNorm(dimensions: config.dim, eps: 1e-6)
+        self._shiftTable.wrappedValue   = MLXArray.zeros([6, config.dim])
+        self._timeEmbedder.wrappedValue = Linear(config.dim, 6 * config.dim)
+        self._selfAttn.wrappedValue     = WanDiTSelfAttn(config: config)
+        self._crossAttn.wrappedValue    = WanDiTCrossAttn(config: config)
+        self._ffn.wrappedValue          = WanDiTFFN(config: config)
         super.init()
     }
 
     func callAsFunction(
-        _ x:     MLXArray,    // [B, S, dim]
-        cross:   MLXArray,    // [B, Seq, textDim=4096]
-        temb:    MLXArray,    // [B, 6*dim]
-        freqsT:  MLXArray, freqsH: MLXArray, freqsW: MLXArray,
-        tPos:    MLXArray, hPos:   MLXArray, wPos:   MLXArray
+        _ x:      MLXArray,    // [B, S, dim]
+        cross:    MLXArray,    // [B, Seq, 1536] — projected T5 for cross-attn
+        timeVec:  MLXArray,    // [B, dim] — expanded per-block to [B, 6*dim]
+        freqsT:   MLXArray, freqsH: MLXArray, freqsW: MLXArray,
+        tPos:     MLXArray, hPos:   MLXArray, wPos:   MLXArray
     ) -> MLXArray {
         let B   = x.dim(0)
-        let mod = shiftTable + temb.reshaped([B, 6, -1])   // shiftTable: [1,6,dim] broadcasts
-        // mod: [B, 6, dim] — split into 6 vectors each [B, 1, dim]
+        let temb = timeEmbedder(timeVec)    // [B, 6*dim]
+        // norm2 (the single shared pre-norm) is used for both self-attn and FFN paths
+        let mod = shiftTable + temb.reshaped([B, 6, -1])
         let shiftMSA = mod[0..., 0, 0...]
         let scaleMSA = mod[0..., 1, 0...]
         let gateMSA  = mod[0..., 2, 0...]
@@ -287,15 +357,15 @@ nonisolated final class WanDiTBlock: Module {
         let scaleMLP = mod[0..., 4, 0...]
         let gateMLP  = mod[0..., 5, 0...]
 
-        // Self-attention with adaLN
+        // Self-attention with adaLN-zero (pre-norm = norm/norm2)
         var xN = norm(x)
         xN = xN * (1 + scaleMSA.expandedDimensions(axis: 1)) + shiftMSA.expandedDimensions(axis: 1)
         var h  = x + gateMSA.expandedDimensions(axis: 1) * selfAttn(xN, freqsT: freqsT, freqsH: freqsH, freqsW: freqsW, tPos: tPos, hPos: hPos, wPos: wPos)
 
-        // Cross-attention (no modulation)
-        h = h + crossAttn(norm(h), cross: cross)
+        // Cross-attention — no pre-norm, applied to post-self-attn residual
+        h = h + crossAttn(h, cross: cross)
 
-        // FFN with adaLN
+        // FFN with adaLN-zero (pre-norm = norm/norm2)
         xN = norm(h)
         xN = xN * (1 + scaleMLP.expandedDimensions(axis: 1)) + shiftMLP.expandedDimensions(axis: 1)
         h  = h + gateMLP.expandedDimensions(axis: 1) * ffn(xN)

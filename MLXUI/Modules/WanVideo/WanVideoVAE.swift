@@ -31,8 +31,8 @@ nonisolated final class WanVAEDecoder: Module {
         self._midBlock.wrappedValue = WanVAEMidBlock(ch: inner)
         self._upBlocks.wrappedValue = [
             WanVAEUpBlock(inCh: inner, outCh: inner, resnets: 3, upsample: .timeAndSpace(inCh: inner, outCh: b * 2)),
-            WanVAEUpBlock(inCh: b * 2, outCh: b * 2, resnets: 3, upsample: .timeAndSpace(inCh: b * 2, outCh: b)),
-            WanVAEUpBlock(inCh: b,     outCh: b,     resnets: 3, upsample: .spaceOnly(inCh: b, outCh: b)),
+            WanVAEUpBlock(inCh: b * 2, outCh: inner, resnets: 3, upsample: .timeAndSpace(inCh: inner, outCh: b * 2)),
+            WanVAEUpBlock(inCh: b * 2, outCh: b * 2, resnets: 3, upsample: .spaceOnly(inCh: b * 2, outCh: b)),
             WanVAEUpBlock(inCh: b,     outCh: b,     resnets: 3, upsample: .none),
         ]
         self._normOut.wrappedValue  = WanVAERMSNorm(ch: b)
@@ -63,7 +63,27 @@ nonisolated final class WanVAEDecoder: Module {
         if key == "conv_out.bias"   { return ("convOut.bias",   val) }
         if key == "norm_out.gamma"  { return ("normOut.gamma",  squeezeGamma(val)) }
 
-        // Mid block
+        // Mid block attention — fused QKV (to_qkv) and output proj (proj) as 1×1 convs
+        if key.hasPrefix("mid_block.attentions.0.") {
+            let rest = String(key.dropFirst("mid_block.attentions.0.".count))
+            let pfx  = "midBlock.attn"
+            switch rest {
+            case "norm.gamma":
+                return ("\(pfx).norm.gamma",   squeezeGamma(val))
+            case "to_qkv.weight":
+                return ("\(pfx).toQKV.weight", val.reshaped([val.dim(0), val.dim(1)]))
+            case "to_qkv.bias":
+                return ("\(pfx).toQKV.bias",   val)
+            case "proj.weight":
+                return ("\(pfx).toOut.weight", val.reshaped([val.dim(0), val.dim(1)]))
+            case "proj.bias":
+                return ("\(pfx).toOut.bias",   val)
+            default:
+                return nil
+            }
+        }
+
+        // Mid block resnets
         if key.hasPrefix("mid_block.resnets.") {
             let s = String(key.dropFirst("mid_block.resnets.".count))
             guard let (i, rest) = splitIdx(s) else { return nil }
@@ -303,20 +323,17 @@ nonisolated final class WanVAEMidBlock: Module {
     }
 }
 
-/// Simplified spatial self-attention for the VAE mid-block. Processes each frame independently
-/// (temporal dim treated as batch). Weights not currently mapped from safetensors in this port.
+/// Spatial self-attention for the VAE mid-block. Processes each frame independently
+/// (temporal dim treated as batch). Uses fused QKV to match the diffusers checkpoint
+/// (to_qkv: [3C, C, 1, 1], proj: [C, C, 1, 1]).
 nonisolated final class WanVAEMidAttn: Module {
-    @ModuleInfo(key: "norm") var norm:  WanVAERMSNorm
-    @ModuleInfo(key: "toQ")  var toQ:   Linear
-    @ModuleInfo(key: "toK")  var toK:   Linear
-    @ModuleInfo(key: "toV")  var toV:   Linear
+    @ModuleInfo(key: "norm")  var norm:  WanVAERMSNorm
+    @ModuleInfo(key: "toQKV") var toQKV: Linear   // [3C, C] fused Q+K+V
     @ModuleInfo(key: "toOut") var toOut: Linear
 
     init(ch: Int) {
         self._norm.wrappedValue  = WanVAERMSNorm(ch: ch)
-        self._toQ.wrappedValue   = Linear(ch, ch)
-        self._toK.wrappedValue   = Linear(ch, ch)
-        self._toV.wrappedValue   = Linear(ch, ch)
+        self._toQKV.wrappedValue = Linear(ch, ch * 3)
         self._toOut.wrappedValue = Linear(ch, ch)
         super.init()
     }
@@ -324,9 +341,10 @@ nonisolated final class WanVAEMidAttn: Module {
     func callAsFunction(_ x: MLXArray) -> MLXArray {
         let (B, T, H, W, C) = (x.dim(0), x.dim(1), x.dim(2), x.dim(3), x.dim(4))
         let flat = norm(x).reshaped([B * T, H * W, C])
-        let q    = toQ(flat)
-        let k    = toK(flat)
-        let v    = toV(flat)
+        let qkv  = toQKV(flat)   // [BT, HW, 3C]
+        let q = qkv[0..., 0..., ..<C]
+        let k = qkv[0..., 0..., C ..< 2 * C]
+        let v = qkv[0..., 0..., (2 * C)...]
         let scale = Float(1.0 / sqrt(Double(C)))
         let w = softmax((matmul(q, k.transposed(0, 2, 1)) * scale).asType(.float32), axis: -1).asType(x.dtype)
         let out = toOut(matmul(w, v))
