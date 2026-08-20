@@ -152,11 +152,26 @@ nonisolated final class WanVAEDecoder: Module {
     // MARK: Forward
 
     func callAsFunction(_ z: MLXArray) -> MLXArray {
+#if DEBUG
+        // [VAE-DBG] Per-stage std tracking (P3) — collapses or explosions isolate the faulty stage.
+        func s(_ a: MLXArray, _ tag: String) -> MLXArray {
+            let f = a.asType(.float32); eval(f)
+            let std = sqrt(pow(f - f.mean(), 2).mean()).item(Float.self)
+            print("[VAE-DBG] \(tag): std=\(String(format:"%.4f", std)) shape=\(a.shape)")
+            return a
+        }
+        var h = s(convIn(z), "convIn")
+        h = s(midBlock(h), "midBlock")
+        for (i, block) in upBlocks.enumerated() { h = s(block(h), "upBlock[\(i)]") }
+        h = s(silu(normOut(h)), "normOut")
+        let raw = s(convOut(h), "convOut")
+#else
         var h = convIn(z)
         h = midBlock(h)
         for block in upBlocks { h = block(h) }
         h = silu(normOut(h))
         let raw = convOut(h)
+#endif
         return minimum(maximum(raw, MLXArray(-1.0)), MLXArray(1.0))
     }
 }

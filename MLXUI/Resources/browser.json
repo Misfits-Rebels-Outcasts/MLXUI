@@ -11,12 +11,19 @@
       ]
     },
     {
-      "id": "images",
-      "name": "Images",
-      "sfSymbol": "photo.on.rectangle.angled.fill",
+      "id": "vision-ocr",
+      "name": "Vision & OCR",
+      "sfSymbol": "eye.fill",
       "domainIds": [
         "vision",
-        "ocr",
+        "ocr"
+      ]
+    },
+    {
+      "id": "images-videos",
+      "name": "Images",
+      "sfSymbol": "film.stack",
+      "domainIds": [
         "imagegen",
         "segmentation",
         "videogen"

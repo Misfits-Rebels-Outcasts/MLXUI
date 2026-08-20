@@ -6,13 +6,13 @@ import UniformTypeIdentifiers
 // MARK: - Resolution presets
 
 enum WanResolution: String, CaseIterable {
-    case full   = "832×480"
-    case square = "480×480"
-    case medium = "512×288"
-    case small  = "320×192"
+    case full     = "832×480"
+    case square   = "480×480"
+    case medium   = "512×288"
+    case compact  = "448×256"
 
-    var latH: Int { switch self { case .full: return 60; case .square: return 60; case .medium: return 36; case .small: return 24 } }
-    var latW: Int { switch self { case .full: return 104; case .square: return 60; case .medium: return 64; case .small: return 40 } }
+    var latH: Int { switch self { case .full: return 60; case .square: return 60; case .medium: return 36; case .compact: return 32 } }
+    var latW: Int { switch self { case .full: return 104; case .square: return 60; case .medium: return 64; case .compact: return 56 } }
 }
 
 // MARK: - Run view
@@ -24,12 +24,12 @@ struct WanVideoRunView: View {
     let modelID: String
 
     @State private var model          = WanRunModel()
-    @State private var prompt         = "A cat walks on the grass, realistic style."
+    @State private var prompt         = "Blue Waves"
     @State private var showNeg        = false
     @State private var negativePrompt = ""
     @State private var numFrames      = 3
-    @State private var numSteps       = 20
-    @State private var resolution     = WanResolution.square
+    @State private var numSteps       = 50
+    @State private var resolution     = WanResolution.compact
     @State private var player: AVPlayer?
 
     var body: some View {
@@ -40,7 +40,9 @@ struct WanVideoRunView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     promptSection
                     if showNeg { negPromptField }
-                    configRow
+                    framesRow
+                    stepsRow
+                    resolutionRow
                     if model.isRunning { progressRow }
                     if let url = model.videoURL { videoSection(url) }
                     else if let img = model.thumbnail { thumbnailSection(img) }
@@ -102,7 +104,7 @@ struct WanVideoRunView: View {
         }
     }
 
-    private var configRow: some View {
+    private var framesRow: some View {
         HStack(spacing: 20) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Frames").font(.caption).foregroundStyle(.secondary)
@@ -110,20 +112,34 @@ struct WanVideoRunView: View {
                     Text("3 (0.25s)").tag(3)
                     Text("5 (0.5s)").tag(5)
                     Text("17 (1.25s)").tag(17)
+                    Text("33 (2s)").tag(33)
+                    Text("49 (3s)").tag(49)
                     Text("81 (5s)").tag(81)
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 200)
+                .frame(width: 200, alignment: .leading)
             }
+            Spacer()
+        }
+    }
+
+    private var stepsRow: some View {
+        HStack(spacing: 20) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Steps: \(numSteps)").font(.caption).foregroundStyle(.secondary)
                 Slider(
                     value: Binding(get: { Double(numSteps) },
                                    set: { numSteps = Int($0.rounded()) }),
-                    in: 10...50, step: 5
+                    in: 1...50, step: 1
                 )
                 .frame(width: 160)
             }
+            Spacer()
+        }
+    }
+
+    private var resolutionRow: some View {
+        HStack(spacing: 20) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Resolution").font(.caption).foregroundStyle(.secondary)
                 Picker("", selection: $resolution) {
@@ -132,7 +148,7 @@ struct WanVideoRunView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 280)
+                .frame(width: 280, alignment: .leading)
             }
             Spacer()
         }

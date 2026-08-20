@@ -61,8 +61,9 @@ struct WanVideoTests {
         let timestep = MLXArray([Float(500.0)]).asType(.float32)
         let textCond = MLXRandom.normal([B, 6, cfg.textDim]).asType(.float32)
 
-        let out = dit(x, timestep: timestep, textCond: textCond)  // [B, nT, nH, nW, outDim]
-        #expect(out.shape == [B, nT, nH, nW, cfg.outDim])
+        let out = dit(x, timestep: timestep, textCond: textCond)  // [B, nT, nH*patchH, nW*patchW, outDim]
+        // Unpatch restores the input spatial resolution (x was [B, nT, nH*patchH, nW*patchW, inCh])
+        #expect(out.shape == [B, nT, nH * cfg.patchH, nW * cfg.patchW, cfg.outDim])
     }
 
     // MARK: - VAE Decoder
@@ -114,6 +115,14 @@ struct WanVideoTests {
         let sigs = WanSampler.buildSigmas(numSteps: 30)
         #expect(sigs.count == 31)
         #expect(sigs.first! > sigs.last!)  // descending
+    }
+
+    @Test func samplerBuildsSigmasSingleStep() {
+        // numSteps=1 must not divide by (numSteps-1)=0 (NaN) and must emit σ₁ and σ=0
+        let sigs = WanSampler.buildSigmas(numSteps: 1)
+        #expect(sigs.count == 2)
+        #expect(sigs[0].isFinite && sigs[0] > 0)
+        #expect(sigs[1] == 0)
     }
 
     @Test func eulerStepPreservesShape() {

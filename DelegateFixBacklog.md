@@ -97,6 +97,64 @@ velocity magnitudes. CFG is adding meaningful guidance (guided_std > u_std).
 
 ---
 
+## ✅ RESOLVED — noise investigation outcome (2026-08-18)
+
+**Root cause:** the 20-step denoising schedule was amplifying CFG at low sigma. With
+`flow_shift=3.0` the sigma schedule spends most steps at high noise and only a handful refining
+the low-noise end where structure emerges; `u + 5·(c−u)` guidance applied over those few coarse
+steps pushed the latent toward collapse (std divergence, then a std≈0.3 collapsed decode).
+
+**Fix:** denoise with **50 steps** (matching the reference diffusers setup for WAN 2.1) instead
+of 20. Final config:
+
+- `WanVideoEngine.generate` and `generateAll` default `numSteps: 50`.
+- `WanVideoRunView` default `numSteps = 50`, slider `1...50` step 1 (1-step sanity check).
+- `cfgScale = 5.0` (reverted after the temporary 1.0 A/B test).
+- `numFrames = 3` default for the diagnostic runs (latT=1); frame picker still offers 17/81.
+
+**Diagnostics cleanup:** the `[VEL-DBG]`, `[STEP-DBG]`, `[DIT-DBG]`, `[WAN-DBG]`, `[FFN-DBG]`,
+and `[VAE-DBG]` prints are now gated behind `#if DEBUG` (still available in Debug builds; silent
+in Release). The DiT/VAE stage instrumentation stays available for future model bring-ups.
+
+**Remaining (accepted) risk:** if a future run still shows blank content at 50 steps / latT≥5,
+re-open P8 (DiT conditioning was corrected, but low-σ velocity was not re-validated end-to-end).
+
+---
+
+## ONGOING — dynamic CFG for guided-velocity divergence (2026-08-19)
+
+**Root cause:** `diff_std` grows throughout denoising and can spike anywhere in σ=0.25–0.71
+depending on seed. CFG×5 amplifies the spike into net energy addition per step; with
+`flow_shift=3.0` Euler step sizes Δσ grow from 0.007 (step 0) to 0.06 (step 48), so
+high guided_std at large-Δσ steps is especially damaging. Final latent std overshoots
+the target ~1.0 clean-video distribution (e.g. 1.808 run A, 1.584 run B).
+
+**Iteration 1 (threshold=0.5, 2026-08-19):** ramp from full CFG at σ≥0.5 to floor 1.5.
+Run B: "some patterns but still like noise", final std=1.584. The spike in run B peaked at
+step 36 (σ=0.5209) with cfg still at 5.0 — threshold was too late.
+
+**Iteration 2 (threshold=0.9, 2026-08-19):** ramp now starts at σ=0.9 (≈ step 13).
+
+```swift
+let effectiveCfg = sigmaFrom >= 0.9
+    ? cfgScale
+    : max(1.5, cfgScale * (sigmaFrom / 0.9))
+let noisePred = u + (c - u) * effectiveCfg
+```
+
+- σ=0.9 (step 13): cfg≈5.0 (just entering ramp)
+- σ=0.7 (step 27): cfg≈3.89 → estimated guided_std ~2.0 (was 2.57)
+- σ=0.52 (step 36): cfg≈2.89 → estimated guided_std ~2.1 (was 3.09)
+- σ≤0.27: cfg=1.5 floor
+
+Expected: mid-σ energy addition cut ~40%; final latent std should land ~1.0–1.3.
+`[VEL-DBG]` print includes `cfg=X.XX` to confirm the ramp.
+
+**Applied 2026-08-19.** Run latT=1, 50 steps, 480×480 and report final latent std
+and decoded mean/std to verify improvement.
+
+---
+
 ## Priority investigation items
 
 Work through these in order. Stop after each SMOKE TEST and check the video before continuing.
@@ -230,9 +288,24 @@ func callAsFunction(_ z: MLXArray) -> MLXArray {
 Expected healthy std progression (approximate): `convIn~0.5, midBlock~0.5, upBlocks~0.3–0.5, convOut~0.3`.
 If std explodes (>10) or collapses (<0.01) at a stage, that stage has a weight bug.
 
+> **Implemented 2026-08-18:** per-stage `[VAE-DBG]` std prints added to
+> `WanVAEDecoder.callAsFunction` (convIn → midBlock → upBlock[0..3] → normOut → convOut),
+> exactly as specified above. Also verified `vatMeanF`/`vatStdF` against `vae/config.json`:
+> **both match the repo's 16 values exactly** (this machine had no installed WAN model, so the
+> authoritative `Wan-AI/Wan2.1-T2V-1.3B-Diffusers/vae/config.json` was used — the installed copy
+> is the same file the installer downloads). Denormalization constants are correct.
+>
+> **Per-step latent tracker (reviewer, 2026-08-18):** a `[STEP-DBG]` line is now printed after
+> every euler step in `loadAndDenoise` (step number, σ_from→σ_to, latent mean/std). Healthy
+> behavior: latent stays near std≈1.0 and shrinks slowly toward the low-noise end (std→0) as
+> denoising converges; a sudden collapse (std→~0) or blow-up (std>5) isolates the faulty step.
+> **1-step sanity check:** call `loadAndDenoise` with `numSteps=1` (temporarily, or via a tiny
+> harness) — one `[STEP-DBG]` line confirms the single euler step moves the latent in the
+> predicted direction and by the right magnitude (`latent = x + v·(σ_to−σ_from)`).
+
 **SMOKE TEST 1:** Run with prompt "A cat walks on the grass, realistic style.", numFrames=3,
-numSteps=20, resolution=square 480×480. Check if the video shows any non-noise content
-(even vague blobs of the right color are progress). Check the `[VAE-DBG]` std progression.
+numSteps=50 (P4 default), resolution=square 480×480. Check if the video shows any non-noise
+content (even vague blobs of the right color are progress). Check the `[VAE-DBG]` std progression.
 
 ---
 
@@ -248,7 +321,14 @@ Change the default `numSteps` in `WanVideoRunView` from 20 to 50:
 steps at high noise (σ near 1.0) and few steps refining fine detail. 50 steps gives more
 resolution at the low-noise end where video structure emerges.
 
+> **Implemented 2026-08-18:** `WanVideoRunView` default is now `@State private var numSteps = 50`,
+> and the slider allows `1...50` step 1 (so the 1-step sanity check is selectable in the UI).
+> `WanSampler.buildSigmas` handles `numSteps==1` (avoids division by `numSteps-1` → NaN).
+
 **SMOKE TEST 2:** Re-run with 50 steps. Check if image quality improves.
+
+> Note: the single-frame `WanVideoEngine.generate` entry point still hardcodes `numSteps: 20`;
+> it is a separate preview/stage path, untouched by P4.
 
 ---
 
@@ -268,7 +348,28 @@ This gives `latT = max(1, (17+3)/4) = 5`. The DiT sees 5×30×30 = 4500 tokens i
 
 Note: 17 frames requires more memory. Only do this after P3 memory check passes.
 
+> **Status 2026-08-18:** P5 (numFrames=17, latT=5) was tried but **reverted for the current
+> diagnostic runs** — `WanVideoRunView` default is back to `numFrames = 3` (latT=1) to keep the
+> per-step sanity checks fast and memory-light. The frame picker still offers 17/81. Re-apply
+> `numFrames = 17` once the pipeline produces recognizable content.
+
 **SMOKE TEST 3:** Run with numFrames=17, numSteps=50. Verify no OOM. Check if video has structure.
+If 50 steps / latT=5 still produces blank content with no spatial structure, that points to a
+subtler DiT bug (see P8 notes) rather than insufficient denoising.
+
+---
+
+## CFG scale=1.0 test *(test run done, 2026-08-18 — reverted)*
+
+`WanVideoEngine.cfgScale` was temporarily set to 1.0, then **reverted to 5.0**. Run 20 steps at default settings and
+read the `[VEL-DBG]`/`[STEP-DBG]` lines:
+
+- **If latent std keeps decreasing (no divergence):** CFG amplification (`u + 5·(c−u)`) is the
+  root cause → keep diagnosing guidance, and/or re-tune scale.
+- **If latent std still diverges at σ≈0.8:** the DiT velocity field itself is broken at lower σ,
+  independent of guidance → investigate the P8.1–P8.4 fixes / velocity at low σ.
+
+**Result:** reverted to `cfgScale = 5.0`; production run config is `numSteps = 50` (P4 default).
 
 ---
 
@@ -303,17 +404,124 @@ print("[DIT-DBG] norm1 keys in checkpoint: \(norm1Keys.prefix(5))")
 If `blocks.0.norm1.weight` exists AND differs from `blocks.0.norm2.weight`, add a second
 `norm1: LayerNorm` to `WanDiTBlock` and use it for the self-attn pre-norm path.
 
+> **Resolved by checkpoint inspection:** there is no `norm1`/`norm3` weight in the checkpoint
+> (they are affine=False). Only `norm2` has weights and it is the **cross-attn** pre-norm.
+> The bug is that our code applies `norm2` to the self-attn and FFN pre-norms and skips the
+> cross-attn pre-norm. See **P8.2**.
+
 ---
 
-## Removing diagnostics when video works
+## P1 & P2 — Implemented (2026-08-18)
 
-Once the video produces recognizable content, remove all `[WAN-DBG]`, `[DIT-DBG]`, `[VAE-DBG]`,
-and `[FFN-DBG]` print statements. They are in:
-- `WanVideoEngine.swift`: `loadAndEncodeText`, `loadAndDenoise`, `generateAll`
-- `WanVideoDiT.swift`: `callAsFunction` (wrapped in `if dbgThisCall { … }` guard)
-- `WanVideoVAE.swift`: (none yet — implementer adds in P3, then removes)
-- Also remove `static var dbgDone = false` from `WanDiT` and the `WanDiT.dbgDone` reset
-  in the engine if you add one.
+Verified P1 and P2 directly against the actual checkpoint (safetensors headers fetched from
+`Wan-AI/Wan2.1-T2V-1.3B-Diffusers`; tensor names + shapes are in the file headers, no full
+download needed). Both diagnostics were added to `WanVideoEngine`; neither structural fix that
+P1/P2 hypothesized was triggered, **but the P2 dropped-key check exposed one real bug that was fixed**.
+
+### P1 — FFN is plain GELU, NOT GEGLU → no change needed
+
+`blocks.0.ffn.net.0.proj.weight` = `[8960, 1536]`, `blocks.0.ffn.net.2.weight` = `[1536, 8960]`
+(confirmed across all 30 blocks). diffusers `FeedForward(dim, inner_dim=8960, activation_fn="gelu-approximate")`.
+Our `WanDiTFFN` (`fc1(1536→8960)`, `gelu`, `fc2(8960→1536)`) matches. Do **not** switch to GEGLU.
+Note: diffusers uses tanh-approximate GELU here — `WanDiTFFN` calls `gelu()` (exact). Minor numerical
+difference, not a noise source. Diagnostic wired into `loadAndDenoise` → `[FFN-DBG]`.
+
+### P2 — VAE channel progression matches the checkpoint → no change needed
+
+Actual decoder channels (from checkpoint, PyTorch layout `[O,I,kD,kH,kW]`):
+
+| upblock | conv1 weight | meaning | our code |
+|---|---|---|---|
+| `up_blocks.0.resnets.0` | `[384,384,3,3,3]` | 384→384 | ✓ |
+| `up_blocks.1.resnets.0` | `[384,192,3,3,3]` | **192→384** (channels increase — unusual but correct) | ✓ |
+| `up_blocks.2.resnets.0` | `[192,192,3,3,3]` | 192→192 | ✓ |
+| `up_blocks.3.resnets.0` | `[96,96,3,3,3]` | 96→96 | ✓ |
+
+`up_blocks.1` genuinely goes 192→384 (then 384→192 through the upsampler), so the code's
+`WanVAEUpBlock(inCh: b*2, outCh: inner, …)` is correct. Upsamplers also match:
+`upsamplers.0.time_conv` `[768,384,3,1,1]` (384→768, temporal ×2) + `resample.1` `[192,384,3,3]`
+(spatial 384→192); block 2 is `spaceOnly` (no `time_conv`); block 3 has no upsampler.
+Temporal pixel-shuffle ordering, causal padding, and nearest-exact ×2 all match diffusers
+`WanResample`/`WanCausalConv3d`/`WanUpBlock` exactly.
+
+**Dropped-key check: 0 decoder keys are dropped.** `WanVAEDecoder.sanitize` covers every
+`decoder.*` key. Diagnostics wired into `loadAndDecode` → `[VAE-DBG]`.
+
+### P2 fix that WAS needed — `post_quant_conv` was being dropped
+
+diffusers `AutoencoderKLWan._decode` runs the latent through `post_quant_conv` (a trained
+1×1×1 causal conv, `[16,16,1,1,1]` + bias) **before** the decoder. Our sanitize's guard
+explicitly skips `post_quant_conv.*` (it lives outside `decoder.`), and the engine never applied
+it — so every decoded frame was produced from an unprocessed latent. **Fixed** in
+`WanVideoEngine`: `loadPostQuantConv(vaeRaw)` now builds the 1×1×1 conv from the raw top-level
+keys and `loadAndDecode` applies it as `latentVAE = postQuant(latentVAE)` before `vae(latentVAE)`
+(the P2 `[VAE-DBG] Dropped 2 decoder keys` line now flags `post_quant_conv.weight/bias` on purpose).
+
+---
+
+## P8 — DiT conditioning divergences *(implemented 2026-08-18)*
+
+Verifying P1/P2 against the checkpoint surfaced **unambiguous DiT bugs** of the same class as B1
+(silently dropped weights → random init → wrong output). Evidence: checkpoint headers + diffusers
+v0.33.0 `transformer_wan.py` + original `Wan-Video/Wan2.1` `wan/modules/model.py`.
+All four fixes (P8.1–P8.4) are now implemented in `WanVideoDiT.swift`. They should be validated
+with SMOKE TEST 1 before spending time on P3–P7.
+
+**P8.1 — ✅ FIXED: `condition_embedder.time_proj` ([9216, 1536] = 6×1536) is now loaded and used**
+
+Added shared `WanDiT.timeProj: Linear(1536, 6·1536)`, mapped `condition_embedder.time_proj.*`
+in sanitize, dropped the (nonexistent) per-block `time_embedder.*` mapping, removed
+`WanDiTBlock.timeEmbedder`. Forward: `mods = timeProj(silu(timeVec)).reshaped([B, 6, dim])`
+computed once; each block computes `mod = shiftTable + mods` then chunks 6 — matching
+`(scale_shift_table + time_proj(silu(temb))).chunk(6)`.
+
+**P8.2 — ✅ FIXED: norm routing is now norm1/norm2/norm3**
+
+`WanDiTBlock` now has `norm1`/`norm3` = `LayerNorm(affine: false)` (self-attn & FFN pre-norms,
+no weights in checkpoint) and `norm2` = affine `LayerNorm` loaded from `blocks.{i}.norm2.*`,
+applied as the **cross-attn** pre-norm: `h = h + crossAttn(norm2(h), cross)`. (Sanitize mapping
+renamed `norm2.*` → `norm2.*`.)
+
+**P8.3 — ✅ FIXED: cross-attn uses `textEmbed` (the MLP) on the full T5 sequence**
+
+`cross = textEmbed(textCond)` replaces `textProj(textCond)`. The pooled-T5→time addition
+(`textVec`) is removed; `WanTimeEmbed` no longer takes a `textVec`. `condition_embedder.text_proj`
+mapping removed — that `Linear` is an unused leftover key in the checkpoint and is now dropped
+by sanitize (correct).
+
+**P8.4 — ✅ FIXED: output modulation now includes `+ temb`**
+
+```swift
+let outMod = outShiftTable.reshaped([-1, c.dim]).expandedDimensions(axis: 0)
+             + timeVec.expandedDimensions(axis: 1)      // [B, 2, dim]
+let shift = outMod[0..., 0, 0...]
+let scale = outMod[0..., 1, 0...]
+h = outNorm(h) * (1 + scale) + shift
+```
+
+`outNorm` is now `LayerNorm(affine: false)` (the checkpoint has no `norm_out` weights).
+
+**P8.5 — not fixed (cosmetic):** the FFN uses exact `gelu` vs diffusers `gelu-approximate` (tanh).
+
+Also fixed: `WanVideoTests.ditOutputShape` asserted the latent-resolution shape `[1,2,4,4,4]`
+but the DiT correctly unpatchifies to the input resolution `[1,2,8,8,4]` (stale since the
+"fix DiT output unpatch" commit). Test updated; all `WanVideoTests` pass.
+
+---
+
+## Diagnostics — gated behind `#if DEBUG` (2026-08-18)
+
+All `[WAN-DBG]`, `[DIT-DBG]`, `[VAE-DBG]`, `[FFN-DBG]`, `[VEL-DBG]`, and `[STEP-DBG]` prints are
+**now wrapped in `#if DEBUG`** — they still print in Debug builds, and are compiled out of
+Release. Locations, if you ever need to remove them entirely:
+- `WanVideoEngine.swift`: `loadAndEncodeText`, `loadAndDenoise` (incl. the `[VEL-DBG]`
+  per-step velocity log and the `[STEP-DBG]` per-step latent tracker), `loadAndDecode`,
+  and the helper funcs `printFFNShapeDiagnostics`, `printVAEChannelDiagnostics`,
+  `printDroppedVAEKeys` (the `[VAE-DBG] post_quant_conv not found` print in
+  `loadPostQuantConv` too). Keep `loadPostQuantConv` itself — it is a required decode step.
+- `WanVideoDiT.swift`: the two `[DIT-DBG]` blocks in `callAsFunction` + `static var dbgDone`
+  (all gated).
+- `WanVideoVAE.swift`: the per-stage `[VAE-DBG]` std tracker in `WanVAEDecoder.callAsFunction` (added in P3).
 
 ---
 
@@ -333,14 +541,28 @@ and `[FFN-DBG]` print statements. They are in:
 
 ## Architecture reference (WAN 2.1 T2V-1.3B)
 
+> Corrected 2026-08-18 from the actual checkpoint + diffusers v0.33.0 / original Wan-AI code.
+> The previous "per-block time_embedder / textProj cross-attn / pooled-T5 time conditioning" lines
+> were wrong — see P8. The Swift DiT does NOT yet match this corrected reference.
+
 - DiT: 30 layers, 12 heads, dim=1536, ffnDim=8960, headDim=128
-- adaLN-zero: each block has own `time_embedder: Linear(1536, 6×1536)`; shared `norm2`
-- Cross-attn: T5 sequence projected via `textProj: Linear(4096, 1536)` (simple linear)
-- Time conditioning: pooled T5 → `textEmbed` MLP (4096→1536) → added to sinusoidal time emb
+- adaLN-zero: **shared** `condition_embedder.time_proj: Linear(1536, 6×1536)`; per block
+  `mod = scale_shift_table + time_proj(silu(temb))`, chunked into
+  [shiftMSA, scaleMSA, gateMSA, shiftMLP, scaleMLP, gateMLP]. No per-block time_embedder exists.
+- Norms: self-attn pre-norm = affine=False LayerNorm; cross-attn pre-norm = `norm2` (affine,
+  has weights); FFN pre-norm = affine=False LayerNorm.
+- Cross-attn: T5 sequence projected by `text_embedder` (2-layer GELU-tanh MLP: 4096→1536→1536).
+  `text_proj` (`Linear(4096, 1536)`) is an unused leftover key — do not use it.
+- Time conditioning: sinusoidal → `time_embedder` (fc1→silu→fc2) → `temb`; `temb` (base, [B,1536])
+  is added to the top-level `scale_shift_table` for the output scale/shift. No text in time path.
+- FFN: plain GELU (tanh-approx), `[8960, 1536]`, NOT GEGLU.
 - Sampler: flow matching, `flow_shift=3.0`, `num_train_timesteps=1000`
 - CFG scale: 5.0 (unconditional = empty string negative prompt)
-- VAE: 3D causal conv, latent_channels=16, 4 upblocks (2× temporal, 2× temporal+spatial, 1× spatial, 0×)
-- VAE normalization: per-channel latents_mean and latents_std from `vae/config.json`
+- VAE: 3D causal conv, latent_channels=16, 4 upblocks
+  (384→384 upsample3d, 192→384 upsample3d, 192→192 upsample2d, 96→96 none);
+  decode = `post_quant_conv` (1×1×1) → decoder → clamp[-1,1].
+- VAE normalization: `latents = latent*std + mean` from `vae/config.json`, applied before
+  `post_quant_conv`.
 
 ---
 

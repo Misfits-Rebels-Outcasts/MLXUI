@@ -17,7 +17,8 @@ nonisolated enum WanSampler {
     static func buildSigmas(numSteps: Int, flowShift: Float = 3.0, numTrainTimesteps: Int = 1000) -> [Float] {
         let tMin = 1.0 / Float(numTrainTimesteps)
         var sigmas = (0 ..< numSteps).map { i -> Float in
-            let t = 1.0 - Float(i) / Float(numSteps - 1) * (1.0 - tMin)
+            // numSteps==1 → division by (numSteps-1)=0 would be NaN; single step starts at t=1.
+            let t = numSteps == 1 ? 1.0 : 1.0 - Float(i) / Float(numSteps - 1) * (1.0 - tMin)
             return flowShift * t / (1 + (flowShift - 1) * t)
         }
         sigmas.append(0.0)

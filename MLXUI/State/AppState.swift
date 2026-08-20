@@ -3,6 +3,11 @@ import Observation
 
 @Observable
 final class AppState {
+    // ── Optional domain hiding ──────────────────────────────────────────────────
+    /// Set to `true` to hide the "Video Generation" domain (and every model listed
+    /// under it, e.g. WAN 2.1) from the catalog UI. Flip back to `false` to restore.
+    static let hideVideoGeneration = false
+
     var browserData: BrowserData?
     var loadError: String?
     var systemInfo = SystemInfo.detect()
@@ -58,6 +63,13 @@ final class AppState {
         return data.sidebarSections.filter { $0.modelCount(in: data) > 0 }
     }
 
+    /// Domain ids for a browse section, minus domains hidden by `hideVideoGeneration`.
+    private func domainIDsForSection(_ sectionID: String) -> [String] {
+        guard let data = browserData else { return [] }
+        let ids = data.sidebarSections.first(where: { $0.id == sectionID })?.domainIds ?? []
+        return ids.filter { !(Self.hideVideoGeneration && $0 == "videogen") }
+    }
+
     // ── Sources actually present in the catalog ──
     // The bundled catalog is mlx-only today, so the source picker collapses to a
     // single option (and the UI hides it). Computed from the data so it adapts if
@@ -88,7 +100,7 @@ final class AppState {
         guard let data = browserData else { return [] }
         var models: [ModelEntry] = []
         if case .browse(let sectionID) = selectedSection {
-            let domainIds = data.sidebarSections.first(where: { $0.id == sectionID })?.domainIds ?? []
+            let domainIds = domainIDsForSection(sectionID)
             for domain in data.domains where domainIds.contains(domain.id) {
                 models.append(contentsOf: domain.allModels)
             }
@@ -111,7 +123,7 @@ final class AppState {
         guard let data = browserData else { return [] }
         var result: [(DomainNode, [ModelEntry])] = []
         if case .browse(let sectionID) = selectedSection {
-            let domainIds = data.sidebarSections.first(where: { $0.id == sectionID })?.domainIds ?? []
+            let domainIds = domainIDsForSection(sectionID)
             let modelSet = Set(filteredModels.map { $0.id })
             for domain in data.domains where domainIds.contains(domain.id) {
                 for leaf in domain.leafDomains {
