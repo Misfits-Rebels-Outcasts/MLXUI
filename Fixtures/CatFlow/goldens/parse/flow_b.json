@@ -1,0 +1,68 @@
+{
+  "version": "0.8",
+  "rows": [
+    {
+      "task": "Read Video",
+      "model": null,
+      "settings": "intro.mp4",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Read Video",
+      "model": null,
+      "settings": "main.mp4",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Read Video",
+      "model": null,
+      "settings": "outro.mp4",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Join Video",
+      "model": null,
+      "settings": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 1
+        },
+        {
+          "kind": "row",
+          "number": 2
+        },
+        {
+          "kind": "row",
+          "number": 3
+        }
+      ],
+      "chain_break": true,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Save Video",
+      "model": null,
+      "settings": "final.mp4",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    }
+  ]
+}

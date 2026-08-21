@@ -1,0 +1,167 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": null,
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "handbook.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Split",
+        "model": null,
+        "settings": "chunk_size=500",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Embed",
+        "model": "BGE-M3",
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Store Index",
+        "model": null,
+        "settings": "kb.index",
+        "refs": [
+          {
+            "kind": "row",
+            "number": 2
+          },
+          {
+            "kind": "row",
+            "number": 3
+          }
+        ],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "run": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 1|Read Text||handbook.txt#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2|Split||chunk_size=500|[mock:text] 1|Read Text||handbook.txt#0#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 2|Split||chunk_size=500|[mock:text] 1|Read Text||handbook.txt#0#1",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 2|Split||chunk_size=500|[mock:text] 1|Read Text||handbook.txt#0#2",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3"
+      },
+      {
+        "type": "row_completed",
+        "path": "3",
+        "output": {
+          "items": [
+            {
+              "kind": "vector",
+              "value": null,
+              "path": "3.0.vector.45cc1f0ce6371ee0.bin"
+            },
+            {
+              "kind": "vector",
+              "value": null,
+              "path": "3.1.vector.34f2f72bd87d6da9.bin"
+            },
+            {
+              "kind": "vector",
+              "value": null,
+              "path": "3.2.vector.6a3091de986be952.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "4"
+      },
+      {
+        "type": "row_completed",
+        "path": "4",
+        "output": {
+          "items": [
+            {
+              "kind": "index",
+              "value": null,
+              "path": "4.0.index.80c727976c7d471f.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "run_completed"
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "cache": {
+    "hits_on_rerun": [
+      "1",
+      "2",
+      "3"
+    ]
+  }
+}

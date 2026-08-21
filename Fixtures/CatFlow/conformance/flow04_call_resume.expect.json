@@ -1,0 +1,247 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Index",
+        "model": null,
+        "settings": "kb.index",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Think",
+        "model": "Qwen3 8B",
+        "settings": "tools: search, final",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "clause": {
+          "kind": "decide",
+          "edges": [
+            {
+              "tag": "search",
+              "target": {
+                "kind": "call",
+                "number": 3
+              }
+            },
+            {
+              "tag": "final",
+              "target": {
+                "kind": "row",
+                "number": 5
+              }
+            }
+          ]
+        },
+        "visits_leq": 8,
+        "on_budget": "final"
+      },
+      {
+        "task": "Embed",
+        "model": "BGE-M3",
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Retrieve",
+        "model": null,
+        "settings": "top_k=5",
+        "refs": [
+          {
+            "kind": "row",
+            "number": 1
+          },
+          {
+            "kind": "row",
+            "number": 3
+          }
+        ],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "clause": {
+          "kind": "resume"
+        }
+      },
+      {
+        "task": "Save Text",
+        "model": null,
+        "settings": "findings.md",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "trace": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "index",
+              "value": null,
+              "path": "1.0.index.4fee3db3114dc60a.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "index",
+              "value": null,
+              "path": "2.0.index.931bdeaa43818416.bin"
+            }
+          ]
+        },
+        "fired_tag": "search",
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3"
+      },
+      {
+        "type": "row_completed",
+        "path": "3",
+        "output": {
+          "items": [
+            {
+              "kind": "vector",
+              "value": null,
+              "path": "3.0.vector.b0a7c88167116586.bin"
+            },
+            {
+              "kind": "vector",
+              "value": null,
+              "path": "3.1.vector.510ea2ca6e229c59.bin"
+            },
+            {
+              "kind": "vector",
+              "value": null,
+              "path": "3.2.vector.9fdc30f97ebe67d1.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "4"
+      },
+      {
+        "type": "row_completed",
+        "path": "4",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#1",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#2",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "transcript_appended",
+        "path": "2",
+        "entry": {
+          "tool": "search",
+          "input": "<index>",
+          "observation": "[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#0 [mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#1 [mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#2"
+        }
+      },
+      {
+        "type": "row_started",
+        "path": "2@2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2@2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2@2|Think|Qwen3 8B|tools: search, final|[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#0|[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#1|[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#2|tag=final",
+              "path": null
+            }
+          ]
+        },
+        "fired_tag": "final",
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "5"
+      },
+      {
+        "type": "row_completed",
+        "path": "5",
+        "output": {
+          "items": [
+            {
+              "kind": "status",
+              "value": "[mock:status] 5|Save Text||findings.md|[mock:text] 2@2|Think|Qwen3 8B|tools: search, final|[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#0|[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#1|[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#2|tag=final#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "run_completed"
+      }
+    ],
+    "decider_script": {
+      "2": [
+        "search",
+        "final"
+      ]
+    }
+  }
+}

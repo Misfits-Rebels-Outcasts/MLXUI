@@ -1,0 +1,8 @@
+1. Read Audio    podcast_fr.m4a
+2. Transcribe    Whisper Large v3 · lang=fr
+3. Translate     Llama 3.1 8B · to=English
+4. Summarize     Ministral 3B · "3 key points"
+5. Speak         Kokoro 82M · af_heart
+6. Save Audio    recap-en.wav
+7. Save Text     transcript-fr.txt   (2)
+8. Save Text     transcript-en.txt   (3)

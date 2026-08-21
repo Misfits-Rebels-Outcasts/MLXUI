@@ -1,0 +1,348 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "roster.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Greet",
+        "model": null,
+        "settings": "hey ; shout=true",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "declared_signature": "text -> [text]"
+      },
+      {
+        "task": "Merge",
+        "model": "Qwen3 8B",
+        "settings": "\"combined greetings\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Save Text",
+        "model": null,
+        "settings": "greetings.md",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ],
+    "definitions": {
+      "Greet": {
+        "name": "Greet",
+        "signature": "text -> [text]",
+        "params": [
+          {
+            "name": "greeting",
+            "kind": null,
+            "default": "\"Hello\""
+          },
+          {
+            "name": "shout",
+            "kind": "bool",
+            "default": null
+          },
+          {
+            "name": "times",
+            "kind": null,
+            "default": "1"
+          }
+        ],
+        "rows": [
+          {
+            "task": "Split",
+            "model": null,
+            "settings": "by=lines",
+            "refs": [],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          },
+          {
+            "task": null,
+            "model": null,
+            "settings": null,
+            "refs": [],
+            "chain_break": false,
+            "block_kind": "each",
+            "block_name": "say_one",
+            "children": [
+              {
+                "task": "Draft",
+                "model": "{greeting}",
+                "settings": "shout={shout}",
+                "refs": [],
+                "chain_break": false,
+                "block_kind": null,
+                "block_name": null,
+                "children": []
+              }
+            ],
+            "declared_signature": "[text] -> [text]"
+          }
+        ]
+      }
+    },
+    "models": {
+      "Qwen3 8B": "mlx-community/Qwen3-8B-4bit"
+    }
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "trace": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 1|Read Text||roster.txt#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "row_started",
+        "path": "2.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.1|Split||by=lines|[mock:text] 1|Read Text||roster.txt#0#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.1|Split||by=lines|[mock:text] 1|Read Text||roster.txt#0#1",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.1|Split||by=lines|[mock:text] 1|Read Text||roster.txt#0#2",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2.2"
+      },
+      {
+        "type": "each_item_started",
+        "path": "2.2",
+        "index": 0,
+        "total": 3
+      },
+      {
+        "type": "row_started",
+        "path": "2.2.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.2.1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2.1|Draft|hey|shout=true|[mock:text] 2.1|Split||by=lines|[mock:text] 1|Read Text||roster.txt#0#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "each_item_completed",
+        "path": "2.2",
+        "index": 0,
+        "total": 3
+      },
+      {
+        "type": "each_item_started",
+        "path": "2.2",
+        "index": 1,
+        "total": 3
+      },
+      {
+        "type": "row_started",
+        "path": "2.2.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.2.1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2.1|Draft|hey|shout=true|[mock:text] 2.1|Split||by=lines|[mock:text] 1|Read Text||roster.txt#0#1#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "each_item_completed",
+        "path": "2.2",
+        "index": 1,
+        "total": 3
+      },
+      {
+        "type": "each_item_started",
+        "path": "2.2",
+        "index": 2,
+        "total": 3
+      },
+      {
+        "type": "row_started",
+        "path": "2.2.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.2.1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2.1|Draft|hey|shout=true|[mock:text] 2.1|Split||by=lines|[mock:text] 1|Read Text||roster.txt#0#2#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "each_item_completed",
+        "path": "2.2",
+        "index": 2,
+        "total": 3
+      },
+      {
+        "type": "row_completed",
+        "path": "2.2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2.1|Draft|hey|shout=true|[mock:text] 2.1|Split||by=lines|[mock:text] 1|Read Text||roster.txt#0#0#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2.1|Draft|hey|shout=true|[mock:text] 2.1|Split||by=lines|[mock:text] 1|Read Text||roster.txt#0#1#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2.1|Draft|hey|shout=true|[mock:text] 2.1|Split||by=lines|[mock:text] 1|Read Text||roster.txt#0#2#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2.1|Draft|hey|shout=true|[mock:text] 2.1|Split||by=lines|[mock:text] 1|Read Text||roster.txt#0#0#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2.1|Draft|hey|shout=true|[mock:text] 2.1|Split||by=lines|[mock:text] 1|Read Text||roster.txt#0#1#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2.1|Draft|hey|shout=true|[mock:text] 2.1|Split||by=lines|[mock:text] 1|Read Text||roster.txt#0#2#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3"
+      },
+      {
+        "type": "row_completed",
+        "path": "3",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 3|Merge|Qwen3 8B|\"combined greetings\"|[mock:text] 2.2.1|Draft|hey|shout=true|[mock:text] 2.1|Split||by=lines|[mock:text] 1|Read Text||roster.txt#0#0#0|[mock:text] 2.2.1|Draft|hey|shout=true|[mock:text] 2.1|Split||by=lines|[mock:text] 1|Read Text||roster.txt#0#1#0|[mock:text] 2.2.1|Draft|hey|shout=true|[mock:text] 2.1|Split||by=lines|[mock:text] 1|Read Text||roster.txt#0#2#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "4"
+      },
+      {
+        "type": "row_completed",
+        "path": "4",
+        "output": {
+          "items": [
+            {
+              "kind": "status",
+              "value": "[mock:status] 4|Save Text||greetings.md|[mock:text] 3|Merge|Qwen3 8B|\"combined greetings\"|[mock:text] 2.2.1|Draft|hey|shout=true|[mock:text] 2.1|Split||by=lines|[mock:text] 1|Read Text||roster.txt#0#0#0|[mock:text] 2.2.1|Draft|hey|shout=true|[mock:text] 2.1|Split||by=lines|[mock:text] 1|Read Text||roster.txt#0#1#0|[mock:text] 2.2.1|Draft|hey|shout=true|[mock:text] 2.1|Split||by=lines|[mock:text] 1|Read Text||roster.txt#0#2#0#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "run_completed"
+      }
+    ]
+  }
+}

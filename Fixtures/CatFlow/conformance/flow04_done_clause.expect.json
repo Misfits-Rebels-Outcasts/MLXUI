@@ -1,0 +1,81 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "memo.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Save Text",
+        "model": null,
+        "settings": "out.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "clause": {
+          "kind": "goto",
+          "target": {
+            "kind": "done"
+          }
+        }
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "trace": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 1|Read Text||memo.txt#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "status",
+              "value": "[mock:status] 2|Save Text||out.txt|[mock:text] 1|Read Text||memo.txt#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "run_completed"
+      }
+    ]
+  }
+}

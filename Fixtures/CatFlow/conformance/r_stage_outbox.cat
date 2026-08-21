@@ -1,0 +1,7 @@
+catflow 0.8
+1. Read Text    inquiry.txt
+2. Draft        Qwen3 8B; "Write the reply"
+3. Stage Send   outbox
+
+models:
+  Qwen3 8B = mlx-community/Qwen3-8B-4bit

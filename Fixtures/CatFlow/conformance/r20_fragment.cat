@@ -1,0 +1,6 @@
+catflow 0.8
+1. Read Text         notes.txt   # synthesized (R20)
+2. Summarize   (1)   Qwen3 8B; "TL;DR"
+
+models:
+  Qwen3 8B = mlx-community/Qwen3-8B-4bit

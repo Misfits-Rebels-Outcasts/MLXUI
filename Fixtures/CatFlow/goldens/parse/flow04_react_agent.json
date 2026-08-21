@@ -1,0 +1,133 @@
+{
+  "version": "0.8",
+  "rows": [
+    {
+      "task": "Template",
+      "model": null,
+      "settings": "\"Compare our 2025 and 2026 PTO policies. What changed?\"",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": null,
+      "model": null,
+      "settings": null,
+      "refs": [],
+      "chain_break": false,
+      "block_kind": "list",
+      "block_name": "react_agent",
+      "children": [
+        {
+          "task": "Read Index",
+          "model": null,
+          "settings": "kb.index",
+          "refs": [],
+          "chain_break": false,
+          "block_kind": null,
+          "block_name": null,
+          "children": []
+        },
+        {
+          "task": "Think",
+          "model": "Qwen3 8B",
+          "settings": "tools: search, calculate, final",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "chain_break": false,
+          "block_kind": null,
+          "block_name": null,
+          "children": [],
+          "clause": {
+            "kind": "decide",
+            "edges": [
+              {
+                "tag": "search",
+                "target": {
+                  "kind": "call",
+                  "number": 3
+                }
+              },
+              {
+                "tag": "calculate",
+                "target": {
+                  "kind": "call",
+                  "number": 5
+                }
+              },
+              {
+                "tag": "final",
+                "target": {
+                  "kind": "resume"
+                }
+              }
+            ]
+          },
+          "visits_leq": 8,
+          "on_budget": "final"
+        },
+        {
+          "task": "Embed",
+          "model": "BGE-M3",
+          "settings": null,
+          "refs": [],
+          "chain_break": false,
+          "block_kind": null,
+          "block_name": null,
+          "children": []
+        },
+        {
+          "task": "Retrieve",
+          "model": null,
+          "settings": "top_k=5",
+          "refs": [
+            {
+              "kind": "row",
+              "number": 1
+            },
+            {
+              "kind": "row",
+              "number": 3
+            }
+          ],
+          "chain_break": false,
+          "block_kind": null,
+          "block_name": null,
+          "children": [],
+          "clause": {
+            "kind": "resume"
+          }
+        },
+        {
+          "task": "Calculate",
+          "model": null,
+          "settings": null,
+          "refs": [],
+          "chain_break": false,
+          "block_kind": null,
+          "block_name": null,
+          "children": [],
+          "clause": {
+            "kind": "resume"
+          }
+        }
+      ]
+    },
+    {
+      "task": "Save Text",
+      "model": null,
+      "settings": "findings.md",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    }
+  ]
+}

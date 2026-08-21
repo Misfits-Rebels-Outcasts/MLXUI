@@ -1,0 +1,6 @@
+1. Read Audio    standup.m4a
+2. <list spoken_summary>
+     1. Transcribe   Whisper Large v3  (input:1)
+     2. Summarize    Qwen3 8B · "TL;DR"
+     3. Speak        Kokoro 82M · af_heart
+3. Save Audio    standup-recap.wav

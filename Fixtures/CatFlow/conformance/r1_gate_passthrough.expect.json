@@ -1,0 +1,137 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "memo.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Gate",
+        "model": "Ministral 3B",
+        "settings": "\"Good?\"",
+        "refs": [
+          {
+            "kind": "row",
+            "number": 1
+          }
+        ],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "clause": {
+          "kind": "decide",
+          "edges": [
+            {
+              "tag": "no",
+              "target": {
+                "kind": "row",
+                "number": 3
+              }
+            },
+            {
+              "tag": "yes",
+              "target": {
+                "kind": "row",
+                "number": 3
+              }
+            }
+          ]
+        },
+        "tags": [
+          "no",
+          "yes"
+        ]
+      },
+      {
+        "task": "Save Text",
+        "model": null,
+        "settings": "out.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "trace": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 1|Read Text||memo.txt#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 1|Read Text||memo.txt#0",
+              "path": null
+            }
+          ]
+        },
+        "fired_tag": "yes",
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3"
+      },
+      {
+        "type": "row_completed",
+        "path": "3",
+        "output": {
+          "items": [
+            {
+              "kind": "status",
+              "value": "[mock:status] 3|Save Text||out.txt|[mock:text] 1|Read Text||memo.txt#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "run_completed"
+      }
+    ],
+    "decider_script": {
+      "2": [
+        "yes"
+      ]
+    }
+  }
+}

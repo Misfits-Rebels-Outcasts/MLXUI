@@ -1,0 +1,5 @@
+catflow 0.8
+1. Read Text         memo.txt
+2. Gate        (1)   Ministral 3B; "Good? tags: no, yes"
+   -> { no: 3 | yes: 3 }
+3. Save Text         out.txt

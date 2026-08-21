@@ -1,0 +1,35 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Draft",
+        "model": "Qwen3 8B",
+        "settings": "\"Write a two-paragraph announcement for the release, formal tone\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Save Text",
+        "model": null,
+        "settings": "announcement.md",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ],
+    "models": {
+      "Qwen3 8B": "mlx-community/Qwen3-8B-4bit"
+    }
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  }
+}

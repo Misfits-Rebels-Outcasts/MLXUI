@@ -1,0 +1,180 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": null,
+    "rows": [
+      {
+        "task": "Read Video",
+        "model": null,
+        "settings": "intro.mp4",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Read Video",
+        "model": null,
+        "settings": "main.mp4",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Read Video",
+        "model": null,
+        "settings": "outro.mp4",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Join Video",
+        "model": null,
+        "settings": null,
+        "refs": [
+          {
+            "kind": "row",
+            "number": 1
+          },
+          {
+            "kind": "row",
+            "number": 2
+          },
+          {
+            "kind": "row",
+            "number": 3
+          }
+        ],
+        "chain_break": true,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Save Video",
+        "model": null,
+        "settings": "final.mp4",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "run": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "video",
+              "value": null,
+              "path": "1.0.video.532d0865aaf28c7f.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "video",
+              "value": null,
+              "path": "2.0.video.aa63e121b5559437.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3"
+      },
+      {
+        "type": "row_completed",
+        "path": "3",
+        "output": {
+          "items": [
+            {
+              "kind": "video",
+              "value": null,
+              "path": "3.0.video.39d1ec4501f05364.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "4"
+      },
+      {
+        "type": "row_completed",
+        "path": "4",
+        "output": {
+          "items": [
+            {
+              "kind": "video",
+              "value": null,
+              "path": "4.0.video.1996a807845f7eb9.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "5"
+      },
+      {
+        "type": "row_completed",
+        "path": "5",
+        "output": {
+          "items": [
+            {
+              "kind": "status",
+              "value": "[mock:status] 5|Save Video||final.mp4|4.0.video.1996a807845f7eb9.bin#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "run_completed"
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "cache": {
+    "hits_on_rerun": [
+      "1",
+      "2",
+      "3",
+      "4"
+    ]
+  }
+}

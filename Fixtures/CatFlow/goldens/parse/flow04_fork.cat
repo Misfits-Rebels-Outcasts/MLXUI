@@ -1,0 +1,9 @@
+catflow 0.8
+1. Transcribe   Whisper Large v3; lang=en
+   -> 2 & 4
+2. Summarize    Qwen3 8B; "TL;DR"
+   -> 3
+3. Save Text    summary.md
+   -> done
+4. Translate    Qwen3 8B; to=French
+5. Save Text    translation.md

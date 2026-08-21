@@ -1,0 +1,10 @@
+catflow 0.8
+1. Draft               Qwen3 8B; "Write a tagline"
+   -> 2 & 3
+2. Draft               Qwen3 8B; "Write a tagline, alt phrasing"
+   -> 4
+3. Draft               Qwen3 8B; "Write a tagline, another angle"
+   -> done
+4. Judge       (2,3)   Ministral 3B; "Pick the best tagline"
+   -> { a: 5 | b: 5 }
+5. Save Text           tagline.md

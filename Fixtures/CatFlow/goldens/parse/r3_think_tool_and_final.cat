@@ -1,0 +1,6 @@
+catflow 0.8
+1. Template         "What changed in the policy?"
+2. Think      (1)   Qwen3 8B; tools: search, final; max_visits=4; on_budget=final
+   -> { search: call 3 | final: resume }
+3. Template         "search result placeholder"
+   resume

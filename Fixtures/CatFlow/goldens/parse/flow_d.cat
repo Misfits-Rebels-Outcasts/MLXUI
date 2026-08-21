@@ -1,0 +1,12 @@
+catflow 0.8
+1. Read Audio   standup.m4a
+2. <list spoken_summary>
+     1. Transcribe   (input:1)   Whisper Large v3
+     2. Summarize                Qwen3 8B; "TL;DR"
+     3. Speak                    Kokoro 82M; af_heart
+3. Save Audio   standup-recap.wav
+
+models:
+  Whisper Large v3 = mlx-community/whisper-large-v3-mlx
+  Qwen3 8B         = mlx-community/Qwen3-8B-4bit
+  Kokoro 82M       = mlx-community/Kokoro-82M-4bit

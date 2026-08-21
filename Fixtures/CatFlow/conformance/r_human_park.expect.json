@@ -1,0 +1,151 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "inquiry.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Draft",
+        "model": "Qwen3 8B",
+        "settings": "\"Write the reply\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Ask Human",
+        "model": null,
+        "settings": "\"Send this reply?\" ; wait=forever",
+        "refs": [
+          {
+            "kind": "row",
+            "number": 2
+          }
+        ],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "clause": {
+          "kind": "decide",
+          "edges": [
+            {
+              "tag": "approve",
+              "target": {
+                "kind": "row",
+                "number": 5
+              }
+            },
+            {
+              "tag": "edit",
+              "target": {
+                "kind": "row",
+                "number": 4
+              }
+            },
+            {
+              "tag": "reject",
+              "target": {
+                "kind": "row",
+                "number": 5
+              }
+            }
+          ]
+        },
+        "tags": [
+          "approve",
+          "edit",
+          "reject"
+        ]
+      },
+      {
+        "task": "Human Input",
+        "model": null,
+        "settings": "\"Add anything before sending?\" ; wait=forever",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Save Text",
+        "model": null,
+        "settings": "final.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ],
+    "models": {
+      "Qwen3 8B": "mlx-community/Qwen3-8B-4bit"
+    }
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "trace": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 1|Read Text||inquiry.txt#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2|Draft|Qwen3 8B|\"Write the reply\"|[mock:text] 1|Read Text||inquiry.txt#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3"
+      },
+      {
+        "type": "run_parked",
+        "path": "3",
+        "prompt": "Send this reply?",
+        "policy": "wait=forever"
+      }
+    ]
+  }
+}

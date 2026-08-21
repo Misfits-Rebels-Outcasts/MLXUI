@@ -1,0 +1,395 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Index",
+        "model": null,
+        "settings": "kb.index",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Embed",
+        "model": "BGE-M3",
+        "settings": "\"How many PTO days do new hires get?\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Retrieve",
+        "model": null,
+        "settings": "top_k=5",
+        "refs": [
+          {
+            "kind": "row",
+            "number": 1
+          },
+          {
+            "kind": "row",
+            "number": 2
+          }
+        ],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Gate",
+        "model": "Ministral 3B",
+        "settings": "\"Do the chunks answer it?\"",
+        "refs": [
+          {
+            "kind": "row",
+            "number": 2
+          },
+          {
+            "kind": "row",
+            "number": 3
+          }
+        ],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "clause": {
+          "kind": "decide",
+          "edges": [
+            {
+              "tag": "yes",
+              "target": {
+                "kind": "row",
+                "number": 6
+              }
+            },
+            {
+              "tag": "no",
+              "target": {
+                "kind": "row",
+                "number": 5
+              }
+            }
+          ]
+        },
+        "tags": [
+          "yes",
+          "no"
+        ],
+        "visits_leq": 3,
+        "on_budget": "yes"
+      },
+      {
+        "task": "Rewrite",
+        "model": "Ministral 3B",
+        "settings": "\"Rephrase the question\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "clause": {
+          "kind": "goto",
+          "target": {
+            "kind": "row",
+            "number": 2
+          }
+        }
+      },
+      {
+        "task": "Template",
+        "model": null,
+        "settings": "\"Context: the question.\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Answer",
+        "model": "Qwen3 8B",
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Save Text",
+        "model": null,
+        "settings": "answer.md",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "trace": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "index",
+              "value": null,
+              "path": "1.0.index.4fee3db3114dc60a.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "vector",
+              "value": null,
+              "path": "2.0.vector.c4d0a014b2455fd1.bin"
+            },
+            {
+              "kind": "vector",
+              "value": null,
+              "path": "2.1.vector.2f9c901412facacb.bin"
+            },
+            {
+              "kind": "vector",
+              "value": null,
+              "path": "2.2.vector.f7529a5d0ef8af1d.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3"
+      },
+      {
+        "type": "row_completed",
+        "path": "3",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 3|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|2.0.vector.c4d0a014b2455fd1.bin|2.1.vector.2f9c901412facacb.bin|2.2.vector.f7529a5d0ef8af1d.bin#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 3|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|2.0.vector.c4d0a014b2455fd1.bin|2.1.vector.2f9c901412facacb.bin|2.2.vector.f7529a5d0ef8af1d.bin#1",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 3|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|2.0.vector.c4d0a014b2455fd1.bin|2.1.vector.2f9c901412facacb.bin|2.2.vector.f7529a5d0ef8af1d.bin#2",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "4"
+      },
+      {
+        "type": "row_completed",
+        "path": "4",
+        "output": {
+          "items": [
+            {
+              "kind": "vector",
+              "value": null,
+              "path": "2.0.vector.c4d0a014b2455fd1.bin"
+            },
+            {
+              "kind": "vector",
+              "value": null,
+              "path": "2.1.vector.2f9c901412facacb.bin"
+            },
+            {
+              "kind": "vector",
+              "value": null,
+              "path": "2.2.vector.f7529a5d0ef8af1d.bin"
+            }
+          ]
+        },
+        "fired_tag": "no",
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "5"
+      },
+      {
+        "type": "row_completed",
+        "path": "5",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 5|Rewrite|Ministral 3B|\"Rephrase the question\"#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2@2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2@2",
+        "output": {
+          "items": [
+            {
+              "kind": "vector",
+              "value": null,
+              "path": "2@2.0.vector.2a3712ab06f2690c.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3@2"
+      },
+      {
+        "type": "row_completed",
+        "path": "3@2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 3@2|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|2@2.0.vector.2a3712ab06f2690c.bin#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 3@2|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|2@2.0.vector.2a3712ab06f2690c.bin#1",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 3@2|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|2@2.0.vector.2a3712ab06f2690c.bin#2",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "4@2"
+      },
+      {
+        "type": "row_completed",
+        "path": "4@2",
+        "output": {
+          "items": [
+            {
+              "kind": "vector",
+              "value": null,
+              "path": "2@2.0.vector.2a3712ab06f2690c.bin"
+            }
+          ]
+        },
+        "fired_tag": "yes",
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "6"
+      },
+      {
+        "type": "row_completed",
+        "path": "6",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 6|Template||\"Context: the question.\"#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "7"
+      },
+      {
+        "type": "row_completed",
+        "path": "7",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 7|Answer|Qwen3 8B||[mock:text] 6|Template||\"Context: the question.\"#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "8"
+      },
+      {
+        "type": "row_completed",
+        "path": "8",
+        "output": {
+          "items": [
+            {
+              "kind": "status",
+              "value": "[mock:status] 8|Save Text||answer.md|[mock:text] 7|Answer|Qwen3 8B||[mock:text] 6|Template||\"Context: the question.\"#0#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "run_completed"
+      }
+    ],
+    "decider_script": {
+      "4": [
+        "no",
+        "yes"
+      ]
+    }
+  }
+}

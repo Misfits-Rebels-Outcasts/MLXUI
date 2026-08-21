@@ -1,0 +1,113 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "a.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Classify",
+        "model": "Ministral 3B",
+        "settings": "\"\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "clause": {
+          "kind": "decide",
+          "edges": [
+            {
+              "tag": "x",
+              "target": {
+                "kind": "row",
+                "number": 3
+              }
+            },
+            {
+              "tag": "y",
+              "target": {
+                "kind": "row",
+                "number": 4
+              }
+            }
+          ]
+        },
+        "tags": [
+          "x",
+          "y"
+        ]
+      },
+      {
+        "task": "Draft",
+        "model": "Qwen3 8B",
+        "settings": null,
+        "refs": [
+          {
+            "kind": "row",
+            "number": 1
+          }
+        ],
+        "chain_break": true,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "clause": {
+          "kind": "goto",
+          "target": {
+            "kind": "row",
+            "number": 5
+          }
+        }
+      },
+      {
+        "task": "Draft",
+        "model": "Qwen3 8B",
+        "settings": null,
+        "refs": [
+          {
+            "kind": "row",
+            "number": 1
+          }
+        ],
+        "chain_break": true,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Save Text",
+        "model": null,
+        "settings": "out.txt",
+        "refs": [
+          {
+            "kind": "row",
+            "number": 3
+          }
+        ],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "check": {
+    "valid": false,
+    "issues": [
+      {
+        "row": "5",
+        "code": "E204",
+        "message": "Row 5 references row 3, but row 3 doesn't run on every path that reaches row 5 \u2014 when 2's tag `y` fires, row 3 is skipped. Reference something both paths produce, or move the reference behind the paths' converging row."
+      }
+    ]
+  }
+}

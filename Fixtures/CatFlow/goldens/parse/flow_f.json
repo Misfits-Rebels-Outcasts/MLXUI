@@ -1,0 +1,75 @@
+{
+  "version": "0.8",
+  "rows": [
+    {
+      "task": "Read Text",
+      "model": null,
+      "settings": "book.txt",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Split",
+      "model": null,
+      "settings": "chunk_size=2000",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": null,
+      "model": null,
+      "settings": null,
+      "refs": [],
+      "chain_break": false,
+      "block_kind": "each",
+      "block_name": "summarize_section",
+      "children": [
+        {
+          "task": "Summarize",
+          "model": "Ministral 3B",
+          "settings": "\"one paragraph\"",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "chain_break": false,
+          "block_kind": null,
+          "block_name": null,
+          "children": []
+        }
+      ]
+    },
+    {
+      "task": "Summarize",
+      "model": "Qwen3 8B",
+      "settings": "\"One page, from these section summaries\"",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Save Text",
+      "model": null,
+      "settings": "book-summary.md",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    }
+  ],
+  "models": {
+    "Ministral 3B": "mlx-community/Ministral-3-3B-Instruct-2512-4bit",
+    "Qwen3 8B": "mlx-community/Qwen3-8B-4bit"
+  }
+}

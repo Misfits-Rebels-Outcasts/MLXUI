@@ -1,0 +1,10 @@
+catflow 0.8
+1. Read Text           inquiry.txt
+2. Draft               Qwen3 8B; "Write the reply"
+3. Ask Human     (2)   "Send this reply?" ; timeout=4h ; default=edit; tags: approve, edit, reject
+   -> { approve: 5 | edit: 4 | reject: 5 }
+4. Human Input         "Add anything before sending?" ; timeout=1h ; default=unchanged
+5. Save Text           final.txt
+
+models:
+  Qwen3 8B = mlx-community/Qwen3-8B-4bit

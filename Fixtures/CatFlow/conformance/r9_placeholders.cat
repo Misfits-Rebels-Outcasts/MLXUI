@@ -1,0 +1,19 @@
+catflow 0.8; events
+1. On File              memos/ ; pattern=*.m4a
+2. Read Audio   (1)
+3. Transcribe           Whisper Large v3
+4. Draft        (3)     Qwen3 8B; "Write a subject line"
+5. Template     (4,3)   "{1}: {2}"
+6. BriefFor             exec
+
+7. Save Text            briefs/{name}-brief.md
+
+definitions:
+  composite BriefFor   text -> text
+  params: audience (text); model = Qwen3 8B
+     1. Template   "For {audience}: {input}"
+     2. Generate   {model}
+
+models:
+  Whisper Large v3 = mlx-community/whisper-large-v3-mlx
+  Qwen3 8B         = mlx-community/Qwen3-8B-4bit

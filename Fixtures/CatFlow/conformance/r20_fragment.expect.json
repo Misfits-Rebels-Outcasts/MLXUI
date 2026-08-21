@@ -1,0 +1,41 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "notes.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "comment": "synthesized (R20)"
+      },
+      {
+        "task": "Summarize",
+        "model": "Qwen3 8B",
+        "settings": "\"TL;DR\"",
+        "refs": [
+          {
+            "kind": "row",
+            "number": 1
+          }
+        ],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ],
+    "models": {
+      "Qwen3 8B": "mlx-community/Qwen3-8B-4bit"
+    }
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "version": "0.8",
+  "rows": [
+    {
+      "task": "Transcribe",
+      "model": "Whisper Large v3",
+      "settings": "lang=en",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": [],
+      "clause": {
+        "kind": "fork",
+        "targets": [
+          {
+            "kind": "row",
+            "number": 2
+          },
+          {
+            "kind": "row",
+            "number": 4
+          }
+        ]
+      }
+    },
+    {
+      "task": "Summarize",
+      "model": "Qwen3 8B",
+      "settings": "\"TL;DR\"",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": [],
+      "clause": {
+        "kind": "goto",
+        "target": {
+          "kind": "row",
+          "number": 3
+        }
+      }
+    },
+    {
+      "task": "Save Text",
+      "model": null,
+      "settings": "summary.md",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": [],
+      "clause": {
+        "kind": "goto",
+        "target": {
+          "kind": "done"
+        }
+      }
+    },
+    {
+      "task": "Translate",
+      "model": "Qwen3 8B",
+      "settings": "to=French",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Save Text",
+      "model": null,
+      "settings": "translation.md",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    }
+  ]
+}

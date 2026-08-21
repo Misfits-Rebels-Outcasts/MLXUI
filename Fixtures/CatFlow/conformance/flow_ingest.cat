@@ -1,0 +1,7 @@
+1. Read Files    pattern=*.pdf
+2. <each read_one>
+     1. Read PDF    (input:1)
+3. Join Text
+4. Split         chunk_size=500
+5. Embed         BGE-M3
+6. Store Index   library.index   (4,5)

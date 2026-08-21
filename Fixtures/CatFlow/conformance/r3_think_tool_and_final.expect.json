@@ -1,0 +1,166 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Template",
+        "model": null,
+        "settings": "\"What changed in the policy?\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Think",
+        "model": "Qwen3 8B",
+        "settings": "tools: search, final",
+        "refs": [
+          {
+            "kind": "row",
+            "number": 1
+          }
+        ],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "clause": {
+          "kind": "decide",
+          "edges": [
+            {
+              "tag": "search",
+              "target": {
+                "kind": "call",
+                "number": 3
+              }
+            },
+            {
+              "tag": "final",
+              "target": {
+                "kind": "resume"
+              }
+            }
+          ]
+        },
+        "visits_leq": 4,
+        "on_budget": "final"
+      },
+      {
+        "task": "Template",
+        "model": null,
+        "settings": "\"search result placeholder\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "clause": {
+          "kind": "resume"
+        }
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "trace": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 1|Template||\"What changed in the policy?\"#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2|Think|Qwen3 8B|tools: search, final|[mock:text] 1|Template||\"What changed in the policy?\"#0|tag=search",
+              "path": null
+            }
+          ]
+        },
+        "fired_tag": "search",
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3"
+      },
+      {
+        "type": "row_completed",
+        "path": "3",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 3|Template||\"search result placeholder\"|[mock:text] 2|Think|Qwen3 8B|tools: search, final|[mock:text] 1|Template||\"What changed in the policy?\"#0|tag=search#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "transcript_appended",
+        "path": "2",
+        "entry": {
+          "tool": "search",
+          "input": "[mock:text] 2|Think|Qwen3 8B|tools: search, final|[mock:text] 1|Template||\"What changed in the policy?\"#0|tag=search",
+          "observation": "[mock:text] 3|Template||\"search result placeholder\"|[mock:text] 2|Think|Qwen3 8B|tools: search, final|[mock:text] 1|Template||\"What changed in the policy?\"#0|tag=search#0"
+        }
+      },
+      {
+        "type": "row_started",
+        "path": "2@2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2@2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2@2|Think|Qwen3 8B|tools: search, final|[mock:text] 1|Template||\"What changed in the policy?\"#0|tag=final",
+              "path": null
+            }
+          ]
+        },
+        "fired_tag": "final",
+        "duration_ms": 0
+      },
+      {
+        "type": "run_completed"
+      }
+    ],
+    "decider_script": {
+      "2": [
+        "search",
+        "final"
+      ]
+    }
+  }
+}

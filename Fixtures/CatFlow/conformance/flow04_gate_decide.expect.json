@@ -1,0 +1,221 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Audio",
+        "model": null,
+        "settings": "memo.m4a",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Transcribe",
+        "model": "Whisper Tiny",
+        "settings": "lang=en",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Gate",
+        "model": "Ministral 3B",
+        "settings": "\"Garbled?\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "clause": {
+          "kind": "decide",
+          "edges": [
+            {
+              "tag": "bad",
+              "target": {
+                "kind": "row",
+                "number": 4
+              }
+            },
+            {
+              "tag": "ok",
+              "target": {
+                "kind": "row",
+                "number": 5
+              }
+            }
+          ]
+        },
+        "tags": [
+          "bad",
+          "ok"
+        ]
+      },
+      {
+        "task": "Transcribe",
+        "model": "Whisper Large v3",
+        "settings": "lang=en",
+        "refs": [
+          {
+            "kind": "row",
+            "number": 1
+          }
+        ],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Summarize",
+        "model": "Qwen3 8B",
+        "settings": "\"TL;DR\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Save Text",
+        "model": null,
+        "settings": "memo.md",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "trace": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "audio",
+              "value": null,
+              "path": "1.0.audio.a6d69e5e6fe1e87b.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2|Transcribe|Whisper Tiny|lang=en|1.0.audio.a6d69e5e6fe1e87b.bin#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3"
+      },
+      {
+        "type": "row_completed",
+        "path": "3",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2|Transcribe|Whisper Tiny|lang=en|1.0.audio.a6d69e5e6fe1e87b.bin#0",
+              "path": null
+            }
+          ]
+        },
+        "fired_tag": "bad",
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "4"
+      },
+      {
+        "type": "row_completed",
+        "path": "4",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 4|Transcribe|Whisper Large v3|lang=en|1.0.audio.a6d69e5e6fe1e87b.bin#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "5"
+      },
+      {
+        "type": "row_completed",
+        "path": "5",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 5|Summarize|Qwen3 8B|\"TL;DR\"|[mock:text] 4|Transcribe|Whisper Large v3|lang=en|1.0.audio.a6d69e5e6fe1e87b.bin#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "6"
+      },
+      {
+        "type": "row_completed",
+        "path": "6",
+        "output": {
+          "items": [
+            {
+              "kind": "status",
+              "value": "[mock:status] 6|Save Text||memo.md|[mock:text] 5|Summarize|Qwen3 8B|\"TL;DR\"|[mock:text] 4|Transcribe|Whisper Large v3|lang=en|1.0.audio.a6d69e5e6fe1e87b.bin#0#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "run_completed"
+      }
+    ],
+    "decider_script": {
+      "3": [
+        "bad"
+      ]
+    }
+  }
+}

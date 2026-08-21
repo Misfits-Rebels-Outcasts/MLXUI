@@ -1,0 +1,6 @@
+catflow 0.8; offdevice
+1. Read Text         a.txt
+2. Answer      (1)   claude-sonnet @ anthropic; remote
+
+models:
+  claude-sonnet @ anthropic = anthropic/claude-sonnet-4

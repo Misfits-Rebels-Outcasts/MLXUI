@@ -1,0 +1,175 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "memo.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": null,
+        "model": null,
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": "list",
+        "block_name": "gate_check",
+        "children": [
+          {
+            "task": "Gate",
+            "model": "Ministral 3B",
+            "settings": "\"Skip formatting?\"",
+            "refs": [
+              {
+                "kind": "input",
+                "position": 1
+              }
+            ],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": [],
+            "clause": {
+              "kind": "decide",
+              "edges": [
+                {
+                  "tag": "no",
+                  "target": {
+                    "kind": "row",
+                    "number": 2
+                  }
+                },
+                {
+                  "tag": "yes",
+                  "target": {
+                    "kind": "done"
+                  }
+                }
+              ]
+            },
+            "tags": [
+              "no",
+              "yes"
+            ]
+          },
+          {
+            "task": "Rewrite",
+            "model": "Qwen3 8B",
+            "settings": "\"Format nicely\"",
+            "refs": [],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          }
+        ]
+      },
+      {
+        "task": "Save Text",
+        "model": null,
+        "settings": "final.md",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "trace": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 1|Read Text||memo.txt#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "row_started",
+        "path": "2.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 1|Read Text||memo.txt#0",
+              "path": null
+            }
+          ]
+        },
+        "fired_tag": "yes",
+        "duration_ms": 0
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 1|Read Text||memo.txt#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3"
+      },
+      {
+        "type": "row_completed",
+        "path": "3",
+        "output": {
+          "items": [
+            {
+              "kind": "status",
+              "value": "[mock:status] 3|Save Text||final.md|[mock:text] 1|Read Text||memo.txt#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "run_completed"
+      }
+    ],
+    "decider_script": {
+      "2.1": [
+        "yes"
+      ]
+    }
+  }
+}

@@ -1,0 +1,300 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": null,
+    "rows": [
+      {
+        "task": "Read Images",
+        "model": null,
+        "settings": "vacation/",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": null,
+        "model": null,
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": "each",
+        "block_name": "prep_photo",
+        "children": [
+          {
+            "task": "Resize",
+            "model": null,
+            "settings": "max=2048",
+            "refs": [
+              {
+                "kind": "input",
+                "position": 1
+              }
+            ],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          },
+          {
+            "task": "Watermark",
+            "model": null,
+            "settings": "logo.png",
+            "refs": [],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          }
+        ]
+      },
+      {
+        "task": "Save Images",
+        "model": null,
+        "settings": "vacation-web/",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "run": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "image",
+              "value": null,
+              "path": "1.0.image.21672adf6dc55e36.bin"
+            },
+            {
+              "kind": "image",
+              "value": null,
+              "path": "1.1.image.e30482fe10ea09de.bin"
+            },
+            {
+              "kind": "image",
+              "value": null,
+              "path": "1.2.image.d2e0494d9ea141f7.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "each_item_started",
+        "path": "2",
+        "index": 0,
+        "total": 3
+      },
+      {
+        "type": "row_started",
+        "path": "2.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.1",
+        "output": {
+          "items": [
+            {
+              "kind": "image",
+              "value": null,
+              "path": "2.1.0.image.d69e8f47648345cc.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2.2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.2",
+        "output": {
+          "items": [
+            {
+              "kind": "image",
+              "value": null,
+              "path": "2.2.0.image.95b66cbd64ae5c6e.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "each_item_completed",
+        "path": "2",
+        "index": 0,
+        "total": 3
+      },
+      {
+        "type": "each_item_started",
+        "path": "2",
+        "index": 1,
+        "total": 3
+      },
+      {
+        "type": "row_started",
+        "path": "2.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.1",
+        "output": {
+          "items": [
+            {
+              "kind": "image",
+              "value": null,
+              "path": "2.1.0.image.efe8e21f1a4cf2dc.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2.2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.2",
+        "output": {
+          "items": [
+            {
+              "kind": "image",
+              "value": null,
+              "path": "2.2.0.image.2a6ed21cbe143490.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "each_item_completed",
+        "path": "2",
+        "index": 1,
+        "total": 3
+      },
+      {
+        "type": "each_item_started",
+        "path": "2",
+        "index": 2,
+        "total": 3
+      },
+      {
+        "type": "row_started",
+        "path": "2.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.1",
+        "output": {
+          "items": [
+            {
+              "kind": "image",
+              "value": null,
+              "path": "2.1.0.image.d7dfae19cbc4c716.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2.2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.2",
+        "output": {
+          "items": [
+            {
+              "kind": "image",
+              "value": null,
+              "path": "2.2.0.image.6a44b475459b80c6.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "each_item_completed",
+        "path": "2",
+        "index": 2,
+        "total": 3
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "image",
+              "value": null,
+              "path": "2.2.0.image.95b66cbd64ae5c6e.bin"
+            },
+            {
+              "kind": "image",
+              "value": null,
+              "path": "2.2.0.image.2a6ed21cbe143490.bin"
+            },
+            {
+              "kind": "image",
+              "value": null,
+              "path": "2.2.0.image.6a44b475459b80c6.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3"
+      },
+      {
+        "type": "row_completed",
+        "path": "3",
+        "output": {
+          "items": [
+            {
+              "kind": "status",
+              "value": "[mock:status] 3|Save Images||vacation-web/|2.2.0.image.95b66cbd64ae5c6e.bin|2.2.0.image.2a6ed21cbe143490.bin|2.2.0.image.6a44b475459b80c6.bin#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "run_completed"
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "cache": {
+    "hits_on_rerun": [
+      "1",
+      "2.1",
+      "2.2"
+    ]
+  }
+}

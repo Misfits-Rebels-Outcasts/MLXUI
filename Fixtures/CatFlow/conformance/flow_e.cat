@@ -1,0 +1,5 @@
+1. Read Images   vacation/
+2. <each prep_photo>
+     1. Resize      max=2048   (input:1)
+     2. Watermark   logo.png
+3. Save Images   vacation-web/

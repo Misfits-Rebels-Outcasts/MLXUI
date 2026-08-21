@@ -1,0 +1,8 @@
+catflow 0.8
+1. Read Text         memo.txt
+2. Split             chunk_size=500
+3. <each contextualize>   (2,1)
+     1. Draft   (input:1)   Ministral 3B; "one sentence about this chunk"
+     2. Draft   (input:2)   Ministral 3B; "one sentence about the whole
+                            document"
+4. Join Text   (3)   separator="---"

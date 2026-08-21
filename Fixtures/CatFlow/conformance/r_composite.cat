@@ -1,0 +1,15 @@
+catflow 0.8
+1. Read Text   roster.txt
+2. Greet       hey ; shout=true   text -> [text]
+3. Merge       Qwen3 8B; "combined greetings"
+4. Save Text   greetings.md
+
+definitions:
+  composite Greet   text -> [text]
+  params: greeting = "Hello"; shout (bool); times = 1
+     1. Split   by=lines
+     2. <each say_one>   [text] -> [text]
+          1. Draft   {greeting}; shout={shout}
+
+models:
+  Qwen3 8B = mlx-community/Qwen3-8B-4bit

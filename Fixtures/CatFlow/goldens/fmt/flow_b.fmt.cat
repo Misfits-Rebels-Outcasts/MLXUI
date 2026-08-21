@@ -1,0 +1,7 @@
+catflow 0.8
+1. Read Video             intro.mp4
+2. Read Video             main.mp4
+3. Read Video             outro.mp4
+
+4. Join Video   (1,2,3)
+5. Save Video             final.mp4

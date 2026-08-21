@@ -1,0 +1,11 @@
+catflow 0.8
+1. Read Text   book.txt
+2. Split       chunk_size=2000
+3. <each summarize_section>
+     1. Summarize   (input:1)   Ministral 3B; "one paragraph"
+4. Summarize   Qwen3 8B; "One page, from these section summaries"
+5. Save Text   book-summary.md
+
+models:
+  Ministral 3B = mlx-community/Ministral-3-3B-Instruct-2512-4bit
+  Qwen3 8B     = mlx-community/Qwen3-8B-4bit

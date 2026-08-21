@@ -1,0 +1,43 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "a.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Answer",
+        "model": "claude-sonnet @ anthropic",
+        "settings": "remote",
+        "refs": [
+          {
+            "kind": "row",
+            "number": 1
+          }
+        ],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ],
+    "flags": [
+      "offdevice"
+    ],
+    "models": {
+      "claude-sonnet @ anthropic": "anthropic/claude-sonnet-4"
+    }
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  }
+}

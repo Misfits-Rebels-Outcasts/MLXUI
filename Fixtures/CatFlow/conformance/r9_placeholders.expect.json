@@ -1,0 +1,148 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "On File",
+        "model": null,
+        "settings": "memos/ ; pattern=*.m4a",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Read Audio",
+        "model": null,
+        "settings": null,
+        "refs": [
+          {
+            "kind": "row",
+            "number": 1
+          }
+        ],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Transcribe",
+        "model": "Whisper Large v3",
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Draft",
+        "model": "Qwen3 8B",
+        "settings": "\"Write a subject line\"",
+        "refs": [
+          {
+            "kind": "row",
+            "number": 3
+          }
+        ],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Template",
+        "model": null,
+        "settings": "\"{1}: {2}\"",
+        "refs": [
+          {
+            "kind": "row",
+            "number": 4
+          },
+          {
+            "kind": "row",
+            "number": 3
+          }
+        ],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "BriefFor",
+        "model": null,
+        "settings": "exec",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Save Text",
+        "model": null,
+        "settings": "briefs/{name}-brief.md",
+        "refs": [],
+        "chain_break": true,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ],
+    "flags": [
+      "events"
+    ],
+    "definitions": {
+      "BriefFor": {
+        "name": "BriefFor",
+        "signature": "text -> text",
+        "params": [
+          {
+            "name": "audience",
+            "kind": "text",
+            "default": null
+          },
+          {
+            "name": "model",
+            "kind": null,
+            "default": "Qwen3 8B"
+          }
+        ],
+        "rows": [
+          {
+            "task": "Template",
+            "model": null,
+            "settings": "\"For {audience}: {input}\"",
+            "refs": [],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          },
+          {
+            "task": "Generate",
+            "model": "{model}",
+            "settings": null,
+            "refs": [],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          }
+        ]
+      }
+    },
+    "models": {
+      "Whisper Large v3": "mlx-community/whisper-large-v3-mlx",
+      "Qwen3 8B": "mlx-community/Qwen3-8B-4bit"
+    }
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  }
+}

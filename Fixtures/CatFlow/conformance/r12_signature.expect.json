@@ -1,0 +1,60 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Files",
+        "model": null,
+        "settings": "docs/ ; pattern=*.pdf",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "declared_signature": "folder -> [file]"
+      },
+      {
+        "task": null,
+        "model": null,
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": "each",
+        "block_name": "ingest_one",
+        "children": [
+          {
+            "task": "Read PDF",
+            "model": null,
+            "settings": null,
+            "refs": [
+              {
+                "kind": "input",
+                "position": 1
+              }
+            ],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          }
+        ],
+        "declared_signature": "[file] -> [text]"
+      },
+      {
+        "task": "Join Text",
+        "model": null,
+        "settings": "separator=\"\\n\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  }
+}

@@ -1,0 +1,6 @@
+1. Read Index    kb.index
+2. Embed         BGE-M3 · "How many PTO days do new hires get?"
+3. Retrieve      (1,2) · top_k=5
+4. Template      "Context:\n{input}\n\nQ: How many PTO days do new hires get?"
+5. Answer        Qwen3 8B
+6. Save Text     answer.txt

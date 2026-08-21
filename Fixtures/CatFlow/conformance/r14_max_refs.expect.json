@@ -1,0 +1,82 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "a.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "b.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "c.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "d.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Merge",
+        "model": "Qwen3 8B",
+        "settings": "\"combine\"",
+        "refs": [
+          {
+            "kind": "row",
+            "number": 1
+          },
+          {
+            "kind": "row",
+            "number": 2
+          },
+          {
+            "kind": "row",
+            "number": 3
+          },
+          {
+            "kind": "row",
+            "number": 4
+          }
+        ],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ],
+    "models": {
+      "Qwen3 8B": "mlx-community/Qwen3-8B-4bit"
+    }
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  }
+}

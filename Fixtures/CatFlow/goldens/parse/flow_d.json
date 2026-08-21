@@ -1,0 +1,76 @@
+{
+  "version": "0.8",
+  "rows": [
+    {
+      "task": "Read Audio",
+      "model": null,
+      "settings": "standup.m4a",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": null,
+      "model": null,
+      "settings": null,
+      "refs": [],
+      "chain_break": false,
+      "block_kind": "list",
+      "block_name": "spoken_summary",
+      "children": [
+        {
+          "task": "Transcribe",
+          "model": "Whisper Large v3",
+          "settings": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "chain_break": false,
+          "block_kind": null,
+          "block_name": null,
+          "children": []
+        },
+        {
+          "task": "Summarize",
+          "model": "Qwen3 8B",
+          "settings": "\"TL;DR\"",
+          "refs": [],
+          "chain_break": false,
+          "block_kind": null,
+          "block_name": null,
+          "children": []
+        },
+        {
+          "task": "Speak",
+          "model": "Kokoro 82M",
+          "settings": "af_heart",
+          "refs": [],
+          "chain_break": false,
+          "block_kind": null,
+          "block_name": null,
+          "children": []
+        }
+      ]
+    },
+    {
+      "task": "Save Audio",
+      "model": null,
+      "settings": "standup-recap.wav",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    }
+  ],
+  "models": {
+    "Whisper Large v3": "mlx-community/whisper-large-v3-mlx",
+    "Qwen3 8B": "mlx-community/Qwen3-8B-4bit",
+    "Kokoro 82M": "mlx-community/Kokoro-82M-4bit"
+  }
+}

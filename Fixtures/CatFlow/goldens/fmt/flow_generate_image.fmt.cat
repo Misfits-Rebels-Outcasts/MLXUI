@@ -1,0 +1,7 @@
+catflow 0.8
+1. Read Text              brief.txt
+2. Generate Image   (1)   Z-Image Turbo; steps=9; seed=7
+3. Save Image       (2)   hero.png
+
+models:
+  Z-Image Turbo = Tongyi-MAI/Z-Image-Turbo

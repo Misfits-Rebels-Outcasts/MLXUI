@@ -1,0 +1,6 @@
+catflow 0.8
+1. Read Audio   talk.m4a
+2. Transcribe   Whisper Large v3; lang=en
+
+models:
+  Whisper Large v3 = mlx-community/whisper-large-v3-mlx

@@ -1,0 +1,868 @@
+[
+  {
+    "name": "unknown-task",
+    "cat": "1. Frobnicate  foo.txt\n",
+    "issues": [
+      {
+        "row": "1",
+        "code": "unknown-task",
+        "message": "\"Frobnicate\" isn't a recognized task -- check spelling against `catflow tasks`."
+      }
+    ]
+  },
+  {
+    "name": "too-many-refs",
+    "cat": "1. Read Text a.txt\n2. Read Text b.txt\n3. Read Text c.txt\n4. Read Text d.txt\n5. Read Text e.txt\n6. Merge (1,2,3,4,5)\n",
+    "issues": [
+      {
+        "row": "6",
+        "code": "E205",
+        "message": "Row 6 bundles 5 references; the limit is 4. Combine some upstream (Template and Join Text both bundle), then reference the result."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement)"
+  },
+  {
+    "name": "refs-exactly-4-ok",
+    "cat": "1. Read Text a.txt\n2. Read Text b.txt\n3. Read Text c.txt\n4. Read Text d.txt\n5. Merge (1,2,3,4)\n",
+    "issues": []
+  },
+  {
+    "name": "unresolved-ref-forward",
+    "cat": "1. Read Text a.txt\n2. Save Text out.txt   (3)\n3. Read Text b.txt\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E203",
+        "message": "Row 2 references row 3, which no longer exists. It was deleted \u2014 pick a new source, or undo."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement)"
+  },
+  {
+    "name": "unresolved-ref-out-of-range",
+    "cat": "1. Save Text out.txt   (5)\n",
+    "issues": [
+      {
+        "row": "1",
+        "code": "E203",
+        "message": "Row 1 references row 5, which no longer exists. It was deleted \u2014 pick a new source, or undo."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement)"
+  },
+  {
+    "name": "unresolved-ref-self",
+    "cat": "1. Save Text out.txt   (1)\n",
+    "issues": [
+      {
+        "row": "1",
+        "code": "E203",
+        "message": "Row 1 references row 1, which no longer exists. It was deleted \u2014 pick a new source, or undo."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement)"
+  },
+  {
+    "name": "bad-input-ref-outside-block",
+    "cat": "1. Transcribe  Whisper  (input:1)\n",
+    "issues": [
+      {
+        "row": "1",
+        "code": "bad-input-ref",
+        "message": "(input:1) only makes sense inside a <list>/<each> block -- this row isn't inside one."
+      }
+    ]
+  },
+  {
+    "name": "unbound-block-input",
+    "_replaces": "unsupported-multi-input (P3-MA-05: input:K>1 is legal now, R6 -- reconciliation table's own E-code mapping marks the old code 'deleted, now legal'; this fixture documents the sanctioned replacement per reconciliation row 13's precedent, not a golden edit)",
+    "cat": "1. Read Audio a.m4a\n2. <each x>\n     1. Transcribe  Whisper  (input:2)\n3. Save Text out.txt\n",
+    "issues": [
+      {
+        "row": "2.1",
+        "code": "E401",
+        "message": "Inside 2, row 2.1 reads `(input:2)`, but the block row binds only 1 input(s). Add a reference on the block's row, or drop to `(input:1)`."
+      }
+    ]
+  },
+  {
+    "name": "input-1-reused-inside-block-ok",
+    "cat": "1. Read Audio a.m4a\n2. <list x>\n     1. Transcribe  Whisper  (input:1)\n     2. Save Audio  copy.wav   (input:1)\n     3. Summarize   Qwen3   (1)\n3. Save Text out.txt\n",
+    "issues": [],
+    "_replaces": "P3-MA-08: row 2.3 (Summarize) had no real input even before this item (the old silent auto-chain-mismatch policy never flagged it) -- fixed to reference row 2.1's transcript explicitly, keeping this fixture a clean input:1-reuse example (its own name's promise) rather than accepting an unrelated E201 finding here."
+  },
+  {
+    "name": "type-mismatch-union-accepts",
+    "cat": "1. Read Text a.txt\n2. Trim   in=00:01   (1)\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E202",
+        "message": "Row 2's reference (1) delivers text, but its first input needs audio|video."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement)"
+  },
+  {
+    "name": "type-mismatch-list-bundle-wrong-kind",
+    "cat": "1. Read Text a.txt\n2. Read Video b.mp4\n3. Join Video   (1,2)\n",
+    "issues": [
+      {
+        "row": "3",
+        "code": "E202",
+        "message": "Row 3's reference (1) delivers text, but its first input needs video."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement)"
+  },
+  {
+    "name": "type-mismatch-tuple-wrong-order",
+    "cat": "1. Read Text handbook.txt\n2. Embed BGE-M3\n3. Split chunk_size=500\n4. Store Index kb.index (2,3)\n",
+    "issues": [
+      {
+        "row": "4",
+        "code": "E202",
+        "message": "Row 4's reference (2) delivers [vector], but its first input needs text."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement); P3-MA-08 reconciliation row 8: a genuinely new catch (this row always had no real input; the old silent auto-chain-mismatch policy just never flagged it) -- an addition, not a wording-only replacement",
+    "_note": "SPEC-Q71(a) resolved: row 2's own E201 dropped -- row 1 (Read Text) auto-chains a Single(text) into Embed's [text] accepts, now a valid lift (same rule for auto-chain as for an explicit ref, per Q71(a)'s own recommendation). Row 4's E202 is untouched: that's the wrong-order TupleOf mismatch this fixture is actually named for, unrelated to the Single->ListOf lift."
+  },
+  {
+    "name": "type-mismatch-tuple-right-order-ok",
+    "cat": "1. Read Text handbook.txt\n2. Split chunk_size=500\n3. Embed BGE-M3\n4. Store Index kb.index (2,3)\n",
+    "issues": []
+  },
+  {
+    "name": "frame-variadic-text-bundle-ok",
+    "cat": "1. Draft Qwen3\n2. Critique Qwen3\n3. Verify (1,2)\n",
+    "issues": []
+  },
+  {
+    "name": "non-frame-multi-ref-rejected",
+    "cat": "1. Draft Qwen3\n2. Critique Qwen3\n3. Speak Kokoro (1,2)\n",
+    "issues": [
+      {
+        "row": "3",
+        "code": "E202",
+        "message": "Row 3's reference (1) delivers text, but its first input needs text."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement)"
+  },
+  {
+    "name": "ambiguous-auto-chain",
+    "cat": "1. Draft Qwen3\n2. Critique Qwen3\n3. Verify (1)\n",
+    "issues": [
+      {
+        "row": "3",
+        "code": "ambiguous-auto-chain",
+        "message": "this row could auto-chain from the row above (same type), but it references a different row instead -- add a blank line above to make the branch explicit."
+      }
+    ]
+  },
+  {
+    "name": "ambiguous-redundant-ref-ok",
+    "cat": "1. Draft Qwen3\n2. Critique Qwen3\n3. Verify (2)\n",
+    "issues": []
+  },
+  {
+    "name": "ambiguous-suppressed-by-blank-line-ok",
+    "cat": "1. Draft Qwen3\n2. Critique Qwen3\n\n3. Verify (1)\n",
+    "issues": []
+  },
+  {
+    "name": "ambiguous-suppressed-by-anykind-ok",
+    "cat": "1. Draft Qwen3\n2. Critique Qwen3\n3. Save Text out.txt   (1)\n",
+    "issues": []
+  },
+  {
+    "name": "mismatched-auto-chain-silently-branches-ok",
+    "cat": "1. Read Video clip.mp4\n2. Summarize Qwen3 \u00b7 \"recap\"\n",
+    "issues": []
+  },
+  {
+    "name": "embedder-mismatch",
+    "cat": "1. Read Text handbook.txt\n2. Split chunk_size=500\n3. Embed BGE-M3\n4. Store Index kb.index (2,3)\n5. Embed MiniLM-L6 \u00b7 \"query\"\n6. Retrieve (4,5) \u00b7 top_k=5\n",
+    "issues": [
+      {
+        "row": "6",
+        "code": "E707",
+        "message": "Row 6 retrieves from row 4, which was built with BGE-M3, but row 5 embeds with MiniLM-L6. Same text, different spaces \u2014 results would be silently wrong. Match them, or rebuild the index."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement)"
+  },
+  {
+    "name": "embedder-match-ok",
+    "cat": "1. Read Text handbook.txt\n2. Split chunk_size=500\n3. Embed BGE-M3\n4. Store Index kb.index (2,3)\n5. Embed BGE-M3 \u00b7 \"query\"\n6. Retrieve (4,5) \u00b7 top_k=5\n",
+    "issues": []
+  },
+  {
+    "name": "embedder-from-read-index-deferred-ok",
+    "cat": "1. Read Index kb.index\n2. Embed MiniLM-L6 \u00b7 \"query\"\n3. Retrieve (1,2) \u00b7 top_k=5\n",
+    "issues": []
+  },
+  {
+    "name": "index-embedder-mismatch-v08",
+    "cat": "catflow 0.8\n1. Read Text handbook.txt\n2. Split chunk_size=500\n3. Embed BGE-M3\n4. Store Index kb.index (2,3)\n5. Embed ModernBERT Embed ; \"query\"\n6. Retrieve (4,5) ; top_k=5\n",
+    "issues": [
+      {
+        "row": "6",
+        "code": "E209",
+        "message": "Row 6 queries an index built with BGE-M3, but row 5 embeds with ModernBERT Embed. Vectors from different models aren't comparable \u2014 re-embed the query with BGE-M3, or rebuild the index."
+      }
+    ],
+    "_note": "P5-ND-01 (Spec \u00a73.1a, R26, check 21): the v0.8 successor to embedder-mismatch above -- same in-flow Store Index/Embed trace, but E209 instead of E707 (SPEC-Q156). Two real, distinct curated models rather than a made-up name, so `_check_models_pinned` stays clean."
+  },
+  {
+    "name": "index-embedder-match-v08-ok",
+    "cat": "catflow 0.8\n1. Read Text handbook.txt\n2. Split chunk_size=500\n3. Embed BGE-M3\n4. Store Index kb.index (2,3)\n5. Embed BGE-M3 ; \"query\"\n6. Retrieve (4,5) ; top_k=5\n",
+    "issues": []
+  },
+  {
+    "name": "nested-issue-path-numbering",
+    "cat": "1. Read Audio a.m4a\n2. <list x>\n     1. Transcribe  Whisper\n     2. Frobnicate  bad\n3. Save Text out.txt\n",
+    "issues": [
+      {
+        "row": "2.2",
+        "code": "unknown-task",
+        "message": "\"Frobnicate\" isn't a recognized task -- check spelling against `catflow tasks`."
+      }
+    ]
+  },
+  {
+    "name": "multiple-issues-in-order",
+    "cat": "1. Frobnicate  a\n2. Frobnicate  b\n",
+    "issues": [
+      {
+        "row": "1",
+        "code": "unknown-task",
+        "message": "\"Frobnicate\" isn't a recognized task -- check spelling against `catflow tasks`."
+      },
+      {
+        "row": "2",
+        "code": "unknown-task",
+        "message": "\"Frobnicate\" isn't a recognized task -- check spelling against `catflow tasks`."
+      }
+    ]
+  },
+  {
+    "name": "each-lifts-single-to-list-ok",
+    "cat": "1. Read Images vacation/\n2. <each prep_photo>\n     1. Resize      max=2048   (input:1)\n     2. Watermark   logo.png\n3. Save Images vacation-web/\n",
+    "issues": []
+  },
+  {
+    "name": "list-block-signature-inference-ok",
+    "cat": "1. Read Audio standup.m4a\n2. <list spoken_summary>\n     1. Transcribe   Whisper Large v3  (input:1)\n     2. Summarize    Qwen3 8B \u00b7 \"TL;DR\"\n     3. Speak        Kokoro 82M \u00b7 af_heart\n3. Save Audio standup-recap.wav\n",
+    "issues": []
+  },
+  {
+    "name": "retrieve-single-ref-is-type-mismatch",
+    "cat": "1. Read Index kb.index\n2. Retrieve (1) \u00b7 top_k=5\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E202",
+        "message": "Row 2's reference (1) delivers index, but its first input needs [index, vector]."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement)"
+  },
+  {
+    "name": "tools-doc-research-block-networked-tools-valid",
+    "cat": "catflow 0.8; network\n1. Web Search   top_k=5\n2. <each fetch_one>\n     1. Web Fetch   as=markdown  (input:1)\n3. Template     \"Sources:\"\n4. Answer       Qwen3 8B\n",
+    "issues": [],
+    "_replaces": "P4-02 (SPEC-Q9): Web Search/Web Fetch are recognized tasks now -- this fixture used to assert the unknown-task rejection itself (tools-doc-research-block-networked-tools-unknown), now asserts the same block validates clean instead"
+  },
+  {
+    "name": "tools-doc-watch-block-networked-tool-valid",
+    "cat": "catflow 0.8; network\n1. Fetch Feed     url=https://example.com/feed\n2. Filter         contains=\"release\"\n3. <each summarize_item>\n     1. Summarize   Ministral 3B ; \"one line\"  (input:1)\n4. Join Text      separator=\"\\n\"\n5. Save Text      updates.md\n",
+    "issues": [],
+    "_replaces": "P4-02 (SPEC-Q9): Fetch Feed is a recognized task now -- this fixture used to assert the unknown-task rejection itself (tools-doc-watch-block-networked-tool-unknown), now asserts the same block validates clean instead"
+  },
+  {
+    "name": "v04-dangling-target",
+    "cat": "catflow 0.8\n1. Summarize  Qwen3 8B\n-> 9\n",
+    "issues": [
+      {
+        "row": "1",
+        "code": "E203",
+        "message": "Row 1 references row 9, which no longer exists. It was deleted \u2014 pick a new source, or undo."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement)"
+  },
+  {
+    "name": "v04-goto-in-range-ok",
+    "cat": "catflow 0.8\n1. Summarize  Qwen3 8B\n-> 2\n2. Save Text  out.txt\n",
+    "issues": []
+  },
+  {
+    "name": "v04-unreachable-row",
+    "cat": "catflow 0.8\n1. Summarize  Qwen3 8B\n-> 3\n2. Translate  Qwen3 8B ; to=French\n3. Save Text  out.txt\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E301",
+        "message": "Row 2 can never run: nothing falls into it, no edge aims at it, and no reference reads it. Delete it, or connect it."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement)"
+  },
+  {
+    "name": "v04-resume-no-caller",
+    "cat": "catflow 0.8\n1. Template  \"index question\"\n2. <list broken_agent>\n     1. Read Index  kb.index\n     2. Think       Qwen3 8B ; tools: search, final ; max_visits=8 ; on_budget=final\n        -> { search: call 4 | final: resume }\n     3. Embed       BGE-M3\n        resume\n     4. Retrieve    (1,3) ; top_k=5\n        resume\n3. Save Text  out.txt\n",
+    "issues": [
+      {
+        "row": "2.3",
+        "code": "E309",
+        "message": "Row 2.3 ends its chain with `resume`, but no `call` can reach it. At the top level of a flow this is fine (resume means done) \u2014 inside a block it means the tool chain is orphaned. Aim a `call` at row 3, or end the chain another way."
+      },
+      {
+        "row": "2.3",
+        "code": "E201",
+        "message": "Row 2.3 (Embed) needs [text], but row 2 produces index. Between them you likely want a reference or your own settings."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement); P3-MA-08 reconciliation row 8: a genuinely new catch (this row always had no real input; the old silent auto-chain-mismatch policy just never flagged it) -- an addition, not a wording-only replacement"
+  },
+  {
+    "name": "v04-tag-missing-edge",
+    "cat": "catflow 0.8\n1. Read Text  memo.txt\n2. Classify   Qwen3 8B ; \"Route it. tags: urgent, normal, spam\"\n   -> { urgent: 3 | normal: 3 }\n3. Save Text  out.txt\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E302",
+        "message": "Row 2 declares tags urgent, normal, spam, but `spam` has no destination. Every tag needs an edge: add `spam: <row>` to the clause."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement)"
+  },
+  {
+    "name": "v04-tags-fully-edged-ok",
+    "cat": "catflow 0.8\n1. Read Text  memo.txt\n2. Classify   Qwen3 8B ; \"Route it. tags: urgent, normal, spam\"\n   -> { urgent: 3 | normal: 3 | spam: 3 }\n3. Save Text  out.txt\n",
+    "issues": []
+  },
+  {
+    "name": "v04-undeclared-tag",
+    "cat": "catflow 0.8\n1. Read Text  memo.txt\n2. Classify   Qwen3 8B ; \"Route it. tags: urgent, normal\"\n   -> { urgent: 3 | normal: 3 | spam: 3 }\n3. Save Text  out.txt\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E303",
+        "message": "Row 2's clause routes `spam`, but the row's tags are urgent, normal. Closest declared tag: `normal`."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement)"
+  },
+  {
+    "name": "v04-decide-edge-type-mismatch",
+    "cat": "catflow 0.8\n1. Read Text   memo.txt\n2. Gate        Ministral 3B ; \"Garbled? tags: bad, ok\"\n   -> { bad: 3 | ok: 4 }\n3. Translate   Qwen3 8B ; to=French\n4. Extract Frame  at=0\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E304",
+        "message": "Row 2's tag `ok` carries text to row 4, which needs video. (A decider hands on its own input \u2014 see what row 2 receives.)"
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement)"
+  },
+  {
+    "name": "v04-decide-edge-with-own-refs-not-type-checked-ok",
+    "cat": "catflow 0.8\n1. Read Text   memo.txt\n2. Read Audio  clip.m4a\n3. Gate        Ministral 3B ; \"Garbled? tags: bad, ok\"  (1)\n   -> { bad: 4 | ok: 5 }\n4. Transcribe  Whisper Tiny  (2)\n5. Save Text   out.txt\n",
+    "issues": []
+  },
+  {
+    "name": "spec-q118-decide-edge-to-block-whose-real-input-arrives-on-a-deeper-child-ok",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. Classify   Ministral 3B ; \"Type? tags: x, y\"\n   -> { x: 3 | y: 4 }\n3. <list agent>\n     1. Read Text  b.txt\n     2. Summarize  Qwen3 8B  (input:1)\n4. Save Text  out.txt\n",
+    "issues": [],
+    "_note": "SPEC-Q118: row 3's own first child (Read Text) is unrelated setup that ignores the block's real input -- the real use is on 3.2's explicit (input:1); the decider's text payload must be checked against that, not Read Text's file accepts."
+  },
+  {
+    "name": "spec-q118-decide-edge-to-block-with-no-input-1-use-still-checked",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. Classify   Ministral 3B ; \"Type? tags: x, y\"\n   -> { x: 3 | y: 4 }\n3. <list agent>\n     1. Read Text  b.txt\n     2. Summarize  Qwen3 8B\n4. Save Text  out.txt\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E304",
+        "message": "Row 2's tag `x` carries text to row 3, which needs file. (A decider hands on its own input \u2014 see what row 2 receives.)"
+      }
+    ],
+    "_note": "SPEC-Q118 regression guard: without any child referencing (input:1), the block's real accepts genuinely is its first child's own (file) -- the exemption must not fire here."
+  },
+  {
+    "name": "spec-q118-blocks-own-first-child-using-input-1-not-widened-ok",
+    "cat": "catflow 0.8\n1. <list agent>\n     1. Summarize  Qwen3 8B  (input:1)\n     2. Draft      Qwen3 8B\n",
+    "issues": [],
+    "_note": "SPEC-Q118 regression guard (library/RagQuery.cat's own shape): the *first* child is the one referencing (input:1) -- its own catalog accepts is already the precise answer; widening to AnyKind() here would make this same ref fail its own inferred type (an AnyKind given never satisfies a typed accepts)."
+  },
+  {
+    "name": "spec-q117-multi-ref-listof-text-bundle-position-ok",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. Split      by=lines\n3. Read Text  b.txt\n4. Template   \"{1}\\n\\n{2}\"  (2,3)\n",
+    "issues": [],
+    "_note": "SPEC-Q117: ref (2) is Split's genuine [text] (multiple lines) -- fills one Template position same as a Single(text) ref would, the same leniency single_compatible's ListOf branch already grants a lone ref (SPEC-Q71(a))."
+  },
+  {
+    "name": "spec-q117-multi-ref-listof-kind-mismatch-still-checked",
+    "cat": "catflow 0.8\n1. Read Files  docs/ ; pattern=*.txt\n2. Read Text  b.txt\n3. Template   \"{1}\\n\\n{2}\"  (1,2)\n",
+    "issues": [
+      {
+        "row": "3",
+        "code": "E202",
+        "message": "Row 3's reference (1) delivers [file], but its first input needs text."
+      }
+    ],
+    "_note": "SPEC-Q117 regression guard: a genuine kind mismatch in a multi-ref [text]-accepts bundle position (Read Files gives [file]) must still be caught."
+  },
+  {
+    "name": "spec-q71c-composite-call-declared-signature-consulted-ok",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. BriefFor   launch\n\n3. Embed      BGE-M3   (2)\n\ndefinitions:\n  composite BriefFor  text -> text\n  params: topic\n     1. Draft  Qwen3 8B\n",
+    "issues": [],
+    "_note": "SPEC-Q71(c): BriefFor's own declared 'text -> text' is consulted for row 2's real gives, satisfying Embed's [text] accepts (SPEC-Q71(a)'s Single-lifts-to-ListOf leniency)."
+  },
+  {
+    "name": "spec-q71c-composite-call-declared-signature-mismatch-caught",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. BriefFor   launch\n\n3. OCR        (2)\n\ndefinitions:\n  composite BriefFor  text -> text\n  params: topic\n     1. Draft  Qwen3 8B\n",
+    "issues": [
+      {
+        "row": "3",
+        "code": "E202",
+        "message": "Row 3's reference (2) delivers text, but its first input needs image."
+      }
+    ],
+    "_note": "SPEC-Q71(c) regression guard: previously the composite call's gives fell back to AnyKind(), so this real mismatch (BriefFor gives text, OCR needs image) was silently masked entirely."
+  },
+  {
+    "name": "spec-q120-decide-edge-hands-text-to-save-context-ok",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. Draft      Qwen3 8B\n3. Ask Human  \"More? tags: yes, no\" ; wait=forever\n   -> { yes: 2 | no: 4 }\n4. Save Context  out.ctx\n",
+    "issues": [],
+    "_note": "SPEC-Q120: core/interpreter.py always overrides Save Context's real input to the run's live journal, regardless of what a decide edge/ref/auto-chain hands it -- a decider handing on text (its own catalog accepts=context) must not be flagged."
+  },
+  {
+    "name": "spec-q120-decide-edge-to-a-different-mismatched-task-still-checked",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. Draft      Qwen3 8B\n3. Ask Human  \"More? tags: yes, no\" ; wait=forever\n   -> { yes: 2 | no: 4 }\n4. OCR\n",
+    "issues": [
+      {
+        "row": "3",
+        "code": "E304",
+        "message": "Row 3's tag `no` carries text to row 4, which needs image. (A decider hands on its own input \u2014 see what row 3 receives.)"
+      }
+    ],
+    "_note": "SPEC-Q120 regression guard: the AnyKind() exemption is scoped to Save Context specifically, not decide edges in general -- a genuine mismatch elsewhere (OCR needs image) must still be caught."
+  },
+  {
+    "name": "v04-missing-on-budget",
+    "cat": "catflow 0.8\n1. Read Text  memo.txt\n2. Gate       Ministral 3B ; \"Good? tags: yes, no\" ; max_visits=3\n   -> { yes: 3 | no: 2 }\n3. Save Text  out.txt\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E307",
+        "message": "Row 2 has `max_visits=3` but doesn't say what running out means. Add `on_budget=yes` to proceed with the best so far, or `on_budget=fail` to stop instead."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement)"
+  },
+  {
+    "name": "v04-invalid-on-budget-target",
+    "cat": "catflow 0.8\n1. Read Text  memo.txt\n2. Gate       Ministral 3B ; \"Good? tags: yes, no\" ; max_visits=3 ; on_budget=maybe\n   -> { yes: 3 | no: 2 }\n3. Save Text  out.txt\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E308",
+        "message": "Row 2's `on_budget=maybe` isn't one of its tags (yes, no) or `fail`."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement)"
+  },
+  {
+    "name": "v04-on-budget-fail-ok",
+    "cat": "catflow 0.8\n1. Read Text  memo.txt\n2. Gate       Ministral 3B ; \"Good? tags: yes, no\" ; max_visits=3 ; on_budget=fail\n   -> { yes: 3 | no: 2 }\n3. Save Text  out.txt\n",
+    "issues": []
+  },
+  {
+    "name": "v04-cycle-no-exit",
+    "cat": "catflow 0.8\n1. Read Text  memo.txt\n2. Rewrite    Qwen3 8B ; \"shorter\" ; max_visits=3\n   -> 3\n3. Rewrite    Qwen3 8B ; \"shorter again\"\n   -> 2\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E305",
+        "message": "Rows 2, 3 form a loop with no way out \u2014 no decider in the loop has an edge leaving it. Add an exit tag, or aim one edge past the loop."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement)"
+  },
+  {
+    "name": "v04-cycle-no-budget",
+    "cat": "catflow 0.8\n1. Read Text  memo.txt\n2. Gate       Ministral 3B ; \"Good? tags: yes, no\"\n   -> { yes: 4 | no: 3 }\n3. Rewrite    Qwen3 8B ; \"shorter\"\n   -> 2\n4. Save Text  out.txt\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E306",
+        "message": "Rows 2, 3 form a loop, but no row in it carries `max_visits=N`. A loop must say how many times it may run \u2014 put the budget on the decider (row 2)."
+      }
+    ],
+    "_replaces": "P3-MA-08 verbatim E-code remap (reconciliation row 13 sanctioned replacement)"
+  },
+  {
+    "name": "v04-cycle-with-exit-and-budget-ok",
+    "cat": "catflow 0.8\n1. Read Text  memo.txt\n2. Gate       Ministral 3B ; \"Good? tags: yes, no\" ; max_visits=3 ; on_budget=yes\n   -> { yes: 4 | no: 3 }\n3. Rewrite    Qwen3 8B ; \"shorter\"\n   -> 2\n4. Save Text  out.txt\n",
+    "issues": []
+  },
+  {
+    "name": "v04-call-from-one-shot",
+    "cat": "catflow 0.8\n1. Read Text  memo.txt\n2. Classify   Qwen3 8B ; \"Route it. tags: urgent, normal\"\n   -> { urgent: call 3 | normal: 4 }\n3. Summarize  Qwen3 8B\n   resume\n4. Save Text  out.txt\n",
+    "issues": [],
+    "_replaces": "P3-MA-11/reconciliation row 7: call-from-one-shot is downgraded from a check_flow() validity error to a non-blocking lint (Spec S7.3: \"validity does not enforce this\") -- the firing case now lives in tests/goldens/check/lint_fixtures.json instead; this fixture's own name stays as the documented \"used to be an error\" regression marker."
+  },
+  {
+    "name": "v04-fork-ok",
+    "cat": "catflow 0.8\n1. Transcribe  Whisper Large v3 ; lang=en\n   -> 2 & 3\n2. Summarize   Qwen3 8B ; \"TL;DR\"\n3. Translate   Qwen3 8B ; to=French\n",
+    "issues": []
+  },
+  {
+    "name": "e204-reference-skips-a-decide-branch",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. Gate  M ; \"check? tags: yes, no\"\n   -> { yes: 4 | no: 3 }\n3. Summarize  M\n   -> 4\n4. Save Text  out.txt   (3)\n\nmodels:\n  M = local/m\n",
+    "issues": [
+      {
+        "row": "4",
+        "code": "E204",
+        "message": "Row 4 references row 3, but row 3 doesn't run on every path that reaches row 4 \u2014 when 2's tag `yes` fires, row 3 is skipped. Reference something both paths produce, or move the reference behind the paths' converging row."
+      }
+    ]
+  },
+  {
+    "name": "e204-fork-join-both-siblings-dominate-ok",
+    "cat": "catflow 0.8\n1. Draft  Qwen3 8B ; \"tagline\"\n   -> 2 & 3\n2. Draft  Qwen3 8B ; \"tagline, alt\"\n   -> 4\n3. Draft  Qwen3 8B ; \"tagline, another\"\n   -> done\n4. Judge  Ministral 3B ; \"pick the best\"  (2,3)\n   -> { a: 5 | b: 5 }\n5. Save Text  out.md\n",
+    "issues": []
+  },
+  {
+    "name": "e201-cousin-row-lost-its-input-after-blank-line",
+    "cat": "1. Read Audio  a.m4a\n2. Transcribe  Whisper\n\n3. Summarize   Qwen3 8B\n",
+    "issues": [
+      {
+        "row": "3",
+        "code": "E201",
+        "message": "Row 3 (Summarize) needs text, but row 2 produces text. Between them you likely want a reference or your own settings."
+      }
+    ]
+  },
+  {
+    "name": "e201-cousin-mid-flow-type-mismatch-with-no-settings",
+    "cat": "1. Read Video  clip.mp4\n2. Summarize   Qwen3 8B\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E201",
+        "message": "Row 2 (Summarize) needs text, but row 1 produces video. Between them you likely want a reference or your own settings."
+      }
+    ]
+  },
+  {
+    "name": "e201-cousin-block-first-child-exempt-ok",
+    "cat": "1. Read Audio  a.m4a\n2. <each x>\n     1. Transcribe  Whisper\n",
+    "issues": []
+  },
+  {
+    "name": "e201-cousin-call-target-exempt-ok",
+    "cat": "catflow 0.8\n1. Read Index  kb.index\n2. Think  Qwen3 8B ; tools: search, final ; max_visits=8 ; on_budget=final\n   -> { search: call 3 | final: resume }\n3. Embed  BGE-M3\n   resume\n",
+    "issues": []
+  },
+  {
+    "name": "e403-block-row-refs-outer-row-escapes-scope",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. Read Text  b.txt\n3. Read Text  c.txt\n4. Read Text  d.txt\n5. Read Text  e.txt\n6. <each x>\n     1. Read Audio  clip.m4a\n     2. Draft  Qwen3 8B  (5)\n",
+    "issues": [
+      {
+        "row": "6.2",
+        "code": "E403",
+        "message": "Inside 6, row 6.2 references row 5 of the outer flow. Blocks are sealed \u2014 pass it in: add `(5)` to the block's row and read it as `(input:2)`."
+      }
+    ]
+  },
+  {
+    "name": "e403-in-scope-ref-ok",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. <each x>\n     1. Summarize  Qwen3 8B\n     2. Draft  Qwen3 8B  (1)\n",
+    "issues": []
+  },
+  {
+    "name": "e404-composite-param-unbound-no-default",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. BriefFor\n\ndefinitions:\n  composite BriefFor  text -> text\n  params: topic\n     1. Draft  Qwen3 8B\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E404",
+        "message": "Row 2 uses BriefFor but doesn't set `topic`, which has no default. Add `topic=\u2026` to the row."
+      }
+    ]
+  },
+  {
+    "name": "e404-composite-param-bound-positionally-ok",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. BriefFor  launch\n\ndefinitions:\n  composite BriefFor  text -> text\n  params: topic\n     1. Draft  Qwen3 8B\n",
+    "issues": []
+  },
+  {
+    "name": "e405-pascal-case-name-no-definition",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. BriefFor  launch\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E405",
+        "message": "Row 2 uses BriefFor, but this file's `definitions:` section doesn't define it. The flow isn't whole \u2014 re-insert the composite from the library, or paste its definition."
+      }
+    ]
+  },
+  {
+    "name": "e406-unknown-composite-param-key",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. BriefFor  launch ; tone=\"formal\"\n\ndefinitions:\n  composite BriefFor  text -> text\n  params: topic\n     1. Draft  Qwen3 8B\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E406",
+        "message": "Row 2 passes `tone=\u2026`, but BriefFor's parameters are topic."
+      }
+    ]
+  },
+  {
+    "name": "e406-declared-keyword-param-ok",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. BriefFor  launch ; tone=\"formal\"\n\ndefinitions:\n  composite BriefFor  text -> text\n  params: topic ; tone = \"neutral\"\n     1. Draft  Qwen3 8B\n",
+    "issues": []
+  },
+  {
+    "name": "e207-template-position-beyond-bound-refs",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. Read Text  b.txt\n3. Template  \"{1} and {2} and {3}\"  (1,2)\n",
+    "issues": [
+      {
+        "row": "3",
+        "code": "E207",
+        "message": "Row 3's pattern uses `{3}`, but its input has only 2 position(s). Positions here: 1, 2."
+      }
+    ]
+  },
+  {
+    "name": "e207-input-and-in-range-positions-ok",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. Read Text  b.txt\n3. Template  \"{input}: {1} and {2}\"  (1,2)\n",
+    "issues": []
+  },
+  {
+    "name": "e402-block-exits-disagree-in-type",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. <list agent>\n     1. Read Text  b.txt\n        -> { yes: done | no: 2 }\n     2. Speak  Kokoro 82M\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E402",
+        "message": "2 can end at row 2.1 (producing text) or at row 2.2 (producing audio). A block's exits must agree \u2014 converge them on one row."
+      }
+    ]
+  },
+  {
+    "name": "e402-block-exits-agree-ok",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. <list agent>\n     1. Read Text  b.txt\n        -> { yes: done | no: 2 }\n     2. Summarize  Qwen3 8B\n",
+    "issues": []
+  },
+  {
+    "name": "e504-parallel-chain-ends-unresolved",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. <parallel two_views>\n     1. Summarize   Qwen3 8B ; \"technical assessment\"   (input:1)\n\n     2. Frobnicate\n3. Save Text  out.md\n",
+    "issues": [
+      {
+        "row": "2.2",
+        "code": "unknown-task",
+        "message": "\"Frobnicate\" isn't a recognized task -- check spelling against `catflow tasks`."
+      },
+      {
+        "row": "2",
+        "code": "E504",
+        "message": "Chain 2 of 2 ends in a row that produces an unresolved type, which doesn't fit the block's declared bundle. Each chain's last row is one slot of the output."
+      }
+    ]
+  },
+  {
+    "name": "e504-parallel-chains-well-typed-ok",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. <parallel two_views>\n     1. Summarize   Qwen3 8B ; \"technical assessment\"   (input:1)\n\n     2. Translate   Llama 3.1 8B ; to=German            (input:1)\n     3. Summarize   Ministral 3B ; \"customer impact\"\n3. Save Text  out.md\n",
+    "issues": []
+  },
+  {
+    "name": "signature-mismatch-declared-gives-wrong",
+    "cat": "catflow 0.8\n1. Read Text  a.txt   file -> audio\n",
+    "issues": [
+      {
+        "row": "1",
+        "code": "signature-mismatch",
+        "message": "Row 1's declared signature says the output is audio, but the inferred type is text. Update the annotation, or fix the row."
+      }
+    ]
+  },
+  {
+    "name": "signature-mismatch-bare-bracket-gives-only-ok",
+    "cat": "catflow 0.8\n1. Read Images  vacation/   [image]\n",
+    "issues": []
+  },
+  {
+    "name": "r8-wait-forever-exempts-cycle-from-budget",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. Human Input  \"Your question:\"  ; wait=forever\n3. Draft        Qwen3 8B  (2)\n4. Ask Human    \"Another? tags: ask, done\"  ; wait=forever\n   -> { ask: 2 | done: 5 }\n5. Save Text  out.txt\n",
+    "issues": []
+  },
+  {
+    "name": "e501-human-row-without-waiting-policy",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. Ask Human  \"Proceed? tags: yes, no\"  (1)\n   -> { yes: 3 | no: done }\n3. Save Text  out.txt\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E501",
+        "message": "Row 2 (Ask Human) waits for a person but doesn't say what happens if nobody answers. Add `timeout=\u2026; default=\u2026` to proceed unattended (flagged), or `wait=forever` to park until answered."
+      }
+    ]
+  },
+  {
+    "name": "e501-wait-forever-ok",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. Human Input  \"Edit:\"  (1)  ; wait=forever\n3. Save Text  out.txt\n",
+    "issues": []
+  },
+  {
+    "name": "e502-default-not-a-declared-tag",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. Ask Human  \"Proceed? tags: yes, no\"  (1)  ; timeout=4h ; default=maybe\n   -> { yes: 3 | no: done }\n3. Save Text  out.txt\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E502",
+        "message": "Row 2's `default=maybe` isn't one of its tags (yes, no). The timeout must pick a real choice."
+      }
+    ]
+  },
+  {
+    "name": "e502-default-is-a-declared-tag-ok",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. Ask Human  \"Proceed? tags: yes, no\"  (1)  ; timeout=4h ; default=yes\n   -> { yes: 3 | no: done }\n3. Save Text  out.txt\n",
+    "issues": []
+  },
+  {
+    "name": "e601-trigger-not-at-row-1",
+    "cat": "catflow 0.8; events\n1. Read Text  a.txt\n2. On File    inbox/ ; pattern=*.pdf\n3. Save Text  out.txt\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E601",
+        "message": "`On File` sits at row 2, but a trigger is the flow's front door \u2014 it must be row 1, and there can be only one."
+      }
+    ]
+  },
+  {
+    "name": "e602-trigger-inside-a-block",
+    "cat": "catflow 0.8; events\n1. Read Text  a.txt\n2. <each x>\n     1. On File  inbox/ ; pattern=*.pdf\n",
+    "issues": [
+      {
+        "row": "2.1",
+        "code": "E602",
+        "message": "2 contains `On File`. Doors open from the outside; a block can't contain one. Move it to row 1 of its own flow."
+      }
+    ]
+  },
+  {
+    "name": "e603-edge-targets-the-trigger",
+    "cat": "catflow 0.8; events\n1. On File     inbox/ ; pattern=*.pdf ; settle=30s\n2. Gate        Ministral 3B ; \"more? tags: again, done\"  max_visits=1 ; on_budget=done\n   -> { again: 1 | done: done }\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E304",
+        "message": "Row 2's tag `again` carries file to row 1, which needs occurrence. (A decider hands on its own input \u2014 see what row 2 receives.)"
+      },
+      {
+        "row": "2",
+        "code": "E603",
+        "message": "Row 2's edge targets row 1, which is a trigger. Nothing inside a flow can knock on its own front door \u2014 aim at row 2."
+      }
+    ]
+  },
+  {
+    "name": "e601-e602-e603-clean-trigger-placement-ok",
+    "cat": "catflow 0.8; events\n1. On File     inbox/ ; pattern=*.pdf ; settle=30s\n2. Read Files  inbox/ ; pattern=*.pdf\n",
+    "issues": []
+  },
+  {
+    "name": "e604-missing-events-flag",
+    "cat": "catflow 0.8\n1. On File     inbox/ ; pattern=*.pdf ; settle=30s\n2. Read Files  inbox/ ; pattern=*.pdf\n",
+    "issues": [
+      {
+        "row": "1",
+        "code": "E604",
+        "message": "Row 1 is a trigger, but the header doesn't say `; events`. Add it \u2014 a reader must see from line one that this flow can be armed. (fmt will do this for you.)"
+      }
+    ]
+  },
+  {
+    "name": "e604-events-flag-present-ok",
+    "cat": "catflow 0.8; events\n1. On File     inbox/ ; pattern=*.pdf ; settle=30s\n2. Read Files  inbox/ ; pattern=*.pdf\n",
+    "issues": []
+  },
+  {
+    "name": "e605-rate-budget-required-for-stage-row",
+    "cat": "catflow 0.8; events\n1. On File     inbox/ ; pattern=*.pdf ; settle=30s\n2. Draft       Qwen3 8B ; \"reply\"\n3. Stage Send  outbox\n",
+    "issues": [
+      {
+        "row": "1",
+        "code": "E605",
+        "message": "This flow has `On File` and uses Stage Send (row 3) \u2014 it must say how often it may fire. Add `max_runs=N/hour` or `max_runs=N/day` to row 1."
+      }
+    ]
+  },
+  {
+    "name": "e605-rate-budget-declared-ok",
+    "cat": "catflow 0.8; events\n1. On Flow     IndexSelfTest.cat ; status=failed ; max_runs=4/day\n2. Draft       Ministral 3B ; \"alert\"\n3. Stage Send  outbox\n",
+    "issues": []
+  },
+  {
+    "name": "e104-model-not-pinned",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. Draft  MyCustomModel 7B  (1)\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E104",
+        "message": "Row 2 names \"MyCustomModel 7B\", but the `models:` section doesn't pin an id for it. Pick the model again to pin it, or add the line yourself."
+      }
+    ]
+  },
+  {
+    "name": "e104-well-known-alias-ok",
+    "cat": "catflow 0.8\n1. Read Text  a.txt\n2. Draft  Qwen3 8B  (1)\n",
+    "issues": []
+  },
+  {
+    "name": "e206-implicit-broadcasting",
+    "cat": "1. Read Text  memo.txt\n2. Split       chunk_size=500\n3. Calculate  (2)\n",
+    "issues": [
+      {
+        "row": "3",
+        "code": "E206",
+        "message": "Row 3 (Calculate) takes one text, but receives a list of texts. To run it once per item, wrap it in `<each>`. To combine the items first, use Join Text."
+      }
+    ]
+  },
+  {
+    "name": "e206-frame-task-variadic-ok",
+    "cat": "catflow 0.8\n1. Read Text  memo.txt\n2. Split       chunk_size=500\n3. Summarize  Qwen3 8B  (2)\n\nmodels:\n  Qwen3 8B = mlx-community/Qwen3-8B-4bit\n",
+    "issues": []
+  },
+  {
+    "name": "single-text-lifts-into-listof-accepts-template-ok",
+    "cat": "catflow 0.8\n1. Read Text  memo.txt\n2. Rewrite    Qwen3 8B\n3. Template   \"note: {1}\"  (2)\n\nmodels:\n  Qwen3 8B = mlx-community/Qwen3-8B-4bit\n",
+    "issues": [],
+    "_note": "SPEC-Q71(a): a single ref delivering Single(text) now satisfies a [text]-shaped (ListOf) accepts, the same lift <each> blocks already get in signature() -- fixes Template/Embed/Join Text fed one dynamic text via an explicit ref (e.g. gallery PhotoCull.cat's per-item Template rows)."
+  },
+  {
+    "name": "single-text-lifts-into-listof-accepts-embed-ok",
+    "cat": "catflow 0.8\n1. Read Text  memo.txt\n2. Rewrite    Qwen3 8B\n3. Embed      BGE-M3  (2)\n\nmodels:\n  Qwen3 8B = mlx-community/Qwen3-8B-4bit\n",
+    "issues": [],
+    "_note": "SPEC-Q71(a), same lift as the Template case above, for Embed's [text] accepts."
+  },
+  {
+    "name": "single-wrong-kind-still-mismatched-against-listof-accepts",
+    "cat": "catflow 0.8\n1. Read Image   photo.jpg\n2. Template     \"{1}\"  (1)\n",
+    "issues": [
+      {
+        "row": "2",
+        "code": "E202",
+        "message": "Row 2's reference (1) delivers image, but its first input needs [text]."
+      }
+    ],
+    "_note": "SPEC-Q71(a)'s lift only applies when the single given's kind matches the accepts' kind -- a genuine kind mismatch (image vs. text) must still be caught, not silently waved through."
+  }
+]

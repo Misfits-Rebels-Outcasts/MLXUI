@@ -1,0 +1,351 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": null,
+    "rows": [
+      {
+        "task": "Read Files",
+        "model": null,
+        "settings": "pattern=*.pdf",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": null,
+        "model": null,
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": "each",
+        "block_name": "read_one",
+        "children": [
+          {
+            "task": "Read PDF",
+            "model": null,
+            "settings": null,
+            "refs": [
+              {
+                "kind": "input",
+                "position": 1
+              }
+            ],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          }
+        ]
+      },
+      {
+        "task": "Join Text",
+        "model": null,
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Split",
+        "model": null,
+        "settings": "chunk_size=500",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Embed",
+        "model": "BGE-M3",
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Store Index",
+        "model": null,
+        "settings": "library.index",
+        "refs": [
+          {
+            "kind": "row",
+            "number": 4
+          },
+          {
+            "kind": "row",
+            "number": 5
+          }
+        ],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "run": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "file",
+              "value": null,
+              "path": "1.0.file.07bb8f1649be5b39.bin"
+            },
+            {
+              "kind": "file",
+              "value": null,
+              "path": "1.1.file.89db69fba6a2323e.bin"
+            },
+            {
+              "kind": "file",
+              "value": null,
+              "path": "1.2.file.ee1b17bdb896e82d.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "each_item_started",
+        "path": "2",
+        "index": 0,
+        "total": 3
+      },
+      {
+        "type": "row_started",
+        "path": "2.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.1|Read PDF|||1.0.file.07bb8f1649be5b39.bin#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "each_item_completed",
+        "path": "2",
+        "index": 0,
+        "total": 3
+      },
+      {
+        "type": "each_item_started",
+        "path": "2",
+        "index": 1,
+        "total": 3
+      },
+      {
+        "type": "row_started",
+        "path": "2.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.1|Read PDF|||1.1.file.89db69fba6a2323e.bin#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "each_item_completed",
+        "path": "2",
+        "index": 1,
+        "total": 3
+      },
+      {
+        "type": "each_item_started",
+        "path": "2",
+        "index": 2,
+        "total": 3
+      },
+      {
+        "type": "row_started",
+        "path": "2.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.1|Read PDF|||1.2.file.ee1b17bdb896e82d.bin#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "each_item_completed",
+        "path": "2",
+        "index": 2,
+        "total": 3
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.1|Read PDF|||1.0.file.07bb8f1649be5b39.bin#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.1|Read PDF|||1.1.file.89db69fba6a2323e.bin#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.1|Read PDF|||1.2.file.ee1b17bdb896e82d.bin#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3"
+      },
+      {
+        "type": "row_completed",
+        "path": "3",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 3|Join Text|||[mock:text] 2.1|Read PDF|||1.0.file.07bb8f1649be5b39.bin#0|[mock:text] 2.1|Read PDF|||1.1.file.89db69fba6a2323e.bin#0|[mock:text] 2.1|Read PDF|||1.2.file.ee1b17bdb896e82d.bin#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "4"
+      },
+      {
+        "type": "row_completed",
+        "path": "4",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 4|Split||chunk_size=500|[mock:text] 3|Join Text|||[mock:text] 2.1|Read PDF|||1.0.file.07bb8f1649be5b39.bin#0|[mock:text] 2.1|Read PDF|||1.1.file.89db69fba6a2323e.bin#0|[mock:text] 2.1|Read PDF|||1.2.file.ee1b17bdb896e82d.bin#0#0#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 4|Split||chunk_size=500|[mock:text] 3|Join Text|||[mock:text] 2.1|Read PDF|||1.0.file.07bb8f1649be5b39.bin#0|[mock:text] 2.1|Read PDF|||1.1.file.89db69fba6a2323e.bin#0|[mock:text] 2.1|Read PDF|||1.2.file.ee1b17bdb896e82d.bin#0#0#1",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 4|Split||chunk_size=500|[mock:text] 3|Join Text|||[mock:text] 2.1|Read PDF|||1.0.file.07bb8f1649be5b39.bin#0|[mock:text] 2.1|Read PDF|||1.1.file.89db69fba6a2323e.bin#0|[mock:text] 2.1|Read PDF|||1.2.file.ee1b17bdb896e82d.bin#0#0#2",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "5"
+      },
+      {
+        "type": "row_completed",
+        "path": "5",
+        "output": {
+          "items": [
+            {
+              "kind": "vector",
+              "value": null,
+              "path": "5.0.vector.6cd08bd86ee8d721.bin"
+            },
+            {
+              "kind": "vector",
+              "value": null,
+              "path": "5.1.vector.99596e32cfc864c6.bin"
+            },
+            {
+              "kind": "vector",
+              "value": null,
+              "path": "5.2.vector.ff5131cdf15441c7.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "6"
+      },
+      {
+        "type": "row_completed",
+        "path": "6",
+        "output": {
+          "items": [
+            {
+              "kind": "index",
+              "value": null,
+              "path": "6.0.index.276b42ff4399e371.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "run_completed"
+      }
+    ]
+  },
+  "cache": {
+    "hits_on_rerun": [
+      "1",
+      "2.1",
+      "3",
+      "4",
+      "5"
+    ]
+  }
+}

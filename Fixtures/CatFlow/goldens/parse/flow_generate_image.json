@@ -1,0 +1,48 @@
+{
+  "version": "0.8",
+  "rows": [
+    {
+      "task": "Read Text",
+      "model": null,
+      "settings": "brief.txt",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Generate Image",
+      "model": "Z-Image Turbo",
+      "settings": "steps=9; seed=7",
+      "refs": [
+        {
+          "kind": "row",
+          "number": 1
+        }
+      ],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Save Image",
+      "model": null,
+      "settings": "hero.png",
+      "refs": [
+        {
+          "kind": "row",
+          "number": 2
+        }
+      ],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    }
+  ],
+  "models": {
+    "Z-Image Turbo": "Tongyi-MAI/Z-Image-Turbo"
+  }
+}

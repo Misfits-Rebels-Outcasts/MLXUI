@@ -1,0 +1,6 @@
+1. Read Text     book.txt
+2. Split         chunk_size=2000
+3. <each summarize_section>
+     1. Summarize   Ministral 3B · "one paragraph"   (input:1)
+4. Summarize     Qwen3 8B · "One page, from these section summaries"
+5. Save Text     book-summary.md

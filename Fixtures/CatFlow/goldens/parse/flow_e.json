@@ -1,0 +1,61 @@
+{
+  "version": "0.8",
+  "rows": [
+    {
+      "task": "Read Images",
+      "model": null,
+      "settings": "vacation/",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": null,
+      "model": null,
+      "settings": null,
+      "refs": [],
+      "chain_break": false,
+      "block_kind": "each",
+      "block_name": "prep_photo",
+      "children": [
+        {
+          "task": "Resize",
+          "model": null,
+          "settings": "max=2048",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "chain_break": false,
+          "block_kind": null,
+          "block_name": null,
+          "children": []
+        },
+        {
+          "task": "Watermark",
+          "model": null,
+          "settings": "logo.png",
+          "refs": [],
+          "chain_break": false,
+          "block_kind": null,
+          "block_name": null,
+          "children": []
+        }
+      ]
+    },
+    {
+      "task": "Save Images",
+      "model": null,
+      "settings": "vacation-web/",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    }
+  ]
+}

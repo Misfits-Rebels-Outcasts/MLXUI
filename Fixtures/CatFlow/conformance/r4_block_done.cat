@@ -1,0 +1,7 @@
+catflow 0.8
+1. Read Text   memo.txt
+2. <list gate_check>
+     1. Gate      (input:1)   Ministral 3B; "Skip formatting? tags: no, yes"
+        -> { no: 2 | yes: done }
+     2. Rewrite               Qwen3 8B; "Format nicely"
+3. Save Text   final.md

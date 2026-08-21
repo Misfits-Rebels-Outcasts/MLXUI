@@ -1,0 +1,88 @@
+{
+  "version": "0.8",
+  "rows": [
+    {
+      "task": "Read Index",
+      "model": null,
+      "settings": "kb.index",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Think",
+      "model": "Qwen3 8B",
+      "settings": "tools: search, final",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": [],
+      "clause": {
+        "kind": "decide",
+        "edges": [
+          {
+            "tag": "search",
+            "target": {
+              "kind": "call",
+              "number": 3
+            }
+          },
+          {
+            "tag": "final",
+            "target": {
+              "kind": "row",
+              "number": 5
+            }
+          }
+        ]
+      },
+      "visits_leq": 8,
+      "on_budget": "final"
+    },
+    {
+      "task": "Embed",
+      "model": "BGE-M3",
+      "settings": null,
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Retrieve",
+      "model": null,
+      "settings": "top_k=5",
+      "refs": [
+        {
+          "kind": "row",
+          "number": 1
+        },
+        {
+          "kind": "row",
+          "number": 3
+        }
+      ],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": [],
+      "clause": {
+        "kind": "resume"
+      }
+    },
+    {
+      "task": "Save Text",
+      "model": null,
+      "settings": "findings.md",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    }
+  ]
+}

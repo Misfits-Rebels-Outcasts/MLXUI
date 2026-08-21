@@ -1,0 +1,9 @@
+catflow 0.8
+1. Read Text               a.txt
+2. Read Text               b.txt
+3. Read Text               c.txt
+4. Read Text               d.txt
+5. Merge       (1,2,3,4)   Qwen3 8B; "combine"
+
+models:
+  Qwen3 8B = mlx-community/Qwen3-8B-4bit

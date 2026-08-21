@@ -1,0 +1,10 @@
+catflow 0.8
+1. Read Text         a.txt
+2. Classify          Ministral 3B; "tags: x, y"
+   -> { x: 3 | y: 4 }
+
+3. Draft       (1)   Qwen3 8B
+   -> 5
+
+4. Draft       (1)   Qwen3 8B
+5. Save Text   (3)   out.txt

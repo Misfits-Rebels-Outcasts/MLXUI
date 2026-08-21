@@ -1,0 +1,5 @@
+catflow 0.8
+1. Read Files   docs/ ; pattern=*.pdf   folder -> [file]
+2. <each ingest_one>   [file] -> [text]
+     1. Read PDF   (input:1)
+3. Join Text    separator="\n"

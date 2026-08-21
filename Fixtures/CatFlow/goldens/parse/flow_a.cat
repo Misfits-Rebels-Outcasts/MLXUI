@@ -1,0 +1,15 @@
+catflow 0.8
+1. Read Audio         podcast_fr.m4a
+2. Transcribe         Whisper Large v3; lang=fr
+3. Translate          Llama 3.1 8B; to=English
+4. Summarize          Ministral 3B; "3 key points"
+5. Speak              Kokoro 82M; af_heart
+6. Save Audio         recap-en.wav
+7. Save Text    (2)   transcript-fr.txt
+8. Save Text    (3)   transcript-en.txt
+
+models:
+  Whisper Large v3 = mlx-community/whisper-large-v3-mlx
+  Llama 3.1 8B     = mlx-community/Meta-Llama-3.1-8B-Instruct-4bit
+  Ministral 3B     = mlx-community/Ministral-3-3B-Instruct-2512-4bit
+  Kokoro 82M       = mlx-community/Kokoro-82M-4bit

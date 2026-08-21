@@ -1,0 +1,9 @@
+catflow 0.8
+1. Draft               Qwen3 8B; "Write the launch announcement"
+2. Critique    (1)     Ministral 3B; "accurate, concise, friendly"
+3. Gate                Ministral 3B; "Real weaknesses left? tags: fix,
+                       ship"; max_visits=3; on_budget=ship
+   -> { fix: 4 | ship: 5 }
+4. Revise      (1,2)   Qwen3 8B
+   -> 2
+5. Save Text           announcement.md

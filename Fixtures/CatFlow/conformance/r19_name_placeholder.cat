@@ -1,0 +1,3 @@
+catflow 0.8; events
+1. On File           inbox/ ; pattern=*.pdf
+2. Save Text   (1)   briefs/{name}-brief.md

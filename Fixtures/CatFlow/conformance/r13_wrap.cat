@@ -1,0 +1,7 @@
+catflow 0.8
+1. Draft       Qwen3 8B; "Write a two-paragraph announcement for the
+               release, formal tone"
+2. Save Text   announcement.md
+
+models:
+  Qwen3 8B = mlx-community/Qwen3-8B-4bit

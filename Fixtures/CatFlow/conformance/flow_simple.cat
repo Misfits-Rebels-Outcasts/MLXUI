@@ -1,0 +1,5 @@
+1. Read Audio    talk.m4a
+2. Transcribe    Whisper Large v3 · lang=en
+3. Summarize     Qwen3 8B · "TL;DR in 3 bullets"
+4. Speak         Kokoro 82M · af_heart
+5. Save Audio    summary.wav

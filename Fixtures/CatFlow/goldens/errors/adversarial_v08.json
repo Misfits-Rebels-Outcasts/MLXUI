@@ -1,0 +1,118 @@
+[
+  {
+    "name": "mid_dot_settings_separator",
+    "desc": "· field separator, pasted straight from a v0.7 flow",
+    "source": "catflow 0.8\n1. Summarize  Qwen3 8B · temp=0\n",
+    "char": "·",
+    "ascii": ";",
+    "line": 2,
+    "row": 1
+  },
+  {
+    "name": "arrow_continuation_line",
+    "desc": "→ continuation clause on its own line",
+    "source": "catflow 0.8\n1. Summarize  Qwen3 8B\n→ 2\n",
+    "char": "→",
+    "ascii": "->",
+    "line": 3,
+    "row": 1
+  },
+  {
+    "name": "leq_visits_marker",
+    "desc": "visits≤N budget marker, bare (no other pre-0.8 char on the line)",
+    "source": "catflow 0.8\n1. Save Text  out.txt visits≤3\n",
+    "char": "≤",
+    "ascii": "<=",
+    "line": 2,
+    "row": 1
+  },
+  {
+    "name": "leq_runs_marker",
+    "desc": "runs≤N rate-budget marker, bare",
+    "source": "catflow 0.8\n1. Save Text  out.txt runs≤5/day\n",
+    "char": "≤",
+    "ascii": "<=",
+    "line": 2,
+    "row": 1
+  },
+  {
+    "name": "mid_dot_and_leq_same_line_mid_dot_wins",
+    "desc": "both · and ≤ present -- fixed check order means · fires first",
+    "source": "catflow 0.8\n1. <each x · visits≤3>\n",
+    "char": "·",
+    "ascii": ";",
+    "line": 2,
+    "row": 1
+  },
+  {
+    "name": "second_row_first_offender",
+    "desc": "a whole pasted-v0.7 flow: row 1 is clean, row 2's separator is the first hit",
+    "source": "catflow 0.8\n1. Read Text  a.txt\n2. Summarize  Qwen3 8B · temp=0\n",
+    "char": "·",
+    "ascii": ";",
+    "line": 3,
+    "row": 2
+  },
+  {
+    "name": "block_header_mid_dot",
+    "desc": "· inside a <each ...> block header marker list",
+    "source": "catflow 0.8\n1. <each x · on_error=skip>\n",
+    "char": "·",
+    "ascii": ";",
+    "line": 2,
+    "row": 1
+  },
+  {
+    "name": "row_one_after_leading_comments",
+    "desc": "SPEC-Q140: two whole-line comments above row 1 push the file line to 4, but the row is still 1 -- the bug this item fixes",
+    "source": "catflow 0.8\n# c\n# c\n1. Transcribe  Whisper Tiny · lang=en\n2. Save Text  o.md\n",
+    "char": "·",
+    "ascii": ";",
+    "line": 4,
+    "row": 1
+  },
+  {
+    "name": "models_section_mid_dot",
+    "desc": "SPEC-Q140: · inside models: -- no row owns that line, so the message names the section",
+    "source": "catflow 0.8\n1. Summarize  Qwen3 8B\n\nmodels:\n  Qwen3 8B = a/b · c\n",
+    "char": "·",
+    "ascii": ";",
+    "line": 5,
+    "section": "models"
+  },
+  {
+    "name": "definitions_section_arrow",
+    "desc": "SPEC-Q140: → inside a definitions: composite signature -- v0.8's signature production is ASCII-only too (CHANGES_FROM_v0_7.md's arrow row names 'signature annotations' explicitly)",
+    "source": "catflow 0.8\n1. Summarize  Qwen3 8B\n\ndefinitions:\n  composite Foo  text → text\n",
+    "char": "→",
+    "ascii": "->",
+    "line": 5,
+    "section": "definitions"
+  },
+  {
+    "name": "params_line_leq",
+    "desc": "SPEC-Q140: ≤ inside a params: line -- named for the section, not a fictitious row",
+    "source": "catflow 0.8\n1. Summarize  Qwen3 8B\n\ndefinitions:\n  composite Foo\n    params: count≤5\n",
+    "char": "≤",
+    "ascii": "<=",
+    "line": 6,
+    "section": "params"
+  },
+  {
+    "name": "above_row_one_stray_clause",
+    "desc": "SPEC-Q140: a stray clause-shaped line before any row exists -- no row, no section, falls back to the raw file line",
+    "source": "catflow 0.8\n→ 2\n1. Summarize  Qwen3 8B\n",
+    "char": "→",
+    "ascii": "->",
+    "line": 2
+  },
+  {
+    "name": "wrap_continuation_marker_clause_mid_dot",
+    "desc": "P5-NA2-08: a R13 `;`-prefixed wrap-continuation clause (condition b, §2.5) -- the char sits solely on the wrapped line, which used to parse silently since nothing scanned it",
+    "source": "catflow 0.8\n1. Human Input   \"Send this reply?\"\n               ; timeout=4h; default=edit · extra\n",
+    "char": "·",
+    "ascii": ";",
+    "line": 3,
+    "row": 1
+  }
+]

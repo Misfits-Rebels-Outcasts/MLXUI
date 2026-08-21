@@ -1,0 +1,8 @@
+catflow 0.8
+1. Read Text             handbook.txt
+2. Split                 chunk_size=500   text -> [text]
+3. Embed                 BGE-M3   [text] -> [vector]
+4. Store Index   (2,3)   kb.index   [text, vector] -> index
+
+models:
+  BGE-M3 = mlx-community/bge-m3-mlx-4bit

@@ -1,0 +1,179 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "announcement.md",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": null,
+        "model": null,
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": "parallel",
+        "block_name": "two_takes",
+        "children": [
+          {
+            "task": "Draft",
+            "model": "Qwen3 8B",
+            "settings": "\"Post, \u2264280 chars, no hashtags\"",
+            "refs": [
+              {
+                "kind": "input",
+                "position": 1
+              }
+            ],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          },
+          {
+            "task": "Draft",
+            "model": "Qwen3 8B",
+            "settings": "\"Post, \u2264280 chars, playful\"",
+            "refs": [
+              {
+                "kind": "input",
+                "position": 1
+              }
+            ],
+            "chain_break": true,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          }
+        ],
+        "declared_signature": "text -> [text, text]"
+      },
+      {
+        "task": "Merge",
+        "model": "Qwen3 8B",
+        "settings": "\"one brief, both views\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ],
+    "models": {
+      "Qwen3 8B": "mlx-community/Qwen3-8B-4bit"
+    }
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "trace": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 1|Read Text||announcement.md#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "row_started",
+        "path": "2.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.1|Draft|Qwen3 8B|\"Post, \u2264280 chars, no hashtags\"|[mock:text] 1|Read Text||announcement.md#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2.2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2|Draft|Qwen3 8B|\"Post, \u2264280 chars, playful\"|[mock:text] 1|Read Text||announcement.md#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.1|Draft|Qwen3 8B|\"Post, \u2264280 chars, no hashtags\"|[mock:text] 1|Read Text||announcement.md#0#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2|Draft|Qwen3 8B|\"Post, \u2264280 chars, playful\"|[mock:text] 1|Read Text||announcement.md#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3"
+      },
+      {
+        "type": "row_completed",
+        "path": "3",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 3|Merge|Qwen3 8B|\"one brief, both views\"|[mock:text] 2.1|Draft|Qwen3 8B|\"Post, \u2264280 chars, no hashtags\"|[mock:text] 1|Read Text||announcement.md#0#0|[mock:text] 2.2|Draft|Qwen3 8B|\"Post, \u2264280 chars, playful\"|[mock:text] 1|Read Text||announcement.md#0#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "run_completed"
+      }
+    ]
+  }
+}

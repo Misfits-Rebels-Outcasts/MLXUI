@@ -1,0 +1,61 @@
+[
+  {
+    "name": "call-from-one-shot",
+    "cat": "catflow 0.8\n1. Read Text  memo.txt\n2. Classify   Qwen3 8B ; \"Route it. tags: urgent, normal\"\n   -> { urgent: call 3 | normal: 4 }\n3. Summarize  Qwen3 8B\n   resume\n4. Save Text  out.txt\n",
+    "lints": [
+      {
+        "row": "2",
+        "code": "call-from-one-shot",
+        "message": "one-shot routing uses plain edges that converge, not `call` -- only a transcript-keeping decider (Think) can call a tool and get its result back."
+      }
+    ]
+  },
+  {
+    "name": "call-from-think-ok",
+    "cat": "catflow 0.8\n1. Read Index  kb.index\n2. Think       Qwen3 8B ; tools: search, final ; max_visits=8 ; on_budget=final\n   -> { search: call 3 | final: resume }\n3. Embed       BGE-M3\n   resume\n",
+    "lints": []
+  },
+  {
+    "name": "fork-suggests-parallel",
+    "cat": "catflow 0.8\n1. Transcribe  Whisper Large v3 ; lang=en\n   -> 2 & 3\n2. Summarize   Qwen3 8B ; \"TL;DR\"\n3. Translate   Qwen3 8B ; to=French\n",
+    "lints": [
+      {
+        "row": "1",
+        "code": "fork-suggests-parallel",
+        "message": "Row 1's fork edge (\u2192 2 & 3) pushes the same output to multiple chains -- a <parallel> block is the user-facing form for this now."
+      }
+    ]
+  },
+  {
+    "name": "plain-edge-no-fork-ok",
+    "cat": "catflow 0.8\n1. Read Text  memo.txt\n2. Summarize  Qwen3 8B\n   -> done\n",
+    "lints": []
+  },
+  {
+    "name": "range-large",
+    "cat": "catflow 0.8\n1. Range  0..10001\n",
+    "lints": [
+      {
+        "row": "1",
+        "code": "range-large",
+        "message": "Row 1's `Range` produces 10002 items, past the 10000-item guideline -- if a downstream <each> runs a model per item, that's 10002 model calls. Probably intentional; worth a second look if not."
+      }
+    ]
+  },
+  {
+    "name": "range-small-ok",
+    "cat": "catflow 0.8\n1. Range  0..99\n",
+    "lints": []
+  },
+  {
+    "name": "remote-decider-unconstrained",
+    "cat": "catflow 0.8\n1. Read Text  memo.txt\n2. Gate       claude-sonnet @ anthropic ; \"ship? tags: ship, escalate\"\n   -> { ship: 3 | escalate: 4 }\n3. Save Text  out.txt\n4. Save Text  escalate.txt\n\nmodels:\n  claude-sonnet @ anthropic = anthropic/claude-sonnet-4\n",
+    "lints": [
+      {
+        "row": "2",
+        "code": "F010",
+        "message": "Row 2 (Gate) binds claude-sonnet @ anthropic, which can't constrain its tag — the row that routes this flow runs on a parsed tag, not a guaranteed one. Prefer a local model for the routing step, or read the frame after the run."
+      }
+    ]
+  }
+]

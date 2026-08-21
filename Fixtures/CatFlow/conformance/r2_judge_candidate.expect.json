@@ -1,0 +1,229 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Draft",
+        "model": "Qwen3 8B",
+        "settings": "\"Write a tagline\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "clause": {
+          "kind": "fork",
+          "targets": [
+            {
+              "kind": "row",
+              "number": 2
+            },
+            {
+              "kind": "row",
+              "number": 3
+            }
+          ]
+        }
+      },
+      {
+        "task": "Draft",
+        "model": "Qwen3 8B",
+        "settings": "\"Write a tagline, playful angle\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "clause": {
+          "kind": "goto",
+          "target": {
+            "kind": "row",
+            "number": 4
+          }
+        }
+      },
+      {
+        "task": "Draft",
+        "model": "Qwen3 8B",
+        "settings": "\"Write a tagline, formal angle\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "clause": {
+          "kind": "goto",
+          "target": {
+            "kind": "done"
+          }
+        }
+      },
+      {
+        "task": "Judge",
+        "model": "Ministral 3B",
+        "settings": "\"Which tagline lands better?\"",
+        "refs": [
+          {
+            "kind": "row",
+            "number": 2
+          },
+          {
+            "kind": "row",
+            "number": 3
+          }
+        ],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": [],
+        "clause": {
+          "kind": "decide",
+          "edges": [
+            {
+              "tag": "a",
+              "target": {
+                "kind": "row",
+                "number": 5
+              }
+            },
+            {
+              "tag": "b",
+              "target": {
+                "kind": "row",
+                "number": 5
+              }
+            }
+          ]
+        },
+        "tags": [
+          "a",
+          "b"
+        ]
+      },
+      {
+        "task": "Save Text",
+        "model": null,
+        "settings": "tagline.md",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "trace": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 1|Draft|Qwen3 8B|\"Write a tagline\"#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2|Draft|Qwen3 8B|\"Write a tagline, playful angle\"|[mock:text] 1|Draft|Qwen3 8B|\"Write a tagline\"#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3"
+      },
+      {
+        "type": "row_completed",
+        "path": "3",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 3|Draft|Qwen3 8B|\"Write a tagline, formal angle\"|[mock:text] 1|Draft|Qwen3 8B|\"Write a tagline\"#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "4"
+      },
+      {
+        "type": "flag_raised",
+        "path": "4",
+        "code": "F007",
+        "message": "This activation's first input arrived from row 2's edge, overriding the `(2)` reference for this pass."
+      },
+      {
+        "type": "row_completed",
+        "path": "4",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 3|Draft|Qwen3 8B|\"Write a tagline, formal angle\"|[mock:text] 1|Draft|Qwen3 8B|\"Write a tagline\"#0#0",
+              "path": null
+            }
+          ]
+        },
+        "fired_tag": "b",
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "5"
+      },
+      {
+        "type": "row_completed",
+        "path": "5",
+        "output": {
+          "items": [
+            {
+              "kind": "status",
+              "value": "[mock:status] 5|Save Text||tagline.md|[mock:text] 3|Draft|Qwen3 8B|\"Write a tagline, formal angle\"|[mock:text] 1|Draft|Qwen3 8B|\"Write a tagline\"#0#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "run_completed"
+      }
+    ],
+    "decider_script": {
+      "4": [
+        "b"
+      ]
+    }
+  }
+}

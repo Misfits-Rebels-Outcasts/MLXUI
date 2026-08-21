@@ -1,0 +1,6 @@
+catflow 0.8
+1. Read Images   vacation/
+2. <each prep_photo>
+     1. Resize      (input:1)   max=2048
+     2. Watermark               logo.png
+3. Save Images   vacation-web/

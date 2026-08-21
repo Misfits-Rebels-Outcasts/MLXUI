@@ -1,0 +1,394 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": null,
+    "rows": [
+      {
+        "task": "Read Files",
+        "model": null,
+        "settings": "pattern=*.m4a",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": null,
+        "model": null,
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": "each",
+        "block_name": "one_memo",
+        "children": [
+          {
+            "task": "Read Audio",
+            "model": null,
+            "settings": null,
+            "refs": [
+              {
+                "kind": "input",
+                "position": 1
+              }
+            ],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          },
+          {
+            "task": "Transcribe",
+            "model": "Whisper Large v3",
+            "settings": null,
+            "refs": [],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          },
+          {
+            "task": "Summarize",
+            "model": "Ministral 3B",
+            "settings": "\"3 bullets\"",
+            "refs": [],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          }
+        ]
+      },
+      {
+        "task": "Join Text",
+        "model": null,
+        "settings": "separator=\"\\n\\n---\\n\\n\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Save Text",
+        "model": null,
+        "settings": "weekly-digest.md",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "run": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "file",
+              "value": null,
+              "path": "1.0.file.d841793a5eb0c1ce.bin"
+            },
+            {
+              "kind": "file",
+              "value": null,
+              "path": "1.1.file.08a479585d69c276.bin"
+            },
+            {
+              "kind": "file",
+              "value": null,
+              "path": "1.2.file.f9c0aa3b06d070bb.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "each_item_started",
+        "path": "2",
+        "index": 0,
+        "total": 3
+      },
+      {
+        "type": "row_started",
+        "path": "2.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.1",
+        "output": {
+          "items": [
+            {
+              "kind": "audio",
+              "value": null,
+              "path": "2.1.0.audio.26ec7a58fbc59497.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2.2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2|Transcribe|Whisper Large v3||2.1.0.audio.26ec7a58fbc59497.bin#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2.3"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.3",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.3|Summarize|Ministral 3B|\"3 bullets\"|[mock:text] 2.2|Transcribe|Whisper Large v3||2.1.0.audio.26ec7a58fbc59497.bin#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "each_item_completed",
+        "path": "2",
+        "index": 0,
+        "total": 3
+      },
+      {
+        "type": "each_item_started",
+        "path": "2",
+        "index": 1,
+        "total": 3
+      },
+      {
+        "type": "row_started",
+        "path": "2.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.1",
+        "output": {
+          "items": [
+            {
+              "kind": "audio",
+              "value": null,
+              "path": "2.1.0.audio.e59131441c4e65ed.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2.2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2|Transcribe|Whisper Large v3||2.1.0.audio.e59131441c4e65ed.bin#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2.3"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.3",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.3|Summarize|Ministral 3B|\"3 bullets\"|[mock:text] 2.2|Transcribe|Whisper Large v3||2.1.0.audio.e59131441c4e65ed.bin#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "each_item_completed",
+        "path": "2",
+        "index": 1,
+        "total": 3
+      },
+      {
+        "type": "each_item_started",
+        "path": "2",
+        "index": 2,
+        "total": 3
+      },
+      {
+        "type": "row_started",
+        "path": "2.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.1",
+        "output": {
+          "items": [
+            {
+              "kind": "audio",
+              "value": null,
+              "path": "2.1.0.audio.39e72fdb214aed51.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2.2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2|Transcribe|Whisper Large v3||2.1.0.audio.39e72fdb214aed51.bin#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2.3"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.3",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.3|Summarize|Ministral 3B|\"3 bullets\"|[mock:text] 2.2|Transcribe|Whisper Large v3||2.1.0.audio.39e72fdb214aed51.bin#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "each_item_completed",
+        "path": "2",
+        "index": 2,
+        "total": 3
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.3|Summarize|Ministral 3B|\"3 bullets\"|[mock:text] 2.2|Transcribe|Whisper Large v3||2.1.0.audio.26ec7a58fbc59497.bin#0#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.3|Summarize|Ministral 3B|\"3 bullets\"|[mock:text] 2.2|Transcribe|Whisper Large v3||2.1.0.audio.e59131441c4e65ed.bin#0#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.3|Summarize|Ministral 3B|\"3 bullets\"|[mock:text] 2.2|Transcribe|Whisper Large v3||2.1.0.audio.39e72fdb214aed51.bin#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3"
+      },
+      {
+        "type": "row_completed",
+        "path": "3",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 3|Join Text||separator=\"\\n\\n---\\n\\n\"|[mock:text] 2.3|Summarize|Ministral 3B|\"3 bullets\"|[mock:text] 2.2|Transcribe|Whisper Large v3||2.1.0.audio.26ec7a58fbc59497.bin#0#0|[mock:text] 2.3|Summarize|Ministral 3B|\"3 bullets\"|[mock:text] 2.2|Transcribe|Whisper Large v3||2.1.0.audio.e59131441c4e65ed.bin#0#0|[mock:text] 2.3|Summarize|Ministral 3B|\"3 bullets\"|[mock:text] 2.2|Transcribe|Whisper Large v3||2.1.0.audio.39e72fdb214aed51.bin#0#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "4"
+      },
+      {
+        "type": "row_completed",
+        "path": "4",
+        "output": {
+          "items": [
+            {
+              "kind": "status",
+              "value": "[mock:status] 4|Save Text||weekly-digest.md|[mock:text] 3|Join Text||separator=\"\\n\\n---\\n\\n\"|[mock:text] 2.3|Summarize|Ministral 3B|\"3 bullets\"|[mock:text] 2.2|Transcribe|Whisper Large v3||2.1.0.audio.26ec7a58fbc59497.bin#0#0|[mock:text] 2.3|Summarize|Ministral 3B|\"3 bullets\"|[mock:text] 2.2|Transcribe|Whisper Large v3||2.1.0.audio.e59131441c4e65ed.bin#0#0|[mock:text] 2.3|Summarize|Ministral 3B|\"3 bullets\"|[mock:text] 2.2|Transcribe|Whisper Large v3||2.1.0.audio.39e72fdb214aed51.bin#0#0#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "run_completed"
+      }
+    ]
+  },
+  "cache": {
+    "hits_on_rerun": [
+      "1",
+      "2.1",
+      "2.2",
+      "2.3",
+      "3"
+    ]
+  }
+}

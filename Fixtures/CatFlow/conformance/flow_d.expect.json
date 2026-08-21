@@ -1,0 +1,201 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": null,
+    "rows": [
+      {
+        "task": "Read Audio",
+        "model": null,
+        "settings": "standup.m4a",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": null,
+        "model": null,
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": "list",
+        "block_name": "spoken_summary",
+        "children": [
+          {
+            "task": "Transcribe",
+            "model": "Whisper Large v3",
+            "settings": null,
+            "refs": [
+              {
+                "kind": "input",
+                "position": 1
+              }
+            ],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          },
+          {
+            "task": "Summarize",
+            "model": "Qwen3 8B",
+            "settings": "\"TL;DR\"",
+            "refs": [],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          },
+          {
+            "task": "Speak",
+            "model": "Kokoro 82M",
+            "settings": "af_heart",
+            "refs": [],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          }
+        ]
+      },
+      {
+        "task": "Save Audio",
+        "model": null,
+        "settings": "standup-recap.wav",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "run": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "audio",
+              "value": null,
+              "path": "1.0.audio.ef60f50691c73620.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "row_started",
+        "path": "2.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.1|Transcribe|Whisper Large v3||1.0.audio.ef60f50691c73620.bin#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2.2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2|Summarize|Qwen3 8B|\"TL;DR\"|[mock:text] 2.1|Transcribe|Whisper Large v3||1.0.audio.ef60f50691c73620.bin#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2.3"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.3",
+        "output": {
+          "items": [
+            {
+              "kind": "audio",
+              "value": null,
+              "path": "2.3.0.audio.bbcbcc4554efd0bd.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "audio",
+              "value": null,
+              "path": "2.3.0.audio.bbcbcc4554efd0bd.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3"
+      },
+      {
+        "type": "row_completed",
+        "path": "3",
+        "output": {
+          "items": [
+            {
+              "kind": "status",
+              "value": "[mock:status] 3|Save Audio||standup-recap.wav|2.3.0.audio.bbcbcc4554efd0bd.bin#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "run_completed"
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "cache": {
+    "hits_on_rerun": [
+      "1",
+      "2.1",
+      "2.2",
+      "2.3"
+    ]
+  }
+}

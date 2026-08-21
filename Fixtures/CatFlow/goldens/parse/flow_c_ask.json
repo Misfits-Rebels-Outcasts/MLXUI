@@ -1,0 +1,78 @@
+{
+  "version": "0.8",
+  "rows": [
+    {
+      "task": "Read Index",
+      "model": null,
+      "settings": "kb.index",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Embed",
+      "model": "BGE-M3",
+      "settings": "\"How many PTO days do new hires get?\"",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Retrieve",
+      "model": null,
+      "settings": "top_k=5",
+      "refs": [
+        {
+          "kind": "row",
+          "number": 1
+        },
+        {
+          "kind": "row",
+          "number": 2
+        }
+      ],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Template",
+      "model": null,
+      "settings": "\"Context:\\n{input}\\n\\nQ: How many PTO days do new hires get?\"",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Answer",
+      "model": "Qwen3 8B",
+      "settings": null,
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Save Text",
+      "model": null,
+      "settings": "answer.txt",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    }
+  ],
+  "models": {
+    "BGE-M3": "mlx-community/bge-m3-mlx-4bit",
+    "Qwen3 8B": "mlx-community/Qwen3-8B-4bit"
+  }
+}

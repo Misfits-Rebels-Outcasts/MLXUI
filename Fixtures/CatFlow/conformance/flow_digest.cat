@@ -1,0 +1,7 @@
+1. Read Files    pattern=*.m4a
+2. <each one_memo>
+     1. Read Audio   (input:1)
+     2. Transcribe   Whisper Large v3
+     3. Summarize    Ministral 3B · "3 bullets"
+3. Join Text     separator="\n\n---\n\n"
+4. Save Text     weekly-digest.md

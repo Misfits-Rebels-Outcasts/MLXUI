@@ -1,0 +1,8 @@
+catflow 0.8
+1. Read Audio         memo.m4a
+2. Transcribe         Whisper Tiny; lang=en
+3. Gate               Ministral 3B; "Garbled? tags: bad, ok"
+   -> { bad: 4 | ok: 5 }
+4. Transcribe   (1)   Whisper Large v3; lang=en
+5. Summarize          Qwen3 8B; "TL;DR"
+6. Save Text          memo.md

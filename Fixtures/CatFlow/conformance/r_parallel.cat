@@ -1,0 +1,10 @@
+catflow 0.8
+1. Read Text   announcement.md
+2. <parallel two_takes>   text -> [text, text]
+     1. Draft   (input:1)   Qwen3 8B; "Post, ≤280 chars, no hashtags"
+
+     2. Draft   (input:1)   Qwen3 8B; "Post, ≤280 chars, playful"
+3. Merge       Qwen3 8B; "one brief, both views"
+
+models:
+  Qwen3 8B = mlx-community/Qwen3-8B-4bit

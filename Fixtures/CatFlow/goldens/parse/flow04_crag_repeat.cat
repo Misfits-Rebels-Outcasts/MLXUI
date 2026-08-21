@@ -1,0 +1,12 @@
+catflow 0.8
+1. Read Index           kb.index
+2. Embed                BGE-M3; "How many PTO days do new hires get?"
+3. Retrieve     (1,2)   top_k=5
+4. Gate         (2,3)   Ministral 3B; "Do the chunks answer it? tags: yes,
+                        no"; max_visits=3; on_budget=yes
+   -> { yes: 6 | no: 5 }
+5. Rewrite              Ministral 3B; "Rephrase the question"
+   -> 2
+6. Template             "Context: the question."
+7. Answer               Qwen3 8B
+8. Save Text            answer.md

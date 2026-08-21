@@ -1,0 +1,365 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Template",
+        "model": null,
+        "settings": "\"Compare our 2025 and 2026 PTO policies. What changed?\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": null,
+        "model": null,
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": "list",
+        "block_name": "react_agent",
+        "children": [
+          {
+            "task": "Read Index",
+            "model": null,
+            "settings": "kb.index",
+            "refs": [],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          },
+          {
+            "task": "Think",
+            "model": "Qwen3 8B",
+            "settings": "tools: search, calculate, final",
+            "refs": [
+              {
+                "kind": "input",
+                "position": 1
+              }
+            ],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": [],
+            "clause": {
+              "kind": "decide",
+              "edges": [
+                {
+                  "tag": "search",
+                  "target": {
+                    "kind": "call",
+                    "number": 3
+                  }
+                },
+                {
+                  "tag": "calculate",
+                  "target": {
+                    "kind": "call",
+                    "number": 5
+                  }
+                },
+                {
+                  "tag": "final",
+                  "target": {
+                    "kind": "resume"
+                  }
+                }
+              ]
+            },
+            "visits_leq": 8,
+            "on_budget": "final"
+          },
+          {
+            "task": "Embed",
+            "model": "BGE-M3",
+            "settings": null,
+            "refs": [],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          },
+          {
+            "task": "Retrieve",
+            "model": null,
+            "settings": "top_k=5",
+            "refs": [
+              {
+                "kind": "row",
+                "number": 1
+              },
+              {
+                "kind": "row",
+                "number": 3
+              }
+            ],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": [],
+            "clause": {
+              "kind": "resume"
+            }
+          },
+          {
+            "task": "Calculate",
+            "model": null,
+            "settings": null,
+            "refs": [],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": [],
+            "clause": {
+              "kind": "resume"
+            }
+          }
+        ]
+      },
+      {
+        "task": "Save Text",
+        "model": null,
+        "settings": "findings.md",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "trace": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 1|Template||\"Compare our 2025 and 2026 PTO policies. What changed?\"#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "row_started",
+        "path": "2.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.1",
+        "output": {
+          "items": [
+            {
+              "kind": "index",
+              "value": null,
+              "path": "2.1.0.index.a493e0a2ed0586db.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2.2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2|Think|Qwen3 8B|tools: search, calculate, final|[mock:text] 1|Template||\"Compare our 2025 and 2026 PTO policies. What changed?\"#0|tag=search",
+              "path": null
+            }
+          ]
+        },
+        "fired_tag": "search",
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2.3"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.3",
+        "output": {
+          "items": [
+            {
+              "kind": "vector",
+              "value": null,
+              "path": "2.3.0.vector.17b7c8b437f252b9.bin"
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2.4"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.4",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.4|Retrieve||top_k=5|2.1.0.index.a493e0a2ed0586db.bin|2.3.0.vector.17b7c8b437f252b9.bin#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.4|Retrieve||top_k=5|2.1.0.index.a493e0a2ed0586db.bin|2.3.0.vector.17b7c8b437f252b9.bin#1",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.4|Retrieve||top_k=5|2.1.0.index.a493e0a2ed0586db.bin|2.3.0.vector.17b7c8b437f252b9.bin#2",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "transcript_appended",
+        "path": "2.2",
+        "entry": {
+          "tool": "search",
+          "input": "[mock:text] 2.2|Think|Qwen3 8B|tools: search, calculate, final|[mock:text] 1|Template||\"Compare our 2025 and 2026 PTO policies. What changed?\"#0|tag=search",
+          "observation": "[mock:text] 2.4|Retrieve||top_k=5|2.1.0.index.a493e0a2ed0586db.bin|2.3.0.vector.17b7c8b437f252b9.bin#0 [mock:text] 2.4|Retrieve||top_k=5|2.1.0.index.a493e0a2ed0586db.bin|2.3.0.vector.17b7c8b437f252b9.bin#1 [mock:text] 2.4|Retrieve||top_k=5|2.1.0.index.a493e0a2ed0586db.bin|2.3.0.vector.17b7c8b437f252b9.bin#2"
+        }
+      },
+      {
+        "type": "row_started",
+        "path": "2.2@2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.2@2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2@2|Think|Qwen3 8B|tools: search, calculate, final|[mock:text] 1|Template||\"Compare our 2025 and 2026 PTO policies. What changed?\"#0|tag=calculate",
+              "path": null
+            }
+          ]
+        },
+        "fired_tag": "calculate",
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2.5"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.5",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.5|Calculate|||[mock:text] 2.2@2|Think|Qwen3 8B|tools: search, calculate, final|[mock:text] 1|Template||\"Compare our 2025 and 2026 PTO policies. What changed?\"#0|tag=calculate#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "transcript_appended",
+        "path": "2.2",
+        "entry": {
+          "tool": "calculate",
+          "input": "[mock:text] 2.2@2|Think|Qwen3 8B|tools: search, calculate, final|[mock:text] 1|Template||\"Compare our 2025 and 2026 PTO policies. What changed?\"#0|tag=calculate",
+          "observation": "[mock:text] 2.5|Calculate|||[mock:text] 2.2@2|Think|Qwen3 8B|tools: search, calculate, final|[mock:text] 1|Template||\"Compare our 2025 and 2026 PTO policies. What changed?\"#0|tag=calculate#0"
+        }
+      },
+      {
+        "type": "row_started",
+        "path": "2.2@3"
+      },
+      {
+        "type": "row_completed",
+        "path": "2.2@3",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2@3|Think|Qwen3 8B|tools: search, calculate, final|[mock:text] 1|Template||\"Compare our 2025 and 2026 PTO policies. What changed?\"#0|tag=final",
+              "path": null
+            }
+          ]
+        },
+        "fired_tag": "final",
+        "duration_ms": 0
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2.2@3|Think|Qwen3 8B|tools: search, calculate, final|[mock:text] 1|Template||\"Compare our 2025 and 2026 PTO policies. What changed?\"#0|tag=final",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3"
+      },
+      {
+        "type": "row_completed",
+        "path": "3",
+        "output": {
+          "items": [
+            {
+              "kind": "status",
+              "value": "[mock:status] 3|Save Text||findings.md|[mock:text] 2.2@3|Think|Qwen3 8B|tools: search, calculate, final|[mock:text] 1|Template||\"Compare our 2025 and 2026 PTO policies. What changed?\"#0|tag=final#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "run_completed"
+      }
+    ],
+    "decider_script": {
+      "2.2": [
+        "search",
+        "calculate",
+        "final"
+      ]
+    }
+  }
+}

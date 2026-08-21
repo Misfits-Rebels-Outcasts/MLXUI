@@ -1,0 +1,4 @@
+1. Read Text     handbook.txt
+2. Split         chunk_size=500                     text → [text]
+3. Embed         BGE-M3                             [text] → [vector]
+4. Store Index   kb.index   (2,3)                  [text, vector] → index

@@ -1,0 +1,293 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": null,
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "book.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Split",
+        "model": null,
+        "settings": "chunk_size=2000",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": null,
+        "model": null,
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": "each",
+        "block_name": "summarize_section",
+        "children": [
+          {
+            "task": "Summarize",
+            "model": "Ministral 3B",
+            "settings": "\"one paragraph\"",
+            "refs": [
+              {
+                "kind": "input",
+                "position": 1
+              }
+            ],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          }
+        ]
+      },
+      {
+        "task": "Summarize",
+        "model": "Qwen3 8B",
+        "settings": "\"One page, from these section summaries\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Save Text",
+        "model": null,
+        "settings": "book-summary.md",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "run": {
+    "events": [
+      {
+        "type": "row_started",
+        "path": "1"
+      },
+      {
+        "type": "row_completed",
+        "path": "1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 1|Read Text||book.txt#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "2"
+      },
+      {
+        "type": "row_completed",
+        "path": "2",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 2|Split||chunk_size=2000|[mock:text] 1|Read Text||book.txt#0#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 2|Split||chunk_size=2000|[mock:text] 1|Read Text||book.txt#0#1",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 2|Split||chunk_size=2000|[mock:text] 1|Read Text||book.txt#0#2",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "3"
+      },
+      {
+        "type": "each_item_started",
+        "path": "3",
+        "index": 0,
+        "total": 3
+      },
+      {
+        "type": "row_started",
+        "path": "3.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "3.1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 3.1|Summarize|Ministral 3B|\"one paragraph\"|[mock:text] 2|Split||chunk_size=2000|[mock:text] 1|Read Text||book.txt#0#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "each_item_completed",
+        "path": "3",
+        "index": 0,
+        "total": 3
+      },
+      {
+        "type": "each_item_started",
+        "path": "3",
+        "index": 1,
+        "total": 3
+      },
+      {
+        "type": "row_started",
+        "path": "3.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "3.1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 3.1|Summarize|Ministral 3B|\"one paragraph\"|[mock:text] 2|Split||chunk_size=2000|[mock:text] 1|Read Text||book.txt#0#1#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "each_item_completed",
+        "path": "3",
+        "index": 1,
+        "total": 3
+      },
+      {
+        "type": "each_item_started",
+        "path": "3",
+        "index": 2,
+        "total": 3
+      },
+      {
+        "type": "row_started",
+        "path": "3.1"
+      },
+      {
+        "type": "row_completed",
+        "path": "3.1",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 3.1|Summarize|Ministral 3B|\"one paragraph\"|[mock:text] 2|Split||chunk_size=2000|[mock:text] 1|Read Text||book.txt#0#2#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "each_item_completed",
+        "path": "3",
+        "index": 2,
+        "total": 3
+      },
+      {
+        "type": "row_completed",
+        "path": "3",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 3.1|Summarize|Ministral 3B|\"one paragraph\"|[mock:text] 2|Split||chunk_size=2000|[mock:text] 1|Read Text||book.txt#0#0#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 3.1|Summarize|Ministral 3B|\"one paragraph\"|[mock:text] 2|Split||chunk_size=2000|[mock:text] 1|Read Text||book.txt#0#1#0",
+              "path": null
+            },
+            {
+              "kind": "text",
+              "value": "[mock:text] 3.1|Summarize|Ministral 3B|\"one paragraph\"|[mock:text] 2|Split||chunk_size=2000|[mock:text] 1|Read Text||book.txt#0#2#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "4"
+      },
+      {
+        "type": "row_completed",
+        "path": "4",
+        "output": {
+          "items": [
+            {
+              "kind": "text",
+              "value": "[mock:text] 4|Summarize|Qwen3 8B|\"One page, from these section summaries\"|[mock:text] 3.1|Summarize|Ministral 3B|\"one paragraph\"|[mock:text] 2|Split||chunk_size=2000|[mock:text] 1|Read Text||book.txt#0#0#0|[mock:text] 3.1|Summarize|Ministral 3B|\"one paragraph\"|[mock:text] 2|Split||chunk_size=2000|[mock:text] 1|Read Text||book.txt#0#1#0|[mock:text] 3.1|Summarize|Ministral 3B|\"one paragraph\"|[mock:text] 2|Split||chunk_size=2000|[mock:text] 1|Read Text||book.txt#0#2#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "row_started",
+        "path": "5"
+      },
+      {
+        "type": "row_completed",
+        "path": "5",
+        "output": {
+          "items": [
+            {
+              "kind": "status",
+              "value": "[mock:status] 5|Save Text||book-summary.md|[mock:text] 4|Summarize|Qwen3 8B|\"One page, from these section summaries\"|[mock:text] 3.1|Summarize|Ministral 3B|\"one paragraph\"|[mock:text] 2|Split||chunk_size=2000|[mock:text] 1|Read Text||book.txt#0#0#0|[mock:text] 3.1|Summarize|Ministral 3B|\"one paragraph\"|[mock:text] 2|Split||chunk_size=2000|[mock:text] 1|Read Text||book.txt#0#1#0|[mock:text] 3.1|Summarize|Ministral 3B|\"one paragraph\"|[mock:text] 2|Split||chunk_size=2000|[mock:text] 1|Read Text||book.txt#0#2#0#0#0",
+              "path": null
+            }
+          ]
+        },
+        "duration_ms": 0
+      },
+      {
+        "type": "run_completed"
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  },
+  "cache": {
+    "hits_on_rerun": [
+      "1",
+      "2",
+      "3.1",
+      "4"
+    ]
+  }
+}
