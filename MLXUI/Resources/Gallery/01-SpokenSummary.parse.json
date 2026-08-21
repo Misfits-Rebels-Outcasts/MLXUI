@@ -1,0 +1,70 @@
+{
+  "version": "0.8",
+  "rows": [
+    {
+      "task": "Read Audio",
+      "model": null,
+      "settings": "memo.m4a",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Transcribe",
+      "model": "Whisper Large v3",
+      "settings": "lang=en",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Summarize",
+      "model": "Qwen3 8B",
+      "settings": "\"TL;DR in 3 bullets\"",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Speak",
+      "model": "Kokoro 82M",
+      "settings": "af_heart",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Save Audio",
+      "model": null,
+      "settings": "memo-tldr.wav",
+      "refs": [],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    },
+    {
+      "task": "Save Text",
+      "model": null,
+      "settings": "memo-transcript.txt",
+      "refs": [
+        {
+          "kind": "row",
+          "number": 2
+        }
+      ],
+      "chain_break": false,
+      "block_kind": null,
+      "block_name": null,
+      "children": []
+    }
+  ]
+}
