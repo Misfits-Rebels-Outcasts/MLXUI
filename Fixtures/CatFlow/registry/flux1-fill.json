@@ -1,0 +1,73 @@
+{
+  "id": "black-forest-labs/FLUX.1-Fill-dev",
+  "display": "FLUX.1 Fill",
+  "kind": "local",
+  "engine": "mlx-diffusion",
+  "tasks": [
+    "Inpaint",
+    "Init Latent",
+    "Encode Latent",
+    "Decode Latent"
+  ],
+  "settings": {
+    "steps": {
+      "type": "number",
+      "min": 1,
+      "max": 50,
+      "default": 9,
+      "maps_to": "num_inference_steps"
+    },
+    "width": {
+      "type": "number",
+      "min": 256,
+      "max": 2048,
+      "default": 1024
+    },
+    "height": {
+      "type": "number",
+      "min": 256,
+      "max": 2048,
+      "default": 1024
+    },
+    "seed": {
+      "type": "number",
+      "min": 0,
+      "max": 4294967295,
+      "maps_to": "seed",
+      "auto_ok": true
+    },
+    "guidance": {
+      "type": "number",
+      "min": 0.0,
+      "max": 10.0,
+      "default": 4.0
+    },
+    "quantize": {
+      "type": "number",
+      "min": 3,
+      "max": 8,
+      "default": 8,
+      "maps_to": "quantize"
+    },
+    "preview": {
+      "type": "bool",
+      "default": false,
+      "maps_to": "preview"
+    }
+  },
+  "capabilities": {
+    "supports_guidance": true,
+    "variant": "flux-1-fill",
+    "latent_space": "flux-1"
+  },
+  "resources": {
+    "disk_gb": 16.0,
+    "ram_gb": 9.0,
+    "bits": 8
+  },
+  "source": "https://huggingface.co/black-forest-labs/FLUX.1-Fill-dev",
+  "checksum": "N/A",
+  "license": "FLUX.1-dev Non-Commercial License",
+  "manifest_version": 1,
+  "pinned": false
+}

@@ -1,0 +1,20 @@
+{
+  "id": "mlx-community/nomicai-modernbert-embed-base-bf16",
+  "display": "ModernBERT Embed",
+  "kind": "local",
+  "engine": "mlx-embed",
+  "tasks": [
+    "Embed"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 0.3,
+    "ram_gb": 0.6
+  },
+  "source": "https://huggingface.co/mlx-community/nomicai-modernbert-embed-base-bf16",
+  "checksum": "sha256:891d5d890c4f34bf6e8d4d75ac9082f5e09dbf0a6206fbc8b51a5b11bfe84be9",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true
+}

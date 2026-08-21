@@ -1,0 +1,20 @@
+{
+  "id": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit",
+  "display": "Qwen3-TTS 1.7B",
+  "kind": "local",
+  "engine": "qwen3-tts",
+  "tasks": [
+    "Speak"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 3.1,
+    "ram_gb": 3.72
+  },
+  "source": "https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit",
+  "checksum": "sha256:783508f69387779664e7541f9a3e839b211e4af6a9e7a56816d5c7694d77b308",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true
+}

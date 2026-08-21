@@ -1,0 +1,90 @@
+{
+  "id": "filipstrand/Z-Image-Turbo-mflux-4bit",
+  "display": "Z-Image Turbo (4-bit)",
+  "kind": "local",
+  "engine": "mlx-diffusion",
+  "tasks": [
+    "Generate Image",
+    "Edit Image",
+    "Init Latent",
+    "Encode Latent",
+    "Decode Latent",
+    "Denoise"
+  ],
+  "settings": {
+    "steps": {
+      "type": "number",
+      "min": 1,
+      "max": 50,
+      "default": 9,
+      "maps_to": "num_inference_steps"
+    },
+    "width": {
+      "type": "number",
+      "min": 256,
+      "max": 2048,
+      "default": 1024
+    },
+    "height": {
+      "type": "number",
+      "min": 256,
+      "max": 2048,
+      "default": 1024
+    },
+    "seed": {
+      "type": "number",
+      "min": 0,
+      "max": 4294967295,
+      "maps_to": "seed",
+      "auto_ok": true
+    },
+    "strength": {
+      "type": "number",
+      "min": 0.0,
+      "max": 1.0,
+      "default": 0.5,
+      "maps_to": "image_strength"
+    },
+    "quantize": {
+      "type": "number",
+      "min": 4,
+      "max": 4,
+      "default": 4,
+      "maps_to": "quantize"
+    },
+    "lora": {
+      "type": "adapter",
+      "adapter_kind": "lora",
+      "repeatable": true,
+      "weight_range": [
+        0.0,
+        2.5
+      ]
+    },
+    "preview": {
+      "type": "bool",
+      "default": false,
+      "maps_to": "preview"
+    }
+  },
+  "capabilities": {
+    "supports_guidance": false,
+    "variant": "z-image-turbo",
+    "latent_space": "flux-1",
+    "rejected_settings": {
+      "guidance": "timestep-distilled, no CFG",
+      "negative": "no classifier-free guidance"
+    }
+  },
+  "resources": {
+    "disk_gb": 5.9,
+    "ram_gb": 7.5,
+    "bits": 4
+  },
+  "source": "https://huggingface.co/filipstrand/Z-Image-Turbo-mflux-4bit",
+  "checksum": "N/A",
+  "license": "tongyi-qianwen-license",
+  "manifest_version": 1,
+  "pinned": false,
+  "notes": "P6-QA (found live, 2026-08-11): a pre-quantized (int4) redistribution of Tongyi-MAI/Z-Image-Turbo, published by mflux's own author -- 5.89GB of already-4-bit weight files, versus the base manifest's ~32.83GB full-precision-only repo (mflux's own load path is full precision first, quantize after, so this is what actually keeps peak load memory down). Same `variant`/`latent_space` as the base Z-Image Turbo manifest -- disambiguated at load time by `model_path=`, not a new tag; `Denoise` (locked to the `z-image-turbo` variant) works with it unchanged. Verified live end to end: Generate Image, Edit Image, Init/Encode/Decode Latent + Denoise, and a real Load Checkpoint -> Blend -> Generate Image chain, no OOM, on a 19.3GB machine."
+}

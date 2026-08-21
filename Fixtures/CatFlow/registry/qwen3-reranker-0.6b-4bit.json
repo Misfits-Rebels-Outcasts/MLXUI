@@ -1,0 +1,20 @@
+{
+  "id": "mlx-community/Qwen3-Reranker-0.6B-4bit",
+  "display": "Qwen3 Reranker 0.6B",
+  "kind": "local",
+  "engine": "mlx-rerank-causal",
+  "tasks": [
+    "Rerank"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 0.35,
+    "ram_gb": 0.4
+  },
+  "source": "https://huggingface.co/mlx-community/Qwen3-Reranker-0.6B-4bit",
+  "checksum": "sha256:1156952dbaedf2084ee41d66fcabf3c09c9561b8d3db4f46f528c079f117d085",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true
+}

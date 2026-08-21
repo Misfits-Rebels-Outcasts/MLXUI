@@ -1,0 +1,59 @@
+{
+  "id": "wan/wan2.1-14b",
+  "display": "Wan2.1 14B",
+  "kind": "local",
+  "engine": "mlx-diffusion",
+  "tasks": [
+    "Animate"
+  ],
+  "settings": {
+    "seed": {
+      "type": "number",
+      "min": 0,
+      "max": 4294967295,
+      "maps_to": "seed",
+      "auto_ok": true
+    },
+    "steps": {
+      "type": "number",
+      "min": 1,
+      "max": 100,
+      "default": 50,
+      "maps_to": "num_inference_steps"
+    },
+    "width": {
+      "type": "number",
+      "min": 256,
+      "max": 2048,
+      "default": 832
+    },
+    "height": {
+      "type": "number",
+      "min": 256,
+      "max": 2048,
+      "default": 480
+    },
+    "frames": {
+      "type": "number",
+      "min": 5,
+      "max": 200,
+      "default": 81,
+      "maps_to": "num_frames"
+    }
+  },
+  "capabilities": {
+    "supports_guidance": true,
+    "variant": "wan-2.1",
+    "model_dir": "wan21_14b_i2v_mlx"
+  },
+  "resources": {
+    "disk_gb": 40.0,
+    "ram_gb": 38.0,
+    "bits": 8
+  },
+  "source": "https://huggingface.co/Wan-AI/Wan2.1-I2V-14B",
+  "checksum": "N/A",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": false
+}

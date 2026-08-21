@@ -1,0 +1,21 @@
+{
+  "id": "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit",
+  "display": "Llama 3.1 8B",
+  "kind": "local",
+  "engine": "mlx-lm",
+  "tasks": [
+    "Generate",
+    "Decide"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 4.53,
+    "ram_gb": 7.8
+  },
+  "source": "https://huggingface.co/mlx-community/Meta-Llama-3.1-8B-Instruct-4bit",
+  "checksum": "sha256:49dc82a047e265376454decb931fddb52833d6348a1a6e061c9b2548a4a33600",
+  "license": "llama3.1",
+  "manifest_version": 1,
+  "pinned": true
+}

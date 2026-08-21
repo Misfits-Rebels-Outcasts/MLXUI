@@ -1,0 +1,32 @@
+{
+  "id": "apple/DepthPro",
+  "display": "Depth Pro",
+  "kind": "local",
+  "engine": "mlx-diffusion",
+  "tasks": [
+    "Estimate Depth"
+  ],
+  "settings": {
+    "quantize": {
+      "type": "number",
+      "min": 3,
+      "max": 8,
+      "default": 8,
+      "maps_to": "quantize"
+    }
+  },
+  "capabilities": {
+    "supports_guidance": true,
+    "variant": "depth-pro"
+  },
+  "resources": {
+    "disk_gb": 1.9,
+    "ram_gb": 2.5,
+    "bits": 8
+  },
+  "source": "https://ml-site.cdn-apple.com/models/depth-pro/depth_pro.pt",
+  "checksum": "N/A",
+  "license": "Apple Sample Code License",
+  "manifest_version": 1,
+  "pinned": false
+}

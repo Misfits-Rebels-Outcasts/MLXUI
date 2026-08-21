@@ -1,0 +1,20 @@
+{
+  "id": "mlx-community/olmOCR-2-7B-1025-4bit",
+  "display": "olmOCR-2 7B",
+  "kind": "local",
+  "engine": "mlx-vlm",
+  "tasks": [
+    "OCR"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 5.65,
+    "ram_gb": 6.77
+  },
+  "source": "https://huggingface.co/mlx-community/olmOCR-2-7B-1025-4bit",
+  "checksum": "sha256:ae3894d19dfb61ed4ab89a1ad6972050ddca8da7ca0209501b84fb1a67b9b52e",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true
+}

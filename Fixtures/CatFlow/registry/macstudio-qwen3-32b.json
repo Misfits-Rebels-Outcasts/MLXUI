@@ -1,0 +1,32 @@
+{
+  "id": "macstudio/qwen3-32b",
+  "display": "qwen3-32b @ http://mac-studio.local:8080",
+  "kind": "provider",
+  "engine": "openai-compatible",
+  "base_url": "http://mac-studio.local:8080/v1",
+  "tasks": [
+    "@frames-text",
+    "Decide"
+  ],
+  "settings": {
+    "max_tokens": {
+      "type": "number",
+      "min": 1,
+      "max": 32768,
+      "default": 4096,
+      "maps_to": "max_tokens"
+    }
+  },
+  "capabilities": {
+    "constrained_decoding": false,
+    "schema_mode": true
+  },
+  "resources": {
+    "disk_gb": 0,
+    "ram_gb": 0
+  },
+  "egress": "lan",
+  "checksum": "N/A",
+  "manifest_version": 1,
+  "pinned": false
+}

@@ -1,0 +1,48 @@
+{
+  "id": "mlx-community/Qwen3-8B-4bit",
+  "display": "Qwen3 8B",
+  "kind": "local",
+  "engine": "mlx-lm",
+  "tasks": [
+    "Generate",
+    "Decide"
+  ],
+  "settings": {
+    "temperature": {
+      "type": "number",
+      "min": 0.0,
+      "max": 2.0,
+      "default": 0.3,
+      "maps_to": "temp"
+    },
+    "max_tokens": {
+      "type": "number",
+      "min": 1,
+      "max": 32768,
+      "default": 2048,
+      "maps_to": "max_tokens"
+    }
+  },
+  "capabilities": {
+    "constrained_decoding": true,
+    "schema_mode": true,
+    "context_tokens": 32768,
+    "languages": [
+      "en",
+      "zh",
+      "de",
+      "ja",
+      "es",
+      "fr"
+    ]
+  },
+  "resources": {
+    "disk_gb": 4.62,
+    "ram_gb": 8.5
+  },
+  "source": "https://huggingface.co/mlx-community/Qwen3-8B-4bit",
+  "checksum": "sha256:6fcfb2289f0e5448cebc993df0935646b0c4e5440ec50925286a06f9aec29af5",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true
+}

@@ -239,6 +239,152 @@ nonisolated enum CatParser {
         )
     }
 
+    /// Parse *text* and return the raw, **numeric-ref** parse tree plus the document
+    /// metadata — the shape the validator (and the golden comparisons) operate on,
+    /// before id-resolution. `FlowDocument` is produced from this by `resolve`.
+    static func parseForValidation(_ text: String) throws -> ParsedFlow {
+        let lines = text.components(separatedBy: "\n")
+        var start = 0
+        var version = ""
+        var fileKind = "catflow"
+        var flags: [String] = []
+        var accepts: [Kind]?
+        var gives: String?
+        var params: [ParamDecl] = []
+        var presets: [String: PresetDecl] = [:]
+
+        for (i, line) in lines.enumerated() {
+            if reBlank.firstMatch(in: line) != nil { continue }
+            var m = headerMatch(line)
+            var sep = "·"
+            if m == nil {
+                if let m08 = reHeaderV08.firstMatch(in: line),
+                   group(m08, in: line, index: 2) == "0.8" {
+                    m = m08
+                    sep = ";"
+                }
+            }
+            if let m {
+                let kind = group(m, in: line, index: 1) ?? ""
+                let v = group(m, in: line, index: 2) ?? ""
+                if v != "0.8" {
+                    throw CatParserError.needsVersion(token: "\(kind) \(v)", version: v, line: i + 1)
+                }
+                let flagsStr = (group(m, in: line, index: 3) ?? "").trimmingCharacters(in: .whitespaces)
+                if !flagsStr.isEmpty {
+                    for f in splitOnSeparator(flagsStr, sep: sep) {
+                        let f = f.trimmingCharacters(in: .whitespaces)
+                        if f.isEmpty { continue }
+                        if !knownHeaderFlags.contains(f) {
+                            throw CatParserError.unknownHeaderFlag(flag: f, line: i + 1)
+                        }
+                        flags.append(f)
+                    }
+                }
+                version = v
+                fileKind = kind
+                start = i + 1
+            }
+            break
+        }
+
+        let isV08 = version == "0.8"
+
+        if isV08 && fileKind == "catpipeline" {
+            while start < lines.count {
+                let stripped = lines[start].trimmingCharacters(in: .whitespaces)
+                if stripped.hasPrefix("pipeline ") {
+                    start += 1
+                    continue
+                }
+                if stripped.hasPrefix("accepts:") {
+                    accepts = try parseAcceptsList(String(stripped.dropFirst("accepts:".count)), lineNum: start + 1)
+                    start += 1
+                    continue
+                }
+                if stripped.hasPrefix("gives:") {
+                    gives = String(stripped.dropFirst("gives:".count)).trimmingCharacters(in: .whitespaces)
+                    start += 1
+                    continue
+                }
+                if stripped.hasPrefix("params:") {
+                    params = try parseParamsLine(stripped, lineNum: start + 1, isV08: true)
+                    start += 1
+                    continue
+                }
+                break
+            }
+        }
+
+        if isV08 && start < lines.count && lines[start].hasPrefix("params:") {
+            params = try parseParamsLine(lines[start], lineNum: start + 1, isV08: true)
+            start += 1
+        }
+
+        if isV08 {
+            var j = start
+            while j < lines.count {
+                let l = lines[j]
+                let t = l.trimmingCharacters(in: .whitespaces)
+                if t.isEmpty || t.hasPrefix("#") { j += 1 } else { break }
+            }
+            if j < lines.count, rePresetsHeader.firstMatch(in: lines[j].trimmingCharacters(in: .whitespaces)) != nil {
+                (presets, start) = try parsePresetsBlock(lines, start: j + 1)
+            }
+        }
+
+        var boundary = lines.count
+        if isV08 {
+            boundary = findSectionBoundary(lines, start: start)
+        }
+        let rowLines = Array(lines[..<boundary])
+
+        let parsedRows = try parseRowsRaw(rowLines, start: start, indent: 0, isV08: isV08)
+
+        var definitions: [String: CompositeDef] = [:]
+        var uses: [String: String] = [:]
+        var models: [String: String] = [:]
+        var transforms: [String: TransformDef] = [:]
+
+        if isV08 && boundary < lines.count {
+            (definitions, uses, models, transforms) = try parseSections(lines, start: boundary, isV08: true)
+        }
+
+        return ParsedFlow(
+            version: version,
+            fileKind: fileKind == "catpipeline" ? .catpipeline : .catflow,
+            flags: flags,
+            rows: parsedRows,
+            uses: uses,
+            models: models,
+            transforms: transforms,
+            definitions: definitions,
+            accepts: accepts,
+            gives: gives,
+            params: params,
+            presets: presets
+        )
+    }
+
+    /// Convert a `ParsedFlow` into the id-resolved `FlowDocument` (used by `parse`
+    /// and by callers that already hold a `ParsedFlow`).
+    static func resolveDocument(_ parsed: ParsedFlow) throws -> FlowDocument {
+        FlowDocument(
+            version: parsed.version,
+            fileKind: parsed.fileKind,
+            rows: try resolve(parsed.rows),
+            flags: Set(parsed.flags.compactMap { CapabilityFlag(rawValue: $0) }),
+            uses: parsed.uses,
+            models: parsed.models,
+            transforms: parsed.transforms,
+            definitions: parsed.definitions,
+            accepts: parsed.accepts,
+            gives: parsed.gives,
+            params: parsed.params,
+            presets: parsed.presets
+        )
+    }
+
     // MARK: - Identity resolution (numbers → ids, per scope)
 
     /// Mint a UUID per row and rewrite numeric refs to ids, per scope — the same
@@ -1415,6 +1561,28 @@ enum ParsedRef: Equatable {
     case row(number: Int)
     case input(position: Int)
     case param(name: String)
+}
+
+/// The raw parse result the validator operates on: numeric refs throughout, plus the
+/// document metadata (version/flags/models/…). `CatParser.resolveDocument` converts it
+/// to the id-based `FlowDocument` for the app.
+nonisolated struct ParsedFlow {
+    var version: String
+    var fileKind: FileKind
+    var flags: [String]
+    var rows: [ParsedRow]
+    var uses: [String: String]
+    var models: [String: String]
+    var transforms: [String: TransformDef]
+    var definitions: [String: CompositeDef]
+    var accepts: [Kind]?
+    var gives: String?
+    var params: [ParamDecl]
+    var presets: [String: PresetDecl]
+
+    var flowDocument: FlowDocument? {
+        try? CatParser.resolveDocument(self)
+    }
 }
 
 /// Parse-time errors for the CAT Flow grammar — ported from `core/errors.py`. Every

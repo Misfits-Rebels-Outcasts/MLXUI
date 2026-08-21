@@ -1,0 +1,20 @@
+{
+  "id": "groq/whisper-large-v3",
+  "display": "whisper-large-v3 @ groq",
+  "kind": "provider",
+  "engine": "openai-compatible",
+  "base_url": "https://api.groq.com/openai/v1",
+  "tasks": [
+    "Transcribe"
+  ],
+  "resources": {
+    "disk_gb": 0,
+    "ram_gb": 0
+  },
+  "credentials": "groq",
+  "egress": "internet",
+  "timeout_s": 600,
+  "checksum": "N/A",
+  "manifest_version": 1,
+  "pinned": false
+}

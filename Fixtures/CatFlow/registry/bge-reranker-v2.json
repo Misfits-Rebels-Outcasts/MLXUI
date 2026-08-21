@@ -1,0 +1,20 @@
+{
+  "id": "flaglow/BAAI-bge-reranker-v2-m3-mlx-fp16",
+  "display": "BGE Reranker",
+  "kind": "local",
+  "engine": "mlx-rerank",
+  "tasks": [
+    "Rerank"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 2.29,
+    "ram_gb": 3.3
+  },
+  "source": "https://huggingface.co/flaglow/BAAI-bge-reranker-v2-m3-mlx-fp16",
+  "checksum": "sha256:66aa1e2f73302bbab312a2027e29fbc28624536908babe5cf6a6e780d8dd2f5e",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true
+}

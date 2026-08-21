@@ -1,0 +1,20 @@
+{
+  "id": "mlx-community/bge-m3-mlx-4bit",
+  "display": "BGE-M3",
+  "kind": "local",
+  "engine": "mlx-embed",
+  "tasks": [
+    "Embed"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 0.34,
+    "ram_gb": 0.5
+  },
+  "source": "https://huggingface.co/mlx-community/bge-m3-mlx-4bit",
+  "checksum": "sha256:280c7c706bcc150fd83b55e11ef8453783d39b3524ccd3792dc2fbab62826db0",
+  "license": "MIT",
+  "manifest_version": 1,
+  "pinned": true
+}

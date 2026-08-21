@@ -1,0 +1,40 @@
+{
+  "id": "meta/musicgen-small",
+  "display": "MusicGen",
+  "kind": "local",
+  "engine": "mlx-diffusion",
+  "tasks": [
+    "Generate Sound"
+  ],
+  "settings": {
+    "seed": {
+      "type": "number",
+      "min": 0,
+      "max": 4294967295,
+      "maps_to": "seed",
+      "auto_ok": true
+    },
+    "steps": {
+      "type": "number",
+      "min": 1,
+      "max": 200,
+      "default": 50,
+      "maps_to": "num_inference_steps"
+    }
+  },
+  "capabilities": {
+    "supports_guidance": true,
+    "variant": "musicgen"
+  },
+  "resources": {
+    "disk_gb": 2.0,
+    "ram_gb": 1.5,
+    "bits": 8
+  },
+  "source": "https://huggingface.co/facebook/musicgen-small",
+  "checksum": "N/A",
+  "license": "MIT",
+  "manifest_version": 1,
+  "pinned": false,
+  "notes": "P6-G2-02a (SPEC-Q192): the smallest MusicGen checkpoint, matching this registry's default-to-small pattern. The engine is the vendored mlx-examples source (src/catflow/engines/vendor/musicgen/, mlx-examples @ 796f5b53); the first `Generate Sound` use downloads facebook/musicgen-small's state_dict.bin and the encodec/t5 helpers via the vendored from_pretrained. medium/large are NOT here -- each is a follow-up manifest-only addition (same manifest shape, `source` pointing at that checkpoint) to add when a real need names itself."
+}

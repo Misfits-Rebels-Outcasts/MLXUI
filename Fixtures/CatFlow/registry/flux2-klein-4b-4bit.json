@@ -1,0 +1,91 @@
+{
+  "id": "RunPod/FLUX.2-klein-4B-mflux-4bit",
+  "display": "FLUX.2 Klein 4B (4-bit)",
+  "kind": "local",
+  "engine": "mlx-diffusion",
+  "tasks": [
+    "Generate Image",
+    "Init Latent",
+    "Encode Latent",
+    "Decode Latent"
+  ],
+  "settings": {
+    "steps": {
+      "type": "number",
+      "min": 1,
+      "max": 50,
+      "default": 4,
+      "maps_to": "num_inference_steps"
+    },
+    "width": {
+      "type": "number",
+      "min": 256,
+      "max": 2048,
+      "default": 1024
+    },
+    "height": {
+      "type": "number",
+      "min": 256,
+      "max": 2048,
+      "default": 1024
+    },
+    "seed": {
+      "type": "number",
+      "min": 0,
+      "max": 4294967295,
+      "maps_to": "seed",
+      "auto_ok": true
+    },
+    "guidance": {
+      "type": "number",
+      "min": 0.0,
+      "max": 10.0,
+      "default": 2.0
+    },
+    "negative": {
+      "type": "string",
+      "default": ""
+    },
+    "quantize": {
+      "type": "number",
+      "min": 4,
+      "max": 4,
+      "default": 4,
+      "maps_to": "quantize"
+    },
+    "lora": {
+      "type": "adapter",
+      "adapter_kind": "lora",
+      "repeatable": true,
+      "weight_range": [
+        0.0,
+        2.5
+      ]
+    },
+    "controlnet": {
+      "type": "adapter",
+      "adapter_kind": "controlnet"
+    },
+    "preview": {
+      "type": "bool",
+      "default": false,
+      "maps_to": "preview"
+    }
+  },
+  "capabilities": {
+    "supports_guidance": true,
+    "variant": "flux-2-klein",
+    "latent_space": "flux-2"
+  },
+  "resources": {
+    "disk_gb": 4.7,
+    "ram_gb": 7.0,
+    "bits": 4
+  },
+  "source": "https://huggingface.co/RunPod/FLUX.2-klein-4B-mflux-4bit",
+  "checksum": "N/A",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": false,
+  "notes": "P6-QA (found live, 2026-08-11): a pre-quantized (int4) redistribution of black-forest-labs/FLUX.2-klein-4B, published directly on HF -- 4.61GB of already-4-bit weight files (verified via HfApi), versus the base manifest's ~23.7GB full-precision-only repo, which mflux would load entirely into memory before quantizing (the OOM this manifest exists to route around: mflux's own load path is `_load_weights` (full precision) then `_apply_and_quantize`, so an already-quantized source is what actually keeps peak memory down, not a lower `quantize=` argument against the full-precision repo). Same `variant`/`latent_space` as the base FLUX.2 Klein manifest (mechanically the same Flux2Klein class/architecture) -- disambiguated at load time by `model_path=` (the manifest's own `id`), not a new variant tag. Verified live: real end-to-end generation, ~11s for 4 steps, no OOM, on a 19.3GB machine."
+}

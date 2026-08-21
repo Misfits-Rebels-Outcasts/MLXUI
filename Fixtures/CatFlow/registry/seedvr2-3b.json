@@ -1,0 +1,52 @@
+{
+  "id": "numz/SeedVR2_comfyUI",
+  "display": "SeedVR2 3B",
+  "kind": "local",
+  "engine": "mlx-diffusion",
+  "tasks": [
+    "Upscale"
+  ],
+  "settings": {
+    "seed": {
+      "type": "number",
+      "min": 0,
+      "max": 4294967295,
+      "maps_to": "seed",
+      "auto_ok": true
+    },
+    "scale": {
+      "type": "number",
+      "min": 1.0,
+      "max": 4.0,
+      "default": 2.0,
+      "maps_to": "resolution"
+    },
+    "softness": {
+      "type": "number",
+      "min": 0.0,
+      "max": 1.0,
+      "default": 0.0
+    },
+    "quantize": {
+      "type": "number",
+      "min": 3,
+      "max": 8,
+      "default": 8,
+      "maps_to": "quantize"
+    }
+  },
+  "capabilities": {
+    "supports_guidance": true,
+    "variant": "seedvr2-3b"
+  },
+  "resources": {
+    "disk_gb": 6.0,
+    "ram_gb": 4.0,
+    "bits": 8
+  },
+  "source": "https://huggingface.co/numz/SeedVR2_comfyUI",
+  "checksum": "N/A",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": false
+}

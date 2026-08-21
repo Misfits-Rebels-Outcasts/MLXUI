@@ -1,0 +1,21 @@
+{
+  "id": "mlx-community/Qwen2.5-14B-4bit",
+  "display": "Qwen2.5 14B",
+  "kind": "local",
+  "engine": "mlx-lm",
+  "tasks": [
+    "Generate",
+    "Decide"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 8.32,
+    "ram_gb": 14.0
+  },
+  "source": "https://huggingface.co/mlx-community/Qwen2.5-14B-4bit",
+  "checksum": "sha256:96b7709ef69abe1b8fe33817fd2488b6c0184e4d3cf4426b1623f12b4b6a85d5",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true
+}

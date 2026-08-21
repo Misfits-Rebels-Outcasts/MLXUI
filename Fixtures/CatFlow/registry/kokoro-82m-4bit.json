@@ -1,0 +1,57 @@
+{
+  "id": "mlx-community/Kokoro-82M-4bit",
+  "display": "Kokoro 82M",
+  "kind": "local",
+  "engine": "kokoro-tts",
+  "tasks": [
+    "Speak"
+  ],
+  "settings": {
+    "voice": {
+      "type": "enum",
+      "values": [
+        "af_heart",
+        "af_bella",
+        "af_nicole",
+        "am_adam",
+        "am_michael"
+      ],
+      "default": "af_heart",
+      "maps_to": "--voice",
+      "positional_ok": true
+    },
+    "speed": {
+      "type": "number",
+      "min": 0.5,
+      "max": 2.0,
+      "default": 1.0,
+      "maps_to": "--speed"
+    },
+    "trim_silence": {
+      "type": "bool",
+      "default": true,
+      "maps_to": "--trim"
+    },
+    "seed": {
+      "type": "number",
+      "min": 0,
+      "max": 4294967295,
+      "maps_to": "seed",
+      "auto_ok": true
+    }
+  },
+  "capabilities": {
+    "languages": [
+      "en"
+    ]
+  },
+  "resources": {
+    "disk_gb": 0.64,
+    "ram_gb": 1.2
+  },
+  "source": "https://huggingface.co/mlx-community/Kokoro-82M-4bit",
+  "checksum": "sha256:c88c015917713b65377127f343864a1e0fc436e72a911b2cd6349080666d63e0",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true
+}

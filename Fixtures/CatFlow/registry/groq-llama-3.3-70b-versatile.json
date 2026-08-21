@@ -1,0 +1,33 @@
+{
+  "id": "groq/llama-3.3-70b-versatile",
+  "display": "llama-3.3-70b @ groq",
+  "kind": "provider",
+  "engine": "openai-compatible",
+  "base_url": "https://api.groq.com/openai/v1",
+  "tasks": [
+    "@frames-text",
+    "Decide"
+  ],
+  "settings": {
+    "max_tokens": {
+      "type": "number",
+      "min": 1,
+      "max": 131072,
+      "default": 4096,
+      "maps_to": "max_tokens"
+    }
+  },
+  "capabilities": {
+    "constrained_decoding": false,
+    "schema_mode": true
+  },
+  "resources": {
+    "disk_gb": 0,
+    "ram_gb": 0
+  },
+  "credentials": "groq",
+  "checksum": "N/A",
+  "egress": "internet",
+  "manifest_version": 1,
+  "pinned": false
+}

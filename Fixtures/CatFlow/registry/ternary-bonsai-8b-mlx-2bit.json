@@ -1,0 +1,40 @@
+{
+  "id": "prism-ml/Ternary-Bonsai-8B-mlx-2bit",
+  "display": "Ternary-Bonsai 8B",
+  "kind": "local",
+  "engine": "mlx-lm",
+  "tasks": [
+    "Generate",
+    "Decide"
+  ],
+  "settings": {
+    "temperature": {
+      "type": "number",
+      "min": 0.0,
+      "max": 2.0,
+      "default": 0.3,
+      "maps_to": "temp"
+    },
+    "max_tokens": {
+      "type": "number",
+      "min": 1,
+      "max": 65536,
+      "default": 2048,
+      "maps_to": "max_tokens"
+    }
+  },
+  "capabilities": {
+    "constrained_decoding": true,
+    "schema_mode": true,
+    "context_tokens": 65536
+  },
+  "resources": {
+    "disk_gb": 2.32,
+    "ram_gb": 2.76
+  },
+  "source": "https://huggingface.co/prism-ml/Ternary-Bonsai-8B-mlx-2bit",
+  "checksum": "sha256:d3b5d01ee344e8c4101e7e57da56439a4d66776f5abf6272db72740e1e32c47c",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true
+}

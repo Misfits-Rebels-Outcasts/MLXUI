@@ -1,0 +1,20 @@
+{
+  "id": "mlx-community/gemma-3-4b-it-4bit",
+  "display": "Gemma 3 4B",
+  "kind": "local",
+  "engine": "mlx-vlm",
+  "tasks": [
+    "Describe Image"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 3.44,
+    "ram_gb": 4.08
+  },
+  "source": "https://huggingface.co/mlx-community/gemma-3-4b-it-4bit",
+  "checksum": "sha256:bbb3ca55c86c078448fa8e571384e72f359a65692aaec837c5878263c4f5b8c8",
+  "license": "gemma",
+  "manifest_version": 1,
+  "pinned": true
+}

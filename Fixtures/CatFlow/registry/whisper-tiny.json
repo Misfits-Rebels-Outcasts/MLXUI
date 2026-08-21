@@ -1,0 +1,20 @@
+{
+  "id": "mlx-community/whisper-tiny",
+  "display": "Whisper Tiny",
+  "kind": "local",
+  "engine": "mlx-whisper",
+  "tasks": [
+    "Transcribe"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 0.07,
+    "ram_gb": 0.4
+  },
+  "source": "https://huggingface.co/mlx-community/whisper-tiny",
+  "checksum": "sha256:f14b611e4cb96fe101897bb5b9838ae8004f656ac35126c31b0ab56adc222c35",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true
+}

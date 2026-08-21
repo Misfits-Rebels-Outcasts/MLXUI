@@ -1,0 +1,21 @@
+{
+  "id": "mlx-community/Ministral-3-3B-Instruct-2512-4bit",
+  "display": "Ministral 3B",
+  "kind": "local",
+  "engine": "mlx-lm",
+  "tasks": [
+    "Generate",
+    "Decide"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 2.78,
+    "ram_gb": 4.9
+  },
+  "source": "https://huggingface.co/mlx-community/Ministral-3-3B-Instruct-2512-4bit",
+  "checksum": "sha256:91da21e32ae6ec1510235635dbb3a7d38df0a1b1f41b995592d10a8886145b04",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true
+}
