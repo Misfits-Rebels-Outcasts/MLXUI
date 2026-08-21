@@ -31,17 +31,18 @@ nonisolated struct RealExecutor: FlowExecutor {
 
         switch desc.taskClass {
         case .instant:
-            return try await runInstant(desc, row: row, inputs: inputs)
+            return try await runInstant(desc, row: row, inputs: inputs, path: path)
         case .model:
             return try await runModel(desc, row: row, inputs: inputs, path: path)
         case .human, .trigger, .staged, .net, .agent:
-            throw FlowError.unsupportedKind(row: String(path), kind: .file)   // refused by canRun earlier
+            // Refused by `canRun` earlier; keep a truthful sentence as defense in depth.
+            throw FlowError.unsupportedTask(row: path, task: row.task ?? "?")
         }
     }
 
     // MARK: - Instant tools
 
-    private func runInstant(_ desc: TaskDescriptor, row: Row, inputs: [Asset]) async throws -> Asset {
+    private func runInstant(_ desc: TaskDescriptor, row: Row, inputs: [Asset], path: String) async throws -> Asset {
         switch desc.name {
         case "Read Audio":
             return try await ReadAudioTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
@@ -56,7 +57,10 @@ nonisolated struct RealExecutor: FlowExecutor {
             return try await SaveTextTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
                 .run(inputs.first ?? Asset(items: [])) { _ in }
         default:
-            throw FlowError.unsupportedKind(row: row.task ?? "?", kind: .file)
+            // A catalog task with no Swift tool implementation yet (e.g. `Diff`, `Split`,
+            // `Template`). Name the task, not a misleading kind — the flow declines rather
+            // than approximating (standing rule 5).
+            throw FlowError.unsupportedTask(row: path, task: desc.name)
         }
     }
 

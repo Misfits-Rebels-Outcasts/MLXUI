@@ -34,6 +34,8 @@ nonisolated enum FlowErrorDisplay {
             return "Row \(row) failed: \(message)"
         case .modelNotRunnable(let row, let display, let reason):
             return "Row \(row) needs \(display), which can't run: \(reason)"
+        case .unsupportedTask(let row, let task):
+            return "Row \(row) uses \(task), which this version of Flows doesn't run yet."
         }
     }
 

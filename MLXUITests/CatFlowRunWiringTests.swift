@@ -176,6 +176,45 @@ struct CatFlowRunWiringTests {
         #expect(value.contains("TL;DR in 3 bullets"))
     }
 
+    // MARK: - Unimplemented instant tool refuses with an honest sentence (Policy Diff)
+
+    @Test func policyDiffDiffRowRefusesNamingTheTask() async throws {
+        // 08-PolicyDiff row 3 is `Diff`, a real catalog task with no Swift tool yet. The
+        // refusal must name the row number and the task — never "Row Diff produces file".
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let docURL = repoRoot.appendingPathComponent("MLXUI/Resources/Gallery/08-PolicyDiff.parse.json")
+        let doc = try JSONDecoder().decode(FlowDocument.self, from: Data(contentsOf: docURL))
+
+        // The executor's instant path is exercised directly with a Diff row.
+        let executor = RealExecutor(
+            workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory),
+            flowID: "08-PolicyDiff",
+            blobDirectory: FileManager.default.temporaryDirectory,
+            makeModelStage: { _, _ in EchoPromptStage() },
+            installedModelIDs: [],
+            catalog: [])
+        let row3 = doc.rows[2]   // Diff (1,2)
+        #expect(row3.task == "Diff")
+
+        do {
+            _ = try await executor.execute(path: "3", row: row3, inputs: [
+                Asset(items: [Item(kind: .text, value: "a", path: nil, sourceText: nil)]),
+                Asset(items: [Item(kind: .text, value: "b", path: nil, sourceText: nil)]),
+            ])
+            Issue.record("Diff should refuse in this version")
+        } catch let error as FlowError {
+            let sentence = FlowErrorDisplay.sentence(for: error)
+            #expect(sentence.contains("Row 3"))
+            #expect(sentence.contains("Diff"))
+            #expect(!sentence.contains("produces file"))
+            #expect(!sentence.contains("Row Diff"))
+        } catch {
+            Issue.record("wrong error type: \(error)")
+        }
+    }
+
     private func makeMockContext() -> FlowRunner.RunContext {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("catflow-wire-\(UUID().uuidString)")

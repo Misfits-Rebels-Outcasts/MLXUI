@@ -186,6 +186,7 @@ nonisolated enum FlowError: Error, CustomStringConvertible, Equatable {
     case referenceNotFound(row: String)
     case stageFailure(row: String, message: String)
     case modelNotRunnable(row: String, display: String, reason: String)
+    case unsupportedTask(row: String, task: String)
 
     var description: String {
         switch self {
@@ -211,6 +212,8 @@ nonisolated enum FlowError: Error, CustomStringConvertible, Equatable {
             return "Row \(row) failed: \(message)"
         case .modelNotRunnable(let row, let display, let reason):
             return "Row \(row) needs \(display), which isn't runnable: \(reason)"
+        case .unsupportedTask(let row, let task):
+            return "Row \(row) uses \(task), which this version of Flows doesn't run yet."
         }
     }
 }
