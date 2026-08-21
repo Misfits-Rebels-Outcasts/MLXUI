@@ -17,6 +17,9 @@ import Foundation
 /// Coverage (browser.json): chat (LLM) · ASR (Whisper, Voxtral) · TTS (Kokoro + generic) ·
 /// Vision (VLM) · OCR (MLXVLM + PaddleOCR-VL + dots.ocr + DeepSeek-OCR) · Embeddings ·
 /// Image generation (FLUX.1) · Image segmentation (SAM3) · Video generation (WAN 2.1).
+/// `ChatModule` is deliberately **last**: it claims `.llm`, which no other SDK claims, so
+/// appending keeps every existing claim resolution byte-identical (the CFM-R1-1 table test
+/// guards this).
 @MainActor
 let installedModules: [ModelModule.Type] = [
     MLXWhisperModule.self,
@@ -35,4 +38,5 @@ let installedModules: [ModelModule.Type] = [
     FluxModule.self,
     SegmentAnythingModule.self,
     WanVideoModule.self,
+    ChatModule.self,
 ]
