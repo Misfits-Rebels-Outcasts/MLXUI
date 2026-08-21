@@ -180,6 +180,12 @@ nonisolated enum FlowError: Error, CustomStringConvertible, Equatable {
     case missingInlineValue(row: String, kind: Kind)
     case fileReadFailed(row: String, path: String)
     case writeFailed(row: String, path: String)
+    case frameInputOutOfRange(index: Int, count: Int)
+    case unknownTask(row: String)
+    case unsupportedReference(row: String)
+    case referenceNotFound(row: String)
+    case stageFailure(row: String, message: String)
+    case modelNotRunnable(row: String, display: String, reason: String)
 
     var description: String {
         switch self {
@@ -193,6 +199,18 @@ nonisolated enum FlowError: Error, CustomStringConvertible, Equatable {
             return "\(row) couldn't read '\(path)' — make sure it's in the flow's folder."
         case .writeFailed(let row, let path):
             return "\(row) couldn't write '\(path)' — the flow's folder may be read-only."
+        case .frameInputOutOfRange(let index, let count):
+            return "A frame references input[\(index)], but only \(count) item(s) were given."
+        case .unknownTask(let row):
+            return "Row \(row) uses a task this version of Flows doesn't know — update the flow."
+        case .unsupportedReference(let row):
+            return "Row \(row) uses a reference type this version of Flows can't follow."
+        case .referenceNotFound(let row):
+            return "Row \(row) references a row that hasn't run yet — check the flow's order."
+        case .stageFailure(let row, let message):
+            return "Row \(row) failed: \(message)"
+        case .modelNotRunnable(let row, let display, let reason):
+            return "Row \(row) needs \(display), which isn't runnable: \(reason)"
         }
     }
 }
