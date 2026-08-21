@@ -41,4 +41,20 @@ nonisolated enum AppFlowExecutorFactory {
                                      blobDirectory: blobDir,
                                      executor: make(flowID: flowID, appState: appState))
     }
+
+    /// The `RunContext` with the real executor wrapped in the content-addressed cache
+    /// (CFM-R3-2/4): a deterministic run seed is derived from the flow's raw text, so cached
+    /// keys are stable across runs and `_with_seed` derives the same concrete seeds.
+    static func cachingContext(flowID: String, appState: AppState) -> FlowRunner.RunContext {
+        let workspace = FlowWorkspace(root: ModelStore.shared.flowsDirectory)
+        let flowDir = workspace.directory(for: flowID)
+        let blobDir = flowDir.appendingPathComponent(".blobs", isDirectory: true)
+        let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
+        let runSeed = (try? GalleryLoader.rawCatText(flowID: flowID)).map { FlowSeed.runSeed(for: $0) } ?? 0
+        let inner = make(flowID: flowID, appState: appState)
+        let caching = CachingExecutor(inner: inner, store: FlowCacheStore.shared,
+                                      cacheTier: "real", catalog: catalog, runSeed: runSeed)
+        return FlowRunner.RunContext(flowID: flowID, workspace: workspace,
+                                     blobDirectory: blobDir, executor: caching)
+    }
 }

@@ -29,6 +29,15 @@ nonisolated protocol FlowExecutor: Sendable {
     /// Run `row`, whose gathered inputs are `inputs`. `path` is the row's dotted path
     /// (e.g. `"1"`, `"2"` — the Python's fingerprint identity). Throws a `FlowError`.
     func execute(path: String, row: Row, inputs: [Asset]) async throws -> Asset
+
+    /// Whether the last `execute` served from cache. Default `false` for plain executors;
+    /// `CachingExecutor` overrides (a reference type so the mutation persists across the
+    /// protocol existential). The runner reads this to emit `.cacheHit`.
+    var lastCacheHit: Bool { get }
+}
+
+extension FlowExecutor {
+    var lastCacheHit: Bool { false }
 }
 
 /// The execution engine for the **linear subset** (CFM-R2-6): straight-line rows top to
@@ -105,14 +114,22 @@ nonisolated struct FlowRunner {
         return .runnable
     }
 
-    /// Run `doc` with the linear engine. The caller drains the returned stream; each row
-    /// emits `.started` → (`.progress`…) → `.finished` or `.failed`, and the run halts on
-    /// the first failure (no later `.started`s). A cancelled `Task` stops the stream.
-    func run(_ doc: FlowDocument, context: RunContext) -> AsyncStream<FlowEvent> {
+    /// Run `doc` with the linear engine, starting at `startIndex` (0 = the whole flow; a
+    /// re-run from the first gray row passes the index of the first `✓`-to-`○` boundary).
+    /// `resumeOutputs` seeds rows **before** `startIndex` (their already-earned outputs), so
+    /// downstream refs still resolve. The caller drains the returned stream; each row emits
+    /// `.started` → (`.progress`…) → (`.cacheHit` when served from cache) → `.finished` or
+    /// `.failed`, and the run halts on the first failure (no later `.started`s). A cancelled
+    /// `Task` stops the stream.
+    func run(_ doc: FlowDocument, context: RunContext, startIndex: Int = 0,
+             resumeOutputs: [UUID: Asset] = [:]) -> AsyncStream<FlowEvent> {
         AsyncStream { continuation in
             let task = Task {
                 do {
-                    try await Self.executeLinear(doc, context: context, continuation: continuation)
+                    try await Self.executeLinear(doc, context: context,
+                                                 continuation: continuation,
+                                                 startIndex: max(0, startIndex),
+                                                 resumeOutputs: resumeOutputs)
                     continuation.finish()
                 } catch is CancellationError {
                     continuation.finish()
@@ -125,12 +142,17 @@ nonisolated struct FlowRunner {
     }
 
     private static func executeLinear(_ doc: FlowDocument, context: RunContext,
-                                      continuation: AsyncStream<FlowEvent>.Continuation) async {
-        var outputs: [UUID: Asset] = [:]
+                                      continuation: AsyncStream<FlowEvent>.Continuation,
+                                      startIndex: Int = 0,
+                                      resumeOutputs: [UUID: Asset] = [:]) async {
+        var outputs = resumeOutputs
         var previousOutput: Asset?
+        if startIndex > 0, startIndex <= doc.rows.count {
+            previousOutput = outputs[doc.rows[startIndex - 1].id]
+        }
         let rows = doc.rows
 
-        for (i, row) in rows.enumerated() {
+        for (i, row) in rows.enumerated() where i >= startIndex {
             // Every per-row failure — setup or stage — yields `.failed` and halts; nothing
             // throws out of the loop, so no later `.started` can follow a failure.
             do {
@@ -180,7 +202,11 @@ nonisolated struct FlowRunner {
 
                 outputs[row.id] = asset
                 previousOutput = asset
-                continuation.yield(.finished(rowID: row.id, asset))
+                if context.executor.lastCacheHit {
+                    continuation.yield(.cacheHit(rowID: row.id))
+                } else {
+                    continuation.yield(.finished(rowID: row.id, asset))
+                }
             } catch let error as FlowError {
                 continuation.yield(.failed(rowID: row.id, error))
                 return

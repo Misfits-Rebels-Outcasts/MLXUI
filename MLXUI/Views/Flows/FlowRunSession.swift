@@ -46,6 +46,11 @@ final class FlowRunSession {
         rowStates[rowID]?.status ?? .notRun
     }
 
+    /// Whether any row has earned a result (any succeeded dot) — gates "re-run from here".
+    var hasRunResults: Bool {
+        rowStates.values.contains { $0.status == .succeeded }
+    }
+
     /// Error sentence for a failed row.
     func errorSentence(for rowID: UUID) -> String? {
         rowStates[rowID]?.errorSentence
@@ -53,15 +58,33 @@ final class FlowRunSession {
 
     // MARK: - Start
 
-    /// Start a run: reset dots, consume the stream, drive states. `installFirst` (when
-    /// non-empty) is confirmed by the caller before this is called.
-    func start(doc: FlowDocument, runner: FlowRunner, context: FlowRunner.RunContext) {
+    /// Start a run. When `resume` is true, the run starts at the first gray row (answer
+    /// `f3`): rows already `✓` keep their dots and outputs, and Run re-executes only the
+    /// gray rows. Otherwise the whole flow runs (dots reset).
+    func start(doc: FlowDocument, runner: FlowRunner, context: FlowRunner.RunContext,
+               resume: Bool = false) {
         guard !isRunning else { return }
         isRunning = true
         errorSentence = nil
-        rowStates = Dictionary(uniqueKeysWithValues: doc.rows.map { ($0.id, RowState()) })
 
-        let stream = runner.run(doc, context: context)
+        let startIndex = resume ? firstGrayIndex(in: doc) : 0
+        let resumeOutputs = resume ? outputs : [:]
+        if startIndex == 0 {
+            rowStates = Dictionary(uniqueKeysWithValues: doc.rows.map { ($0.id, RowState()) })
+        } else {
+            // Keep the ✓ rows' states; gray out everything from startIndex down.
+            for (id, var state) in rowStates {
+                if isDownstream(id, of: startIndex, in: doc) {
+                    state.status = .notRun
+                    state.errorSentence = nil
+                    rowStates[id] = state
+                    outputs[id] = nil
+                }
+            }
+        }
+
+        let stream = runner.run(doc, context: context, startIndex: startIndex,
+                                resumeOutputs: resumeOutputs)
         runTask = Task {
             for await event in stream {
                 if Task.isCancelled { break }
@@ -69,6 +92,42 @@ final class FlowRunSession {
             }
             isRunning = false
         }
+    }
+
+    /// The index of the first non-`✓` row (the re-run-from-here boundary). A row is gray if
+    /// it isn't `.succeeded` (covers `.notRun`, `.failed`, `.needsAttention`).
+    private func firstGrayIndex(in doc: FlowDocument) -> Int {
+        for (i, row) in doc.rows.enumerated() {
+            if status(for: row.id) != .succeeded { return i }
+        }
+        return doc.rows.count   // everything done — a fresh run from the top
+    }
+
+    /// Whether `id` is at or after `fromIndex` in the flow's top-level rows.
+    private func isDownstream(_ id: UUID, of fromIndex: Int, in doc: FlowDocument) -> Bool {
+        guard let idx = doc.rows.firstIndex(where: { $0.id == id }) else { return false }
+        return idx >= fromIndex
+    }
+
+    // MARK: - Clear
+
+    /// Clear Run: reset every row's dot to gray and drop the inspector outputs. The cache
+    /// store is untouched (Clear Cache is separate).
+    func clearRun(doc: FlowDocument) {
+        cancel()
+        rowStates = Dictionary(uniqueKeysWithValues: doc.rows.map { ($0.id, RowState()) })
+        outputs = [:]
+        selectedRowID = nil
+    }
+
+    /// Clear Cache: drop every stored asset (entries + blobs) from the flow cache store.
+    /// Always safe — clearing only costs recomputation. Returns the number of entries
+    /// cleared, or nil when the store was already empty.
+    func clearCache() -> Int? {
+        let store = FlowCacheStore.shared
+        let count = store.entryCount
+        try? store.clear()
+        return count > 0 ? count : nil
     }
 
     private func apply(_ event: FlowEvent) {

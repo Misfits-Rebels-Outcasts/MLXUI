@@ -119,11 +119,50 @@ struct FlowListView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!session.canRun)
-                .help(session.runDisabledReason ?? "Run the flow")
+                .help(session.runDisabledReason ?? "Run the flow (or re-run from the first gray row)")
             }
+            Menu {
+                Button("Clear Run", systemImage: "arrow.counterclockwise") {
+                    confirmClearRun(doc)
+                }
+                .disabled(session.hasRunResults)
+                Button("Clear Cache", systemImage: "trash") {
+                    confirmClearCache()
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .help("Clear run results or the flow cache")
         }
         .padding(16)
+        .confirmationDialog("Clear run results?", isPresented: $showClearRunConfirm) {
+            Button("Clear", role: .destructive) { session.clearRun(doc: doc) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Every row's dot resets to gray and the inspector outputs are dropped. The cache is kept.")
+        }
+        .confirmationDialog("Clear the flow cache?", isPresented: $showClearCacheConfirm) {
+            Button("Clear Cache", role: .destructive) {
+                let cleared = session.clearCache()
+                if cleared == nil {
+                    cacheClearNotice = "The cache was already empty."
+                } else {
+                    cacheClearNotice = "Cleared \(cleared ?? 0) cached row\(cleared == 1 ? "" : "s")."
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Stored row outputs are deleted. The next run recomputes everything.")
+        }
     }
+
+    @State private var showClearRunConfirm = false
+    @State private var showClearCacheConfirm = false
+    @State private var cacheClearNotice: String?
+
+    private func confirmClearRun(_ doc: FlowDocument) { showClearRunConfirm = true }
+    private func confirmClearCache() { showClearCacheConfirm = true }
 
     private var rawCatDisclosure: some View {
         DisclosureGroup("Show raw `.cat`") {
@@ -160,8 +199,10 @@ struct FlowListView: View {
     }
 
     private func startRun(_ doc: FlowDocument) {
-        let context = AppFlowExecutorFactory.context(flowID: flowID, appState: appState)
-        session.start(doc: doc, runner: FlowRunner(), context: context)
+        // Re-run from here when some rows already have results; a fresh run otherwise.
+        let resume = session.hasRunResults
+        let context = AppFlowExecutorFactory.cachingContext(flowID: flowID, appState: appState)
+        session.start(doc: doc, runner: FlowRunner(), context: context, resume: resume)
     }
 
     // MARK: - Install sheet (one prompt, not six)

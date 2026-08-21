@@ -35,6 +35,76 @@ struct CatFlowRunnerTests {
         return result
     }
 
+    private func events(_ doc: FlowDocument, context: FlowRunner.RunContext,
+                        startIndex: Int, resumeOutputs: [UUID: Asset]) async throws -> [FlowEvent] {
+        let runner = FlowRunner()
+        var result: [FlowEvent] = []
+        for await event in runner.run(doc, context: context, startIndex: startIndex,
+                                      resumeOutputs: resumeOutputs) {
+            result.append(event)
+        }
+        return result
+    }
+
+    // MARK: - Caching (CFM-R3-4)
+
+    @Test func secondRunThroughCacheEmitsCacheHit() async throws {
+        let doc = try decode("01-SpokenSummary")
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-cacherun-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let store = FlowCacheStore(root: base.appendingPathComponent("cache"))
+
+        let mock = MockExecutor(blobDirectory: base.appendingPathComponent("blobs"))
+        let caching = CachingExecutor(inner: mock, store: store, cacheTier: "real",
+                                      catalog: [], runSeed: 0)
+        let workspace = FlowWorkspace(root: base.appendingPathComponent("flows"))
+        let context = FlowRunner.RunContext(flowID: "t", workspace: workspace,
+                                            blobDirectory: base.appendingPathComponent("blobs"),
+                                            executor: caching)
+
+        // First run: real execution, no hits.
+        let first = try await events(doc, context: context)
+        #expect(first.contains { if case .cacheHit = $0 { return true }; return false } == false)
+
+        // Second run: every cacheable row is a hit (Save rows are NEVER_CACHE).
+        let second = try await events(doc, context: context)
+        let hits = second.filter { if case .cacheHit = $0 { return true }; return false }.count
+        let started = second.filter { if case .started = $0 { return true }; return false }.count
+        #expect(hits > 0)
+        #expect(hits <= started)   // some rows may be NEVER_CACHE (Save*)
+    }
+
+    @Test func startIndexRunsOnlyFromThatRow() async throws {
+        let doc = try decode("01-SpokenSummary")
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-resume-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let blob = base.appendingPathComponent("blobs")
+        let workspace = FlowWorkspace(root: base.appendingPathComponent("flows"))
+        let context = FlowRunner.RunContext(flowID: "t", workspace: workspace,
+                                            blobDirectory: blob,
+                                            executor: MockExecutor(blobDirectory: blob))
+
+        // Resume from row index 3 (0-based) — rows 3..5 run. Row 6 references row 2, so its
+        // already-earned output must be seeded via resumeOutputs (the real session does this).
+        let resumeOutputs: [UUID: Asset] = [
+            doc.rows[1].id: Asset(items: [Item(kind: .text, value: "the transcript",
+                                               path: nil, sourceText: nil)]),
+        ]
+        let events = try await events(doc, context: context, startIndex: 3,
+                                      resumeOutputs: resumeOutputs)
+        let started = events.compactMap { event -> UUID? in
+            if case .started(let id) = event { return id }
+            return nil
+        }
+        #expect(started.map(\.uuidString) == doc.rows[3...].map(\.id.uuidString))
+        // No row before index 3 started (rows 0..2 are already done).
+        #expect(started.allSatisfy { id in doc.rows[0..<3].allSatisfy { $0.id != id } })
+    }
+
     // MARK: - canRun
 
     @Test func spokenSummaryIsRunnable() throws {

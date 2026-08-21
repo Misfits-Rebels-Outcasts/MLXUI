@@ -195,6 +195,39 @@ struct CatFlowRunWiringTests {
         #expect(session.substitutionNotes[row.id] == nil)
     }
 
+    // MARK: - Clear Run / Clear Cache (CFM-R3-4)
+
+    @Test func clearRunResetsDotsAndOutputs() async throws {
+        let doc = try decode("01-SpokenSummary")
+        let session = FlowRunSession()
+        session.prepareInstall(FlowPreflight.Result())
+        session.start(doc: doc, runner: FlowRunner(), context: makeMockContext())
+        try? await Task.sleep(for: .milliseconds(800))
+        #expect(session.hasRunResults)
+
+        session.clearRun(doc: doc)
+        #expect(session.hasRunResults == false)
+        #expect(session.outputs.isEmpty)
+        for row in doc.rows {
+            #expect(session.status(for: row.id) == .notRun)
+        }
+    }
+
+    @Test func clearCacheDropsStoredAssets() async throws {
+        // Put something into a temp store-backed session, then clear it.
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-clearcache-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let store = FlowCacheStore(root: base.appendingPathComponent("cache"))
+        let key = try CacheKey.cacheKey(task: "Summarize", model: "m", settings: nil,
+                                        inputs: [], realism: "real")
+        try store.put(key: key, asset: Asset(items: [Item(kind: .text, value: "x", path: nil, sourceText: nil)]))
+        #expect(store.entryCount == 1)
+        try store.clear()
+        #expect(store.entryCount == 0)
+    }
+
     // MARK: - Frame-backed model rows resolve the frame (regression: Summarize.frame.txt)
 
     @Test func frameBackedRowResolvesTheFrame() async throws {
