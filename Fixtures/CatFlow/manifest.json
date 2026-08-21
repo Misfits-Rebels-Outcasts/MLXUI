@@ -86,6 +86,7 @@
     "goldens/check/lint_fixtures.json": "9b87f56370529015a2e855166a9b8872dc547fe4d8fe4f7801d31db218b7eef2",
     "goldens/errors/adversarial_v08.json": "e6bf599036b60df61a5e443272e44f52849b245cf4fe887c84ea3f98927363e2",
     "goldens/errors/error_messages.json": "a92bda5173edb0ef8e958e70a5f0830c7b16a0af4d7ac65c3b5b34eda59c9180",
+    "goldens/errors/fill_golden.json": "bdb0307e487b1c618ab7bc1c6373a57e54d7f807ec4d88ebb2dcc55df0f1090c",
     "goldens/fmt/flow04_done_clause.fmt.cat": "290aae9ac3c5e73c60510a84861d10e47d26fe5064588f50c09dd89eee8c5b68",
     "goldens/fmt/flow04_gate_decide.fmt.cat": "28626d0fc1285c0216077b56cb44feb2de81a7e3eef127c25ba7d1902d66385c",
     "goldens/fmt/flow_a.fmt.cat": "b97fc31266499787884f38c9fa337cb897b30bd8590e4ca4786b206c82b88c91",

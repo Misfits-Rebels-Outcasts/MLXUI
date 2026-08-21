@@ -1,0 +1,1565 @@
+[
+ {
+  "code": "E101",
+  "catalog": "v07",
+  "values": {
+   "version": "‹version›",
+   "feature-example": "‹feature-example›",
+   "supported": "‹supported›"
+  },
+  "expected": "This flow needs CAT Flow ‹version› — it uses ‹feature-example›. This runtime speaks ‹supported›. Nothing was run."
+ },
+ {
+  "code": "E102",
+  "catalog": "v07",
+  "values": {
+   "flag": "‹flag›"
+  },
+  "expected": "This flow declares `· ‹flag›`, which this runtime doesn't support. Nothing was run."
+ },
+ {
+  "code": "E103",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "task": "‹task›"
+  },
+  "expected": "Row ‹n› (‹task›) talks to the internet, but the header doesn't say `· network`. Add it — shared flows must show their network use on line one. (fmt will do this for you.)"
+ },
+ {
+  "code": "E104",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "display": "‹display›"
+  },
+  "expected": "Row ‹n› names \"‹display›\", but the `models:` section doesn't pin an id for it. Pick the model again to pin it, or add the line yourself."
+ },
+ {
+  "code": "E105",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "fragment": "‹fragment›",
+   "detail": "‹detail›"
+  },
+  "expected": "Row ‹n› couldn't be read from \"‹fragment›…\". A row is: `N. Task  model · settings  (refs)`. The first thing that confused the parser: ‹detail›."
+ },
+ {
+  "code": "E106",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›"
+  },
+  "expected": "Row ‹n›'s quoted text opens with `\"` but never closes. If the text should contain a quote, write `\\\"`."
+ },
+ {
+  "code": "E107",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›"
+  },
+  "expected": "Two rows are numbered ‹n› in the same scope. Positions must be sequential — running fmt will renumber and re-aim references."
+ },
+ {
+  "code": "E201",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "task": "‹task›",
+   "wanted": "‹wanted›",
+   "n-1": "‹n-1›",
+   "got": "‹got›",
+   "suggestion": "‹suggestion›"
+  },
+  "expected": "Row ‹n› (‹task›) needs ‹wanted›, but row ‹n-1› produces ‹got›. Between them you likely want ‹suggestion›."
+ },
+ {
+  "code": "E202",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "m": "‹m›",
+   "got": "‹got›",
+   "position": "‹position›",
+   "wanted": "‹wanted›"
+  },
+  "expected": "Row ‹n›'s reference (‹m›) delivers ‹got›, but its ‹position› input needs ‹wanted›."
+ },
+ {
+  "code": "E203",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "m": "‹m›"
+  },
+  "expected": "Row ‹n› references row ‹m›, which no longer exists. It was deleted — pick a new source, or undo."
+ },
+ {
+  "code": "E204",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "m": "‹m›",
+   "decider-row": "‹decider-row›",
+   "tag": "‹tag›"
+  },
+  "expected": "Row ‹n› references row ‹m›, but row ‹m› doesn't run on every path that reaches row ‹n› — when ‹decider-row›'s tag `‹tag›` fires, row ‹m› is skipped. Reference something both paths produce, or move the reference behind the paths' converging row."
+ },
+ {
+  "code": "E205",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "count": "‹count›"
+  },
+  "expected": "Row ‹n› bundles ‹count› references; the limit is 4. Combine some upstream (Template and Join Text both bundle), then reference the result."
+ },
+ {
+  "code": "E206",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "task": "‹task›",
+   "kind": "‹kind›",
+   "count": "‹count›",
+   "suggestion": "‹suggestion›"
+  },
+  "expected": "Row ‹n› (‹task›) takes one ‹kind›, but receives a list of ‹count›. To run it once per item, wrap it in `<each>`. To combine the items first, use ‹suggestion›."
+ },
+ {
+  "code": "E207",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "ph": "‹ph›",
+   "count": "‹count›",
+   "list": "‹list›"
+  },
+  "expected": "Row ‹n›'s pattern uses `{‹ph›}`, but its input has only ‹count› position(s). Positions here: ‹list›."
+ },
+ {
+  "code": "E208",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "m": "‹m›",
+   "chain": "‹chain›"
+  },
+  "expected": "Row ‹n› references row ‹m›, which (through ‹chain›) references row ‹n› back. References read completed outputs — one of these needs to come first."
+ },
+ {
+  "code": "E301",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›"
+  },
+  "expected": "Row ‹n› can never run: nothing falls into it, no edge aims at it, and no reference reads it. Delete it, or connect it."
+ },
+ {
+  "code": "E302",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "tags": "‹tags›",
+   "tag": "‹tag›"
+  },
+  "expected": "Row ‹n› declares tags ‹tags›, but `‹tag›` has no destination. Every tag needs an edge: add `‹tag›: <row>` to the clause."
+ },
+ {
+  "code": "E303",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "tag": "‹tag›",
+   "tags": "‹tags›",
+   "closest": "‹closest›"
+  },
+  "expected": "Row ‹n›'s clause routes `‹tag›`, but the row's tags are ‹tags›. Closest declared tag: `‹closest›`."
+ },
+ {
+  "code": "E304",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "tag": "‹tag›",
+   "got": "‹got›",
+   "m": "‹m›",
+   "wanted": "‹wanted›"
+  },
+  "expected": "Row ‹n›'s tag `‹tag›` carries ‹got› to row ‹m›, which needs ‹wanted›. (A decider hands on its own input — see what row ‹n› receives.)"
+ },
+ {
+  "code": "E305",
+  "catalog": "v07",
+  "values": {
+   "cycle": "‹cycle›"
+  },
+  "expected": "Rows ‹cycle› form a loop with no way out — no decider in the loop has an edge leaving it. Add an exit tag, or aim one edge past the loop."
+ },
+ {
+  "code": "E306",
+  "catalog": "v07",
+  "values": {
+   "cycle": "‹cycle›",
+   "suggested": "‹suggested›"
+  },
+  "expected": "Rows ‹cycle› form a loop, but no row in it carries `visits≤N`. A loop must say how many times it may run — put the budget on the decider (row ‹suggested›)."
+ },
+ {
+  "code": "E307",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "N": "‹N›",
+   "tag": "‹tag›"
+  },
+  "expected": "Row ‹n› has `visits≤‹N›` but doesn't say what running out means. Add `on_budget=‹tag›` to proceed with the best so far, or `on_budget=fail` to stop instead."
+ },
+ {
+  "code": "E308",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "tag": "‹tag›",
+   "tags": "‹tags›"
+  },
+  "expected": "Row ‹n›'s `on_budget=‹tag›` isn't one of its tags (‹tags›) or `fail`."
+ },
+ {
+  "code": "E309",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "first-of-chain": "‹first-of-chain›"
+  },
+  "expected": "Row ‹n› ends its chain with `resume`, but no `call` can reach it. At the top level of a flow this is fine (resume means done) — inside a block it means the tool chain is orphaned. Aim a `call` at row ‹first-of-chain›, or end the chain another way."
+ },
+ {
+  "code": "E401",
+  "catalog": "v07",
+  "values": {
+   "block": "‹block›",
+   "n": "‹n›",
+   "k": "‹k›",
+   "count": "‹count›"
+  },
+  "expected": "Inside ‹block›, row ‹n› reads `(input:‹k›)`, but the block row binds only ‹count› input(s). Add a reference on the block's row, or drop to `(input:‹count›)`."
+ },
+ {
+  "code": "E402",
+  "catalog": "v07",
+  "values": {
+   "block": "‹block›",
+   "a": "‹a›",
+   "type-a": "‹type-a›",
+   "b": "‹b›",
+   "type-b": "‹type-b›"
+  },
+  "expected": "‹block› can end at row ‹a› (producing ‹type-a›) or at row ‹b› (producing ‹type-b›). A block's exits must agree — converge them on one row."
+ },
+ {
+  "code": "E403",
+  "catalog": "v07",
+  "values": {
+   "block": "‹block›",
+   "n": "‹n›",
+   "m": "‹m›",
+   "next": "‹next›"
+  },
+  "expected": "Inside ‹block›, row ‹n› references row ‹m› of the outer flow. Blocks are sealed — pass it in: add `(‹m›)` to the block's row and read it as `(input:‹next›)`."
+ },
+ {
+  "code": "E404",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "composite": "‹composite›",
+   "param": "‹param›"
+  },
+  "expected": "Row ‹n› uses ‹composite› but doesn't set `‹param›`, which has no default. Add `‹param›=…` to the row."
+ },
+ {
+  "code": "E405",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "composite": "‹composite›"
+  },
+  "expected": "Row ‹n› uses ‹composite›, but this file's `definitions:` section doesn't define it. The flow isn't whole — re-insert the composite from the library, or paste its definition."
+ },
+ {
+  "code": "E406",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "key": "‹key›",
+   "composite": "‹composite›",
+   "params": "‹params›"
+  },
+  "expected": "Row ‹n› passes `‹key›=…`, but ‹composite›'s parameters are ‹params›."
+ },
+ {
+  "code": "E501",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "task": "‹task›"
+  },
+  "expected": "Row ‹n› (‹task›) waits for a person but doesn't say what happens if nobody answers. Add `timeout=… · default=…` to proceed unattended (flagged), or `wait=forever` to park until answered."
+ },
+ {
+  "code": "E502",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "value": "‹value›",
+   "tags": "‹tags›"
+  },
+  "expected": "Row ‹n›'s `default=‹value›` isn't one of its tags (‹tags›). The timeout must pick a real choice."
+ },
+ {
+  "code": "E503",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›"
+  },
+  "expected": "Row ‹n›'s pattern mentions the journal, but the row doesn't carry `· ctx`. Context is never ambient — add the marker, and the journal becomes a visible input."
+ },
+ {
+  "code": "E504",
+  "catalog": "v07",
+  "values": {
+   "k": "‹k›",
+   "block": "‹block›",
+   "got": "‹got›"
+  },
+  "expected": "Chain ‹k› of ‹block› ends in a row that produces ‹got›, which doesn't fit the block's declared bundle. Each chain's last row is one slot of the output."
+ },
+ {
+  "code": "E505",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›"
+  },
+  "expected": "Row ‹n› would send directly. Direct sends don't exist — use `Stage Send`, and commit from the outbox after the run."
+ },
+ {
+  "code": "E601",
+  "catalog": "v07",
+  "values": {
+   "trigger": "‹trigger›",
+   "n": "‹n›"
+  },
+  "expected": "`‹trigger›` sits at row ‹n›, but a trigger is the flow's front door — it must be row 1, and there can be only one."
+ },
+ {
+  "code": "E602",
+  "catalog": "v07",
+  "values": {
+   "block": "‹block›",
+   "trigger": "‹trigger›"
+  },
+  "expected": "‹block› contains `‹trigger›`. Doors open from the outside; a block can't contain one. Move it to row 1 of its own flow."
+ },
+ {
+  "code": "E603",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›"
+  },
+  "expected": "Row ‹n›'s edge targets row 1, which is a trigger. Nothing inside a flow can knock on its own front door — aim at row 2."
+ },
+ {
+  "code": "E604",
+  "catalog": "v07",
+  "values": {},
+  "expected": "Row 1 is a trigger, but the header doesn't say `· events`. Add it — a reader must see from line one that this flow can be armed. (fmt will do this for you.)"
+ },
+ {
+  "code": "E605",
+  "catalog": "v07",
+  "values": {
+   "trigger": "‹trigger›",
+   "costly-rows": "‹costly-rows›"
+  },
+  "expected": "This flow has `‹trigger›` and uses ‹costly-rows› — it must say how often it may fire. Add `runs≤N/hour` or `runs≤N/day` to row 1."
+ },
+ {
+  "code": "E701",
+  "catalog": "v07",
+  "values": {
+   "key": "‹key›",
+   "model": "‹model›",
+   "list": "‹list›",
+   "Closest: `{closest": "‹Closest: `{closest›"
+  },
+  "expected": "`‹key›` isn't a setting ‹model› knows. Its settings: ‹list›."
+ },
+ {
+  "code": "E701",
+  "catalog": "v07",
+  "closest": true,
+  "values": {
+   "key": "‹key›",
+   "model": "‹model›",
+   "list": "‹list›",
+   "Closest: `{closest": "‹Closest: `{closest›",
+   "closest": "‹closest›"
+  },
+  "expected": "`‹key›` isn't a setting ‹model› knows. Its settings: ‹list›. Closest: `‹closest›`."
+ },
+ {
+  "code": "E702",
+  "catalog": "v07",
+  "values": {
+   "key": "‹key›",
+   "value": "‹value›",
+   "model": "‹model›",
+   "closest": "‹closest›",
+   "list": "‹list›"
+  },
+  "expected": "`‹key›=‹value›` — ‹model› has no such ‹key›. Closest: `‹closest›`. All values: ‹list›."
+ },
+ {
+  "code": "E703",
+  "catalog": "v07",
+  "values": {
+   "key": "‹key›",
+   "value": "‹value›",
+   "model": "‹model›",
+   "min": "‹min›",
+   "max": "‹max›"
+  },
+  "expected": "`‹key›=‹value›` is outside ‹model›'s range (‹min›–‹max›)."
+ },
+ {
+  "code": "E704",
+  "catalog": "v07",
+  "values": {
+   "id": "‹id›",
+   "size": "‹size›",
+   "license": "‹license›"
+  },
+  "expected": "This flow pins ‹id›, which isn't installed. Download (‹size›, ‹license›)? Until then this row is held."
+ },
+ {
+  "code": "E705",
+  "catalog": "v07",
+  "values": {
+   "id": "‹id›"
+  },
+  "expected": "‹id› isn't in the registry and isn't downloadable from a curated source. The flow won't substitute a same-named model — install the id, or pick a model on the row (which re-pins)."
+ },
+ {
+  "code": "E706",
+  "catalog": "v07",
+  "values": {
+   "display": "‹display›",
+   "id-a": "‹id-a›",
+   "id-b": "‹id-b›"
+  },
+  "expected": "Two models claim the name \"‹display›\" (‹id-a›, ‹id-b›). Registry not loaded — rename one manifest's display."
+ },
+ {
+  "code": "E707",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "index": "‹index›",
+   "embedder-a": "‹embedder-a›",
+   "m": "‹m›",
+   "embedder-b": "‹embedder-b›"
+  },
+  "expected": "Row ‹n› retrieves from ‹index›, which was built with ‹embedder-a›, but row ‹m› embeds with ‹embedder-b›. Same text, different spaces — results would be silently wrong. Match them, or rebuild the index."
+ },
+ {
+  "code": "E801",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "source-file": "‹source-file›",
+   "task": "‹task›"
+  },
+  "expected": "Row ‹n› sends text derived from ‹source-file› to the web (‹task›). If that's intended, add `allow_upload` to the row — the flow must say your data leaves."
+ },
+ {
+  "code": "E802",
+  "catalog": "v07",
+  "values": {
+   "block": "‹block›"
+  },
+  "expected": "‹block›'s Think uses both your index and the web. Fetched pages could steer what it searches for next — add `allow_upload` to the block to accept that, visibly."
+ },
+ {
+  "code": "F001",
+  "catalog": "v07",
+  "values": {
+   "N": "‹N›",
+   "tag": "‹tag›"
+  },
+  "expected": "Out of visits (‹N›) — proceeded on `‹tag›` with the best so far."
+ },
+ {
+  "code": "F002",
+  "catalog": "v07",
+  "values": {
+   "time": "‹time›",
+   "default": "‹default›"
+  },
+  "expected": "Nobody answered by ‹time› — proceeded as `‹default›`, unreviewed."
+ },
+ {
+  "code": "F003",
+  "catalog": "v07",
+  "values": {
+   "k": "‹k›",
+   "N": "‹N›",
+   "reason": "‹reason›",
+   "N-1": "‹N-1›"
+  },
+  "expected": "Item ‹k› of ‹N› failed (‹reason›) and was skipped. ‹N-1› delivered."
+ },
+ {
+  "code": "F004",
+  "catalog": "v07",
+  "values": {
+   "provider": "‹provider›"
+  },
+  "expected": "‹provider› can't constrain output; used strict parsing + one retry. The tag is valid, but read the frame if the stakes are high."
+ },
+ {
+  "code": "F005",
+  "catalog": "v07",
+  "values": {
+   "count": "‹count›",
+   "budget": "‹budget›"
+  },
+  "expected": "‹count› occurrence(s) beyond `runs≤‹budget›` are held; they'll run when the window reopens."
+ },
+ {
+  "code": "F006",
+  "catalog": "v07",
+  "values": {
+   "model": "‹model›",
+   "key": "‹key›",
+   "old": "‹old›",
+   "new": "‹new›"
+  },
+  "expected": "Recomputed: ‹model›'s manifest changed a default (‹key› ‹old› → ‹new›)."
+ },
+ {
+  "code": "F007",
+  "catalog": "v07",
+  "values": {
+   "m": "‹m›",
+   "ref": "‹ref›"
+  },
+  "expected": "This activation's first input arrived from row ‹m›'s edge, overriding the `(‹ref›)` reference for this pass."
+ },
+ {
+  "code": "R901",
+  "catalog": "v07",
+  "values": {
+   "model": "‹model›",
+   "ram": "‹ram›",
+   "available": "‹available›",
+   "n": "‹n›",
+   "suggestion": "‹suggestion›"
+  },
+  "expected": "‹model› needs ~‹ram› GB free; ‹available› GB available. Close something, or swap row ‹n› to a smaller model (‹suggestion›)."
+ },
+ {
+  "code": "R902",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›"
+  },
+  "expected": "Row ‹n› produced nothing. Its input is on the row — usually the story is there (an empty transcript, a filter that matched nothing)."
+ },
+ {
+  "code": "R903",
+  "catalog": "v07",
+  "values": {
+   "n": "‹n›",
+   "path": "‹path›",
+   "reason": "‹reason›",
+   "n-1": "‹n-1›"
+  },
+  "expected": "Row ‹n› couldn't read ‹path›: ‹reason›. Fix or re-point the row; rows 1–‹n-1› are cached."
+ },
+ {
+  "code": "R904",
+  "catalog": "v07",
+  "values": {
+   "provider": "‹provider›",
+   "status": "‹status›"
+  },
+  "expected": "‹provider› answered: ‹status›. The row is held; nothing was retried without you. Your key is configured in Settings, never in the flow."
+ },
+ {
+  "code": "R905",
+  "catalog": "v07",
+  "values": {
+   "N": "‹N›"
+  },
+  "expected": "This run hit the global cap of ‹N› steps and was stopped. If this flow legitimately needs more, raise the cap in Settings — budgets on rows are the better fix."
+ },
+ {
+  "code": "E101",
+  "catalog": "v08",
+  "values": {
+   "version": "‹version›"
+  },
+  "expected": "This flow says `catflow ‹version›`. This runtime speaks 0.8 only, and there is no converter. Nothing was run."
+ },
+ {
+  "code": "E102",
+  "catalog": "v08",
+  "values": {
+   "flag": "‹flag›"
+  },
+  "expected": "This flow declares `; ‹flag›`, which this runtime doesn't support. Nothing was run."
+ },
+ {
+  "code": "E103",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "task": "‹task›"
+  },
+  "expected": "Row ‹n› (‹task›) talks to the internet, but the header doesn't say `; network`. Add it — shared flows must show their network use on line one. (fmt will do this for you.)"
+ },
+ {
+  "code": "E104",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "display": "‹display›"
+  },
+  "expected": "Row ‹n› names \"‹display›\", but the `models:` section doesn't pin an id for it. Pick the model again to pin it, or add the line yourself."
+ },
+ {
+  "code": "E105",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "fragment": "‹fragment›",
+   "detail": "‹detail›"
+  },
+  "expected": "Row ‹n› couldn't be read from \"‹fragment›…\". A row is: `N. Task  (refs)  model; settings`. The first thing that confused the parser: ‹detail›."
+ },
+ {
+  "code": "E106",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›"
+  },
+  "expected": "Row ‹n›'s quoted text opens with `\"` but never closes. If the text should contain a quote, write `\\\"`."
+ },
+ {
+  "code": "E107",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›"
+  },
+  "expected": "Two rows are numbered ‹n› in the same scope. Positions must be sequential — running fmt will renumber and re-aim references."
+ },
+ {
+  "code": "E108",
+  "catalog": "v08",
+  "values": {
+   "subject": "‹subject›",
+   "char": "‹char›",
+   "ascii": "‹ascii›"
+  },
+  "expected": "‹subject› uses `‹char›`, which CAT Flow 0.8 replaced with `‹ascii›`. Run `catflow fmt --upgrade` to convert this file. Nothing was run."
+ },
+ {
+  "code": "E109",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›"
+  },
+  "expected": "Row ‹n› improvises with a shell, but the header doesn't say `; improvise`. Add it — shared flows must show what they can do on line one. (fmt will do this for you.)"
+ },
+ {
+  "code": "E110",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›"
+  },
+  "expected": "Row ‹n› improvises, but doesn't say when to stop. Add `max_actions=N` (how many steps it may take) and `timeout=<duration>` (how long any one step may run)."
+ },
+ {
+  "code": "E111",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›"
+  },
+  "expected": "Row ‹n› improvises, but doesn't say where. Add `workdir=<dir>` — the agent reads and writes there and nowhere else."
+ },
+ {
+  "code": "E112",
+  "catalog": "v08",
+  "values": {},
+  "expected": "This flow both improvises and starts itself. Those can't combine: triggers run unattended, and an improvising row is the one thing that shouldn't. Remove the trigger, or the `Improvise` row."
+ },
+ {
+  "code": "E113",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "task": "‹task›"
+  },
+  "expected": "Row ‹n› names \"‹task›\", which isn't a catalog task, a composite in `definitions:`, or an entry in `uses:`. If it's another flow in this folder, add `‹task› = ./‹task›.cat` to `uses:`."
+ },
+ {
+  "code": "E114",
+  "catalog": "v08",
+  "values": {
+   "path": "‹path›"
+  },
+  "expected": "`uses:` points at `‹path›`, which resolves outside this flow's own folder. A flow may only use flows beside it — copy it in, or move it here."
+ },
+ {
+  "code": "E115",
+  "catalog": "v08",
+  "values": {
+   "a": "‹a›",
+   "b": "‹b›",
+   "chain": "‹chain›"
+  },
+  "expected": "`‹a›` uses `‹b›`, which (through ‹chain›) uses `‹a›` back. A flow can't use itself, directly or at a distance."
+ },
+ {
+  "code": "E116",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "path": "‹path›",
+   "first-error": "‹first-error›"
+  },
+  "expected": "Row ‹n› uses `‹path›`, but that file doesn't validate on its own: ‹first-error›. Fix it there — every used flow is also an ordinary flow, so opening and checking it works normally."
+ },
+ {
+  "code": "E117",
+  "catalog": "v08",
+  "values": {
+   "path": "‹path›",
+   "chain": "‹chain›"
+  },
+  "expected": "This flow uses `‹path›`, which ‹chain› improvises with a shell — but this header doesn't say `; improvise`. Add it. What a flow can do has to be readable on line one, even when it happens two files away."
+ },
+ {
+  "code": "E118",
+  "catalog": "v08",
+  "values": {},
+  "expected": "This flow declares `transforms:`, but the header doesn't say `; code`. Add it — shared flows must show what they can do on line one. (fmt will do this for you.)"
+ },
+ {
+  "code": "E119",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "transform": "‹transform›"
+  },
+  "expected": "Row ‹n› uses ‹transform›, but its `transforms:` entry doesn't declare `workdir:`. Every transform names the directory its script may touch — add `workdir: <dir>` to its entry."
+ },
+ {
+  "code": "E120",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "task": "‹task›",
+   "provider": "‹provider›",
+   "egress": "‹egress›"
+  },
+  "expected": "Row ‹n› (‹task›) binds ‹provider› — this row's input ‹egress› — but the header doesn't say `; offdevice`. Add it, so line one shows when data leaves this machine. (fmt will do this for you.)"
+ },
+ {
+  "code": "E201",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "task": "‹task›",
+   "wanted": "‹wanted›",
+   "n-1": "‹n-1›",
+   "got": "‹got›",
+   "suggestion": "‹suggestion›"
+  },
+  "expected": "Row ‹n› (‹task›) needs ‹wanted›, but row ‹n-1› produces ‹got›. Between them you likely want ‹suggestion›."
+ },
+ {
+  "code": "E202",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "m": "‹m›",
+   "got": "‹got›",
+   "position": "‹position›",
+   "wanted": "‹wanted›"
+  },
+  "expected": "Row ‹n›'s reference (‹m›) delivers ‹got›, but its ‹position› input needs ‹wanted›."
+ },
+ {
+  "code": "E203",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "m": "‹m›"
+  },
+  "expected": "Row ‹n› references row ‹m›, which no longer exists. It was deleted — pick a new source, or undo."
+ },
+ {
+  "code": "E204",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "m": "‹m›",
+   "decider-row": "‹decider-row›",
+   "tag": "‹tag›"
+  },
+  "expected": "Row ‹n› references row ‹m›, but row ‹m› doesn't run on every path that reaches row ‹n› — when ‹decider-row›'s tag `‹tag›` fires, row ‹m› is skipped. Reference something both paths produce, or move the reference behind the paths' converging row."
+ },
+ {
+  "code": "E205",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "count": "‹count›"
+  },
+  "expected": "Row ‹n› bundles ‹count› references; the limit is 4. Combine some upstream (Template and Join Text both bundle), then reference the result."
+ },
+ {
+  "code": "E206",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "task": "‹task›",
+   "kind": "‹kind›",
+   "count": "‹count›",
+   "suggestion": "‹suggestion›"
+  },
+  "expected": "Row ‹n› (‹task›) takes one ‹kind›, but receives a list of ‹count›. To run it once per item, wrap it in `<each>`. To combine the items first, use ‹suggestion›."
+ },
+ {
+  "code": "E207",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "ph": "‹ph›",
+   "count": "‹count›",
+   "list": "‹list›"
+  },
+  "expected": "Row ‹n›'s pattern uses `{‹ph›}`, but its input has only ‹count› position(s). Positions here: ‹list›."
+ },
+ {
+  "code": "E208",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "m": "‹m›",
+   "chain": "‹chain›"
+  },
+  "expected": "Row ‹n› references row ‹m›, which (through ‹chain›) references row ‹n› back. References read completed outputs — one of these needs to come first."
+ },
+ {
+  "code": "E209",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "index-embedder": "‹index-embedder›",
+   "m": "‹m›",
+   "row-embedder": "‹row-embedder›"
+  },
+  "expected": "Row ‹n› queries an index built with ‹index-embedder›, but row ‹m› embeds with ‹row-embedder›. Vectors from different models aren't comparable — re-embed the query with ‹index-embedder›, or rebuild the index."
+ },
+ {
+  "code": "E210",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "space-a": "‹space-a›",
+   "channels-a": "‹channels-a›",
+   "model-a": "‹model-a›",
+   "m": "‹m›",
+   "space-b": "‹space-b›",
+   "channels-b": "‹channels-b›",
+   "model-b": "‹model-b›"
+  },
+  "expected": "Row ‹n› produces a ‹space-a› latent (‹channels-a› channels) via ‹model-a›, but row ‹m› consumes it as ‹space-b› (‹channels-b› channels) from ‹model-b›. Channel count alone doesn't make two latents interchangeable — a latent is only meaningful in the space that wrote it. Match the producing and consuming models."
+ },
+ {
+  "code": "E301",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›"
+  },
+  "expected": "Row ‹n› can never run: nothing falls into it, no edge aims at it, and no reference reads it. Delete it, or connect it."
+ },
+ {
+  "code": "E302",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "tags": "‹tags›",
+   "tag": "‹tag›"
+  },
+  "expected": "Row ‹n› declares tags ‹tags›, but `‹tag›` has no destination. Every tag needs an edge: add `‹tag›: <row>` to the clause."
+ },
+ {
+  "code": "E303",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "tag": "‹tag›",
+   "tags": "‹tags›",
+   "closest": "‹closest›"
+  },
+  "expected": "Row ‹n›'s clause routes `‹tag›`, but the row's tags are ‹tags›. Closest declared tag: `‹closest›`."
+ },
+ {
+  "code": "E304",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "tag": "‹tag›",
+   "got": "‹got›",
+   "m": "‹m›",
+   "wanted": "‹wanted›"
+  },
+  "expected": "Row ‹n›'s tag `‹tag›` carries ‹got› to row ‹m›, which needs ‹wanted›. (A decider hands on its own input — see what row ‹n› receives.)"
+ },
+ {
+  "code": "E305",
+  "catalog": "v08",
+  "values": {
+   "cycle": "‹cycle›"
+  },
+  "expected": "Rows ‹cycle› form a loop with no way out — no decider in the loop has an edge leaving it. Add an exit tag, or aim one edge past the loop."
+ },
+ {
+  "code": "E306",
+  "catalog": "v08",
+  "values": {
+   "cycle": "‹cycle›",
+   "suggested": "‹suggested›"
+  },
+  "expected": "Rows ‹cycle› form a loop, but no row in it carries `max_visits=N`. A loop must say how many times it may run — put the budget on the decider (row ‹suggested›)."
+ },
+ {
+  "code": "E307",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "N": "‹N›",
+   "tag": "‹tag›"
+  },
+  "expected": "Row ‹n› has `max_visits=‹N›` but doesn't say what running out means. Add `on_budget=‹tag›` to proceed with the best so far, or `on_budget=fail` to stop instead."
+ },
+ {
+  "code": "E308",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "tag": "‹tag›",
+   "tags": "‹tags›"
+  },
+  "expected": "Row ‹n›'s `on_budget=‹tag›` isn't one of its tags (‹tags›) or `fail`."
+ },
+ {
+  "code": "E309",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "first-of-chain": "‹first-of-chain›"
+  },
+  "expected": "Row ‹n› ends its chain with `resume`, but no `call` can reach it. At the top level of a flow this is fine (resume means done) — inside a block it means the tool chain is orphaned. Aim a `call` at row ‹first-of-chain›, or end the chain another way."
+ },
+ {
+  "code": "E310",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "count": "‹count›",
+   "tags": "‹tags›"
+  },
+  "expected": "Row ‹n› declares ‹count› tags (‹tags›), but `Compare` always describes a yes/no split — exactly two. A three-way split is two `Compare` rows in sequence, not a wider tag set."
+ },
+ {
+  "code": "E311",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "bounds": "‹bounds›",
+   "detail": "‹detail›"
+  },
+  "expected": "Row ‹n›'s `Range ‹bounds›` isn't legal: ‹detail›."
+ },
+ {
+  "code": "E401",
+  "catalog": "v08",
+  "values": {
+   "block": "‹block›",
+   "n": "‹n›",
+   "k": "‹k›",
+   "count": "‹count›"
+  },
+  "expected": "Inside ‹block›, row ‹n› reads `(input:‹k›)`, but the block row binds only ‹count› input(s). Add a reference on the block's row, or drop to `(input:‹count›)`."
+ },
+ {
+  "code": "E402",
+  "catalog": "v08",
+  "values": {
+   "block": "‹block›",
+   "a": "‹a›",
+   "type-a": "‹type-a›",
+   "b": "‹b›",
+   "type-b": "‹type-b›"
+  },
+  "expected": "‹block› can end at row ‹a› (producing ‹type-a›) or at row ‹b› (producing ‹type-b›). A block's exits must agree — converge them on one row."
+ },
+ {
+  "code": "E403",
+  "catalog": "v08",
+  "values": {
+   "block": "‹block›",
+   "n": "‹n›",
+   "m": "‹m›",
+   "next": "‹next›"
+  },
+  "expected": "Inside ‹block›, row ‹n› references row ‹m› of the outer flow. Blocks are sealed — pass it in: add `(‹m›)` to the block's row and read it as `(input:‹next›)`."
+ },
+ {
+  "code": "E404",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "composite": "‹composite›",
+   "param": "‹param›"
+  },
+  "expected": "Row ‹n› uses ‹composite› but doesn't set `‹param›`, which has no default. Add `‹param›=…` to the row."
+ },
+ {
+  "code": "E405",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "composite": "‹composite›"
+  },
+  "expected": "Row ‹n› uses ‹composite›, but this file's `definitions:` section doesn't define it. The flow isn't whole — re-insert the composite from the library, or paste its definition."
+ },
+ {
+  "code": "E406",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "key": "‹key›",
+   "composite": "‹composite›",
+   "params": "‹params›"
+  },
+  "expected": "Row ‹n› passes `‹key›=…`, but ‹composite›'s parameters are ‹params›."
+ },
+ {
+  "code": "E407",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "transform": "‹transform›"
+  },
+  "expected": "Row ‹n› uses ‹transform›, but its `transforms:` entry doesn't declare `run:`. Every transform names an executable — add `run: <path>` to its entry."
+ },
+ {
+  "code": "E408",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "transform": "‹transform›"
+  },
+  "expected": "Row ‹n› uses ‹transform›, but its `transforms:` entry doesn't declare `timeout:`. Add a bound — every transform declares how long its script may run."
+ },
+ {
+  "code": "E409",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "transform": "‹transform›",
+   "path": "‹path›"
+  },
+  "expected": "Row ‹n› uses ‹transform›, whose `run:` script (‹path›) doesn't exist, or isn't executable. Until it does, this row is held."
+ },
+ {
+  "code": "E501",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "task": "‹task›"
+  },
+  "expected": "Row ‹n› (‹task›) waits for a person but doesn't say what happens if nobody answers. Add `timeout=…; default=…` to proceed unattended (flagged), or `wait=forever` to park until answered."
+ },
+ {
+  "code": "E502",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "value": "‹value›",
+   "tags": "‹tags›"
+  },
+  "expected": "Row ‹n›'s `default=‹value›` isn't one of its tags (‹tags›). The timeout must pick a real choice."
+ },
+ {
+  "code": "E503",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›"
+  },
+  "expected": "Row ‹n›'s pattern mentions the journal, but the row doesn't carry `; ctx`. Context is never ambient — add the marker, and the journal becomes a visible input."
+ },
+ {
+  "code": "E504",
+  "catalog": "v08",
+  "values": {
+   "k": "‹k›",
+   "block": "‹block›",
+   "got": "‹got›"
+  },
+  "expected": "Chain ‹k› of ‹block› ends in a row that produces ‹got›, which doesn't fit the block's declared bundle. Each chain's last row is one slot of the output."
+ },
+ {
+  "code": "E505",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›"
+  },
+  "expected": "Row ‹n› would send directly. Direct sends don't exist — use `Stage Send`, and commit from the outbox after the run."
+ },
+ {
+  "code": "E601",
+  "catalog": "v08",
+  "values": {
+   "trigger": "‹trigger›",
+   "n": "‹n›"
+  },
+  "expected": "`‹trigger›` sits at row ‹n›, but a trigger is the flow's front door — it must be row 1, and there can be only one."
+ },
+ {
+  "code": "E602",
+  "catalog": "v08",
+  "values": {
+   "block": "‹block›",
+   "trigger": "‹trigger›"
+  },
+  "expected": "‹block› contains `‹trigger›`. Doors open from the outside; a block can't contain one. Move it to row 1 of its own flow."
+ },
+ {
+  "code": "E603",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›"
+  },
+  "expected": "Row ‹n›'s edge targets row 1, which is a trigger. Nothing inside a flow can knock on its own front door — aim at row 2."
+ },
+ {
+  "code": "E604",
+  "catalog": "v08",
+  "values": {},
+  "expected": "Row 1 is a trigger, but the header doesn't say `; events`. Add it — a reader must see from line one that this flow can be armed. (fmt will do this for you.)"
+ },
+ {
+  "code": "E605",
+  "catalog": "v08",
+  "values": {
+   "trigger": "‹trigger›",
+   "costly-rows": "‹costly-rows›"
+  },
+  "expected": "This flow has `‹trigger›` and uses ‹costly-rows› — it must say how often it may fire. Add `max_runs=N/hour` or `max_runs=N/day` to row 1."
+ },
+ {
+  "code": "E701",
+  "catalog": "v08",
+  "values": {
+   "key": "‹key›",
+   "model": "‹model›",
+   "list": "‹list›",
+   "Closest: `{closest": "‹Closest: `{closest›"
+  },
+  "expected": "`‹key›` isn't a setting ‹model› knows. Its settings: ‹list›."
+ },
+ {
+  "code": "E701",
+  "catalog": "v08",
+  "closest": true,
+  "values": {
+   "key": "‹key›",
+   "model": "‹model›",
+   "list": "‹list›",
+   "Closest: `{closest": "‹Closest: `{closest›",
+   "closest": "‹closest›"
+  },
+  "expected": "`‹key›` isn't a setting ‹model› knows. Its settings: ‹list›. Closest: `‹closest›`."
+ },
+ {
+  "code": "E702",
+  "catalog": "v08",
+  "values": {
+   "key": "‹key›",
+   "value": "‹value›",
+   "model": "‹model›",
+   "closest": "‹closest›",
+   "list": "‹list›"
+  },
+  "expected": "`‹key›=‹value›` — ‹model› has no such ‹key›. Closest: `‹closest›`. All values: ‹list›."
+ },
+ {
+  "code": "E703",
+  "catalog": "v08",
+  "values": {
+   "key": "‹key›",
+   "value": "‹value›",
+   "model": "‹model›",
+   "min": "‹min›",
+   "max": "‹max›"
+  },
+  "expected": "`‹key›=‹value›` is outside ‹model›'s range (‹min›–‹max›)."
+ },
+ {
+  "code": "E704",
+  "catalog": "v08",
+  "values": {
+   "id": "‹id›",
+   "size": "‹size›",
+   "license": "‹license›"
+  },
+  "expected": "This flow pins ‹id›, which isn't installed. Download (‹size›, ‹license›)? Until then this row is held."
+ },
+ {
+  "code": "E705",
+  "catalog": "v08",
+  "values": {
+   "id": "‹id›"
+  },
+  "expected": "‹id› isn't in the registry and isn't downloadable from a curated source. The flow won't substitute a same-named model — install the id, or pick a model on the row (which re-pins)."
+ },
+ {
+  "code": "E706",
+  "catalog": "v08",
+  "values": {
+   "display": "‹display›",
+   "id-a": "‹id-a›",
+   "id-b": "‹id-b›"
+  },
+  "expected": "Two models claim the name \"‹display›\" (‹id-a›, ‹id-b›). Registry not loaded — rename one manifest's display."
+ },
+ {
+  "code": "E707",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "index": "‹index›",
+   "embedder-a": "‹embedder-a›",
+   "m": "‹m›",
+   "embedder-b": "‹embedder-b›"
+  },
+  "expected": "Row ‹n› retrieves from ‹index›, which was built with ‹embedder-a›, but row ‹m› embeds with ‹embedder-b›. Same text, different spaces — results would be silently wrong. Match them, or rebuild the index."
+ },
+ {
+  "code": "E708",
+  "catalog": "v08",
+  "values": {
+   "model": "‹model›",
+   "key": "‹key›",
+   "reason": "‹reason›"
+  },
+  "expected": "‹model› rejects `‹key›=`: ‹reason›. Remove it, or switch the row to a model that supports ‹key›."
+ },
+ {
+  "code": "E709",
+  "catalog": "v08",
+  "values": {
+   "adapter": "‹adapter›",
+   "type": "‹type›",
+   "base": "‹base›",
+   "model": "‹model›",
+   "setting": "‹setting›"
+  },
+  "expected": "‹adapter› is a ‹type› for ‹base›, but this row runs ‹model›. They don't share a base, so applying it would produce noise — remove the `‹setting›=`, or switch the row to ‹base›."
+ },
+ {
+  "code": "E710",
+  "catalog": "v08",
+  "values": {
+   "task": "‹task›",
+   "reason": "‹reason›"
+  },
+  "expected": "‹task› isn't allowed in a pipeline: ‹reason›."
+ },
+ {
+  "code": "E711",
+  "catalog": "v08",
+  "values": {
+   "name": "‹name›"
+  },
+  "expected": "‹name› gives a model, so it reads nothing — a recipe's parents, method and ratios are bound from `params:`, never from a flow-computed input. Remove the `accepts:` line."
+ },
+ {
+  "code": "E712",
+  "catalog": "v08",
+  "values": {
+   "suffix": "‹suffix›",
+   "kind": "‹kind›",
+   "version": "‹version›",
+   "correct": "‹correct›"
+  },
+  "expected": "This file is named *‹suffix› but its header says `‹kind› ‹version›` — the extension and line one are both the answer to \"what is this file\". Rename it to *‹correct› or fix the header."
+ },
+ {
+  "code": "E713",
+  "catalog": "v08",
+  "values": {
+   "task": "‹task›"
+  },
+  "expected": "‹task› is model space: a row that produces or consumes a model lives only inside a `.catpipeline`. `.cat` is \"assets flow, models are declared\" — put this row in a pipeline and reference the result from `models:`."
+ },
+ {
+  "code": "E714",
+  "catalog": "v08",
+  "values": {
+   "adapter": "‹adapter›",
+   "setting": "‹setting›"
+  },
+  "expected": "`‹adapter›` isn't a pinned adapter — ‹setting›= applies weights pinned in `models:`. Add `‹adapter› = <lora|controlnet id>` to `models:`."
+ },
+ {
+  "code": "E715",
+  "catalog": "v08",
+  "values": {
+   "preset": "‹preset›",
+   "list": "‹list›"
+  },
+  "expected": "‹preset› isn't a preset this pipeline defines. Its presets: ‹list›."
+ },
+ {
+  "code": "E716",
+  "catalog": "v08",
+  "values": {},
+  "expected": "`presets:` is pipeline-only — a named settings bundle lives inside a `.catpipeline`, never in a `.cat` or a `.transform`."
+ },
+ {
+  "code": "E801",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "source-file": "‹source-file›",
+   "task": "‹task›"
+  },
+  "expected": "Row ‹n› sends text derived from ‹source-file› to the web (‹task›). If that's intended, add `allow_upload` to the row — the flow must say your data leaves."
+ },
+ {
+  "code": "E802",
+  "catalog": "v08",
+  "values": {
+   "block": "‹block›"
+  },
+  "expected": "‹block›'s Think uses both your index and the web. Fetched pages could steer what it searches for next — add `allow_upload` to the block to accept that, visibly."
+ },
+ {
+  "code": "F001",
+  "catalog": "v08",
+  "values": {
+   "N": "‹N›",
+   "tag": "‹tag›"
+  },
+  "expected": "Out of visits (‹N›) — proceeded on `‹tag›` with the best so far."
+ },
+ {
+  "code": "F002",
+  "catalog": "v08",
+  "values": {
+   "time": "‹time›",
+   "default": "‹default›"
+  },
+  "expected": "Nobody answered by ‹time› — proceeded as `‹default›`, unreviewed."
+ },
+ {
+  "code": "F003",
+  "catalog": "v08",
+  "values": {
+   "k": "‹k›",
+   "N": "‹N›",
+   "reason": "‹reason›",
+   "N-1": "‹N-1›"
+  },
+  "expected": "Item ‹k› of ‹N› failed (‹reason›) and was skipped. ‹N-1› delivered."
+ },
+ {
+  "code": "F004",
+  "catalog": "v08",
+  "values": {
+   "provider": "‹provider›"
+  },
+  "expected": "‹provider› can't constrain output; used strict parsing + one retry. The tag is valid, but read the frame if the stakes are high."
+ },
+ {
+  "code": "F005",
+  "catalog": "v08",
+  "values": {
+   "count": "‹count›",
+   "budget": "‹budget›"
+  },
+  "expected": "‹count› occurrence(s) beyond `max_runs=‹budget›` are held; they'll run when the window reopens."
+ },
+ {
+  "code": "F006",
+  "catalog": "v08",
+  "values": {
+   "model": "‹model›",
+   "key": "‹key›",
+   "old": "‹old›",
+   "new": "‹new›"
+  },
+  "expected": "Recomputed: ‹model›'s manifest changed a default (‹key› ‹old› -> ‹new›)."
+ },
+ {
+  "code": "F007",
+  "catalog": "v08",
+  "values": {
+   "m": "‹m›",
+   "ref": "‹ref›"
+  },
+  "expected": "This activation's first input arrived from row ‹m›'s edge, overriding the `(‹ref›)` reference for this pass."
+ },
+ {
+  "code": "F008",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "N": "‹N›"
+  },
+  "expected": "Row ‹n› used all ‹N› of its actions and stopped there. What it finished is kept; what it didn't isn't. Raise `max_actions=` if the work was genuinely bigger than the budget."
+ },
+ {
+  "code": "F009",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "k": "‹k›",
+   "workdir": "‹workdir›",
+   "paths": "‹paths›",
+   "run": "‹run›"
+  },
+  "expected": "Row ‹n› changed ‹k› file(s) in `‹workdir›`: ‹paths›. Undo with `catflow undo ‹run› ‹n›`."
+ },
+ {
+  "code": "F010",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "task": "‹task›",
+   "provider": "‹provider›"
+  },
+  "expected": "Row ‹n› (‹task›) binds ‹provider›, which can't constrain its tag — the row that routes this flow runs on a parsed tag, not a guaranteed one. Prefer a local model for the routing step, or read the frame after the run."
+ },
+ {
+  "code": "F011",
+  "catalog": "v08",
+  "values": {
+   "model": "‹model›",
+   "seed": "‹seed›"
+  },
+  "expected": "‹model› accepted `seed=‹seed›` but doesn't honour it — this row is not reproducible. Nothing was retried without you."
+ },
+ {
+  "code": "R901",
+  "catalog": "v08",
+  "values": {
+   "model": "‹model›",
+   "ram": "‹ram›",
+   "available": "‹available›",
+   "n": "‹n›",
+   "suggestion": "‹suggestion›"
+  },
+  "expected": "‹model› needs ~‹ram› GB free; ‹available› GB available. Close something, or swap row ‹n› to a smaller model (‹suggestion›)."
+ },
+ {
+  "code": "R902",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›"
+  },
+  "expected": "Row ‹n› produced nothing. Its input is on the row — usually the story is there (an empty transcript, a filter that matched nothing)."
+ },
+ {
+  "code": "R903",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "path": "‹path›",
+   "reason": "‹reason›",
+   "n-1": "‹n-1›"
+  },
+  "expected": "Row ‹n› couldn't read ‹path›: ‹reason›. Fix or re-point the row; rows 1–‹n-1› are cached."
+ },
+ {
+  "code": "R904",
+  "catalog": "v08",
+  "values": {
+   "provider": "‹provider›",
+   "status": "‹status›"
+  },
+  "expected": "‹provider› answered: ‹status›. The row is held; nothing was retried without you. Your key is configured in Settings, never in the flow."
+ },
+ {
+  "code": "R905",
+  "catalog": "v08",
+  "values": {
+   "N": "‹N›"
+  },
+  "expected": "This run hit the global cap of ‹N› steps and was stopped. If this flow legitimately needs more, raise the cap in Settings — budgets on rows are the better fix."
+ },
+ {
+  "code": "R906",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "read|write|delete": "‹read|write|delete›",
+   "path": "‹path›",
+   "dir": "‹dir›",
+   "run": "‹run›"
+  },
+  "expected": "Row ‹n› tried to ‹read|write|delete› `‹path›`, which is outside its `workdir=‹dir›`. The run stopped and nothing at that path was touched. Everything row ‹n› changed before this can be undone with `catflow undo ‹run› ‹n›`."
+ },
+ {
+  "code": "R907",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "detail": "‹detail›",
+   "k": "‹k›",
+   "N": "‹N›",
+   "run": "‹run›"
+  },
+  "expected": "Row ‹n›'s action failed: ‹detail›. The agent had ‹k› of ‹N› actions left. Everything it changed can be undone with `catflow undo ‹run› ‹n›`."
+ },
+ {
+  "code": "R908",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "value": "‹value›",
+   "detail": "‹detail›"
+  },
+  "expected": "Row ‹n›'s `Compare` couldn't read \"‹value›\" as a number (‹detail›). `Compare` only reads numbers — clean the text first (`Extract`, `Filter`) if it needs it."
+ },
+ {
+  "code": "R909",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "transform": "‹transform›",
+   "script": "‹script›",
+   "detail": "‹detail›"
+  },
+  "expected": "Row ‹n›'s transform ‹transform› (‹script›) ‹detail›. Nothing downstream of row ‹n› ran."
+ }
+]
