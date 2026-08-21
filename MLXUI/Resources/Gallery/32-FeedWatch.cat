@@ -1,0 +1,7 @@
+catflow 0.8; network
+1. Fetch Feed   url=https://blog.python.org/feeds/posts/default?alt=rss
+2. Filter       contains="release"
+3. <each summarize_item; on_error=skip>
+     1. Summarize   (input:1)   Ministral 3B; "one line"
+4. Join Text    separator="\n"
+5. Save Text    updates.md

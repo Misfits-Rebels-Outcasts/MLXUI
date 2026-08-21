@@ -1,0 +1,14 @@
+catflow 0.8
+1. Read Text           cases.txt   # one prompt per line
+2. Split               by=lines   text -> [text]
+3. <each run_one; on_error=skip>   [text] -> [text]
+     1. <list flow_under_test>   (input:1)   # your flow, pasted in
+          1. Draft   Qwen3 8B; "Say hello in one short sentence."
+     2. Template   (input:1,1)   "### {1}\n{2}"
+4. Join Text           separator="\n\n"
+5. Save Text           run-today.md
+
+6. Read Text           run-baseline.md
+
+7. Diff        (4,6)   format=unified
+8. Save Text           regression.diff

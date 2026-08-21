@@ -1,0 +1,8 @@
+catflow 0.8; network
+1. Web Search   "local LLM quantization"; top_k=8; recency=week
+2. <each fetch_one; on_error=skip ; [url] -> [text]>
+     1. Web Fetch   (input:1)   as=markdown
+     2. Summarize               Ministral 3B; "2 lines: what's new here"
+3. Join Text    separator="\n\n"
+4. Rewrite      Qwen3 8B; "Merge overlapping items; rank by novelty"
+5. Save Text    topic-weekly.md

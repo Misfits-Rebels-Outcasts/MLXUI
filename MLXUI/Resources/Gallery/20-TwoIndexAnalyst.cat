@@ -1,0 +1,16 @@
+catflow 0.8
+1. Template    "Which team's PTO policy changed more, and by how much?"
+2. <list research_agent>   text -> text
+     1. Read Index               hr.index
+     2. Read Index               eng.index
+     3. Think        (input:1)   Qwen3 8B; tools: search_hr, search_eng, calculate, final; max_visits=8; on_budget=final
+        -> { search_hr: call 4 | search_eng: call 6 | calculate: call 8 | final: resume }
+     4. Embed                    BGE-M3
+     5. Retrieve     (1,4)       top_k=5
+        resume
+     6. Embed                    BGE-M3
+     7. Retrieve     (2,6)       top_k=5
+        resume
+     8. Calculate
+        resume
+3. Save Text   comparison.md

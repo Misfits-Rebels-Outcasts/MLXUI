@@ -1,0 +1,9 @@
+catflow 0.8; network
+1. Template             "What changed in EU AI Act enforcement this
+                        quarter?"
+2. Web Search           top_k=5                      text -> [url]
+3. <each fetch_one; on_error=skip ; [url] -> [text]>
+     1. Web Fetch   (input:1)   as=markdown
+4. Template     (3,1)   "Sources:\n{1}\n\nQ: {2}"
+5. Answer               Qwen3 8B; "cite sources by number"
+6. Save Text            research-brief.md

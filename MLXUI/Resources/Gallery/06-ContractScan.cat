@@ -1,0 +1,12 @@
+catflow 0.8
+1. Read PDF            contract.pdf; layout=markdown
+2. Split               by=headings   text -> [text]
+3. <each scan_section; on_error=skip>   [text] -> [text]
+     1. Extract Structured   (input:1)   Qwen3 8B; "clause_type, risk_level,
+                                         obligation, deadline"
+     2. Table to Text                    format=markdown
+4. Join Text           separator="\n"
+5. Summarize           Qwen3 8B; "Plain-words brief: penalties,
+                       auto-renewals, deadlines to calendar"
+6. Template    (4,5)   "{2}\n\n## Clause table\n\n{1}"
+7. Save Text           contract-review.md

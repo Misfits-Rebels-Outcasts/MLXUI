@@ -124,12 +124,16 @@ struct CatFlowWorkspaceTests {
 
     @Test func galleryLoaderFindsAllFlows() throws {
         let metadata = GalleryLoader.loadMetadata()
-        // R1 shipped three; R4 adds Log Triage, House Style, Voiceover Bed.
-        #expect(metadata.count == 6)
-        #expect(metadata.map(\.flowID).sorted() == [
-            "01-SpokenSummary", "08-PolicyDiff", "15-HouseStyle",
-            "21-PhotoWebPrep", "29-LogTriage", "65-VoiceoverBed",
-        ])
+        // The full gallery ships: 69 entries (66 .cat + 3 .catpipeline).
+        #expect(metadata.count == 69)
+        // The 5 runnable flows carry no notRunnableReason.
+        let runnable = metadata.filter { $0.isRunnable }.map(\.flowID).sorted()
+        #expect(runnable == ["01-SpokenSummary", "08-PolicyDiff", "15-HouseStyle",
+                             "29-LogTriage", "65-VoiceoverBed"])
+        // A not-runnable flow carries an honest reason (CFM-R4-4).
+        let photoWeb = try #require(metadata.first { $0.flowID == "21-PhotoWebPrep" })
+        #expect(photoWeb.notRunnableReason != nil)
+        #expect(photoWeb.notRunnableReason?.contains("blocks") == true)
         let spoken = try #require(metadata.first { $0.flowID == "01-SpokenSummary" })
         #expect(spoken.title == "Spoken Summary")
         #expect(spoken.number == 1)

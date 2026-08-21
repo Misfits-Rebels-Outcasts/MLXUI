@@ -1,0 +1,9 @@
+catflow 0.8; events
+1. On File            memos/; pattern=*.m4a; settle=30s
+2. Read Audio
+3. Transcribe         Whisper Tiny; lang=en
+4. Gate               Ministral 3B; "Garbled or truncated? tags: bad, ok"
+   -> { bad: 5 | ok: 6 }
+5. Transcribe   (2)   Whisper Large v3; lang=en
+6. Summarize          Qwen3 8B; "3 bullets, then action items"
+7. Save Text          memos/{name}-notes.md

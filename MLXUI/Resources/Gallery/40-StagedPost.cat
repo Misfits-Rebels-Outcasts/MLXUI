@@ -1,0 +1,11 @@
+catflow 0.8
+1. Read Text            announcement.md
+2. <parallel two_takes>   text -> [text, text]
+     1. Draft   (input:1)   Qwen3 8B; "Post, 280 chars max, no hashtags"
+
+     2. Draft   (input:1)   Qwen3 8B; "Post, 280 chars max, playful"
+3. Judge        (1,2)   Ministral 3B; "Which post lands better? tags: a, b"
+   -> { a: 4 | b: 4 }
+4. Ask Human            "Post this?"; timeout=12h; default=skip; tags: post, skip
+   -> { post: 5 | skip: done }
+5. Stage Post           outbox

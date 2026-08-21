@@ -1,0 +1,7 @@
+catflow 0.8; improvise
+1. Read Files   exports/; pattern=*.csv
+2. Improvise    Qwen2.5 14B; "normalize these into one table; the headers
+                differ between files" ; max_actions=20; workdir=.; timeout=10m
+3. Read Text    work/normalized.csv
+4. Summarize    Qwen3 8B; "what changed, in 5 bullets"
+5. Save Text    report.md

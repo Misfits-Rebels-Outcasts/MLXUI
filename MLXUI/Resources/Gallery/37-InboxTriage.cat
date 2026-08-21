@@ -1,0 +1,19 @@
+catflow 0.8
+1. Read Files   inbox/; pattern=*.txt
+2. <each triage_one; on_error=skip>   [file] -> [text]
+     1. Read Text   (input:1)
+     2. Summarize               Ministral 3B; "One line: sender wants…"
+     3. Classify    (1)         Ministral 3B; "Urgency? tags: act, read, ignore"
+        -> { act: 4 | read: 5 | ignore: 6 }
+
+     4. Template    (2)         "ACT     {1}"
+        -> 7
+
+     5. Template    (2)         "READ    {1}"
+        -> 7
+
+     6. Template    (2)         "IGNORE  {1}"
+     7. Template                "{1}"
+3. Sort         direction=asc   # ACT sorts to the top
+4. Join Text    separator="\n"
+5. Save Text    inbox-brief.md

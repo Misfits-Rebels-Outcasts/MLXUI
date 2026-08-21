@@ -1,0 +1,18 @@
+catflow 0.8
+1. Read Files   tickets/; pattern=*.txt
+2. <each draft_one; on_error=skip>   [file] -> [text]
+     1. Read Text     (input:1)
+     2. <list kb_answer>   text -> text
+          1. Read Index                 support-kb.index
+          2. Embed        (input:1)     BGE-M3
+          3. Retrieve     (1,2)         top_k=5
+          4. Template     (3,input:1)   "Context:\n{1}\n\nCustomer:\n{2}\n\n Draft
+                                        the reply."
+          5. Answer                     Qwen3 8B
+     3. Gate                      Ministral 3B; "Safe and correct to send
+                                  as-is? tags: send, unsure"
+        -> { send: 5 | unsure: 4 }
+     4. Human Input               "Fix or rewrite this draft:"; timeout=8h ; default=unchanged
+     5. Template                  "{1}"
+3. Join Text    separator="\n\n===\n\n"
+4. Save Text    replies-review.md

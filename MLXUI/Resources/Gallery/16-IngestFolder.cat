@@ -1,0 +1,8 @@
+catflow 0.8
+1. Read Files            docs/; pattern=*.pdf
+2. <each read_one; on_error=skip>   [file] -> [text]
+     1. Read PDF   (input:1)
+3. Join Text
+4. Split                 chunk_size=500; overlap=50
+5. Embed                 BGE-M3
+6. Store Index   (4,5)   library.index

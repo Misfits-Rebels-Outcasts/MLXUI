@@ -1,0 +1,12 @@
+catflow 0.8; network
+1. Web Fetch           https://buttondown.com/pricing; as=markdown
+2. Read Text           pricing-last-week.md
+
+3. Diff        (1,2)   format=unified
+4. Gate                Ministral 3B; "Meaningful change (not formatting)?
+                       tags: changed, same"
+   -> { changed: 5 | same: 7 }
+
+5. Summarize   (3)     Qwen3 8B; "What changed and why it matters"
+6. Save Text           pricing-alert.md
+7. Save Text   (1)     pricing-this-week.md

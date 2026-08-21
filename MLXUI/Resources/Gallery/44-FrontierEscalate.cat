@@ -1,0 +1,18 @@
+catflow 0.8; offdevice
+1. Read Index           library.index
+2. Embed                BGE-M3; "Summarize our indemnification obligations"
+3. Retrieve     (1,2)   top_k=5
+4. Template             "Context:\n{input}\n\nQ: Summarize our
+                        indemnification obligations"
+5. Answer               Qwen3 8B
+6. Gate         (5,3)   Ministral 3B; "Complete and grounded, ready to
+                        ship? tags: ship, escalate"
+   -> { ship: 7 | escalate: 8 }
+7. Template     (5)     "{1}"
+   -> 9
+
+8. Answer       (4)     claude-sonnet @ anthropic; "cite sources"    remote
+9. Save Text            answer.md
+
+models:
+  claude-sonnet @ anthropic = anthropic/claude-sonnet-4

@@ -1,0 +1,14 @@
+catflow 0.8
+1. Read Text         announcement.md
+2. <parallel three_locales>   text -> [text, text, text]
+     1. Translate   (input:1)   Llama 3.1 8B; to=German
+
+     2. Translate   (input:1)   Llama 3.1 8B; to=Japanese
+
+     3. Translate   (input:1)   Llama 3.1 8B; to=Spanish
+3. Template          "{1}"
+4. Save Text         announcement-de.md
+5. Template    (2)   "{2}"
+6. Save Text         announcement-ja.md
+7. Template    (2)   "{3}"
+8. Save Text         announcement-es.md

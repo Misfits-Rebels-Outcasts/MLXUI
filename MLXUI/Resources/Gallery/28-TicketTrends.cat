@@ -1,0 +1,14 @@
+catflow 0.8
+1. Read Files            tickets/; pattern=*.txt
+2. <each one; on_error=skip>   [file] -> [text]
+     1. Read Text            (input:1)
+     2. Extract Structured               Qwen3 8B; "product, issue_type,
+                                         severity"
+     3. Table to Text                    format=csv
+3. Join Text             separator="\n"
+4. Text to Table         expected="product, issue_type, severity"
+5. Query Table           group=issue_type
+6. Chart                 kind=bar; x=issue_type; y=count
+7. Save Image            issues-this-week.png
+8. Table to Text   (4)   format=markdown
+9. Save Text             tickets-structured.md

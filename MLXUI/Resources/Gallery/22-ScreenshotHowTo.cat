@@ -1,0 +1,11 @@
+catflow 0.8
+1. Read Images   steps/
+2. <each read_step; on_error=skip>   [image] -> [text]
+     1. OCR              (input:1)
+     2. Describe Image   (input:1)   LFM2-VL 1.6B; "What action is happening on
+                                     this screen?"
+     3. Template         (1,2)       "UI text:\n{1}\n\nWhat's shown:\n{2}"
+3. Join Text     separator="\n\n## Step\n\n"
+4. Draft         Qwen3 8B; "Turn these captured steps into a numbered
+                 how-to guide"
+5. Save Text     howto.md

@@ -1,0 +1,15 @@
+catflow 0.8
+1. Read Audio           interview.m4a
+2. Transcribe           Whisper Large v3; lang=en
+3. Rewrite              Qwen3 8B; "Remove filler words; keep meaning and
+                        speaker turns"
+4. Draft                Qwen3 8B; "1,000-word article from this interview,
+                        quotes verbatim"
+5. Critique             Ministral 3B; "quotes verbatim? faithful?
+                        engaging?"
+6. Gate                 Ministral 3B; "Real weaknesses left? tags: fix,
+                        ship"; max_visits=2; on_budget=ship
+   -> { fix: 7 | ship: 8 }
+7. Revise       (4,5)   Qwen3 8B
+   -> 5
+8. Save Text            article.md

@@ -1,0 +1,11 @@
+catflow 0.8
+1. Read Text            inquiry.txt
+2. Draft                Qwen3 8B; "Write the reply"
+3. Critique             Ministral 3B; "policy-safe? complete?"
+
+4. Ask Human    (2)     "Send this reply?" ; timeout=4h; default=edit; tags: approve, edit, reject; max_visits=3; on_budget=reject
+   -> { approve: 6 | edit: 5 | reject: done }
+5. Revise       (2,4)   Qwen3 8B
+   -> 3
+
+6. Stage Send           outbox

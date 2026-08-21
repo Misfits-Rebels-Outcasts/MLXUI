@@ -1,0 +1,11 @@
+catflow 0.8
+1. Read CSV                sales.csv
+2. Query Table             group=region; columns=region,revenue
+3. Chart                   kind=bar; x=region; y=revenue
+4. Save Image              revenue-by-region.png
+
+5. Table to Text   (2)     format=markdown
+6. Draft                   Qwen3 8B; "3 insights and 1 anomaly, from this
+                           table"
+7. Template        (5,6)   "{1}\n\n{2}"
+8. Save Text               sales-insights.md

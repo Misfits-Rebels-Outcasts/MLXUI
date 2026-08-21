@@ -1,0 +1,10 @@
+catflow 0.8
+1. Read PDF    paper.pdf; layout=markdown
+2. <parallel two_depths>   text -> [text, text]
+     1. Summarize   (input:1)   Qwen3 8B; "Contribution, method, result — 5
+                                lines"
+
+     2. Summarize   (input:1)   Qwen3 8B; "Practitioner notes: what could we
+                                apply, and the limitations"
+3. Merge       Qwen3 8B; "One digest, both depths"
+4. Save Text   paper-digest.md

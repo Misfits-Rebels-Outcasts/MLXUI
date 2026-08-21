@@ -1,0 +1,10 @@
+catflow 0.8
+1. Read Video            webinar.mp4
+2. Extract Audio
+3. Transcribe            Whisper Large v3; timestamps=true
+4. Summarize             Qwen3 8B; "Key moments with timestamps; 5
+                         quotable clips worth cutting"
+5. Save Text             clip-notes.md
+
+6. Extract Frame   (1)   at=00:00:05
+7. Save Image            thumbnail.png

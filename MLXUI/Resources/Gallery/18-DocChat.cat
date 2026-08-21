@@ -1,0 +1,12 @@
+catflow 0.8
+1. Read Index             library.index
+2. Human Input            "Your question:"; wait=forever; ctx+
+3. Rewrite                Ministral 3B; "Make the question standalone,
+                          resolving references to the conversation"; ctx
+4. Embed                  BGE-M3
+5. Retrieve       (1,4)   top_k=5
+6. Template       (5,3)   "Context:\n{1}\n\nQ: {2}"
+7. Answer                 Qwen3 8B; ctx; ctx+
+8. Ask Human              "Another question?"; wait=forever; tags: ask, done
+   -> { ask: 2 | done: 9 }
+9. Save Context           session.ctx

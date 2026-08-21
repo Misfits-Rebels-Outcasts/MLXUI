@@ -1,0 +1,20 @@
+catflow 0.8
+1. Read Images         shoot/
+2. <each judge_one; on_error=skip>   [image] -> [text]
+     1. Describe Image   (input:1)   LFM2-VL 1.6B; "Blur, exposure problems,
+                                     closed eyes? Be specific."
+     2. Classify                     Ministral 3B; "Keeper? tags: keep, reject"
+        -> { keep: 3 | reject: 4 }
+
+     3. Template         (1)         "KEEP    {1}"
+        -> 5
+
+     4. Template         (1)         "REJECT  {1}"
+     5. Template                     "{1}"
+3. Join Text           separator="\n"
+4. Save Text           cull-list.txt
+
+5. Filter        (2)   contains="REJECT"
+6. Count               items
+7. Template            "{1} photos flagged — see cull-list.txt"
+8. Save Text           cull-summary.txt

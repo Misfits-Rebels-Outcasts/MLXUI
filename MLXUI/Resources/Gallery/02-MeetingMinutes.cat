@@ -1,0 +1,14 @@
+catflow 0.8
+1. Read Audio   all-hands.m4a
+2. Transcribe   Whisper Large v3; lang=en
+3. <parallel three_reads>   text -> [text, text, text]
+     1. Summarize   (input:1)   Qwen3 8B; "Decisions made, one per line"
+
+     2. Summarize   (input:1)   Qwen3 8B; "Action items: owner — task —
+                                deadline"
+     3. Rewrite                 Ministral 3B; "as a markdown checklist"
+
+     4. Summarize   (input:1)   Qwen3 8B; "Risks and open questions raised"
+4. Merge        Qwen3 8B; "One minutes document, three sections:
+                Decisions, Action Items, Risks"
+5. Save Text    minutes.md

@@ -1,0 +1,15 @@
+catflow 0.8
+1. Read Text         launch-notes.txt
+2. <parallel channels>   text -> [text, text, text]
+     1. Draft   (input:1)   Qwen3 8B; "LinkedIn post, professional, 150 words
+                            max"
+
+     2. Draft   (input:1)   Qwen3 8B; "Thread: 4 short posts, plain language"
+
+     3. Draft   (input:1)   Qwen3 8B; "Customer email, warm, subject line first"
+3. Template          "{1}"
+4. Save Text         linkedin.md
+5. Template    (2)   "{2}"
+6. Save Text         thread.md
+7. Template    (2)   "{3}"
+8. Save Text         email.md

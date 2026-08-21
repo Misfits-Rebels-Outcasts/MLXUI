@@ -1,0 +1,8 @@
+catflow 0.8
+1. Read Text   book.txt
+2. Split       chunk_size=2000   text -> [text]
+3. <each summarize_section>   [text] -> [text]
+     1. Summarize   (input:1)   Ministral 3B; "one paragraph"
+     2. Template                "## Section {index}\n\n{1}"
+4. Summarize   Qwen3 8B; "One page, from these section summaries"
+5. Save Text   book-summary.md

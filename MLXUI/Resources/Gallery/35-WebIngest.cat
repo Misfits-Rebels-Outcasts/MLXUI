@@ -1,0 +1,9 @@
+catflow 0.8; network
+1. Read Text             urls.txt
+2. Split                 by=lines
+3. <each fetch_one; on_error=skip>   [text] -> [text]
+     1. Web Fetch   (input:1)   as=markdown
+4. Join Text
+5. Split                 chunk_size=500
+6. Embed                 BGE-M3
+7. Store Index   (5,6)   webdocs.index

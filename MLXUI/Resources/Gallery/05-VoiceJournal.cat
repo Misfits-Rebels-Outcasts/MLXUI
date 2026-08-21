@@ -1,0 +1,10 @@
+catflow 0.8
+1. Read Files           memos/; pattern=*.m4a
+2. <each one_memo; on_error=skip>   [file] -> [text]
+     1. Read Audio   (input:1)
+     2. Transcribe               Whisper Large v3
+     3. Summarize                Ministral 3B; "3 bullets"
+3. Join Text            separator="\n\n---\n\n"
+4. Title                Ministral 3B; "filename-safe, this week's theme"
+5. Template     (4,3)   "# {1}\n\n{2}"
+6. Save Text            weekly-digest.md

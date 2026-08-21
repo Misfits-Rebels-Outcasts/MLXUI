@@ -1,0 +1,14 @@
+catflow 0.8
+1. Read Images           receipts/
+2. <each read_receipt; on_error=skip>   [image] -> [text]
+     1. OCR                  (input:1)
+     2. Extract Structured               Qwen3 8B; "merchant, date, total,
+                                         category"
+     3. Table to Text                    format=csv
+3. Join Text             separator="\n"
+4. Text to Table         expected="merchant, date, total, category"
+5. Query Table           group=category
+6. Chart                 kind=bar; x=category; y=total
+7. Save Image            spend.png
+8. Table to Text   (4)   format=markdown
+9. Save Text             expense-report.md

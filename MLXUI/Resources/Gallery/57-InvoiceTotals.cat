@@ -1,0 +1,15 @@
+catflow 0.8; code
+1. Read Files        invoices/; pattern=*.txt
+2. Parse Invoices  (1)
+3. Query Table       sort=amount; direction=desc
+4. Table to Text     format=markdown
+5. Summarize          Qwen3 8B; "the three biggest vendors this batch,
+                      one line each"
+6. Template   (4,5)   "{1}\n\n{2}"
+7. Save Text          totals-report.md
+
+transforms:
+  Parse Invoices   [file] -> table
+    run:      ./tools/parse_invoices.py
+    timeout:  30s
+    workdir:  ./work

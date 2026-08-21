@@ -28,8 +28,20 @@ struct SidebarView: View {
             if !AppState.hideFlows && !appState.galleryEntries.isEmpty {
                 Section("Flows") {
                     ForEach(appState.galleryEntries) { flow in
-                        Label(flow.title, systemImage: "flowchart")
-                            .tag(SidebarItem.flows(flow.flowID))
+                        Label {
+                            HStack(spacing: 6) {
+                                Text(flow.title)
+                                if !flow.isRunnable {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundStyle(.orange)
+                                        .font(.caption2)
+                                        .accessibilityLabel("Not runnable yet")
+                                }
+                            }
+                        } icon: {
+                            Image(systemName: "flowchart")
+                        }
+                        .tag(SidebarItem.flows(flow.flowID))
                     }
                 }
             }

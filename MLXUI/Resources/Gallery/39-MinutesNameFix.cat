@@ -1,0 +1,8 @@
+catflow 0.8
+1. Read Audio            meeting.m4a
+2. Transcribe            Whisper Large v3
+3. Draft                 Ministral 3B; "List attendee names, one per line"
+4. Human Input           "Correct any misspelled names:" ; timeout=2h; default=unchanged
+5. Rewrite       (2,4)   Qwen3 8B; "Meeting minutes; use these corrected
+                         names"
+6. Save Text             minutes.md

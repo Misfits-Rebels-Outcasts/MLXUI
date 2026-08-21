@@ -1,0 +1,30 @@
+catflow 0.8
+1. Read Text            handbook.txt
+2. Ask                  Qwen3 8B; "10 factual questions this document
+                        answers, one per line"   text -> [text]
+3. <each eval_one>   [text] -> [text]
+     1. Read Index                    library.index
+     2. Embed        (input:1)        BGE-M3
+     3. Retrieve     (1,2)            top_k=5
+     4. Gate         (input:1,3)      Ministral 3B; "Do the chunks contain the
+                                      answer? tags: hit, miss"
+        -> { hit: 5 | miss: 6 }
+     5. Template                      "retrieval: hit"
+        -> 7
+     6. Template                      "retrieval: miss"
+     7. Template                      "{1}"
+     8. Template     (3,input:1)      "Context:\n{1}\n\nQ: {2}"
+     9. Answer                        Qwen3 8B
+     10. Verify      (9,3)            Ministral 3B
+     11. Template    (input:1,7,10)   "Q: {1}\n{2}\nfaithfulness:\n{3}"
+4. Join Text            separator="\n\n"
+5. Save Text            index-eval.md
+
+6. Filter       (3)     contains="retrieval: miss"
+7. Count                items
+
+8. Filter       (3)     contains="UNSUPPORTED"
+9. Count                items
+10. Template    (7,9)   "retrieval misses: {1} / 10; unsupported claims
+                        in: {2} / 10"
+11. Save Text           index-scorecard.md

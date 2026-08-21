@@ -20,6 +20,8 @@ struct FlowListView: View {
                 ContentUnavailableView("Couldn't Load This Flow",
                                        systemImage: "exclamationmark.triangle",
                                        description: Text(error))
+            } else if let metadata, metadata.notRunnableReason != nil, let rawCat {
+                notRunnableView(metadata, rawCat)
             } else if let document, let metadata {
                 flowList(document, metadata)
             } else {
@@ -34,6 +36,46 @@ struct FlowListView: View {
                     .environment(appState)
             }
         }
+    }
+
+    /// A read-only view for a flow this version can't run (CFM-R4-4): an honest badge
+    /// naming what it needs, the description, and the raw `.cat` text. No Run button.
+    private func notRunnableView(_ meta: GalleryFlowMetadata, _ raw: String) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 10) {
+                Label(meta.title, systemImage: "flowchart")
+                    .font(.title2.weight(.semibold))
+                Text("catflow 0.8")
+                    .font(.caption.monospaced())
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
+                Spacer()
+            }
+            Label(meta.notRunnableReason ?? "", systemImage: "exclamationmark.triangle.fill")
+                .font(.callout)
+                .foregroundStyle(.orange)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+            Text(meta.description)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            DisclosureGroup("Show raw `.cat`") {
+                ScrollView(.horizontal) {
+                    Text(raw)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .padding(8)
+                }
+                .frame(maxWidth: .infinity)
+                .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 6))
+            }
+            .font(.callout)
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     // MARK: - Content
@@ -285,13 +327,18 @@ struct FlowListView: View {
     private func load() {
         do {
             metadata = GalleryLoader.loadMetadata().first { $0.flowID == flowID }
-            document = try GalleryLoader.loadDocument(flowID: flowID)
             rawCat = try? GalleryLoader.rawCatText(flowID: flowID)
+            // Not-runnable flows (CFM-R4-4) have no parse document — metadata + raw .cat is
+            // enough for their read-only view.
+            if let meta = metadata, meta.notRunnableReason != nil {
+                return
+            }
+            document = try GalleryLoader.loadDocument(flowID: flowID)
             if let doc = document {
                 let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
                 session.prepareInstall(FlowPreflight.run(doc, catalog: catalog,
-                                                         installedModelIDs: appState.installedModelIDs,
-                                                         totalRAMGB: appState.systemInfo.totalRAMGB),
+                                                          installedModelIDs: appState.installedModelIDs,
+                                                          totalRAMGB: appState.systemInfo.totalRAMGB),
                                        doc: doc)
             }
         } catch {

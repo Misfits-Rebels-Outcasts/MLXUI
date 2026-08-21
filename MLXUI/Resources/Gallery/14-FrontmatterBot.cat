@@ -1,0 +1,13 @@
+catflow 0.8
+1. Read Text           post.md
+2. <parallel meta>   text -> [text, text, text]
+     1. Title                (input:1)   Ministral 3B; "SEO headline"
+
+     2. Summarize            (input:1)   Ministral 3B; "meta description, 155
+                                         chars max"
+
+     3. Extract Structured   (input:1)   Ministral 3B; "tags, category"
+     4. Table to Text                    format=csv
+3. Template            "---\ntitle: {1}\ndescription: {2}\n{3}\n---"
+4. Template    (3,1)   "{1}\n\n{2}"
+5. Save Text           post-published.md

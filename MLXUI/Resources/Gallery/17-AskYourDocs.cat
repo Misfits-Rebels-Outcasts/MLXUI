@@ -1,0 +1,8 @@
+catflow 0.8
+1. Read Index           library.index
+2. Embed                BGE-M3; "How do I rotate the API keys?"
+3. Retrieve     (1,2)   top_k=5
+4. Template             "Context:\n{input}\n\nQ: How do I rotate the API
+                        keys?"
+5. Answer               Qwen3 8B
+6. Save Text            answer.md

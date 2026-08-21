@@ -1,0 +1,12 @@
+catflow 0.8
+1. Read Files   memos/; pattern=*.m4a
+2. <each transcribe_one; on_error=skip>   [file] -> [text]
+     1. Read Audio   (input:1)
+     2. Transcribe               Whisper Tiny; lang=en
+     3. Gate                     Ministral 3B; "Garbled or truncated? tags:
+                                 bad, ok"
+        -> { bad: 4 | ok: 5 }
+     4. Transcribe   (1)         Whisper Large v3; lang=en
+     5. Template                 "{1}"
+3. Join Text    separator="\n\n---\n\n"
+4. Save Text    transcripts.md

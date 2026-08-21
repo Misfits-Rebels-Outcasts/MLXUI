@@ -1,0 +1,14 @@
+catflow 0.8; events; network
+1. On Schedule           every=day; at=06:30; max_runs=2/day
+2. Read Text             topics.txt   # one query per line
+3. Split                 by=lines
+4. <each one_topic; on_error=skip>   [text] -> [text]
+     1. Web Search   (input:1)   top_k=3; recency=day
+     2. <each fetch_one; on_error=skip ; [url] -> [text]>
+          1. Web Fetch   (input:1)   as=markdown
+     3. Summarize                Ministral 3B; "2 lines: what's new"
+5. Join Text             separator="\n\n"
+6. Rewrite               Qwen3 8B; "One briefing: merge overlaps, lead
+                         with the most consequential item"
+7. Template      (6,1)   "# Briefing — {2}\n\n{1}"
+8. Save Text             briefings/briefing.md

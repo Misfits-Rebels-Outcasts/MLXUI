@@ -1,0 +1,19 @@
+catflow 0.8
+1. Read Text   prompts.txt
+2. Split       by=lines   text -> [text]
+3. <each compare_one>   [text] -> [text]
+     1. <list system_a>   (input:1)
+          1. Draft   Qwen3 8B; "Say hello in one short sentence."
+     2. <list system_b>   (input:1)
+          1. Draft   Qwen3 8B; "Say hello in one short sentence."
+     3. Judge      (input:1,1,2)   Qwen3 8B; "Which better answers the prompt?
+                                   tags: a, b"
+        -> { a: 4 | b: 5 }
+     4. Template                   "A"
+        -> 6
+     5. Template                   "B"
+     6. Template                   "{1}"
+4. Filter      contains="A"
+5. Count       items
+6. Template    "A preferred on {1} cases — expand row 3 for details"
+7. Save Text   ab-report.md

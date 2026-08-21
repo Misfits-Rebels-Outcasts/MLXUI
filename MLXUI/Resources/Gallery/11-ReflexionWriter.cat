@@ -1,0 +1,12 @@
+catflow 0.8
+1. Template            "Write the launch announcement for AcmeSync 2.0:
+                       calendar sync for small teams, ships Aug 1, $6/seat"
+2. Draft               Qwen3 8B; "Write the launch announcement"
+3. Template            "{1}"
+4. Critique            Ministral 3B; "accurate, concise, friendly"
+5. Gate        (3,4)   Ministral 3B; "Real weaknesses left? tags: fix,
+                       ship"; max_visits=3; on_budget=ship
+   -> { fix: 6 | ship: 7 }
+6. Revise      (3,4)   Qwen3 8B
+   -> 3
+7. Save Text   (3)     announcement.md

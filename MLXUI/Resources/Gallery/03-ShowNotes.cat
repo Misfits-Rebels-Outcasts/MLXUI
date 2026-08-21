@@ -1,0 +1,15 @@
+catflow 0.8
+1. Read Audio           episode.mp3
+2. Transcribe           Whisper Large v3; timestamps=true
+3. <parallel notes>   text -> [text, text, text]
+     1. Summarize   (input:1)   Qwen3 8B; "Episode summary, one paragraph"
+
+     2. Draft       (input:1)   Qwen3 8B; "Chapter list with timestamps, from
+                                the transcript's time marks"
+
+     3. Draft       (input:1)   Qwen3 8B; "3 pull quotes, verbatim"
+4. Merge                Qwen3 8B; "Markdown show notes: summary, chapters,
+                        quotes"
+5. Title                Ministral 3B; "episode title, catchy"
+6. Template     (5,4)   "# {1}\n\n{2}"
+7. Save Text            shownotes.md

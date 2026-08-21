@@ -1,0 +1,13 @@
+catflow 0.8
+1. Read Files            invoices/; pattern=*.pdf
+2. <each read_one; on_error=skip>   [file] -> [text]
+     1. Read PDF             (input:1)
+     2. Extract Structured               Qwen3 8B; "vendor, date, total,
+                                         currency"
+     3. Table to Text                    format=csv
+3. Join Text             separator="\n"
+4. Text to Table         expected="vendor, date, total, currency"
+5. Chart                 kind=bar; x=vendor; y=total
+6. Save Image            spend-by-vendor.png
+7. Table to Text   (4)   format=markdown
+8. Save Text             ledger.md

@@ -1,0 +1,18 @@
+catflow 0.8
+1. Read CSV        survey.csv
+2. Query Table     columns=comment
+3. Table to Text   format=csv
+4. Split           by=lines   text -> [text]
+5. <each tag_one; on_error=skip>   [text] -> [text]
+     1. Classify   (input:1)   Ministral 3B; "Sentiment? tags: pos, neu, neg"
+        -> { pos: 2 | neu: 3 | neg: 4 }
+     2. Template   (input:1)   "POS  {1}"
+        -> 5
+     3. Template   (input:1)   "NEU  {1}"
+        -> 5
+     4. Template   (input:1)   "NEG  {1}"
+     5. Template               "{1}"
+6. Filter          contains="NEG"
+7. Summarize       Qwen3 8B; "Top 5 complaint themes, one example quote
+                   each"
+8. Save Text       complaint-themes.md

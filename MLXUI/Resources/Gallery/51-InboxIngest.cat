@@ -1,0 +1,9 @@
+catflow 0.8; events
+1. On File               inbox/; pattern=*.pdf; settle=30s
+2. Read Files            inbox/; pattern=*.pdf
+3. <each read_one; on_error=skip>   [file] -> [text]
+     1. Read PDF   (input:1)
+4. Join Text
+5. Split                 chunk_size=500; overlap=50
+6. Embed                 BGE-M3
+7. Store Index   (5,6)   library.index
