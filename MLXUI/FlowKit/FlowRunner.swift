@@ -73,8 +73,12 @@ nonisolated struct FlowRunner {
     }
 
     /// Whether `doc` uses only the linear subset. Every out-of-scope feature produces a
-    /// named refusal, not a wrong answer.
+    /// named refusal, not a wrong answer. Under `APPSTORE_BUILD`, a flow whose header
+    /// declares `code`/`improvise` is refused outright (CFM-R5-6) before any row is read.
     static func canRun(_ doc: FlowDocument) -> Runnability {
+        if let refusal = CapabilityGate.appStoreRefusal(flags: doc.flags.map(\.rawValue)) {
+            return .notRunnable(reason: refusal)
+        }
         var indexByID: [UUID: Int] = [:]
         for (i, row) in doc.rows.enumerated() { indexByID[row.id] = i + 1 }
 
