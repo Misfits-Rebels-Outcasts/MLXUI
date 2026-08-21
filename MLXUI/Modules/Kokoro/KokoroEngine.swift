@@ -17,6 +17,13 @@ enum KokoroEngine {
     /// Synthesize `text` to a 24 kHz mono `AudioBuffer` using the installed model directory.
     /// `speed` scales pacing (1.0 = normal; higher = faster). Loads the model per call
     /// (matches the other engines); instance caching is a later optimization.
+    ///
+    /// **Long-text handling.** The Python `mlx_audio` Kokoro pipeline splits the input on
+    /// newlines (`split_pattern=r"\n+"`, `engines/tts.py` collects the segments and
+    /// concatenates) — the model itself is one-shot with a 510-token cap. This Swift engine
+    /// mirrors that: `textSegments` splits on newlines, each segment is synthesized, and the
+    /// audio is concatenated. A single over-510-token *segment* (a giant unbroken paragraph)
+    /// still refuses — matching the Python, never a truncated wrong answer.
     nonisolated static func synthesize(
         _ text: String,
         voice: String = defaultVoice,
@@ -26,12 +33,29 @@ enum KokoroEngine {
         do {
             let model = try await KokoroModel.fromModelDirectory(modelDirectory)
             model.speed = speed
-            let audio = try await model.generate(
-                text: text, voice: voice, refAudio: nil, refText: nil, language: nil)
-            return AudioBuffer(samples: audio.asArray(Float.self), sampleRate: model.sampleRate)
+            let segments = textSegments(text)
+            var allSamples: [Float] = []
+            var sampleRate = model.sampleRate
+            for segment in segments {
+                let audio = try await model.generate(
+                    text: segment, voice: voice, refAudio: nil, refText: nil, language: nil)
+                allSamples.append(contentsOf: audio.asArray(Float.self))
+                sampleRate = model.sampleRate
+            }
+            return AudioBuffer(samples: allSamples, sampleRate: sampleRate)
         } catch {
             throw StageError.engineFailure(stage: "Kokoro TTS", underlying: error)
         }
+    }
+
+    /// Split text into the segments the Kokoro pipeline synthesizes separately — the Swift
+    /// mirror of the Python's `split_pattern=r"\n+"`. A blank line between paragraphs (one
+    /// or more newlines) is the split point; whitespace-only segments are dropped. Pure so
+    /// it is unit-testable without a model.
+    nonisolated static func textSegments(_ text: String) -> [String] {
+        text.split(whereSeparator: \.isNewline)
+            .map(String.init)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
     /// The installed-model directory for a catalog id, mirroring `InstallManager`'s layout

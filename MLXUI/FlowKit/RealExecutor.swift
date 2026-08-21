@@ -99,11 +99,25 @@ nonisolated struct RealExecutor: FlowExecutor {
         guard let input = inputs.first else {
             throw FlowError.badInputCardinality(row: "\(path)", expected: "an input", got: 0)
         }
-        let stage = try await makeModelStage(modelEntry, .default)
+        let stage = try await makeModelStage(modelEntry, stageConfig(for: desc, row: row))
         let adapter = SingleMediaStage(id: modelEntry.id, name: display,
                                        inner: stage, rowLabel: "\(path)",
                                        blobDirectory: blobDirectory)
         return try await adapter.run(input) { _ in }
+    }
+
+    /// Build the `StageConfig` for a model row. For TTS rows the settings' bare token (or
+    /// `voice=`) is the voice — matching the Python's `voice = s.get("voice") or
+    /// s.first_bare() or "af_heart"` — so `Speak Kokoro 82M; af_heart` uses `af_heart`.
+    /// Internal (not `private`) so the settings→voice mapping is unit-testable.
+    func stageConfig(for desc: TaskDescriptor, row: Row) -> StageConfig {
+        let settings = FlowSettings(row.settings)
+        if desc.refName == "engines.tts.speak" {
+            let voice = settings.value(for: "voice") ?? settings.pathValue()
+            let speed = Float(settings.value(for: "speed") ?? "") ?? 1.0
+            return StageConfig(voice: voice, speed: speed)
+        }
+        return .default
     }
 
     private func persist(_ media: Media, rowLabel: String) throws -> Asset {

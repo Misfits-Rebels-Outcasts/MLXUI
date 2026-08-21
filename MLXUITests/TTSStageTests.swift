@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 @testable import MLXUI
 
 /// Covers the TTS stage logic (backlog K1a) via an injected synthesizer — no model
@@ -54,5 +55,64 @@ struct TTSStageTests {
 
     @Test func voiceNamesEmptyForNoSafetensors() {
         #expect(KokoroEngine.voiceNames(inDirectoryContents: ["README.md", "config.json"]).isEmpty)
+    }
+
+    // MARK: - Long-text segmentation (the Python's split_pattern=r"\n+")
+
+    @Test func textSegmentsSplitsOnNewlines() {
+        #expect(KokoroEngine.textSegments("first\nsecond\nthird") == ["first", "second", "third"])
+    }
+
+    @Test func textSegmentsDropsBlankLines() {
+        #expect(KokoroEngine.textSegments("first\n\n\nsecond") == ["first", "second"])
+    }
+
+    @Test func textSegmentsKeepsSingleParagraphWhole() {
+        // A single unbroken paragraph stays one segment — the Python would refuse it too
+        // if it exceeded the model's cap; we never silently truncate.
+        let one = "A single paragraph with no newlines at all."
+        #expect(KokoroEngine.textSegments(one) == [one])
+    }
+
+    // MARK: - Speak row settings → voice (Python's `voice or first_bare or "af_heart"`)
+
+    @Test func speakBareTokenBecomesVoice() {
+        // The RealExecutor derives a StageConfig from the row settings; the bare token is
+        // the Kokoro voice. Assert via the descriptor-driven helper path: Speak + "af_heart".
+        let desc = try! #require(TaskCatalog.get("Speak"))
+        let row = Row(task: "Speak", model: "Kokoro 82M", settings: "af_heart")
+        let executor = RealExecutor(workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory),
+                                    flowID: "t",
+                                    blobDirectory: FileManager.default.temporaryDirectory,
+                                    makeModelStage: { _, _ in TTSStubStage() },
+                                    installedModelIDs: [],
+                                    catalog: [])
+        let config = executor.stageConfig(for: desc, row: row)
+        #expect(config.voice == "af_heart")
+    }
+
+    @Test func speakVoiceSettingBeatsBareToken() {
+        let desc = try! #require(TaskCatalog.get("Speak"))
+        let row = Row(task: "Speak", model: "Kokoro 82M", settings: "af_bella; voice=am_adam")
+        let executor = RealExecutor(workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory),
+                                    flowID: "t",
+                                    blobDirectory: FileManager.default.temporaryDirectory,
+                                    makeModelStage: { _, _ in TTSStubStage() },
+                                    installedModelIDs: [],
+                                    catalog: [])
+        let config = executor.stageConfig(for: desc, row: row)
+        #expect(config.voice == "am_adam")
+    }
+}
+
+/// A local text→text stub for RealExecutor config tests (no model needed).
+private struct TTSStubStage: PipelineStage {
+    let id = "stub.tts"
+    let name = "Stub TTS"
+    var accepts: MediaKind { .text }
+    var produces: MediaKind { .text }
+    func run(_ input: Media, progress: @Sendable @escaping (Double) -> Void) async throws -> Media {
+        try require(input, .text)
+        return input
     }
 }
