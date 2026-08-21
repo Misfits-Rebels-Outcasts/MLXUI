@@ -31,7 +31,13 @@ struct MLXUIApp: App {
                                 if appState.selectedSection.isHome {
                                     HomeView()
                                 } else if case .flows(let flowID) = appState.selectedSection {
+                                    // `.id(flowID)` gives each flow its own view identity, so
+                                    // switching flows recreates FlowListView's @State (the
+                                    // loaded document + run session) instead of reusing the
+                                    // previous flow's — without it, clicking another flow
+                                    // after opening one "does nothing" (CFM-QR3 finding).
                                     FlowListView(flowID: flowID)
+                                        .id(flowID)
                                 } else {
                                     BrowseView()
                                 }
