@@ -1,0 +1,11 @@
+2026-07-19T08:01:12Z INFO  worker started pid=4821
+2026-07-19T08:01:15Z INFO  connected to queue
+2026-07-19T08:02:03Z ERROR failed to fetch batch: timeout after 5s
+2026-07-19T08:02:03Z ERROR failed to fetch batch: timeout after 5s
+2026-07-19T08:02:44Z INFO  retry succeeded
+2026-07-19T08:05:10Z WARN  queue depth above threshold: 1200
+2026-07-19T08:07:59Z FATAL unhandled exception in job runner: KeyError('shard_id')
+2026-07-19T08:08:00Z INFO  worker restarting
+2026-07-19T08:08:05Z INFO  worker started pid=4830
+2026-07-19T08:11:32Z ERROR failed to fetch batch: timeout after 5s
+2026-07-19T08:15:01Z INFO  heartbeat ok

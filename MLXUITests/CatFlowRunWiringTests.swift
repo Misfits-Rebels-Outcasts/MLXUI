@@ -24,8 +24,12 @@ struct CatFlowRunWiringTests {
         session.prepareInstall(FlowPreflight.Result())
         session.start(doc: doc, runner: FlowRunner(), context: makeMockContext())
 
-        // Events are delivered asynchronously; wait for the run to settle.
-        try? await Task.sleep(for: .milliseconds(800))
+        // Events are delivered asynchronously; wait for the run to finish (not a fixed
+        // sleep — under parallel workers the mock run can take a couple of seconds).
+        let deadline = Date().addingTimeInterval(10)
+        while session.isRunning && Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
         for row in doc.rows {
             #expect(session.status(for: row.id) == .succeeded,
                     "row \(row.task ?? "?") should have succeeded")
@@ -148,7 +152,10 @@ struct CatFlowRunWiringTests {
         let session = FlowRunSession()
         session.prepareInstall(FlowPreflight.Result())
         session.start(doc: doc, runner: FlowRunner(), context: makeMockContext())
-        try? await Task.sleep(for: .milliseconds(800))
+        let deadline = Date().addingTimeInterval(10)
+        while session.isRunning && Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
 
         // Every succeeded row has a stored output the inspector can show.
         for row in doc.rows {
@@ -265,16 +272,15 @@ struct CatFlowRunWiringTests {
 
     // MARK: - Unimplemented instant tool refuses with an honest sentence (Policy Diff)
 
-    @Test func policyDiffDiffRowRefusesNamingTheTask() async throws {
-        // 08-PolicyDiff row 3 is `Diff`, a real catalog task with no Swift tool yet. The
-        // refusal must name the row number and the task — never "Row Diff produces file".
+    @Test func policyDiffDiffRowNowRuns() async throws {
+        // 08-PolicyDiff row 3 is `Diff`, implemented in R4 — it must now produce a diff
+        // instead of refusing.
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let docURL = repoRoot.appendingPathComponent("MLXUI/Resources/Gallery/08-PolicyDiff.parse.json")
         let doc = try JSONDecoder().decode(FlowDocument.self, from: Data(contentsOf: docURL))
 
-        // The executor's instant path is exercised directly with a Diff row.
         let executor = RealExecutor(
             workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory),
             flowID: "08-PolicyDiff",
@@ -285,21 +291,20 @@ struct CatFlowRunWiringTests {
         let row3 = doc.rows[2]   // Diff (1,2)
         #expect(row3.task == "Diff")
 
-        do {
-            _ = try await executor.execute(path: "3", row: row3, inputs: [
-                Asset(items: [Item(kind: .text, value: "a", path: nil, sourceText: nil)]),
-                Asset(items: [Item(kind: .text, value: "b", path: nil, sourceText: nil)]),
-            ])
-            Issue.record("Diff should refuse in this version")
-        } catch let error as FlowError {
-            let sentence = FlowErrorDisplay.sentence(for: error)
-            #expect(sentence.contains("Row 3"))
-            #expect(sentence.contains("Diff"))
-            #expect(!sentence.contains("produces file"))
-            #expect(!sentence.contains("Row Diff"))
-        } catch {
-            Issue.record("wrong error type: \(error)")
+        let out = try await executor.execute(path: "3", row: row3, inputs: [
+            Asset(items: [Item(kind: .text, value: "a\nb\nc", path: nil, sourceText: nil)]),
+            Asset(items: [Item(kind: .text, value: "a\nb2\nc", path: nil, sourceText: nil)]),
+        ])
+        // The bundled 08-PolicyDiff row 3 is `Diff format=unified` — it must produce a
+        // unified diff, not refuse.
+        let value = out.items.first?.value ?? ""
+        let expected = "--- \n+++ \n@@ -1,3 +1,3 @@\n a\n-b\n+b2\n c"
+        if value != expected {
+            let dest = FileManager.default.temporaryDirectory.appendingPathComponent("diff-dbg.txt")
+            try? value.write(to: dest, atomically: true, encoding: .utf8)
+            Issue.record("Diff output wrong: [\(value)]")
         }
+        #expect(value == expected)
     }
 
     private func makeMockContext() -> FlowRunner.RunContext {

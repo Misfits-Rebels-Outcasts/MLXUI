@@ -1,10 +1,11 @@
 import Foundation
 
-/// A minimal port of the Python `Settings` settings-string parser (`catalog/registry.py`):
+/// A minimal port of the Python `Settings` settings-string parser (`tools/_settings.py`):
 /// a `.cat` row's settings is a `;`-separated list of `key=value` tokens, where a token
-/// with no `=` is the **bare value** (`first_bare()`). Used by the instant tools to find
-/// their path (`memo.m4a`, `memo-tldr.wav`, …). Not the full resolver — enums/ranges/
-/// defaults stay in `CuratedManifest` (CFM-R2-2) and R2-6's dispatch.
+/// with no `=` is the **bare value** (`first_bare()`). A quoted value is unquoted and its
+/// `\n \t \" \\` escapes processed — exactly the Python's `_unquote` (so `separator="\n"`
+/// yields a real newline). Used by the instant tools to find their path (`memo.m4a`,
+/// `memo-tldr.wav`, …) and read settings like `lang=`, `voice=`, `separator=`.
 nonisolated struct FlowSettings {
     private let tokens: [(key: String, value: String)]
     private let bare: String?
@@ -17,18 +18,30 @@ nonisolated struct FlowSettings {
             guard !trimmed.isEmpty else { continue }
             if let eq = trimmed.firstIndex(of: "=") {
                 let key = trimmed[..<eq].trimmingCharacters(in: .whitespacesAndNewlines)
-                let value = trimmed[trimmed.index(after: eq)...]
+                let rawValue = trimmed[trimmed.index(after: eq)...]
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
                 if !key.isEmpty {
-                    tokens.append((key, value))
+                    tokens.append((key, Self.unquote(rawValue)))
                 }
             } else if bare == nil {
-                bare = trimmed
+                bare = Self.unquote(trimmed)
             }
         }
         self.tokens = tokens
         self.bare = bare
+    }
+
+    /// `_unquote` — strip one surrounding pair of double quotes and process
+    /// `\n \t \" \\` escapes (the Python's shared tokenizer rule).
+    static func unquote(_ raw: String) -> String {
+        var s = raw
+        if s.count >= 2, s.first == "\"", s.last == "\"" {
+            s = String(s.dropFirst().dropLast())
+        }
+        return s.replacingOccurrences(of: "\\n", with: "\n")
+            .replacingOccurrences(of: "\\t", with: "\t")
+            .replacingOccurrences(of: "\\\"", with: "\"")
+            .replacingOccurrences(of: "\\\\", with: "\\")
     }
 
     /// The value for `key`, or the bare (no-`=`) token, or nil.

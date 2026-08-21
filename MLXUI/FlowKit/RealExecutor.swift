@@ -56,12 +56,40 @@ nonisolated struct RealExecutor: FlowExecutor {
         case "Save Text":
             return try await SaveTextTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
                 .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Split":
+            return try await SplitTool(settings: row.settings ?? "")
+                .run(bundle(inputs)) { _ in }
+        case "Filter":
+            return try await FilterTool(settings: row.settings ?? "")
+                .run(bundle(inputs)) { _ in }
+        case "Dedupe":
+            return try await DedupeTool(settings: row.settings ?? "")
+                .run(bundle(inputs)) { _ in }
+        case "Count":
+            return try await CountTool(settings: row.settings ?? "")
+                .run(bundle(inputs)) { _ in }
+        case "Join Text":
+            return try await JoinTextTool(settings: row.settings ?? "")
+                .run(bundle(inputs)) { _ in }
+        case "Template":
+            return try await TemplateTool(settings: row.settings ?? "")
+                .run(bundle(inputs)) { _ in }
+        case "Diff":
+            // Diff consumes the bundled flat list across both refs (1,2).
+            return try await DiffTool(settings: row.settings ?? "")
+                .run(bundle(inputs)) { _ in }
         default:
-            // A catalog task with no Swift tool implementation yet (e.g. `Diff`, `Split`,
-            // `Template`). Name the task, not a misleading kind — the flow declines rather
-            // than approximating (standing rule 5).
+            // A catalog task with no Swift tool implementation yet. Name the task, not a
+            // misleading kind — the flow declines rather than approximating (rule 5).
             throw FlowError.unsupportedTask(row: path, task: desc.name)
         }
+    }
+
+    /// The §2 text tools consume the **bundled flat list** across all refs (the Python's
+    /// `_flat_texts(inputs)`) — `Template`'s `{1}`/`{2}` and `Diff`'s `(1,2)` read
+    /// positions across refs, not just the first input.
+    private func bundle(_ inputs: [Asset]) -> Asset {
+        Asset(items: inputs.flatMap { $0.items })
     }
 
     // MARK: - Model rows

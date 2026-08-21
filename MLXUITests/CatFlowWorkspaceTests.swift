@@ -122,10 +122,14 @@ struct CatFlowWorkspaceTests {
 
     // MARK: - GalleryLoader (uses the real bundle, which ships the three flows)
 
-    @Test func galleryLoaderFindsThreeFlows() throws {
+    @Test func galleryLoaderFindsAllFlows() throws {
         let metadata = GalleryLoader.loadMetadata()
-        #expect(metadata.count == 3)
-        #expect(metadata.map(\.flowID).sorted() == ["01-SpokenSummary", "08-PolicyDiff", "21-PhotoWebPrep"])
+        // R1 shipped three; R4 adds Log Triage, House Style, Voiceover Bed.
+        #expect(metadata.count == 6)
+        #expect(metadata.map(\.flowID).sorted() == [
+            "01-SpokenSummary", "08-PolicyDiff", "15-HouseStyle",
+            "21-PhotoWebPrep", "29-LogTriage", "65-VoiceoverBed",
+        ])
         let spoken = try #require(metadata.first { $0.flowID == "01-SpokenSummary" })
         #expect(spoken.title == "Spoken Summary")
         #expect(spoken.number == 1)

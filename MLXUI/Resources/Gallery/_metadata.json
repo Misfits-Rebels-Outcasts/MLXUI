@@ -20,6 +20,27 @@
       "filename": "21-PhotoWebPrep.cat",
       "category": "Images & Video",
       "description": "A folder of photos resized and watermarked, one corrupt file no longer killing the batch."
+    },
+    {
+      "number": 15,
+      "title": "House Style",
+      "filename": "15-HouseStyle.cat",
+      "category": "Writing & Content",
+      "description": "Rewrite a draft to match your style guide — with a diff so you can see exactly what the model touched."
+    },
+    {
+      "number": 29,
+      "title": "Log Triage",
+      "filename": "29-LogTriage.cat",
+      "category": "Data & Numbers",
+      "description": "Mostly instant rows: errors filtered and deduped in code, one model call to hypothesize root causes."
+    },
+    {
+      "number": 65,
+      "title": "A Voiceover Bed",
+      "filename": "65-VoiceoverBed.cat",
+      "category": "Diffusion & Generation",
+      "description": "`Generate Sound` (MusicGen) is `Speak`'s sibling — same signature, different job: music instead of a voice reading text."
     }
   ]
 }

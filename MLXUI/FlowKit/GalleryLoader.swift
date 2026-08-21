@@ -73,6 +73,10 @@ nonisolated enum GalleryLoader {
                     ("photo-01.png", "vacation/photo-01.png"),
                     ("photo-02.png", "vacation/photo-02.png"),
                     ("photo-03.png", "vacation/photo-03.png")]
+        case "29-LogTriage":
+            return [("app.log", "app.log")]
+        case "15-HouseStyle":
+            return [("draft.md", "draft.md"), ("style-guide.md", "style-guide.md")]
         default:
             return []
         }

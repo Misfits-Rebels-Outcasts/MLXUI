@@ -1,0 +1,12 @@
+catflow 0.8
+1. Read Text           app.log
+2. Split               by=lines
+3. Filter              regex="ERROR|FATAL"
+4. Dedupe
+5. Count               items
+
+6. Join Text   (4)     separator="\n"
+7. Summarize           Qwen3 8B; "Group these errors; likely root causes;
+                       what to check first"
+8. Template    (5,7)   "unique errors: {1}\n\n{2}"
+9. Save Text           log-triage.md
