@@ -95,6 +95,112 @@ nonisolated struct FlowDocument: Codable, Sendable, Equatable {
         }
     }
 
+    // MARK: - Parse-tree serialization (the `flow_to_dict` wire shape)
+
+    /// Emit this document as the Python `flow_to_dict` shape — `version`, `rows`, and
+    /// additively `flags`/`definitions`/`models` (only when non-empty). Used by the
+    /// R5-2 corpus test to compare the Swift parser's tree against the conformance
+    /// goldens. Key order follows `tests/conftest.py::flow_to_dict`.
+    func toParseTreeJSON() throws -> Data {
+        var d: [String: Any] = ["version": version.isEmpty ? NSNull() : version]
+        d["rows"] = try FlowDocument.parseTreeRows(rows, scope: Dictionary(uniqueKeysWithValues: rows.enumerated().map { ($1.id, $0 + 1) }))
+        if !flags.isEmpty {
+            d["flags"] = flags.map(\.rawValue)
+        }
+        if !definitions.isEmpty {
+            d["definitions"] = try Dictionary(uniqueKeysWithValues: definitions.map { ($0.key, try FlowDocument.parseTreeComposite($0.value)) })
+        }
+        if !models.isEmpty {
+            d["models"] = models
+        }
+        return try JSONSerialization.data(withJSONObject: d, options: [])
+    }
+
+    private static func parseTreeComposite(_ def: CompositeDef) throws -> [String: Any] {
+        let childScope = Dictionary(uniqueKeysWithValues: def.rows.enumerated().map { ($1.id, $0 + 1) })
+        return [
+            "name": def.name,
+            "signature": def.signature ?? NSNull(),
+            "params": def.params.map { ["name": $0.name, "kind": $0.kind ?? NSNull(), "default": $0.defaultValue ?? NSNull()] } as [[String: Any]],
+            "rows": try parseTreeRows(def.rows, scope: childScope),
+        ]
+    }
+
+    private static func parseTreeRows(_ rows: [Row], scope: [UUID: Int]) throws -> [[String: Any]] {
+        try rows.map { row in
+            let childScope = Dictionary(uniqueKeysWithValues: row.children.enumerated().map { ($1.id, $0 + 1) })
+            var d: [String: Any] = [
+                "task": row.task ?? NSNull(),
+                "model": row.model ?? NSNull(),
+                "settings": row.settings ?? NSNull(),
+                "refs": try row.refs.map { try parseTreeRef($0, scope: scope) },
+                "chain_break": row.chainBreak,
+                "block_kind": row.blockKind?.rawValue ?? NSNull(),
+                "block_name": row.blockName ?? NSNull(),
+                "children": try parseTreeRows(row.children, scope: childScope),
+            ]
+            if let clause = row.clause {
+                d["clause"] = try parseTreeClause(clause)
+            }
+            if let tags = row.tags, !tags.isEmpty {
+                d["tags"] = tags
+            }
+            if let visitsLeq = row.visitsLeq {
+                d["visits_leq"] = visitsLeq
+            }
+            if let onBudget = row.onBudget {
+                d["on_budget"] = onBudget
+            }
+            if let comment = row.comment {
+                d["comment"] = comment
+            }
+            if let declaredSignature = row.declaredSignature {
+                d["declared_signature"] = declaredSignature
+            }
+            if !row.leadingComments.isEmpty {
+                d["leading_comments"] = row.leadingComments
+            }
+            return d
+        }
+    }
+
+    private static func parseTreeRef(_ ref: Ref, scope: [UUID: Int]) throws -> [String: Any] {
+        switch ref {
+        case .rowRef(let id):
+            guard let number = scope[id] else {
+                throw FlowDocumentError.unresolvedReference(id: id)
+            }
+            return ["kind": "row", "number": number]
+        case .inputRef(let position):
+            return ["kind": "input", "position": position]
+        case .paramRef(let name):
+            return ["kind": "param", "name": name]
+        }
+    }
+
+    private static func parseTreeClause(_ clause: Clause) throws -> [String: Any] {
+        func target(_ t: ClauseTarget) -> [String: Any] {
+            switch t {
+            case .row(let number): return ["kind": "row", "number": number]
+            case .call(let number): return ["kind": "call", "number": number]
+            case .resume: return ["kind": "resume"]
+            case .done: return ["kind": "done"]
+            }
+        }
+        switch clause {
+        case .goto(let t):
+            return ["kind": "goto", "target": target(t)]
+        case .fork(let targets):
+            return ["kind": "fork", "targets": targets.map(target)]
+        case .decide(let edges):
+            return ["kind": "decide", "edges": edges.map { ["tag": $0.tag, "target": target($0.target)] }]
+        case .call(let number):
+            return ["kind": "call", "target": ["kind": "call", "number": number]]
+        case .resume:
+            return ["kind": "resume"]
+        }
+    }
+
     // MARK: Scope-aware conversion (Python numbers ↔ Swift ids)
 
     /// Mint ids for `rawRows`, resolving numeric refs against this scope's number→id map.
@@ -123,7 +229,9 @@ nonisolated struct FlowDocument: Codable, Sendable, Equatable {
                 declaredSignature: row.declaredSignature,
                 tags: row.tags,
                 visitsLeq: row.visitsLeq,
-                onBudget: row.onBudget
+                onBudget: row.onBudget,
+                comment: row.comment,
+                leadingComments: row.leadingComments.isEmpty ? nil : row.leadingComments
             )
         }
     }
@@ -148,6 +256,8 @@ nonisolated struct Row: Identifiable, Sendable, Equatable {
     var visitsLeq: Int?
     var onBudget: String?
     var declaredSignature: String?
+    var comment: String?
+    var leadingComments: [String]
 
     init(
         id: UUID = UUID(),
@@ -163,7 +273,9 @@ nonisolated struct Row: Identifiable, Sendable, Equatable {
         tags: [String]? = nil,
         visitsLeq: Int? = nil,
         onBudget: String? = nil,
-        declaredSignature: String? = nil
+        declaredSignature: String? = nil,
+        comment: String? = nil,
+        leadingComments: [String] = []
     ) {
         self.id = id
         self.task = task
@@ -179,6 +291,8 @@ nonisolated struct Row: Identifiable, Sendable, Equatable {
         self.visitsLeq = visitsLeq
         self.onBudget = onBudget
         self.declaredSignature = declaredSignature
+        self.comment = comment
+        self.leadingComments = leadingComments
     }
 }
 
@@ -378,6 +492,8 @@ private struct RawRow: Codable {
     var tags: [String]?
     var visitsLeq: Int?
     var onBudget: String?
+    var comment: String?
+    var leadingComments: [String]?
 
     enum CodingKeys: String, CodingKey {
         case task, model, settings, refs, children, tags
@@ -387,6 +503,8 @@ private struct RawRow: Codable {
         case declaredSignature = "declared_signature"
         case visitsLeq = "visits_leq"
         case onBudget = "on_budget"
+        case comment
+        case leadingComments = "leading_comments"
     }
 
     init(from decoder: Decoder) throws {
@@ -403,13 +521,15 @@ private struct RawRow: Codable {
         tags = try c.decodeIfPresent([String].self, forKey: .tags)
         visitsLeq = try c.decodeIfPresent(Int.self, forKey: .visitsLeq)
         onBudget = try c.decodeIfPresent(String.self, forKey: .onBudget)
+        comment = try c.decodeIfPresent(String.self, forKey: .comment)
+        leadingComments = try c.decodeIfPresent([String].self, forKey: .leadingComments)
     }
 
     init(
         task: String?, model: String?, settings: String?, refs: [RawRef],
         chainBreak: Bool, blockKind: String?, blockName: String?,
         children: [RawRow], declaredSignature: String?, tags: [String]?,
-        visitsLeq: Int?, onBudget: String?
+        visitsLeq: Int?, onBudget: String?, comment: String?, leadingComments: [String]?
     ) {
         self.task = task
         self.model = model
@@ -423,6 +543,8 @@ private struct RawRow: Codable {
         self.tags = tags
         self.visitsLeq = visitsLeq
         self.onBudget = onBudget
+        self.comment = comment
+        self.leadingComments = leadingComments
     }
 
     func encode(to encoder: Encoder) throws {
@@ -446,6 +568,12 @@ private struct RawRow: Codable {
         }
         if let onBudget {
             try c.encode(onBudget, forKey: .onBudget)
+        }
+        if let comment {
+            try c.encode(comment, forKey: .comment)
+        }
+        if let leadingComments {
+            try c.encode(leadingComments, forKey: .leadingComments)
         }
     }
 
@@ -485,7 +613,9 @@ private struct RawRow: Codable {
             tags: tags,
             visitsLeq: visitsLeq,
             onBudget: onBudget,
-            declaredSignature: declaredSignature
+            declaredSignature: declaredSignature,
+            comment: comment,
+            leadingComments: leadingComments ?? []
         )
     }
 }
