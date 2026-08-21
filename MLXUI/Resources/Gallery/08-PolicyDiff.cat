@@ -1,0 +1,9 @@
+catflow 0.8
+1. Read Text           policy-2025.md
+2. Read Text           policy-2026.md
+
+3. Diff        (1,2)   format=unified
+4. Summarize           Qwen3 8B; "What changed, in plain words, for
+                       employees? Group by topic."
+5. Save Text           policy-changes.md
+6. Save Text   (3)     policy-changes.diff

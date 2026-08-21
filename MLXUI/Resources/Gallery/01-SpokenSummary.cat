@@ -1,0 +1,7 @@
+catflow 0.8
+1. Read Audio         memo.m4a
+2. Transcribe         Whisper Large v3; lang=en
+3. Summarize          Qwen3 8B; "TL;DR in 3 bullets"
+4. Speak              Kokoro 82M; af_heart
+5. Save Audio         memo-tldr.wav
+6. Save Text    (2)   memo-transcript.txt

@@ -78,6 +78,13 @@ nonisolated struct ModelStore: Sendable {
         baseDirectory.appendingPathComponent("agent-index", isDirectory: true)
     }
 
+    /// Working directory for CAT Flow gallery flows (`…/flows/`). Each flow gets its own
+    /// subdirectory here; every unqualified path in a `.cat` resolves against that flow
+    /// directory (`FlowWorkspace.resolve`). See `DelegateMergeBacklog.md` standing rule 3.
+    var flowsDirectory: URL {
+        baseDirectory.appendingPathComponent("flows", isDirectory: true)
+    }
+
     // MARK: - Per-model
 
     /// Where `InstallManager` places a model's files. `id` is the catalog id with

@@ -1,0 +1,25 @@
+{
+  "entries": [
+    {
+      "number": 1,
+      "title": "Spoken Summary",
+      "filename": "01-SpokenSummary.cat",
+      "category": "Voice & Meetings",
+      "description": "The founding flow: a voice memo in, a spoken TL;DR out, transcript saved on the side."
+    },
+    {
+      "number": 8,
+      "title": "Policy Diff Brief",
+      "filename": "08-PolicyDiff.cat",
+      "category": "Documents & Paperwork",
+      "description": "Two versions of a document, the mechanical diff, and a human-readable \"what changed for you.\""
+    },
+    {
+      "number": 21,
+      "title": "Photos for the Web",
+      "filename": "21-PhotoWebPrep.cat",
+      "category": "Images & Video",
+      "description": "A folder of photos resized and watermarked, one corrupt file no longer killing the batch."
+    }
+  ]
+}
