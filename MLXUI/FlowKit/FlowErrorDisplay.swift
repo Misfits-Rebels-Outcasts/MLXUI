@@ -49,6 +49,13 @@ nonisolated enum FlowErrorDisplay {
             return String(format: "This model needs %.2f GB of RAM but this Mac has %.2f GB available.",
                           required, available)
         case .engineFailure(let stage, let underlying):
+            // Name the stage and the fix; surface the underlying cause when it has a real
+            // description (the bridge to the engine's own error voice).
+            let cause = (underlying as? CustomStringConvertible)?.description
+                ?? (underlying as NSError).localizedDescription
+            if !cause.isEmpty && !cause.contains("couldn't be completed") {
+                return "The \(stage) engine failed — \(cause). Check the model files and try again."
+            }
             return "The \(stage) engine failed — check the model files and try again."
         }
     }

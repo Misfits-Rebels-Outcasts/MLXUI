@@ -83,6 +83,37 @@ struct CatFlowRunWiringTests {
                 .contains("6.75"))
         #expect(FlowErrorDisplay.sentence(for: StageError.kindMismatch(expected: .text, got: .audio))
                 .contains("text"))
+        // A real engine failure surfaces the stage name + the underlying cause, never the
+        // raw NSError "MLXUI.StageError error 4" text.
+        let sentence = FlowErrorDisplay.sentence(
+            for: StageError.engineFailure(stage: "Kokoro TTS", underlying: CocoaError(.fileNoSuchFile)))
+        #expect(sentence.contains("Kokoro TTS"))
+        #expect(!sentence.contains("couldn't be completed"))
+    }
+
+    // MARK: - A StageError from the executor must route through FlowErrorDisplay
+
+    @Test func stageErrorFromExecutorShowsRealSentenceNotLocalizedDescription() async throws {
+        // A stub executor that throws a real StageError (as the Kokoro engine does).
+        let failing = FailingExecutor()
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-stageerr-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        let workspace = FlowWorkspace(root: base.appendingPathComponent("flows"))
+        let context = FlowRunner.RunContext(flowID: "t", workspace: workspace,
+                                            blobDirectory: base.appendingPathComponent("blobs"),
+                                            executor: failing)
+
+        let doc = FlowDocument(version: "0.8", rows: [Row(task: "Speak", model: "Kokoro 82M")])
+        let session = FlowRunSession()
+        session.prepareInstall(FlowPreflight.Result())
+        session.start(doc: doc, runner: FlowRunner(), context: context)
+        try? await Task.sleep(for: .milliseconds(500))
+
+        let sentence = session.errorSentence(for: doc.rows[0].id)
+        #expect(sentence != nil)
+        #expect(sentence?.contains("Kokoro") == true)
+        #expect(sentence?.contains("couldn't be completed") == false)
     }
 
     // MARK: - canRun gating
@@ -153,6 +184,14 @@ struct CatFlowRunWiringTests {
         let workspace = FlowWorkspace(root: base.appendingPathComponent("flows"))
         return FlowRunner.RunContext(flowID: "test", workspace: workspace,
                                      blobDirectory: blob, executor: MockExecutor(blobDirectory: blob))
+    }
+}
+
+/// A stub executor that throws a real `StageError.engineFailure` — the class of error the
+/// Kokoro engine wraps — so the runner's message routing is observable.
+private struct FailingExecutor: FlowExecutor {
+    func execute(path: String, row: Row, inputs: [Asset]) async throws -> Asset {
+        throw StageError.engineFailure(stage: "Kokoro TTS", underlying: CocoaError(.fileNoSuchFile))
     }
 }
 

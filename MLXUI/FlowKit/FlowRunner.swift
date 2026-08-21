@@ -169,10 +169,12 @@ nonisolated struct FlowRunner {
                     continuation.yield(.failed(rowID: row.id, error))
                     return
                 } catch {
+                    // A non-FlowError (e.g. a `StageError` from an engine). Route it through
+                    // the exhaustive `FlowErrorDisplay` mapping so the user sees the real
+                    // sentence, never `error.localizedDescription` ("MLXUI.StageError error 4").
                     continuation.yield(.failed(rowID: row.id,
                                                FlowError.stageFailure(row: String(i + 1),
-                                                                      message: (error as? CustomStringConvertible)?.description
-                                                                        ?? error.localizedDescription)))
+                                                                      message: FlowErrorDisplay.sentence(for: error))))
                     return
                 }
 
