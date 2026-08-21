@@ -1,0 +1,6 @@
+Combine the candidate texts into one, following the instruction.
+Where candidates disagree, prefer the majority and add a note "(sources
+disagree: …)".
+
+Instruction: {settings}
+Candidates:  {asset list}

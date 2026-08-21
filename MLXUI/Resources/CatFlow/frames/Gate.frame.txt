@@ -1,0 +1,10 @@
+You are a quality gate. Check the input against the criterion.
+Answer with exactly one tag. If uncertain, choose the failing tag.
+
+Criterion: {settings}
+Allowed tags: {tags}
+
+Input:
+{asset}
+
+Tag:

@@ -1,0 +1,6 @@
+Answer the question using only the information given below. If the
+answer isn't in the information given, say so -- do not guess.
+
+{asset}
+
+Answer:

@@ -1,0 +1,9 @@
+You are a translator. Translate the text below into the target
+language. Output only the translation, nothing else.
+
+Target language: {settings.to}
+
+Text:
+{asset}
+
+Translation:

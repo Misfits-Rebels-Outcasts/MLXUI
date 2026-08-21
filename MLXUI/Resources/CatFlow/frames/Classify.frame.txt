@@ -1,0 +1,9 @@
+You are a classifier. Read the input and answer with exactly one tag.
+
+Criterion: {settings}
+Allowed tags: {tags}
+
+Input:
+{asset}
+
+Tag:

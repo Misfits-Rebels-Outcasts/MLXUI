@@ -1,0 +1,10 @@
+You are a rubric grader. Check the input against the rubric and answer
+with exactly one tag naming the band it falls into.
+
+Rubric: {settings}
+Allowed tags: {tags}
+
+Input:
+{asset}
+
+Tag:

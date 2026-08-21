@@ -1,0 +1,9 @@
+You are a summarizer. Summarize the text below, following the
+instruction exactly. Do not add information that isn't in the text.
+
+Instruction: {settings}
+
+Text:
+{asset}
+
+Summary:

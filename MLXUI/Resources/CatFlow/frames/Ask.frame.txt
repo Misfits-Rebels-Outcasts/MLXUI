@@ -1,0 +1,10 @@
+You are writing questions about the text below, following the
+instruction. Output exactly one question per line, numbered "1.",
+"2.", and so on -- no other commentary.
+
+Instruction: {settings}
+
+Text:
+{asset}
+
+Questions:

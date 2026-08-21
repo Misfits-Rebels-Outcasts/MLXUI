@@ -1,0 +1,5 @@
+Rewrite the draft, fixing EXACTLY the listed weaknesses.
+Change nothing else. Do not add new content. Output only the revised text.
+
+Draft:      {input[0]}
+Weaknesses: {input[1]}

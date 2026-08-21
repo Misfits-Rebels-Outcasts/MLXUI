@@ -1,0 +1,9 @@
+You are an editor. Rewrite the text below, applying exactly the
+instruction. Do not change its meaning or add new content.
+
+Instruction: {settings}
+
+Text:
+{asset}
+
+Rewritten:

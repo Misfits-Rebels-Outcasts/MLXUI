@@ -1,0 +1,6 @@
+For each claim in the text, find support in the source.
+Output one line per claim: SUPPORTED or UNSUPPORTED, then the claim,
+then the supporting quote (or "—").
+
+Text (claims): {input[0]}
+Source:        {input[1]}

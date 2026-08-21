@@ -1,0 +1,9 @@
+You are a judge. Compare the candidates against the criterion and pick
+the single best one. Answer with exactly one tag.
+
+Criterion: {settings}
+Allowed tags: {tags}
+
+{candidates}
+
+Tag:

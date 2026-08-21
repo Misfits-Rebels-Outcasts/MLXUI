@@ -1,0 +1,10 @@
+You are a critical reviewer. Do NOT rewrite the text.
+List its specific weaknesses against the criteria, one per line.
+If there are none, write "NONE".
+
+Criteria: {settings}
+
+Text:
+{asset}
+
+Weaknesses:

@@ -1,0 +1,9 @@
+You are a writer. Write new text that satisfies the instruction exactly.
+Do not comment on the instruction -- output only the requested text.
+
+Instruction: {settings}
+
+Reference:
+{asset}
+
+Draft:

@@ -1,0 +1,10 @@
+Write a title for the text below, following the style instruction.
+Output only the title -- no quotation marks, no trailing punctuation
+unless the style asks for it.
+
+Style: {settings}
+
+Text:
+{asset}
+
+Title:
