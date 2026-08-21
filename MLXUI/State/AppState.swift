@@ -1,5 +1,6 @@
 import SwiftUI
 import Observation
+import UniformTypeIdentifiers
 
 @Observable
 final class AppState {
@@ -57,6 +58,13 @@ final class AppState {
 
     // Settings sheet
     var showSettings = false
+
+    // R5-5: a `.cat` file the user opened from disk. Non-nil shows `OpenedFlowView`
+    // in the Flows detail area. Read-only — parsed + validated, never written.
+    var openedCatFlow: OpenedCatFlow?
+    var showOpenCatPanel = false
+    /// Non-nil surfaces an Open .cat… failure (unreadable / access denied / invalid).
+    var openCatFlowError: String?
 
     init() {
         filterRAMLimitGB = SystemInfo.detect().totalRAMGB
@@ -308,6 +316,68 @@ final class AppState {
         if let raw = defaults.string(forKey: "sortOrder"),
            let order = SortOrder(rawValue: raw) {
             sortOrder = order
+        }
+    }
+
+    // ── R5-5: Open .cat… ──────────────────────────────────────────────────────────
+
+    /// Parse + validate a `.cat` file from disk and stage it as `openedCatFlow`.
+    /// `bookmarkData` (if any) is kept so a later launch can re-grant access; the file's
+    /// contents are captured here, so the security-scoped access can be released after.
+    /// Throws `OpenCatFlowError` on any failure — the caller surfaces `description`.
+    func openCatFlow(at url: URL, bookmarkData: Data? = nil) throws {
+        let rawText: String
+        do {
+            rawText = try String(contentsOf: url, encoding: .utf8)
+        } catch {
+            throw OpenCatFlowError.unreadable(path: url.path, reason: error.localizedDescription)
+        }
+        let parsed: ParsedFlow
+        do {
+            parsed = try CatParser.parseForValidation(rawText)
+        } catch {
+            throw OpenCatFlowError.parseFailed(path: url.path, message: String(describing: error))
+        }
+        openedCatFlow = OpenedCatFlow(
+            url: url,
+            displayName: url.deletingPathExtension().lastPathComponent,
+            rawText: rawText,
+            parsed: parsed,
+            issues: FlowValidator.checkFlow(parsed),
+            bookmarkData: bookmarkData
+        )
+    }
+
+    /// Present the read-only Open panel, then parse + validate the picked file.
+    /// A security-scoped bookmark is created so the choice survives a relaunch.
+    func presentOpenCatPanel() {
+        let panel = NSOpenPanel()
+        panel.title = "Open a CAT Flow"
+        panel.prompt = "Open"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.plainText, .data]
+        panel.allowedFileTypes = ["cat", "catpipeline", "txt"]
+        panel.begin { [weak self] response in
+            guard response == .OK, let self, let url = panel.url else { return }
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+            var bookmark: Data?
+            do {
+                bookmark = try url.bookmarkData(
+                    options: .withSecurityScope,
+                    includingResourceValuesForKeys: nil,
+                    relativeTo: nil
+                )
+            } catch {
+                bookmark = nil  // non-fatal: the file is still readable this session
+            }
+            do {
+                try self.openCatFlow(at: url, bookmarkData: bookmark)
+            } catch {
+                self.openCatFlowError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+            }
         }
     }
 }

@@ -38,6 +38,9 @@ struct MLXUIApp: App {
                                     // after opening one "does nothing" (CFM-QR3 finding).
                                     FlowListView(flowID: flowID)
                                         .id(flowID)
+                                } else if let opened = appState.openedCatFlow {
+                                    OpenedFlowView(opened: opened)
+                                        .id(opened.url.path)
                                 } else {
                                     BrowseView()
                                 }
@@ -80,13 +83,26 @@ struct MLXUIApp: App {
                 SettingsView()
                     .environment(appState)
             }
+            .alert("Couldn't Open This Flow", isPresented: Binding(
+                get: { appState.openCatFlowError != nil },
+                set: { if !$0 { appState.openCatFlowError = nil } }
+            )) {
+                Button("OK", role: .cancel) { appState.openCatFlowError = nil }
+            } message: {
+                Text(appState.openCatFlowError ?? "")
+            }
             .onChange(of: appState.filterSource) { _, _ in appState.saveFilters() }
             .onChange(of: appState.sortOrder) { _, _ in appState.saveFilters() }
         }
         .windowResizability(.contentSize)
         .defaultSize(width: 1400, height: 900)
         .commands {
-            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .newItem) {
+                Button("Open .cat…") {
+                    appState.presentOpenCatPanel()
+                }
+                .keyboardShortcut("o", modifiers: .command)
+            }
             CommandGroup(replacing: .appSettings) {
                 Button("Settings…") {
                     appState.showSettings = true
