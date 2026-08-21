@@ -1,0 +1,20 @@
+{
+  "id": "mlx-community/whisper-large-v3-mlx",
+  "display": "Whisper Large v3",
+  "kind": "local",
+  "engine": "mlx-whisper",
+  "tasks": [
+    "Transcribe"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 3.08,
+    "ram_gb": 4.6
+  },
+  "source": "https://huggingface.co/mlx-community/whisper-large-v3-mlx",
+  "checksum": "sha256:7a20f07cc888a46228f80e5f8dde14f0a323b5d61c4ddc7438a12ad894c9b659",
+  "license": "MIT",
+  "manifest_version": 1,
+  "pinned": true
+}
