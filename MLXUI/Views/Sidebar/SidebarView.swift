@@ -25,6 +25,15 @@ struct SidebarView: View {
                 }
             }
 
+            if !AppState.hideFlows && !appState.galleryEntries.isEmpty {
+                Section("Flows") {
+                    ForEach(appState.galleryEntries) { flow in
+                        Label(flow.title, systemImage: "flowchart")
+                            .tag(SidebarItem.flows(flow.flowID))
+                    }
+                }
+            }
+
             Section("Installed") {
                 if appState.installedModelIDs.isEmpty {
                     Label("None installed", systemImage: "tray")

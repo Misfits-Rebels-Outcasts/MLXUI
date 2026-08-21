@@ -30,6 +30,8 @@ struct MLXUIApp: App {
                             Group {
                                 if appState.selectedSection.isHome {
                                     HomeView()
+                                } else if case .flows(let flowID) = appState.selectedSection {
+                                    FlowListView(flowID: flowID)
                                 } else {
                                     BrowseView()
                                 }

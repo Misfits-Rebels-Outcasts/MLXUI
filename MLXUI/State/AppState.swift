@@ -8,6 +8,14 @@ final class AppState {
     /// under it, e.g. WAN 2.1) from the catalog UI. Flip back to `false` to restore.
     static let hideVideoGeneration = false
 
+    /// Set to `true` to hide the entire "Flows" section (sidebar, gallery, run views).
+    /// When `true`, `galleryEntries` is empty and the section does not render — the app
+    /// returns to its pre-Flows behavior exactly. Mirrors `hideVideoGeneration`.
+    static let hideFlows = false
+
+    /// The bundled gallery flows, in gallery order. Empty when `hideFlows` is true.
+    var galleryEntries: [GalleryFlowMetadata] = []
+
     var browserData: BrowserData?
     var loadError: String?
     var systemInfo = SystemInfo.detect()
@@ -55,6 +63,9 @@ final class AppState {
         installedURL = ModelStore.shared.installedRegistryURL
         loadInstalledModels()
         for module in installedModules { module.register(into: registry) }
+        if !Self.hideFlows {
+            galleryEntries = GalleryLoader.loadMetadata()
+        }
     }
 
     // ── Visible sidebar sections ──
@@ -306,6 +317,7 @@ final class AppState {
 enum SidebarItem: Hashable {
     case home
     case browse(String)
+    case flows(String)
     var isHome: Bool { if case .home = self { return true }; return false }
 }
 
