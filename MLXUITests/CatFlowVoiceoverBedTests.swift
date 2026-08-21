@@ -12,8 +12,8 @@ struct CatFlowVoiceoverBedTests {
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let url = repoRoot.appendingPathComponent("MLXUI/Resources/Gallery/\(flowID).parse.json")
-        return try JSONDecoder().decode(FlowDocument.self, from: Data(contentsOf: url))
+        let url = repoRoot.appendingPathComponent("MLXUI/Resources/Gallery/\(flowID).cat")
+        return try CatParser.parse(try String(contentsOf: url, encoding: .utf8))
     }
 
     private func loadCatalog() throws -> [ModelEntry] {

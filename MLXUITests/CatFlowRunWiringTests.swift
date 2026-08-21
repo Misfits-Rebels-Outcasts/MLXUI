@@ -12,8 +12,8 @@ struct CatFlowRunWiringTests {
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let url = repoRoot.appendingPathComponent("MLXUI/Resources/Gallery/\(flowID).parse.json")
-        return try JSONDecoder().decode(FlowDocument.self, from: Data(contentsOf: url))
+        let url = repoRoot.appendingPathComponent("MLXUI/Resources/Gallery/\(flowID).cat")
+        return try CatParser.parse(try String(contentsOf: url, encoding: .utf8))
     }
 
     // MARK: - FlowRunSession drives dots from events
@@ -278,8 +278,8 @@ struct CatFlowRunWiringTests {
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let docURL = repoRoot.appendingPathComponent("MLXUI/Resources/Gallery/08-PolicyDiff.parse.json")
-        let doc = try JSONDecoder().decode(FlowDocument.self, from: Data(contentsOf: docURL))
+        let docURL = repoRoot.appendingPathComponent("MLXUI/Resources/Gallery/08-PolicyDiff.cat")
+        let doc = try CatParser.parse(try String(contentsOf: docURL, encoding: .utf8))
 
         let executor = RealExecutor(
             workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory),

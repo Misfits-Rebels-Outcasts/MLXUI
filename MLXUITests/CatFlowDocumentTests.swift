@@ -2,31 +2,34 @@ import Testing
 import Foundation
 @testable import MLXUI
 
-/// Covers CFM-R1-3: `FlowDocument` decoding from the Python parse-tree JSON. The JSON is
-/// the wire shape (`tests/conftest.py::flow_to_dict`); the Swift model mints a UUID per
-/// row and resolves numeric refs to ids **during decode**, so no number-shaped reference
-/// survives. See `RSI/DelegateMergeBacklog.md` CFM-R1-3.
+/// Covers CFM-R1-3 / the R5 parser retirement: `FlowDocument` construction from the
+/// parse tree. The pre-parsed-JSON resources are retired — the app now parses each
+/// gallery `.cat` at runtime via `CatParser` (pinned against the Python corpus by
+/// `CatFlowParserTests`), which mints a UUID per row and resolves numeric refs to ids
+/// **during parse**, so no number-shaped reference survives. The JSON decode/encode
+/// round-trip and the unresolved-reference failure are covered here against inline JSON
+/// (the wire shape `tests/conftest.py::flow_to_dict`).
 struct CatFlowDocumentTests {
 
     // MARK: - Fixtures (loaded from the repo, mirroring how the app loads browser.json)
 
-    private func loadParseJSON(_ flowID: String) throws -> Data {
+    private func loadCatText(_ flowID: String) throws -> String {
         let filePath = #filePath                      // .../MLXUITests/CatFlowDocumentTests.swift
         let repoRoot = URL(fileURLWithPath: filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let url = repoRoot.appendingPathComponent("MLXUI/Resources/Gallery/\(flowID).parse.json")
-        return try Data(contentsOf: url)
+        let url = repoRoot.appendingPathComponent("MLXUI/Resources/Gallery/\(flowID).cat")
+        return try String(contentsOf: url, encoding: .utf8)
     }
 
-    private func decode(_ flowID: String) throws -> FlowDocument {
-        try JSONDecoder().decode(FlowDocument.self, from: loadParseJSON(flowID))
+    private func parse(_ flowID: String) throws -> FlowDocument {
+        try CatParser.parse(try loadCatText(flowID))
     }
 
-    // MARK: - All three bundled flows decode
+    // MARK: - All bundled flows parse
 
-    @Test func spokenSummaryDecodes() throws {
-        let doc = try decode("01-SpokenSummary")
+    @Test func spokenSummaryParses() throws {
+        let doc = try parse("01-SpokenSummary")
         #expect(doc.version == "0.8")
         #expect(doc.rows.count == 6)
         #expect(doc.rows.map(\.task) == [
@@ -39,8 +42,8 @@ struct CatFlowDocumentTests {
         #expect(row6Refs == [.rowRef(row2.id)])
     }
 
-    @Test func policyDiffDecodesWithChainBreak() throws {
-        let doc = try decode("08-PolicyDiff")
+    @Test func policyDiffParsesWithChainBreak() throws {
+        let doc = try parse("08-PolicyDiff")
         #expect(doc.rows.count == 6)
         #expect(doc.rows.map(\.task) == [
             "Read Text", "Read Text", "Diff", "Summarize", "Save Text", "Save Text",
@@ -56,8 +59,8 @@ struct CatFlowDocumentTests {
         #expect(doc.rows[5].refs == [.rowRef(row3.id)])
     }
 
-    @Test func photoWebPrepDecodesWithBlockChildren() throws {
-        let doc = try decode("21-PhotoWebPrep")
+    @Test func photoWebPrepParsesWithBlockChildren() throws {
+        let doc = try parse("21-PhotoWebPrep")
         #expect(doc.rows.count == 3)
         #expect(doc.rows.map(\.task) == ["Read Images", nil, "Save Images"])
         let each = try #require(doc.rows.dropFirst(1).first)
@@ -78,7 +81,7 @@ struct CatFlowDocumentTests {
 
     @Test func encodeDecodeRoundTripIsIdentity() throws {
         for flowID in ["01-SpokenSummary", "08-PolicyDiff", "21-PhotoWebPrep"] {
-            let original = try decode(flowID)
+            let original = try parse(flowID)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]   // canonical bytes across encodes
             let data = try encoder.encode(original)
@@ -109,8 +112,8 @@ struct CatFlowDocumentTests {
     @Test func rowIDsAreReMintedOnEachDecode() throws {
         // UUIDs are minted at decode time — two decodes of the same file differ in ids,
         // which is what makes references id-based rather than number-based.
-        let a = try decode("01-SpokenSummary")
-        let b = try decode("01-SpokenSummary")
+        let a = try parse("01-SpokenSummary")
+        let b = try parse("01-SpokenSummary")
         #expect(a.rows.first?.id != b.rows.first?.id)
     }
 

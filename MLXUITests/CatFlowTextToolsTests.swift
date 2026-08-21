@@ -109,8 +109,8 @@ struct CatFlowTextToolsTests {
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let url = repoRoot.appendingPathComponent("MLXUI/Resources/Gallery/29-LogTriage.parse.json")
-        let doc = try JSONDecoder().decode(FlowDocument.self, from: Data(contentsOf: url))
+        let url = repoRoot.appendingPathComponent("MLXUI/Resources/Gallery/29-LogTriage.cat")
+        let doc = try CatParser.parse(try String(contentsOf: url, encoding: .utf8))
         #expect(doc.rows.count == 9)
 
         // Runnable: all instant text tools + one model row, no blocks/clauses.
@@ -141,8 +141,8 @@ struct CatFlowTextToolsTests {
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let url = repoRoot.appendingPathComponent("MLXUI/Resources/Gallery/29-LogTriage.parse.json")
-        let doc = try JSONDecoder().decode(FlowDocument.self, from: Data(contentsOf: url))
+        let url = repoRoot.appendingPathComponent("MLXUI/Resources/Gallery/29-LogTriage.cat")
+        let doc = try CatParser.parse(try String(contentsOf: url, encoding: .utf8))
 
         // Row 6 (Join Text) starts a new chain.
         #expect(doc.rows[5].chainBreak == true)

@@ -47,12 +47,13 @@ nonisolated enum GalleryLoader {
         return decoded.entries
     }
 
-    /// Load the parsed `FlowDocument` for a flow id.
+    /// Load the parsed `FlowDocument` for a flow id — **parsed at runtime from the bundled
+    /// `.cat` text** (R5's parser retirement: the pre-parsed `*.parse.json` resources are
+    /// gone; the Swift `CatParser` reproduces the Python trees byte-for-byte, pinned by
+    /// `CatFlowParserTests`).
     static func loadDocument(flowID: String) throws -> FlowDocument {
-        guard let url = Bundle.main.url(forResource: flowID, withExtension: "parse.json") else {
-            throw GalleryError.missingResource(flowID, kind: "parse.json")
-        }
-        return try JSONDecoder().decode(FlowDocument.self, from: Data(contentsOf: url))
+        let raw = try rawCatText(flowID: flowID)
+        return try CatParser.parse(raw)
     }
 
     /// The raw `.cat` file text, verbatim — what the user reads in the disclosure.
