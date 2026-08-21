@@ -110,6 +110,41 @@ struct CatFlowRunWiringTests {
         #expect(session.runDisabledReason?.contains("Missing Model") == true)
     }
 
+    // MARK: - Frame-backed model rows resolve the frame (regression: Summarize.frame.txt)
+
+    @Test func frameBackedRowResolvesTheFrame() async throws {
+        // A Summarize row through the RealExecutor must render its frame — the frame file is
+        // bundled and refName "frames/Summarize.frame.txt" must derive the "Summarize" name.
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let catalogURL = repoRoot.appendingPathComponent("MLXUI/Resources/browser.json")
+        let catalog = try JSONDecoder().decode(BrowserData.self, from: Data(contentsOf: catalogURL))
+            .domains.flatMap { $0.allModels }
+        let qwen = try #require(catalog.first { $0.hfModelId == "mlx-community/Qwen3-8B-4bit" })
+
+        // Stub stage that echoes the prompt it was given (so the test sees the rendered frame).
+        let stub = EchoPromptStage()
+        let executor = RealExecutor(
+            workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory),
+            flowID: "01-SpokenSummary",
+            blobDirectory: FileManager.default.temporaryDirectory,
+            makeModelStage: { model, _ in
+                stub
+            },
+            installedModelIDs: [qwen.id],
+            catalog: catalog)
+
+        let row = Row(task: "Summarize", model: "Qwen3 8B", settings: "\"TL;DR in 3 bullets\"")
+        let input = Asset(items: [Item(kind: .text, value: "the transcript", path: nil, sourceText: nil)])
+        let out = try await executor.execute(path: "3", row: row, inputs: [input])
+        let value = out.items.first?.value ?? ""
+        // The stub echoed the rendered frame prompt: it must contain the frame's instruction
+        // and the substituted settings — proving the frame loaded and rendered, not failed.
+        #expect(value.contains("summarizer"))
+        #expect(value.contains("TL;DR in 3 bullets"))
+    }
+
     private func makeMockContext() -> FlowRunner.RunContext {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("catflow-wire-\(UUID().uuidString)")
@@ -118,5 +153,19 @@ struct CatFlowRunWiringTests {
         let workspace = FlowWorkspace(root: base.appendingPathComponent("flows"))
         return FlowRunner.RunContext(flowID: "test", workspace: workspace,
                                      blobDirectory: blob, executor: MockExecutor(blobDirectory: blob))
+    }
+}
+
+/// A stub `text → text` PipelineStage that echoes its input, so a frame-backed row's
+/// rendered prompt is observable.
+private struct EchoPromptStage: PipelineStage {
+    let id = "stub.echo"
+    let name = "Echo Prompt"
+    var accepts: MediaKind { .text }
+    var produces: MediaKind { .text }
+    func run(_ input: Media, progress: @Sendable @escaping (Double) -> Void) async throws -> Media {
+        try require(input, .text)
+        progress(1.0)
+        return input
     }
 }

@@ -82,9 +82,11 @@ nonisolated struct RealExecutor: FlowExecutor {
             guard let input = inputs.first else {
                 throw FlowError.badInputCardinality(row: "\(path)", expected: "a text input", got: 0)
             }
-            let frameName = (desc.refName as NSString)
-                .deletingPathExtension
+            // refName is "frames/Summarize.frame.txt" — derive the bundle name "Summarize"
+            // (loadFrame appends ".frame.txt").
+            let frameName = desc.refName
                 .replacingOccurrences(of: "frames/", with: "")
+                .replacingOccurrences(of: ".frame.txt", with: "")
             let frame = try FrameRenderer.loadFrame(named: frameName)
             let prompt = try FrameRenderer.render(frameText: frame, settings: row.settings, asset: input)
             let stage = try await makeModelStage(modelEntry, .default)
