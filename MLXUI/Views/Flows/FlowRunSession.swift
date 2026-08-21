@@ -13,6 +13,12 @@ final class FlowRunSession {
     }
 
     private(set) var rowStates: [UUID: RowState] = [:]
+    /// The last finished output per row id (the inspector's content source).
+    private(set) var outputs: [UUID: Asset] = [:]
+    /// A `CatalogBridge` substitution note per row id (CFM-R2-2 rule 3), or absent.
+    private(set) var substitutionNotes: [UUID: String] = [:]
+    /// The row the inspector pane is bound to (nil = nothing selected).
+    var selectedRowID: UUID?
     var isRunning = false
     var errorSentence: String?
     /// The preflight result that gates Run (models to install / blocked reason).
@@ -73,7 +79,8 @@ final class FlowRunSession {
             setStatus(.running, for: id)
         case .progress(let id, _):
             if rowStates[id]?.status != .failed { setStatus(.running, for: id) }
-        case .finished(let id, _):
+        case .finished(let id, let asset):
+            outputs[id] = asset
             setStatus(.succeeded, for: id)
         case .failed(let id, let error):
             rowStates[id]?.status = .failed
@@ -101,13 +108,40 @@ final class FlowRunSession {
 
     // MARK: - Install
 
-    /// Register the preflight result and decide whether an install sheet must be shown.
-    func prepareInstall(_ result: FlowPreflight.Result) {
+    /// Register the preflight result, compute substitution notes, and decide whether an
+    /// install sheet must be shown.
+    func prepareInstall(_ result: FlowPreflight.Result, doc: FlowDocument? = nil) {
         preflight = result
+        substitutionNotes = Self.substitutionNotes(result, doc: doc)
         if !result.toDownload.isEmpty && !installPrompted {
             installPrompted = true
             showInstallSheet = true
         }
+    }
+
+    /// The `CatalogBridge` substitution note per row id (CFM-R2-2 rule 3): `.sameFamily` /
+    /// `.substitute` rows get "running <display> as <candidate>" so the substitution is
+    /// surfaced, never hidden. `.same`/`.requantized` run silently.
+    private static func substitutionNotes(_ result: FlowPreflight.Result,
+                                          doc: FlowDocument?) -> [UUID: String] {
+        var notes: [UUID: String] = [:]
+        guard let doc else { return notes }
+        let needsByDisplay = Dictionary(result.needs.map { ($0.display, $0) }, uniquingKeysWith: { a, _ in a })
+        for row in allRows(doc.rows) {
+            guard let display = row.model,
+                  let need = needsByDisplay[display],
+                  let equivalence = need.equivalence,
+                  let model = need.model,
+                  let note = equivalence.note(display: display, substitutedID: model.hfModelId) else {
+                continue
+            }
+            notes[row.id] = note
+        }
+        return notes
+    }
+
+    private static func allRows(_ rows: [Row]) -> [Row] {
+        rows.flatMap { [$0] + allRows($0.children) }
     }
 }
 

@@ -141,6 +141,60 @@ struct CatFlowRunWiringTests {
         #expect(session.runDisabledReason?.contains("Missing Model") == true)
     }
 
+    // MARK: - Inspector wiring (CFM-R3-3)
+
+    @Test func finishedEventsStoreOutputsForTheInspector() async throws {
+        let doc = try decode("01-SpokenSummary")
+        let session = FlowRunSession()
+        session.prepareInstall(FlowPreflight.Result())
+        session.start(doc: doc, runner: FlowRunner(), context: makeMockContext())
+        try? await Task.sleep(for: .milliseconds(800))
+
+        // Every succeeded row has a stored output the inspector can show.
+        for row in doc.rows {
+            #expect(session.outputs[row.id] != nil, "row \(row.task ?? "?") output should be inspectable")
+        }
+    }
+
+    @Test func substitutionNoteSurfacesForSubstituteRows() throws {
+        // Build a preflight whose MusicGen row (.substitute) resolved, and a doc with a
+        // "Generate Sound" row naming it — the note must be attached to that row's id.
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let catalogURL = repoRoot.appendingPathComponent("MLXUI/Resources/browser.json")
+        let catalog = try JSONDecoder().decode(BrowserData.self, from: Data(contentsOf: catalogURL))
+            .domains.flatMap { $0.allModels }
+        let music = try #require(catalog.first { $0.hfModelId == "jasonvassallo/mlx-musicgen-small" })
+
+        let row = Row(task: "Generate Sound", model: "MusicGen")
+        let doc = FlowDocument(version: "0.8", rows: [row])
+        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 16)
+
+        let session = FlowRunSession()
+        session.prepareInstall(result, doc: doc)
+        let note = session.substitutionNotes[row.id]
+        #expect(note != nil)
+        #expect(note?.contains("MusicGen") == true)
+    }
+
+    @Test func requantizedRowsGetNoSubstitutionNote() throws {
+        // Whisper Large v3 is .requantized → runs silently, no inspector note.
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let catalogURL = repoRoot.appendingPathComponent("MLXUI/Resources/browser.json")
+        let catalog = try JSONDecoder().decode(BrowserData.self, from: Data(contentsOf: catalogURL))
+            .domains.flatMap { $0.allModels }
+
+        let row = Row(task: "Transcribe", model: "Whisper Large v3")
+        let doc = FlowDocument(version: "0.8", rows: [row])
+        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 16)
+        let session = FlowRunSession()
+        session.prepareInstall(result, doc: doc)
+        #expect(session.substitutionNotes[row.id] == nil)
+    }
+
     // MARK: - Frame-backed model rows resolve the frame (regression: Summarize.frame.txt)
 
     @Test func frameBackedRowResolvesTheFrame() async throws {

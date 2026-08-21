@@ -42,31 +42,48 @@ struct FlowListView: View {
         VStack(alignment: .leading, spacing: 0) {
             header(meta, doc)
             Divider()
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(doc.rows.enumerated()), id: \.element.id) { index, row in
-                        if FlowRowSummary.hasChainBreakBefore(row) {
-                            Divider()
-                                .padding(.leading, 48)
-                        }
-                        FlowRowView(row: row,
-                                    number: index + 1,
-                                    referenceScope: doc.rows,
-                                    status: session.status(for: row.id))
-                        if let sentence = session.errorSentence(for: row.id) {
-                            Text(sentence)
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                                .padding(.leading, 48)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 0) {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(doc.rows.enumerated()), id: \.element.id) { index, row in
+                            if FlowRowSummary.hasChainBreakBefore(row) {
+                                Divider()
+                                    .padding(.leading, 48)
+                            }
+                            FlowRowView(row: row,
+                                        number: index + 1,
+                                        referenceScope: doc.rows,
+                                        status: session.status(for: row.id))
+                                .contentShape(Rectangle())
+                                .onTapGesture { session.selectedRowID = row.id }
+                                .background(session.selectedRowID == row.id ? Color.accentColor.opacity(0.12) : Color.clear)
+                            if let sentence = session.errorSentence(for: row.id) {
+                                Text(sentence)
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                                    .padding(.leading, 48)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                         }
                     }
+                    .padding(12)
                 }
-                .padding(12)
+                Divider()
+                FlowInspectorPane(
+                    output: session.selectedRowID.flatMap { session.outputs[$0] },
+                    rowTitle: selectedRowTitle(doc),
+                    substitutionNote: session.selectedRowID.flatMap { session.substitutionNotes[$0] }
+                )
             }
             rawCatDisclosure
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+
+    private func selectedRowTitle(_ doc: FlowDocument) -> String {
+        guard let id = session.selectedRowID,
+              let row = doc.rows.first(where: { $0.id == id }) else { return "" }
+        return FlowRowSummary.taskName(for: row)
     }
 
     private func header(_ meta: GalleryFlowMetadata, _ doc: FlowDocument) -> some View {
@@ -134,7 +151,7 @@ struct FlowListView: View {
         let result = FlowPreflight.run(doc, catalog: catalog,
                                        installedModelIDs: appState.installedModelIDs,
                                        totalRAMGB: appState.systemInfo.totalRAMGB)
-        session.prepareInstall(result)
+        session.prepareInstall(result, doc: doc)
         guard !result.toDownload.isEmpty else {
             startRun(doc)
             return
@@ -233,7 +250,8 @@ struct FlowListView: View {
                 let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
                 session.prepareInstall(FlowPreflight.run(doc, catalog: catalog,
                                                          installedModelIDs: appState.installedModelIDs,
-                                                         totalRAMGB: appState.systemInfo.totalRAMGB))
+                                                         totalRAMGB: appState.systemInfo.totalRAMGB),
+                                       doc: doc)
             }
         } catch {
             loadError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
