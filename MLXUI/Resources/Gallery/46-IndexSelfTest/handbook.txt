@@ -1,0 +1,9 @@
+Employee Handbook (excerpt)
+
+Working hours are flexible; core hours are 10am-4pm local time
+for meeting overlap. New hires get 20 PTO days per year, prorated
+in the first year. Expenses under $75 do not require
+pre-approval. All laptops are company property and must be
+returned within two weeks of departure. Security incidents must
+be reported to security@company.example within one hour of
+discovery.

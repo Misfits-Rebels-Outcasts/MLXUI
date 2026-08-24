@@ -1,15 +1,15 @@
 catflow 0.8; code; events
-1. On File              drops/; pattern=*.usage; settle=30s; max_runs=6/day
-2. Parse Usage File       (1)
-3. Store Write            ledger.db; table=entries; key=entry_id; mode=insert
+1. On File                  drops/; pattern=*.usage; settle=30s; max_runs=6/day
+2. Parse Usage File   (1)
+3. Store Write              ledger.db; table=entries; key=entry_id; mode=insert
 
-4. Store Read             ledger.db; table=entries
-5. Query Table             group=account; columns=account,amount
-6. Table to Text           format=markdown
-7. Save Text               reports/ledger-{name}.md
+4. Store Read               ledger.db; table=entries
+5. Query Table              group=account; columns=account,amount
+6. Table to Text            format=markdown
+7. Save Text                reports/ledger-{name}.md
 
 transforms:
   Parse Usage File   file -> table
-    run:      ./tools/parse_usage.py
-    timeout:  30s
-    workdir:  ./work
+    run:     ./tools/parse_usage.py
+    timeout: 30s
+    workdir: ./work

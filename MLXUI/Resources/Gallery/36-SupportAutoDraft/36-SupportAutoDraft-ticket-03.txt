@@ -1,0 +1,2 @@
+Product: Billing
+Issue: Invoice shows the wrong currency symbol for a EUR-billed account. Cosmetic but confusing for the customer's finance team.

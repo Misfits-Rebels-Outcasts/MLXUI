@@ -1,0 +1,4 @@
+From: newsletter@vendor.example
+Subject: Your weekly digest
+
+Here's what's new this week: three blog posts and a webinar recap.

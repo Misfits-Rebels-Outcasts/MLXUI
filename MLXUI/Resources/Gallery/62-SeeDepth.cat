@@ -1,4 +1,4 @@
 catflow 0.8
-1. Read Image           photo.jpg
-2. Estimate Depth       Depth Pro
-3. Save Image           photo-depth.png
+1. Read Image       photo.jpg
+2. Estimate Depth   Depth Pro
+3. Save Image       photo-depth.png

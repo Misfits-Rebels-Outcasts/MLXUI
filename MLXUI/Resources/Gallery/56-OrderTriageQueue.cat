@@ -1,18 +1,18 @@
 catflow 0.8
-1. Read CSV          new_orders.csv
-2. Store Write       orders.db; table=orders; key=id; mode=insert
+1. Read CSV         new_orders.csv
+2. Store Write      orders.db; table=orders; key=id; mode=insert
 
-3. Store Query       orders.db; table=orders; filter=status=pending
-4. Query Table        filter=total>5000
-5. Set Field          status=escalated
-6. Store Write        orders.db; table=orders; key=id
+3. Store Query      orders.db; table=orders; filter=status=pending
+4. Query Table      filter=total>5000
+5. Set Field        status=escalated
+6. Store Write      orders.db; table=orders; key=id
 
-7. Store Query       orders.db; table=orders; filter=status=pending
-8. Set Field          status=approved
-9. Store Write        orders.db; table=orders; key=id
+7. Store Query      orders.db; table=orders; filter=status=pending
+8. Set Field        status=approved
+9. Store Write      orders.db; table=orders; key=id
 
-10. Store Query      orders.db; table=orders; filter=status=escalated
-11. Table to Text     format=markdown
-12. Summarize         Qwen3 8B; "one line per order: why it needs a
-                      human look before it ships"
-13. Save Text         review-queue.md
+10. Store Query     orders.db; table=orders; filter=status=escalated
+11. Table to Text   format=markdown
+12. Summarize       Qwen3 8B; "one line per order: why it needs a human
+                    look before it ships"
+13. Save Text       review-queue.md

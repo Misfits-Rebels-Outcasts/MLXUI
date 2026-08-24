@@ -1,0 +1,1 @@
+Third sample note: draft the changelog entry before the release.

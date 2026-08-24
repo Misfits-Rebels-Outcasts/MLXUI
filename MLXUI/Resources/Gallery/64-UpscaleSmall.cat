@@ -1,4 +1,4 @@
 catflow 0.8
-1. Read Image       small-photo.jpg
-2. Upscale          SeedVR2 3B; scale=2.0
-3. Save Image       photo-2x.png
+1. Read Image   small-photo.jpg
+2. Upscale      SeedVR2 3B; scale=2.0
+3. Save Image   photo-2x.png

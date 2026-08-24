@@ -1,0 +1,3 @@
+Write a product launch tweet for a calendar sync app.
+Explain chunking tradeoffs in RAG to a non-technical reader.
+Summarize this quarter's PTO policy change in one sentence.

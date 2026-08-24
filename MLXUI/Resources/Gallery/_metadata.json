@@ -12,48 +12,42 @@
       "title": "Meeting Minutes",
       "filename": "02-MeetingMinutes.cat",
       "category": "Voice & Meetings",
-      "description": "One transcript, three concurrent readings — decisions, action items, risks — assembled into one minutes document.",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "One transcript, three concurrent readings — decisions, action items, risks — assembled into one minutes document."
     },
     {
       "number": 3,
       "title": "Podcast Show Notes",
       "filename": "03-ShowNotes.cat",
       "category": "Voice & Meetings",
-      "description": "Episode audio to publishable show notes: summary, chapter list from the transcript's time marks, pull quotes, and a title.",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "Episode audio to publishable show notes: summary, chapter list from the transcript's time marks, pull quotes, and a title."
     },
     {
       "number": 4,
       "title": "Interview to Article",
       "filename": "04-InterviewArticle.cat",
       "category": "Voice & Meetings",
-      "description": "Interview audio becomes a quote-faithful article, pushed through one refine loop before it ships.",
-      "notRunnableReason": "needs newer support (needs continuations, needs deciders)"
+      "description": "Interview audio becomes a quote-faithful article, pushed through one refine loop before it ships."
     },
     {
       "number": 5,
       "title": "Weekly Voice Journal",
       "filename": "05-VoiceJournal.cat",
       "category": "Voice & Meetings",
-      "description": "A folder of the week's memos, each transcribed and boiled down, joined under a theme title.",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "A folder of the week's memos, each transcribed and boiled down, joined under a theme title."
     },
     {
       "number": 6,
       "title": "Contract Clause Scan",
       "filename": "06-ContractScan.cat",
       "category": "Documents & Paperwork",
-      "description": "Every section of a contract mined into a clause table, topped with a plain-words risk brief. (A reading aid, not legal advice.)",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "Every section of a contract mined into a clause table, topped with a plain-words risk brief. (A reading aid, not legal advice.)"
     },
     {
       "number": 7,
       "title": "Paper Digest",
       "filename": "07-PaperDigest.cat",
       "category": "Documents & Paperwork",
-      "description": "A research paper read at two depths at once — abstract-level and \"what could we apply\" — merged into one digest.",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "A research paper read at two depths at once — abstract-level and \"what could we apply\" — merged into one digest."
     },
     {
       "number": 8,
@@ -67,48 +61,42 @@
       "title": "Invoice Ledger",
       "filename": "09-InvoiceLedger.cat",
       "category": "Documents & Paperwork",
-      "description": "A folder of invoice PDFs becomes a ledger table, a spend chart, and a markdown report.",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "A folder of invoice PDFs becomes a ledger table, a spend chart, and a markdown report."
     },
     {
       "number": 10,
       "title": "Book Summary",
       "filename": "10-BookSummary.cat",
       "category": "Documents & Paperwork",
-      "description": "The map-reduce classic: a cheap model summarizes every chunk, a strong model writes the one page that ships. `{index}` labels each paragraph with its section number on the way in — free, since the `<each>` already knows the position; the reduce step reads a numbered outline instead of 148 anonymous paragraphs.",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "The map-reduce classic: a cheap model summarizes every chunk, a strong model writes the one page that ships. `{index}` labels each paragraph with its section number on the way in — free, since the `<each>` already knows the position; the reduce step reads a numbered outline instead of 148 anonymous paragraphs."
     },
     {
       "number": 11,
       "title": "Reflexion Writer",
       "filename": "11-ReflexionWriter.cat",
       "category": "Writing & Content",
-      "description": "The draft–critique–revise loop, budgeted. The critic can't rewrite; the reviser can't re-judge; the Gate decides when it's done arguing.",
-      "notRunnableReason": "needs newer support (needs continuations, needs deciders)"
+      "description": "The draft–critique–revise loop, budgeted. The critic can't rewrite; the reviser can't re-judge; the Gate decides when it's done arguing."
     },
     {
       "number": 12,
       "title": "Channel Blast",
       "filename": "12-ChannelBlast.cat",
       "category": "Writing & Content",
-      "description": "One set of launch notes, three channel-native versions written concurrently, each saved to its own file.",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "One set of launch notes, three channel-native versions written concurrently, each saved to its own file."
     },
     {
       "number": 13,
       "title": "Translate Three",
       "filename": "13-TranslateThree.cat",
       "category": "Writing & Content",
-      "description": "The same document localized into three languages concurrently.",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "The same document localized into three languages concurrently."
     },
     {
       "number": 14,
       "title": "Frontmatter Bot",
       "filename": "14-FrontmatterBot.cat",
       "category": "Writing & Content",
-      "description": "A finished blog post gains its metadata: SEO title, meta description, tags — generated concurrently, assembled as frontmatter.",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "A finished blog post gains its metadata: SEO title, meta description, tags — generated concurrently, assembled as frontmatter."
     },
     {
       "number": 15,
@@ -122,104 +110,91 @@
       "title": "Ingest a Folder",
       "filename": "16-IngestFolder.cat",
       "category": "Your Knowledge, Searchable",
-      "description": "The index-time half of every RAG flow: a folder of PDFs becomes a searchable index. Run once; re-run when documents change.",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "The index-time half of every RAG flow: a folder of PDFs becomes a searchable index. Run once; re-run when documents change."
     },
     {
       "number": 17,
       "title": "Ask Your Docs",
       "filename": "17-AskYourDocs.cat",
       "category": "Your Knowledge, Searchable",
-      "description": "The query-time half: one question, five retrieved passages, one grounded answer — every step inspectable.",
-      "notRunnableReason": "needs index tooling"
+      "description": "The query-time half: one question, five retrieved passages, one grounded answer — every step inspectable."
     },
     {
       "number": 18,
       "title": "Chat With Your Docs",
       "filename": "18-DocChat.cat",
       "category": "Your Knowledge, Searchable",
-      "description": "The parked-run chat session: follow-up questions resolved against the conversation journal, the whole session saved as a file.",
-      "notRunnableReason": "needs newer support (needs human rows, needs continuations)"
+      "description": "The parked-run chat session: follow-up questions resolved against the conversation journal, the whole session saved as a file."
     },
     {
       "number": 19,
       "title": "Corrective RAG",
       "filename": "19-CorrectiveRag.cat",
       "category": "Your Knowledge, Searchable",
-      "description": "Retrieval that checks its own evidence and retries with a better question — three tries, then best-effort, visibly.",
-      "notRunnableReason": "needs newer support (needs continuations, needs deciders)"
+      "description": "Retrieval that checks its own evidence and retries with a better question — three tries, then best-effort, visibly."
     },
     {
       "number": 20,
       "title": "Two-Index Analyst",
       "filename": "20-TwoIndexAnalyst.cat",
       "category": "Your Knowledge, Searchable",
-      "description": "An agent that chooses which index to search, when to compute, and when to finish — within a budget, transcript readable.",
-      "notRunnableReason": "needs newer support (needs blocks, needs continuations, needs deciders)"
+      "description": "An agent that chooses which index to search, when to compute, and when to finish — within a budget, transcript readable."
     },
     {
       "number": 21,
       "title": "Photos for the Web",
       "filename": "21-PhotoWebPrep.cat",
       "category": "Images & Video",
-      "description": "A folder of photos resized and watermarked, one corrupt file no longer killing the batch.",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "A folder of photos resized and watermarked, one corrupt file no longer killing the batch."
     },
     {
       "number": 22,
       "title": "Screenshots to How-To",
       "filename": "22-ScreenshotHowTo.cat",
       "category": "Images & Video",
-      "description": "A folder of numbered screenshots becomes a written guide: OCR reads the UI text, a vision model describes the action, a writer stitches the steps.",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "A folder of numbered screenshots becomes a written guide: OCR reads the UI text, a vision model describes the action, a writer stitches the steps."
     },
     {
       "number": 23,
       "title": "Alt-Text Writer",
       "filename": "23-AltText.cat",
       "category": "Images & Video",
-      "description": "Accessibility at batch scale: one factual alt-text line per image.",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "Accessibility at batch scale: one factual alt-text line per image."
     },
     {
       "number": 24,
       "title": "Video Clip Notes",
       "filename": "24-ClipNotes.cat",
       "category": "Images & Video",
-      "description": "A webinar recording mined for its cuttable moments, plus a thumbnail.",
-      "notRunnableReason": "needs video tools"
+      "description": "A webinar recording mined for its cuttable moments, plus a thumbnail."
     },
     {
       "number": 25,
       "title": "Photo Cull List",
       "filename": "25-PhotoCull.cat",
       "category": "Images & Video",
-      "description": "A vision model flags the blurry and blinked; you get a keep/reject list to act on in your photo app. (The flow writes a list — moving your photos stays your hand's job, per the effects rule.)",
-      "notRunnableReason": "needs newer support (needs blocks, needs continuations, needs deciders)"
+      "description": "A vision model flags the blurry and blinked; you get a keep/reject list to act on in your photo app. (The flow writes a list — moving your photos stays your hand's job, per the effects rule.)"
     },
     {
       "number": 26,
       "title": "CSV Insights",
       "filename": "26-CsvInsights.cat",
       "category": "Data & Numbers",
-      "description": "A sales CSV becomes a chart and three written insights — the table the model saw sitting right beside its claims.",
-      "notRunnableReason": "needs table tools"
+      "description": "A sales CSV becomes a chart and three written insights — the table the model saw sitting right beside its claims."
     },
     {
       "number": 27,
       "title": "Survey Themes",
       "filename": "27-SurveyThemes.cat",
       "category": "Data & Numbers",
-      "description": "Free-text survey responses tagged by sentiment; the negatives distilled into the five themes leadership will actually read.",
-      "notRunnableReason": "needs newer support (needs blocks, needs continuations, needs deciders)"
+      "description": "Free-text survey responses tagged by sentiment; the negatives distilled into the five themes leadership will actually read."
     },
     {
       "number": 28,
       "title": "Ticket Trends",
       "filename": "28-TicketTrends.cat",
       "category": "Data & Numbers",
-      "description": "A folder of support tickets structured into (product, issue, severity) and charted — the weekly meeting's opening slide.",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "A folder of support tickets structured into (product, issue, severity) and charted — the weekly meeting's opening slide."
     },
     {
       "number": 29,
@@ -233,8 +208,7 @@
       "title": "Receipts to Expenses",
       "filename": "30-ReceiptsExpense.cat",
       "category": "Data & Numbers",
-      "description": "Phone photos of receipts become a categorized expense report with a spend chart.",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "Phone photos of receipts become a categorized expense report with a spend chart."
     },
     {
       "number": 31,
@@ -242,7 +216,7 @@
       "filename": "31-ResearchBrief.cat",
       "category": "The Web, Read-Only",
       "description": "Search the web, read the top pages, answer with numbered sources.",
-      "notRunnableReason": "needs newer support (needs net rows, needs blocks)"
+      "notRunnableReason": "Row 2 is a net row, which this version of Flows can't complete."
     },
     {
       "number": 32,
@@ -250,7 +224,7 @@
       "filename": "32-FeedWatch.cat",
       "category": "The Web, Read-Only",
       "description": "An RSS feed filtered to what you care about, each new item summarized to one line.",
-      "notRunnableReason": "needs newer support (needs net rows, needs blocks)"
+      "notRunnableReason": "Row 1 is a net row, which this version of Flows can't complete."
     },
     {
       "number": 33,
@@ -258,7 +232,7 @@
       "filename": "33-PageDiff.cat",
       "category": "The Web, Read-Only",
       "description": "A competitor's pricing page against last week's snapshot — a Gate decides whether the change is worth telling you about.",
-      "notRunnableReason": "needs newer support (needs net rows, needs continuations, needs deciders)"
+      "notRunnableReason": "Row 1 is a net row, which this version of Flows can't complete."
     },
     {
       "number": 34,
@@ -266,7 +240,7 @@
       "filename": "34-TopicMonitor.cat",
       "category": "The Web, Read-Only",
       "description": "This week's news on a topic, fetched, summarized, deduplicated, and ranked by novelty.",
-      "notRunnableReason": "needs newer support (needs net rows, needs blocks)"
+      "notRunnableReason": "Row 1 is a net row, which this version of Flows can't complete."
     },
     {
       "number": 35,
@@ -274,23 +248,21 @@
       "filename": "35-WebIngest.cat",
       "category": "The Web, Read-Only",
       "description": "A hand-picked list of URLs becomes a local, searchable index — the web snapshotted into your RAG corpus.",
-      "notRunnableReason": "needs newer support (needs blocks, needs net rows)"
+      "notRunnableReason": "Row 4 is a net row, which this version of Flows can't complete."
     },
     {
       "number": 36,
       "title": "Support Auto-Draft",
       "filename": "36-SupportAutoDraft.cat",
       "category": "Inbox, Approvals & People",
-      "description": "The review queue, inverted: the machine drafts every reply from the KB; a person sees only the drafts the Gate doubted.",
-      "notRunnableReason": "needs newer support (needs blocks, needs continuations, needs deciders, needs human rows)"
+      "description": "The review queue, inverted: the machine drafts every reply from the KB; a person sees only the drafts the Gate doubted."
     },
     {
       "number": 37,
       "title": "Inbox Triage Brief",
       "filename": "37-InboxTriage.cat",
       "category": "Inbox, Approvals & People",
-      "description": "Exported emails, each summarized to one line and tagged by urgency — a morning brief with ACT items on top.",
-      "notRunnableReason": "needs newer support (needs blocks, needs continuations, needs deciders)"
+      "description": "Exported emails, each summarized to one line and tagged by urgency — a morning brief with ACT items on top."
     },
     {
       "number": 38,
@@ -298,15 +270,14 @@
       "filename": "38-ReplyApproval.cat",
       "category": "Inbox, Approvals & People",
       "description": "The machine drafts and critiques; a person approves, edits, or rejects; the approved reply is staged, never auto-sent.",
-      "notRunnableReason": "needs newer support (needs continuations, needs human rows, needs staged rows)"
+      "notRunnableReason": "Row 6 is a staged row, which this version of Flows can't complete."
     },
     {
       "number": 39,
       "title": "Minutes Name Fix",
       "filename": "39-MinutesNameFix.cat",
       "category": "Inbox, Approvals & People",
-      "description": "Whisper fumbles names; people don't. One human row between transcript and minutes, timeout-safe.",
-      "notRunnableReason": "needs newer support (needs human rows)"
+      "description": "Whisper fumbles names; people don't. One human row between transcript and minutes, timeout-safe."
     },
     {
       "number": 40,
@@ -314,71 +285,63 @@
       "filename": "40-StagedPost.cat",
       "category": "Inbox, Approvals & People",
       "description": "Two candidate posts, a judge picks, a person confirms, the winner is queued — the send stays yours.",
-      "notRunnableReason": "needs newer support (needs blocks, needs continuations, needs deciders, needs human rows, needs staged rows)"
+      "notRunnableReason": "Row 7 is a staged row, which this version of Flows can't complete."
     },
     {
       "number": 41,
       "title": "ReAct Agent",
       "filename": "41-ReactAgent.cat",
       "category": "Agents & Cost Ladders",
-      "description": "The canonical agent: a Think that picks tools, tool chains that `resume`, a budget that proves it ends. A named block — no framework.",
-      "notRunnableReason": "needs newer support (needs blocks, needs continuations, needs deciders)"
+      "description": "The canonical agent: a Think that picks tools, tool chains that `resume`, a budget that proves it ends. A named block — no framework."
     },
     {
       "number": 42,
       "title": "Plan and Execute",
       "filename": "42-PlanExecute.cat",
       "category": "Agents & Cost Ladders",
-      "description": "A planner decomposes the task; an `<each>` runs one agent per sub-question; a Gate decides whether the merged report needs another pass.",
-      "notRunnableReason": "needs newer support (needs blocks, needs continuations, needs deciders)"
+      "description": "A planner decomposes the task; an `<each>` runs one agent per sub-question; a Gate decides whether the merged report needs another pass."
     },
     {
       "number": 43,
       "title": "Tiny-First Batch",
       "filename": "43-TinyFirstBatch.cat",
       "category": "Agents & Cost Ladders",
-      "description": "The cascade economics flow: the fast model transcribes everything; only the garbled pay for the big one. The `×N` on row 2.4 is the invoice.",
-      "notRunnableReason": "needs newer support (needs blocks, needs continuations, needs deciders)"
+      "description": "The cascade economics flow: the fast model transcribes everything; only the garbled pay for the big one. The `×N` on row 2.4 is the invoice."
     },
     {
       "number": 44,
       "title": "Frontier Escalation",
       "filename": "44-FrontierEscalate.cat",
       "category": "Agents & Cost Ladders",
-      "description": "Local RAG answers; a Gate checks grounding; only demonstrably weak answers send their (locally retrieved) context to a frontier model.",
-      "notRunnableReason": "needs newer support (needs continuations, needs deciders)"
+      "description": "Local RAG answers; a Gate checks grounding; only demonstrably weak answers send their (locally retrieved) context to a frontier model."
     },
     {
       "number": 45,
       "title": "Router Desk",
       "filename": "45-RouterDesk.cat",
       "category": "Agents & Cost Ladders",
-      "description": "A classifier routes each ticket to its specialist; the branches converge on one reviewed draft. (The two specialist blocks are entries 41-style agents over their own indexes.)",
-      "notRunnableReason": "needs newer support (needs continuations, needs deciders, needs blocks)"
+      "description": "A classifier routes each ticket to its specialist; the branches converge on one reviewed draft. (The two specialist blocks are entries 41-style agents over their own indexes.)"
     },
     {
       "number": 46,
       "title": "Index Self-Test",
       "filename": "46-IndexSelfTest.cat",
       "category": "Testing Your Flows",
-      "description": "The index examines itself: generate questions from the corpus, answer each, check retrieval and grounding separately.",
-      "notRunnableReason": "needs newer support (needs blocks, needs continuations, needs deciders)"
+      "description": "The index examines itself: generate questions from the corpus, answer each, check retrieval and grounding separately."
     },
     {
       "number": 47,
       "title": "Golden Regression",
       "filename": "47-GoldenRegression.cat",
       "category": "Testing Your Flows",
-      "description": "The suite-as-a-diff: run your flow over its cases, compare against the accepted baseline, read only what moved. Shown pre-filled with a trivial one-row placeholder (SPEC-Q124) so a fresh install runs end to end immediately — replace `flow_under_test`'s child row with your own flow to actually use this for regression testing.",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "The suite-as-a-diff: run your flow over its cases, compare against the accepted baseline, read only what moved. Shown pre-filled with a trivial one-row placeholder (SPEC-Q124) so a fresh install runs end to end immediately — replace `flow_under_test`'s child row with your own flow to actually use this for regression testing."
     },
     {
       "number": 48,
       "title": "A/B Judge",
       "filename": "48-AbJudge.cat",
       "category": "Testing Your Flows",
-      "description": "Two systems, one judge, win counts — which prompt (or model, or pipeline) actually wins on your cases. `system_a`/`system_b` are shown pre-filled with the same trivial placeholder (SPEC-Q124) purely so this installs and runs immediately — replace each with your real two systems to actually compare them.",
-      "notRunnableReason": "needs newer support (needs blocks, needs continuations, needs deciders)"
+      "description": "Two systems, one judge, win counts — which prompt (or model, or pipeline) actually wins on your cases. `system_a`/`system_b` are shown pre-filled with the same trivial placeholder (SPEC-Q124) purely so this installs and runs immediately — replace each with your real two systems to actually compare them."
     },
     {
       "number": 49,
@@ -386,31 +349,28 @@
       "filename": "49-ModelMigration.cat",
       "category": "Testing Your Flows",
       "description": "\"Can we switch to the cheaper model?\" — the suite run twice by parameter, the differences reviewed by a human, `keep` by default.",
-      "notRunnableReason": "needs newer support (needs continuations, needs human rows)"
+      "notRunnableReason": "Row 1 uses 'RunSuite', which isn't a task this version of Flows knows."
     },
     {
       "number": 50,
       "title": "Nightly Drift",
       "filename": "50-NightlyDrift.cat",
       "category": "Testing Your Flows",
-      "description": "The suite that remembers: every night's report appends to a journal, so the analysis can say \"those failures are back.\"",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "The suite that remembers: every night's report appends to a journal, so the analysis can say \"those failures are back.\""
     },
     {
       "number": 51,
       "title": "Self-Ingesting Inbox",
       "filename": "51-InboxIngest.cat",
       "category": "Armed & Automatic",
-      "description": "Drop a PDF into the folder and it's searchable minutes later. The trigger is the doorbell; the flow re-ingests the folder; per-item caching means each run only pays for the file that just arrived.",
-      "notRunnableReason": "needs newer support (needs trigger rows, needs blocks)"
+      "description": "Drop a PDF into the folder and it's searchable minutes later. The trigger is the doorbell; the flow re-ingests the folder; per-item caching means each run only pays for the file that just arrived."
     },
     {
       "number": 52,
       "title": "Auto-Transcribe Drop",
       "filename": "52-AutoTranscribe.cat",
       "category": "Armed & Automatic",
-      "description": "Entry 43's cascade, armed: record a memo, and by the time you're at your desk the notes file is beside it — the big model paid only for garbled audio.",
-      "notRunnableReason": "needs newer support (needs trigger rows, needs continuations, needs deciders)"
+      "description": "Entry 43's cascade, armed: record a memo, and by the time you're at your desk the notes file is beside it — the big model paid only for garbled audio."
     },
     {
       "number": 53,
@@ -418,7 +378,7 @@
       "filename": "53-MorningBriefing.cat",
       "category": "Armed & Automatic",
       "description": "The 6:30 brief, waiting when you wake. Net rows behind a schedule — so the trigger carries the mandatory rate budget.",
-      "notRunnableReason": "needs newer support (needs trigger rows, needs blocks, needs net rows)"
+      "notRunnableReason": "Row 5 is a net row, which this version of Flows can't complete."
     },
     {
       "number": 54,
@@ -426,23 +386,21 @@
       "filename": "54-PipelineAlarm.cat",
       "category": "Armed & Automatic",
       "description": "Flow CI's last link: when the index self-test (entry 46, armed via `On Flow` after entry 51 succeeds) *fails*, draft an alert carrying the actual scorecard — staged, never auto-sent.",
-      "notRunnableReason": "needs newer support (needs trigger rows, needs staged rows)"
+      "notRunnableReason": "Row 4 is a staged row, which this version of Flows can't complete."
     },
     {
       "number": 55,
       "title": "Receipts Ledger, Always On",
       "filename": "55-ReceiptsLedger.cat",
       "category": "Armed & Automatic",
-      "description": "Two small armed flows cooperating through a context file — photograph receipts whenever, get the spend report every Sunday — with the capture flow watching its own pile too: `Count Context` and `Compare`, both instant, flag a busy week before Sunday with no model call.",
-      "notRunnableReason": "needs newer support (needs trigger rows, needs continuations)"
+      "description": "Two small armed flows cooperating through a context file — photograph receipts whenever, get the spend report every Sunday — with the capture flow watching its own pile too: `Count Context` and `Compare`, both instant, flag a busy week before Sunday with no model call."
     },
     {
       "number": 56,
       "title": "Order Triage Queue",
       "filename": "56-OrderTriageQueue.cat",
       "category": "Store & Code Doors",
-      "description": "A local SQLite store that remembers order status across runs — no round trip through files between them. New orders land, anything over threshold gets flagged for a human, everything else auto-approves, and a model is only spent on the orders that actually need judgement.",
-      "notRunnableReason": "needs newer support (needs the store door)"
+      "description": "A local SQLite store that remembers order status across runs — no round trip through files between them. New orders land, anything over threshold gets flagged for a human, everything else auto-approves, and a model is only spent on the orders that actually need judgement."
     },
     {
       "number": 57,
@@ -450,7 +408,7 @@
       "filename": "57-InvoiceTotals.cat",
       "category": "Store & Code Doors",
       "description": "A folder of vendor invoices in your own shop's plain-text export format — not OCR, not a model guessing at a `total:` line, just the three-line parser your billing team has trusted for years, called from a row instead of a cron job. Compare with entry 9 (Invoice Ledger), which reaches for a model because its invoices are scanned images with no fixed format to parse against.",
-      "notRunnableReason": "needs tools this version doesn't run yet"
+      "notRunnableReason": "this flow declares `code` -- App Store builds refuse it outright (2.4.5 iv); distribute it directly instead."
     },
     {
       "number": 58,
@@ -458,7 +416,7 @@
       "filename": "58-NightlyLedger.cat",
       "category": "Store & Code Doors",
       "description": "Both doors, armed: a usage export lands overnight in a format only your own parser understands; the code door turns one file into rows, the store door remembers them across every night this has ever run, and the morning total is one query away — not a re-read of every file that ever landed.",
-      "notRunnableReason": "needs newer support (needs trigger rows, needs the store door)"
+      "notRunnableReason": "this flow declares `code` -- App Store builds refuse it outright (2.4.5 iv); distribute it directly instead."
     },
     {
       "number": 59,
@@ -466,7 +424,7 @@
       "filename": "59-NormalizeExports.cat",
       "category": "Improvise & Promote",
       "description": "A folder of CSV exports whose headers never quite agree — an agent free-forms inside a fenced `workdir` until they're one table. This is the improvise-then-promote arc: run it once with `Improvise`, then let `catflow promote` turn whatever it did that maps to a plain read into an ordinary row, keeping only the genuinely ad hoc part improvised.",
-      "notRunnableReason": "needs newer support (needs agent rows)"
+      "notRunnableReason": "this flow declares `improvise` -- App Store builds refuse it outright (2.4.5 iv); distribute it directly instead."
     },
     {
       "number": 60,
@@ -520,8 +478,7 @@
       "title": "Eight Seeds, One Sheet",
       "filename": "66-SeedSweep.cat",
       "category": "Diffusion & Generation",
-      "description": "The pattern the whole column exists for: a `Range` drives an `<each>` generate, and a real `Contact Sheet` tiles the results labelled by what changed — eight images, read as one.",
-      "notRunnableReason": "needs newer support (needs blocks)"
+      "description": "The pattern the whole column exists for: a `Range` drives an `<each>` generate, and a real `Contact Sheet` tiles the results labelled by what changed — eight images, read as one."
     },
     {
       "number": 67,

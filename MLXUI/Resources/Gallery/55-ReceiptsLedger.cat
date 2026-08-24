@@ -6,9 +6,9 @@ catflow 0.8; events
 5. Extract Structured         Qwen3 8B; "merchant, date, total, category"
 6. Table to Text              format=csv; ctx+
 7. Save Context               ledger.ctx
-8. Count Context               entries
-9. Compare                     "> 50"; tags: escalate, normal
+8. Count Context              entries
+9. Compare                    "> 50"; tags: escalate, normal
    -> { escalate: 10 | normal: done }
-10. Template                    "{1} receipts logged since the last report
-                                 — worth an early look before Sunday"
-11. Save Text                   receipts/review-needed.txt
+10. Template                  "{1} receipts logged since the last report —
+                              worth an early look before Sunday"
+11. Save Text                 receipts/review-needed.txt

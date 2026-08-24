@@ -1,4 +1,4 @@
 catflow 0.8
-1. Read Image      photo.jpg
-2. Segment         SAM Base
-3. Save Image      photo-mask.png
+1. Read Image   photo.jpg
+2. Segment      SAM Base
+3. Save Image   photo-mask.png

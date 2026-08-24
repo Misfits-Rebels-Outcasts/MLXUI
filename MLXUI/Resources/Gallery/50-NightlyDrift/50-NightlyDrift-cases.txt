@@ -1,0 +1,3 @@
+Summarize the benefits of local-first AI in two sentences.
+List three risks of running quantized models in production.
+Draft a one-paragraph apology for a billing error.

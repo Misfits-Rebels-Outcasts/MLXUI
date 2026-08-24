@@ -1,0 +1,10 @@
+AcmeSync 2.0 launch notes
+
+- Calendar sync now works across Google, Outlook, and iCloud in
+  one unified view.
+- Conflict resolution is automatic; overlapping events prompt a
+  single merge suggestion instead of duplicating entries.
+- Built for small teams: shared team calendars are included at
+  no extra cost, up to 10 seats.
+- Pricing: $6/seat/month, billed monthly, no annual lock-in.
+- Ships August 1st. Existing beta users are auto-upgraded.

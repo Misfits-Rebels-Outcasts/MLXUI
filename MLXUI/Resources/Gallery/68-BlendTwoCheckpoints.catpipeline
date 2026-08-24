@@ -1,10 +1,9 @@
 catpipeline 0.8
-pipeline Blend Two Checkpoints
+  pipeline Blend Two Checkpoints
   gives:   model
-
 1. Load Checkpoint   Base Style
 2. Blend             Alt Style; ratio=0.4
 
 models:
   Base Style = filipstrand/Z-Image-Turbo-mflux-4bit
-  Alt Style = filipstrand/Z-Image-Turbo-mflux-4bit
+  Alt Style  = filipstrand/Z-Image-Turbo-mflux-4bit

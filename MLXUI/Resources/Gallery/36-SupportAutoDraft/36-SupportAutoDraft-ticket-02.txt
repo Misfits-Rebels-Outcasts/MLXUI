@@ -1,0 +1,2 @@
+Product: Mobile App
+Issue: App crashes on launch after the latest update on iOS 18. Happens every time, not intermittent.

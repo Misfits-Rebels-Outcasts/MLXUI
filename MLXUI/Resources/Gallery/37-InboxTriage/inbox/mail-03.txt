@@ -1,0 +1,4 @@
+From: sam@customer.example
+Subject: URGENT - production down
+
+Our integration stopped receiving webhooks about an hour ago, can someone take a look ASAP?

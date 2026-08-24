@@ -1,0 +1,7 @@
+{
+  "format_version": 1,
+  "embedder": "mlx-community/bge-m3-mlx-4bit",
+  "dims": 1024,
+  "normalization": "none",
+  "count": 1
+}

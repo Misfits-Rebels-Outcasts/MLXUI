@@ -1,0 +1,6 @@
+Sample text
+
+This is the sample text file a new Read Text row starts with.
+
+Paragraph two. It exists so a freshly-added row has something to run without
+the user hunting for a file of their own - they can replace it whenever they like.

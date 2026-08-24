@@ -1,0 +1,2 @@
+Product: Dashboard
+Issue: Export button does nothing when clicked on Safari. Works fine on Chrome. Severity feels high, customer is blocked from a report they need today.

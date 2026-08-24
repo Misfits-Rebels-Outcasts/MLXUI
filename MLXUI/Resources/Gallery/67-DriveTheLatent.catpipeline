@@ -1,8 +1,7 @@
 catpipeline 0.8
-pipeline Drive The Latent Yourself
+  pipeline Drive The Latent Yourself
   gives:   image
-
-1. Init Latent    Z-Image Turbo (4-bit); seed=7; width=1024; height=1024
-2. Denoise             Z-Image Turbo (4-bit); steps=9; strength=1.0  "a
-                       lighthouse at sunset, watercolor style"
-3. Decode Latent       Z-Image Turbo (4-bit)
+1. Init Latent     Z-Image Turbo (4-bit); seed=7; width=1024; height=1024
+2. Denoise         Z-Image Turbo (4-bit); steps=9; strength=1.0  "a
+                   lighthouse at sunset, watercolor style"
+3. Decode Latent   Z-Image Turbo (4-bit)
