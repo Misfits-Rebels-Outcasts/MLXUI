@@ -35,6 +35,10 @@ final class AppState {
     /// The bundled gallery flows, in gallery order. Empty when `hideFlows` is true.
     var galleryEntries: [GalleryFlowMetadata] = []
 
+    /// CFM-R12-1: the user's saved flows (the "My Workflows" shelf), newest first. Loaded by
+    /// `reloadUserFlows()` — never trusted to be current across an editor save.
+    private(set) var userFlowEntries: [UserFlowStore.Entry] = []
+
     var browserData: BrowserData?
     var loadError: String?
     var systemInfo = SystemInfo.detect()
@@ -109,6 +113,15 @@ final class AppState {
             galleryEntries = GalleryLoader.loadMetadata()
                 .filter { !Self.hiddenFlowNumbers.contains($0.number) }
         }
+        reloadUserFlows()
+    }
+
+    /// CFM-R12-1: refresh the "My Workflows" shelf from the flow folder. Called at launch and
+    /// every time the gallery reappears, so a just-saved or just-duplicated flow shows up.
+    func reloadUserFlows() {
+        let bundled = Set(galleryEntries.map(\.flowID))
+        userFlowEntries = UserFlowStore.scan(workspace: FlowWorkspace.shared,
+                                             bundledFlowIDs: bundled)
     }
 
     // ── Visible sidebar sections ──
@@ -435,7 +448,15 @@ enum SidebarItem: Hashable {
 /// is available.
 struct FlowSelection: Hashable, Identifiable {
     let flowID: String
-    var id: String { flowID }
+    /// CFM-R12-1: whether this is a user flow (the shelf) or a bundled gallery flow.
+    let isUserFlow: Bool
+
+    init(flowID: String, isUserFlow: Bool = false) {
+        self.flowID = flowID
+        self.isUserFlow = isUserFlow
+    }
+
+    var id: String { "\(isUserFlow ? "u" : "g")-\(flowID)" }
 }
 
 enum SortOrder: String, CaseIterable, Identifiable {

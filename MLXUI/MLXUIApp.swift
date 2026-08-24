@@ -47,8 +47,9 @@ struct MLXUIApp: App {
                             // Selecting a badge in the "AI Workflows" gallery pushes that
                             // flow's detail (title, rows, inspector) with a back button.
                             .navigationDestination(item: $appState.selectedFlow) { selection in
-                                FlowListView(flowID: selection.flowID)
-                                    .id(selection.flowID)
+                                FlowListView(flowID: selection.flowID,
+                                             source: selection.isUserFlow ? .user : .gallery)
+                                    .id(selection.id)
                             }
                             // CFM-R8/R11-0: the flow editor — a fresh flow (nil document) or
                             // an edited copy of an existing one (Duplicate & Edit / Edit copy).

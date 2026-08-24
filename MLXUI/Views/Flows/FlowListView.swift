@@ -6,10 +6,26 @@ import AppKit
 /// sentences on `✗`, and a Cancel that keeps earned dots. Run is disabled with the reason
 /// when `FlowRunner.canRun` says no, and blocked models disable it with the bridge's reason.
 struct FlowListView: View {
+    /// CFM-R12-1: where a flow comes from — the bundled gallery or the user's own shelf.
+    enum Source: Equatable {
+        case gallery
+        case user
+    }
+
     let flowID: String
+    let source: Source
+
+    /// A user flow has no bundled assets, so `prepare` is called with an empty list (it is
+    /// already idempotent). A gallery flow's input assets come from the flattened bundle.
+    init(flowID: String, source: Source = .gallery) {
+        self.flowID = flowID
+        self.source = source
+    }
 
     @Environment(AppState.self) private var appState
     @State private var metadata: GalleryFlowMetadata?
+    /// CFM-R12-1: the user-flow shelf entry (nil for a bundled flow).
+    @State private var userEntry: UserFlowStore.Entry?
     @State private var document: FlowDocument?
     @State private var loadError: String?
     /// The refusal reason this flow can't run, derived from `FlowRunner.canRun(doc)` — not
@@ -29,16 +45,18 @@ struct FlowListView: View {
                 ContentUnavailableView("Couldn't Load This Flow",
                                        systemImage: "exclamationmark.triangle",
                                        description: Text(error))
-            } else if let notRunnableReason, let document, let metadata {
-                notRunnableView(metadata, doc: document, reason: notRunnableReason)
-            } else if let document, let metadata {
-                flowList(document, metadata)
+            } else if let display, let document {
+                if let reason = notRunnableReason {
+                    notRunnableView(display, doc: document, reason: reason)
+                } else {
+                    flowList(document, display: display)
+                }
             } else {
                 ProgressView("Loading flow…")
                     .onAppear(perform: load)
             }
         }
-        .navigationTitle(metadata?.title ?? flowID)
+        .navigationTitle(display?.title ?? flowID)
         .sheet(isPresented: $session.showInstallSheet) {
             if let result = session.preflight {
                 installSheet(result)
@@ -65,10 +83,10 @@ struct FlowListView: View {
     /// A read-only view for a flow this version can't run (CFM-R4-4): an honest badge
     /// naming what it needs, the description, and the canonical serialized lines (the list
     /// is the file — R6-2/3, no raw-`.cat` disclosure in the gallery view). No Run button.
-    private func notRunnableView(_ meta: GalleryFlowMetadata, doc: FlowDocument, reason: String) -> some View {
+    private func notRunnableView(_ display: FlowDisplay, doc: FlowDocument, reason: String) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
-                Label(meta.title, systemImage: "flowchart")
+                Label(display.title, systemImage: "flowchart")
                     .font(.title2.weight(.semibold))
                 Text("catflow 0.8")
                     .font(.caption.monospaced())
@@ -83,7 +101,7 @@ struct FlowListView: View {
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
-            Text(meta.description)
+            Text(display.description ?? "")
                 .font(.callout)
                 .foregroundStyle(.secondary)
             ScrollView(.horizontal, showsIndicators: false) {
@@ -102,9 +120,9 @@ struct FlowListView: View {
 
     // MARK: - Content
 
-    private func flowList(_ doc: FlowDocument, _ meta: GalleryFlowMetadata) -> some View {
+    private func flowList(_ doc: FlowDocument, display: FlowDisplay) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            header(meta, doc)
+            header(doc, display: display)
             Divider()
             if let sentence = session.errorSentence {
                 HStack(alignment: .top, spacing: 8) {
@@ -263,15 +281,15 @@ struct FlowListView: View {
 
     /// CFM-R11-0: copy this bundled flow into the user's flow folder and open the editor on
     /// the copy. On failure the flow stays read-only with a plain sentence.
-    private func duplicateAndEdit(_ meta: GalleryFlowMetadata, _ doc: FlowDocument) {
+    private func duplicateAndEdit(_ display: FlowDisplay, _ doc: FlowDocument) {
         do {
             let target = try FlowEditRoute.duplicateAndEdit(
-                flowID: flowID, title: meta.title, document: doc,
+                flowID: flowID, title: display.title, document: doc,
                 workspace: FlowWorkspace.shared,
                 sourceDir: GalleryLoader.resourcesDirectory ?? Bundle.main.resourceURL ?? .init(fileURLWithPath: "/"))
             appState.editingFlow = target
         } catch {
-            appState.openCatFlowError = "Couldn't copy '\(meta.title)' into your flows folder — the flow stays read-only."
+            appState.openCatFlowError = "Couldn't copy '\(display.title)' into your flows folder — the flow stays read-only."
         }
     }
 
@@ -289,9 +307,9 @@ struct FlowListView: View {
         .help("Copy error text")
     }
 
-    private func header(_ meta: GalleryFlowMetadata, _ doc: FlowDocument) -> some View {
+    private func header(_ doc: FlowDocument, display: FlowDisplay) -> some View {
         HStack(spacing: 12) {
-            Text(meta.title)
+            Text(display.title)
                 .font(.title2.weight(.semibold))
             Text("catflow \(doc.version)")
                 .font(.caption.monospaced())
@@ -299,19 +317,31 @@ struct FlowListView: View {
                 .padding(.vertical, 2)
                 .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
             Spacer()
-            // CFM-R11-0: bundled flows are read-only — "Duplicate & Edit" copies the flow
-            // into the user's flow folder and opens the editor on the copy.
-            Button {
-                duplicateAndEdit(meta, doc)
-            } label: {
-                Label("Duplicate & Edit", systemImage: "square.and.pencil")
+            // CFM-R12-1: bundled flows are read-only — "Duplicate & Edit" copies the flow
+            // into the user's flow folder. A user flow is already the user's: "Edit" opens
+            // it in the editor in place.
+            if source == .gallery {
+                Button {
+                    duplicateAndEdit(display, doc)
+                } label: {
+                    Label("Duplicate & Edit", systemImage: "square.and.pencil")
+                }
+                .help("Copy this flow into your flows folder and open it in the editor")
+            } else {
+                Button {
+                    appState.editingFlow = FlowEditTarget(flowID: flowID, name: display.title,
+                                                          document: doc,
+                                                          savedText: CatSerializer.serialize(doc))
+                } label: {
+                    Label("Edit", systemImage: "square.and.pencil")
+                }
+                .help("Open this flow in the editor")
             }
-            .help("Copy this flow into your flows folder and open it in the editor")
             Button {
                 try? FlowWorkspace.shared.prepare(
                     flowID: flowID,
-                    sourceDir: GalleryLoader.resourcesDirectory,
-                    bundledAssets: GalleryLoader.bundledAssets(flowID: flowID))
+                    sourceDir: source == .gallery ? GalleryLoader.resourcesDirectory : nil,
+                    bundledAssets: source == .gallery ? GalleryLoader.bundledAssets(flowID: flowID) : [])
                 FlowWorkspace.shared.revealInFinder(flowID: flowID)
             } label: {
                 Label("Reveal in Finder", systemImage: "folder")
@@ -586,7 +616,27 @@ struct FlowListView: View {
 
     // MARK: - Loading
 
+    /// CFM-R12-1: what the flow list renders about a flow, abstracted over its source
+    /// (bundled gallery vs. the user's shelf) — never a faked `GalleryFlowMetadata`.
+    private var display: FlowDisplay? {
+        if let metadata { return FlowDisplay(title: metadata.title,
+                                             description: metadata.description,
+                                             notRunnableReason: metadata.notRunnableReason) }
+        if let userEntry { return FlowDisplay(title: userEntry.title,
+                                              description: nil,
+                                              notRunnableReason: nil) }
+        return nil
+    }
+
     private func load() {
+        if source == .gallery {
+            loadGallery()
+        } else {
+            loadUserFlow()
+        }
+    }
+
+    private func loadGallery() {
         metadata = GalleryLoader.loadMetadata().first { $0.flowID == flowID }
         do {
             document = try GalleryLoader.loadDocument(flowID: flowID)
@@ -623,6 +673,45 @@ struct FlowListView: View {
             flowID: flowID,
             sourceDir: GalleryLoader.resourcesDirectory,
             bundledAssets: GalleryLoader.bundledAssets(flowID: flowID))
+        finishLoad(doc)
+    }
+
+    /// CFM-R12-1: load a user flow from its folder. A broken file shows its parse error
+    /// (loadError), never a crash or a vanished badge.
+    private func loadUserFlow() {
+        userEntry = UserFlowStore.scan(workspace: FlowWorkspace.shared,
+                                       bundledFlowIDs: Set(appState.galleryEntries.map(\.flowID)))
+            .first { $0.flowID == flowID }
+        guard let entry = userEntry else {
+            loadError = "This flow's folder isn't in your flows directory anymore."
+            return
+        }
+        if let issue = entry.parseIssue {
+            loadError = issue
+            return
+        }
+        do {
+            document = try UserFlowStore.loadDocument(entry: entry)
+        } catch {
+            loadError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+            return
+        }
+        guard let doc = document else { return }
+
+        let serialized = CatSerializer.serializeLines(doc)
+        serializedLines = serialized.lines
+        lineRanges = serialized.lineRanges
+
+        if case .notRunnable(let reason) = FlowRunner.canRun(doc) {
+            notRunnableReason = reason
+            return
+        }
+        // A user flow has no bundled assets; prepare with an empty list is a no-op.
+        finishLoad(doc)
+    }
+
+    /// The shared tail of both loads: preflight, trigger inspection, install wiring.
+    private func finishLoad(_ doc: FlowDocument) {
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
         session.prepareInstall(FlowPreflight.run(doc, catalog: catalog,
                                                   installedModelIDs: appState.installedModelIDs,
@@ -632,4 +721,12 @@ struct FlowListView: View {
         // refusal when the flow carries a door).
         armSession.inspect(doc: doc)
     }
+}
+
+/// CFM-R12-1 — the display-side identity of a flow, abstracted over its source. Everything
+/// the flow list renders about a flow, without faking gallery metadata for user flows.
+nonisolated struct FlowDisplay {
+    let title: String
+    let description: String?
+    let notRunnableReason: String?
 }

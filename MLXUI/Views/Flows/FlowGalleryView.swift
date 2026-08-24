@@ -10,18 +10,19 @@ struct FlowGalleryView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 20) {
                 header
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
-                    newFlowBadge
-                    ForEach(appState.galleryEntries) { flow in
-                        badge(for: flow)
-                    }
-                }
+                // CFM-R12-1: the user's own saved flows. The New Flow badge lives here too —
+                // it is a user action, not a bundled flow.
+                myWorkflowsSection
+                gallerySection
             }
             .padding(20)
         }
         .navigationTitle("AI Workflows")
+        // A save or Duplicate & Edit adds a folder while the editor was open; refresh on
+        // every appearance so the shelf is never stale.
+        .onAppear { appState.reloadUserFlows() }
     }
 
     /// The content-panel title: a visible heading above the badge grid (the navigation
@@ -30,9 +31,41 @@ struct FlowGalleryView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("AI Workflows")
                 .font(.largeTitle.weight(.bold))
-            Text("\(appState.galleryEntries.count) bundled flows — pick one to see and run it, or start your own.")
+            Text("\(appState.galleryEntries.count) bundled flows — and anything you've saved under My Workflows. Pick one to see and run it, or start your own.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - CFM-R12-1: My Workflows
+
+    private var myWorkflowsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("My Workflows")
+                .font(.title3.weight(.semibold))
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
+                newFlowBadge
+                ForEach(appState.userFlowEntries) { entry in
+                    userFlowBadge(entry)
+                }
+            }
+            if appState.userFlowEntries.isEmpty {
+                Text("Flows you save — or duplicate from the gallery — appear here. Start with New Flow.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var gallerySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Gallery Workflows")
+                .font(.title3.weight(.semibold))
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
+                ForEach(appState.galleryEntries) { flow in
+                    badge(for: flow)
+                }
+            }
         }
     }
 
@@ -66,6 +99,43 @@ struct FlowGalleryView: View {
             .overlay {
                 RoundedRectangle(cornerRadius: 14)
                     .strokeBorder(Color.accentColor.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [5]))
+            }
+        }
+        .buttonStyle(.plain)
+        .contentShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    /// One user flow's badge: title + last-modified, a ⚠ when its file no longer parses.
+    /// Opening it pushes `FlowListView` in the user source.
+    private func userFlowBadge(_ entry: UserFlowStore.Entry) -> some View {
+        Button {
+            appState.selectedFlow = FlowSelection(flowID: entry.flowID, isUserFlow: true)
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Image(systemName: "doc.plaintext")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if entry.parseIssue != nil {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .accessibilityLabel("This flow doesn't parse")
+                    }
+                }
+                Text(entry.title)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text("Saved \(entry.modifiedAt.formatted(date: .abbreviated, time: .omitted))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 110, alignment: .leading)
+            .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 14))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(.quaternary, lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
