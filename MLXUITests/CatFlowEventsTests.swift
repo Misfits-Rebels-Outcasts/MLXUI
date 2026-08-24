@@ -18,11 +18,16 @@ struct CatFlowEventsTests {
         #expect(FlowRunner.canRun(doc) == .runnable)
     }
 
-    @Test func inboxIngestIsRunnableNow() throws {
+    /// R10 made 51's trigger arming real; R12-4 added the unported-tool gate, so the flow is
+    /// now honestly refused *before* running (it reads `Store Index`, which isn't ported
+    /// until R12-6). The trigger half still arms — the refusal is the run, not the watcher.
+    @Test func inboxIngestIsBlockedByStoreIndexUntilR12_6() throws {
         let doc = try GalleryLoader.loadDocument(flowID: "51-InboxIngest")
-        #expect(FlowRunner.canRun(doc) == .runnable)
-        let meta = try #require(GalleryLoader.loadMetadata().first { $0.flowID == "51-InboxIngest" })
-        #expect(meta.isRunnable)
+        guard case .notRunnable(let reason) = FlowRunner.canRun(doc) else {
+            Issue.record("expected notRunnable (Store Index unported)")
+            return
+        }
+        #expect(reason.contains("Store Index"))
     }
 
     // MARK: - Arming

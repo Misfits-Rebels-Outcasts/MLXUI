@@ -39,6 +39,12 @@ final class AppState {
     /// `reloadUserFlows()` — never trusted to be current across an editor save.
     private(set) var userFlowEntries: [UserFlowStore.Entry] = []
 
+    /// CFM-R12-4: the bundled flows `FlowRunner.canRun` refuses — the gallery's ⚠ badge tells
+    /// the truth for every blocked flow (net/staged/agent channels, unported instant tools),
+    /// not just the ~10 the metadata's `notRunnableReason` happens to name. Computed on
+    /// gallery appear (`refreshGalleryBlocked()`), never at launch.
+    private(set) var galleryBlocked: Set<String> = []
+
     var browserData: BrowserData?
     var loadError: String?
     var systemInfo = SystemInfo.detect()
@@ -122,6 +128,19 @@ final class AppState {
         let bundled = Set(galleryEntries.map(\.flowID))
         userFlowEntries = UserFlowStore.scan(workspace: FlowWorkspace.shared,
                                              bundledFlowIDs: bundled)
+    }
+
+    /// CFM-R12-4: recompute which bundled flows `canRun` refuses (the ⚠ badges). Called when
+    /// the gallery appears — parsing ~66 small files once per appearance is cheap.
+    func refreshGalleryBlocked() {
+        var blocked: Set<String> = []
+        for flow in galleryEntries {
+            if let doc = try? GalleryLoader.loadDocument(flowID: flow.flowID),
+               case .notRunnable = FlowRunner.canRun(doc) {
+                blocked.insert(flow.flowID)
+            }
+        }
+        galleryBlocked = blocked
     }
 
     // ── Visible sidebar sections ──

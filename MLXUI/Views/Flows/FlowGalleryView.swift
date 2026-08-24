@@ -22,7 +22,10 @@ struct FlowGalleryView: View {
         .navigationTitle("AI Workflows")
         // A save or Duplicate & Edit adds a folder while the editor was open; refresh on
         // every appearance so the shelf is never stale.
-        .onAppear { appState.reloadUserFlows() }
+        .onAppear {
+            appState.reloadUserFlows()
+            appState.refreshGalleryBlocked()
+        }
     }
 
     /// The content-panel title: a visible heading above the badge grid (the navigation
@@ -151,7 +154,9 @@ struct FlowGalleryView: View {
                     Image(systemName: "flowchart")
                         .foregroundStyle(.secondary)
                     Spacer()
-                    if !flow.isRunnable {
+                    // CFM-R12-4: the badge tells the truth — metadata's notRunnableReason
+                    // *or* a live `canRun` refusal (unported tools, net/staged/agent).
+                    if !flow.isRunnable || appState.galleryBlocked.contains(flow.flowID) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
                             .accessibilityLabel("Not runnable yet")

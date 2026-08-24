@@ -156,7 +156,15 @@ nonisolated struct FlowRunner {
                     "Row \(position) uses '\(row.task!)', which isn't a task this version of Flows knows.")
             }
             switch desc.taskClass {
-            case .instant, .model:
+            case .instant:
+                // CFM-R12-4: refuse a flow that uses an unported instant tool *before* the
+                // install prompt, not three rows in after the models downloaded. Honest and
+                // early, naming the task.
+                if !TaskAvailability.isAvailable(row.task!) {
+                    return .notRunnable(reason:
+                        "Row \(position) uses '\(row.task!)', which this version of Flows doesn't run yet.")
+                }
+            case .model:
                 break   // in scope (deciders are model-class — the interpreter routes them)
             case .human:
                 break   // CFM-R10-Human: the interpreter parks `wait=forever` rows for an

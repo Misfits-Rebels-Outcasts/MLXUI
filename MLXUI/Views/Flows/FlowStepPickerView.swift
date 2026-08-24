@@ -29,15 +29,17 @@ struct FlowStepPickerView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(steps, id: \.name) { task in
+                        let marker = TaskAvailability.marker(for: task)
                         Button {
                             onPick(task.name)
                         } label: {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 Text(task.name)
                                     .font(.body.weight(.medium))
+                                    .foregroundStyle(marker == nil ? Color.primary : Color.secondary)
                                 Spacer()
-                                if SampleSeed.readTaskNames.contains(task.name) && !SampleSeed.isRunnable(task.name) {
-                                    Text("needs newer support")
+                                if let marker {
+                                    Text(marker)
                                         .font(.caption)
                                         .foregroundStyle(.orange)
                                 }
@@ -50,6 +52,7 @@ struct FlowStepPickerView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .help(marker.map { "\(task.name): \($0)" } ?? task.name)
                         Divider().opacity(0.3)
                     }
                 }
