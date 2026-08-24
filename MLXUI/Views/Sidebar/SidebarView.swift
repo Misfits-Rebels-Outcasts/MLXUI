@@ -25,24 +25,10 @@ struct SidebarView: View {
                 }
             }
 
-            if !AppState.hideFlows && !appState.galleryEntries.isEmpty {
-                Section("Flows") {
-                    ForEach(appState.galleryEntries) { flow in
-                        Label {
-                            HStack(spacing: 6) {
-                                Text(flow.title)
-                                if !flow.isRunnable {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .foregroundStyle(.orange)
-                                        .font(.caption2)
-                                        .accessibilityLabel("Not runnable yet")
-                                }
-                            }
-                        } icon: {
-                            Image(systemName: "flowchart")
-                        }
-                        .tag(SidebarItem.flows(flow.flowID))
-                    }
+            if !AppState.hideFlows, !AppState.hideAutomate, !appState.galleryEntries.isEmpty {
+                Section("Automate") {
+                    Label("AI Workflows", systemImage: "flowchart")
+                        .tag(SidebarItem.aiWorkflows)
                 }
             }
 

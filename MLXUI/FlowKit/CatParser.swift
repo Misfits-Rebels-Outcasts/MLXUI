@@ -62,42 +62,42 @@ nonisolated enum CatParser {
     /// Known header capability flags — `core/parser.py::_KNOWN_HEADER_FLAGS`.
     static let knownHeaderFlags: Set<String> = ["network", "events", "improvise", "code", "offdevice"]
 
-    private static let reHeader = try! NSRegularExpression(pattern: "^(catflow|catpipeline)\\s+(\\S+)((?:\\s*·\\s*\\S+)*)\\s*$")
-    private static let reHeaderV08 = try! NSRegularExpression(pattern: "^(catflow|catpipeline)\\s+(\\S+)((?:\\s*;\\s*\\S+)*)\\s*$")
-    private static let reNumbered = try! NSRegularExpression(pattern: "^(\\s*)(\\d+)\\.\\s+(.+?)\\s*$")
-    private static let reBlockHeader = try! NSRegularExpression(pattern: "^<(list|each|parallel)(?:\\s+([\\w_-]+))?\\s*(?:·\\s*(.+?))?\\s*>(.*)$", options: [.caseInsensitive])
-    private static let reBlockHeaderV08 = try! NSRegularExpression(pattern: "^<(list|each|parallel)(?:\\s+([\\w_-]+))?\\s*(?:;\\s*(.+?))?\\s*(?<!-)>(.*)$", options: [.caseInsensitive])
-    private static let reRefs = try! NSRegularExpression(pattern: "\\(([^)]+)\\)")
-    private static let reInputRef = try! NSRegularExpression(pattern: "^input:(\\d+)$", options: [.caseInsensitive])
-    private static let reParamRef = try! NSRegularExpression(pattern: "^param:([\\w_-]+)$", options: [.caseInsensitive])
-    private static let reActivationRefFull = try! NSRegularExpression(pattern: "^(\\d+)\\s*@\\s*(\\d+)$")
-    private static let reBlank = try! NSRegularExpression(pattern: "^\\s*$")
-    private static let reVisitsLeq = try! NSRegularExpression(pattern: "visits≤(\\d+)")
-    private static let reOnBudget = try! NSRegularExpression(pattern: "on_budget=(\\w+)")
-    private static let reMaxVisits = try! NSRegularExpression(pattern: "max_visits=(\\d+)")
-    private static let reTagsTrailing = try! NSRegularExpression(pattern: "\\s*tags:\\s*(\\w+(?:\\s*,\\s*\\w+)*)\\s*$")
-    private static let reQuotedSpan = try! NSRegularExpression(pattern: "\"[^\"]*\"")
+    private static let reHeader = NSRegularExpression.compiled("^(catflow|catpipeline)\\s+(\\S+)((?:\\s*·\\s*\\S+)*)\\s*$")
+    private static let reHeaderV08 = NSRegularExpression.compiled("^(catflow|catpipeline)\\s+(\\S+)((?:\\s*;\\s*\\S+)*)\\s*$")
+    private static let reNumbered = NSRegularExpression.compiled("^(\\s*)(\\d+)\\.\\s+(.+?)\\s*$")
+    private static let reBlockHeader = NSRegularExpression.compiled("^<(list|each|parallel)(?:\\s+([\\w_-]+))?\\s*(?:·\\s*(.+?))?\\s*>(.*)$", options: [.caseInsensitive])
+    private static let reBlockHeaderV08 = NSRegularExpression.compiled("^<(list|each|parallel)(?:\\s+([\\w_-]+))?\\s*(?:;\\s*(.+?))?\\s*(?<!-)>(.*)$", options: [.caseInsensitive])
+    private static let reRefs = NSRegularExpression.compiled("\\(([^)]+)\\)")
+    private static let reInputRef = NSRegularExpression.compiled("^input:(\\d+)$", options: [.caseInsensitive])
+    private static let reParamRef = NSRegularExpression.compiled("^param:([\\w_-]+)$", options: [.caseInsensitive])
+    private static let reActivationRefFull = NSRegularExpression.compiled("^(\\d+)\\s*@\\s*(\\d+)$")
+    private static let reBlank = NSRegularExpression.compiled("^\\s*$")
+    private static let reVisitsLeq = NSRegularExpression.compiled("visits≤(\\d+)")
+    private static let reOnBudget = NSRegularExpression.compiled("on_budget=(\\w+)")
+    private static let reMaxVisits = NSRegularExpression.compiled("max_visits=(\\d+)")
+    private static let reTagsTrailing = NSRegularExpression.compiled("\\s*tags:\\s*(\\w+(?:\\s*,\\s*\\w+)*)\\s*$")
+    private static let reQuotedSpan = NSRegularExpression.compiled("\"[^\"]*\"")
 
-    private static let rePresetsHeader = try! NSRegularExpression(pattern: "^presets:\\s*$")
-    private static let rePresetEntry = try! NSRegularExpression(pattern: "^(\\S+?)\\s*=\\s*(.*)$")
-    private static let reCompositeLine = try! NSRegularExpression(pattern: "^composite\\s+([\\w_-]+)\\s*(?:\\s{2,}(.+))?$")
-    private static let reParamToken = try! NSRegularExpression(pattern: "^([\\w_-]+)(?:\\s*\\(([\\w_-]+)\\))?(?:\\s*=\\s*(.+))?$")
-    private static let reModelLine = try! NSRegularExpression(pattern: "^(.+?)\\s*=\\s*(\\S.*)$")
-    private static let reTransformLine = try! NSRegularExpression(pattern: "^(\\S.*?)\\s{2,}(\\S.*)$")
-    private static let reTransformField = try! NSRegularExpression(pattern: "^(run|timeout|workdir|params):\\s*(.*)$")
+    private static let rePresetsHeader = NSRegularExpression.compiled("^presets:\\s*$")
+    private static let rePresetEntry = NSRegularExpression.compiled("^(\\S+?)\\s*=\\s*(.*)$")
+    private static let reCompositeLine = NSRegularExpression.compiled("^composite\\s+([\\w_-]+)\\s*(?:\\s{2,}(.+))?$")
+    private static let reParamToken = NSRegularExpression.compiled("^([\\w_-]+)(?:\\s*\\(([\\w_-]+)\\))?(?:\\s*=\\s*(.+))?$")
+    private static let reModelLine = NSRegularExpression.compiled("^(.+?)\\s*=\\s*(\\S.*)$")
+    private static let reTransformLine = NSRegularExpression.compiled("^(\\S.*?)\\s{2,}(\\S.*)$")
+    private static let reTransformField = NSRegularExpression.compiled("^(run|timeout|workdir|params):\\s*(.*)$")
 
-    private static let reCallWhole = try! NSRegularExpression(pattern: "^call\\s+(\\d+)$")
-    private static let reCallLead = try! NSRegularExpression(pattern: "^call\\b")
-    private static let reDigits = try! NSRegularExpression(pattern: "^\\d+$")
-    private static let reModelAtProvider = try! NSRegularExpression(pattern: "^(\\S+(?:\\s+\\S+)*?)\\s+@\\s+(\\S+)\\s*(.*)$")
+    private static let reCallWhole = NSRegularExpression.compiled("^call\\s+(\\d+)$")
+    private static let reCallLead = NSRegularExpression.compiled("^call\\b")
+    private static let reDigits = NSRegularExpression.compiled("^\\d+$")
+    private static let reModelAtProvider = NSRegularExpression.compiled("^(\\S+(?:\\s+\\S+)*?)\\s+@\\s+(\\S+)\\s*(.*)$")
 
     /// Type-signature trail — `core/parser.py::_RE_SIG_TRAIL`. Kind names are the
     /// closed vocabulary from `core/kinds.py` plus `tagged` (SameAsInput, not a Kind).
     private static let kindWord = Kind.allCases.map(\.rawValue).joined(separator: "|") + "|tagged"
     private static let kindList = "(?:\(kindWord))(?:\\s*,\\s*(?:\(kindWord)))*"
     private static let typeRE = "\\[?(?:\(kindList))\\]?"
-    private static let reSigTrail = try! NSRegularExpression(
-        pattern: "("
+    private static let reSigTrail = NSRegularExpression.compiled(
+        "("
             + "\\s+\(typeRE)\\s*(?:→|->)\\s*\(typeRE)"
             + "|\\s{3,}\\[\(kindList)\\]"
             + ")\\s*$"
@@ -192,6 +192,7 @@ nonisolated enum CatParser {
         }
 
         // v0.8: `presets:` block, scanned in the pre-rows region.
+        var presetsOrder: [String] = []
         if isV08 {
             var j = start
             while j < lines.count {
@@ -200,7 +201,7 @@ nonisolated enum CatParser {
                 if t.isEmpty || t.hasPrefix("#") { j += 1 } else { break }
             }
             if j < lines.count, rePresetsHeader.firstMatch(in: lines[j].trimmingCharacters(in: .whitespaces)) != nil {
-                (presets, start) = try parsePresetsBlock(lines, start: j + 1)
+                (presets, presetsOrder, start) = try parsePresetsBlock(lines, start: j + 1)
             }
         }
 
@@ -218,9 +219,15 @@ nonisolated enum CatParser {
         var uses: [String: String] = [:]
         var models: [String: String] = [:]
         var transforms: [String: TransformDef] = [:]
+        var definitionsOrder: [String] = []
+        var usesOrder: [String] = []
+        var modelsOrder: [String] = []
+        var transformsOrder: [String] = []
 
         if isV08 && boundary < lines.count {
-            (definitions, uses, models, transforms) = try parseSections(lines, start: boundary, isV08: true)
+            (definitions, uses, models, transforms,
+             definitionsOrder, usesOrder, modelsOrder, transformsOrder) =
+                try parseSections(lines, start: boundary, isV08: true)
         }
 
         return FlowDocument(
@@ -228,6 +235,7 @@ nonisolated enum CatParser {
             fileKind: fileKind == "catpipeline" ? .catpipeline : .catflow,
             rows: try resolve(parsedRows),
             flags: Set(flags.compactMap { CapabilityFlag(rawValue: $0) }),
+            flagsOrder: flags.compactMap { CapabilityFlag(rawValue: $0) },
             uses: uses,
             models: models,
             transforms: transforms,
@@ -235,7 +243,13 @@ nonisolated enum CatParser {
             accepts: accepts,
             gives: gives,
             params: params,
-            presets: presets
+            presets: presets,
+            pipelineName: pipelineName,
+            modelsOrder: modelsOrder,
+            usesOrder: usesOrder,
+            definitionsOrder: definitionsOrder,
+            transformsOrder: transformsOrder,
+            presetsOrder: presetsOrder
         )
     }
 
@@ -329,7 +343,7 @@ nonisolated enum CatParser {
                 if t.isEmpty || t.hasPrefix("#") { j += 1 } else { break }
             }
             if j < lines.count, rePresetsHeader.firstMatch(in: lines[j].trimmingCharacters(in: .whitespaces)) != nil {
-                (presets, start) = try parsePresetsBlock(lines, start: j + 1)
+                (presets, _, start) = try parsePresetsBlock(lines, start: j + 1)
             }
         }
 
@@ -347,7 +361,8 @@ nonisolated enum CatParser {
         var transforms: [String: TransformDef] = [:]
 
         if isV08 && boundary < lines.count {
-            (definitions, uses, models, transforms) = try parseSections(lines, start: boundary, isV08: true)
+            (definitions, uses, models, transforms, _, _, _, _) =
+                try parseSections(lines, start: boundary, isV08: true)
         }
 
         return ParsedFlow(
@@ -391,7 +406,7 @@ nonisolated enum CatParser {
     /// contract `FlowDocument.resolve` applies to the pre-parsed JSON.
     static func resolve(_ parsed: [ParsedRow], scopeLabel: String = "the flow") throws -> [Row] {
         let ids = parsed.enumerated().map { (number: $0.offset + 1, id: UUID()) }
-        let byNumber = Dictionary(uniqueKeysWithValues: ids.map { ($0.number, $0.id) })
+        let byNumber = Dictionary(ids.map { ($0.number, $0.id) }, uniquingKeysWith: { a, _ in a })
         return try parsed.enumerated().map { index, p in
             let refs = try p.refs.map { ref -> Ref in
                 switch ref {
@@ -517,11 +532,16 @@ nonisolated enum CatParser {
 
     private static func parseSections(
         _ lines: [String], start: Int, isV08: Bool
-    ) throws -> ([String: CompositeDef], [String: String], [String: String], [String: TransformDef]) {
+    ) throws -> ([String: CompositeDef], [String: String], [String: String], [String: TransformDef],
+                 [String], [String], [String], [String]) {
         var definitions: [String: CompositeDef] = [:]
         var uses: [String: String] = [:]
         var models: [String: String] = [:]
         var transforms: [String: TransformDef] = [:]
+        var definitionsOrder: [String] = []
+        var usesOrder: [String] = []
+        var modelsOrder: [String] = []
+        var transformsOrder: [String] = []
         var i = start
         while i < lines.count {
             let line = lines[i]
@@ -532,16 +552,16 @@ nonisolated enum CatParser {
             switch sectionHeaderName(line) {
             case "definitions":
                 i += 1
-                (definitions, i) = try parseDefinitionsSection(lines, start: i, isV08: isV08)
+                (definitions, definitionsOrder, i) = try parseDefinitionsSection(lines, start: i, isV08: isV08)
             case "uses" where isV08:
                 i += 1
-                (uses, i) = try parseUsesSection(lines, start: i, isV08: isV08)
+                (uses, usesOrder, i) = try parseUsesSection(lines, start: i, isV08: isV08)
             case "models":
                 i += 1
-                (models, i) = try parseModelsSection(lines, start: i, isV08: isV08)
+                (models, modelsOrder, i) = try parseModelsSection(lines, start: i, isV08: isV08)
             case "transforms" where isV08:
                 i += 1
-                (transforms, i) = try parseTransformsSection(lines, start: i, isV08: isV08)
+                (transforms, transformsOrder, i) = try parseTransformsSection(lines, start: i, isV08: isV08)
             default:
                 let detail = isV08
                     ? "expected `definitions:`, `uses:`, `models:`, or `transforms:`"
@@ -551,13 +571,15 @@ nonisolated enum CatParser {
                 )
             }
         }
-        return (definitions, uses, models, transforms)
+        return (definitions, uses, models, transforms,
+                definitionsOrder, usesOrder, modelsOrder, transformsOrder)
     }
 
     private static func parseDefinitionsSection(
         _ lines: [String], start: Int, isV08: Bool
-    ) throws -> ([String: CompositeDef], Int) {
+    ) throws -> ([String: CompositeDef], [String], Int) {
         var definitions: [String: CompositeDef] = [:]
+        var order: [String] = []
         var i = start
         while i < lines.count {
             let line = lines[i]
@@ -593,13 +615,15 @@ nonisolated enum CatParser {
             let bodyRows = bodyLines.isEmpty ? [] : try resolve(try parseRowsRaw(bodyLines, start: 0, indent: 0, isV08: isV08))
             i += consumed
 
+            if definitions[name] == nil { order.append(name) }
             definitions[name] = CompositeDef(name: name, signature: signature, params: params, rows: bodyRows)
         }
-        return (definitions, i)
+        return (definitions, order, i)
     }
 
-    private static func parsePresetsBlock(_ lines: [String], start: Int) throws -> ([String: PresetDecl], Int) {
+    private static func parsePresetsBlock(_ lines: [String], start: Int) throws -> ([String: PresetDecl], [String], Int) {
         var presets: [String: PresetDecl] = [:]
+        var order: [String] = []
         var i = start
         while i < lines.count {
             let stripped = lines[i].trimmingCharacters(in: .whitespaces)
@@ -623,10 +647,11 @@ nonisolated enum CatParser {
                 let value = String(part[part.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
                 bindings.append(PresetBinding(key: key, value: value))
             }
+            if presets[name] == nil { order.append(name) }
             presets[name] = PresetDecl(name: name, bindings: bindings)
             i += 1
         }
-        return (presets, i)
+        return (presets, order, i)
     }
 
     private static func parseAcceptsList(_ text: String, lineNum: Int) throws -> [Kind] {
@@ -669,8 +694,9 @@ nonisolated enum CatParser {
         return params
     }
 
-    private static func parseModelsSection(_ lines: [String], start: Int, isV08: Bool) throws -> ([String: String], Int) {
+    private static func parseModelsSection(_ lines: [String], start: Int, isV08: Bool) throws -> ([String: String], [String], Int) {
         var models: [String: String] = [:]
+        var order: [String] = []
         var i = start
         while i < lines.count {
             let line = lines[i]
@@ -692,14 +718,17 @@ nonisolated enum CatParser {
                     detail: "expected `display name = pinned-id` inside models:", isV08: isV08
                 )
             }
-            models[(m[1] ?? "").trimmingCharacters(in: .whitespaces)] = (m[2] ?? "").trimmingCharacters(in: .whitespaces)
+            let name = (m[1] ?? "").trimmingCharacters(in: .whitespaces)
+            if models[name] == nil { order.append(name) }
+            models[name] = (m[2] ?? "").trimmingCharacters(in: .whitespaces)
             i += 1
         }
-        return (models, i)
+        return (models, order, i)
     }
 
-    private static func parseUsesSection(_ lines: [String], start: Int, isV08: Bool) throws -> ([String: String], Int) {
+    private static func parseUsesSection(_ lines: [String], start: Int, isV08: Bool) throws -> ([String: String], [String], Int) {
         var uses: [String: String] = [:]
+        var order: [String] = []
         var i = start
         while i < lines.count {
             let line = lines[i]
@@ -721,14 +750,17 @@ nonisolated enum CatParser {
                     detail: "expected `Name = ./path.cat` inside uses:", isV08: isV08
                 )
             }
-            uses[(m[1] ?? "").trimmingCharacters(in: .whitespaces)] = (m[2] ?? "").trimmingCharacters(in: .whitespaces)
+            let name = (m[1] ?? "").trimmingCharacters(in: .whitespaces)
+            if uses[name] == nil { order.append(name) }
+            uses[name] = (m[2] ?? "").trimmingCharacters(in: .whitespaces)
             i += 1
         }
-        return (uses, i)
+        return (uses, order, i)
     }
 
-    private static func parseTransformsSection(_ lines: [String], start: Int, isV08: Bool) throws -> ([String: TransformDef], Int) {
+    private static func parseTransformsSection(_ lines: [String], start: Int, isV08: Bool) throws -> ([String: TransformDef], [String], Int) {
         var transforms: [String: TransformDef] = [:]
+        var order: [String] = []
         var current: TransformDef?
         var i = start
         while i < lines.count {
@@ -777,10 +809,11 @@ nonisolated enum CatParser {
             let name = (m[1] ?? "").trimmingCharacters(in: .whitespaces)
             let signature = (m[2] ?? "").trimmingCharacters(in: .whitespaces)
             current = TransformDef(name: name, signature: signature, params: [])
+            if transforms[name] == nil { order.append(name) }
             transforms[name] = current
             i += 1
         }
-        return (transforms, i)
+        return (transforms, order, i)
     }
 
     // MARK: - Row parsing

@@ -37,7 +37,8 @@ struct CatFlowRunWiringTests {
     }
 
     @Test func sessionFailedRowShowsErrorSentence() async throws {
-        // A flow whose row 2 is an unknown task → .failed with a row-naming sentence.
+        // CFM-R10-FIX-1: the runner consults `canRun` before starting — a flow with an
+        // unknown task surfaces the refusal as a `.failed` sentence, never a partial run.
         let rows = [
             Row(task: "Read Text", settings: "a.txt"),
             Row(task: "Nope"),
@@ -46,14 +47,16 @@ struct CatFlowRunWiringTests {
         let session = FlowRunSession()
         session.prepareInstall(FlowPreflight.Result())
         session.start(doc: doc, runner: FlowRunner(), context: makeMockContext())
-        try? await Task.sleep(for: .milliseconds(500))
+        // Poll for the failure (the run task applies events asynchronously).
+        var sentence: String?
+        for _ in 0..<40 {
+            if let s = session.errorSentence(for: rows[0].id) { sentence = s; break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
 
-        #expect(session.status(for: rows[0].id) == .succeeded)
-        let row2 = rows[1].id
-        #expect(session.status(for: row2) == .failed)
-        let sentence = session.errorSentence(for: row2)
-        #expect(sentence != nil)
-        #expect(sentence?.contains("Nope") == true || sentence?.lowercased().contains("unknown") == true)
+        #expect(session.status(for: rows[0].id) == .failed)
+        #expect(session.status(for: rows[1].id) == .notRun)
+        #expect(sentence?.contains("Nope") == true)
     }
 
     @Test func cancelStopsAndKeepsEarnedDots() async throws {
@@ -112,9 +115,13 @@ struct CatFlowRunWiringTests {
         let session = FlowRunSession()
         session.prepareInstall(FlowPreflight.Result())
         session.start(doc: doc, runner: FlowRunner(), context: context)
-        try? await Task.sleep(for: .milliseconds(500))
+        // Poll for the failed sentence (the run task applies events asynchronously).
+        var sentence: String?
+        for _ in 0..<40 {
+            if let s = session.errorSentence(for: doc.rows[0].id) { sentence = s; break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
 
-        let sentence = session.errorSentence(for: doc.rows[0].id)
         #expect(sentence != nil)
         #expect(sentence?.contains("Kokoro") == true)
         #expect(sentence?.contains("couldn't be completed") == false)
@@ -143,6 +150,52 @@ struct CatFlowRunWiringTests {
         session.prepareInstall(blocked)
         #expect(session.canRun == false)
         #expect(session.runDisabledReason?.contains("Missing Model") == true)
+    }
+
+    // MARK: - B3: the session's Run gate consults FlowRunner.canRun(doc)
+
+    @Test func sessionCanRunRefusesOutOfScopeLanguage() throws {
+        // An `agent` (Improvise) row is refused by `FlowRunner.canRun` — in the App Store
+        // tier (the MLXUI scheme) the door refusal names the channel; the session must
+        // surface that even with an otherwise-clean preflight (B3, keystone fix).
+        let doc = FlowDocument(version: "0.8", rows: [Row(task: "Improvise", model: "Qwen3 8B")])
+        let session = FlowRunSession()
+        session.prepareInstall(FlowPreflight.Result(), doc: doc)
+        #expect(session.canRun == false)
+        #expect(session.runDisabledReason?.contains("App Store") == true)
+    }
+
+    @Test func sessionCanRunIsTrueForRunnableDocument() throws {
+        let doc = try decode("01-SpokenSummary")
+        let session = FlowRunSession()
+        session.prepareInstall(FlowPreflight.Result(), doc: doc)
+        #expect(session.canRun)
+    }
+
+    // MARK: - H7: re-running a fully-green flow is a fresh run, not a no-op
+
+    @Test func resumeAfterAllRowsSucceededReRunsTheFlow() async throws {
+        let doc = try decode("01-SpokenSummary")
+        let session = FlowRunSession()
+        session.prepareInstall(FlowPreflight.Result(), doc: doc)
+        let counting = CountingExecutor(inner: MockExecutor(blobDirectory: FileManager.default.temporaryDirectory))
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-h7-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let context = FlowRunner.RunContext(flowID: "t", workspace: FlowWorkspace(root: base),
+                                            blobDirectory: base, executor: counting)
+
+        session.start(doc: doc, runner: FlowRunner(), context: context)
+        let deadline = Date().addingTimeInterval(10)
+        while session.isRunning && Date() < deadline { try? await Task.sleep(for: .milliseconds(50)) }
+        #expect(counting.executions == doc.rows.count)
+
+        // Re-run with resume — every row is already ✓, which used to select zero rows (H7).
+        session.start(doc: doc, runner: FlowRunner(), context: context, resume: true)
+        let deadline2 = Date().addingTimeInterval(10)
+        while session.isRunning && Date() < deadline2 { try? await Task.sleep(for: .milliseconds(50)) }
+        #expect(counting.executions == doc.rows.count * 2)
     }
 
     // MARK: - Inspector wiring (CFM-R3-3)
@@ -321,8 +374,33 @@ struct CatFlowRunWiringTests {
 /// A stub executor that throws a real `StageError.engineFailure` — the class of error the
 /// Kokoro engine wraps — so the runner's message routing is observable.
 private struct FailingExecutor: FlowExecutor {
-    func execute(path: String, row: Row, inputs: [Asset]) async throws -> Asset {
+    func execute(path: String, row: Row, inputs: [Asset],
+                 transcript: [FlowInterpreter.TranscriptEntry]?,
+                 context: [(label: String, content: String)]?,
+                 usedFlowContent: String?) async throws -> Asset {
         throw StageError.engineFailure(stage: "Kokoro TTS", underlying: CocoaError(.fileNoSuchFile))
+    }
+}
+
+/// Counts every `execute` it dispatches, delegating to a mock — the H7 harness: a re-run
+/// that silently selects zero rows is a no-op the counter would expose.
+private final class CountingExecutor: FlowExecutor, @unchecked Sendable {
+    private let inner: MockExecutor
+    private let lock = NSLock()
+    private var _executions = 0
+
+    init(inner: MockExecutor) {
+        self.inner = inner
+    }
+
+    var executions: Int { lock.withLock { _executions } }
+
+    func execute(path: String, row: Row, inputs: [Asset],
+                 transcript: [FlowInterpreter.TranscriptEntry]?,
+                 context: [(label: String, content: String)]?,
+                 usedFlowContent: String?) async throws -> Asset {
+        lock.withLock { _executions += 1 }
+        return try await inner.execute(path: path, row: row, inputs: inputs)
     }
 }
 

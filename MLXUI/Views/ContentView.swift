@@ -16,6 +16,8 @@ struct ContentView: View {
                 } detail: {
                     if appState.selectedSection.isHome {
                         HomeView()
+                    } else if case .aiWorkflows = appState.selectedSection {
+                        FlowGalleryView()
                     } else {
                         BrowseView()
                     }

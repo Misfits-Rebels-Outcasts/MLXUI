@@ -18,12 +18,16 @@ enum KokoroEngine {
     /// `speed` scales pacing (1.0 = normal; higher = faster). Loads the model per call
     /// (matches the other engines); instance caching is a later optimization.
     ///
-    /// **Long-text handling.** The Python `mlx_audio` Kokoro pipeline splits the input on
-    /// newlines (`split_pattern=r"\n+"`, `engines/tts.py` collects the segments and
-    /// concatenates) — the model itself is one-shot with a 510-token cap. This Swift engine
-    /// mirrors that: `textSegments` splits on newlines, each segment is synthesized, and the
-    /// audio is concatenated. A single over-510-token *segment* (a giant unbroken paragraph)
-    /// still refuses — matching the Python, never a truncated wrong answer.
+    /// **Long-text handling (CFM-FIX-4).** The Python `mlx_audio` Kokoro pipeline splits the
+    /// input on `re.split(r"\n+", text.strip())` and synthesizes each segment; the model
+    /// itself is one-shot with a 510-token cap. This Swift engine mirrors that:
+    /// `textSegments` splits on runs of `\n` **after stripping the whole text** (CR, VT, FF
+    /// and U+2028/9 are *not* split points — only `\n`, exactly as the Python), each segment
+    /// is further `subChunks`d at sentence/clause boundaries so it stays under the cap, and
+    /// the audio is concatenated. Nothing is dropped: where the Python **truncates** an
+    /// over-long phoneme batch to 510 (a warning, not a refusal), the Swift speaks the whole
+    /// text in sub-chunks. Empty or whitespace-only input raises "Speak produced no audio"
+    /// rather than returning a zero-length WAV (the Python's own error).
     nonisolated static func synthesize(
         _ text: String,
         voice: String = defaultVoice,
@@ -37,10 +41,17 @@ enum KokoroEngine {
             var allSamples: [Float] = []
             var sampleRate = model.sampleRate
             for segment in segments {
-                let audio = try await model.generate(
-                    text: segment, voice: voice, refAudio: nil, refText: nil, language: nil)
-                allSamples.append(contentsOf: audio.asArray(Float.self))
-                sampleRate = model.sampleRate
+                for chunk in subChunks(segment) {
+                    let audio = try await model.generate(
+                        text: chunk, voice: voice, refAudio: nil, refText: nil, language: nil)
+                    allSamples.append(contentsOf: audio.asArray(Float.self))
+                    sampleRate = model.sampleRate
+                }
+            }
+            // FIX-4a: empty/whitespace input (or every segment producing nothing) is an
+            // error — never a silent zero-length WAV.
+            guard !allSamples.isEmpty else {
+                throw SpeakProducedNoAudio()
             }
             return AudioBuffer(samples: allSamples, sampleRate: sampleRate)
         } catch {
@@ -48,14 +59,83 @@ enum KokoroEngine {
         }
     }
 
-    /// Split text into the segments the Kokoro pipeline synthesizes separately — the Swift
-    /// mirror of the Python's `split_pattern=r"\n+"`. A blank line between paragraphs (one
-    /// or more newlines) is the split point; whitespace-only segments are dropped. Pure so
-    /// it is unit-testable without a model.
+    /// Split the text into the segments the Kokoro pipeline synthesizes separately — the
+    /// Swift mirror of `re.split(r"\n+", text.strip())`. The whole text is stripped first,
+    /// only runs of `\n` are split points (a blank line between paragraphs), and empty
+    /// segments are dropped. Pure so it is unit-testable without a model.
     nonisolated static func textSegments(_ text: String) -> [String] {
-        text.split(whereSeparator: \.isNewline)
-            .map(String.init)
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let stripped = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var result: [String] = []
+        var current = String.UnicodeScalarView()
+        var lastWasNewline = false
+        for scalar in stripped.unicodeScalars {
+            if scalar == "\n" {
+                if lastWasNewline { continue }
+                result.append(String(current))
+                current = String.UnicodeScalarView()
+                lastWasNewline = true
+            } else {
+                current.append(scalar)
+                lastWasNewline = false
+            }
+        }
+        result.append(String(current))
+        return result.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    /// Sub-chunk one `\n+` segment at sentence/clause boundaries so each piece fits under
+    /// the model's 510-token cap (CFM-FIX-4d). A single over-long "sentence" is hard-split
+    /// at whitespace. Pure, so it is unit-testable without a model.
+    nonisolated static func subChunks(_ text: String, maxLength: Int = 350) -> [String] {
+        guard text.unicodeScalars.count > maxLength else { return [text] }
+        let regex = NSRegularExpression.compiled(#"[.!?;:]\s+"#)
+        let ns = NSRange(text.startIndex..<text.endIndex, in: text)
+        var sentences: [String] = []
+        var last = text.startIndex
+        for match in regex.matches(in: text, range: ns) {
+            guard let range = Range(match.range, in: text) else { continue }
+            sentences.append(String(text[last...range.lowerBound]))
+            last = range.upperBound
+        }
+        sentences.append(String(text[last...]))
+        var chunks: [String] = []
+        var current = ""
+        for sentence in sentences {
+            let sentence = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !sentence.isEmpty else { continue }
+            if sentence.unicodeScalars.count > maxLength {
+                if !current.isEmpty { chunks.append(current); current = "" }
+                chunks.append(contentsOf: hardSplit(sentence, maxLength: maxLength))
+            } else if current.isEmpty {
+                current = sentence
+            } else if current.unicodeScalars.count + sentence.unicodeScalars.count + 1 <= maxLength {
+                current += " " + sentence
+            } else {
+                chunks.append(current)
+                current = sentence
+            }
+        }
+        if !current.isEmpty { chunks.append(current) }
+        return chunks.filter { !$0.isEmpty }
+    }
+
+    /// Split a too-long string at whitespace boundaries into ≤`maxLength` pieces.
+    private static func hardSplit(_ text: String, maxLength: Int) -> [String] {
+        let words = text.split(whereSeparator: \.isWhitespace).map(String.init)
+        var chunks: [String] = []
+        var current = ""
+        for word in words {
+            if current.isEmpty {
+                current = word
+            } else if current.unicodeScalars.count + word.unicodeScalars.count + 1 <= maxLength {
+                current += " " + word
+            } else {
+                chunks.append(current)
+                current = word
+            }
+        }
+        if !current.isEmpty { chunks.append(current) }
+        return chunks
     }
 
     /// The installed-model directory for a catalog id, mirroring `InstallManager`'s layout
@@ -82,4 +162,11 @@ enum KokoroEngine {
             .map { String($0.dropLast(".safetensors".count)) }
             .sorted()
     }
+}
+
+/// CFM-FIX-4a: the Python's `RuntimeError("Speak produced no audio")` — empty/whitespace
+/// input is an error, never a zero-length WAV. `CustomStringConvertible` so the error-voice
+/// bridge surfaces the sentence, not an opaque NSError.
+private struct SpeakProducedNoAudio: Error, CustomStringConvertible {
+    var description: String { "Speak produced no audio" }
 }

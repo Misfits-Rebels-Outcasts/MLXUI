@@ -83,17 +83,44 @@ nonisolated enum CacheKey {
 
     // MARK: - The key
 
+    /// `journal_version` — a `· ctx` row's cache-key ingredient (P3-MB-05, Spec §9.2/§13.1):
+    /// `(count, sha256(canonical serialization))`, the Python's `context.py::journal_version`.
+    static func journalVersion(_ entries: [(label: String, content: String)]) -> String {
+        let canon = entries.map { "\($0.label)\u{1E}\(nulSafe($0.content))" }.joined(separator: "\u{1F}")
+        let digest = SHA256.hash(data: Data(canon.utf8)).hex
+        return "\(entries.count):\(digest)"
+    }
+
+    /// `transcript_version` — a transcript-keeping decider's (`Think`'s) cache-key ingredient
+    /// (P2-M13-01 follow-up), same `(count, sha256)` shape as `journal_version`.
+    static func transcriptVersion(_ entries: [FlowInterpreter.TranscriptEntry]) -> String {
+        let canon = entries.map { "\($0.tool)\u{1E}\(nulSafe($0.input))\u{1E}\(nulSafe($0.observation))" }
+            .joined(separator: "\u{1F}")
+        let digest = SHA256.hash(data: Data(canon.utf8)).hex
+        return "\(entries.count):\(digest)"
+    }
+
+    /// Control characters (`\x1e`, `\x1f`) can't legally appear in the joined text; a lone
+    /// `\x1f` in the input would fake a spurious ingredient. Sanitize defensively.
+    private static func nulSafe(_ s: String) -> String {
+        s.replacingOccurrences(of: "\u{1F}", with: " ").replacingOccurrences(of: "\u{1E}", with: " ")
+    }
+
     /// `cache_key` — the base five ingredients in Python order, then the conditional
-    /// `frame_version`. (`context_version`/`transcript_version`/`used_flow_content`/
-    /// `resolved_source_hash` are nil for the linear subset — no `· ctx` rows, no `Think`,
-    /// no `uses:`, and every row has a gathered input.)
+    /// `frame_version`, `context_version`, `transcript_version`, `used_flow_content`, then
+    /// `resolved_source_hash` (B5) — the exact `cache.py:446-459` order. The last three fold
+    /// in only when given, so a row that carries none keeps a byte-identical key (FIX-12).
     static func cacheKey(
         task: String,
         model: String?,
         settings: String?,
         inputs: [Asset],
         realism: String,
-        frameVersion: String? = nil
+        frameVersion: String? = nil,
+        resolvedSourceHash: String? = nil,
+        contextVersion: String? = nil,
+        transcriptVersion: String? = nil,
+        usedFlowContent: String? = nil
     ) throws -> String {
         let inputsHash = SHA256.hash(
             data: Data(try inputs.map { try assetInputHash($0) }.joined(separator: "|").utf8)
@@ -105,8 +132,49 @@ nonisolated enum CacheKey {
         if let frameVersion {
             parts.append(frameVersion)
         }
+        if let contextVersion {
+            parts.append(contextVersion)
+        }
+        if let transcriptVersion {
+            parts.append(transcriptVersion)
+        }
+        if let usedFlowContent {
+            parts.append(SHA256.hash(data: Data(usedFlowContent.utf8)).hex)
+        }
+        if let resolvedSourceHash {
+            parts.append(resolvedSourceHash)
+        }
         let basis = parts.joined(separator: "\u{1F}")
         return SHA256.hash(data: Data(basis.utf8)).hex
+    }
+
+    // MARK: - resolved_source_hash (the local-source ingredient, B5)
+
+    /// `cache.py::_LOCAL_SOURCE_TASKS` — the Read family whose row-1 key must fold in the
+    /// **content** of the source file it reads, so editing `policy-2025.md` in the flow
+    /// folder invalidates the row-1 cache (and two flows reading same-named files with
+    /// different contents never collide). Ported from `cache.py:100-109, 241-263, 456-459`.
+    static let localSourceTasks: Set<String> = [
+        "Read Text", "Read Audio", "Read Image", "Read Video",
+        "Read Images", "Read Files", "Read PDF", "Read CSV", "Read JSON", "Read Index",
+    ]
+
+    /// The content hash of the source file a local-source row reads, resolved against the
+    /// flow's working directory. `nil` when the task isn't a local-source read or the file
+    /// doesn't exist yet (a missing source fails the row, so nothing gets cached anyway).
+    static func resolvedSourceHash(task: String, settings: String?,
+                                   flowID: String, workspace: FlowWorkspace) throws -> String? {
+        guard localSourceTasks.contains(task),
+              let path = FlowSettings(settings).pathValue() else { return nil }
+        let url = try workspace.resolve(path, flowID: flowID)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+            return nil
+        }
+        if isDirectory.boolValue {
+            return try directoryHash(url)
+        }
+        return SHA256.hash(data: try Data(contentsOf: url)).hex
     }
 
     /// `frame_version(task)` — the frame file's own content hash for a `RefKind.FRAME` task

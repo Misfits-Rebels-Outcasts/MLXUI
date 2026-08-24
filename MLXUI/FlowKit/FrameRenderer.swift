@@ -42,15 +42,18 @@ nonisolated enum FrameRenderer {
 
     /// Port of `render_frame`: substitutes `{settings.KEY}`, `{input[N]}`, `{asset list}`,
     /// `{asset}`, `{tags}`, `{settings}` — in exactly the Python's order, so a frame that
-    /// nests placeholders renders identically. (`{candidates}` / `{tools}` / `{transcript}`
-    /// belong to decider/agent renderers and are not in the linear-flow subset.)
+    /// nests placeholders renders identically. `assets` is the full reference bundle in
+    /// order: the Python's `render_frame` takes `inputs: list[Asset]` and flattens *across*
+    /// all of them, so `(1,2)` rows like `Rewrite (1,2)` must see ref 1 and ref 2, not just
+    /// the first input (B1). (`{candidates}` / `{tools}` / `{transcript}` belong to
+    /// decider/agent renderers, which canRun refuses in R2.)
     static func render(
         frameText: String,
         settings: String?,
-        asset: Asset,
+        assets: [Asset],
         tags: [String]? = nil
     ) throws -> String {
-        let texts = try flatTexts(asset)
+        let texts = try assets.flatMap { try flatTexts($0) }
         let s = FlowSettings(settings)
 
         // {settings.KEY} — first, before any other substitution (the Python does this via

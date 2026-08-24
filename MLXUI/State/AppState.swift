@@ -7,12 +7,30 @@ final class AppState {
     // ── Optional domain hiding ──────────────────────────────────────────────────
     /// Set to `true` to hide the "Video Generation" domain (and every model listed
     /// under it, e.g. WAN 2.1) from the catalog UI. Flip back to `false` to restore.
-    static let hideVideoGeneration = false
+    static let hideVideoGeneration = true
+
+    /// Set to `true` to hide the "Image Segmentation" domain (and every model listed
+    /// under it, e.g. SAM3) from the catalog UI. Mirrors `hideVideoGeneration`.
+    static let hideImageSegmentation = true
 
     /// Set to `true` to hide the entire "Flows" section (sidebar, gallery, run views).
     /// When `true`, `galleryEntries` is empty and the section does not render — the app
     /// returns to its pre-Flows behavior exactly. Mirrors `hideVideoGeneration`.
     static let hideFlows = false
+
+    /// Set to `true` to hide the **Automate → AI Workflows** gallery specifically (the
+    /// sidebar section and the bundled flow badges), independently of the rest of Flows.
+    /// When `true`, `galleryEntries` is empty. Mirrors `hideFlows`.
+    static let hideAutomate = false
+
+    /// Hide individual gallery flows (badges) by gallery number. Numbers are the
+    /// `_metadata.json` `number` field (1–69 today), stable across renames. Ranges
+    /// read naturally — hide flows 60–69:
+    /// `static let hiddenFlowNumbers: Set<Int> = Set(60...69)`
+    /// …and also hide flow 50:
+    /// `static let hiddenFlowNumbers: Set<Int> = [50] + Set(60...69)` (or `Set([50])`).
+    /// Empty = show everything.
+    static let hiddenFlowNumbers: Set<Int> = Set(60...69)
 
     /// The bundled gallery flows, in gallery order. Empty when `hideFlows` is true.
     var galleryEntries: [GalleryFlowMetadata] = []
@@ -59,6 +77,22 @@ final class AppState {
     // Settings sheet
     var showSettings = false
 
+    // Automate → AI Workflows: a gallery flow chosen from the badge grid. Non-nil pushes
+    // that flow's detail (title, rows, inspector) onto the detail NavigationStack.
+    var selectedFlow: FlowSelection?
+
+    /// CFM-R11-0: a flow the editor is editing — nil document = a fresh flow (the old
+    /// "New Flow" route). Non-nil pushes the editor onto the detail stack.
+    var editingFlow: FlowEditTarget?
+
+    /// A stable identity for the editor's navigation destination.
+    struct EditorNavigation: Hashable { var id = UUID() }
+
+    /// Flow ids whose required models are currently downloading. Lives here (not in the
+    /// per-view `FlowRunSession`) so the "Installing Models" state survives navigating away
+    /// from the flow and back (smoke-30 finding).
+    var installingFlowIDs: Set<String> = []
+
     // R5-5: a `.cat` file the user opened from disk. Non-nil shows `OpenedFlowView`
     // in the Flows detail area. Read-only — parsed + validated, never written.
     var openedCatFlow: OpenedCatFlow?
@@ -71,8 +105,9 @@ final class AppState {
         installedURL = ModelStore.shared.installedRegistryURL
         loadInstalledModels()
         for module in installedModules { module.register(into: registry) }
-        if !Self.hideFlows {
+        if !Self.hideFlows, !Self.hideAutomate {
             galleryEntries = GalleryLoader.loadMetadata()
+                .filter { !Self.hiddenFlowNumbers.contains($0.number) }
         }
     }
 
@@ -82,11 +117,15 @@ final class AppState {
         return data.sidebarSections.filter { $0.modelCount(in: data) > 0 }
     }
 
-    /// Domain ids for a browse section, minus domains hidden by `hideVideoGeneration`.
+    /// Domain ids for a browse section, minus domains hidden by `hideVideoGeneration` /
+    /// `hideImageSegmentation`.
     private func domainIDsForSection(_ sectionID: String) -> [String] {
         guard let data = browserData else { return [] }
         let ids = data.sidebarSections.first(where: { $0.id == sectionID })?.domainIds ?? []
-        return ids.filter { !(Self.hideVideoGeneration && $0 == "videogen") }
+        return ids.filter {
+            !(Self.hideVideoGeneration && $0 == "videogen")
+                && !(Self.hideImageSegmentation && $0 == "segmentation")
+        }
     }
 
     // ── Sources actually present in the catalog ──
@@ -387,8 +426,16 @@ final class AppState {
 enum SidebarItem: Hashable {
     case home
     case browse(String)
-    case flows(String)
+    case aiWorkflows
     var isHome: Bool { if case .home = self { return true }; return false }
+}
+
+/// A gallery flow selected from the "AI Workflows" badge grid, pushed onto the detail
+/// stack so the sidebar selection ("AI Workflows") stays highlighted and a back button
+/// is available.
+struct FlowSelection: Hashable, Identifiable {
+    let flowID: String
+    var id: String { flowID }
 }
 
 enum SortOrder: String, CaseIterable, Identifiable {

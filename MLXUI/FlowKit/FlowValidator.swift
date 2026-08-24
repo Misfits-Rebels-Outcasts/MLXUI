@@ -337,8 +337,8 @@ nonisolated enum FlowValidator {
 
     // MARK: - Composite calling-row checks (E404/E406)
 
-    private static let reKV = try! NSRegularExpression(pattern: "^([\\w-]+)\\s*=\\s*(.+)$")
-    private static let reInternalCap = try! NSRegularExpression(pattern: "[a-z][A-Z]")
+    private static let reKV = NSRegularExpression.compiled("^([\\w-]+)\\s*=\\s*(.+)$")
+    private static let reInternalCap = NSRegularExpression.compiled("[a-z][A-Z]")
 
     static func looksLikeCompositeName(_ task: String) -> Bool {
         !task.contains(" ") && reInternalCap.firstMatch(in: task) != nil
@@ -398,7 +398,7 @@ nonisolated enum FlowValidator {
 
     // MARK: - E207 placeholder check
 
-    private static let reTemplateToken = try! NSRegularExpression(pattern: "\\{(input(?::(\\d+))?|\\d+|[A-Za-z_][A-Za-z0-9_-]*)\\}")
+    private static let reTemplateToken = NSRegularExpression.compiled("\\{(input(?::(\\d+))?|\\d+|[A-Za-z_][A-Za-z0-9_-]*)\\}")
 
     static func unquotePattern(_ raw: String) -> String {
         let s = raw.trimmingCharacters(in: .whitespaces)
@@ -638,7 +638,8 @@ extension FlowValidator {
     // MARK: - checkFlow entry
 
     /// `check_flow(flow, registry)` — run every check; issues in row order.
-    static func checkFlow(_ flow: ParsedFlow, registry: (any FlowRegistry)? = nil) -> [FlowIssue] {
+    static func checkFlow(_ flow: ParsedFlow, registry: (any FlowRegistry)? = nil,
+                          workspace: FlowWorkspace? = nil, flowID: String? = nil) -> [FlowIssue] {
         var issues: [FlowIssue] = []
         let isV08 = flow.version == "0.8"
         let isV04 = ["0.4", "0.7", "0.8"].contains(flow.version)
@@ -646,7 +647,7 @@ extension FlowValidator {
         _ = checkRows(
             flow.rows, pathPrefix: "", blockInputs: nil, issues: &issues,
             isV04: isV04, definitions: flow.definitions, isV08: isV08,
-            uses: flow.uses, registry: registry
+            uses: flow.uses, registry: registry, transforms: flow.transforms
         )
 
         if flow.version == "0.7" || flow.version == "0.8" {
@@ -656,11 +657,132 @@ extension FlowValidator {
             checkRateBudget(flow.rows, issues: &issues, isV08: isV08, transforms: flow.transforms)
             checkPipelineRules(flow, issues: &issues)
             checkModelsPinned(flow.rows, models: flow.models, registry: registry, issues: &issues)
+            checkDoors(flow, issues: &issues, workspace: workspace, flowID: flowID)
         }
         if isV08, !flow.uses.isEmpty {
             checkUsesAllNamed(flow.rows, uses: flow.uses, issues: &issues)
         }
         return issues
+    }
+
+    // MARK: - The door checks (CFM-R10-FIX-3; E109–E112, E118, E407–E409, E114–E117, E119)
+
+    /// Emits the thirteen door checks that existed in `ErrorCatalog` and never fired
+    /// (`core/validator.py:2710-2810`, `core/uses.py::_check_capability_propagation`).
+    /// The `uses:` checks (E114–E117) need a workspace + flowID to resolve sibling flows;
+    /// without them they are skipped (the editor always passes both).
+    static func checkDoors(_ flow: ParsedFlow, issues: inout [FlowIssue],
+                           workspace: FlowWorkspace?, flowID: String?) {
+        let flags = Set(flow.flags)
+
+        // E109: an `Improvise` row without the `improvise` header flag.
+        for (path, row) in iterFlowRows(flow.rows) where row.task == "Improvise" {
+            if !flags.contains("improvise") {
+                issues.append(FlowIssue(row: path, code: "E109",
+                                        message: (try? ErrorCatalog.fill(code: "E109", values: ["n": path], isV08: true)) ?? ""))
+            }
+        }
+        // E110: an `Improvise` row without `max_actions=N` and `timeout=<duration>`.
+        for (path, row) in iterFlowRows(flow.rows) where row.task == "Improvise" {
+            let s = FlowSettings(row.settings)
+            let bounded = s.value(for: "max_actions") != nil && s.value(for: "timeout") != nil
+            if !bounded {
+                issues.append(FlowIssue(row: path, code: "E110",
+                                        message: (try? ErrorCatalog.fill(code: "E110", values: ["n": path], isV08: true)) ?? ""))
+            }
+        }
+        // E111: an `Improvise` row without `workdir=<dir>`.
+        for (path, row) in iterFlowRows(flow.rows) where row.task == "Improvise" {
+            if FlowSettings(row.settings).value(for: "workdir") == nil {
+                issues.append(FlowIssue(row: path, code: "E111",
+                                        message: (try? ErrorCatalog.fill(code: "E111", values: ["n": path], isV08: true)) ?? ""))
+            }
+        }
+        // E112: `improvise` and `events` flags together (§14.4f).
+        if flags.contains("improvise"), flags.contains("events") {
+            issues.append(FlowIssue(row: "1", code: "E112",
+                                    message: (try? ErrorCatalog.fill(code: "E112", isV08: true)) ?? ""))
+        }
+        // E118: `transforms:` declared but no `code` flag.
+        if !flow.transforms.isEmpty, !flags.contains("code") {
+            issues.append(FlowIssue(row: "1", code: "E118",
+                                    message: (try? ErrorCatalog.fill(code: "E118", isV08: true)) ?? ""))
+        }
+        // E407/E408/E119: a calling row's transform must declare `run:`/`timeout:`/`workdir:`.
+        for (path, row) in iterFlowRows(flow.rows) {
+            guard let transform = flow.transforms[row.task ?? ""] else { continue }
+            if transform.run == nil {
+                issues.append(FlowIssue(row: path, code: "E407",
+                                        message: (try? ErrorCatalog.fill(code: "E407", values: ["n": path, "transform": row.task ?? ""], isV08: true)) ?? ""))
+            }
+            if transform.timeout == nil {
+                issues.append(FlowIssue(row: path, code: "E408",
+                                        message: (try? ErrorCatalog.fill(code: "E408", values: ["n": path, "transform": row.task ?? ""], isV08: true)) ?? ""))
+            }
+            if transform.workdir == nil {
+                issues.append(FlowIssue(row: path, code: "E119",
+                                        message: (try? ErrorCatalog.fill(code: "E119", values: ["n": path, "transform": row.task ?? ""], isV08: true)) ?? ""))
+            }
+            // E409: the `run:` script must exist and be executable (needs the workspace).
+            if let run = transform.run, let workspace, let flowID,
+               let url = try? workspace.resolve(run, flowID: flowID),
+               !FileManager.default.isExecutableFile(atPath: url.path) {
+                issues.append(FlowIssue(row: path, code: "E409",
+                                        message: (try? ErrorCatalog.fill(code: "E409", values: ["n": path, "transform": row.task ?? "", "path": url.lastPathComponent], isV08: true)) ?? ""))
+            }
+        }
+        // E114–E117: the `uses:` checks (sibling-flow resolution; needs the workspace).
+        if let workspace, let flowID, !flow.uses.isEmpty {
+            checkUsesDoors(flow, issues: &issues, workspace: workspace, flowID: flowID)
+        }
+    }
+
+    /// E114–E117 — `uses:` path outside the folder, cycle, invalid used flow, and the
+    /// transitive capability propagation (a used flow's `code`/`improvise`/`offdevice`
+    /// must be declared here too — R28).
+    static func checkUsesDoors(_ flow: ParsedFlow, issues: inout [FlowIssue],
+                               workspace: FlowWorkspace, flowID: String) {
+        for (name, path) in flow.uses.sorted(by: { $0.key < $1.key }) {
+            // E115 cycle detection + E117 propagation run together over the chain.
+            var visited: Set<String> = []
+            var chain: [String] = []
+            var cycle = false
+            var inherited = Set<String>()
+            var usedInvalid: (String, String)?
+
+            func reach(_ entryPath: String) {
+                if visited.contains(entryPath) { cycle = true; return }
+                visited.insert(entryPath)
+                chain.append(entryPath)
+                guard let url = try? workspace.resolve(entryPath, flowID: flowID) else { return }
+                guard let text = try? String(contentsOf: url, encoding: .utf8),
+                      let used = try? CatParser.parseForValidation(text) else {
+                    if usedInvalid == nil { usedInvalid = (name, entryPath) }
+                    return
+                }
+                inherited.formUnion(used.flags.filter { ["code", "improvise", "offdevice"].contains($0) })
+                for sub in used.uses.values { reach(sub) }
+            }
+            reach(path)
+
+            // E115: cycle.
+            if cycle {
+                issues.append(FlowIssue(row: "1", code: "E115",
+                                        message: (try? ErrorCatalog.fill(code: "E115", values: ["a": name, "b": chain.count > 1 ? chain[1] : path, "chain": chain.joined(separator: " -> ")], isV08: true)) ?? ""))
+            }
+            // E116: a used flow that doesn't validate.
+            if let usedInvalid {
+                issues.append(FlowIssue(row: "1", code: "E116",
+                                        message: (try? ErrorCatalog.fill(code: "E116", values: ["n": name, "path": usedInvalid.1, "first-error": "it doesn't parse"], isV08: true)) ?? ""))
+            }
+            // E117: a capability inherited through the chain but not declared here.
+            let flags = Set(flow.flags)
+            for flag in inherited.sorted() where !flags.contains(flag) {
+                let chainPhrase = chain.count > 1 ? "through " + chain.dropFirst().map { "`\($0)`" }.joined(separator: " -> ") : ""
+                issues.append(FlowIssue(row: "1", code: "E117",
+                                        message: (try? ErrorCatalog.fill(code: "E117", values: ["path": path, "chain": chainPhrase], isV08: true)) ?? ""))
+            }
+        }
     }
 
     // MARK: - _check_rows
@@ -669,7 +791,8 @@ extension FlowValidator {
         _ rows: [ParsedRow], pathPrefix: String, blockInputs: [Shape?]?, issues: inout [FlowIssue],
         isV04: Bool, blockPath: String? = nil, parentRowCount: Int? = nil,
         definitions: [String: CompositeDef]? = nil, isV08: Bool = false,
-        uses: [String: String]? = nil, registry: (any FlowRegistry)? = nil, inEach: Bool = false
+        uses: [String: String]? = nil, registry: (any FlowRegistry)? = nil, inEach: Bool = false,
+        transforms: [String: TransformDef]? = nil
     ) -> [Int: Shape?] {
         var resolved: [Int: Shape?] = [:]
 
@@ -719,6 +842,12 @@ extension FlowValidator {
                         code: "E113", values: ["n": path, "task": task], isV08: isV08)) ?? ""))
                     resolved[position] = nil
                     continue
+                } else if let transform = transforms?[task] {
+                    // A row naming a `transforms:` entry is a transform call — no catalog
+                    // entry, resolved by its declared signature (CFM-R10-FIX-3).
+                    let pair = transform.signature.flatMap(parseDeclaredSignature) ?? (nil, nil)
+                    accepts = pair.0 ?? .anyKind
+                    gives = pair.1 ?? .anyKind
                 } else if looksLikeCompositeName(task) {
                     issues.append(FlowIssue(row: path, code: "E405", message: (try? ErrorCatalog.fill(
                         code: "E405", values: ["n": path, "composite": task])) ?? ""))
@@ -1101,8 +1230,8 @@ extension FlowValidator {
     static func controlFlowIssues(_ rows: [ParsedRow], pathPrefix: String, isV08: Bool) -> [Int: [FlowIssue]] {
         let n = rows.count
         var byPosition: [Int: [FlowIssue]] = [:]
-        for p in 1...n { byPosition[p] = [] }
         if n == 0 { return byPosition }
+        for p in 1...n { byPosition[p] = [] }   // 1...0 would trap — guarded above (H1)
 
         let (edges, dangling) = buildControlGraph(rows)
 
@@ -1500,8 +1629,8 @@ extension FlowValidator {
 
     // MARK: - Rate budget (E605)
 
-    private static let reRunsLeq = try! NSRegularExpression(pattern: "\\bruns\\s*(≤|<=)")
-    private static let reMaxRuns = try! NSRegularExpression(pattern: "\\bmax_runs\\s*=")
+    private static let reRunsLeq = NSRegularExpression.compiled("\\bruns\\s*(≤|<=)")
+    private static let reMaxRuns = NSRegularExpression.compiled("\\bmax_runs\\s*=")
 
     static func checkRateBudget(_ rows: [ParsedRow], issues: inout [FlowIssue], isV08: Bool, transforms: [String: TransformDef]) {
         guard let first = rows.first, isTriggerRow(first) else { return }
@@ -1691,8 +1820,8 @@ nonisolated enum FlowRangeBounds {
         var detail: String
     }
 
-    private static let reBounds = try! NSRegularExpression(pattern: "^(-?\\d+)\\.\\.(-?\\d+)$")
-    private static let reInt = try! NSRegularExpression(pattern: "^-?\\d+$")
+    private static let reBounds = NSRegularExpression.compiled("^(-?\\d+)\\.\\.(-?\\d+)$")
+    private static let reInt = NSRegularExpression.compiled("^-?\\d+$")
 
     /// `parse_bounds(settings_raw)` — the shared parse; throws `BoundsError` on a
     /// malformed/descending range.

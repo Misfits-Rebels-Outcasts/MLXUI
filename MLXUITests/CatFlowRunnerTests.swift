@@ -57,9 +57,9 @@ struct CatFlowRunnerTests {
         let store = FlowCacheStore(root: base.appendingPathComponent("cache"))
 
         let mock = MockExecutor(blobDirectory: base.appendingPathComponent("blobs"))
-        let caching = CachingExecutor(inner: mock, store: store, cacheTier: "real",
-                                      catalog: [], runSeed: 0)
         let workspace = FlowWorkspace(root: base.appendingPathComponent("flows"))
+        let caching = CachingExecutor(inner: mock, store: store, cacheTier: "real",
+                                      catalog: [], runSeed: 0, workspace: workspace, flowID: "t")
         let context = FlowRunner.RunContext(flowID: "t", workspace: workspace,
                                             blobDirectory: base.appendingPathComponent("blobs"),
                                             executor: caching)
@@ -76,7 +76,10 @@ struct CatFlowRunnerTests {
         #expect(hits <= started)   // some rows may be NEVER_CACHE (Save*)
     }
 
-    @Test func startIndexRunsOnlyFromThatRow() async throws {
+    @Test func startIndexIsIgnoredByTheFullInterpreter() async throws {
+        // CFM-R7: the full interpreter (which now backs `FlowRunner.run`) always runs the
+        // whole flow from the top — `startIndex`/`resumeOutputs` are retained only for the
+        // session's resume bookkeeping. Unchanged rows replay as cache hits, which is fast.
         let doc = try decode("01-SpokenSummary")
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("catflow-resume-\(UUID().uuidString)")
@@ -88,8 +91,7 @@ struct CatFlowRunnerTests {
                                             blobDirectory: blob,
                                             executor: MockExecutor(blobDirectory: blob))
 
-        // Resume from row index 3 (0-based) — rows 3..5 run. Row 6 references row 2, so its
-        // already-earned output must be seeded via resumeOutputs (the real session does this).
+        // Even a "resume from row 3" call runs every row.
         let resumeOutputs: [UUID: Asset] = [
             doc.rows[1].id: Asset(items: [Item(kind: .text, value: "the transcript",
                                                path: nil, sourceText: nil)]),
@@ -100,9 +102,7 @@ struct CatFlowRunnerTests {
             if case .started(let id) = event { return id }
             return nil
         }
-        #expect(started.map(\.uuidString) == doc.rows[3...].map(\.id.uuidString))
-        // No row before index 3 started (rows 0..2 are already done).
-        #expect(started.allSatisfy { id in doc.rows[0..<3].allSatisfy { $0.id != id } })
+        #expect(started.map(\.uuidString) == doc.rows.map(\.id.uuidString))
     }
 
     // MARK: - canRun
@@ -111,14 +111,38 @@ struct CatFlowRunnerTests {
         #expect(FlowRunner.canRun(try decode("01-SpokenSummary")) == .runnable)
     }
 
-    @Test func photoWebPrepIsNotRunnableNamingEach() throws {
-        let doc = try decode("21-PhotoWebPrep")
-        let runnability = FlowRunner.canRun(doc)
-        guard case .notRunnable(let reason) = runnability else {
-            Issue.record("expected not runnable")
-            return
-        }
-        #expect(reason.contains("each") || reason.contains("block"))
+    @Test func photoWebPrepIsRunnableWithBlocks() throws {
+        // CFM-R7-FIX-2: blocks are no longer refused — `21-PhotoWebPrep`'s `<each>`,
+        // `Resize (input:1)`, `Watermark`, and `Save Images` all run under the interpreter.
+        #expect(FlowRunner.canRun(try decode("21-PhotoWebPrep")) == .runnable)
+    }
+
+    // MARK: - B4: auto-chain is shape-gated
+
+    @Test func incompatibleAutoChainFeedsNoInput() async throws {
+        // `1. Read Text / 2. Summarize / 3. Save Text summary.txt / 4. Title`. Row 3 gives
+        // `Single(status)`; row 4 (Title) auto-chains it — shape-incompatible, so it must
+        // receive NO input (the Python's `single_compatible` gate), not the status string.
+        let rows = [
+            Row(task: "Read Text", settings: "a.txt"),
+            Row(task: "Summarize", model: "Qwen3 8B"),
+            Row(task: "Save Text", settings: "summary.txt"),
+            Row(task: "Title", model: "Qwen3 8B"),
+        ]
+        let doc = FlowDocument(version: "0.8", rows: rows)
+        let recording = RecordingExecutor()
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-b4-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let context = FlowRunner.RunContext(flowID: "t", workspace: FlowWorkspace(root: base),
+                                            blobDirectory: base, executor: recording)
+        for await _ in FlowRunner().run(doc, context: context) {}
+
+        // Row 2 (Summarize) chains row 1's text — compatible, fed.
+        #expect(recording.received["2"]?.isEmpty == false)
+        // Row 4 (Title) chains row 3's status — incompatible, fed nothing (B4).
+        #expect(recording.received["4"]?.isEmpty == true)
     }
 
     // MARK: - Full mock run of Spoken Summary
@@ -191,8 +215,8 @@ struct CatFlowRunnerTests {
     // MARK: - Stage failure halts
 
     @Test func stageFailureEmitsFailedAndHalts() async throws {
-        // A flow whose row 3 is an unknown task → the executor throws → .failed, no later
-        // .started. Use a minimal hand-built document so the failure row is deterministic.
+        // CFM-R10-FIX-1: `FlowRunner.run` consults `canRun` before starting — a flow with an
+        // unknown task is refused upfront (a `.failed` on row 1), never partially started.
         let rows = [
             Row(task: "Read Text", settings: "a.txt"),
             Row(task: "Read Text", settings: "b.txt"),
@@ -203,10 +227,9 @@ struct CatFlowRunnerTests {
         let context = try makeContext()
         let events = try await events(doc, context: context)
 
-        // The run halts at row 3: exactly two rows start, then a failure.
         let startedCount = events.filter { if case .started = $0 { return true }; return false }.count
         let failed = events.filter { if case .failed = $0 { return true }; return false }.count
-        #expect(startedCount == 2)
+        #expect(startedCount == 0)
         #expect(failed == 1)
     }
 
@@ -239,5 +262,24 @@ struct CatFlowRunnerTests {
         let out = try await mock.execute(path: "2", row: row, inputs: [input])
         let value = out.items.first?.value ?? ""
         #expect(value.hasPrefix("[mock:text]"))
+    }
+}
+
+/// An executor that records the inputs each row received (by path) — the B4 harness: it
+/// proves an incompatible auto-chain row is fed nothing rather than the wrong output. Outputs
+/// follow the task's real kind (Save Text → status), so the interpreter's runtime shape gate
+/// sees what a real flow produces.
+private final class RecordingExecutor: FlowExecutor, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _received: [String: [Asset]] = [:]
+    var received: [String: [Asset]] { lock.withLock { _received } }
+
+    func execute(path: String, row: Row, inputs: [Asset],
+                 transcript: [FlowInterpreter.TranscriptEntry]?,
+                 context: [(label: String, content: String)]?,
+                 usedFlowContent: String?) async throws -> Asset {
+        lock.withLock { _received[path] = inputs }
+        let kind: Kind = row.task == "Save Text" ? .status : .text
+        return Asset(items: [Item(kind: kind, value: "ok", path: nil, sourceText: nil)])
     }
 }

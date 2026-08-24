@@ -106,6 +106,61 @@ struct CatFlowCacheStoreTests {
         #expect(countFiles(store.blobsDirectory) == 2)
     }
 
+    // MARK: - resolved_source_hash (B5: no stale replay, no cross-flow collision)
+
+    @Test func resolvedSourceHashChangesWhenSourceFileChanges() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-sourcehash-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let flowDir = base.appendingPathComponent("flows/08-PolicyDiff")
+        try FileManager.default.createDirectory(at: flowDir, withIntermediateDirectories: true)
+        let ws = FlowWorkspace(root: base.appendingPathComponent("flows"))
+        let file = flowDir.appendingPathComponent("policy-2025.md")
+
+        try Data("old policy text".utf8).write(to: file)
+        let h1 = try #require(try CacheKey.resolvedSourceHash(task: "Read Text",
+                                                              settings: "policy-2025.md",
+                                                              flowID: "08-PolicyDiff", workspace: ws))
+        // The user edits the file in the flow folder — the hash must change (B5).
+        try Data("policy after the meeting".utf8).write(to: file)
+        let h2 = try #require(try CacheKey.resolvedSourceHash(task: "Read Text",
+                                                              settings: "policy-2025.md",
+                                                              flowID: "08-PolicyDiff", workspace: ws))
+        #expect(h1 != h2)
+    }
+
+    @Test func readTextKeyFoldsSourceContentHash() throws {
+        // The key for row 1 of a local-source flow must fold the source file's content,
+        // so an edit invalidates the entry and two flows with different files never collide.
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-keyhash-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let flowDir = base.appendingPathComponent("flows/08-PolicyDiff")
+        try FileManager.default.createDirectory(at: flowDir, withIntermediateDirectories: true)
+        let ws = FlowWorkspace(root: base.appendingPathComponent("flows"))
+        let file = flowDir.appendingPathComponent("policy-2025.md")
+        try Data("v1".utf8).write(to: file)
+        let h1 = try CacheKey.resolvedSourceHash(task: "Read Text", settings: "policy-2025.md",
+                                                 flowID: "08-PolicyDiff", workspace: ws)
+        try Data("v2".utf8).write(to: file)
+        let h2 = try CacheKey.resolvedSourceHash(task: "Read Text", settings: "policy-2025.md",
+                                                 flowID: "08-PolicyDiff", workspace: ws)
+
+        let keyA = try CacheKey.cacheKey(task: "Read Text", model: nil, settings: "policy-2025.md",
+                                         inputs: [], realism: "real", resolvedSourceHash: h1)
+        let keyB = try CacheKey.cacheKey(task: "Read Text", model: nil, settings: "policy-2025.md",
+                                         inputs: [], realism: "real", resolvedSourceHash: h2)
+        #expect(keyA != keyB)
+
+        // Non-local-source tasks (and tasks with a gathered input) never fold the hash.
+        let noHash = try CacheKey.cacheKey(task: "Summarize", model: "m", settings: nil,
+                                           inputs: [], realism: "real")
+        let noHash2 = try CacheKey.cacheKey(task: "Summarize", model: "m", settings: nil,
+                                            inputs: [], realism: "real",
+                                            resolvedSourceHash: "x")
+        #expect(noHash != noHash2)   // provided → folded; otherwise not
+    }
+
     // MARK: - LRU eviction
 
     @Test func evictIfNeededRemovesOldestFirst() throws {

@@ -28,6 +28,9 @@ nonisolated struct FlowDocument: Codable, Sendable, Equatable {
     // carries `version` + `rows` (+ optional `flags`/`definitions`/`models`), so these
     // default and are populated by the R5 parser.
     var flags: Set<CapabilityFlag>
+    /// Source order of the header flags — the R6 `CatSerializer` renders `; code; events` in
+    /// the order the file wrote them (the Python's flags are an ordered tuple; the Set isn't).
+    var flagsOrder: [CapabilityFlag]
     var uses: [String: String]
     var models: [String: String]
     var transforms: [String: TransformDef]
@@ -36,12 +39,22 @@ nonisolated struct FlowDocument: Codable, Sendable, Equatable {
     var gives: String?
     var params: [ParamDecl]
     var presets: [String: PresetDecl]
+    /// `.catpipeline` declaration name (`pipeline <Name>`), kept for the R6 serializer.
+    var pipelineName: String?
+    /// Source order of the section keys — the R6 `CatSerializer` needs it to reproduce a
+    /// file byte-for-byte (the Python's dicts are insertion-ordered; Swift's are not).
+    var modelsOrder: [String]
+    var usesOrder: [String]
+    var definitionsOrder: [String]
+    var transformsOrder: [String]
+    var presetsOrder: [String]
 
     init(
         version: String,
         fileKind: FileKind = .catflow,
         rows: [Row] = [],
         flags: Set<CapabilityFlag> = [],
+        flagsOrder: [CapabilityFlag] = [],
         uses: [String: String] = [:],
         models: [String: String] = [:],
         transforms: [String: TransformDef] = [:],
@@ -49,12 +62,19 @@ nonisolated struct FlowDocument: Codable, Sendable, Equatable {
         accepts: [Kind]? = nil,
         gives: String? = nil,
         params: [ParamDecl] = [],
-        presets: [String: PresetDecl] = [:]
+        presets: [String: PresetDecl] = [:],
+        pipelineName: String? = nil,
+        modelsOrder: [String] = [],
+        usesOrder: [String] = [],
+        definitionsOrder: [String] = [],
+        transformsOrder: [String] = [],
+        presetsOrder: [String] = []
     ) {
         self.version = version
         self.fileKind = fileKind
         self.rows = rows
         self.flags = flags
+        self.flagsOrder = flagsOrder
         self.uses = uses
         self.models = models
         self.transforms = transforms
@@ -63,6 +83,12 @@ nonisolated struct FlowDocument: Codable, Sendable, Equatable {
         self.gives = gives
         self.params = params
         self.presets = presets
+        self.pipelineName = pipelineName
+        self.modelsOrder = modelsOrder
+        self.usesOrder = usesOrder
+        self.definitionsOrder = definitionsOrder
+        self.transformsOrder = transformsOrder
+        self.presetsOrder = presetsOrder
     }
 
     // MARK: Codable — parse-tree shape, numbers on the wire
@@ -72,6 +98,7 @@ nonisolated struct FlowDocument: Codable, Sendable, Equatable {
         self.version = raw.version ?? ""
         self.fileKind = .catflow
         self.flags = Set((raw.flags ?? []).compactMap { CapabilityFlag(rawValue: $0) })
+        self.flagsOrder = (raw.flagsOrder ?? []).compactMap { CapabilityFlag(rawValue: $0) }
         self.models = raw.models ?? [:]
         self.definitions = [:]
         self.transforms = [:]
@@ -80,19 +107,50 @@ nonisolated struct FlowDocument: Codable, Sendable, Equatable {
         self.gives = nil
         self.params = []
         self.presets = [:]
+        self.pipelineName = raw.pipelineName
+        self.modelsOrder = raw.modelsOrder ?? []
+        self.usesOrder = raw.usesOrder ?? []
+        self.definitionsOrder = raw.definitionsOrder ?? []
+        self.transformsOrder = raw.transformsOrder ?? []
+        self.presetsOrder = raw.presetsOrder ?? []
         self.rows = try FlowDocument.resolve(raw.rows, scopeLabel: "the flow")
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: RawFlow.CodingKeys.self)
         try container.encode(version, forKey: .version)
-        let rawRows = try FlowDocument.serialize(rows, scope: Dictionary(uniqueKeysWithValues: rows.enumerated().map { ($1.id, $0 + 1) }))
+        let rawRows = try FlowDocument.serialize(rows, scope: Dictionary(rows.enumerated().map { ($1.id, $0 + 1) }, uniquingKeysWith: { a, _ in a }))
         try container.encode(rawRows, forKey: .rows)
         if !flags.isEmpty {
             try container.encode(flags.map(\.rawValue), forKey: .flags)
         }
         if !models.isEmpty {
             try container.encode(models, forKey: .models)
+        }
+        // Swift-only round-trip keys: the parser-order fields the Python wire shape doesn't
+        // carry. Encoded additively (Python ignores them), decoded when present, so a
+        // Swift-encoded document re-serializes with its sections in source order and its
+        // `pipeline` line (CFM-R8-FIX-6: the decoder no longer zeroes them).
+        if !flagsOrder.isEmpty {
+            try container.encode(flagsOrder.map(\.rawValue), forKey: .flagsOrder)
+        }
+        if let pipelineName {
+            try container.encode(pipelineName, forKey: .pipelineName)
+        }
+        if !modelsOrder.isEmpty {
+            try container.encode(modelsOrder, forKey: .modelsOrder)
+        }
+        if !usesOrder.isEmpty {
+            try container.encode(usesOrder, forKey: .usesOrder)
+        }
+        if !definitionsOrder.isEmpty {
+            try container.encode(definitionsOrder, forKey: .definitionsOrder)
+        }
+        if !transformsOrder.isEmpty {
+            try container.encode(transformsOrder, forKey: .transformsOrder)
+        }
+        if !presetsOrder.isEmpty {
+            try container.encode(presetsOrder, forKey: .presetsOrder)
         }
     }
 
@@ -104,12 +162,17 @@ nonisolated struct FlowDocument: Codable, Sendable, Equatable {
     /// goldens. Key order follows `tests/conftest.py::flow_to_dict`.
     func toParseTreeJSON() throws -> Data {
         var d: [String: Any] = ["version": version.isEmpty ? NSNull() : version]
-        d["rows"] = try FlowDocument.parseTreeRows(rows, scope: Dictionary(uniqueKeysWithValues: rows.enumerated().map { ($1.id, $0 + 1) }))
+        d["rows"] = try FlowDocument.parseTreeRows(rows, scope: Dictionary(rows.enumerated().map { ($1.id, $0 + 1) }, uniquingKeysWith: { a, _ in a }))
         if !flags.isEmpty {
-            d["flags"] = flags.map(\.rawValue)
+            // Python's `flow_to_dict` emits `flags` as an ordered list; the Swift `Set`
+            // loses source order, so use the parser-recorded `flagsOrder` (a stable sort for
+            // JSON-decoded documents) — multi-flag flows (53-MorningBriefing, 58-NightlyLedger)
+            // otherwise mismatch their goldens (CFM-R6-FIX-5).
+            let ordered = flagsOrder.isEmpty ? flags.map(\.rawValue).sorted() : flagsOrder.map(\.rawValue)
+            d["flags"] = ordered
         }
         if !definitions.isEmpty {
-            d["definitions"] = try Dictionary(uniqueKeysWithValues: definitions.map { ($0.key, try FlowDocument.parseTreeComposite($0.value)) })
+            d["definitions"] = try Dictionary(definitions.map { ($0.key, try FlowDocument.parseTreeComposite($0.value)) }, uniquingKeysWith: { a, _ in a })
         }
         if !models.isEmpty {
             d["models"] = models
@@ -118,7 +181,7 @@ nonisolated struct FlowDocument: Codable, Sendable, Equatable {
     }
 
     private static func parseTreeComposite(_ def: CompositeDef) throws -> [String: Any] {
-        let childScope = Dictionary(uniqueKeysWithValues: def.rows.enumerated().map { ($1.id, $0 + 1) })
+        let childScope = Dictionary(def.rows.enumerated().map { ($1.id, $0 + 1) }, uniquingKeysWith: { a, _ in a })
         return [
             "name": def.name,
             "signature": def.signature ?? NSNull(),
@@ -129,7 +192,7 @@ nonisolated struct FlowDocument: Codable, Sendable, Equatable {
 
     private static func parseTreeRows(_ rows: [Row], scope: [UUID: Int]) throws -> [[String: Any]] {
         try rows.map { row in
-            let childScope = Dictionary(uniqueKeysWithValues: row.children.enumerated().map { ($1.id, $0 + 1) })
+            let childScope = Dictionary(row.children.enumerated().map { ($1.id, $0 + 1) }, uniquingKeysWith: { a, _ in a })
             var d: [String: Any] = [
                 "task": row.task ?? NSNull(),
                 "model": row.model ?? NSNull(),
@@ -207,7 +270,7 @@ nonisolated struct FlowDocument: Codable, Sendable, Equatable {
     /// Mint ids for `rawRows`, resolving numeric refs against this scope's number→id map.
     private static func resolve(_ rawRows: [RawRow], scopeLabel: String) throws -> [Row] {
         let ids = rawRows.enumerated().map { (number: $0.offset + 1, id: UUID()) }
-        let byNumber = Dictionary(uniqueKeysWithValues: ids.map { ($0.number, $0.id) })
+        let byNumber = Dictionary(ids.map { ($0.number, $0.id) }, uniquingKeysWith: { a, _ in a })
         return try rawRows.enumerated().map { index, raw in
             let id = ids[index].id
             return try raw.toRow(id: id, byNumber: byNumber, scopeLabel: scopeLabel)
@@ -217,7 +280,7 @@ nonisolated struct FlowDocument: Codable, Sendable, Equatable {
     /// Emit `rows` as raw parse-tree rows; `scope` maps each row id to its 1-based number.
     private static func serialize(_ rows: [Row], scope: [UUID: Int]) throws -> [RawRow] {
         try rows.map { row in
-            let childScope = Dictionary(uniqueKeysWithValues: row.children.enumerated().map { ($1.id, $0 + 1) })
+            let childScope = Dictionary(row.children.enumerated().map { ($1.id, $0 + 1) }, uniquingKeysWith: { a, _ in a })
             return try RawRow(
                 task: row.task,
                 model: row.model,
@@ -337,7 +400,7 @@ nonisolated enum FileKind: String, Codable, Sendable, Equatable {
 /// Header capability flags: `network`, `events`, `improvise`, `code`, `offdevice`.
 /// The `code`/`improvise`/`offdevice` doors refuse to run under `APPSTORE_BUILD`
 /// (CFM-R5-6); the rest are ordinary declarations.
-nonisolated enum CapabilityFlag: String, Codable, Sendable, Equatable {
+nonisolated enum CapabilityFlag: String, Codable, Sendable, Equatable, CaseIterable {
     case network, events, improvise, code, offdevice
 }
 
@@ -349,6 +412,13 @@ nonisolated enum Clause: Sendable, Equatable {
     case decide(edges: [ClauseEdge])
     case call(number: Int)
     case resume
+
+    /// The decide edges (nil for a non-decide clause) — the R9 inspector's `[tag | target]`
+    /// pairs.
+    var edges: [ClauseEdge]? {
+        if case .decide(let edges) = self { return edges }
+        return nil
+    }
 }
 
 /// A clause edge target: a row, a `call`, `resume`, or `done`.
@@ -443,9 +513,23 @@ private struct RawFlow: Decodable {
     var flags: [String]?
     var definitions: [String: RawComposite]?
     var models: [String: String]?
+    var pipelineName: String?
+    var flagsOrder: [String]?
+    var modelsOrder: [String]?
+    var usesOrder: [String]?
+    var definitionsOrder: [String]?
+    var transformsOrder: [String]?
+    var presetsOrder: [String]?
 
     enum CodingKeys: String, CodingKey {
         case version, rows, flags, definitions, models
+        case pipelineName = "pipeline_name"
+        case flagsOrder = "flags_order"
+        case modelsOrder = "models_order"
+        case usesOrder = "uses_order"
+        case definitionsOrder = "definitions_order"
+        case transformsOrder = "transforms_order"
+        case presetsOrder = "presets_order"
     }
 
     init(from decoder: Decoder) throws {
@@ -455,6 +539,13 @@ private struct RawFlow: Decodable {
         flags = try c.decodeIfPresent([String].self, forKey: .flags)
         definitions = try c.decodeIfPresent([String: RawComposite].self, forKey: .definitions)
         models = try c.decodeIfPresent([String: String].self, forKey: .models)
+        pipelineName = try c.decodeIfPresent(String.self, forKey: .pipelineName)
+        flagsOrder = try c.decodeIfPresent([String].self, forKey: .flagsOrder)
+        modelsOrder = try c.decodeIfPresent([String].self, forKey: .modelsOrder)
+        usesOrder = try c.decodeIfPresent([String].self, forKey: .usesOrder)
+        definitionsOrder = try c.decodeIfPresent([String].self, forKey: .definitionsOrder)
+        transformsOrder = try c.decodeIfPresent([String].self, forKey: .transformsOrder)
+        presetsOrder = try c.decodeIfPresent([String].self, forKey: .presetsOrder)
     }
 }
 
@@ -597,7 +688,7 @@ private struct RawRow: Codable {
             }
         }
         let childIDs = children.enumerated().map { (number: $0.offset + 1, id: UUID()) }
-        let childByNumber = Dictionary(uniqueKeysWithValues: childIDs.map { ($0.number, $0.id) })
+        let childByNumber = Dictionary(childIDs.map { ($0.number, $0.id) }, uniquingKeysWith: { a, _ in a })
         let childRows = try children.enumerated().map { index, raw in
             try raw.toRow(id: childIDs[index].id, byNumber: childByNumber, scopeLabel: "the block '\(blockName ?? "")'")
         }

@@ -86,7 +86,7 @@ nonisolated enum FlowSeed {
             }
         }
         // Find `seed` `=` value outside quotes (whitespace-tolerant).
-        let pattern = try! NSRegularExpression(pattern: #"\bseed\s*=\s*[^\s;]+"#)
+        let pattern = NSRegularExpression.compiled(#"\bseed\s*=\s*[^\s;]+"#)
         guard let match = pattern.firstMatch(in: scan, range: NSRange(scan.startIndex..<scan.endIndex, in: scan)),
               let range = Range(match.range, in: settings) else {
             return settings

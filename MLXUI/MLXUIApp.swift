@@ -30,14 +30,8 @@ struct MLXUIApp: App {
                             Group {
                                 if appState.selectedSection.isHome {
                                     HomeView()
-                                } else if case .flows(let flowID) = appState.selectedSection {
-                                    // `.id(flowID)` gives each flow its own view identity, so
-                                    // switching flows recreates FlowListView's @State (the
-                                    // loaded document + run session) instead of reusing the
-                                    // previous flow's — without it, clicking another flow
-                                    // after opening one "does nothing" (CFM-QR3 finding).
-                                    FlowListView(flowID: flowID)
-                                        .id(flowID)
+                                } else if case .aiWorkflows = appState.selectedSection, !AppState.hideAutomate {
+                                    FlowGalleryView()
                                 } else if let opened = appState.openedCatFlow {
                                     OpenedFlowView(opened: opened)
                                         .id(opened.url.path)
@@ -49,6 +43,20 @@ struct MLXUIApp: App {
                             // command palette) pushes its detail page onto the stack.
                             .navigationDestination(item: $appState.selectedModel) { model in
                                 ModelDetailView(model: model)
+                            }
+                            // Selecting a badge in the "AI Workflows" gallery pushes that
+                            // flow's detail (title, rows, inspector) with a back button.
+                            .navigationDestination(item: $appState.selectedFlow) { selection in
+                                FlowListView(flowID: selection.flowID)
+                                    .id(selection.flowID)
+                            }
+                            // CFM-R8/R11-0: the flow editor — a fresh flow (nil document) or
+                            // an edited copy of an existing one (Duplicate & Edit / Edit copy).
+                            .navigationDestination(item: $appState.editingFlow) { target in
+                                FlowEditorView(flowID: target.flowID,
+                                               name: target.name,
+                                               document: target.document,
+                                               savedText: target.savedText)
                             }
                         }
                     }

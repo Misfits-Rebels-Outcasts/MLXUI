@@ -1,0 +1,670 @@
+import Testing
+import Foundation
+@testable import MLXUI
+
+/// CFM-R8 + CFM-R8-FIX — the editing engine's identity contract and the step picker. The
+/// QR8 attack surface is delete and reorder in every order: a reference must never be
+/// silently re-aimed, only ever render `(?N)` + yellow until the user fixes it or undoes.
+/// The validity contract (FIX-1) is the second half: the save gate refuses every file
+/// `catflow check` refuses (forward/deleted refs, arity, `(input:N)` out of range).
+struct CatFlowEditingTests {
+
+    // MARK: - Helpers
+
+    /// A model rooted at a temp dir so `save()` never touches real user data.
+    private func editor(name: String = "My Flow",
+                        rows: [Row] = [],
+                        workspaceRoot: URL? = nil) throws -> FlowEditorModel {
+        let root = workspaceRoot ?? FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-editor-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let doc = FlowDocument(version: "0.8", rows: rows)
+        return FlowEditorModel(name: name, document: doc,
+                               workspace: FlowWorkspace(root: root))
+    }
+
+    private func row(_ task: String?, model: String? = nil, settings: String? = nil,
+                     refs: [Ref] = [], children: [Row] = [], blockKind: BlockKind? = nil) -> Row {
+        Row(id: UUID(), task: task, blockKind: blockKind, model: model, settings: settings,
+            refs: refs, children: children)
+    }
+
+    // MARK: - CFM-R8-1: the step picker
+
+    @Test func stepsAcceptingTextOutputListsTextConsumers() {
+        let steps = FlowEditorModel.stepsAccepting(.single(.text))
+        let names = Set(steps.map(\.name))
+        #expect(names.contains("Summarize"))
+        #expect(names.contains("Translate"))
+        #expect(names.contains("Speak"))
+        #expect(names.contains("Save Text"))
+        // FIX-2: a tupleOf-accepts task whose first slot fits is offerable (Diff).
+        #expect(names.contains("Diff"))
+        #expect(!names.contains("Transcribe"))     // accepts audio
+        #expect(!names.contains("Resize"))         // accepts image
+        #expect(!names.contains("Read Text"))      // accepts file
+        #expect(!names.contains("Retrieve"))       // [index, vector] — neither fits text
+    }
+
+    @Test func stepsAcceptingAudioOutputListsTranscribe() {
+        let steps = FlowEditorModel.stepsAccepting(.single(.audio))
+        let names = Set(steps.map(\.name))
+        #expect(names.contains("Transcribe"))
+        #expect(!names.contains("Summarize"))
+    }
+
+    @Test func stepsHideAdvancedUnlessFullCatalog() {
+        let defaulted = Set(FlowEditorModel.stepsAccepting(.single(.text)).map(\.name))
+        let full = Set(FlowEditorModel.stepsAccepting(.single(.text), includeAdvanced: true).map(\.name))
+        #expect(!defaulted.contains("Generate"))
+        #expect(!defaulted.contains("Decide"))
+        #expect(full.contains("Generate"))
+        #expect(full.contains("Decide"))
+        // FIX-2: Full Catalog also relaxes the shape filter — a mismatched task like
+        // Transcribe (audio) is offerable after a text row (answer l: it turns yellow until
+        // the user points its input at a source).
+        #expect(!defaulted.contains("Transcribe"))
+        #expect(full.contains("Transcribe"))
+    }
+
+    @Test func startingNodesAreSourcesCanRunAccepts() {
+        let starts = Set(FlowEditorModel.startingNodes().map(\.name))
+        #expect(starts.contains("Read Text"))
+        #expect(starts.contains("Read Audio"))
+        #expect(starts.contains("Read Images"))
+        #expect(starts.contains("Template"))
+        #expect(starts.contains("Save Text"))       // anyKind, instant
+        // FIX-7: the hidden primitives, the triggers, and the things `canRun` refuses are out.
+        #expect(!starts.contains("Decide"))
+        #expect(!starts.contains("Generate"))
+        #expect(!starts.contains("On File"))
+        #expect(!starts.contains("On Schedule"))
+        #expect(!starts.contains("Ask Human"))
+        // Things that need an upstream asset are not starting nodes.
+        #expect(!starts.contains("Summarize"))
+        #expect(!starts.contains("Transcribe"))
+        #expect(!starts.contains("Speak"))
+    }
+
+    @Test func defaultModelIsBridgeRunnable() {
+        // FIX-3: the default is the first pool entry the build can actually run, never a
+        // dead one. "Whisper Tiny" is in the pool but not the bridge → Whisper Large v3.
+        #expect(FlowEditorModel.defaultModel(forTask: "Transcribe") == "Whisper Large v3")
+        #expect(FlowEditorModel.defaultModel(forTask: "Summarize") == "Ministral 3B")
+        #expect(FlowEditorModel.defaultModel(forTask: "Speak") == "Kokoro 82M")
+        #expect(FlowEditorModel.defaultModel(forTask: "Segment") == nil)   // SAM Base = hazard H2
+        #expect(FlowEditorModel.defaultModel(forTask: "Read Text") == nil)
+    }
+
+    @Test func everySeededDefaultResolvesThroughTheBridge() {
+        // FIX-3's invariant: whatever a task seeds as its default, the bridge can run it.
+        for entry in FlowEditorModel.allDefaultModels {
+            if let model = entry.model {
+                #expect(CatalogBridge.entry(for: model) != nil,
+                        "\(entry.task) seeds \(model), which isn't a runnable bridge model")
+            }
+        }
+    }
+
+    // MARK: - CFM-R8-2: add / remove / reorder
+
+    @Test func addInsertsBelowSelection() throws {
+        let model = try editor(rows: [row("Read Text", settings: "memo.txt"), row("Summarize")])
+        model.selectedRowID = model.document.rows[0].id
+        model.add(task: "Title")
+        #expect(model.document.rows.count == 3)
+        #expect(model.document.rows[1].task == "Title")
+        #expect(model.document.rows[0].task == "Read Text")
+        #expect(model.document.rows[2].task == "Summarize")
+    }
+
+    @Test func addAppendsWhenNothingSelected() throws {
+        let model = try editor(rows: [row("Read Text")])
+        model.add(task: "Summarize")
+        #expect(model.document.rows.count == 2)
+        #expect(model.document.rows[1].task == "Summarize")
+    }
+
+    @Test func addGivesModelClassRowADefaultModel() throws {
+        let model = try editor()
+        model.add(task: "Transcribe")
+        #expect(model.document.rows[0].model == "Whisper Large v3")
+        model.add(task: "Read Text")
+        #expect(model.document.rows[1].model == nil)
+    }
+
+    @Test func removeByIdKeepsOtherRows() throws {
+        let r1 = row("Read Text", settings: "memo.txt")
+        let r2 = row("Summarize")
+        let r3 = row("Save Text", settings: "out.txt")
+        let model = try editor(rows: [r1, r2, r3])
+        model.remove(r2.id)
+        #expect(model.document.rows.map(\.id) == [r1.id, r3.id])
+    }
+
+    @Test func moveReordersTopLevel() throws {
+        let r1 = row("Read Text", settings: "memo.txt")
+        let r2 = row("Summarize")
+        let r3 = row("Save Text", settings: "out.txt")
+        let model = try editor(rows: [r1, r2, r3])
+        model.move(from: IndexSet(integer: 2), to: 0)
+        #expect(model.document.rows.map(\.task) == ["Save Text", "Read Text", "Summarize"])
+    }
+
+    // MARK: - CFM-R8-3 + FIX-1: the identity and validity contract
+
+    @Test func deletingARowNeverSilentlyReAimsItsReferences() throws {
+        let r1 = row("Read Audio", settings: "memo.m4a")
+        let r2 = row("Transcribe", model: "Whisper Large v3")
+        let r3 = row("Summarize", model: "Ministral 3B")
+        let r4 = row("Save Text", refs: [.rowRef(r2.id)])
+        let model = try editor(rows: [r1, r2, r3, r4])
+
+        model.remove(r2.id)
+
+        // The reference is NOT re-aimed at the new row 2 (r3) — it stays broken.
+        let saveRow = model.document.rows.last!
+        #expect(saveRow.refs == [.rowRef(r2.id)])
+        #expect(saveRow.refs != [.rowRef(r3.id)])
+        // It renders `(?2)` — the number the deleted row held.
+        #expect(model.referenceLabel(for: saveRow.id) == "(?2)")
+        // The row is yellow and save is refused.
+        #expect(model.warning(for: saveRow.id) != nil)
+        #expect(model.saveBlockReason != nil)
+        #expect(!model.canSave)
+    }
+
+    @Test func reorderingMakesAForwardReferenceYellowNotReAimed() throws {
+        // FIX-1: after moving the referenced row past its referencer, the reference is
+        // still pointed at the same row (not re-aimed) but is now a *forward* reference —
+        // `catflow check` rejects forward references (E203), so it is yellow and un-saveable.
+        let r1 = row("Read Audio", settings: "memo.m4a")
+        let r2 = row("Transcribe", model: "Whisper Large v3")
+        let r3 = row("Summarize", model: "Ministral 3B")
+        let r4 = row("Save Text", refs: [.rowRef(r2.id)])
+        let model = try editor(rows: [r1, r2, r3, r4])
+
+        model.move(from: IndexSet(integer: 1), to: 4)   // move row 2 to the end
+
+        let saveRow = model.document.rows.first { $0.id == r4.id }!
+        // Still pointed at r2 (never at the new row 2, r3)…
+        #expect(saveRow.refs == [.rowRef(r2.id)])
+        #expect(saveRow.refs != [.rowRef(r3.id)])
+        // …but r4 now sits *before* r2 → a forward reference, yellow + un-saveable.
+        #expect(model.warning(for: saveRow.id) != nil)
+        #expect(model.saveBlockReason != nil)
+        #expect(!model.canSave)
+        // Undo restores the valid backward reference.
+        model.undo()
+        #expect(model.warning(for: r4.id) == nil)
+        #expect(model.canSave)
+    }
+
+    @Test func forwardReferenceIsRefused() throws {
+        // The reviewer's two-click reproduction: [Read Text, Summarize, Title], pointing
+        // Summarize at Title (a forward reference) must refuse, not silently save.
+        let r1 = row("Read Text", settings: "memo.txt")
+        let r2 = row("Summarize")
+        let r3 = row("Title")
+        let model = try editor(rows: [r1, r2, r3])
+
+        // The input picker does not even offer the forward row.
+        let inputs = model.validInputs(for: r2.id)
+        #expect(!inputs.contains { $0.rowID == r3.id })
+        // Forcing it yields a yellow row and a save refusal.
+        model.setReference(to: r3.id, for: r2.id)
+        #expect(model.warning(for: r2.id) != nil)
+        #expect(model.saveBlockReason != nil)
+        #expect(!model.canSave)
+        #expect(throws: (any Error).self) { try model.save() }
+    }
+
+    @Test func referenceLabelFollowsReorder() throws {
+        let r1 = row("Read Audio", settings: "memo.m4a")
+        let r2 = row("Transcribe", model: "Whisper Large v3")
+        let r4 = row("Save Text", refs: [.rowRef(r2.id)])
+        let model = try editor(rows: [r1, r2, r4])
+        #expect(model.referenceLabel(for: r4.id) == "(2)")
+        // Move r1 to the end: r2 shifts to position 1, the ref label follows its target.
+        model.move(from: IndexSet(integer: 0), to: 3)
+        #expect(model.referenceLabel(for: r4.id) == "(1)")
+        // r4 (position 2) still references r2 (position 1) — a valid backward reference.
+        #expect(model.warning(for: r4.id) == nil)
+        #expect(model.canSave)
+    }
+
+    @Test func settingAReferenceFixesAYellowRow() throws {
+        // [Read Audio, Save Text, Transcribe]: Transcribe sits below Save Text (status),
+        // so it can't auto-chain — yellow until it's pointed at the audio source (answer l).
+        let audio = row("Read Audio", settings: "memo.m4a")
+        let save = row("Save Text", settings: "out.txt")
+        let transcribe = row("Transcribe", model: "Whisper Large v3")
+        let model = try editor(rows: [audio, save, transcribe])
+        #expect(model.warning(for: transcribe.id) != nil)
+        model.setReference(to: audio.id, for: transcribe.id)
+        #expect(model.warning(for: transcribe.id) == nil)
+        #expect(model.canSave)
+    }
+
+    @Test func shapeIncompatibleReferenceIsYellowAndBlocksSave() throws {
+        let text = row("Read Text", settings: "memo.txt")
+        let incompatible = row("Transcribe", model: "Whisper Tiny", refs: [.rowRef(text.id)])
+        let model = try editor(rows: [text, incompatible])
+        #expect(model.warning(for: incompatible.id) != nil)
+        #expect(model.saveBlockReason != nil)
+        #expect(!model.canSave)
+    }
+
+    @Test func firstRowNeedingInputIsYellow() throws {
+        let model = try editor()
+        model.add(task: "Summarize")
+        #expect(model.warning(for: model.document.rows[0].id) != nil)   // nothing feeds it
+        model.reset()
+        model.add(task: "Read Text")
+        #expect(model.warning(for: model.document.rows[0].id) == nil)
+        model.add(task: "Summarize")
+        #expect(model.warning(for: model.document.rows[1].id) == nil)   // text → text
+    }
+
+    @Test func rowWithNoRunnableModelIsYellow() throws {
+        // FIX-3: a model-class row seeded with nothing (e.g. Segment) warns it needs a model.
+        let model = try editor()
+        model.add(task: "Segment")
+        #expect(model.document.rows[0].model == nil)
+        #expect(model.warning(for: model.document.rows[0].id) != nil)
+        // A row whose model isn't a bridge entry warns too.
+        let model2 = try editor(rows: [row("Transcribe", model: "Whisper Tiny")])
+        #expect(model2.warning(for: model2.document.rows[0].id) != nil)
+    }
+
+    // MARK: - CFM-R8-FIX-2: bundles (Diff)
+
+    @Test func diffCanBeGivenTwoOrderedInputs() throws {
+        let a = row("Read Text", settings: "a.txt")
+        let b = row("Read Text", settings: "b.txt")
+        let diff = row("Diff")
+        let model = try editor(rows: [a, b, diff])
+
+        // Diff has two input slots.
+        #expect(model.inputSlotCount(for: diff.id) == 2)
+        // Both earlier text rows are valid inputs.
+        let slot1 = model.validInputs(for: diff.id, slot: 1)
+        #expect(slot1.map(\.rowID).contains(a.id))
+        #expect(slot1.map(\.rowID).contains(b.id))
+        #expect(slot1.map(\.rowID).contains(diff.id) == false)   // not itself
+        // Assigning both slots makes the row green.
+        model.setReference(to: a.id, slot: 1, for: diff.id)
+        #expect(model.warning(for: diff.id) != nil)              // still needs slot 2
+        model.setReference(to: b.id, slot: 2, for: diff.id)
+        #expect(model.warning(for: diff.id) == nil)
+        #expect(model.canSave)
+        // The serialized row reads `(1,2)`.
+        let text = CatSerializer.serialize(model.document)
+        #expect(text.contains("(1,2)"))
+    }
+
+    @Test func loadedPolicyDiffStaysGreenAndEditable() throws {
+        // 08-PolicyDiff's `Diff (1,2)` is a shipped flow the editor must load without yellow.
+        let r1 = row("Read Text", settings: "policy-2025.md")
+        let r2 = row("Read Text", settings: "policy-2026.md")
+        let diff = row("Diff", settings: "format=unified", refs: [.rowRef(r1.id), .rowRef(r2.id)])
+        let model = try editor(rows: [r1, r2, diff])
+        #expect(model.warning(for: diff.id) == nil)
+        #expect(model.canSave)
+        // An edit round-trips without breaking it.
+        model.add(task: "Summarize")
+        #expect(model.warning(for: diff.id) == nil)
+        #expect(model.canSave)
+    }
+
+    // MARK: - CFM-R8-FIX-5: dotted display paths
+
+    @Test func displayNumberIsDottedForNestedRows() throws {
+        let child1 = row("Draft")
+        let child2 = row("Draft")
+        let block = row(nil, children: [child1, child2], blockKind: .each)
+        let model = try editor(rows: [row("Read Text", settings: "memo.txt"), block])
+        #expect(model.displayNumber(of: child1.id) == "2.1")
+        #expect(model.displayNumber(of: child2.id) == "2.2")
+        #expect(model.displayNumber(of: block.id) == "2")
+    }
+
+    @Test func nestedRowWarningsNameTheDottedPath() throws {
+        let child = row("Summarize")   // needs an input, is a block child at 2.1
+        let block = row(nil, children: [child], blockKind: .each)
+        let model = try editor(rows: [row("Read Text", settings: "memo.txt"), block])
+        let warning = model.warning(for: child.id)
+        #expect(warning?.contains("2.1") == true)
+    }
+
+    // MARK: - CFM-R8-FIX-6: blocks, chain breaks, duplicate
+
+    @Test func insertBlockCreatesAnEnterableBlock() throws {
+        let model = try editor(rows: [row("Read Text", settings: "memo.txt")])
+        model.insertBlock(kind: .each, name: "loop", after: model.document.rows[0].id)
+        let block = model.document.rows[1]
+        #expect(block.blockKind == .each)
+        #expect(block.blockName == "loop")
+        #expect(block.children.count == 1)
+        // "Entered": adding with the child selected inserts into the block, not the top level.
+        model.selectedRowID = block.children[0].id
+        model.add(task: "Title")
+        #expect(model.document.rows.count == 2)            // top level unchanged
+        #expect(model.document.rows[1].children.count == 2)
+        #expect(model.document.rows[1].children[1].task == "Title")
+    }
+
+    @Test func blockChildrenCanReorderAndRemove() throws {
+        let childA = row("Draft")
+        let childB = row("Draft")
+        let block = row(nil, children: [childA, childB], blockKind: .each)
+        let model = try editor(rows: [block])
+        model.moveInside(blockID: block.id, from: IndexSet(integer: 1), to: 0)
+        #expect(model.document.rows[0].children.map(\.id) == [childB.id, childA.id])
+        // A grandchild removal works (childIndex is depth-aware).
+        model.remove(childA.id)
+        #expect(model.document.rows[0].children.count == 1)
+        #expect(model.document.rows[0].children[0].id == childB.id)
+    }
+
+    @Test func chainBreakSetAndCleared() throws {
+        let r1 = row("Read Text", settings: "memo.txt")
+        let r2 = row("Summarize", model: "Ministral 3B")
+        let model = try editor(rows: [r1, r2])
+        #expect(model.warning(for: r2.id) == nil)   // auto-chains from r1
+        model.setChainBreak(true, for: r1.id)
+        #expect(model.warning(for: r2.id) != nil)   // blank line breaks the chain
+        model.setChainBreak(false, for: r1.id)
+        #expect(model.warning(for: r2.id) == nil)
+    }
+
+    @Test func duplicateMintsFreshIdsAndNeverTraps() throws {
+        let r1 = row("Read Text", settings: "memo.txt")
+        let model = try editor(rows: [r1])
+        model.duplicate(r1.id)
+        #expect(model.document.rows.count == 2)
+        // Fresh ids — no duplicate-key trap anywhere downstream.
+        #expect(model.document.rows[0].id != model.document.rows[1].id)
+        #expect(model.displayNumber(of: model.document.rows[1].id) == "2")
+        #expect(model.saveBlockReason == nil)
+        try model.save()
+    }
+
+    @Test func wrapInBlockWrapsARow() throws {
+        let r1 = row("Read Text", settings: "memo.txt")
+        let r2 = row("Summarize")
+        let model = try editor(rows: [r1, r2])
+        model.wrapInBlock(r2.id, kind: .parallel, name: "group")
+        #expect(model.document.rows.count == 2)
+        let block = model.document.rows[1]
+        #expect(block.blockKind == .parallel)
+        #expect(block.children.map(\.task) == ["Summarize"])
+    }
+
+    // MARK: - CFM-R8-FIX-8: undo hygiene
+
+    @Test func noOpEditDoesNotPushUndoOrClearRedo() throws {
+        let r1 = row("Read Text", settings: "memo.txt")
+        let model = try editor(rows: [r1])
+        model.add(task: "Summarize")
+        model.undo()                       // [r1]
+        #expect(model.undoStack.isEmpty)
+        model.redo()                       // [r1, Summarize]
+        #expect(model.undoStack.count == 1)
+        // A no-op move must not clear redo or push undo.
+        model.move(from: IndexSet(integer: 0), to: 0)
+        #expect(model.undoStack.count == 1)
+        #expect(model.redoStack.isEmpty)   // redo was cleared by the earlier add; a no-op must not matter
+    }
+
+    @Test func selectionSurvivesUndo() throws {
+        let r1 = row("Read Text", settings: "memo.txt")
+        let model = try editor(rows: [r1])
+        model.selectedRowID = r1.id
+        model.add(task: "Summarize")       // selects the new row
+        let newID = model.document.rows[1].id
+        #expect(model.selectedRowID == newID)
+        model.undo()
+        // Selection is restored to the pre-edit row, not dangling.
+        #expect(model.selectedRowID == r1.id)
+    }
+
+    @Test func undoRestoresTheWholeDocumentValue() throws {
+        let r1 = row("Read Text", settings: "memo.txt")
+        let model = try editor(rows: [r1])
+        model.add(task: "Summarize")
+        #expect(model.document.rows.count == 2)
+        model.undo()
+        #expect(model.document.rows.count == 1)
+        #expect(model.document.rows[0].id == r1.id)
+        model.redo()
+        #expect(model.document.rows.count == 2)
+    }
+
+    @Test func undoRestoresADeletedRowAndClearsTheBrokenRef() throws {
+        let r1 = row("Read Audio", settings: "memo.m4a")
+        let r2 = row("Transcribe", model: "Whisper Large v3")
+        let r4 = row("Save Text", refs: [.rowRef(r2.id)])
+        let model = try editor(rows: [r1, r2, r4])
+        model.remove(r2.id)
+        #expect(model.warning(for: r4.id) != nil)
+        #expect(!model.canSave)
+        model.undo()
+        #expect(model.document.rows.count == 3)
+        #expect(model.warning(for: r4.id) == nil)
+        #expect(model.canSave)
+    }
+
+    @Test func undoRedoSequencesInOrder() throws {
+        let model = try editor()
+        model.add(task: "Read Text")
+        model.add(task: "Summarize")
+        model.add(task: "Save Text")
+        model.undo()
+        #expect(model.document.rows.map(\.task) == ["Read Text", "Summarize"])
+        model.undo()
+        #expect(model.document.rows.map(\.task) == ["Read Text"])
+        model.redo()
+        #expect(model.document.rows.map(\.task) == ["Read Text", "Summarize"])
+    }
+
+    // MARK: - CFM-R8-5: save
+
+    @Test func saveWritesTheCanonicalCatIntoTheFlowFolder() throws {
+        let model = try editor(name: "My Flow", rows: [row("Read Text", settings: "memo.txt")])
+        try model.save()
+        let url = try #require(model.savedURL)
+        #expect(url.lastPathComponent == "My Flow.cat")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        #expect(text.contains("catflow 0.8"))
+        #expect(text.contains("1. Read Text"))
+        #expect(model.isDirty == false)
+        model.add(task: "Summarize")
+        #expect(model.isDirty == true)
+    }
+
+    @Test func saveRefusesWhileAReferenceIsBroken() throws {
+        let r1 = row("Read Audio", settings: "memo.m4a")
+        let r2 = row("Transcribe", model: "Whisper Large v3")
+        let r4 = row("Save Text", refs: [.rowRef(r2.id)])
+        let model = try editor(rows: [r1, r2, r4])
+        model.remove(r2.id)
+        #expect(throws: (any Error).self) { try model.save() }
+        do {
+            try model.save()
+            Issue.record("expected save refusal")
+        } catch let error as FlowEditingError {
+            guard case .refusingToSave = error else {
+                Issue.record("unexpected error \(error)")
+                return
+            }
+        }
+    }
+
+    @Test func sanitizedFileNameProducesAValidStem() {
+        #expect(FlowEditorModel.sanitizedFileName("My/Flow: v1") == "My-Flow- v1")
+        #expect(FlowEditorModel.sanitizedFileName("") == "Untitled")
+    }
+
+    // MARK: - The Spoken-Summary-shaped exit build
+
+    @Test func buildingSpokenSummaryShapeStaysGreenEndToEnd() throws {
+        let model = try editor(name: "Spoken Summary")
+        model.add(task: "Read Audio")          // source
+        model.add(task: "Transcribe")          // audio → text
+        model.add(task: "Summarize")           // text → text
+        model.add(task: "Speak")               // text → audio
+        model.add(task: "Save Audio")          // anyKind
+        for row in model.document.rows {
+            #expect(model.warning(for: row.id) == nil,
+                    "\(row.task ?? "?") should be green")
+        }
+        // The file round-trips: save, then re-parse → same structure **including refs**.
+        try model.save()
+        let text = try String(contentsOf: model.savedURL!, encoding: .utf8)
+        let reparsed = try CatParser.parse(text)
+        #expect(reparsed.rows.count == model.document.rows.count)
+        #expect(reparsed.rows.map(\.task) == model.document.rows.map(\.task))
+        #expect(reparsed.rows.map(\.model) == model.document.rows.map(\.model))
+        #expect(reparsed.rows.map(\.refs) == model.document.rows.map(\.refs))
+        #expect(model.runnability == .runnable)
+    }
+
+    @Test func outOfRangeInputRefIsRefusedByTheSaveGate() throws {
+        // FIX-6: an `(input:3)` in a two-input block is E401 — the validator (via the save
+        // gate) catches it, even though the row has no rowRef the local checks would see.
+        let child = row("Draft", refs: [.inputRef(3)])
+        let block = row(nil, children: [child], blockKind: .each)
+        let model = try editor(rows: [row("Read Text", settings: "memo.txt"), block])
+        #expect(model.saveBlockReason != nil)
+        #expect(!model.canSave)
+    }
+
+    @Test func serializerRendersDeletedRefAsQuestionMarkNumber() throws {
+        let r1 = row("Read Text", settings: "memo.txt")
+        let r2 = row("Transcribe", model: "Whisper Tiny")
+        let r4 = row("Save Text", refs: [.rowRef(r2.id)])
+        let model = try editor(rows: [r1, r2, r4])
+        model.remove(r2.id)
+        let lines = CatSerializer.serializeLines(model.document, deadRefNumbers: model.tombstones).lines
+        #expect(lines.contains { $0.contains("(?2)") })
+        let plain = CatSerializer.serializeLines(model.document).lines
+        #expect(plain.contains { $0.contains("(-1)") })
+    }
+
+    // MARK: - CFM-R11-0: the routes into the editor (Duplicate & Edit / Edit a Copy)
+
+    @Test func duplicateAndEditCopiesFlowAndAssetsIntoTheUsersFolder() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-edit-route-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        // A temp "bundle" that mirrors the flattened app bundle: memo.m4a at the flat root.
+        let sourceDir = root.appendingPathComponent("bundle")
+        try FileManager.default.createDirectory(at: sourceDir, withIntermediateDirectories: true)
+        let audio = sourceDir.appendingPathComponent("memo.m4a")
+        try AudioWriter.writeWAV(AudioBuffer(samples: [0.1, 0.2], sampleRate: 24_000), to: audio)
+
+        // A Meeting-Minutes-shaped document that reads memo.m4a.
+        let doc = FlowDocument(version: "0.8", rows: [
+            Row(id: UUID(), task: "Read Audio", settings: "memo.m4a"),
+            Row(id: UUID(), task: "Transcribe", model: "Whisper Tiny"),
+        ])
+        let ws = FlowWorkspace(root: root.appendingPathComponent("flows"))
+
+        let target = try FlowEditRoute.duplicateAndEdit(
+            flowID: "01-SpokenSummary", title: "Spoken Summary", document: doc,
+            workspace: ws, sourceDir: sourceDir)
+
+        // The copy lands in its own flow folder with the .cat and the bundled asset.
+        let dir = ws.directory(for: target.flowID)
+        #expect(target.flowID != "01-SpokenSummary")
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("Spoken Summary.cat").path))
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("memo.m4a").path))
+
+        // The editor built from the route opens the copy clean and saves to the real folder.
+        let model = FlowEditorModel(name: target.name, flowID: target.flowID,
+                                    document: target.document, workspace: ws,
+                                    savedText: target.savedText)
+        #expect(!model.isDirty)
+        #expect(model.runnability == .runnable)
+        try model.save()
+        #expect(model.savedURL?.deletingLastPathComponent() == dir)
+    }
+
+    @Test func editOpenedCopyWritesTheFileIntoTheFlowFolder() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-edit-opened-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let source = """
+        catflow 0.8
+        1. Read Text   memo.txt
+        2. Summarize   Qwen3 8B
+        3. Save Text   out.md
+        """
+        let parsed = try CatParser.parseForValidation(source)
+        let ws = FlowWorkspace(root: root.appendingPathComponent("flows"))
+
+        let target = try FlowEditRoute.editOpenedCopy(displayName: "My Notes", parsed: parsed,
+                                                      workspace: ws)
+        let dir = ws.directory(for: target.flowID)
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("My Notes.cat").path))
+
+        // The editor opens it clean (canonical text == on-disk text) and can save.
+        let model = FlowEditorModel(name: target.name, flowID: target.flowID,
+                                    document: target.document, workspace: ws,
+                                    savedText: target.savedText)
+        #expect(!model.isDirty)
+        #expect(model.canSave)
+        #expect(model.document.rows.count == 3)
+    }
+
+    @Test func newFlowRouteOpensWithNilDocument() {
+        // The gallery's New Flow badge sets editingFlow with a nil document — the editor
+        // starts blank (the CFM-R8 route, now driven through the same destination).
+        let target = FlowEditTarget(flowID: UUID().uuidString, name: "Untitled Flow",
+                                    document: nil, savedText: nil)
+        let model = FlowEditorModel(name: target.name, flowID: target.flowID,
+                                    document: target.document)
+        #expect(model.document.rows.isEmpty)
+    }
+
+    // MARK: - CFM-R11-3: .catpipeline saves back as its own kind
+
+    @Test func catpipelineDocumentSavesBackAsCatpipeline() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-pipe-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let doc = FlowDocument(version: "0.8", fileKind: .catpipeline, rows: [
+            Row(id: UUID(), task: "Generate Image", model: "Z-Image Turbo", settings: "a tree"),
+        ])
+        let model = FlowEditorModel(name: "Look", flowID: "pipe-flow", document: doc,
+                                    workspace: FlowWorkspace(root: root), savedText: nil)
+        try model.save()
+        #expect(model.savedURL?.pathExtension == "catpipeline")
+        let text = try String(contentsOf: try #require(model.savedURL), encoding: .utf8)
+        // The header round-trips the kind (the serializer writes it).
+        #expect(text.hasPrefix("catpipeline"))
+        // Re-opening it keeps the kind.
+        let reparsed = try CatParser.parse(text)
+        #expect(reparsed.fileKind == .catpipeline)
+    }
+
+    @Test func catflowDocumentSavesBackAsCat() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-pipe-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let model = FlowEditorModel(name: "Plain", flowID: "plain-flow",
+                                    workspace: FlowWorkspace(root: root))
+        model.add(task: "Read Text")
+        try model.save()
+        #expect(model.savedURL?.pathExtension == "cat")
+    }
+}

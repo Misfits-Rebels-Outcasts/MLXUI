@@ -120,20 +120,37 @@ struct CatFlowWorkspaceTests {
         }
     }
 
+    @Test func resolveRejectsDanglingSymlink() throws {
+        let (ws, base) = try makeWorkspace()
+        defer { teardown(base) }
+
+        // A symlink whose target does not yet exist. `fileExists` *traverses* links and
+        // would report false for it, letting a later write escape the workspace through it
+        // (H6) — the `.isSymbolicLinkKey` probe must catch it.
+        let flowDir = ws.directory(for: "01-SpokenSummary")
+        try FileManager.default.createDirectory(at: flowDir, withIntermediateDirectories: true)
+        let notYet = base.appendingPathComponent("not-yet-created")
+        try FileManager.default.createSymbolicLink(at: flowDir.appendingPathComponent("bed.wav"),
+                                                   withDestinationURL: notYet)
+
+        #expect(throws: FlowWorkspaceError.self) {
+            _ = try ws.resolve("bed.wav", flowID: "01-SpokenSummary")
+        }
+    }
+
     // MARK: - GalleryLoader (uses the real bundle, which ships the three flows)
 
     @Test func galleryLoaderFindsAllFlows() throws {
         let metadata = GalleryLoader.loadMetadata()
         // The full gallery ships: 69 entries (66 .cat + 3 .catpipeline).
         #expect(metadata.count == 69)
-        // The 5 runnable flows carry no notRunnableReason.
-        let runnable = metadata.filter { $0.isRunnable }.map(\.flowID).sorted()
-        #expect(runnable == ["01-SpokenSummary", "08-PolicyDiff", "15-HouseStyle",
-                             "29-LogTriage", "65-VoiceoverBed"])
-        // A not-runnable flow carries an honest reason (CFM-R4-4).
-        let photoWeb = try #require(metadata.first { $0.flowID == "21-PhotoWebPrep" })
-        #expect(photoWeb.notRunnableReason != nil)
-        #expect(photoWeb.notRunnableReason?.contains("blocks") == true)
+        // R7-FIX-2 + R10-Human/Store: the interpreter-runnable flows (46) carry no reason.
+        #expect(metadata.filter { $0.isRunnable }.count == 48)
+        // A genuinely-not-runnable flow carries an honest reason (CFM-R4-4) — 38-ReplyApproval
+        // is blocked by its staged row, not its human row.
+        let reply = try #require(metadata.first { $0.flowID == "38-ReplyApproval" })
+        #expect(reply.notRunnableReason != nil)
+        #expect(reply.notRunnableReason?.contains("staged") == true)
         let spoken = try #require(metadata.first { $0.flowID == "01-SpokenSummary" })
         #expect(spoken.title == "Spoken Summary")
         #expect(spoken.number == 1)

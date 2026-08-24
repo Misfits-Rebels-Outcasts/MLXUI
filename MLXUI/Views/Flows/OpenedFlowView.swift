@@ -41,6 +41,27 @@ struct OpenedFlowView: View {
             Text(opened.url.path)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Spacer()
+            // CFM-R11-0: an opened file is the user's own — Edit copies it into the flow
+            // folder (never writes the original) and opens the editor on the copy.
+            Button {
+                editACopy()
+            } label: {
+                Label("Edit a Copy…", systemImage: "square.and.pencil")
+            }
+            .help("Copy this flow into your flows folder and open it in the editor")
+        }
+    }
+
+    /// CFM-R11-0: copy the opened `.cat` into the user's flow folder and open the editor.
+    private func editACopy() {
+        do {
+            let target = try FlowEditRoute.editOpenedCopy(displayName: opened.displayName,
+                                                          parsed: opened.parsed,
+                                                          workspace: FlowWorkspace.shared)
+            appState.editingFlow = target
+        } catch {
+            appState.openCatFlowError = "Couldn't copy '\(opened.displayName)' into your flows folder — the flow stays read-only."
         }
     }
 
@@ -79,7 +100,9 @@ struct OpenedFlowView: View {
 
     private var rawText: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Source")
+            // R6-3: only *opened* files keep the raw view (a user-opened file may not be
+            // canonical — showing the serializer's form would misrepresent what's on disk).
+            Text("Show file as written")
                 .font(.headline)
             Text(opened.rawText)
                 .font(.callout.monospaced())

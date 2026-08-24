@@ -17,6 +17,9 @@ final class CachingExecutor: FlowExecutor, @unchecked Sendable {
     let catalog: [ModelEntry]
     /// The deterministic run-level seed (flow-text-derived) for `_with_seed`.
     let runSeed: UInt32
+    /// Resolves local-source rows' file paths for `resolved_source_hash` (B5).
+    let workspace: FlowWorkspace
+    let flowID: String
 
     private let hitLock = NSLock()
     private var _lastCacheHit = false
@@ -25,15 +28,20 @@ final class CachingExecutor: FlowExecutor, @unchecked Sendable {
     }
 
     init(inner: any FlowExecutor, store: FlowCacheStore, cacheTier: String,
-         catalog: [ModelEntry], runSeed: UInt32) {
+         catalog: [ModelEntry], runSeed: UInt32, workspace: FlowWorkspace, flowID: String) {
         self.inner = inner
         self.store = store
         self.cacheTier = cacheTier
         self.catalog = catalog
         self.runSeed = runSeed
+        self.workspace = workspace
+        self.flowID = flowID
     }
 
-    func execute(path: String, row: Row, inputs: [Asset]) async throws -> Asset {
+    func execute(path: String, row: Row, inputs: [Asset],
+                 transcript: [FlowInterpreter.TranscriptEntry]?,
+                 context: [(label: String, content: String)]?,
+                 usedFlowContent: String?) async throws -> Asset {
         hitLock.withLock { _lastCacheHit = false }
 
         // _with_seed: substitute a concrete seed into a stochastic row's settings first, so
@@ -42,16 +50,22 @@ final class CachingExecutor: FlowExecutor, @unchecked Sendable {
 
         // NEVER_CACHE (writes) always skip — a hit would silently skip the real write.
         guard !CacheKey.neverCache.contains(seededRow.task ?? "") else {
-            return try await inner.execute(path: path, row: seededRow, inputs: inputs)
+            return try await inner.execute(path: path, row: seededRow, inputs: inputs,
+                                           transcript: transcript, context: context,
+                                           usedFlowContent: usedFlowContent)
         }
 
-        let key = try cacheKey(for: seededRow, inputs: inputs)
+        let key = try cacheKey(for: seededRow, inputs: inputs,
+                               transcript: transcript, context: context,
+                               usedFlowContent: usedFlowContent)
         let blobDir = store.root.appendingPathComponent("materialized", isDirectory: true)
         if let cached = try store.get(key: key, blobDirectory: blobDir, path: path) {
             hitLock.withLock { _lastCacheHit = true }
             return cached
         }
-        let asset = try await inner.execute(path: path, row: seededRow, inputs: inputs)
+        let asset = try await inner.execute(path: path, row: seededRow, inputs: inputs,
+                                            transcript: transcript, context: context,
+                                            usedFlowContent: usedFlowContent)
         try? store.put(key: key, asset: asset)
         try? store.evictIfNeeded(byteBudget: 1_000_000_000)   // 1 GB soft budget
         return asset
@@ -59,7 +73,10 @@ final class CachingExecutor: FlowExecutor, @unchecked Sendable {
 
     // MARK: - Key
 
-    private func cacheKey(for row: Row, inputs: [Asset]) throws -> String {
+    private func cacheKey(for row: Row, inputs: [Asset],
+                          transcript: [FlowInterpreter.TranscriptEntry]?,
+                          context: [(label: String, content: String)]?,
+                          usedFlowContent: String?) throws -> String {
         // The substituted id (CFM-R2-2) is the identity-model ingredient — the same id the
         // real executor actually loads. Unresolvable rows fall back to the display name
         // (never a crash; mock rows aren't resolved by design).
@@ -69,13 +86,23 @@ final class CachingExecutor: FlowExecutor, @unchecked Sendable {
                 modelID = entry.hfModelId
             }
         }
+        // B5: a local-source row with no gathered input (row 1 of every flow) folds the
+        // source file's content hash into the key, so editing the file invalidates the row.
+        let sourceHash = inputs.isEmpty
+            ? try? CacheKey.resolvedSourceHash(task: row.task ?? "", settings: row.settings,
+                                               flowID: flowID, workspace: workspace)
+            : nil
         return try CacheKey.cacheKey(
             task: row.task ?? "",
             model: modelID,
             settings: row.settings,
             inputs: inputs,
             realism: cacheTier,
-            frameVersion: CacheKey.frameVersion(task: row.task ?? "")
+            frameVersion: CacheKey.frameVersion(task: row.task ?? ""),
+            resolvedSourceHash: sourceHash,
+            contextVersion: context.map { CacheKey.journalVersion($0) },
+            transcriptVersion: transcript.map { CacheKey.transcriptVersion($0) },
+            usedFlowContent: usedFlowContent
         )
     }
 

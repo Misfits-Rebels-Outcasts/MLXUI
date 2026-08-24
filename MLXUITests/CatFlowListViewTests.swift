@@ -2,8 +2,10 @@ import Testing
 import Foundation
 @testable import MLXUI
 
-/// Covers CFM-R1-5's view-model logic: the pure `FlowRowSummary` functions the read-only
-/// flow list renders from. See `RSI/DelegateMergeBacklog.md` CFM-R1-5.
+/// Covers CFM-R6-2: the flow list renders the serializer's canonical lines ("rows read like
+/// the file") — the English one-line descriptions and the hand-computed reference labels are
+/// gone, and `CatSerializer.serializeLines` gives each row its lines. See
+/// `RSI/DelegateMergeBacklog.md` CFM-R6-1/R6-2.
 struct CatFlowListViewTests {
 
     // MARK: - Fixtures
@@ -17,25 +19,38 @@ struct CatFlowListViewTests {
         return try CatParser.parse(try String(contentsOf: url, encoding: .utf8))
     }
 
-    // MARK: - Spoken Summary
+    // MARK: - R6-2: Spoken Summary renders exactly the six canonical lines
 
-    @Test func spokenSummaryRow6ReferenceLabelIsParen2() throws {
+    @Test func spokenSummaryRendersTheSixCanonicalLines() throws {
+        let doc = try decode("01-SpokenSummary")
+        let (lines, ranges) = CatSerializer.serializeLines(doc)
+        // The serializer emits the version header as lines[0]; the view slices per row, so
+        // assert on the row ranges' slices — the thing the view actually renders (FIX-1).
+        #expect(lines.first == "catflow 0.8")
+        let rowSlices = doc.rows.compactMap { ranges[$0.id].map { Array(lines[$0]) } }
+        #expect(rowSlices == [
+            ["1. Read Audio         memo.m4a"],
+            ["2. Transcribe         Whisper Large v3; lang=en"],
+            ["3. Summarize          Qwen3 8B; \"TL;DR in 3 bullets\""],
+            ["4. Speak              Kokoro 82M; af_heart"],
+            ["5. Save Audio         memo-tldr.wav"],
+            ["6. Save Text    (2)   memo-transcript.txt"],
+        ])
+        // Every row's range is non-empty and contiguous; the header belongs to no row.
+        #expect(ranges.count == doc.rows.count)
+        let covered = doc.rows.compactMap { ranges[$0.id] }.reduce(0, { $0 + $1.count })
+        #expect(covered == lines.count - 1)   // the 6 row lines, not the header
+    }
+
+    // MARK: - Row 6's ref column comes from the serializer, not a hand label
+
+    @Test func spokenSummaryRow6LineHasParen2Ref() throws {
         let doc = try decode("01-SpokenSummary")
         let row6 = try #require(doc.rows.last)
-        #expect(FlowRowSummary.referenceLabel(for: row6, in: doc.rows) == "(2)")
-    }
-
-    @Test func spokenSummaryRow2SubtitleIsWhisperLargeV3() throws {
-        let doc = try decode("01-SpokenSummary")
-        let row2 = try #require(doc.rows.dropFirst(1).first)
-        #expect(FlowRowSummary.subtitle(for: row2) == "Whisper Large v3")
-    }
-
-    @Test func spokenSummaryRow1SubtitleIsTaskDescription() throws {
-        // A row with no model gets a one-line task description, not the raw settings line.
-        let doc = try decode("01-SpokenSummary")
-        let row1 = try #require(doc.rows.first)
-        #expect(FlowRowSummary.subtitle(for: row1) == "Reads an audio file")
+        let (_, ranges) = CatSerializer.serializeLines(doc)
+        let range = try #require(ranges[row6.id])
+        // The serializer puts `(2)` in the ref column of row 6's canonical line.
+        #expect(CatSerializer.serialize(doc).contains("6. Save Text    (2)   memo-transcript.txt"))
     }
 
     @Test func spokenSummaryHasNoChainBreak() throws {
@@ -52,10 +67,10 @@ struct CatFlowListViewTests {
         #expect(!FlowRowSummary.hasChainBreakBefore(doc.rows[1]))
     }
 
-    @Test func policyDiffRow3ReferenceLabelIsParen12() throws {
+    @Test func policyDiffRow3LineHasParen12Ref() throws {
         let doc = try decode("08-PolicyDiff")
-        let row3 = try #require(doc.rows.dropFirst(2).first)
-        #expect(FlowRowSummary.referenceLabel(for: row3, in: doc.rows) == "(1,2)")
+        let serialized = CatSerializer.serialize(doc)
+        #expect(serialized.contains("3. Diff        (1,2)   format=unified"))
     }
 
     // MARK: - Photo Web Prep (blocks)
@@ -65,15 +80,6 @@ struct CatFlowListViewTests {
         let block = try #require(doc.rows.dropFirst(1).first)
         #expect(FlowRowSummary.taskName(for: block) == "<each>")
         #expect(FlowRowSummary.isBlock(block))
-    }
-
-    @Test func photoWebPrepChildRefIsNotARowLabel() throws {
-        // The block's first child references its block input (`(input:1)`), which is not a
-        // `(N)` row reference — no reference label is produced.
-        let doc = try decode("21-PhotoWebPrep")
-        let block = try #require(doc.rows.dropFirst(1).first)
-        let child = try #require(block.children.first)
-        #expect(FlowRowSummary.referenceLabel(for: child, in: block.children) == nil)
     }
 
     // MARK: - Display numbers

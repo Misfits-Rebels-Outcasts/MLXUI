@@ -2,10 +2,11 @@ import Testing
 import Foundation
 @testable import MLXUI
 
-/// Covers the R5 pre-parsed-JSON retirement: the bundled gallery ships `.cat` text only
-/// (the `*.parse.json` resources are deleted), and `CatParser` reproduces every gallery
-/// flow's tree — 69 free conformance cases. `GalleryLoader.loadDocument` now parses the
-/// `.cat` at runtime.
+/// Covers the R5 pre-parsed-JSON retirement (CFM-FIX-5 / M11): the bundled gallery ships
+/// `.cat` text only (no `*.parse.json` in the app bundle), and `CatParser` reproduces every
+/// gallery flow's parse tree **byte-for-byte** against trees regenerated from the Python
+/// runtime into `Fixtures/CatFlow/gallery/`. 69 free conformance cases — the retired
+/// `*.parse.json` corpus, restored as fixtures instead of deleted.
 struct CatFlowGalleryReproductionTests {
 
     private var galleryDir: URL {
@@ -14,6 +15,20 @@ struct CatFlowGalleryReproductionTests {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("MLXUI/Resources/Gallery")
+    }
+
+    private var fixturesGalleryDir: URL {
+        let filePath = #filePath
+        return URL(fileURLWithPath: filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/CatFlow/gallery")
+    }
+
+    private func canonicalJSON(_ data: Data) throws -> String {
+        let obj = try JSONSerialization.jsonObject(with: data)
+        return String(data: try JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]),
+                      encoding: .utf8) ?? "?"
     }
 
     @Test func everyGalleryFlowParses() throws {
@@ -40,6 +55,33 @@ struct CatFlowGalleryReproductionTests {
                 #expect(row.id != UUID(uuidString: "00000000-0000-0000-0000-000000000000"),
                         "\(id): unminted id")
             }
+            checked += 1
+        }
+        #expect(checked == files.count)
+    }
+
+    /// CFM-FIX-5 / M11: every gallery flow's parse tree matches the Python-generated golden
+    /// in `Fixtures/CatFlow/gallery/`, byte-for-byte on the canonical JSON.
+    @Test func everyGalleryFlowMatchesPythonParseTree() throws {
+        let files = try FileManager.default.contentsOfDirectory(atPath: galleryDir.path)
+            .filter { $0.hasSuffix(".cat") || $0.hasSuffix(".catpipeline") }
+            .sorted()
+        #expect(files.count == 69)
+
+        var checked = 0
+        for f in files {
+            let id = (f as NSString).deletingPathExtension
+            let catURL = galleryDir.appendingPathComponent(f)
+            let doc = try CatParser.parse(try String(contentsOf: catURL, encoding: .utf8))
+
+            let goldenURL = fixturesGalleryDir.appendingPathComponent("\(id).parse.json")
+            guard FileManager.default.fileExists(atPath: goldenURL.path) else {
+                Issue.record("\(id): no golden tree at \(goldenURL.path) — run the Python generator")
+                continue
+            }
+            let actual = try canonicalJSON(try doc.toParseTreeJSON())
+            let expected = try canonicalJSON(try Data(contentsOf: goldenURL))
+            #expect(actual == expected, "\(id): parse tree differs from the Python golden")
             checked += 1
         }
         #expect(checked == files.count)

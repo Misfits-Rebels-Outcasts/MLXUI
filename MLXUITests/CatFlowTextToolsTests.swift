@@ -24,9 +24,29 @@ struct CatFlowTextToolsTests {
         #expect(out.items.map(\.value) == ["a", "b", "c"])
     }
 
+    @Test func splitBySentencesKeepsPunctuation() async throws {
+        // H4: Python `re.split(r"(?<=[.!?])\s+", text.strip())` splits on the whitespace
+        // *after* terminal punctuation. Note this splits "Dr." too (the review's H4 example
+        // was illustrative) — Python's actual output, verified on the reference:
+        // "Dr. Smith went. Home!" → ["Dr.", "Smith went.", "Home!"].
+        let out = try await SplitTool(settings: "by=sentences").run(asset(["Dr. Smith went. Home!"])) { _ in }
+        #expect(out.items.map(\.value) == ["Dr.", "Smith went.", "Home!"])
+        // "3.14" is not split (the '.' isn't followed by whitespace), and "Version 3.14 is
+        // out." has no trailing space.
+        let decimal = try await SplitTool(settings: "by=sentences").run(asset(["Version 3.14 is out."])) { _ in }
+        #expect(decimal.items.map(\.value) == ["Version 3.14 is out."])
+    }
+
     @Test func splitTokensChunked() async throws {
         let out = try await SplitTool(settings: "chunk_size=3").run(asset(["one two three four five six"])) { _ in }
         #expect(out.items.map(\.value) == ["one two three", "four five six"])
+    }
+
+    @Test func splitNonNumericChunkSizeThrows() async throws {
+        // M6: Python raises ValueError for a non-numeric chunk_size — never a silent 200.
+        await #expect(throws: FlowError.self) {
+            _ = try await SplitTool(settings: "chunk_size=abc").run(asset(["a b c"])) { _ in }
+        }
     }
 
     // MARK: - Filter
@@ -35,6 +55,14 @@ struct CatFlowTextToolsTests {
         let out = try await FilterTool(settings: "regex=\"ERROR|FATAL\"")
             .run(asset(["ERROR x", "INFO y", "FATAL z"])) { _ in }
         #expect(out.items.map(\.value) == ["ERROR x", "FATAL z"])
+    }
+
+    @Test func filterByMalformedRegexThrows() async throws {
+        // M5: a malformed regex raises (Python `re.error`) instead of matching nothing.
+        await #expect(throws: FlowError.self) {
+            _ = try await FilterTool(settings: "regex=\"[unclosed\"")
+                .run(asset(["a", "b"])) { _ in }
+        }
     }
 
     @Test func filterByLength() async throws {
@@ -69,6 +97,20 @@ struct CatFlowTextToolsTests {
         #expect(out.items.first?.value == "a\nb")
     }
 
+    // MARK: - flatTexts alignment (M10)
+
+    @Test func flatTextsKeepsNonInlineItemsAsBlank() {
+        let dir = FileManager.default.temporaryDirectory
+        let input = Asset(items: [
+            Item(kind: .text, value: "A", path: nil, sourceText: nil),
+            Item(kind: .audio, value: nil, path: dir.appendingPathComponent("x.wav"), sourceText: nil),
+            Item(kind: .text, value: "C", path: nil, sourceText: nil),
+        ])
+        // Python `_flat_texts` keeps non-inline items as "" so {1}/{2} positions stay
+        // aligned instead of shifting (M10).
+        #expect(TextTools.flatTexts([input]) == ["A", "", "C"])
+    }
+
     // MARK: - Template
 
     @Test func templateSubstitutesNumberedRefs() async throws {
@@ -83,17 +125,16 @@ struct CatFlowTextToolsTests {
         #expect(out.items.first?.value == "[] X")
     }
 
-    // MARK: - Diff (CFM-R4-2)
+    // MARK: - Diff (CFM-FIX-1)
 
     @Test func diffInlineMatchesPython() async throws {
-        let out = try await DiffTool(settings: nil)
-            .run(asset(["a\nb\nc", "a\nb2\nc"])) { _ in }
+        let out = try await DiffTool(settings: nil).run(inputs: [asset(["a\nb\nc"]), asset(["a\nb2\nc"])])
         #expect(out.items.first?.value == "  a\n- b\n+ b2\n  c")
     }
 
     @Test func diffUnifiedMatchesPython() async throws {
         let out = try await DiffTool(settings: "format=unified")
-            .run(asset(["a\nb\nc", "a\nb2\nc"])) { _ in }
+            .run(inputs: [asset(["a\nb\nc"]), asset(["a\nb2\nc"])])
         let actual = out.items.first?.value ?? ""
         let expected = "--- \n+++ \n@@ -1,3 +1,3 @@\n a\n-b\n+b2\n c"
         if actual != expected {
@@ -101,6 +142,81 @@ struct CatFlowTextToolsTests {
             try? ("actual: [\(actual)]\n\nexpected: [\(expected)]").write(to: dest, atomically: true, encoding: .utf8)
         }
         #expect(actual == expected)
+    }
+
+    // MARK: - Diff golden table (CFM-FIX-1: byte-for-byte against Python's difflib)
+
+    @Test func diffMatchesPythonGoldenTable() async throws {
+        let filePath = #filePath
+        let url = URL(fileURLWithPath: filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/CatFlow/tools/diff_golden.json")
+        let data = try Data(contentsOf: url)
+        struct Root: Decodable { var cases: [String: Case] }
+        struct Case: Decodable {
+            var a_items: [String]?
+            var b_items: [String]?
+            var settings: String?
+            var expected: String?
+        }
+        let root = try JSONDecoder().decode(Root.self, from: data)
+        #expect(root.cases.count == 21)
+
+        func asset(_ items: [String]) -> Asset {
+            Asset(items: items.map { Item(kind: .text, value: $0, path: nil, sourceText: nil) })
+        }
+
+        for (name, c) in root.cases {
+            var inputs: [Asset] = []
+            if let a = c.a_items { inputs.append(asset(a)) }
+            if let b = c.b_items { inputs.append(asset(b)) }
+            let out = try await DiffTool(settings: c.settings).run(inputs: inputs)
+            let actual = out.items.first?.value ?? ""
+            #expect(actual == c.expected, "\(name): Swift produced [\(actual)] but Python produced [\(c.expected ?? "nil")]")
+        }
+    }
+
+    // MARK: - Tools golden table (CFM-FIX-3: M3 casefold, M8 CRLF/blanks, M9 sort/extract)
+
+    @Test func toolsMatchPythonGoldenTable() async throws {
+        let filePath = #filePath
+        let url = URL(fileURLWithPath: filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/CatFlow/tools/tools_golden.json")
+        let data = try Data(contentsOf: url)
+        struct Root: Decodable { var cases: [String: Case] }
+        struct Case: Decodable {
+            var input: [String]
+            var settings: String?
+            var result: [String]
+        }
+        let root = try JSONDecoder().decode(Root.self, from: data)
+        #expect(root.cases.count == 18)
+
+        func asset(_ items: [String]) -> Asset {
+            Asset(items: items.map { Item(kind: .text, value: $0, path: nil, sourceText: nil) })
+        }
+
+        for (name, c) in root.cases {
+            let input = asset(c.input)
+            let out: Asset
+            if name.hasPrefix("dedupe_") {
+                out = try await DedupeTool(settings: c.settings).run(input) { _ in }
+            } else if name.hasPrefix("split_") {
+                out = try await SplitTool(settings: c.settings).run(input) { _ in }
+            } else if name.hasPrefix("sort_") {
+                out = try await SortTool(settings: c.settings).run(input) { _ in }
+            } else if name.hasPrefix("extract_") {
+                out = try await ExtractTool(settings: c.settings).run(input) { _ in }
+            } else {
+                Issue.record("unknown tool prefix in \(name)")
+                continue
+            }
+            let actual = out.items.map { $0.value ?? "" }
+            #expect(actual == c.result, "\(name): Swift \(actual) vs Python \(c.result)")
+        }
     }
 
     // MARK: - Full Log Triage flow under mock

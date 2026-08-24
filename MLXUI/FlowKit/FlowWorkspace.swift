@@ -97,6 +97,13 @@ nonisolated struct FlowWorkspace: Sendable {
         var current = flowDir
         for component in components {
             let next = current.appendingPathComponent(component)
+            // A symlink — even a dangling one whose target doesn't exist yet — is refused
+            // outright (H6). `fileExists` traverses links, so it reports `false` for a
+            // dangling link and the write would later escape the workspace through it; the
+            // `.isSymbolicLinkKey` probe reads the link itself and catches both cases.
+            if isSymbolicLink(next) {
+                throw FlowWorkspaceError.escapesFlow(relativePath)
+            }
             // Only resolve components that exist; a symlink that points outside is caught
             // even when the target file beyond it doesn't.
             if fm.fileExists(atPath: next.path) || fm.fileExists(atPath: next.path + "/") {
@@ -110,6 +117,12 @@ nonisolated struct FlowWorkspace: Sendable {
             }
         }
         return current
+    }
+
+    /// Whether `url` is a symbolic link, reading the link itself (not its target), so a
+    /// dangling link is still detected.
+    private func isSymbolicLink(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true
     }
 
     // MARK: - Finder

@@ -3,7 +3,7 @@ import Foundation
 /// Per-stage knobs supplied when a model is turned into a runnable stage. One bag
 /// of options covers every runner kind; each stage reads only what it needs.
 /// See `Design/pipeline-stage-sketch.md` §factory.
-nonisolated struct StageConfig: Sendable {
+nonisolated struct StageConfig: Sendable, Hashable {
     var voice: String?         // tts
     var speed: Float           // tts
     var systemPrompt: String?  // llm

@@ -57,7 +57,7 @@ struct CatFlowFrameTests {
             Item(kind: .text, value: "The meeting covered Q3 revenue, which beat guidance.",
                  path: nil, sourceText: nil),
         ])
-        let rendered = try FrameRenderer.render(frameText: frame, settings: "TL;DR in 3 bullets", asset: asset)
+        let rendered = try FrameRenderer.render(frameText: frame, settings: "TL;DR in 3 bullets", assets: [asset])
         let expected = "You are a summarizer. Summarize the text below, following the\n"
             + "instruction exactly. Do not add information that isn't in the text.\n\n"
             + "Instruction: TL;DR in 3 bullets\n\n"
@@ -76,7 +76,7 @@ struct CatFlowFrameTests {
             Item(kind: .text, value: "second", path: nil, sourceText: nil),
         ])
         let frame = "Inputs:\n{asset list}\n"
-        let rendered = try FrameRenderer.render(frameText: frame, settings: nil, asset: asset)
+        let rendered = try FrameRenderer.render(frameText: frame, settings: nil, assets: [asset])
         #expect(rendered == "Inputs:\n1. first\n2. second\n")
     }
 
@@ -84,14 +84,26 @@ struct CatFlowFrameTests {
         let asset = Asset(items: [Item(kind: .text, value: "x", path: nil, sourceText: nil)])
         let frame = "{settings.lang} {settings.voice}|{tags}|{settings}"
         let rendered = try FrameRenderer.render(frameText: frame, settings: "lang=en; voice=af_heart",
-                                                asset: asset, tags: ["a", "b"])
+                                                assets: [asset], tags: ["a", "b"])
         #expect(rendered == "en af_heart|a, b|lang=en; voice=af_heart")
     }
 
     @Test func missingSettingsKeyBecomesEmpty() throws {
         let asset = Asset(items: [Item(kind: .text, value: "x", path: nil, sourceText: nil)])
         let rendered = try FrameRenderer.render(frameText: "[{settings.nope}]", settings: "lang=en",
-                                                asset: asset)
+                                                assets: [asset])
         #expect(rendered == "[]")
+    }
+
+    // MARK: - Multi-ref bundle (B1 regression: `Rewrite (1,2)` must see both refs)
+
+    @Test func multiRefBundleFlattensEveryAssetInOrder() throws {
+        // 15-HouseStyle row 3 is `Rewrite (1,2)`: draft + style guide. The renderer must
+        // flatten across BOTH assets — the style guide previously never reached the model.
+        let draft = Asset(items: [Item(kind: .text, value: "The product is fast.", path: nil, sourceText: nil)])
+        let guide = Asset(items: [Item(kind: .text, value: "Use active voice. Never hype.", path: nil, sourceText: nil)])
+        let frame = "Text:\n{asset}\n\nRewritten:"
+        let rendered = try FrameRenderer.render(frameText: frame, settings: nil, assets: [draft, guide])
+        #expect(rendered == "Text:\nThe product is fast.\nUse active voice. Never hype.\n\nRewritten:")
     }
 }

@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// The flow detail view. R1 shipped it read-only; CFM-R2-8 wires Run: preflight → one
 /// install sheet → the `FlowEvent` stream driving each row's dot `○ → ● → ✓`, error
@@ -10,8 +11,16 @@ struct FlowListView: View {
     @Environment(AppState.self) private var appState
     @State private var metadata: GalleryFlowMetadata?
     @State private var document: FlowDocument?
-    @State private var rawCat: String?
     @State private var loadError: String?
+    /// The refusal reason this flow can't run, derived from `FlowRunner.canRun(doc)` — not
+    /// blindly trusted from `_metadata.json` (B3). `nil` = runnable.
+    @State private var notRunnableReason: String?
+    /// The canonical serialized lines (CFM-R6-2) — the flow list *is* the file. Computed once
+    /// in `load()`; `lineRanges` maps each row id to its lines' range in `serializedLines`.
+    @State private var serializedLines: [String] = []
+    @State private var lineRanges: [UUID: Range<Int>] = [:]
+    /// R7-5: block rows whose children are collapsed (start expanded).
+    @State private var collapsedBlocks: Set<UUID> = []
     @State private var session = FlowRunSession()
 
     var body: some View {
@@ -20,8 +29,8 @@ struct FlowListView: View {
                 ContentUnavailableView("Couldn't Load This Flow",
                                        systemImage: "exclamationmark.triangle",
                                        description: Text(error))
-            } else if let metadata, metadata.notRunnableReason != nil, let rawCat {
-                notRunnableView(metadata, rawCat)
+            } else if let notRunnableReason, let document, let metadata {
+                notRunnableView(metadata, doc: document, reason: notRunnableReason)
             } else if let document, let metadata {
                 flowList(document, metadata)
             } else {
@@ -36,11 +45,27 @@ struct FlowListView: View {
                     .environment(appState)
             }
         }
+        // CFM-R10-Human: a `wait=forever` human row parked the run — ask the person.
+        .sheet(isPresented: Binding(
+            get: { session.parked != nil },
+            set: { if !$0 { session.clearParked() } }
+        )) {
+            if let parked = session.parked, let document {
+                FlowHumanPromptView(
+                    parked: parked,
+                    row: Self.row(parked.rowID, in: document),
+                    doc: document,
+                    session: session,
+                    runner: FlowRunner(),
+                    context: AppFlowExecutorFactory.cachingContext(flowID: flowID, appState: appState, transforms: document.transforms))
+            }
+        }
     }
 
     /// A read-only view for a flow this version can't run (CFM-R4-4): an honest badge
-    /// naming what it needs, the description, and the raw `.cat` text. No Run button.
-    private func notRunnableView(_ meta: GalleryFlowMetadata, _ raw: String) -> some View {
+    /// naming what it needs, the description, and the canonical serialized lines (the list
+    /// is the file — R6-2/3, no raw-`.cat` disclosure in the gallery view). No Run button.
+    private func notRunnableView(_ meta: GalleryFlowMetadata, doc: FlowDocument, reason: String) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
                 Label(meta.title, systemImage: "flowchart")
@@ -52,7 +77,7 @@ struct FlowListView: View {
                     .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
                 Spacer()
             }
-            Label(meta.notRunnableReason ?? "", systemImage: "exclamationmark.triangle.fill")
+            Label(reason, systemImage: "exclamationmark.triangle.fill")
                 .font(.callout)
                 .foregroundStyle(.orange)
                 .padding(10)
@@ -61,17 +86,14 @@ struct FlowListView: View {
             Text(meta.description)
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            DisclosureGroup("Show raw `.cat`") {
-                ScrollView(.horizontal) {
-                    Text(raw)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .padding(8)
-                }
-                .frame(maxWidth: .infinity)
-                .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 6))
+            ScrollView(.horizontal, showsIndicators: false) {
+                Text(serializedLines.joined(separator: "\n"))
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding(8)
             }
-            .font(.callout)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 6))
             Spacer(minLength: 0)
         }
         .padding(16)
@@ -84,6 +106,21 @@ struct FlowListView: View {
         VStack(alignment: .leading, spacing: 0) {
             header(meta, doc)
             Divider()
+            if let sentence = session.errorSentence {
+                HStack(alignment: .top, spacing: 8) {
+                    Label(sentence, systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    copyButton(sentence)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
             HStack(spacing: 0) {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -92,19 +129,25 @@ struct FlowListView: View {
                                 Divider()
                                     .padding(.leading, 48)
                             }
-                            FlowRowView(row: row,
-                                        number: index + 1,
-                                        referenceScope: doc.rows,
-                                        status: session.status(for: row.id))
-                                .contentShape(Rectangle())
-                                .onTapGesture { session.selectedRowID = row.id }
-                                .background(session.selectedRowID == row.id ? Color.accentColor.opacity(0.12) : Color.clear)
+                            if let range = lineRanges[row.id] {
+                                let isBlock = row.blockKind != nil
+                                let isCollapsed = isBlock && collapsedBlocks.contains(row.id)
+                                // A collapsed block shows only its own header line (the
+                                // first line of its range); children live in the rest.
+                                rowView(row: row, range: range, isBlock: isBlock, isCollapsed: isCollapsed)
+                                    .background(session.selectedRowID == row.id ? Color.accentColor.opacity(0.12) : Color.clear)
+                            }
                             if let sentence = session.errorSentence(for: row.id) {
-                                Text(sentence)
-                                    .font(.caption)
-                                    .foregroundStyle(.red)
-                                    .padding(.leading, 48)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                HStack(alignment: .top, spacing: 6) {
+                                    Text(sentence)
+                                        .font(.caption)
+                                        .foregroundStyle(.red)
+                                        .textSelection(.enabled)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    copyButton(sentence)
+                                }
+                                .padding(.leading, 48)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
                         }
                     }
@@ -114,18 +157,136 @@ struct FlowListView: View {
                 FlowInspectorPane(
                     output: session.selectedRowID.flatMap { session.outputs[$0] },
                     rowTitle: selectedRowTitle(doc),
-                    substitutionNote: session.selectedRowID.flatMap { session.substitutionNotes[$0] }
+                    substitutionNote: session.selectedRowID.flatMap { session.substitutionNotes[$0] },
+                    savedFile: savedFileURL(in: doc),
+                    savedKind: savedFileKind(in: doc)
                 )
             }
-            rawCatDisclosure
+            // CFM-R11-2 visibility: the flow's cache state + warm engines, so "is there a
+            // cache?" is answerable at a glance instead of a guess.
+            if cacheStatus != nil {
+                Text(cacheStatus ?? "")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 2)
+            }
+            // CFM-R11-1: the run's peak-memory record — a real cold run reads this into the
+            // journal to judge the preflight's largest-single-row RAM rule. Shown after any
+            // run (even one with no GPU activity, so a 0 is visible, not silent).
+            if !session.isRunning && !session.metrics.rowSamples.isEmpty {
+                Text(session.metrics.summary())
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 6)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        // A re-opened view's preflight is stale if installs finished while away; recompute it
+        // whenever the installed set changes (smoke-30: "Install Required Models" reappearing
+        // after the install completed).
+        .onChange(of: appState.installedModelIDs) { _, _ in refreshPreflight() }
     }
 
     private func selectedRowTitle(_ doc: FlowDocument) -> String {
         guard let id = session.selectedRowID,
               let row = doc.rows.first(where: { $0.id == id }) else { return "" }
         return FlowRowSummary.taskName(for: row)
+    }
+
+    /// The file a selected `Save *` row wrote, resolved against the flow's folder — lets the
+    /// inspector play/view the saved result instead of just its status sentence.
+    private func savedFileURL(in doc: FlowDocument) -> URL? {
+        guard let id = session.selectedRowID,
+              let row = doc.rows.first(where: { $0.id == id }) else { return nil }
+        return FlowSavedFile.resolved(row: row, flowID: flowID, workspace: FlowWorkspace.shared)
+    }
+
+    /// The kind of the saved file (drives how the inspector presents it).
+    private func savedFileKind(in doc: FlowDocument) -> Kind? {
+        guard let id = session.selectedRowID,
+              let row = doc.rows.first(where: { $0.id == id }) else { return nil }
+        return FlowSavedFile.kind(forTask: row.task)
+    }
+
+    /// One row's `FlowSerializedRow` — extracted so the row builder stays type-checkable.
+    private func rowView(row: Row, range: Range<Int>, isBlock: Bool, isCollapsed: Bool) -> some View {
+        let shownLines: [String]
+        if isCollapsed {
+            shownLines = Array(serializedLines[range.lowerBound..<min(range.lowerBound + 1, range.upperBound)])
+        } else {
+            shownLines = Array(serializedLines[range])
+        }
+        return FlowSerializedRow(lines: shownLines,
+                                 status: session.status(for: row.id),
+                                 onSelect: { session.selectedRowID = row.id },
+                                 isSemanticParallel: row.blockKind == .parallel,
+                                 isCollapsible: isBlock,
+                                 isCollapsed: isCollapsed,
+                                 onToggleCollapse: {
+                                     if collapsedBlocks.contains(row.id) {
+                                         collapsedBlocks.remove(row.id)
+                                     } else {
+                                         collapsedBlocks.insert(row.id)
+                                     }
+                                 },
+                                 cached: session.cacheHitRows.contains(row.id))
+    }
+
+    /// The flow cache + engine-cache status line (R11-2 visibility): nil = nothing to say.
+    /// A `✓ from cache` row marker plus this line answer "is there a cache?" at a glance.
+    private var cacheStatus: String? {
+        let store = FlowCacheStore.shared
+        var parts: [String] = []
+        let entryCount = store.entryCount
+        if entryCount > 0 {
+            let bytes = mb(store.totalBytes)
+            parts.append("cache \(entryCount) output\(entryCount == 1 ? "" : "s") (\(bytes))")
+        } else {
+            parts.append("cache empty")
+        }
+        let engineCount = EngineCache.shared.count
+        if engineCount > 0 {
+            let bytes = mb(EngineCache.shared.totalCachedBytes)
+            parts.append("\(engineCount) engine\(engineCount == 1 ? "" : "s") warm (\(bytes))")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func mb(_ bytes: Int64) -> String {
+        let value = String(format: "%.1f", Double(bytes) / 1_048_576)
+        return "\(value) MB"
+    }
+
+    /// CFM-R11-0: copy this bundled flow into the user's flow folder and open the editor on
+    /// the copy. On failure the flow stays read-only with a plain sentence.
+    private func duplicateAndEdit(_ meta: GalleryFlowMetadata, _ doc: FlowDocument) {
+        do {
+            let target = try FlowEditRoute.duplicateAndEdit(
+                flowID: flowID, title: meta.title, document: doc,
+                workspace: FlowWorkspace.shared,
+                sourceDir: GalleryLoader.resourcesDirectory ?? Bundle.main.resourceURL ?? .init(fileURLWithPath: "/"))
+            appState.editingFlow = target
+        } catch {
+            appState.openCatFlowError = "Couldn't copy '\(meta.title)' into your flows folder — the flow stays read-only."
+        }
+    }
+
+    /// A plain copy button for an error sentence (top banner and per-row). Copying the
+    /// exact string is how a failure gets reported verbatim.
+    private func copyButton(_ text: String) -> some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        } label: {
+            Image(systemName: "doc.on.doc")
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help("Copy error text")
     }
 
     private func header(_ meta: GalleryFlowMetadata, _ doc: FlowDocument) -> some View {
@@ -138,6 +299,14 @@ struct FlowListView: View {
                 .padding(.vertical, 2)
                 .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
             Spacer()
+            // CFM-R11-0: bundled flows are read-only — "Duplicate & Edit" copies the flow
+            // into the user's flow folder and opens the editor on the copy.
+            Button {
+                duplicateAndEdit(meta, doc)
+            } label: {
+                Label("Duplicate & Edit", systemImage: "square.and.pencil")
+            }
+            .help("Copy this flow into your flows folder and open it in the editor")
             Button {
                 try? FlowWorkspace.shared.prepare(
                     flowID: flowID,
@@ -146,6 +315,23 @@ struct FlowListView: View {
                 FlowWorkspace.shared.revealInFinder(flowID: flowID)
             } label: {
                 Label("Reveal in Finder", systemImage: "folder")
+            }
+            if appState.installingFlowIDs.contains(flowID) {
+                Button {} label: {
+                    Label {
+                        Text("Installing Models")
+                    } icon: {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
+                .disabled(true)
+            } else if session.needsInstall {
+                Button {
+                    session.showInstallSheet = true
+                } label: {
+                    Label("Install Required Models", systemImage: "arrow.down.circle")
+                }
             }
             if session.isRunning {
                 Button {
@@ -163,88 +349,131 @@ struct FlowListView: View {
                 .disabled(!session.canRun)
                 .help(session.runDisabledReason ?? "Run the flow (or re-run from the first gray row)")
             }
-            Menu {
-                Button("Clear Run", systemImage: "arrow.counterclockwise") {
-                    confirmClearRun(doc)
+            // CFM-R10-Events: a trigger flow can be armed — the app watches the folder /
+            // waits for the schedule / hooks the named flow, then fires with an occurrence.
+            // FIX-1: a trigger flow carrying a door (§14.4) cannot arm (never unattended).
+            if armSession.isTriggerFlow {
+                if armSession.isArmed {
+                    Button {
+                        armSession.disarm()
+                    } label: {
+                        Label("Disarm", systemImage: "stop.circle")
+                    }
+                    .help(armSession.armedDescription ?? "Armed")
+                } else {
+                    Button {
+                        armSession.arm(flowID: flowID, doc: doc,
+                                       workspace: FlowWorkspace(root: ModelStore.shared.flowsDirectory),
+                                       onFire: { occurrence in
+                                           DispatchQueue.main.async { run(doc, occurrence: occurrence) }
+                                       })
+                    } label: {
+                        Label("Arm", systemImage: "bell")
+                    }
+                    .disabled(!armSession.isArmable)
+                    .help(armSession.armRefusal ?? armSession.armedDescription ?? "Arm the flow's trigger")
                 }
-                .disabled(session.hasRunResults)
-                Button("Clear Cache", systemImage: "trash") {
-                    confirmClearCache()
+                if let armed = armSession.armedDescription, armSession.isArmed {
+                    Label(armed, systemImage: "bell.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Menu {
+                Button("Clear Cache & Results", systemImage: "trash") {
+                    confirmClearAll()
+                }
+                .disabled(!hasAnythingToClear)
+                // CFM-R10-FIX-6: an Improvise row's workdir can be restored to its pre-run
+                // snapshot (Direct build only — the App Store tier refuses Improvise).
+                if session.hasImprovise(doc) {
+                    Button("Undo Improvise", systemImage: "arrow.uturn.backward") {
+                        do {
+                            let sentence = try session.undoImprovise(
+                                doc: doc,
+                                workspace: FlowWorkspace(root: ModelStore.shared.flowsDirectory),
+                                flowID: flowID)
+                            cacheClearNotice = sentence
+                        } catch {
+                            cacheClearNotice = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+                        }
+                    }
                 }
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
             .menuStyle(.borderlessButton)
-            .help("Clear run results or the flow cache")
+            .help("Clear cached results and reset the run display")
         }
         .padding(16)
-        .confirmationDialog("Clear run results?", isPresented: $showClearRunConfirm) {
-            Button("Clear", role: .destructive) { session.clearRun(doc: doc) }
+        .confirmationDialog("Clear cached results?", isPresented: $showClearAllConfirm) {
+            Button("Clear Cache & Results", role: .destructive) { clearAll(doc: doc) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Every row's dot resets to gray and the inspector outputs are dropped. The cache is kept.")
-        }
-        .confirmationDialog("Clear the flow cache?", isPresented: $showClearCacheConfirm) {
-            Button("Clear Cache", role: .destructive) {
-                let cleared = session.clearCache()
-                if cleared == nil {
-                    cacheClearNotice = "The cache was already empty."
-                } else {
-                    cacheClearNotice = "Cleared \(cleared ?? 0) cached row\(cleared == 1 ? "" : "s")."
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Stored row outputs are deleted. The next run recomputes everything.")
+            Text("The saved row outputs are deleted and every dot resets to gray. The next Run recomputes everything from scratch — this can take minutes.")
         }
     }
 
-    @State private var showClearRunConfirm = false
-    @State private var showClearCacheConfirm = false
+    @State private var showClearAllConfirm = false
     @State private var cacheClearNotice: String?
+    /// CFM-R10-Events: the arming session for trigger flows.
+    @State private var armSession = FlowArmSession()
 
-    private func confirmClearRun(_ doc: FlowDocument) { showClearRunConfirm = true }
-    private func confirmClearCache() { showClearCacheConfirm = true }
-
-    private var rawCatDisclosure: some View {
-        DisclosureGroup("Show raw `.cat`") {
-            if let rawCat {
-                ScrollView(.horizontal) {
-                    Text(rawCat)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .padding(8)
-                }
-                .frame(maxWidth: .infinity)
-                .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 6))
-            }
-        }
-        .font(.callout)
-        .padding(.horizontal, 16)
-        .padding(.bottom, 16)
+    /// Whether there's anything for Clear Cache & Results to clear (results shown or a store).
+    private var hasAnythingToClear: Bool {
+        session.hasRunResults || FlowCacheStore.shared.entryCount > 0
     }
+
+    /// The single destructive reset (R11-2 UX): drop the run display *and* the saved
+    /// outputs, so the next Run is a genuinely fresh compute. Warm engines are kept — they
+    /// are a performance optimization, not results.
+    private func clearAll(doc: FlowDocument) {
+        let cleared = session.clearCache()
+        session.clearRun(doc: doc)
+        if let cleared, cleared > 0 {
+            cacheClearNotice = "Cleared \(cleared) cached output\(cleared == 1 ? "" : "s"); dots reset."
+        } else {
+            cacheClearNotice = "Dots reset. The cache was already empty."
+        }
+    }
+
+    private func confirmClearAll() { showClearAllConfirm = true }
 
     // MARK: - Run
 
     private func run(_ doc: FlowDocument) {
+        run(doc, occurrence: nil)
+    }
+
+    /// Run with an optional trigger occurrence (a fired `On File` / `On Schedule` / `On Flow`).
+    private func run(_ doc: FlowDocument, occurrence: FlowInterpreter.Occurrence?) {
         // Preflight decides installs; the session gates Run until models exist.
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
         let result = FlowPreflight.run(doc, catalog: catalog,
                                        installedModelIDs: appState.installedModelIDs,
                                        totalRAMGB: appState.systemInfo.totalRAMGB)
         session.prepareInstall(result, doc: doc)
+        pendingOccurrence = occurrence
         guard !result.toDownload.isEmpty else {
             startRun(doc)
             return
         }
-        // The install sheet's confirm callback starts the run.
+        // Defensive: the Run button is disabled while downloads are pending, but if run is
+        // reached with models to download, surface the install sheet (Install, not Run).
+        session.showInstallSheet = true
     }
+
+    /// The occurrence an armed trigger fired, consumed by the next `startRun`.
+    @State private var pendingOccurrence: FlowInterpreter.Occurrence?
 
     private func startRun(_ doc: FlowDocument) {
         // Re-run from here when some rows already have results; a fresh run otherwise.
         let resume = session.hasRunResults
-        let context = AppFlowExecutorFactory.cachingContext(flowID: flowID, appState: appState)
-        session.start(doc: doc, runner: FlowRunner(), context: context, resume: resume)
+        let context = AppFlowExecutorFactory.cachingContext(flowID: flowID, appState: appState, transforms: doc.transforms)
+        let occurrence = pendingOccurrence
+        pendingOccurrence = nil
+        session.start(doc: doc, runner: FlowRunner(), context: context, resume: resume,
+                      occurrence: occurrence)
     }
 
     // MARK: - Install sheet (one prompt, not six)
@@ -283,9 +512,9 @@ struct FlowListView: View {
                 Spacer()
                 Button("Cancel") { session.showInstallSheet = false }
                     .keyboardShortcut(.cancelAction)
-                Button("Install & Run") {
+                Button("Install") {
                     session.showInstallSheet = false
-                    installAndRun(result)
+                    installRequiredModels(result)
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
@@ -295,7 +524,12 @@ struct FlowListView: View {
         .frame(width: 420)
     }
 
-    private func installAndRun(_ result: FlowPreflight.Result) {
+    /// Install the flow's to-download models, then refresh preflight so the header flips to
+    /// a ready Run button (and the install button disappears). Run stays on the user. The
+    /// in-progress state is recorded on `AppState` so it survives navigating away (smoke-30).
+    private func installRequiredModels(_ result: FlowPreflight.Result) {
+        session.isInstalling = true
+        appState.installingFlowIDs.insert(flowID)
         let models = Array(result.downloadSet)
         Task {
             await installSequentially(models)
@@ -303,46 +537,99 @@ struct FlowListView: View {
     }
 
     /// Drive `InstallManager.install` **sequentially** — one model at a time, awaiting each
-    /// `.installed` marker before starting the next, then Run once all are installed.
+    /// `.installed` marker before starting the next. Always refreshes the preflight when done
+    /// (so the install sheet and `needsInstall` reflect what actually landed, even after a
+    /// partial install — M13), and surfaces a sentence when a download failed instead of
+    /// silently reverting the button.
     private func installSequentially(_ models: [ModelEntry]) async {
-        guard let doc = document else { return }
+        var succeeded = true
         for model in models {
             appState.installModel(model)
             let installed = await InstallPoller.awaitInstalled(modelID: model.id,
                                                                installManager: installManager)
-            guard installed else {
-                // A failed install leaves the flow ready to retry; don't run half-installed.
-                return
-            }
+            guard installed else { succeeded = false; break }
         }
-        startRun(doc)
+        session.isInstalling = false
+        appState.installingFlowIDs.remove(flowID)
+        if !succeeded {
+            session.errorSentence = "One of the required models failed to download — check your connection and try again."
+        }
+        refreshPreflight()
+    }
+
+    /// Recompute the preflight after installs land — the installed set changed, so the old
+    /// `toDownload` bucket is stale until refreshed.
+    private func refreshPreflight() {
+        guard let doc = document else { return }
+        let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
+        session.prepareInstall(FlowPreflight.run(doc, catalog: catalog,
+                                                  installedModelIDs: appState.installedModelIDs,
+                                                  totalRAMGB: appState.systemInfo.totalRAMGB),
+                               doc: doc)
     }
 
     private var installManager: InstallManager {
         appState.installManager
     }
 
+    /// Find a row by id (top-level or nested) for the human-prompt sheet.
+    private static func row(_ id: UUID, in doc: FlowDocument) -> Row {
+        func find(_ rows: [Row]) -> Row? {
+            for row in rows {
+                if row.id == id { return row }
+                if let found = find(row.children) { return found }
+            }
+            return nil
+        }
+        return find(doc.rows) ?? Row(id: id, task: "Ask Human")
+    }
+
     // MARK: - Loading
 
     private func load() {
+        metadata = GalleryLoader.loadMetadata().first { $0.flowID == flowID }
         do {
-            metadata = GalleryLoader.loadMetadata().first { $0.flowID == flowID }
-            rawCat = try? GalleryLoader.rawCatText(flowID: flowID)
-            // Not-runnable flows (CFM-R4-4) have no parse document — metadata + raw .cat is
-            // enough for their read-only view.
-            if let meta = metadata, meta.notRunnableReason != nil {
-                return
-            }
             document = try GalleryLoader.loadDocument(flowID: flowID)
-            if let doc = document {
-                let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
-                session.prepareInstall(FlowPreflight.run(doc, catalog: catalog,
-                                                          installedModelIDs: appState.installedModelIDs,
-                                                          totalRAMGB: appState.systemInfo.totalRAMGB),
-                                       doc: doc)
-            }
         } catch {
             loadError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+            return
         }
+        guard let doc = document else { return }
+
+        // R6-2: the flow list *is* the file — compute the canonical serialized lines once.
+        let serialized = CatSerializer.serializeLines(doc)
+        serializedLines = serialized.lines
+        lineRanges = serialized.lineRanges
+
+        // The metadata's not-runnable reason is authoritative for structurally-unsupported
+        // flows (.catpipeline, blocks, deciders…); `FlowRunner.canRun` below is the backstop
+        // for a flow the metadata *wrongly* marks runnable (B3).
+        if let meta = metadata, meta.notRunnableReason != nil {
+            notRunnableReason = meta.notRunnableReason
+            return
+        }
+        // Derive the refusal from the language gates, not the JSON string (B3).
+        if case .notRunnable(let reason) = FlowRunner.canRun(doc) {
+            notRunnableReason = reason
+            return
+        }
+
+        // Copy the bundled input assets into the flow's working folder before a run
+        // can touch them — "Reveal in Finder" alone used to do this, so running a
+        // fresh flow (e.g. 15-HouseStyle's `Read Text draft.md`) failed with
+        // "couldn't read" until the user had clicked it. Idempotent: only missing
+        // files are copied, so user edits to inputs survive.
+        try? FlowWorkspace.shared.prepare(
+            flowID: flowID,
+            sourceDir: GalleryLoader.resourcesDirectory,
+            bundledAssets: GalleryLoader.bundledAssets(flowID: flowID))
+        let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
+        session.prepareInstall(FlowPreflight.run(doc, catalog: catalog,
+                                                  installedModelIDs: appState.installedModelIDs,
+                                                  totalRAMGB: appState.systemInfo.totalRAMGB),
+                               doc: doc)
+        // CFM-R10-Events: establish the trigger kind so the Arm button shows (and the §14.4
+        // refusal when the flow carries a door).
+        armSession.inspect(doc: doc)
     }
 }

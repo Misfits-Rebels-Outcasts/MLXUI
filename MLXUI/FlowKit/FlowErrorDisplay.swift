@@ -7,6 +7,11 @@ nonisolated enum FlowErrorDisplay {
     static func sentence(for error: any Error) -> String {
         if let flow = error as? FlowError { return sentence(for: flow) }
         if let stage = error as? StageError { return sentence(for: stage) }
+        // M1: the remaining FlowKit errors conform to `CustomStringConvertible` (not
+        // `LocalizedError`) — surface the written sentence, never "couldn't be completed".
+        if let convertible = error as? CustomStringConvertible {
+            return convertible.description
+        }
         return "This step failed: \(error.localizedDescription)"
     }
 
@@ -36,6 +41,10 @@ nonisolated enum FlowErrorDisplay {
             return "Row \(row) needs \(display), which can't run: \(reason)"
         case .unsupportedTask(let row, let task):
             return "Row \(row) uses \(task), which this version of Flows doesn't run yet."
+        case .invalidSettings(let row, let setting, let detail):
+            return "Row \(row)'s \(setting) setting is malformed — \(detail), then run again."
+        case .budgetExceeded(let row, let visitsLeq):
+            return "Row \(row) hit its budget of \(visitsLeq) visits with `on_budget=fail` — no forced edge to take."
         }
     }
 

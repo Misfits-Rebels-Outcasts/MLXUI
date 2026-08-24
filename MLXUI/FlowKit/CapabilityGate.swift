@@ -32,4 +32,27 @@ nonisolated enum CapabilityGate {
         let listed = refused.map { "`\($0)`" }.joined(separator: ", ")
         return "this flow declares \(listed) -- App Store builds refuse it outright (2.4.5 iv); distribute it directly instead."
     }
+
+    /// CFM-R10-FIX-3 (E117): the declared flags plus any `code`/`improvise`/`offdevice`
+    /// inherited through the flow's `uses:` chain — a used flow declaring a capability the
+    /// header hides is a hole straight through the channel guarantee. `flowID`/`workspace`
+    /// resolve the sibling flows; without them only the declared flags are returned.
+    static func effectiveFlags(_ doc: FlowDocument, workspace: FlowWorkspace?, flowID: String?) -> [String] {
+        var flags = doc.flags.map(\.rawValue)
+        guard let workspace, let flowID, !doc.uses.isEmpty else { return flags }
+        var visited: Set<String> = []
+        func reach(_ path: String) {
+            guard !visited.contains(path) else { return }
+            visited.insert(path)
+            guard let url = try? workspace.resolve(path, flowID: flowID),
+                  let text = try? String(contentsOf: url, encoding: .utf8),
+                  let used = try? CatParser.parseForValidation(text) else { return }
+            for flag in used.flags where ["code", "improvise", "offdevice"].contains(flag) && !flags.contains(flag) {
+                flags.append(flag)
+            }
+            for sub in used.uses.values { reach(sub) }
+        }
+        for path in doc.uses.values { reach(path) }
+        return flags
+    }
 }

@@ -15,6 +15,11 @@ struct FlowInspectorPane: View {
     let rowTitle: String
     /// A `CatalogBridge` substitution note (e.g. "running Kokoro 82M as …"), or nil.
     let substitutionNote: String?
+    /// The file a selected `Save *` row wrote (resolved by the caller), so the saved result
+    /// is playable/viewable rather than just a status sentence.
+    var savedFile: URL?
+    /// The saved file's kind, driving the presentation.
+    var savedKind: Kind?
 
     @State private var player: AVAudioPlayer?
 
@@ -22,7 +27,9 @@ struct FlowInspectorPane: View {
         VStack(alignment: .leading, spacing: 12) {
             header
             Divider()
-            if let output {
+            if let savedFile, let savedKind {
+                savedContent(for: savedFile, kind: savedKind)
+            } else if let output {
                 if let item = output.items.first {
                     content(for: item)
                 } else {
@@ -73,6 +80,59 @@ struct FlowInspectorPane: View {
         }
     }
 
+    /// Present a `Save *` row's written file with the same viewers as a live output, plus a
+    /// "Show in Finder" affordance.
+    @ViewBuilder
+    private func savedContent(for url: URL, kind: Kind) -> some View {
+        let item = Item(kind: kind, value: nil, path: url, sourceText: nil)
+        switch kind {
+        case .audio:
+            VStack(alignment: .leading, spacing: 6) {
+                audioContent(item)
+                openInFinderButton(url)
+            }
+        case .text:
+            VStack(alignment: .leading, spacing: 6) {
+                textContent(item)
+                openInFinderButton(url)
+            }
+        case .image:
+            VStack(alignment: .leading, spacing: 6) {
+                imageContent(item)
+                openInFinderButton(url)
+            }
+        default:
+            VStack(alignment: .leading, spacing: 6) {
+                fileContent(url)
+                openInFinderButton(url)
+            }
+        }
+    }
+
+    private func fileContent(_ url: URL) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Saved file", systemImage: "doc")
+                .font(.subheadline.bold())
+            Text(url.lastPathComponent)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func openInFinderButton(_ url: URL) -> some View {
+        Button {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } label: {
+            Label("Show in Finder", systemImage: "folder")
+        }
+        .controlSize(.small)
+    }
+
     private func audioContent(_ item: Item) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
@@ -99,8 +159,11 @@ struct FlowInspectorPane: View {
     }
 
     private func textContent(_ item: Item) -> some View {
-        ScrollView {
-            Text(item.value ?? "")
+        let text = item.value
+            ?? (item.path.flatMap { try? String(contentsOf: $0, encoding: .utf8) })
+            ?? ""
+        return ScrollView {
+            Text(text)
                 .font(.body)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)

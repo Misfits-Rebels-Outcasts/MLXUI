@@ -24,8 +24,8 @@ nonisolated enum SDCLIPTokenizer {
 
     /// The token regex from the reference (letters, numbers, punctuation, and the special
     /// start/end markers), case-insensitive.
-    private static let pattern = try! NSRegularExpression(
-        pattern: #"<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+"#,
+    private static let pattern = NSRegularExpression.compiled(
+        #"<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+"#,
         options: [.caseInsensitive]
     )
 

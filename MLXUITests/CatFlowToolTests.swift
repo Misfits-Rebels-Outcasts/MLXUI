@@ -135,4 +135,40 @@ struct CatFlowToolTests {
         let s = FlowSettings("bare.txt; path=explicit.txt")
         #expect(s.pathValue() == "explicit.txt")
     }
+
+    // MARK: - FlowSettings tokenizer golden (CFM-FIX-2 / H5)
+
+    @Test func settingsMatchesPythonTokenizerGolden() throws {
+        let filePath = #filePath
+        let url = URL(fileURLWithPath: filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/CatFlow/tools/settings_golden.json")
+        let data = try Data(contentsOf: url)
+        struct Root: Decodable { var cases: [String: Case] }
+        struct Case: Decodable {
+            var pairs: [String: String]
+            var multi: [String: [String]]
+            var bare: [String]
+        }
+        let root = try JSONDecoder().decode(Root.self, from: data)
+        #expect(root.cases.count == 23)
+
+        for (raw, c) in root.cases {
+            let s = FlowSettings(raw)
+            for (key, expected) in c.pairs {
+                #expect(s.value(for: key) == expected,
+                        "\(raw): value(for: \(key)) — Swift \(s.value(for: key) ?? "nil") vs Python \(expected)")
+            }
+            for (key, expected) in c.multi {
+                #expect(s.multi(for: key) == expected,
+                        "\(raw): multi(\(key)) — Swift \(s.multi(for: key)) vs Python \(expected)")
+            }
+            #expect(s.testKeys == Set(c.multi.keys),
+                    "\(raw): key set — Swift \(s.testKeys) vs Python \(Set(c.multi.keys))")
+            // bare tokens must match exactly (order preserved)
+            #expect(s.testBare == c.bare,
+                    "\(raw): bare — Swift \(s.testBare) vs Python \(c.bare)")
+        }
+    }
 }

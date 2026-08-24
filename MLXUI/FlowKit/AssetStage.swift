@@ -187,6 +187,8 @@ nonisolated enum FlowError: Error, CustomStringConvertible, Equatable {
     case stageFailure(row: String, message: String)
     case modelNotRunnable(row: String, display: String, reason: String)
     case unsupportedTask(row: String, task: String)
+    case invalidSettings(row: String, setting: String, detail: String)
+    case budgetExceeded(row: String, visitsLeq: Int)
 
     var description: String {
         switch self {
@@ -214,6 +216,10 @@ nonisolated enum FlowError: Error, CustomStringConvertible, Equatable {
             return "Row \(row) needs \(display), which isn't runnable: \(reason)"
         case .unsupportedTask(let row, let task):
             return "Row \(row) uses \(task), which this version of Flows doesn't run yet."
+        case .invalidSettings(let row, let setting, let detail):
+            return "\(row)'s \(setting) setting is malformed — \(detail), then run again."
+        case .budgetExceeded(let row, let visitsLeq):
+            return "Row \(row) hit its budget of \(visitsLeq) visits with `on_budget=fail` — no forced edge to take."
         }
     }
 }
