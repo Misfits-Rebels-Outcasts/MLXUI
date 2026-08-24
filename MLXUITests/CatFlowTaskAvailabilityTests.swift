@@ -59,13 +59,13 @@ struct CatFlowTaskAvailabilityTests {
     @Test func canRunRefusesAFlowWithAnUnportedInstantTool() {
         let doc = FlowDocument(version: "0.8", rows: [
             Row(id: UUID(), task: "Generate Image", model: "Z-Image Turbo", settings: "a tree"),
-            Row(id: UUID(), task: "Save Image", settings: "tree.png"),
+            Row(id: UUID(), task: "Watermark", settings: "logo.png"),
         ])
         guard case .notRunnable(let reason) = FlowRunner.canRun(doc) else {
             Issue.record("expected notRunnable")
             return
         }
-        #expect(reason.contains("Save Image"))
+        #expect(reason.contains("Watermark"))
         #expect(reason.contains("doesn't run yet"))
     }
 
@@ -95,12 +95,13 @@ struct CatFlowTaskAvailabilityTests {
     }
 
     @Test func everyUnavailableTaskGetsAPickerMarker() {
-        // The spec's 37 = 30 unported instant + 5 net + 2 staged; under the App Store build
-        // the agent row (Improvise) is channel-refused too, so the marker set is 38.
+        // The spec's 37 = 30 unported instant + 5 net + 2 staged; R12-5 ported three more
+        // (Save Image/Save Images/Save Video), so 27 unported. Under the App Store build the
+        // agent row (Improvise) is channel-refused too → 27 + 5 + 2 + 1 = 35 markers.
         let unportedInstant = TaskCatalog.entries.filter {
             $0.taskClass == .instant && !TaskAvailability.supportedInstantTools.contains($0.name)
         }.count
-        #expect(unportedInstant == 30)
+        #expect(unportedInstant == 27)
         #expect(TaskCatalog.entries.filter { $0.taskClass == .net }.count == 5)
         #expect(TaskCatalog.entries.filter { $0.taskClass == .staged }.count == 2)
 
@@ -114,7 +115,7 @@ struct CatFlowTaskAvailabilityTests {
             }
         }
         #expect(expectedUnavailable.map(\.name).sorted() == computedUnavailable.map(\.name).sorted())
-        #expect(expectedUnavailable.count == 38)   // 30 + 5 + 2 + Improvise (App Store)
+        #expect(expectedUnavailable.count == 35)   // 27 + 5 + 2 + Improvise (App Store)
         // Every one is labeled, and every available one is not.
         for task in TaskCatalog.allTasks() {
             #expect((TaskAvailability.marker(for: task) != nil) != TaskAvailability.isAvailable(task.name))

@@ -149,6 +149,15 @@ nonisolated struct RealExecutor: FlowExecutor {
         case "Save Audio":
             return try await SaveAudioTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
                 .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Save Image":
+            return try await SaveImageTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Save Images":
+            return try await SaveImagesTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Save Video":
+            return try await SaveVideoTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
         case "Save Text":
             return try await SaveTextTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
                 .run(inputs.first ?? Asset(items: [])) { _ in }
