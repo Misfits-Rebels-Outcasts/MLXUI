@@ -45,16 +45,11 @@ struct CatFlowContextToolsTests {
     }
 
     @Test func flowsUnblockedByContextAreRunnableNow() throws {
-        // 18/46/50 needed Save/Read Context; 55 also needs Compare (still unported).
-        let runnable = ["18-DocChat", "46-IndexSelfTest", "50-NightlyDrift"]
+        // 18/46/50 needed Save/Read Context; 55 needed Compare (group a, landed after).
+        let runnable = ["18-DocChat", "46-IndexSelfTest", "50-NightlyDrift", "55-ReceiptsLedger"]
         for fid in runnable {
             let doc = try GalleryLoader.loadDocument(flowID: fid)
-            #expect(FlowRunner.canRun(doc) == .runnable, "\(fid) should be runnable after the context port")
-        }
-        let doc = try GalleryLoader.loadDocument(flowID: "55-ReceiptsLedger")
-        guard case .notRunnable = FlowRunner.canRun(doc) else {
-            Issue.record("55 should still need Compare")
-            return
+            #expect(FlowRunner.canRun(doc) == .runnable, "\(fid) should be runnable now")
         }
     }
 }

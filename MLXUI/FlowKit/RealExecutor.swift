@@ -255,6 +255,21 @@ nonisolated struct RealExecutor: FlowExecutor {
             // Diff reads inputs[0].items[0] / inputs[1].items[0] — NOT the flattened bundle —
             // so a list-shaped ref is read by its first item only, as in the Python (CFM-FIX-1).
             return try await DiffTool(settings: row.settings ?? "").run(inputs: inputs)
+        case "Calculate":
+            return try await CalculateTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Range":
+            return try await RangeTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Chart":
+            return try await ChartTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Compare":
+            // CFM-R12-7 group a: a deterministic branch — the fired tag drives the row's
+            // `-> { tag: N }` edge, exactly like a decider (the interpreter reads lastTag).
+            let result = try CompareTool.run(row: row, inputs: inputs, path: path)
+            tagBox.tag = result.firedTag
+            return result.output
         default:
             // A catalog task with no Swift tool implementation yet. Name the task, not a
             // misleading kind — the flow declines rather than approximating (rule 5).
