@@ -230,6 +230,15 @@ nonisolated struct RealExecutor: FlowExecutor {
             return try TableTool.readCSV(settings: row.settings, from: try resolveFile(row: row, inputs: inputs))
         case "Read JSON":
             return try TableTool.readJSON(settings: row.settings, from: try resolveFile(row: row, inputs: inputs))
+        case "Read Context":
+            return try await ReadContextTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Save Context":
+            return try await SaveContextTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Count Context":
+            return try await CountContextTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
         case "Query Table":
             return try TableTool.queryTable(settings: row.settings, from: try tableInput(row: row, path: path, inputs: inputs))
         case "Set Field":

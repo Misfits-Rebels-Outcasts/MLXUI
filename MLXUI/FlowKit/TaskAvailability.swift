@@ -19,12 +19,13 @@ nonisolated enum TaskAvailability {
         case refusedByChannel(reason: String)
     }
 
-    /// The instant tools with a real `case` in `RealExecutor.runInstant` (32 today).
+    /// The instant tools with a real `case` in `RealExecutor.runInstant` (35 today).
     static let supportedInstantTools: Set<String> = [
         "Read Audio", "Read Text", "Read Image", "Read Images", "Read Files", "Read PDF",
-        "Read Index",
-        "Save Audio", "Save Text", "Save Image", "Save Images", "Save Video",
+        "Read Index", "Read Context",
+        "Save Audio", "Save Text", "Save Image", "Save Images", "Save Video", "Save Context",
         "Store Index", "Retrieve", "Keyword Search",
+        "Count Context",
         "Split", "Filter", "Dedupe", "Sort", "Extract", "Count", "Join Text", "Template",
         "Read CSV", "Read JSON", "Query Table", "Set Field", "Table to Text",
         "Store Query", "Store Read", "Store Write", "Diff",
