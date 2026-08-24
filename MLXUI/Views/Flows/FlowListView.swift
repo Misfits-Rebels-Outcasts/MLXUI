@@ -142,7 +142,11 @@ struct FlowListView: View {
             HStack(spacing: 0) {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(doc.rows.enumerated()), id: \.element.id) { index, row in
+                        // CFM-R12-3: one entry per row — block children get their own status
+                        // dot, selection, and error sentence; a collapsed block hides its
+                        // children (its header dot aggregates them so a red can't hide).
+                        ForEach(FlowRowFlatten.flatten(doc.rows, collapsed: collapsedBlocks)) { display in
+                            let row = display.row
                             if FlowRowSummary.hasChainBreakBefore(row) {
                                 Divider()
                                     .padding(.leading, 48)
@@ -150,9 +154,8 @@ struct FlowListView: View {
                             if let range = lineRanges[row.id] {
                                 let isBlock = row.blockKind != nil
                                 let isCollapsed = isBlock && collapsedBlocks.contains(row.id)
-                                // A collapsed block shows only its own header line (the
-                                // first line of its range); children live in the rest.
                                 rowView(row: row, range: range, isBlock: isBlock, isCollapsed: isCollapsed)
+                                    .padding(.leading, CGFloat(display.depth) * 20)
                                     .background(session.selectedRowID == row.id ? Color.accentColor.opacity(0.12) : Color.clear)
                             }
                             if let sentence = session.errorSentence(for: row.id) {
@@ -164,7 +167,7 @@ struct FlowListView: View {
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                     copyButton(sentence)
                                 }
-                                .padding(.leading, 48)
+                                .padding(.leading, 48 + CGFloat(display.depth) * 20)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             }
                         }
@@ -239,7 +242,7 @@ struct FlowListView: View {
             shownLines = Array(serializedLines[range])
         }
         return FlowSerializedRow(lines: shownLines,
-                                 status: session.status(for: row.id),
+                                 status: statusForDisplay(row, isCollapsed: isCollapsed),
                                  onSelect: { session.selectedRowID = row.id },
                                  isSemanticParallel: row.blockKind == .parallel,
                                  isCollapsible: isBlock,
@@ -252,6 +255,19 @@ struct FlowListView: View {
                                      }
                                  },
                                  cached: session.cacheHitRows.contains(row.id))
+    }
+
+    /// CFM-R12-3 item 3: a collapsed block's header dot aggregates its children, so a red dot
+    /// (or a running/succeeded state) can never be hidden by collapsing.
+    private func statusForDisplay(_ row: Row, isCollapsed: Bool) -> FlowStatus {
+        let own = session.status(for: row.id)
+        guard row.blockKind != nil, isCollapsed, !row.children.isEmpty else { return own }
+        let childStatuses = row.children.map { session.status(for: $0.id) }
+        if childStatuses.contains(.failed) { return .failed }
+        if childStatuses.allSatisfy({ $0 == .succeeded }) { return .succeeded }
+        if childStatuses.contains(.running) { return .running }
+        if childStatuses.contains(.needsAttention) { return .needsAttention }
+        return own
     }
 
     /// The flow cache + engine-cache status line (R11-2 visibility): nil = nothing to say.

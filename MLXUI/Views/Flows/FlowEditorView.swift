@@ -56,6 +56,28 @@ struct FlowEditorView: View {
         }
         .frame(minWidth: 620, minHeight: 420)
         .navigationTitle(model.name.isEmpty ? "Untitled Flow" : model.name)
+        // CFM-R12-3 item 5: removing a block header asks — never delete N rows on one
+        // keystroke without saying so.
+        .confirmationDialog("Remove this block?", isPresented: Binding(
+            get: { blockPendingRemoval != nil },
+            set: { if !$0 { blockPendingRemoval = nil } }
+        ), titleVisibility: .visible) {
+            Button("Remove all", role: .destructive) {
+                if let id = blockPendingRemoval { model.remove(id) }
+                blockPendingRemoval = nil
+            }
+            Button("Keep the steps") {
+                if let id = blockPendingRemoval { model.unwrapBlock(id) }
+                blockPendingRemoval = nil
+            }
+            Button("Cancel", role: .cancel) { blockPendingRemoval = nil }
+        } message: {
+            if let id = blockPendingRemoval {
+                Text("Remove '\(model.row(withID: id)?.blockName ?? "block")' and its \(model.childCount(of: id)) steps, or keep the steps by unwrapping them to its place?")
+            } else {
+                Text("")
+            }
+        }
         .sheet(isPresented: $showPicker) {
             FlowStepPickerView(steps: pickerSteps,
                                showFullCatalog: $showFullCatalog,
@@ -145,13 +167,13 @@ struct FlowEditorView: View {
                 showFullCatalog = false
                 showPicker = true
             } label: {
-                Label("Add step", systemImage: "plus")
+                Label(addStepLabel, systemImage: "plus")
             }
             .keyboardShortcut(.return, modifiers: .command)
-            .help("Add a step below the selected row (or at the end)")
+            .help(addStepHelp)
             Button {
                 if let selected = model.selectedRowID {
-                    model.remove(selected)
+                    removeRow(model.row(withID: selected) ?? Row(id: selected, task: nil))
                 }
             } label: {
                 Label("Remove", systemImage: "minus")
@@ -231,16 +253,13 @@ struct FlowEditorView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Row list
+    // MARK: - Row list (CFM-R12-3: one entry per row, children included)
 
     private var rowList: some View {
         HStack(spacing: 0) {
             List {
-                ForEach(model.document.rows) { row in
-                    editorRow(row)
-                }
-                .onMove { source, destination in
-                    model.move(from: source, to: destination)
+                ForEach(visibleRows) { display in
+                    editorRow(display.row, depth: display.depth)
                 }
             }
             .listStyle(.plain)
@@ -254,9 +273,34 @@ struct FlowEditorView: View {
         }
     }
 
-    private func editorRow(_ row: Row) -> some View {
+    /// R12-3: every row flattened with depth; a collapsed block hides its children.
+    private var visibleRows: [FlowRowFlatten.Entry] {
+        FlowRowFlatten.flatten(model.document.rows, collapsed: collapsedBlocks)
+    }
+
+    @State private var collapsedBlocks: Set<UUID> = []
+    /// CFM-R12-3 item 5: the block header awaiting a Remove all / Keep the steps decision.
+    @State private var blockPendingRemoval: UUID?
+
+    private func editorRow(_ row: Row, depth: Int) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .top, spacing: 8) {
+                if row.blockKind != nil {
+                    Button {
+                        if collapsedBlocks.contains(row.id) {
+                            collapsedBlocks.remove(row.id)
+                        } else {
+                            collapsedBlocks.insert(row.id)
+                        }
+                    } label: {
+                        Image(systemName: collapsedBlocks.contains(row.id) ? "chevron.right" : "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 12)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 5)
+                }
                 FlowStatusDot(status: status(for: row))
                     .padding(.top, 4)
                 if let range = serialized.lineRanges[row.id] {
@@ -270,10 +314,11 @@ struct FlowEditorView: View {
                 }
             }
             .padding(.vertical, 3)
+            .padding(.leading, CGFloat(depth) * 20)
             .contextMenu { contextMenu(for: row) }
             .swipeActions(edge: .trailing) {
                 Button(role: .destructive) {
-                    model.remove(row.id)
+                    removeRow(row)
                 } label: {
                     Label("Remove", systemImage: "trash")
                 }
@@ -282,11 +327,20 @@ struct FlowEditorView: View {
                 Text(warning)
                     .font(.caption)
                     .foregroundStyle(.orange)
-                    .padding(.leading, 28)
+                    .padding(.leading, 28 + CGFloat(depth) * 20)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .listRowBackground(rowBackground(for: row))
+    }
+
+    /// R12-3 item 5: removing a block header asks — Remove all / Keep the steps / Cancel.
+    private func removeRow(_ row: Row) {
+        if row.blockKind != nil {
+            blockPendingRemoval = row.id
+        } else {
+            model.remove(row.id)
+        }
     }
 
     @ViewBuilder
@@ -313,6 +367,9 @@ struct FlowEditorView: View {
             Button("<parallel>") { model.insertBlock(kind: .parallel, name: "parallel_group", after: row.id) }
             Button("<list>") { model.insertBlock(kind: .list, name: "list_group", after: row.id) }
         }
+        // CFM-R12-3 item 6: reorder stays inside its scope — top-level via `move`, a block
+        // child among its siblings via `moveInside`.
+        moveMenu(for: row)
         let slots = model.inputSlotCount(for: row.id)
         ForEach(1...slots, id: \.self) { slot in
             inputMenu(for: row, slot: slot)
@@ -329,7 +386,40 @@ struct FlowEditorView: View {
             model.duplicate(row.id)
         }
         Button("Remove", role: .destructive) {
-            model.remove(row.id)
+            removeRow(row)
+        }
+    }
+
+    /// R12-3 item 6: Move up/down within the row's own scope (top-level or a block's
+    /// children) — dragging a child out of a block, or a row into one, is out of scope.
+    @ViewBuilder
+    private func moveMenu(for row: Row) -> some View {
+        if let (blockID, childIndex) = model.childIndexOf(row.id) {
+            Menu("Move") {
+                if childIndex > 0 {
+                    Button("Move up") {
+                        model.moveInside(blockID: blockID, from: [childIndex], to: childIndex - 1)
+                    }
+                }
+                if childIndex < model.childCount(of: blockID) - 1 {
+                    Button("Move down") {
+                        model.moveInside(blockID: blockID, from: [childIndex], to: childIndex + 2)
+                    }
+                }
+            }
+        } else if let index = model.document.rows.firstIndex(where: { $0.id == row.id }) {
+            Menu("Move") {
+                if index > 0 {
+                    Button("Move up") {
+                        model.move(from: [index], to: index - 1)
+                    }
+                }
+                if index < model.document.rows.count - 1 {
+                    Button("Move down") {
+                        model.move(from: [index], to: index + 2)
+                    }
+                }
+            }
         }
     }
 
@@ -368,6 +458,24 @@ struct FlowEditorView: View {
 
     /// The row's dot: the run's own status once a run has happened, else the editing
     /// state — yellow `△` for a row that needs attention (answer c5/c9/l).
+    /// R12-3 item 4: the Add button names where it will insert — inside the enclosing block,
+    /// below the selected row, or at the end.
+    private var addStepLabel: String {
+        if let id = model.selectedRowID, let name = model.enclosingBlockName(for: id) {
+            return "Add step inside \(name)"
+        }
+        if let id = model.selectedRowID {
+            return model.row(withID: id)?.blockKind != nil ? "Add step inside" : "Add step below"
+        }
+        return "Add step"
+    }
+
+    private var addStepHelp: String {
+        if model.selectedRowID == nil { return "Add a step at the end" }
+        if model.enclosingBlockName(for: model.selectedRowID!) != nil { return "Add a step inside the selected block" }
+        return "Add a step below the selected row"
+    }
+
     private func status(for row: Row) -> FlowStatus {
         let run = session.status(for: row.id)
         if run != .notRun { return run }

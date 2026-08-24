@@ -192,6 +192,47 @@ final class FlowEditorModel {
         "Denoise": ["Z-Image Turbo"],
     ]
 
+    // MARK: - CFM-R12-3: rows inside a block are rows
+
+    /// CFM-R12-3 item 5 — "Keep the steps": remove a block header but unwrap its children
+    /// into the block's position.
+    func unwrapBlock(_ blockID: UUID) {
+        commitChange {
+            let before = document.rows
+            guard let idx = document.rows.firstIndex(where: { $0.id == blockID }) else { return }
+            let block = document.rows.remove(at: idx)
+            document.rows.insert(contentsOf: block.children, at: idx)
+            if selectedRowID == blockID { selectedRowID = block.children.first?.id }
+            reaimClauseTargets(before: before, after: document.rows)
+        }
+    }
+
+    /// The enclosing block's display name for a row (the toolbar's "Add step inside `name`").
+    func enclosingBlockName(for rowID: UUID) -> String? {
+        for block in document.rows where block.blockKind != nil {
+            if Self.findRow(rowID, in: block.children) != nil {
+                return block.blockName ?? "<\(block.blockKind?.rawValue ?? "block")>"
+            }
+        }
+        return nil
+    }
+
+    /// The block a row is a direct child of, plus its index among the block's children —
+    /// the R12-3 move-inside-scope and Add-inside targeting.
+    func childIndexOf(_ id: UUID) -> (blockID: UUID, index: Int)? {
+        for block in document.rows where block.blockKind != nil {
+            if let idx = block.children.firstIndex(where: { $0.id == id }) {
+                return (block.id, idx)
+            }
+        }
+        return nil
+    }
+
+    /// A block's child count.
+    func childCount(of blockID: UUID) -> Int {
+        document.rows.first(where: { $0.id == blockID })?.children.count ?? 0
+    }
+
     // MARK: - Editing ops (CFM-R8-2/3/4, CFM-R8-FIX-6)
 
     /// Add a task row below the selected row — into a block when a block child is selected
@@ -671,6 +712,14 @@ final class FlowEditorModel {
             for slot in slots.sorted() {
                 issues.append(FlowIssue(row: path, code: "E203",
                                         message: "Row \(path)'s decision \(slot + 1) targets a row that was deleted — re-point it or undo, then save."))
+            }
+        }
+        // CFM-R12-3 item 5: a block emptied to zero children blocks Save — same honesty as a
+        // broken reference, never a silent deletion of the block.
+        for row in allRows() where row.blockKind != nil && row.children.isEmpty {
+            if let path = Self.displayPath(row.id, rows: document.rows) {
+                issues.append(FlowIssue(row: path, code: "E2xx",
+                                        message: "Row \(path) is a block with no steps — add one inside it, or remove the block."))
             }
         }
         issueCache = (document, issues)

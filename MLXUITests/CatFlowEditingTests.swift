@@ -24,9 +24,10 @@ struct CatFlowEditingTests {
     }
 
     private func row(_ task: String?, model: String? = nil, settings: String? = nil,
-                     refs: [Ref] = [], children: [Row] = [], blockKind: BlockKind? = nil) -> Row {
-        Row(id: UUID(), task: task, blockKind: blockKind, model: model, settings: settings,
-            refs: refs, children: children)
+                     refs: [Ref] = [], children: [Row] = [], blockKind: BlockKind? = nil,
+                     blockName: String? = nil) -> Row {
+        Row(id: UUID(), task: task, blockKind: blockKind, blockName: blockName,
+            model: model, settings: settings, refs: refs, children: children)
     }
 
     // MARK: - CFM-R8-1: the step picker
@@ -666,5 +667,65 @@ struct CatFlowEditingTests {
         model.add(task: "Read Text")
         try model.save()
         #expect(model.savedURL?.pathExtension == "cat")
+    }
+
+    // MARK: - CFM-R12-3: rows inside a block are rows
+
+    @Test func flattenListsEveryChildWithItsDepth() throws {
+        // 02-MeetingMinutes: a top-level `<parallel three_reads>` with four children.
+        let doc = try GalleryLoader.loadDocument(flowID: "02-MeetingMinutes")
+        let entries = FlowRowFlatten.flatten(doc.rows, collapsed: [])
+        let block = try #require(doc.rows.first { $0.blockKind != nil })
+        #expect(entries.contains { $0.row.id == block.id && $0.depth == 0 })
+        for child in block.children {
+            #expect(entries.contains { $0.row.id == child.id && $0.depth == 1 },
+                    "child \(child.id) should appear flattened at depth 1")
+        }
+        // Round-trip: flattening never changes the serialized bytes of an untouched flow.
+        let roundTrip = try CatParser.parse(CatSerializer.serialize(doc))
+        #expect(CatSerializer.serialize(roundTrip) == CatSerializer.serialize(doc))
+    }
+
+    @Test func flattenHonorsCollapsedBlocks() throws {
+        let doc = try GalleryLoader.loadDocument(flowID: "02-MeetingMinutes")
+        let block = try #require(doc.rows.first { $0.blockKind != nil })
+        let collapsed = FlowRowFlatten.flatten(doc.rows, collapsed: [block.id])
+        #expect(collapsed.contains { $0.row.id == block.id })
+        #expect(collapsed.filter { $0.row.id != block.id }.allSatisfy { $0.depth == 0 })
+        for child in block.children {
+            #expect(!collapsed.contains { $0.row.id == child.id })
+        }
+    }
+
+    @Test func unwrapBlockKeepsTheSteps() throws {
+        let r1 = row("Read Text", settings: "memo.txt")
+        let child1 = row("Summarize", model: "Qwen3 8B")
+        let child2 = row("Save Text", settings: "out.md")
+        let block = row(nil, children: [child1, child2], blockKind: .parallel)
+        let model = try editor(rows: [r1, block])
+
+        model.unwrapBlock(block.id)
+
+        // The children land in the block's position, in order.
+        #expect(model.document.rows.map(\.task) == ["Read Text", "Summarize", "Save Text"])
+        #expect(!model.document.rows.contains { $0.id == block.id })
+    }
+
+    @Test func emptyBlockBlocksSave() throws {
+        let block = row(nil, children: [], blockKind: .parallel)
+        let model = try editor(rows: [block])
+        #expect(!model.canSave)
+        #expect(model.saveBlockReason?.contains("no steps") == true)
+    }
+
+    @Test func enclosingBlockNameNamesTheTarget() throws {
+        let child1 = row("Summarize", model: "Qwen3 8B")
+        let block = row(nil, children: [child1], blockKind: .parallel, blockName: "three_reads")
+        let model = try editor(rows: [block])
+        #expect(model.enclosingBlockName(for: child1.id) == "three_reads")
+        let (blockID, index) = try #require(model.childIndexOf(child1.id))
+        #expect(blockID == block.id)
+        #expect(index == 0)
+        #expect(model.childCount(of: block.id) == 1)
     }
 }
