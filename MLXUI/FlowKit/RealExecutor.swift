@@ -228,6 +228,21 @@ nonisolated struct RealExecutor: FlowExecutor {
                 .run(bundle(inputs)) { _ in }
         case "Read CSV":
             return try TableTool.readCSV(settings: row.settings, from: try resolveFile(row: row, inputs: inputs))
+        case "Read Video":
+            return try await ReadVideoTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Extract Frame":
+            return try await ExtractFrameTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Extract Audio":
+            return try await ExtractAudioTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Trim":
+            return try await TrimTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Mux":
+            return try await MuxTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs: inputs)
         case "Read JSON":
             return try TableTool.readJSON(settings: row.settings, from: try resolveFile(row: row, inputs: inputs))
         case "Read Context":

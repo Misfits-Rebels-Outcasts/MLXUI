@@ -58,13 +58,13 @@ struct CatFlowTaskAvailabilityTests {
 
     @Test func canRunRefusesAFlowWithAnUnportedInstantTool() {
         let doc = FlowDocument(version: "0.8", rows: [
-            Row(id: UUID(), task: "Read Video", settings: "clip.mp4"),
+            Row(id: UUID(), task: "Join Video", settings: "clips/"),
         ])
         guard case .notRunnable(let reason) = FlowRunner.canRun(doc) else {
             Issue.record("expected notRunnable")
             return
         }
-        #expect(reason.contains("Read Video"))
+        #expect(reason.contains("Join Video"))
         #expect(reason.contains("doesn't run yet"))
     }
 
@@ -94,12 +94,13 @@ struct CatFlowTaskAvailabilityTests {
     }
 
     @Test func everyUnavailableTaskGetsAPickerMarker() {
-        // Group c ported Append Row/Merge Record: 8 instant tools unported. Markers
-        // = 8 + 5 net + Improvise (App Store) = 14.
+        // Group e ported Read Video/Extract Frame/Extract Audio/Trim/Mux; Join Video stays
+        // unported. 3 instant tools unported (Join Video, Detect Edges, Detect Pose).
+        // Markers = 3 + 5 net + Improvise (App Store) = 9.
         let unportedInstant = TaskCatalog.entries.filter {
             $0.taskClass == .instant && !TaskAvailability.supportedInstantTools.contains($0.name)
         }.count
-        #expect(unportedInstant == 8)
+        #expect(unportedInstant == 3)
         #expect(TaskCatalog.entries.filter { $0.taskClass == .net }.count == 5)
 
         let expectedUnavailable = TaskCatalog.allTasks().filter {
@@ -112,7 +113,7 @@ struct CatFlowTaskAvailabilityTests {
             }
         }
         #expect(expectedUnavailable.map(\.name).sorted() == computedUnavailable.map(\.name).sorted())
-        #expect(expectedUnavailable.count == 14)   // 8 + 5 + Improvise (App Store)
+        #expect(expectedUnavailable.count == 9)   // 3 + 5 + Improvise (App Store)
         // Every one is labeled, and every available one is not.
         for task in TaskCatalog.allTasks() {
             #expect((TaskAvailability.marker(for: task) != nil) != TaskAvailability.isAvailable(task.name))

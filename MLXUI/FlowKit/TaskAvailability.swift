@@ -22,11 +22,12 @@ nonisolated enum TaskAvailability {
     /// The instant tools with a real `case` in `RealExecutor.runInstant` (45 today).
     static let supportedInstantTools: Set<String> = [
         "Read Audio", "Read Text", "Read Image", "Read Images", "Read Files", "Read PDF",
-        "Read Index", "Read Context",
+        "Read Index", "Read Context", "Read Video",
         "Save Audio", "Save Text", "Save Image", "Save Images", "Save Video", "Save Context",
         "Store Index", "Retrieve", "Keyword Search",
         "Count Context", "Calculate", "Compare", "Range", "Chart",
         "Resize", "Crop", "Convert", "Watermark", "Overlay Text", "Contact Sheet",
+        "Extract Frame", "Extract Audio", "Trim", "Mux",
         "Split", "Filter", "Dedupe", "Sort", "Extract", "Count", "Join Text", "Template",
         "Read CSV", "Read JSON", "Query Table", "Set Field", "Table to Text", "Append Row", "Merge Record",
         "Store Query", "Store Read", "Store Write", "Diff",
