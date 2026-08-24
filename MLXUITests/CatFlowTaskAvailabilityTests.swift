@@ -95,13 +95,12 @@ struct CatFlowTaskAvailabilityTests {
     }
 
     @Test func everyUnavailableTaskGetsAPickerMarker() {
-        // The spec's 37 = 30 unported instant + 5 net + 2 staged; R12-5 ported three more
-        // (Save Image/Save Images/Save Video), so 27 unported. Under the App Store build the
-        // agent row (Improvise) is channel-refused too → 27 + 5 + 2 + 1 = 35 markers.
+        // R12-6 ported Read Index/Store Index/Retrieve/Keyword Search, so 23 instant tools
+        // are unported; + 5 net + 2 staged + Improvise (App Store) = 31 markers.
         let unportedInstant = TaskCatalog.entries.filter {
             $0.taskClass == .instant && !TaskAvailability.supportedInstantTools.contains($0.name)
         }.count
-        #expect(unportedInstant == 27)
+        #expect(unportedInstant == 23)
         #expect(TaskCatalog.entries.filter { $0.taskClass == .net }.count == 5)
         #expect(TaskCatalog.entries.filter { $0.taskClass == .staged }.count == 2)
 
@@ -115,7 +114,7 @@ struct CatFlowTaskAvailabilityTests {
             }
         }
         #expect(expectedUnavailable.map(\.name).sorted() == computedUnavailable.map(\.name).sorted())
-        #expect(expectedUnavailable.count == 35)   // 27 + 5 + 2 + Improvise (App Store)
+        #expect(expectedUnavailable.count == 31)   // 23 + 5 + 2 + Improvise (App Store)
         // Every one is labeled, and every available one is not.
         for task in TaskCatalog.allTasks() {
             #expect((TaskAvailability.marker(for: task) != nil) != TaskAvailability.isAvailable(task.name))

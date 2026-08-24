@@ -146,6 +146,18 @@ nonisolated struct RealExecutor: FlowExecutor {
         case "Read PDF":
             return try await ReadPDFTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
                 .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Read Index":
+            return try await ReadIndexTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Store Index":
+            return try await StoreIndexTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs: inputs)
+        case "Retrieve":
+            return try await RetrieveTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs: inputs)
+        case "Keyword Search":
+            return try await KeywordSearchTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs: inputs)
         case "Save Audio":
             return try await SaveAudioTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
                 .run(inputs.first ?? Asset(items: [])) { _ in }

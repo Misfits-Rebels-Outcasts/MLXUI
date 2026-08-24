@@ -117,8 +117,21 @@ nonisolated struct SingleMediaStage: AssetStage {
                 throw FlowError.writeFailed(row: row, path: url.lastPathComponent)
             }
             return Item(kind: .image, value: nil, path: url, sourceText: nil)
-        case .embedding:
-            throw FlowError.unsupportedKind(row: row, kind: .vector)
+        case .embedding(let vectors):
+            // CFM-R12-6: persist each vector as a `.npy` (the SPEC-Q15 on-disk format the
+            // index tools read), so `Store Index`/`Retrieve` consume `Embed`'s output.
+            // The FIRST vector is the returned item (single-media adapter); a batch is
+            // written to the blob dir too, and the item names the first file.
+            guard let first = vectors.first else {
+                throw FlowError.unsupportedKind(row: row, kind: .vector)
+            }
+            let url = try blobURL(extension: "npy")
+            do {
+                try NpyCodec.save(first, to: url)
+            } catch {
+                throw FlowError.writeFailed(row: row, path: url.lastPathComponent)
+            }
+            return Item(kind: .vector, value: nil, path: url, sourceText: nil)
         }
     }
 
@@ -147,10 +160,14 @@ nonisolated struct SingleMediaStage: AssetStage {
             }
             return .image(ImageMedia(cgImage: cgImage))
         case (.vector, _, let path?):
-            // Vector items are file-backed blobs (not inlined); loading them into a
-            // `Media.embedding` is out of scope for the single-media adapter (R2 runs no
-            // embedding rows) — refuse rather than fabricate.
-            throw FlowError.unsupportedKind(row: row, kind: .vector)
+            // CFM-R12-6: a vector item is a `.npy` blob (the SPEC-Q15 format) — load it back
+            // into a `Media.embedding` batch of one.
+            do {
+                let values = try NpyCodec.load(from: path)
+                return .embedding([values])
+            } catch {
+                throw FlowError.fileReadFailed(row: row, path: path.lastPathComponent)
+            }
         case (let kind, _, nil) where MediaKindMapping.mediaKind(for: kind) == .audio:
             throw FlowError.fileReadFailed(row: row, path: "audio item")
         default:
