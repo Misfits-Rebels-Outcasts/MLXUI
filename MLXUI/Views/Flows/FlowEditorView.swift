@@ -137,6 +137,28 @@ struct FlowEditorView: View {
             .keyboardShortcut("z", modifiers: [.command, .shift])
             .help("Redo the last undo")
             Divider().frame(height: 20)
+            // CFM-R12-2: Add/Remove in the toolbar — the visible path to building and
+            // pruning a flow without ever opening a context menu. Add targets below the
+            // selected row (or the end when nothing is selected), the same call the context
+            // menu makes.
+            Button {
+                showFullCatalog = false
+                showPicker = true
+            } label: {
+                Label("Add step", systemImage: "plus")
+            }
+            .keyboardShortcut(.return, modifiers: .command)
+            .help("Add a step below the selected row (or at the end)")
+            Button {
+                if let selected = model.selectedRowID {
+                    model.remove(selected)
+                }
+            } label: {
+                Label("Remove", systemImage: "minus")
+            }
+            .disabled(model.selectedRowID == nil)
+            .keyboardShortcut(.delete, modifiers: [])
+            .help(model.selectedRowID == nil ? "Select a row to remove it" : "Remove the selected row")
             if session.isRunning {
                 Button {
                     session.cancel()
