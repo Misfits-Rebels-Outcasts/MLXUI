@@ -178,7 +178,11 @@ nonisolated struct FlowRunner {
                     return .notRunnable(reason:
                         "Row \(position) is an \(desc.taskClass.rawValue) row, which the App Store build refuses — distribute it directly instead.")
                 }
-            case .staged, .net:
+            case .staged:
+                // CFM-R12-8: Stage Send / Stage Post queue a visible outbox entry (never
+                // send) — in scope now, like the human/trigger channels.
+                break
+            case .net:
                 return .notRunnable(reason:
                     "Row \(position) is a \(desc.taskClass.rawValue) row, which this version of Flows can't complete.")
             }

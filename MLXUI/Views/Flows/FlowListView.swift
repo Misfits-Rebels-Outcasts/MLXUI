@@ -204,6 +204,9 @@ struct FlowListView: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 6)
             }
+            // CFM-R12-8: the flow's outbox — staged effects are meant to be read by a person
+            // before they go anywhere (nothing in the app can send one).
+            outboxDisclosure
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         // A re-opened view's preflight is stale if installs finished while away; recompute it
@@ -216,6 +219,45 @@ struct FlowListView: View {
         guard let id = session.selectedRowID,
               let row = doc.rows.first(where: { $0.id == id }) else { return "" }
         return FlowRowSummary.taskName(for: row)
+    }
+
+    /// CFM-R12-8: the flow's pending staged effects. Nothing sends — the whole point is that
+    /// a person reads each entry before it goes anywhere (which in this version is nowhere).
+    private var outboxDisclosure: some View {
+        let entries = OutboxStore.entries(workspace: FlowWorkspace.shared, flowID: flowID)
+        return DisclosureGroup {
+            if entries.isEmpty {
+                Text("No pending entries — a Stage Send / Stage Post row queues one here.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(entries) { entry in
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text("\(entry.kind) → \(entry.destination)")
+                                .font(.caption.monospaced().weight(.semibold))
+                            Spacer()
+                            Text(entry.id)
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(entry.text)
+                            .font(.caption)
+                            .textSelection(.enabled)
+                            .lineLimit(3)
+                        Text("staged \(entry.stagedAt)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        } label: {
+            Label("Outbox (\(entries.count))", systemImage: "tray.full")
+                .font(.subheadline)
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
     }
 
     /// The file a selected `Save *` row wrote, resolved against the flow's folder — lets the

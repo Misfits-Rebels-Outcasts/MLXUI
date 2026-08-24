@@ -79,13 +79,13 @@ struct CatFlowTaskAvailabilityTests {
 
     // MARK: - The channel states
 
-    @Test func netAndStagedAreRefusedByChannel() {
+    @Test func netIsRefusedButStagedNowRuns() {
         let web = TaskCatalog.get("Web Search")!
         if case .refusedByChannel = TaskAvailability.state(for: web) {} else { Issue.record("net not refused") }
-        let stage = TaskCatalog.get("Stage Send")!
-        if case .refusedByChannel = TaskAvailability.state(for: stage) {} else { Issue.record("staged not refused") }
         #expect(!TaskAvailability.isAvailable("Web Search"))
-        #expect(!TaskAvailability.isAvailable("Stage Send"))
+        // CFM-R12-8: staged rows now queue a visible outbox entry.
+        #expect(TaskAvailability.isAvailable("Stage Send"))
+        #expect(TaskAvailability.isAvailable("Stage Post"))
     }
 
     @Test func agentIsChannelRefusedOnlyUnderAppStore() {
@@ -95,14 +95,14 @@ struct CatFlowTaskAvailabilityTests {
     }
 
     @Test func everyUnavailableTaskGetsAPickerMarker() {
-        // R12-6 ported Read Index/Store Index/Retrieve/Keyword Search, so 23 instant tools
-        // are unported; + 5 net + 2 staged + Improvise (App Store) = 31 markers.
+        // R12-6 ported Read Index/Store Index/Retrieve/Keyword Search (23 unported instant),
+        // R12-8 made staged rows run (Stage Send/Post available). Markers = 23 + 5 net +
+        // Improvise (App Store) = 29.
         let unportedInstant = TaskCatalog.entries.filter {
             $0.taskClass == .instant && !TaskAvailability.supportedInstantTools.contains($0.name)
         }.count
         #expect(unportedInstant == 23)
         #expect(TaskCatalog.entries.filter { $0.taskClass == .net }.count == 5)
-        #expect(TaskCatalog.entries.filter { $0.taskClass == .staged }.count == 2)
 
         let expectedUnavailable = TaskCatalog.allTasks().filter {
             TaskAvailability.marker(for: $0) != nil
@@ -114,7 +114,7 @@ struct CatFlowTaskAvailabilityTests {
             }
         }
         #expect(expectedUnavailable.map(\.name).sorted() == computedUnavailable.map(\.name).sorted())
-        #expect(expectedUnavailable.count == 31)   // 23 + 5 + 2 + Improvise (App Store)
+        #expect(expectedUnavailable.count == 29)   // 23 + 5 + Improvise (App Store)
         // Every one is labeled, and every available one is not.
         for task in TaskCatalog.allTasks() {
             #expect((TaskAvailability.marker(for: task) != nil) != TaskAvailability.isAvailable(task.name))

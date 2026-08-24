@@ -30,9 +30,12 @@ nonisolated struct RealExecutor: FlowExecutor {
     private let tagBox = TagBox()
     /// CFM-R10-Human: the F002 timeout disclosure from a human row's default, same box.
     private let flagBox = FlagBox()
+    /// CFM-R12-8: a staged row's effect, read by the interpreter for `effect_staged`.
+    private let stagedBox = StagedBox()
 
     var lastTag: String? { tagBox.tag }
     var lastTimeoutFlag: (code: String, message: String)? { flagBox.timeout }
+    var lastStaged: (id: String, kind: String, summary: String)? { stagedBox.staged }
 
     /// A reference box for the decider's fired tag.
     private final class TagBox: @unchecked Sendable {
@@ -42,6 +45,11 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// A reference box for the F002 timeout disclosure.
     private final class FlagBox: @unchecked Sendable {
         var timeout: (code: String, message: String)?
+    }
+
+    /// CFM-R12-8: a staged row's effect, read by the interpreter for `effect_staged`.
+    private final class StagedBox: @unchecked Sendable {
+        var staged: (id: String, kind: String, summary: String)?
     }
 
     func execute(path: String, row: Row, inputs: [Asset],
@@ -118,10 +126,31 @@ nonisolated struct RealExecutor: FlowExecutor {
                                             transcript: transcript, context: context)
             }
             return try await runModel(desc, row: row, inputs: inputs, path: path)
-        case .human, .trigger, .staged, .net, .agent:
-            // Refused by `canRun` earlier; keep a truthful sentence as defense in depth.
+        case .human, .trigger, .net, .agent:
+            // Human rows return their default earlier; trigger fires carry their occurrence
+            // via the arming session; net/agent are channel-refused by `canRun`. Keep a
+            // truthful sentence as defense in depth.
+            throw FlowError.unsupportedTask(row: path, task: row.task ?? "?")
+        case .staged:
+            // CFM-R12-8: Stage Send / Stage Post queue a visible outbox entry — never send.
+            return try await runStaged(row: row, inputs: inputs, path: path)
+        }
+    }
+
+    /// CFM-R12-8: stage a Send/Post row into the flow's outbox (the only staged tasks). The
+    /// interpreter reads `lastStaged` for the `effect_staged` event.
+    private func runStaged(row: Row, inputs: [Asset], path: String) async throws -> Asset {
+        let kind: String
+        switch row.task {
+        case "Stage Send": kind = "send"
+        case "Stage Post": kind = "post"
+        default:
             throw FlowError.unsupportedTask(row: path, task: row.task ?? "?")
         }
+        let result = try OutboxStore.stage(row: row, inputs: inputs, kind: kind,
+                                           workspace: workspace, flowID: flowID)
+        stagedBox.staged = (result.id, kind, result.summary)
+        return Asset(items: [Item(kind: .status, value: result.status, path: nil, sourceText: nil)])
     }
 
     // MARK: - Instant tools

@@ -45,7 +45,8 @@ nonisolated enum TaskAvailability {
         case .net:
             return .refusedByChannel(reason: "no networked tool is ported in this version")
         case .staged:
-            return .refusedByChannel(reason: "this version can't complete staged rows")
+            // CFM-R12-8: Stage Send / Stage Post queue a visible outbox entry (never send).
+            return .available
         }
     }
 
