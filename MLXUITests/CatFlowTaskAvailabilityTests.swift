@@ -58,14 +58,13 @@ struct CatFlowTaskAvailabilityTests {
 
     @Test func canRunRefusesAFlowWithAnUnportedInstantTool() {
         let doc = FlowDocument(version: "0.8", rows: [
-            Row(id: UUID(), task: "Generate Image", model: "Z-Image Turbo", settings: "a tree"),
-            Row(id: UUID(), task: "Watermark", settings: "logo.png"),
+            Row(id: UUID(), task: "Read Video", settings: "clip.mp4"),
         ])
         guard case .notRunnable(let reason) = FlowRunner.canRun(doc) else {
             Issue.record("expected notRunnable")
             return
         }
-        #expect(reason.contains("Watermark"))
+        #expect(reason.contains("Read Video"))
         #expect(reason.contains("doesn't run yet"))
     }
 
@@ -95,12 +94,12 @@ struct CatFlowTaskAvailabilityTests {
     }
 
     @Test func everyUnavailableTaskGetsAPickerMarker() {
-        // Group a ported Calculate/Compare/Range/Chart: 16 instant tools unported. Markers
-        // = 16 + 5 net + Improvise (App Store) = 22.
+        // Group d ported Resize/Crop/Convert/Watermark/Overlay Text/Contact Sheet: 10
+        // instant tools unported. Markers = 10 + 5 net + Improvise (App Store) = 16.
         let unportedInstant = TaskCatalog.entries.filter {
             $0.taskClass == .instant && !TaskAvailability.supportedInstantTools.contains($0.name)
         }.count
-        #expect(unportedInstant == 16)
+        #expect(unportedInstant == 10)
         #expect(TaskCatalog.entries.filter { $0.taskClass == .net }.count == 5)
 
         let expectedUnavailable = TaskCatalog.allTasks().filter {
@@ -113,7 +112,7 @@ struct CatFlowTaskAvailabilityTests {
             }
         }
         #expect(expectedUnavailable.map(\.name).sorted() == computedUnavailable.map(\.name).sorted())
-        #expect(expectedUnavailable.count == 22)   // 16 + 5 + Improvise (App Store)
+        #expect(expectedUnavailable.count == 16)   // 10 + 5 + Improvise (App Store)
         // Every one is labeled, and every available one is not.
         for task in TaskCatalog.allTasks() {
             #expect((TaskAvailability.marker(for: task) != nil) != TaskAvailability.isAvailable(task.name))

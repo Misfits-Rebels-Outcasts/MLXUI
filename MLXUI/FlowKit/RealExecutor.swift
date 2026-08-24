@@ -270,6 +270,24 @@ nonisolated struct RealExecutor: FlowExecutor {
             let result = try CompareTool.run(row: row, inputs: inputs, path: path)
             tagBox.tag = result.firedTag
             return result.output
+        case "Resize":
+            return try await ResizeTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Crop":
+            return try await CropTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Convert":
+            return try await ConvertTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Watermark":
+            return try await WatermarkTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Overlay Text":
+            return try await OverlayTextTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Contact Sheet":
+            return try await ContactSheetTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs: inputs)
         default:
             // A catalog task with no Swift tool implementation yet. Name the task, not a
             // misleading kind — the flow declines rather than approximating (rule 5).

@@ -111,16 +111,10 @@ struct CatFlowRunnerTests {
         #expect(FlowRunner.canRun(try decode("01-SpokenSummary")) == .runnable)
     }
 
-    @Test func photoWebPrepIsBlockedByUnportedToolsUntilR12_5() throws {
-        // CFM-R7-FIX-2: blocks are no longer refused per se. R12-4 added the unported-tool
-        // gate, so `21-PhotoWebPrep` is now honestly refused *before* running — it uses
-        // `Resize`/`Watermark`/`Save Images`, which aren't ported yet (R12-5/7). A block
-        // flow whose tools all exist (02-MeetingMinutes) stays runnable.
-        guard case .notRunnable(let reason) = FlowRunner.canRun(try decode("21-PhotoWebPrep")) else {
-            Issue.record("expected notRunnable (unported tools)")
-            return
-        }
-        #expect(reason.contains("doesn't run yet"))
+    @Test func photoWebPrepIsRunnableWithBlocksNow() throws {
+        // CFM-R7-FIX-2: blocks are no longer refused per se. R12-5 ported Save Images and
+        // R12-7 group d ported Resize + Watermark, so 21-PhotoWebPrep is fully runnable.
+        #expect(FlowRunner.canRun(try decode("21-PhotoWebPrep")) == .runnable)
         #expect(FlowRunner.canRun(try decode("02-MeetingMinutes")) == .runnable)
     }
 

@@ -95,22 +95,15 @@ struct CatFlowSaveToolsTests {
         #expect(FileManager.default.fileExists(atPath: flowDir.appendingPathComponent("saved/clip.mp4").path))
     }
 
-    /// R12-5's done-when + the unhide audit: porting `Save Image` unblocks every flow whose
-    /// only blocker was it. 60/66 stay blocked (Watermark; Range+Contact Sheet), so the
-    /// unhide decision (AppState.hiddenFlowNumbers) is handed to the owner in the journal.
+    /// R12-5's done-when + the unhide audit: porting `Save Image` unblocked 61–65; R12-7
+    /// group d (Watermark, Range, Contact Sheet) unblocked the rest of 60/66. The unhide
+    /// decision (AppState.hiddenFlowNumbers) is handed to the owner in the journal.
     @Test func flowsUnblockedBySaveImageAreRunnableNow() throws {
-        let runnable = ["61-EditInPlace", "62-SeeDepth", "63-CutOutSubject", "64-UpscaleSmall", "65-VoiceoverBed"]
+        let runnable = ["61-EditInPlace", "62-SeeDepth", "63-CutOutSubject", "64-UpscaleSmall", "65-VoiceoverBed",
+                        "60-GenerateProductShot", "66-SeedSweep", "21-PhotoWebPrep"]
         for fid in runnable {
             let doc = try GalleryLoader.loadDocument(flowID: fid)
-            #expect(FlowRunner.canRun(doc) == .runnable, "\(fid) should be runnable after Save Image")
-        }
-        let stillBlocked = ["60-GenerateProductShot", "66-SeedSweep"]
-        for fid in stillBlocked {
-            let doc = try GalleryLoader.loadDocument(flowID: fid)
-            guard case .notRunnable = FlowRunner.canRun(doc) else {
-                Issue.record("\(fid) should still be blocked")
-                continue
-            }
+            #expect(FlowRunner.canRun(doc) == .runnable, "\(fid) should be runnable after Save Image + group d")
         }
     }
 }
