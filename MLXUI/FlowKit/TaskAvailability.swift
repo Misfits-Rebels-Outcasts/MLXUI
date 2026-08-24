@@ -28,7 +28,7 @@ nonisolated enum TaskAvailability {
         "Count Context", "Calculate", "Compare", "Range", "Chart",
         "Resize", "Crop", "Convert", "Watermark", "Overlay Text", "Contact Sheet",
         "Split", "Filter", "Dedupe", "Sort", "Extract", "Count", "Join Text", "Template",
-        "Read CSV", "Read JSON", "Query Table", "Set Field", "Table to Text",
+        "Read CSV", "Read JSON", "Query Table", "Set Field", "Table to Text", "Append Row", "Merge Record",
         "Store Query", "Store Read", "Store Write", "Diff",
     ]
 

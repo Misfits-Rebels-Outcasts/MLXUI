@@ -243,6 +243,10 @@ nonisolated struct RealExecutor: FlowExecutor {
             return try TableTool.queryTable(settings: row.settings, from: try tableInput(row: row, path: path, inputs: inputs))
         case "Set Field":
             return try TableTool.setField(settings: row.settings, from: try tableInput(row: row, path: path, inputs: inputs))
+        case "Append Row":
+            return try TableTool.appendRow(settings: row.settings, from: try tableInput(row: row, path: path, inputs: inputs))
+        case "Merge Record":
+            return try TableTool.mergeRecord(settings: row.settings, inputs: inputs)
         case "Table to Text":
             return try TableTool.tableToText(settings: row.settings, from: try tableInput(row: row, path: path, inputs: inputs))
         case "Store Query":

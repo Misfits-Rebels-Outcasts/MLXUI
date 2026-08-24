@@ -303,11 +303,79 @@ nonisolated enum TableTool {
         return Asset(items: [try tableItem(columns: columns, rows: rows, in: path.deletingLastPathComponent())])
     }
 
+    // MARK: - CFM-R12-7 group c: Append Row / Merge Record (entity.py)
+
+    /// `append_row` — add a new row from `field=value` settings; unknown fields widen the
+    /// table (padding existing rows with nil).
+    static func appendRow(settings: String?, from item: Item) throws -> Asset {
+        guard let path = item.path, item.kind == .table else {
+            throw FlowError.stageFailure(row: "Append Row", message: "needs a table input")
+        }
+        var (columns, rows) = try readTable(from: path)
+        let s = FlowSettings(settings)
+        guard !s.testKeys.isEmpty else {
+            throw FlowError.stageFailure(row: "Append Row", message: "needs at least one `field=value` setting")
+        }
+        for field in s.testKeys where !columns.contains(field) {
+            columns.append(field)
+            for i in rows.indices { rows[i].append(nil) }
+        }
+        let newRow: Row = columns.map { c in
+            guard let raw = s.value(for: c) else { return nil }
+            return coerce(raw)
+        }
+        rows.append(newRow)
+        return Asset(items: [try tableItem(columns: columns, rows: rows, in: path.deletingLastPathComponent())])
+    }
+
+    /// `merge_record` — a key join of two tables; the second table's last row wins on a
+    /// duplicate key, and its unmatched rows append.
+    static func mergeRecord(settings: String?, inputs: [Asset]) throws -> Asset {
+        let allItems = inputs.flatMap { $0.items }.filter { $0.kind == .table }
+        guard allItems.count >= 2, let pathA = allItems[0].path, let pathB = allItems[1].path else {
+            throw FlowError.stageFailure(row: "Merge Record", message: "needs two table inputs")
+        }
+        var (columnsA, rowsA) = try readTable(from: pathA)
+        let (columnsB, rowsB) = try readTable(from: pathB)
+        let s = FlowSettings(settings)
+        guard let key = s.value(for: "key") else {
+            throw FlowError.stageFailure(row: "Merge Record", message: "needs a `key=` setting naming the join column")
+        }
+        guard let keyA = columnsA.firstIndex(of: key), let keyB = columnsB.firstIndex(of: key) else {
+            throw FlowError.stageFailure(row: "Merge Record", message: "key column '\(key)' isn't in both tables")
+        }
+        let columns = columnsA + columnsB.filter { !columnsA.contains($0) }
+
+        // Last row wins on a duplicate key within table B (the Python's dict build).
+        var bByKey: [AnyHashable: Row] = [:]
+        for row in rowsB { if let k = row[keyB] { bByKey[AnyHashable(String(describing: k))] = row } }
+
+        var merged: [Row] = []
+        var matched = Set<AnyHashable>()
+        for row in rowsA {
+            var record: [String: Any] = [:]
+            for (i, c) in columnsA.enumerated() { record[c] = row[i] }
+            if let k = row[keyA] {
+                let keyHash = AnyHashable(String(describing: k))
+                if let bRow = bByKey[keyHash] {
+                    matched.insert(keyHash)
+                    for (i, c) in columnsB.enumerated() { record[c] = bRow[i] }
+                }
+            }
+            merged.append(columns.map { record[$0] })
+        }
+        for (keyHash, bRow) in bByKey where !matched.contains(keyHash) {
+            var record: [String: Any] = [:]
+            for (i, c) in columnsB.enumerated() { record[c] = bRow[i] }
+            merged.append(columns.map { record[$0] })
+        }
+        return Asset(items: [try tableItem(columns: columns, rows: merged, in: pathA.deletingLastPathComponent())])
+    }
+
     // MARK: - Table to Text
 
     /// `table_to_text` — `format=markdown` (default) or `format=csv`.
-    static func tableToText(settings: String?, from item: Item) throws -> Asset {
-        guard let path = item.path else {
+    static func tableToText(settings: String?, from item: Item) throws -> Asset {        guard let path = item.path else {
             throw FlowError.stageFailure(row: "Table to Text", message: "needs a table input")
         }
         let (columns, rows) = try readTable(from: path)

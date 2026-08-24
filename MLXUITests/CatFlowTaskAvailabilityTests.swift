@@ -94,12 +94,12 @@ struct CatFlowTaskAvailabilityTests {
     }
 
     @Test func everyUnavailableTaskGetsAPickerMarker() {
-        // Group d ported Resize/Crop/Convert/Watermark/Overlay Text/Contact Sheet: 10
-        // instant tools unported. Markers = 10 + 5 net + Improvise (App Store) = 16.
+        // Group c ported Append Row/Merge Record: 8 instant tools unported. Markers
+        // = 8 + 5 net + Improvise (App Store) = 14.
         let unportedInstant = TaskCatalog.entries.filter {
             $0.taskClass == .instant && !TaskAvailability.supportedInstantTools.contains($0.name)
         }.count
-        #expect(unportedInstant == 10)
+        #expect(unportedInstant == 8)
         #expect(TaskCatalog.entries.filter { $0.taskClass == .net }.count == 5)
 
         let expectedUnavailable = TaskCatalog.allTasks().filter {
@@ -112,7 +112,7 @@ struct CatFlowTaskAvailabilityTests {
             }
         }
         #expect(expectedUnavailable.map(\.name).sorted() == computedUnavailable.map(\.name).sorted())
-        #expect(expectedUnavailable.count == 16)   // 10 + 5 + Improvise (App Store)
+        #expect(expectedUnavailable.count == 14)   // 8 + 5 + Improvise (App Store)
         // Every one is labeled, and every available one is not.
         for task in TaskCatalog.allTasks() {
             #expect((TaskAvailability.marker(for: task) != nil) != TaskAvailability.isAvailable(task.name))
