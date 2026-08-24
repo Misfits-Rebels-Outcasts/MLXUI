@@ -1,0 +1,204 @@
+{
+  "definitions": {
+    "RunSuite": {
+      "name": "RunSuite",
+      "params": [
+        {
+          "default": null,
+          "kind": "path",
+          "name": "cases"
+        },
+        {
+          "default": "Qwen3 8B",
+          "kind": null,
+          "name": "model"
+        }
+      ],
+      "rows": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [
+            {
+              "kind": "param",
+              "name": "cases"
+            }
+          ],
+          "settings": null,
+          "task": "Read Text"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "by=lines",
+          "task": "Split"
+        },
+        {
+          "block_kind": "each",
+          "block_name": "run_one",
+          "chain_break": false,
+          "children": [
+            {
+              "block_kind": "list",
+              "block_name": "flow_under_test",
+              "chain_break": false,
+              "children": [],
+              "comment": "{model} on its AI rows",
+              "model": null,
+              "refs": [
+                {
+                  "kind": "input",
+                  "position": 1
+                }
+              ],
+              "settings": null,
+              "task": null
+            },
+            {
+              "block_kind": null,
+              "block_name": null,
+              "chain_break": false,
+              "children": [],
+              "model": null,
+              "refs": [
+                {
+                  "kind": "input",
+                  "position": 1
+                },
+                {
+                  "kind": "row",
+                  "number": 1
+                }
+              ],
+              "settings": "\"### {1}\\n{2}\"",
+              "task": "Template"
+            }
+          ],
+          "declared_signature": "[text] -> [text]",
+          "model": null,
+          "refs": [],
+          "settings": "on_error=skip",
+          "task": null
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "separator=\"\\n\\n\"",
+          "task": "Join Text"
+        }
+      ],
+      "signature": "text -> text"
+    }
+  },
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "comment": "default model",
+      "model": null,
+      "refs": [],
+      "settings": "cases.txt",
+      "task": "RunSuite"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "cases.txt; model=Llama 3.1 8B",
+      "task": "RunSuite"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": true,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 1
+        },
+        {
+          "kind": "row",
+          "number": 2
+        }
+      ],
+      "settings": "format=unified",
+      "task": "Diff"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "migration-diff.md",
+      "task": "Save Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "clause": {
+        "edges": [
+          {
+            "tag": "adopt",
+            "target": {
+              "kind": "row",
+              "number": 6
+            }
+          },
+          {
+            "tag": "keep",
+            "target": {
+              "kind": "done"
+            }
+          }
+        ],
+        "kind": "decide"
+      },
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 3
+        }
+      ],
+      "settings": "\"Are Llama's differences acceptable?\" ; timeout=24h; default=keep",
+      "tags": [
+        "adopt",
+        "keep"
+      ],
+      "task": "Ask Human"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "adopt-llama.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

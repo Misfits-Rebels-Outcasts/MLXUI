@@ -1,0 +1,127 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "invoices/; pattern=*.pdf",
+      "task": "Read Files"
+    },
+    {
+      "block_kind": "each",
+      "block_name": "read_one",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": null,
+          "task": "Read PDF"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "Qwen3 8B",
+          "refs": [],
+          "settings": "\"vendor, date, total, currency\"",
+          "task": "Extract Structured"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "format=csv",
+          "task": "Table to Text"
+        }
+      ],
+      "declared_signature": "[file] -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": "on_error=skip",
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "separator=\"\\n\"",
+      "task": "Join Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "expected=\"vendor, date, total, currency\"",
+      "task": "Text to Table"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "kind=bar; x=vendor; y=total",
+      "task": "Chart"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "spend-by-vendor.png",
+      "task": "Save Image"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 4
+        }
+      ],
+      "settings": "format=markdown",
+      "task": "Table to Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "ledger.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

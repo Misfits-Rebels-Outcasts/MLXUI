@@ -1,0 +1,187 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "shoot/",
+      "task": "Read Images"
+    },
+    {
+      "block_kind": "each",
+      "block_name": "judge_one",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "LFM2-VL 1.6B",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"Blur, exposure problems, closed eyes? Be specific.\"",
+          "task": "Describe Image"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "edges": [
+              {
+                "tag": "keep",
+                "target": {
+                  "kind": "row",
+                  "number": 3
+                }
+              },
+              {
+                "tag": "reject",
+                "target": {
+                  "kind": "row",
+                  "number": 4
+                }
+              }
+            ],
+            "kind": "decide"
+          },
+          "model": "Ministral 3B",
+          "refs": [],
+          "settings": "\"Keeper?\"",
+          "tags": [
+            "keep",
+            "reject"
+          ],
+          "task": "Classify"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "clause": {
+            "kind": "goto",
+            "target": {
+              "kind": "row",
+              "number": 5
+            }
+          },
+          "model": null,
+          "refs": [
+            {
+              "kind": "row",
+              "number": 1
+            }
+          ],
+          "settings": "\"KEEP    {1}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "model": null,
+          "refs": [
+            {
+              "kind": "row",
+              "number": 1
+            }
+          ],
+          "settings": "\"REJECT  {1}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "\"{1}\"",
+          "task": "Template"
+        }
+      ],
+      "declared_signature": "[image] -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": "on_error=skip",
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "separator=\"\\n\"",
+      "task": "Join Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "cull-list.txt",
+      "task": "Save Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": true,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 2
+        }
+      ],
+      "settings": "contains=\"REJECT\"",
+      "task": "Filter"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "items",
+      "task": "Count"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "\"{1} photos flagged — see cull-list.txt\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "cull-summary.txt",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

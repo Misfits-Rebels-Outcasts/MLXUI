@@ -1,0 +1,7 @@
+catflow 0.8
+1. Speak        Kokoro 82M; af_heart
+2. Save Audio   bed.wav
+
+models:
+  Café Model = mlx-community/some-model
+  🔥 Hot      = mlx-community/hot-model

@@ -1,0 +1,10 @@
+catflow 0.8
+1. Read Text   outline.md                                   ; ctx+
+2. Split       by=headings   text -> [text]
+3. <each write_section>   [text] -> [text]
+     1. Draft   (input:1)   Qwen3 8B; "Write this section in full." ; ctx ; ctx+
+4. Join Text   separator="\n\n"
+5. Save Text   report.md
+
+models:
+  Qwen3 8B = mlx-community/Qwen3-8B-4bit

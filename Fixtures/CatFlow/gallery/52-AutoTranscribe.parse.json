@@ -1,0 +1,106 @@
+{
+  "flags": [
+    "events"
+  ],
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "memos/; pattern=*.m4a; settle=30s",
+      "task": "On File"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": null,
+      "task": "Read Audio"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Whisper Tiny",
+      "refs": [],
+      "settings": "lang=en",
+      "task": "Transcribe"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "clause": {
+        "edges": [
+          {
+            "tag": "bad",
+            "target": {
+              "kind": "row",
+              "number": 5
+            }
+          },
+          {
+            "tag": "ok",
+            "target": {
+              "kind": "row",
+              "number": 6
+            }
+          }
+        ],
+        "kind": "decide"
+      },
+      "model": "Ministral 3B",
+      "refs": [],
+      "settings": "\"Garbled or truncated?\"",
+      "tags": [
+        "bad",
+        "ok"
+      ],
+      "task": "Gate"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Whisper Large v3",
+      "refs": [
+        {
+          "kind": "row",
+          "number": 2
+        }
+      ],
+      "settings": "lang=en",
+      "task": "Transcribe"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"3 bullets, then action items\"",
+      "task": "Summarize"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "memos/{name}-notes.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

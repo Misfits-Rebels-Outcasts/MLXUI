@@ -1,0 +1,91 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "docs/; pattern=*.pdf",
+      "task": "Read Files"
+    },
+    {
+      "block_kind": "each",
+      "block_name": "read_one",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": null,
+          "task": "Read PDF"
+        }
+      ],
+      "declared_signature": "[file] -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": "on_error=skip",
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": null,
+      "task": "Join Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "chunk_size=500; overlap=50",
+      "task": "Split"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "BGE-M3",
+      "refs": [],
+      "settings": null,
+      "task": "Embed"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 4
+        },
+        {
+          "kind": "row",
+          "number": 5
+        }
+      ],
+      "settings": "library.index",
+      "task": "Store Index"
+    }
+  ],
+  "version": "0.8"
+}

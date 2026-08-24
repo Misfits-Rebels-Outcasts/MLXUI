@@ -1,0 +1,75 @@
+[
+  {
+    "type": "row_started",
+    "path": "1"
+  },
+  {
+    "type": "row_completed",
+    "path": "1",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 1|Read Text||a.txt#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "2"
+  },
+  {
+    "type": "flag_raised",
+    "path": "2",
+    "code": "F007",
+    "message": "This activation's first input arrived from row 1's edge, overriding the `(1)` reference for this pass."
+  },
+  {
+    "type": "row_completed",
+    "path": "2",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 2|Split||by=lines|[mock:text] 1|Read Text||a.txt#0#0",
+          "path": null
+        },
+        {
+          "kind": "text",
+          "value": "[mock:text] 2|Split||by=lines|[mock:text] 1|Read Text||a.txt#0#1",
+          "path": null
+        },
+        {
+          "kind": "text",
+          "value": "[mock:text] 2|Split||by=lines|[mock:text] 1|Read Text||a.txt#0#2",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "3"
+  },
+  {
+    "type": "row_completed",
+    "path": "3",
+    "output": {
+      "items": [
+        {
+          "kind": "status",
+          "value": "[mock:status] 3|Save Text||out.txt|[mock:text] 2|Split||by=lines|[mock:text] 1|Read Text||a.txt#0#0|[mock:text] 2|Split||by=lines|[mock:text] 1|Read Text||a.txt#0#1|[mock:text] 2|Split||by=lines|[mock:text] 1|Read Text||a.txt#0#2#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "run_completed"
+  }
+]

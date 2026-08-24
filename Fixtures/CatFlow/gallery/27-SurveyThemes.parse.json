@@ -1,0 +1,203 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "survey.csv",
+      "task": "Read CSV"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "columns=comment",
+      "task": "Query Table"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "format=csv",
+      "task": "Table to Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "declared_signature": "text -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": "by=lines",
+      "task": "Split"
+    },
+    {
+      "block_kind": "each",
+      "block_name": "tag_one",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "edges": [
+              {
+                "tag": "pos",
+                "target": {
+                  "kind": "row",
+                  "number": 2
+                }
+              },
+              {
+                "tag": "neu",
+                "target": {
+                  "kind": "row",
+                  "number": 3
+                }
+              },
+              {
+                "tag": "neg",
+                "target": {
+                  "kind": "row",
+                  "number": 4
+                }
+              }
+            ],
+            "kind": "decide"
+          },
+          "model": "Ministral 3B",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"Sentiment?\"",
+          "tags": [
+            "pos",
+            "neu",
+            "neg"
+          ],
+          "task": "Classify"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "kind": "goto",
+            "target": {
+              "kind": "row",
+              "number": 5
+            }
+          },
+          "model": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"POS  {1}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "kind": "goto",
+            "target": {
+              "kind": "row",
+              "number": 5
+            }
+          },
+          "model": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"NEU  {1}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"NEG  {1}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "\"{1}\"",
+          "task": "Template"
+        }
+      ],
+      "declared_signature": "[text] -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": "on_error=skip",
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "contains=\"NEG\"",
+      "task": "Filter"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"Top 5 complaint themes, one example quote each\"",
+      "task": "Summarize"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "complaint-themes.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

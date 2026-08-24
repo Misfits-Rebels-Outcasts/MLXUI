@@ -1,0 +1,20 @@
+catflow 0.8
+1. Template    "Research: how did our support ticket themes change this
+               year?"
+2. Draft       Qwen3 8B; "Break into 3–6 research questions, one per line"
+3. Split       by=lines   text -> [text]
+4. <each execute_step>   [text] -> [text]
+     1. <list react_agent>   (input:1)   # entry 41's block, pasted in
+          1. Read Index               library.index
+          2. Think        (input:1)   Qwen3 8B; tools: search, calculate, final; max_visits=8; on_budget=final
+             -> { search: call 3 | calculate: call 5 | final: resume }
+          3. Embed                    BGE-M3
+          4. Retrieve     (1,3)       top_k=5
+             resume
+          5. Calculate
+             resume
+5. Merge       Qwen3 8B; "Combine into one report; note gaps"
+6. Gate        Ministral 3B; "Gaps that need another pass? tags: replan,
+               done"; max_visits=2; on_budget=done
+   -> { replan: 2 | done: 7 }
+7. Save Text   report.md

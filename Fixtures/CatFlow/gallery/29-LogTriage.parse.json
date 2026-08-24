@@ -1,0 +1,109 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "app.log",
+      "task": "Read Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "by=lines",
+      "task": "Split"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "regex=\"ERROR|FATAL\"",
+      "task": "Filter"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": null,
+      "task": "Dedupe"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "items",
+      "task": "Count"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": true,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 4
+        }
+      ],
+      "settings": "separator=\"\\n\"",
+      "task": "Join Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"Group these errors; likely root causes; what to check first\"",
+      "task": "Summarize"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 5
+        },
+        {
+          "kind": "row",
+          "number": 7
+        }
+      ],
+      "settings": "\"unique errors: {1}\\n\\n{2}\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "log-triage.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

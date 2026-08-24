@@ -1,0 +1,92 @@
+{
+  "flags": [
+    "code"
+  ],
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "invoices/; pattern=*.txt",
+      "task": "Read Files"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 1
+        }
+      ],
+      "settings": null,
+      "task": "Parse Invoices"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "sort=amount; direction=desc",
+      "task": "Query Table"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "format=markdown",
+      "task": "Table to Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"the three biggest vendors this batch, one line each\"",
+      "task": "Summarize"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 4
+        },
+        {
+          "kind": "row",
+          "number": 5
+        }
+      ],
+      "settings": "\"{1}\\n\\n{2}\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "totals-report.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

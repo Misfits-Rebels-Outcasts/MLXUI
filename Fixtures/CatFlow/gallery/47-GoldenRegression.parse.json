@@ -1,0 +1,144 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "comment": "one prompt per line",
+      "model": null,
+      "refs": [],
+      "settings": "cases.txt",
+      "task": "Read Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "declared_signature": "text -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": "by=lines",
+      "task": "Split"
+    },
+    {
+      "block_kind": "each",
+      "block_name": "run_one",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": "list",
+          "block_name": "flow_under_test",
+          "chain_break": false,
+          "children": [
+            {
+              "block_kind": null,
+              "block_name": null,
+              "chain_break": false,
+              "children": [],
+              "model": "Qwen3 8B",
+              "refs": [],
+              "settings": "\"Say hello in one short sentence.\"",
+              "task": "Draft"
+            }
+          ],
+          "comment": "your flow, pasted in",
+          "model": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": null,
+          "task": null
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            },
+            {
+              "kind": "row",
+              "number": 1
+            }
+          ],
+          "settings": "\"### {1}\\n{2}\"",
+          "task": "Template"
+        }
+      ],
+      "declared_signature": "[text] -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": "on_error=skip",
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "separator=\"\\n\\n\"",
+      "task": "Join Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "run-today.md",
+      "task": "Save Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": true,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "run-baseline.md",
+      "task": "Read Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": true,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 4
+        },
+        {
+          "kind": "row",
+          "number": 6
+        }
+      ],
+      "settings": "format=unified",
+      "task": "Diff"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "regression.diff",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

@@ -1,0 +1,84 @@
+[
+  {
+    "type": "row_started",
+    "path": "1"
+  },
+  {
+    "type": "row_completed",
+    "path": "1",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 1|Read Text||inquiry.txt#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "2"
+  },
+  {
+    "type": "row_completed",
+    "path": "2",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 2|Draft|Qwen3 8B|\"Write the reply\"|[mock:text] 1|Read Text||inquiry.txt#0#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "3"
+  },
+  {
+    "type": "row_completed",
+    "path": "3",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 2|Draft|Qwen3 8B|\"Write the reply\"|[mock:text] 1|Read Text||inquiry.txt#0#0",
+          "path": null
+        }
+      ]
+    },
+    "fired_tag": "approve",
+    "duration_ms": 0
+  },
+  {
+    "type": "flag_raised",
+    "path": "3",
+    "code": "F002",
+    "message": "Nobody answered by 4h — proceeded as `approve`, unreviewed."
+  },
+  {
+    "type": "row_started",
+    "path": "5"
+  },
+  {
+    "type": "row_completed",
+    "path": "5",
+    "output": {
+      "items": [
+        {
+          "kind": "status",
+          "value": "[mock:status] 5|Save Text||final.txt|[mock:text] 2|Draft|Qwen3 8B|\"Write the reply\"|[mock:text] 1|Read Text||inquiry.txt#0#0#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "run_completed"
+  }
+]

@@ -1,0 +1,83 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "book.txt",
+      "task": "Read Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "declared_signature": "text -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": "chunk_size=2000",
+      "task": "Split"
+    },
+    {
+      "block_kind": "each",
+      "block_name": "summarize_section",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "Ministral 3B",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"one paragraph\"",
+          "task": "Summarize"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "\"## Section {index}\\n\\n{1}\"",
+          "task": "Template"
+        }
+      ],
+      "declared_signature": "[text] -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": null,
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"One page, from these section summaries\"",
+      "task": "Summarize"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "book-summary.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

@@ -1,0 +1,202 @@
+{
+  "cases": {
+    "dedupe_normalized_sharp_s": {
+      "input": [
+        "Straße",
+        "STRASSE",
+        "strasse",
+        "café"
+      ],
+      "settings": "by=normalized",
+      "result": [
+        "Straße",
+        "café"
+      ]
+    },
+    "dedupe_normalized_ligature": {
+      "input": [
+        "ﬁle",
+        "file",
+        "fire"
+      ],
+      "settings": "by=normalized",
+      "result": [
+        "ﬁle",
+        "fire"
+      ]
+    },
+    "dedupe_normalized_turkish": {
+      "input": [
+        "İstanbul",
+        "istanbul",
+        "Istanbul"
+      ],
+      "settings": "by=normalized",
+      "result": [
+        "İstanbul",
+        "istanbul"
+      ]
+    },
+    "dedupe_normalized_final_sigma": {
+      "input": [
+        "ΟΣ",
+        "ος"
+      ],
+      "settings": "by=normalized",
+      "result": [
+        "ΟΣ"
+      ]
+    },
+    "split_lines_crlf": {
+      "input": [
+        "a\r\nb\r\n\r\nc\r\n"
+      ],
+      "settings": "by=lines",
+      "result": [
+        "a\r",
+        "b\r",
+        "c\r"
+      ]
+    },
+    "split_headings_crlf_blanks": {
+      "input": [
+        "# Intro\r\n\r\nfirst para\r\n# Second\r\ntext\r\n"
+      ],
+      "settings": "by=headings",
+      "result": [
+        "# Intro\r\n\r\nfirst para",
+        "# Second\r\ntext"
+      ]
+    },
+    "split_headings_blank_lines": {
+      "input": [
+        "# A\n\nbody one\n\n# B\nbody two"
+      ],
+      "settings": "by=headings",
+      "result": [
+        "# A\n\nbody one",
+        "# B\nbody two"
+      ]
+    },
+    "sort_alpha_asc": {
+      "input": [
+        "beta",
+        "alpha",
+        "gamma"
+      ],
+      "settings": "by=alpha",
+      "result": [
+        "alpha",
+        "beta",
+        "gamma"
+      ]
+    },
+    "sort_alpha_desc": {
+      "input": [
+        "beta",
+        "alpha",
+        "gamma"
+      ],
+      "settings": "by=alpha; direction=desc",
+      "result": [
+        "gamma",
+        "beta",
+        "alpha"
+      ]
+    },
+    "sort_length_asc": {
+      "input": [
+        "longer",
+        "a",
+        "mid"
+      ],
+      "settings": "by=length",
+      "result": [
+        "a",
+        "mid",
+        "longer"
+      ]
+    },
+    "sort_length_desc": {
+      "input": [
+        "longer",
+        "a",
+        "mid"
+      ],
+      "settings": "by=length; direction=desc",
+      "result": [
+        "longer",
+        "mid",
+        "a"
+      ]
+    },
+    "extract_emails": {
+      "input": [
+        "contact bob@example.com or alice@test.org now"
+      ],
+      "settings": "emails",
+      "result": [
+        "bob@example.com",
+        "alice@test.org"
+      ]
+    },
+    "extract_urls": {
+      "input": [
+        "see https://example.com/a and http://x.io/?q=1 now"
+      ],
+      "settings": "urls",
+      "result": [
+        "https://example.com/a",
+        "http://x.io/?q=1"
+      ]
+    },
+    "extract_dates": {
+      "input": [
+        "due 2026-08-22 and 08/22/2026 and 3/4/25"
+      ],
+      "settings": "dates",
+      "result": [
+        "2026-08-22",
+        "08/22/2026",
+        "3/4/25"
+      ]
+    },
+    "extract_bare_regex_group": {
+      "input": [
+        "id=1234 id=5678"
+      ],
+      "settings": "id=(\\d+)",
+      "result": [
+        "1234",
+        "5678"
+      ]
+    },
+    "extract_bare_regex": {
+      "input": [
+        "abc 123 xyz"
+      ],
+      "settings": "\\d+",
+      "result": [
+        "123"
+      ]
+    },
+    "extract_regex_setting": {
+      "input": [
+        "a1 b2 c3"
+      ],
+      "settings": "regex=\"[a-z]\\d\"",
+      "result": [
+        "a1",
+        "b2",
+        "c3"
+      ]
+    },
+    "extract_none_matches_empty": {
+      "input": [
+        "nothing here"
+      ],
+      "settings": "emails",
+      "result": []
+    }
+  }
+}

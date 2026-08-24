@@ -1,0 +1,111 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "memos/; pattern=*.m4a",
+      "task": "Read Files"
+    },
+    {
+      "block_kind": "each",
+      "block_name": "one_memo",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": null,
+          "task": "Read Audio"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "Whisper Large v3",
+          "refs": [],
+          "settings": null,
+          "task": "Transcribe"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "Ministral 3B",
+          "refs": [],
+          "settings": "\"3 bullets\"",
+          "task": "Summarize"
+        }
+      ],
+      "declared_signature": "[file] -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": "on_error=skip",
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "separator=\"\\n\\n---\\n\\n\"",
+      "task": "Join Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Ministral 3B",
+      "refs": [],
+      "settings": "\"filename-safe, this week's theme\"",
+      "task": "Title"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 4
+        },
+        {
+          "kind": "row",
+          "number": 3
+        }
+      ],
+      "settings": "\"# {1}\\n\\n{2}\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "weekly-digest.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

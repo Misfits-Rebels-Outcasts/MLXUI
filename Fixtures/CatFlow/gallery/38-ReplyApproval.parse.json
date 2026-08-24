@@ -1,0 +1,118 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "inquiry.txt",
+      "task": "Read Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"Write the reply\"",
+      "task": "Draft"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Ministral 3B",
+      "refs": [],
+      "settings": "\"policy-safe? complete?\"",
+      "task": "Critique"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": true,
+      "children": [],
+      "clause": {
+        "edges": [
+          {
+            "tag": "approve",
+            "target": {
+              "kind": "row",
+              "number": 6
+            }
+          },
+          {
+            "tag": "edit",
+            "target": {
+              "kind": "row",
+              "number": 5
+            }
+          },
+          {
+            "tag": "reject",
+            "target": {
+              "kind": "done"
+            }
+          }
+        ],
+        "kind": "decide"
+      },
+      "model": null,
+      "on_budget": "reject",
+      "refs": [
+        {
+          "kind": "row",
+          "number": 2
+        }
+      ],
+      "settings": "\"Send this reply?\" ; timeout=4h; default=edit",
+      "tags": [
+        "approve",
+        "edit",
+        "reject"
+      ],
+      "task": "Ask Human",
+      "visits_leq": 3
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "clause": {
+        "kind": "goto",
+        "target": {
+          "kind": "row",
+          "number": 3
+        }
+      },
+      "model": "Qwen3 8B",
+      "refs": [
+        {
+          "kind": "row",
+          "number": 2
+        },
+        {
+          "kind": "row",
+          "number": 4
+        }
+      ],
+      "settings": null,
+      "task": "Revise"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": true,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "outbox",
+      "task": "Stage Send"
+    }
+  ],
+  "version": "0.8"
+}

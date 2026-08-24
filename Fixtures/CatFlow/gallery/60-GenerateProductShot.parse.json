@@ -1,0 +1,35 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Z-Image Turbo (4-bit)",
+      "refs": [],
+      "settings": "seed=7; width=1024; height=1024 \"a matte black wireless earbuds case on a marble surface, studio lighting, product photography\"",
+      "task": "Generate Image"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "logo.png",
+      "task": "Watermark"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "product-shot.png",
+      "task": "Save Image"
+    }
+  ],
+  "version": "0.8"
+}

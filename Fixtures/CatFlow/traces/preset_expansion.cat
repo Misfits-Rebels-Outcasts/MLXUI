@@ -1,0 +1,8 @@
+catpipeline 0.8
+pipeline Preset Test
+  gives:   image
+params: quality = balanced
+presets:
+  draft    = steps=4; width=512
+  studio   = steps=28; width=1536
+1. Generate Image   Z-Image Turbo (4-bit); preset=studio; seed=7 "a hero shot"

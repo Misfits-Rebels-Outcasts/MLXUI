@@ -1,0 +1,112 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "all-hands.m4a",
+      "task": "Read Audio"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Whisper Large v3",
+      "refs": [],
+      "settings": "lang=en",
+      "task": "Transcribe"
+    },
+    {
+      "block_kind": "parallel",
+      "block_name": "three_reads",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "Qwen3 8B",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"Decisions made, one per line\"",
+          "task": "Summarize"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "model": "Qwen3 8B",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"Action items: owner — task — deadline\"",
+          "task": "Summarize"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "Ministral 3B",
+          "refs": [],
+          "settings": "\"as a markdown checklist\"",
+          "task": "Rewrite"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "model": "Qwen3 8B",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"Risks and open questions raised\"",
+          "task": "Summarize"
+        }
+      ],
+      "declared_signature": "text -> [text, text, text]",
+      "model": null,
+      "refs": [],
+      "settings": null,
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"One minutes document, three sections: Decisions, Action Items, Risks\"",
+      "task": "Merge"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "minutes.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

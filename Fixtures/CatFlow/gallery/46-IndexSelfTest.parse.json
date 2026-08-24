@@ -1,0 +1,331 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "handbook.txt",
+      "task": "Read Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "declared_signature": "text -> [text]",
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"10 factual questions this document answers, one per line\"",
+      "task": "Ask"
+    },
+    {
+      "block_kind": "each",
+      "block_name": "eval_one",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "library.index",
+          "task": "Read Index"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "BGE-M3",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": null,
+          "task": "Embed"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [
+            {
+              "kind": "row",
+              "number": 1
+            },
+            {
+              "kind": "row",
+              "number": 2
+            }
+          ],
+          "settings": "top_k=5",
+          "task": "Retrieve"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "edges": [
+              {
+                "tag": "hit",
+                "target": {
+                  "kind": "row",
+                  "number": 5
+                }
+              },
+              {
+                "tag": "miss",
+                "target": {
+                  "kind": "row",
+                  "number": 6
+                }
+              }
+            ],
+            "kind": "decide"
+          },
+          "model": "Ministral 3B",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            },
+            {
+              "kind": "row",
+              "number": 3
+            }
+          ],
+          "settings": "\"Do the chunks contain the answer?\"",
+          "tags": [
+            "hit",
+            "miss"
+          ],
+          "task": "Gate"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "kind": "goto",
+            "target": {
+              "kind": "row",
+              "number": 7
+            }
+          },
+          "model": null,
+          "refs": [],
+          "settings": "\"retrieval: hit\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "\"retrieval: miss\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "\"{1}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [
+            {
+              "kind": "row",
+              "number": 3
+            },
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"Context:\\n{1}\\n\\nQ: {2}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "Qwen3 8B",
+          "refs": [],
+          "settings": null,
+          "task": "Answer"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "Ministral 3B",
+          "refs": [
+            {
+              "kind": "row",
+              "number": 9
+            },
+            {
+              "kind": "row",
+              "number": 3
+            }
+          ],
+          "settings": null,
+          "task": "Verify"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            },
+            {
+              "kind": "row",
+              "number": 7
+            },
+            {
+              "kind": "row",
+              "number": 10
+            }
+          ],
+          "settings": "\"Q: {1}\\n{2}\\nfaithfulness:\\n{3}\"",
+          "task": "Template"
+        }
+      ],
+      "declared_signature": "[text] -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": null,
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "separator=\"\\n\\n\"",
+      "task": "Join Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "index-eval.md",
+      "task": "Save Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": true,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 3
+        }
+      ],
+      "settings": "contains=\"retrieval: miss\"",
+      "task": "Filter"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "items",
+      "task": "Count"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": true,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 3
+        }
+      ],
+      "settings": "contains=\"UNSUPPORTED\"",
+      "task": "Filter"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "items",
+      "task": "Count"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 7
+        },
+        {
+          "kind": "row",
+          "number": 9
+        }
+      ],
+      "settings": "\"retrieval misses: {1} / 10; unsupported claims in: {2} / 10\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "index-scorecard.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

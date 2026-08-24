@@ -1,0 +1,144 @@
+{
+ "csv_table": {
+  "columns": [
+   "id",
+   "status",
+   "total"
+  ],
+  "rows": [
+   [
+    1,
+    "pending",
+    1200
+   ],
+   [
+    2,
+    "approved",
+    8000
+   ],
+   [
+    3,
+    "pending",
+    6000
+   ],
+   [
+    4,
+    "escalated",
+    9500
+   ]
+  ]
+ },
+ "query_filter": {
+  "columns": [
+   "id",
+   "status",
+   "total"
+  ],
+  "rows": [
+   [
+    1,
+    "pending",
+    1200
+   ],
+   [
+    3,
+    "pending",
+    6000
+   ]
+  ]
+ },
+ "query_group": {
+  "columns": [
+   "status",
+   "total"
+  ],
+  "rows": [
+   [
+    "pending",
+    7200
+   ],
+   [
+    "approved",
+    8000
+   ],
+   [
+    "escalated",
+    9500
+   ]
+  ]
+ },
+ "set_field": {
+  "columns": [
+   "id",
+   "status",
+   "total"
+  ],
+  "rows": [
+   [
+    1,
+    "approved",
+    1200
+   ],
+   [
+    2,
+    "approved",
+    8000
+   ],
+   [
+    3,
+    "approved",
+    6000
+   ],
+   [
+    4,
+    "approved",
+    9500
+   ]
+  ]
+ },
+ "to_markdown": "| id | status | total |\n| --- | --- | --- |\n| 1 | pending | 1200 |\n| 2 | approved | 8000 |\n| 3 | pending | 6000 |\n| 4 | escalated | 9500 |",
+ "to_csv": "id,status,total\r\n1,pending,1200\r\n2,approved,8000\r\n3,pending,6000\r\n4,escalated,9500",
+ "store_query_json": {
+  "columns": [
+   "id",
+   "status",
+   "total"
+  ],
+  "rows": [
+   [
+    1,
+    "pending",
+    1200
+   ],
+   [
+    3,
+    "pending",
+    6000
+   ]
+  ]
+ },
+ "store_query_upsert": {
+  "columns": [
+   "id",
+   "status",
+   "total"
+  ],
+  "rows": [
+   [
+    2,
+    "approved",
+    8000
+   ],
+   [
+    3,
+    "pending",
+    6000
+   ],
+   [
+    4,
+    "escalated",
+    9500
+   ]
+  ]
+ }
+}

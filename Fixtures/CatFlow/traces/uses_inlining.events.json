@@ -1,0 +1,77 @@
+[
+  {
+    "type": "row_started",
+    "path": "1"
+  },
+  {
+    "type": "row_completed",
+    "path": "1",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 1|Read Text||input.txt#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "2"
+  },
+  {
+    "type": "row_started",
+    "path": "2.1"
+  },
+  {
+    "type": "row_completed",
+    "path": "2.1",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 2.1|Draft|Qwen3 8B|\"\"Hello!\"\"|[mock:text] 1|Read Text||input.txt#0#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_completed",
+    "path": "2",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 2.1|Draft|Qwen3 8B|\"\"Hello!\"\"|[mock:text] 1|Read Text||input.txt#0#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "3"
+  },
+  {
+    "type": "row_completed",
+    "path": "3",
+    "output": {
+      "items": [
+        {
+          "kind": "status",
+          "value": "[mock:status] 3|Save Text||out.txt|[mock:text] 2.1|Draft|Qwen3 8B|\"\"Hello!\"\"|[mock:text] 1|Read Text||input.txt#0#0#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "run_completed"
+  }
+]

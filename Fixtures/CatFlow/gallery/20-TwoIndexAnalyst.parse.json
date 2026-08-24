@@ -1,0 +1,183 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "\"Which team's PTO policy changed more, and by how much?\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": "list",
+      "block_name": "research_agent",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "hr.index",
+          "task": "Read Index"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "eng.index",
+          "task": "Read Index"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "edges": [
+              {
+                "tag": "search_hr",
+                "target": {
+                  "kind": "call",
+                  "number": 4
+                }
+              },
+              {
+                "tag": "search_eng",
+                "target": {
+                  "kind": "call",
+                  "number": 6
+                }
+              },
+              {
+                "tag": "calculate",
+                "target": {
+                  "kind": "call",
+                  "number": 8
+                }
+              },
+              {
+                "tag": "final",
+                "target": {
+                  "kind": "resume"
+                }
+              }
+            ],
+            "kind": "decide"
+          },
+          "model": "Qwen3 8B",
+          "on_budget": "final",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "tools: search_hr, search_eng, calculate, final",
+          "task": "Think",
+          "visits_leq": 8
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "BGE-M3",
+          "refs": [],
+          "settings": null,
+          "task": "Embed"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "kind": "resume"
+          },
+          "model": null,
+          "refs": [
+            {
+              "kind": "row",
+              "number": 1
+            },
+            {
+              "kind": "row",
+              "number": 4
+            }
+          ],
+          "settings": "top_k=5",
+          "task": "Retrieve"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "BGE-M3",
+          "refs": [],
+          "settings": null,
+          "task": "Embed"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "kind": "resume"
+          },
+          "model": null,
+          "refs": [
+            {
+              "kind": "row",
+              "number": 2
+            },
+            {
+              "kind": "row",
+              "number": 6
+            }
+          ],
+          "settings": "top_k=5",
+          "task": "Retrieve"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "kind": "resume"
+          },
+          "model": null,
+          "refs": [],
+          "settings": null,
+          "task": "Calculate"
+        }
+      ],
+      "declared_signature": "text -> text",
+      "model": null,
+      "refs": [],
+      "settings": null,
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "comparison.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

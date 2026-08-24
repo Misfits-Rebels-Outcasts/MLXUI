@@ -1,0 +1,35 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Z-Image Turbo (4-bit)",
+      "refs": [],
+      "settings": "seed=7; width=1024; height=1024",
+      "task": "Init Latent"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Z-Image Turbo (4-bit)",
+      "refs": [],
+      "settings": "steps=9; strength=1.0  \"a lighthouse at sunset, watercolor style\"",
+      "task": "Denoise"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Z-Image Turbo (4-bit)",
+      "refs": [],
+      "settings": null,
+      "task": "Decode Latent"
+    }
+  ],
+  "version": "0.8"
+}

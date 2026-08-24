@@ -1,0 +1,93 @@
+{
+  "flags": [
+    "network"
+  ],
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "\"What changed in EU AI Act enforcement this quarter?\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "top_k=5                      text -> [url]",
+      "task": "Web Search"
+    },
+    {
+      "block_kind": "each",
+      "block_name": "fetch_one",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "as=markdown",
+          "task": "Web Fetch"
+        }
+      ],
+      "model": null,
+      "refs": [],
+      "settings": "on_error=skip ; [url] -> [text]",
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 3
+        },
+        {
+          "kind": "row",
+          "number": 1
+        }
+      ],
+      "settings": "\"Sources:\\n{1}\\n\\nQ: {2}\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"cite sources by number\"",
+      "task": "Answer"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "research-brief.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

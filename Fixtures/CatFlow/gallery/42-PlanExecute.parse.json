@@ -1,0 +1,217 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "\"Research: how did our support ticket themes change this year?\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"Break into 3–6 research questions, one per line\"",
+      "task": "Draft"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "declared_signature": "text -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": "by=lines",
+      "task": "Split"
+    },
+    {
+      "block_kind": "each",
+      "block_name": "execute_step",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": "list",
+          "block_name": "react_agent",
+          "chain_break": false,
+          "children": [
+            {
+              "block_kind": null,
+              "block_name": null,
+              "chain_break": false,
+              "children": [],
+              "model": null,
+              "refs": [],
+              "settings": "library.index",
+              "task": "Read Index"
+            },
+            {
+              "block_kind": null,
+              "block_name": null,
+              "chain_break": false,
+              "children": [],
+              "clause": {
+                "edges": [
+                  {
+                    "tag": "search",
+                    "target": {
+                      "kind": "call",
+                      "number": 3
+                    }
+                  },
+                  {
+                    "tag": "calculate",
+                    "target": {
+                      "kind": "call",
+                      "number": 5
+                    }
+                  },
+                  {
+                    "tag": "final",
+                    "target": {
+                      "kind": "resume"
+                    }
+                  }
+                ],
+                "kind": "decide"
+              },
+              "model": "Qwen3 8B",
+              "on_budget": "final",
+              "refs": [
+                {
+                  "kind": "input",
+                  "position": 1
+                }
+              ],
+              "settings": "tools: search, calculate, final",
+              "task": "Think",
+              "visits_leq": 8
+            },
+            {
+              "block_kind": null,
+              "block_name": null,
+              "chain_break": false,
+              "children": [],
+              "model": "BGE-M3",
+              "refs": [],
+              "settings": null,
+              "task": "Embed"
+            },
+            {
+              "block_kind": null,
+              "block_name": null,
+              "chain_break": false,
+              "children": [],
+              "clause": {
+                "kind": "resume"
+              },
+              "model": null,
+              "refs": [
+                {
+                  "kind": "row",
+                  "number": 1
+                },
+                {
+                  "kind": "row",
+                  "number": 3
+                }
+              ],
+              "settings": "top_k=5",
+              "task": "Retrieve"
+            },
+            {
+              "block_kind": null,
+              "block_name": null,
+              "chain_break": false,
+              "children": [],
+              "clause": {
+                "kind": "resume"
+              },
+              "model": null,
+              "refs": [],
+              "settings": null,
+              "task": "Calculate"
+            }
+          ],
+          "comment": "entry 41's block, pasted in",
+          "model": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": null,
+          "task": null
+        }
+      ],
+      "declared_signature": "[text] -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": null,
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"Combine into one report; note gaps\"",
+      "task": "Merge"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "clause": {
+        "edges": [
+          {
+            "tag": "replan",
+            "target": {
+              "kind": "row",
+              "number": 2
+            }
+          },
+          {
+            "tag": "done",
+            "target": {
+              "kind": "row",
+              "number": 7
+            }
+          }
+        ],
+        "kind": "decide"
+      },
+      "model": "Ministral 3B",
+      "on_budget": "done",
+      "refs": [],
+      "settings": "\"Gaps that need another pass?\"",
+      "tags": [
+        "replan",
+        "done"
+      ],
+      "task": "Gate",
+      "visits_leq": 2
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "report.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

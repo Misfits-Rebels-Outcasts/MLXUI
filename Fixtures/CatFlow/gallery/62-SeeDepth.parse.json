@@ -1,0 +1,35 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "photo.jpg",
+      "task": "Read Image"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Depth Pro",
+      "refs": [],
+      "settings": null,
+      "task": "Estimate Depth"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "photo-depth.png",
+      "task": "Save Image"
+    }
+  ],
+  "version": "0.8"
+}

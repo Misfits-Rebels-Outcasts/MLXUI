@@ -1,0 +1,48 @@
+[
+  {
+    "type": "row_started",
+    "path": "1"
+  },
+  {
+    "type": "row_completed",
+    "path": "1",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 1|Read Text||inquiry.txt#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "2"
+  },
+  {
+    "type": "row_completed",
+    "path": "2",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 2|Draft|Qwen3 8B|\"Write the reply\"|[mock:text] 1|Read Text||inquiry.txt#0#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "3"
+  },
+  {
+    "type": "run_parked",
+    "path": "3",
+    "prompt": "Send this reply?",
+    "policy": "wait=forever"
+  }
+]

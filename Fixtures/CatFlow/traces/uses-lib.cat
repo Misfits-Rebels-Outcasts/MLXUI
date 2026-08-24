@@ -1,0 +1,3 @@
+catflow 0.8
+params: greeting = "hi"
+1. Draft  Qwen3 8B; "{greeting}"

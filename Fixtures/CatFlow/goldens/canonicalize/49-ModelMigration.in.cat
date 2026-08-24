@@ -1,0 +1,20 @@
+catflow 0.8
+1. RunSuite    cases.txt                       # default model
+2. RunSuite    cases.txt; model=Llama 3.1 8B
+
+3. Diff        (1,2); format=unified
+4. Save Text   migration-diff.md
+5. Ask Human   "Are Llama's differences acceptable? tags: adopt, keep"  (3)
+               ; timeout=24h; default=keep
+   -> { adopt: 6 | keep: done }
+6. Save Text   adopt-llama.md
+
+definitions:
+  composite RunSuite                           text -> text
+  params: cases (path); model = Qwen3 8B
+     1. Read Text   (param:cases)
+     2. Split       by=lines
+     3. <each run_one; on_error=skip>         [text] -> [text]
+          1. <list flow_under_test>   (input:1)   # {model} on its AI rows
+          2. Template   "### {1}\n{2}"  (input:1, 1)
+     4. Join Text   separator="\n\n"

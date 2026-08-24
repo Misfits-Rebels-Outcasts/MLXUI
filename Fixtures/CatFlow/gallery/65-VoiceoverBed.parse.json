@@ -1,0 +1,25 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "MusicGen",
+      "refs": [],
+      "settings": "seed=7 \"calm ambient background music, soft piano, no drums, suitable under narration\"",
+      "task": "Generate Sound"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "bed.wav",
+      "task": "Save Audio"
+    }
+  ],
+  "version": "0.8"
+}

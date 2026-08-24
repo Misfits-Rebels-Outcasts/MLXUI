@@ -1,0 +1,267 @@
+{
+  "cases": {
+    "by=sentences chunk_size=2": {
+      "pairs": {
+        "by": "sentences",
+        "chunk_size": "2"
+      },
+      "multi": {
+        "by": [
+          "sentences"
+        ],
+        "chunk_size": [
+          "2"
+        ]
+      },
+      "bare": []
+    },
+    "regex=\"a;b\"": {
+      "pairs": {
+        "regex": "a;b"
+      },
+      "multi": {
+        "regex": [
+          "a;b"
+        ]
+      },
+      "bare": []
+    },
+    "a=1 a=2": {
+      "pairs": {
+        "a": "2"
+      },
+      "multi": {
+        "a": [
+          "1",
+          "2"
+        ]
+      },
+      "bare": []
+    },
+    "lora=House Style:0.8; lora=Product Lighting:0.4": {
+      "pairs": {
+        "lora": "Product Lighting:0.4"
+      },
+      "multi": {
+        "lora": [
+          "House Style:0.8",
+          "Product Lighting:0.4"
+        ]
+      },
+      "bare": []
+    },
+    "lang=en; voice=af_heart": {
+      "pairs": {
+        "lang": "en",
+        "voice": "af_heart"
+      },
+      "multi": {
+        "lang": [
+          "en"
+        ],
+        "voice": [
+          "af_heart"
+        ]
+      },
+      "bare": []
+    },
+    "memo.m4a": {
+      "pairs": {},
+      "multi": {},
+      "bare": [
+        "memo.m4a"
+      ]
+    },
+    "separator=\"\\n\"": {
+      "pairs": {
+        "separator": "\n"
+      },
+      "multi": {
+        "separator": [
+          "\n"
+        ]
+      },
+      "bare": []
+    },
+    "path=x": {
+      "pairs": {
+        "path": "x"
+      },
+      "multi": {
+        "path": [
+          "x"
+        ]
+      },
+      "bare": []
+    },
+    "count words": {
+      "pairs": {},
+      "multi": {},
+      "bare": [
+        "count",
+        "words"
+      ]
+    },
+    "items": {
+      "pairs": {},
+      "multi": {},
+      "bare": [
+        "items"
+      ]
+    },
+    "length>2": {
+      "pairs": {},
+      "multi": {},
+      "bare": [
+        "length>2"
+      ]
+    },
+    "chunk_size=abc": {
+      "pairs": {
+        "chunk_size": "abc"
+      },
+      "multi": {
+        "chunk_size": [
+          "abc"
+        ]
+      },
+      "bare": []
+    },
+    "  spaced   out  ; with=semicolons": {
+      "pairs": {
+        "with": "semicolons"
+      },
+      "multi": {
+        "with": [
+          "semicolons"
+        ]
+      },
+      "bare": [
+        "spaced",
+        "out"
+      ]
+    },
+    "voice=af_heart; seed=auto": {
+      "pairs": {
+        "voice": "af_heart",
+        "seed": "auto"
+      },
+      "multi": {
+        "voice": [
+          "af_heart"
+        ],
+        "seed": [
+          "auto"
+        ]
+      },
+      "bare": []
+    },
+    "\"a bare quoted value\"": {
+      "pairs": {},
+      "multi": {},
+      "bare": [
+        "a bare quoted value"
+      ]
+    },
+    "key=\"quoted; with semicolon\" tail": {
+      "pairs": {
+        "key": "quoted; with semicolon"
+      },
+      "multi": {
+        "key": [
+          "quoted; with semicolon"
+        ]
+      },
+      "bare": [
+        "tail"
+      ]
+    },
+    "x=1;x=2;x=3": {
+      "pairs": {
+        "x": "3"
+      },
+      "multi": {
+        "x": [
+          "1",
+          "2",
+          "3"
+        ]
+      },
+      "bare": []
+    },
+    "format=inline": {
+      "pairs": {
+        "format": "inline"
+      },
+      "multi": {
+        "format": [
+          "inline"
+        ]
+      },
+      "bare": []
+    },
+    "seed=7; steps=9": {
+      "pairs": {
+        "seed": "7",
+        "steps": "9"
+      },
+      "multi": {
+        "seed": [
+          "7"
+        ],
+        "steps": [
+          "9"
+        ]
+      },
+      "bare": []
+    },
+    "steps=9; seed=7": {
+      "pairs": {
+        "steps": "9",
+        "seed": "7"
+      },
+      "multi": {
+        "steps": [
+          "9"
+        ],
+        "seed": [
+          "7"
+        ]
+      },
+      "bare": []
+    },
+    "by=exact": {
+      "pairs": {
+        "by": "exact"
+      },
+      "multi": {
+        "by": [
+          "exact"
+        ]
+      },
+      "bare": []
+    },
+    "draft.md": {
+      "pairs": {},
+      "multi": {},
+      "bare": [
+        "draft.md"
+      ]
+    },
+    "pattern=*.jpg; on_error=skip": {
+      "pairs": {
+        "pattern": "*.jpg",
+        "on_error": "skip"
+      },
+      "multi": {
+        "pattern": [
+          "*.jpg"
+        ],
+        "on_error": [
+          "skip"
+        ]
+      },
+      "bare": []
+    }
+  }
+}

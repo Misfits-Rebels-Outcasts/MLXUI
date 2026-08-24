@@ -1,0 +1,7 @@
+catflow 0.8
+1. Read Text  input.txt
+2. Tidy   (1)  ; greeting="Hello!"
+3. Save Text  out.txt
+
+uses:
+  Tidy = ./uses-lib.cat

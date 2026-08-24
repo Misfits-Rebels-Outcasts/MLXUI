@@ -1,0 +1,136 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "library.index",
+      "task": "Read Index"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "\"Your question:\"; wait=forever; ctx+",
+      "task": "Human Input"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Ministral 3B",
+      "refs": [],
+      "settings": "\"Make the question standalone, resolving references to the conversation\"; ctx",
+      "task": "Rewrite"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "BGE-M3",
+      "refs": [],
+      "settings": null,
+      "task": "Embed"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 1
+        },
+        {
+          "kind": "row",
+          "number": 4
+        }
+      ],
+      "settings": "top_k=5",
+      "task": "Retrieve"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 5
+        },
+        {
+          "kind": "row",
+          "number": 3
+        }
+      ],
+      "settings": "\"Context:\\n{1}\\n\\nQ: {2}\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "ctx; ctx+",
+      "task": "Answer"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "clause": {
+        "edges": [
+          {
+            "tag": "ask",
+            "target": {
+              "kind": "row",
+              "number": 2
+            }
+          },
+          {
+            "tag": "done",
+            "target": {
+              "kind": "row",
+              "number": 9
+            }
+          }
+        ],
+        "kind": "decide"
+      },
+      "model": null,
+      "refs": [],
+      "settings": "\"Another question?\"; wait=forever",
+      "tags": [
+        "ask",
+        "done"
+      ],
+      "task": "Ask Human"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "session.ctx",
+      "task": "Save Context"
+    }
+  ],
+  "version": "0.8"
+}

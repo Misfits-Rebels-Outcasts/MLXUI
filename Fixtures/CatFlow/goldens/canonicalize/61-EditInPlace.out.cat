@@ -1,0 +1,5 @@
+catflow 0.8
+1. Read Image           photo.jpg
+2. Read Text            brief.txt
+3. Edit Image   (1,2)   Z-Image Turbo (4-bit); strength=0.6; seed=7
+4. Save Image           photo-edited.png

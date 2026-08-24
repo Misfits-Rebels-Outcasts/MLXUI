@@ -1,0 +1,58 @@
+{
+  "flags": [
+    "improvise"
+  ],
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "exports/; pattern=*.csv",
+      "task": "Read Files"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen2.5 14B",
+      "refs": [],
+      "settings": "\"normalize these into one table; the headers differ between files\" ; max_actions=20; workdir=.; timeout=10m",
+      "task": "Improvise"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "work/normalized.csv",
+      "task": "Read Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"what changed, in 5 bullets\"",
+      "task": "Summarize"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "report.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

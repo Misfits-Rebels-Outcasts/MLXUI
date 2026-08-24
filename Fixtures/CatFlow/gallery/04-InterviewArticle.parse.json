@@ -1,0 +1,126 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "interview.m4a",
+      "task": "Read Audio"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Whisper Large v3",
+      "refs": [],
+      "settings": "lang=en",
+      "task": "Transcribe"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"Remove filler words; keep meaning and speaker turns\"",
+      "task": "Rewrite"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"1,000-word article from this interview, quotes verbatim\"",
+      "task": "Draft"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Ministral 3B",
+      "refs": [],
+      "settings": "\"quotes verbatim? faithful? engaging?\"",
+      "task": "Critique"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "clause": {
+        "edges": [
+          {
+            "tag": "fix",
+            "target": {
+              "kind": "row",
+              "number": 7
+            }
+          },
+          {
+            "tag": "ship",
+            "target": {
+              "kind": "row",
+              "number": 8
+            }
+          }
+        ],
+        "kind": "decide"
+      },
+      "model": "Ministral 3B",
+      "on_budget": "ship",
+      "refs": [],
+      "settings": "\"Real weaknesses left?\"",
+      "tags": [
+        "fix",
+        "ship"
+      ],
+      "task": "Gate",
+      "visits_leq": 2
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "clause": {
+        "kind": "goto",
+        "target": {
+          "kind": "row",
+          "number": 5
+        }
+      },
+      "model": "Qwen3 8B",
+      "refs": [
+        {
+          "kind": "row",
+          "number": 4
+        },
+        {
+          "kind": "row",
+          "number": 5
+        }
+      ],
+      "settings": null,
+      "task": "Revise"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "article.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

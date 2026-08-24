@@ -1,0 +1,648 @@
+[
+  {
+    "type": "row_started",
+    "path": "1"
+  },
+  {
+    "type": "row_completed",
+    "path": "1",
+    "output": {
+      "items": [
+        {
+          "kind": "index",
+          "value": null,
+          "path": "1.0.index.4fee3db3114dc60a.bin"
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "2"
+  },
+  {
+    "type": "row_completed",
+    "path": "2",
+    "output": {
+      "items": [
+        {
+          "kind": "index",
+          "value": null,
+          "path": "2.0.index.931bdeaa43818416.bin"
+        }
+      ]
+    },
+    "fired_tag": "search",
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "3"
+  },
+  {
+    "type": "row_completed",
+    "path": "3",
+    "output": {
+      "items": [
+        {
+          "kind": "vector",
+          "value": null,
+          "path": "3.0.vector.b0a7c88167116586.bin"
+        },
+        {
+          "kind": "vector",
+          "value": null,
+          "path": "3.1.vector.510ea2ca6e229c59.bin"
+        },
+        {
+          "kind": "vector",
+          "value": null,
+          "path": "3.2.vector.9fdc30f97ebe67d1.bin"
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "4"
+  },
+  {
+    "type": "row_completed",
+    "path": "4",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#0",
+          "path": null
+        },
+        {
+          "kind": "text",
+          "value": "[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#1",
+          "path": null
+        },
+        {
+          "kind": "text",
+          "value": "[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#2",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "transcript_appended",
+    "path": "2",
+    "entry": {
+      "tool": "search",
+      "input": "<index>",
+      "observation": "[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#0 [mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#1 [mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#2"
+    }
+  },
+  {
+    "type": "row_started",
+    "path": "2@2"
+  },
+  {
+    "type": "row_completed",
+    "path": "2@2",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 2@2|Think|Qwen3 8B|tools: search, final|[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#0|[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#1|[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#2|tag=search",
+          "path": null
+        }
+      ]
+    },
+    "fired_tag": "search",
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "3@2"
+  },
+  {
+    "type": "row_completed",
+    "path": "3@2",
+    "output": {
+      "items": [
+        {
+          "kind": "vector",
+          "value": null,
+          "path": "3@2.0.vector.2576ce8bfb5b4ef9.bin"
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "4@2"
+  },
+  {
+    "type": "row_completed",
+    "path": "4@2",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@2|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@2.0.vector.2576ce8bfb5b4ef9.bin#0",
+          "path": null
+        },
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@2|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@2.0.vector.2576ce8bfb5b4ef9.bin#1",
+          "path": null
+        },
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@2|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@2.0.vector.2576ce8bfb5b4ef9.bin#2",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "transcript_appended",
+    "path": "2",
+    "entry": {
+      "tool": "search",
+      "input": "[mock:text] 2@2|Think|Qwen3 8B|tools: search, final|[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#0|[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#1|[mock:text] 4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3.0.vector.b0a7c88167116586.bin|3.1.vector.510ea2ca6e229c59.bin|3.2.vector.9fdc30f97ebe67d1.bin#2|tag=search",
+      "observation": "[mock:text] 4@2|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@2.0.vector.2576ce8bfb5b4ef9.bin#0 [mock:text] 4@2|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@2.0.vector.2576ce8bfb5b4ef9.bin#1 [mock:text] 4@2|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@2.0.vector.2576ce8bfb5b4ef9.bin#2"
+    }
+  },
+  {
+    "type": "row_started",
+    "path": "2@3"
+  },
+  {
+    "type": "row_completed",
+    "path": "2@3",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 2@3|Think|Qwen3 8B|tools: search, final|[mock:text] 4@2|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@2.0.vector.2576ce8bfb5b4ef9.bin#0|[mock:text] 4@2|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@2.0.vector.2576ce8bfb5b4ef9.bin#1|[mock:text] 4@2|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@2.0.vector.2576ce8bfb5b4ef9.bin#2|tag=search",
+          "path": null
+        }
+      ]
+    },
+    "fired_tag": "search",
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "3@3"
+  },
+  {
+    "type": "row_completed",
+    "path": "3@3",
+    "output": {
+      "items": [
+        {
+          "kind": "vector",
+          "value": null,
+          "path": "3@3.0.vector.d218f56094499466.bin"
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "4@3"
+  },
+  {
+    "type": "row_completed",
+    "path": "4@3",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@3|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@3.0.vector.d218f56094499466.bin#0",
+          "path": null
+        },
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@3|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@3.0.vector.d218f56094499466.bin#1",
+          "path": null
+        },
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@3|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@3.0.vector.d218f56094499466.bin#2",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "transcript_appended",
+    "path": "2",
+    "entry": {
+      "tool": "search",
+      "input": "[mock:text] 2@3|Think|Qwen3 8B|tools: search, final|[mock:text] 4@2|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@2.0.vector.2576ce8bfb5b4ef9.bin#0|[mock:text] 4@2|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@2.0.vector.2576ce8bfb5b4ef9.bin#1|[mock:text] 4@2|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@2.0.vector.2576ce8bfb5b4ef9.bin#2|tag=search",
+      "observation": "[mock:text] 4@3|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@3.0.vector.d218f56094499466.bin#0 [mock:text] 4@3|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@3.0.vector.d218f56094499466.bin#1 [mock:text] 4@3|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@3.0.vector.d218f56094499466.bin#2"
+    }
+  },
+  {
+    "type": "row_started",
+    "path": "2@4"
+  },
+  {
+    "type": "row_completed",
+    "path": "2@4",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 2@4|Think|Qwen3 8B|tools: search, final|[mock:text] 4@3|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@3.0.vector.d218f56094499466.bin#0|[mock:text] 4@3|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@3.0.vector.d218f56094499466.bin#1|[mock:text] 4@3|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@3.0.vector.d218f56094499466.bin#2|tag=search",
+          "path": null
+        }
+      ]
+    },
+    "fired_tag": "search",
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "3@4"
+  },
+  {
+    "type": "row_completed",
+    "path": "3@4",
+    "output": {
+      "items": [
+        {
+          "kind": "vector",
+          "value": null,
+          "path": "3@4.0.vector.c4356b57e2794bc0.bin"
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "4@4"
+  },
+  {
+    "type": "row_completed",
+    "path": "4@4",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@4.0.vector.c4356b57e2794bc0.bin#0",
+          "path": null
+        },
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@4.0.vector.c4356b57e2794bc0.bin#1",
+          "path": null
+        },
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@4.0.vector.c4356b57e2794bc0.bin#2",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "transcript_appended",
+    "path": "2",
+    "entry": {
+      "tool": "search",
+      "input": "[mock:text] 2@4|Think|Qwen3 8B|tools: search, final|[mock:text] 4@3|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@3.0.vector.d218f56094499466.bin#0|[mock:text] 4@3|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@3.0.vector.d218f56094499466.bin#1|[mock:text] 4@3|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@3.0.vector.d218f56094499466.bin#2|tag=search",
+      "observation": "[mock:text] 4@4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@4.0.vector.c4356b57e2794bc0.bin#0 [mock:text] 4@4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@4.0.vector.c4356b57e2794bc0.bin#1 [mock:text] 4@4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@4.0.vector.c4356b57e2794bc0.bin#2"
+    }
+  },
+  {
+    "type": "row_started",
+    "path": "2@5"
+  },
+  {
+    "type": "row_completed",
+    "path": "2@5",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 2@5|Think|Qwen3 8B|tools: search, final|[mock:text] 4@4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@4.0.vector.c4356b57e2794bc0.bin#0|[mock:text] 4@4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@4.0.vector.c4356b57e2794bc0.bin#1|[mock:text] 4@4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@4.0.vector.c4356b57e2794bc0.bin#2|tag=search",
+          "path": null
+        }
+      ]
+    },
+    "fired_tag": "search",
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "3@5"
+  },
+  {
+    "type": "row_completed",
+    "path": "3@5",
+    "output": {
+      "items": [
+        {
+          "kind": "vector",
+          "value": null,
+          "path": "3@5.0.vector.33172f6b9889b631.bin"
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "4@5"
+  },
+  {
+    "type": "row_completed",
+    "path": "4@5",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@5|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@5.0.vector.33172f6b9889b631.bin#0",
+          "path": null
+        },
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@5|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@5.0.vector.33172f6b9889b631.bin#1",
+          "path": null
+        },
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@5|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@5.0.vector.33172f6b9889b631.bin#2",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "transcript_appended",
+    "path": "2",
+    "entry": {
+      "tool": "search",
+      "input": "[mock:text] 2@5|Think|Qwen3 8B|tools: search, final|[mock:text] 4@4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@4.0.vector.c4356b57e2794bc0.bin#0|[mock:text] 4@4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@4.0.vector.c4356b57e2794bc0.bin#1|[mock:text] 4@4|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@4.0.vector.c4356b57e2794bc0.bin#2|tag=search",
+      "observation": "[mock:text] 4@5|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@5.0.vector.33172f6b9889b631.bin#0 [mock:text] 4@5|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@5.0.vector.33172f6b9889b631.bin#1 [mock:text] 4@5|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@5.0.vector.33172f6b9889b631.bin#2"
+    }
+  },
+  {
+    "type": "row_started",
+    "path": "2@6"
+  },
+  {
+    "type": "row_completed",
+    "path": "2@6",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 2@6|Think|Qwen3 8B|tools: search, final|[mock:text] 4@5|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@5.0.vector.33172f6b9889b631.bin#0|[mock:text] 4@5|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@5.0.vector.33172f6b9889b631.bin#1|[mock:text] 4@5|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@5.0.vector.33172f6b9889b631.bin#2|tag=search",
+          "path": null
+        }
+      ]
+    },
+    "fired_tag": "search",
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "3@6"
+  },
+  {
+    "type": "row_completed",
+    "path": "3@6",
+    "output": {
+      "items": [
+        {
+          "kind": "vector",
+          "value": null,
+          "path": "3@6.0.vector.d6a759ba8941f2eb.bin"
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "4@6"
+  },
+  {
+    "type": "row_completed",
+    "path": "4@6",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@6|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@6.0.vector.d6a759ba8941f2eb.bin#0",
+          "path": null
+        },
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@6|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@6.0.vector.d6a759ba8941f2eb.bin#1",
+          "path": null
+        },
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@6|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@6.0.vector.d6a759ba8941f2eb.bin#2",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "transcript_appended",
+    "path": "2",
+    "entry": {
+      "tool": "search",
+      "input": "[mock:text] 2@6|Think|Qwen3 8B|tools: search, final|[mock:text] 4@5|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@5.0.vector.33172f6b9889b631.bin#0|[mock:text] 4@5|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@5.0.vector.33172f6b9889b631.bin#1|[mock:text] 4@5|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@5.0.vector.33172f6b9889b631.bin#2|tag=search",
+      "observation": "[mock:text] 4@6|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@6.0.vector.d6a759ba8941f2eb.bin#0 [mock:text] 4@6|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@6.0.vector.d6a759ba8941f2eb.bin#1 [mock:text] 4@6|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@6.0.vector.d6a759ba8941f2eb.bin#2"
+    }
+  },
+  {
+    "type": "row_started",
+    "path": "2@7"
+  },
+  {
+    "type": "row_completed",
+    "path": "2@7",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 2@7|Think|Qwen3 8B|tools: search, final|[mock:text] 4@6|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@6.0.vector.d6a759ba8941f2eb.bin#0|[mock:text] 4@6|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@6.0.vector.d6a759ba8941f2eb.bin#1|[mock:text] 4@6|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@6.0.vector.d6a759ba8941f2eb.bin#2|tag=search",
+          "path": null
+        }
+      ]
+    },
+    "fired_tag": "search",
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "3@7"
+  },
+  {
+    "type": "row_completed",
+    "path": "3@7",
+    "output": {
+      "items": [
+        {
+          "kind": "vector",
+          "value": null,
+          "path": "3@7.0.vector.329d08f06c96b6af.bin"
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "4@7"
+  },
+  {
+    "type": "row_completed",
+    "path": "4@7",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@7|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@7.0.vector.329d08f06c96b6af.bin#0",
+          "path": null
+        },
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@7|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@7.0.vector.329d08f06c96b6af.bin#1",
+          "path": null
+        },
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@7|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@7.0.vector.329d08f06c96b6af.bin#2",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "transcript_appended",
+    "path": "2",
+    "entry": {
+      "tool": "search",
+      "input": "[mock:text] 2@7|Think|Qwen3 8B|tools: search, final|[mock:text] 4@6|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@6.0.vector.d6a759ba8941f2eb.bin#0|[mock:text] 4@6|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@6.0.vector.d6a759ba8941f2eb.bin#1|[mock:text] 4@6|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@6.0.vector.d6a759ba8941f2eb.bin#2|tag=search",
+      "observation": "[mock:text] 4@7|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@7.0.vector.329d08f06c96b6af.bin#0 [mock:text] 4@7|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@7.0.vector.329d08f06c96b6af.bin#1 [mock:text] 4@7|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@7.0.vector.329d08f06c96b6af.bin#2"
+    }
+  },
+  {
+    "type": "row_started",
+    "path": "2@8"
+  },
+  {
+    "type": "row_completed",
+    "path": "2@8",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 2@8|Think|Qwen3 8B|tools: search, final|[mock:text] 4@7|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@7.0.vector.329d08f06c96b6af.bin#0|[mock:text] 4@7|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@7.0.vector.329d08f06c96b6af.bin#1|[mock:text] 4@7|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@7.0.vector.329d08f06c96b6af.bin#2|tag=search",
+          "path": null
+        }
+      ]
+    },
+    "fired_tag": "search",
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "3@8"
+  },
+  {
+    "type": "row_completed",
+    "path": "3@8",
+    "output": {
+      "items": [
+        {
+          "kind": "vector",
+          "value": null,
+          "path": "3@8.0.vector.ce516eb926a20e07.bin"
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "4@8"
+  },
+  {
+    "type": "row_completed",
+    "path": "4@8",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@8|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@8.0.vector.ce516eb926a20e07.bin#0",
+          "path": null
+        },
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@8|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@8.0.vector.ce516eb926a20e07.bin#1",
+          "path": null
+        },
+        {
+          "kind": "text",
+          "value": "[mock:text] 4@8|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@8.0.vector.ce516eb926a20e07.bin#2",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "transcript_appended",
+    "path": "2",
+    "entry": {
+      "tool": "search",
+      "input": "[mock:text] 2@8|Think|Qwen3 8B|tools: search, final|[mock:text] 4@7|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@7.0.vector.329d08f06c96b6af.bin#0|[mock:text] 4@7|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@7.0.vector.329d08f06c96b6af.bin#1|[mock:text] 4@7|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@7.0.vector.329d08f06c96b6af.bin#2|tag=search",
+      "observation": "[mock:text] 4@8|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@8.0.vector.ce516eb926a20e07.bin#0 [mock:text] 4@8|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@8.0.vector.ce516eb926a20e07.bin#1 [mock:text] 4@8|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@8.0.vector.ce516eb926a20e07.bin#2"
+    }
+  },
+  {
+    "type": "budget_forced",
+    "path": "2",
+    "edge": "final"
+  },
+  {
+    "type": "row_started",
+    "path": "5"
+  },
+  {
+    "type": "row_completed",
+    "path": "5",
+    "output": {
+      "items": [
+        {
+          "kind": "status",
+          "value": "[mock:status] 5|Save Text||findings.md|[mock:text] 2@8|Think|Qwen3 8B|tools: search, final|[mock:text] 4@7|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@7.0.vector.329d08f06c96b6af.bin#0|[mock:text] 4@7|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@7.0.vector.329d08f06c96b6af.bin#1|[mock:text] 4@7|Retrieve||top_k=5|1.0.index.4fee3db3114dc60a.bin|3@7.0.vector.329d08f06c96b6af.bin#2|tag=search#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "run_completed"
+  }
+]

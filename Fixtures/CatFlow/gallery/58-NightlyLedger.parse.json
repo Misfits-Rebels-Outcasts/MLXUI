@@ -1,0 +1,84 @@
+{
+  "flags": [
+    "code",
+    "events"
+  ],
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "drops/; pattern=*.usage; settle=30s; max_runs=6/day",
+      "task": "On File"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 1
+        }
+      ],
+      "settings": null,
+      "task": "Parse Usage File"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "ledger.db; table=entries; key=entry_id; mode=insert",
+      "task": "Store Write"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": true,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "ledger.db; table=entries",
+      "task": "Store Read"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "group=account; columns=account,amount",
+      "task": "Query Table"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "format=markdown",
+      "task": "Table to Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "reports/ledger-{name}.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

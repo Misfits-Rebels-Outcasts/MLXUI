@@ -1,0 +1,5 @@
+catflow 0.8
+1. Read Text   a.txt
+   -> 2
+2. Split   (1)   by=lines
+3. Save Text   out.txt

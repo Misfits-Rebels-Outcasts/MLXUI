@@ -1,0 +1,121 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "post.md",
+      "task": "Read Text"
+    },
+    {
+      "block_kind": "parallel",
+      "block_name": "meta",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "Ministral 3B",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"SEO headline\"",
+          "task": "Title"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "model": "Ministral 3B",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"meta description, 155 chars max\"",
+          "task": "Summarize"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "model": "Ministral 3B",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"tags, category\"",
+          "task": "Extract Structured"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "format=csv",
+          "task": "Table to Text"
+        }
+      ],
+      "declared_signature": "text -> [text, text, text]",
+      "model": null,
+      "refs": [],
+      "settings": null,
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "\"---\\ntitle: {1}\\ndescription: {2}\\n{3}\\n---\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 3
+        },
+        {
+          "kind": "row",
+          "number": 1
+        }
+      ],
+      "settings": "\"{1}\\n\\n{2}\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "post-published.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

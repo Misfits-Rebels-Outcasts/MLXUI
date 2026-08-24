@@ -1,0 +1,76 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "3..6",
+      "task": "Range"
+    },
+    {
+      "block_kind": "each",
+      "block_name": "variant",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "\"a lighthouse at sunset, watercolor style, seed {item}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "Z-Image Turbo (4-bit)",
+          "refs": [],
+          "settings": "seed={item}",
+          "task": "Generate Image"
+        }
+      ],
+      "declared_signature": "[text] -> [image]",
+      "model": null,
+      "refs": [],
+      "settings": null,
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 2
+        },
+        {
+          "kind": "row",
+          "number": 1
+        }
+      ],
+      "settings": "cols=2",
+      "task": "Contact Sheet"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "seed-sweep.png",
+      "task": "Save Image"
+    }
+  ],
+  "version": "0.8"
+}

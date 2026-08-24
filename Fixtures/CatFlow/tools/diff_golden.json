@@ -1,0 +1,212 @@
+{
+  "cases": {
+    "inline_basic": {
+      "a_items": [
+        "a\nb\nc"
+      ],
+      "b_items": [
+        "a\nb2\nc"
+      ],
+      "settings": null,
+      "expected": "  a\n- b\n+ b2\n  c"
+    },
+    "inline_trailing_nl": {
+      "a_items": [
+        "line1\nline2\n"
+      ],
+      "b_items": [
+        "line1\nline2 changed\n"
+      ],
+      "settings": null,
+      "expected": "  line1\n- line2\n+ line2 changed"
+    },
+    "inline_empty_a": {
+      "a_items": [
+        ""
+      ],
+      "b_items": [
+        "x\n"
+      ],
+      "settings": null,
+      "expected": "+ x"
+    },
+    "inline_empty_both": {
+      "a_items": [
+        ""
+      ],
+      "b_items": [
+        ""
+      ],
+      "settings": null,
+      "expected": ""
+    },
+    "inline_no_change": {
+      "a_items": [
+        "a\nb\nc"
+      ],
+      "b_items": [
+        "a\nb\nc"
+      ],
+      "settings": null,
+      "expected": "  a\n  b\n  c"
+    },
+    "inline_crlf": {
+      "a_items": [
+        "a\r\nb\r\nc\r\n"
+      ],
+      "b_items": [
+        "a\r\nb2\r\nc\r\n"
+      ],
+      "settings": null,
+      "expected": "  a\n- b\n+ b2\n  c"
+    },
+    "inline_interior_blanks": {
+      "a_items": [
+        "a\n\n\nb"
+      ],
+      "b_items": [
+        "a\n\nc"
+      ],
+      "settings": null,
+      "expected": "  a\n  \n+ c\n- \n- b"
+    },
+    "inline_intraline": {
+      "a_items": [
+        "xab12"
+      ],
+      "b_items": [
+        "xac34"
+      ],
+      "settings": null,
+      "expected": "- xab12\n+ xac34"
+    },
+    "inline_intraline_similar": {
+      "a_items": [
+        "abcDefghiJkl"
+      ],
+      "b_items": [
+        "abcdefGhijkl"
+      ],
+      "settings": null,
+      "expected": "- abcDefghiJkl\n?    ^  ^  ^\n\n+ abcdefGhijkl\n?    ^  ^  ^\n"
+    },
+    "inline_single_ref": {
+      "a_items": [
+        "alpha\nbeta"
+      ],
+      "b_items": null,
+      "settings": null,
+      "expected": "- alpha\n- beta"
+    },
+    "inline_bundle_list_ref": {
+      "a_items": [
+        "first",
+        "second"
+      ],
+      "b_items": [
+        "third"
+      ],
+      "settings": null,
+      "expected": "- first\n+ third"
+    },
+    "inline_unicode": {
+      "a_items": [
+        "café über"
+      ],
+      "b_items": [
+        "cafe uber"
+      ],
+      "settings": null,
+      "expected": "- café über\n+ cafe uber"
+    },
+    "inline_long_change": {
+      "a_items": [
+        "one\ntwo\nthree\nfour\nfive"
+      ],
+      "b_items": [
+        "one\ntoo\nthree\nfour\nfive"
+      ],
+      "settings": null,
+      "expected": "  one\n- two\n+ too\n  three\n  four\n  five"
+    },
+    "unified_single_ref": {
+      "a_items": [
+        "alpha\nbeta"
+      ],
+      "b_items": null,
+      "settings": "format=unified",
+      "expected": "--- \n+++ \n@@ -1,2 +0,0 @@\n-alpha\n-beta"
+    },
+    "unified_bundle_list_ref": {
+      "a_items": [
+        "first",
+        "second"
+      ],
+      "b_items": [
+        "third"
+      ],
+      "settings": "format=unified",
+      "expected": "--- \n+++ \n@@ -1 +1 @@\n-first\n+third"
+    },
+    "unified_trailing_nl": {
+      "a_items": [
+        "line1\nline2\n"
+      ],
+      "b_items": [
+        "line1\nline2 changed\n"
+      ],
+      "settings": "format=unified",
+      "expected": "--- \n+++ \n@@ -1,2 +1,2 @@\n line1\n-line2\n+line2 changed"
+    },
+    "unified_empty_both": {
+      "a_items": [
+        ""
+      ],
+      "b_items": [
+        ""
+      ],
+      "settings": "format=unified",
+      "expected": ""
+    },
+    "unified_no_change": {
+      "a_items": [
+        "a\nb\nc"
+      ],
+      "b_items": [
+        "a\nb\nc"
+      ],
+      "settings": "format=unified",
+      "expected": ""
+    },
+    "unified_crlf": {
+      "a_items": [
+        "a\r\nb\r\nc\r\n"
+      ],
+      "b_items": [
+        "a\r\nb2\r\nc\r\n"
+      ],
+      "settings": "format=unified",
+      "expected": "--- \n+++ \n@@ -1,3 +1,3 @@\n a\n-b\n+b2\n c"
+    },
+    "unified_interior_blanks": {
+      "a_items": [
+        "a\n\n\nb"
+      ],
+      "b_items": [
+        "a\n\nc"
+      ],
+      "settings": "format=unified",
+      "expected": "--- \n+++ \n@@ -1,4 +1,3 @@\n a\n \n-\n-b\n+c"
+    },
+    "unified_multi_hunk": {
+      "a_items": [
+        "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\nl11\nl12\nl13\nl14\nl15\nl16\nl17\nl18\nl19\nl20\nl21\nl22\nl23\nl24\nl25\nl26\nl27\nl28\nl29\nl30\n"
+      ],
+      "b_items": [
+        "l1\nl2 CHANGED\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\nl11\nl12\nl13\nl14\nl15\nl16\nl17\nl18\nl19\nl20\nl21\nl22\nl23\nl24\nl25\nl26 CHANGED\nl27\nl28\nl29\nl30\n"
+      ],
+      "settings": "format=unified",
+      "expected": "--- \n+++ \n@@ -1,5 +1,5 @@\n l1\n-l2\n+l2 CHANGED\n l3\n l4\n l5\n@@ -23,7 +23,7 @@\n l23\n l24\n l25\n-l26\n+l26 CHANGED\n l27\n l28\n l29"
+    }
+  }
+}

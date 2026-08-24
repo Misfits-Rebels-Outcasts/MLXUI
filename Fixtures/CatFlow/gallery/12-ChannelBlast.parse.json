@@ -1,0 +1,142 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "launch-notes.txt",
+      "task": "Read Text"
+    },
+    {
+      "block_kind": "parallel",
+      "block_name": "channels",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "Qwen3 8B",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"LinkedIn post, professional, 150 words max\"",
+          "task": "Draft"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "model": "Qwen3 8B",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"Thread: 4 short posts, plain language\"",
+          "task": "Draft"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "model": "Qwen3 8B",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"Customer email, warm, subject line first\"",
+          "task": "Draft"
+        }
+      ],
+      "declared_signature": "text -> [text, text, text]",
+      "model": null,
+      "refs": [],
+      "settings": null,
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "\"{1}\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "linkedin.md",
+      "task": "Save Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 2
+        }
+      ],
+      "settings": "\"{2}\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "thread.md",
+      "task": "Save Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 2
+        }
+      ],
+      "settings": "\"{3}\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "email.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

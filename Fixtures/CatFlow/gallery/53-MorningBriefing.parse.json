@@ -1,0 +1,152 @@
+{
+  "flags": [
+    "events",
+    "network"
+  ],
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "every=day; at=06:30; max_runs=2/day",
+      "task": "On Schedule"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "comment": "one query per line",
+      "model": null,
+      "refs": [],
+      "settings": "topics.txt",
+      "task": "Read Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "by=lines",
+      "task": "Split"
+    },
+    {
+      "block_kind": "each",
+      "block_name": "one_topic",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "top_k=3; recency=day",
+          "task": "Web Search"
+        },
+        {
+          "block_kind": "each",
+          "block_name": "fetch_one",
+          "chain_break": false,
+          "children": [
+            {
+              "block_kind": null,
+              "block_name": null,
+              "chain_break": false,
+              "children": [],
+              "model": null,
+              "refs": [
+                {
+                  "kind": "input",
+                  "position": 1
+                }
+              ],
+              "settings": "as=markdown",
+              "task": "Web Fetch"
+            }
+          ],
+          "model": null,
+          "refs": [],
+          "settings": "on_error=skip ; [url] -> [text]",
+          "task": null
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "Ministral 3B",
+          "refs": [],
+          "settings": "\"2 lines: what's new\"",
+          "task": "Summarize"
+        }
+      ],
+      "declared_signature": "[text] -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": "on_error=skip",
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "separator=\"\\n\\n\"",
+      "task": "Join Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"One briefing: merge overlaps, lead with the most consequential item\"",
+      "task": "Rewrite"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 6
+        },
+        {
+          "kind": "row",
+          "number": 1
+        }
+      ],
+      "settings": "\"# Briefing — {2}\\n\\n{1}\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "briefings/briefing.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

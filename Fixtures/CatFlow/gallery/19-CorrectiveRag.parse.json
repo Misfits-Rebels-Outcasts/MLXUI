@@ -1,0 +1,140 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "library.index",
+      "task": "Read Index"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "BGE-M3",
+      "refs": [],
+      "settings": "\"How many PTO days do new hires get?\"",
+      "task": "Embed"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 1
+        },
+        {
+          "kind": "row",
+          "number": 2
+        }
+      ],
+      "settings": "top_k=5",
+      "task": "Retrieve"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "clause": {
+        "edges": [
+          {
+            "tag": "yes",
+            "target": {
+              "kind": "row",
+              "number": 6
+            }
+          },
+          {
+            "tag": "no",
+            "target": {
+              "kind": "row",
+              "number": 5
+            }
+          }
+        ],
+        "kind": "decide"
+      },
+      "model": "Ministral 3B",
+      "on_budget": "yes",
+      "refs": [
+        {
+          "kind": "row",
+          "number": 2
+        },
+        {
+          "kind": "row",
+          "number": 3
+        }
+      ],
+      "settings": "\"Do these chunks answer it?\"",
+      "tags": [
+        "yes",
+        "no"
+      ],
+      "task": "Gate",
+      "visits_leq": 3
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "clause": {
+        "kind": "goto",
+        "target": {
+          "kind": "row",
+          "number": 2
+        }
+      },
+      "model": "Ministral 3B",
+      "refs": [],
+      "settings": "\"Rephrase the question\"",
+      "task": "Rewrite"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": true,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 3
+        }
+      ],
+      "settings": "\"Context:\\n{input}\\n\\nAnswer the question.\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": null,
+      "task": "Answer"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "answer.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

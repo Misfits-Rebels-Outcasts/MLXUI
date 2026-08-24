@@ -1,0 +1,84 @@
+{
+  "flags": [
+    "network"
+  ],
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "\"local LLM quantization\"; top_k=8; recency=week",
+      "task": "Web Search"
+    },
+    {
+      "block_kind": "each",
+      "block_name": "fetch_one",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "as=markdown",
+          "task": "Web Fetch"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "Ministral 3B",
+          "refs": [],
+          "settings": "\"2 lines: what's new here\"",
+          "task": "Summarize"
+        }
+      ],
+      "model": null,
+      "refs": [],
+      "settings": "on_error=skip ; [url] -> [text]",
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "separator=\"\\n\\n\"",
+      "task": "Join Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"Merge overlapping items; rank by novelty\"",
+      "task": "Rewrite"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "topic-weekly.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

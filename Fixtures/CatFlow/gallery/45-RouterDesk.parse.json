@@ -1,0 +1,318 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "ticket.txt",
+      "task": "Read Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "clause": {
+        "edges": [
+          {
+            "tag": "billing",
+            "target": {
+              "kind": "row",
+              "number": 3
+            }
+          },
+          {
+            "tag": "technical",
+            "target": {
+              "kind": "row",
+              "number": 5
+            }
+          },
+          {
+            "tag": "other",
+            "target": {
+              "kind": "row",
+              "number": 6
+            }
+          }
+        ],
+        "kind": "decide"
+      },
+      "model": "Ministral 3B",
+      "refs": [],
+      "settings": "\"Type?\"",
+      "tags": [
+        "billing",
+        "technical",
+        "other"
+      ],
+      "task": "Classify"
+    },
+    {
+      "block_kind": "list",
+      "block_name": "billing_agent",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "billing-kb.index",
+          "task": "Read Index"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "edges": [
+              {
+                "tag": "search",
+                "target": {
+                  "kind": "call",
+                  "number": 3
+                }
+              },
+              {
+                "tag": "calculate",
+                "target": {
+                  "kind": "call",
+                  "number": 5
+                }
+              },
+              {
+                "tag": "final",
+                "target": {
+                  "kind": "resume"
+                }
+              }
+            ],
+            "kind": "decide"
+          },
+          "model": "Qwen3 8B",
+          "on_budget": "final",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "tools: search, calculate, final",
+          "task": "Think",
+          "visits_leq": 8
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "BGE-M3",
+          "refs": [],
+          "settings": null,
+          "task": "Embed"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "kind": "resume"
+          },
+          "model": null,
+          "refs": [
+            {
+              "kind": "row",
+              "number": 1
+            },
+            {
+              "kind": "row",
+              "number": 3
+            }
+          ],
+          "settings": "top_k=5",
+          "task": "Retrieve"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "kind": "resume"
+          },
+          "model": null,
+          "refs": [],
+          "settings": null,
+          "task": "Calculate"
+        }
+      ],
+      "comment": "reads billing-kb.index inside",
+      "model": null,
+      "refs": [],
+      "settings": null,
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "clause": {
+        "kind": "goto",
+        "target": {
+          "kind": "row",
+          "number": 7
+        }
+      },
+      "model": "Ministral 3B",
+      "refs": [],
+      "settings": "\"policy-safe tone\"",
+      "task": "Rewrite"
+    },
+    {
+      "block_kind": "list",
+      "block_name": "docs_agent",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "docs-kb.index",
+          "task": "Read Index"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "edges": [
+              {
+                "tag": "search",
+                "target": {
+                  "kind": "call",
+                  "number": 3
+                }
+              },
+              {
+                "tag": "calculate",
+                "target": {
+                  "kind": "call",
+                  "number": 5
+                }
+              },
+              {
+                "tag": "final",
+                "target": {
+                  "kind": "resume"
+                }
+              }
+            ],
+            "kind": "decide"
+          },
+          "model": "Qwen3 8B",
+          "on_budget": "final",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "tools: search, calculate, final",
+          "task": "Think",
+          "visits_leq": 8
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "BGE-M3",
+          "refs": [],
+          "settings": null,
+          "task": "Embed"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "kind": "resume"
+          },
+          "model": null,
+          "refs": [
+            {
+              "kind": "row",
+              "number": 1
+            },
+            {
+              "kind": "row",
+              "number": 3
+            }
+          ],
+          "settings": "top_k=5",
+          "task": "Retrieve"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "kind": "resume"
+          },
+          "model": null,
+          "refs": [],
+          "settings": null,
+          "task": "Calculate"
+        }
+      ],
+      "clause": {
+        "kind": "goto",
+        "target": {
+          "kind": "row",
+          "number": 7
+        }
+      },
+      "comment": "reads docs-kb.index inside",
+      "model": null,
+      "refs": [],
+      "settings": null,
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"acknowledge; summarize for a human\"",
+      "task": "Answer"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "reply-draft.txt",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

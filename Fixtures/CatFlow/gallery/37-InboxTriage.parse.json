@@ -1,0 +1,198 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "inbox/; pattern=*.txt",
+      "task": "Read Files"
+    },
+    {
+      "block_kind": "each",
+      "block_name": "triage_one",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": null,
+          "task": "Read Text"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "Ministral 3B",
+          "refs": [],
+          "settings": "\"One line: sender wants…\"",
+          "task": "Summarize"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "edges": [
+              {
+                "tag": "act",
+                "target": {
+                  "kind": "row",
+                  "number": 4
+                }
+              },
+              {
+                "tag": "read",
+                "target": {
+                  "kind": "row",
+                  "number": 5
+                }
+              },
+              {
+                "tag": "ignore",
+                "target": {
+                  "kind": "row",
+                  "number": 6
+                }
+              }
+            ],
+            "kind": "decide"
+          },
+          "model": "Ministral 3B",
+          "refs": [
+            {
+              "kind": "row",
+              "number": 1
+            }
+          ],
+          "settings": "\"Urgency?\"",
+          "tags": [
+            "act",
+            "read",
+            "ignore"
+          ],
+          "task": "Classify"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "clause": {
+            "kind": "goto",
+            "target": {
+              "kind": "row",
+              "number": 7
+            }
+          },
+          "model": null,
+          "refs": [
+            {
+              "kind": "row",
+              "number": 2
+            }
+          ],
+          "settings": "\"ACT     {1}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "clause": {
+            "kind": "goto",
+            "target": {
+              "kind": "row",
+              "number": 7
+            }
+          },
+          "model": null,
+          "refs": [
+            {
+              "kind": "row",
+              "number": 2
+            }
+          ],
+          "settings": "\"READ    {1}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "model": null,
+          "refs": [
+            {
+              "kind": "row",
+              "number": 2
+            }
+          ],
+          "settings": "\"IGNORE  {1}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "\"{1}\"",
+          "task": "Template"
+        }
+      ],
+      "declared_signature": "[file] -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": "on_error=skip",
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "comment": "ACT sorts to the top",
+      "model": null,
+      "refs": [],
+      "settings": "direction=asc",
+      "task": "Sort"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "separator=\"\\n\"",
+      "task": "Join Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "inbox-brief.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

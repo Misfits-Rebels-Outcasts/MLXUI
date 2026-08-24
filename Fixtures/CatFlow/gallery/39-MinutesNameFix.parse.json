@@ -1,0 +1,74 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "meeting.m4a",
+      "task": "Read Audio"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Whisper Large v3",
+      "refs": [],
+      "settings": null,
+      "task": "Transcribe"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Ministral 3B",
+      "refs": [],
+      "settings": "\"List attendee names, one per line\"",
+      "task": "Draft"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "\"Correct any misspelled names:\" ; timeout=2h; default=unchanged",
+      "task": "Human Input"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [
+        {
+          "kind": "row",
+          "number": 2
+        },
+        {
+          "kind": "row",
+          "number": 4
+        }
+      ],
+      "settings": "\"Meeting minutes; use these corrected names\"",
+      "task": "Rewrite"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "minutes.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

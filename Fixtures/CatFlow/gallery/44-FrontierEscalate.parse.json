@@ -1,0 +1,159 @@
+{
+  "flags": [
+    "offdevice"
+  ],
+  "models": {
+    "claude-sonnet @ anthropic": "anthropic/claude-sonnet-4"
+  },
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "library.index",
+      "task": "Read Index"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "BGE-M3",
+      "refs": [],
+      "settings": "\"Summarize our indemnification obligations\"",
+      "task": "Embed"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 1
+        },
+        {
+          "kind": "row",
+          "number": 2
+        }
+      ],
+      "settings": "top_k=5",
+      "task": "Retrieve"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "\"Context:\\n{input}\\n\\nQ: Summarize our indemnification obligations\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": null,
+      "task": "Answer"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "clause": {
+        "edges": [
+          {
+            "tag": "ship",
+            "target": {
+              "kind": "row",
+              "number": 7
+            }
+          },
+          {
+            "tag": "escalate",
+            "target": {
+              "kind": "row",
+              "number": 8
+            }
+          }
+        ],
+        "kind": "decide"
+      },
+      "model": "Ministral 3B",
+      "refs": [
+        {
+          "kind": "row",
+          "number": 5
+        },
+        {
+          "kind": "row",
+          "number": 3
+        }
+      ],
+      "settings": "\"Complete and grounded, ready to ship?\"",
+      "tags": [
+        "ship",
+        "escalate"
+      ],
+      "task": "Gate"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "clause": {
+        "kind": "goto",
+        "target": {
+          "kind": "row",
+          "number": 9
+        }
+      },
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 5
+        }
+      ],
+      "settings": "\"{1}\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": true,
+      "children": [],
+      "model": "claude-sonnet @ anthropic",
+      "refs": [
+        {
+          "kind": "row",
+          "number": 4
+        }
+      ],
+      "settings": "\"cite sources\"    remote",
+      "task": "Answer"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "answer.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

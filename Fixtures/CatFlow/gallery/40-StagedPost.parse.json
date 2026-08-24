@@ -1,0 +1,141 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "announcement.md",
+      "task": "Read Text"
+    },
+    {
+      "block_kind": "parallel",
+      "block_name": "two_takes",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "Qwen3 8B",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"Post, 280 chars max, no hashtags\"",
+          "task": "Draft"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "model": "Qwen3 8B",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"Post, 280 chars max, playful\"",
+          "task": "Draft"
+        }
+      ],
+      "declared_signature": "text -> [text, text]",
+      "model": null,
+      "refs": [],
+      "settings": null,
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "clause": {
+        "edges": [
+          {
+            "tag": "a",
+            "target": {
+              "kind": "row",
+              "number": 4
+            }
+          },
+          {
+            "tag": "b",
+            "target": {
+              "kind": "row",
+              "number": 4
+            }
+          }
+        ],
+        "kind": "decide"
+      },
+      "model": "Ministral 3B",
+      "refs": [
+        {
+          "kind": "row",
+          "number": 1
+        },
+        {
+          "kind": "row",
+          "number": 2
+        }
+      ],
+      "settings": "\"Which post lands better?\"",
+      "tags": [
+        "a",
+        "b"
+      ],
+      "task": "Judge"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "clause": {
+        "edges": [
+          {
+            "tag": "post",
+            "target": {
+              "kind": "row",
+              "number": 5
+            }
+          },
+          {
+            "tag": "skip",
+            "target": {
+              "kind": "done"
+            }
+          }
+        ],
+        "kind": "decide"
+      },
+      "model": null,
+      "refs": [],
+      "settings": "\"Post this?\"; timeout=12h; default=skip",
+      "tags": [
+        "post",
+        "skip"
+      ],
+      "task": "Ask Human"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "outbox",
+      "task": "Stage Post"
+    }
+  ],
+  "version": "0.8"
+}

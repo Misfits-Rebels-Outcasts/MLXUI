@@ -1,0 +1,59 @@
+{
+ "improvise_no_flag": [
+  [
+   "2",
+   "E109",
+   "Row 2 improvises with a shell, but the header doesn't say `; improvise`. Add it \u2014 shared flows must show what they can do on line one. (fmt will do this for you.)"
+  ]
+ ],
+ "improvise_unbounded": [
+  [
+   "1",
+   "E110",
+   "Row 1 improvises, but doesn't say when to stop. Add `max_actions=N` (how many steps it may take) and `timeout=<duration>` (how long any one step may run)."
+  ]
+ ],
+ "improvise_no_workdir": [
+  [
+   "1",
+   "E111",
+   "Row 1 improvises, but doesn't say where. Add `workdir=<dir>` \u2014 the agent reads and writes there and nowhere else."
+  ]
+ ],
+ "improvise_events": [
+  [
+   "1",
+   "E112",
+   "This flow both improvises and starts itself. Those can't combine: triggers run unattended, and an improvising row is the one thing that shouldn't. Remove the trigger, or the `Improvise` row."
+  ]
+ ],
+ "transforms_no_code": [
+  [
+   "1",
+   "E118",
+   "This flow declares `transforms:`, but the header doesn't say `; code`. Add it \u2014 shared flows must show what they can do on line one. (fmt will do this for you.)"
+  ],
+  [
+   "1",
+   "E408",
+   "Row 1 uses Tidy, but its `transforms:` entry doesn't declare `timeout:`. Add a bound \u2014 every transform declares how long its script may run."
+  ],
+  [
+   "1",
+   "E119",
+   "Row 1 uses Tidy, but its `transforms:` entry doesn't declare `workdir:`. Every transform names the directory its script may touch \u2014 add `workdir: <dir>` to its entry."
+  ]
+ ],
+ "transform_incomplete": [
+  [
+   "1",
+   "E408",
+   "Row 1 uses Tidy, but its `transforms:` entry doesn't declare `timeout:`. Add a bound \u2014 every transform declares how long its script may run."
+  ],
+  [
+   "1",
+   "E119",
+   "Row 1 uses Tidy, but its `transforms:` entry doesn't declare `workdir:`. Every transform names the directory its script may touch \u2014 add `workdir: <dir>` to its entry."
+  ]
+ ]
+}

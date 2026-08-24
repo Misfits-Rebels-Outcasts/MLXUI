@@ -1,0 +1,120 @@
+{
+  "flags": [
+    "network"
+  ],
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "https://buttondown.com/pricing; as=markdown",
+      "task": "Web Fetch"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "pricing-last-week.md",
+      "task": "Read Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": true,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 1
+        },
+        {
+          "kind": "row",
+          "number": 2
+        }
+      ],
+      "settings": "format=unified",
+      "task": "Diff"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "clause": {
+        "edges": [
+          {
+            "tag": "changed",
+            "target": {
+              "kind": "row",
+              "number": 5
+            }
+          },
+          {
+            "tag": "same",
+            "target": {
+              "kind": "row",
+              "number": 7
+            }
+          }
+        ],
+        "kind": "decide"
+      },
+      "model": "Ministral 3B",
+      "refs": [],
+      "settings": "\"Meaningful change (not formatting)?\"",
+      "tags": [
+        "changed",
+        "same"
+      ],
+      "task": "Gate"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": true,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [
+        {
+          "kind": "row",
+          "number": 3
+        }
+      ],
+      "settings": "\"What changed and why it matters\"",
+      "task": "Summarize"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "pricing-alert.md",
+      "task": "Save Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 1
+        }
+      ],
+      "settings": "pricing-this-week.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

@@ -1,0 +1,66 @@
+[
+  {
+    "type": "row_started",
+    "path": "1"
+  },
+  {
+    "type": "row_completed",
+    "path": "1",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 1|Read Text||inquiry.txt#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "2"
+  },
+  {
+    "type": "row_completed",
+    "path": "2",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 2|Draft|Qwen3 8B|\"Write the reply\"|[mock:text] 1|Read Text||inquiry.txt#0#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "3"
+  },
+  {
+    "type": "row_completed",
+    "path": "3",
+    "output": {
+      "items": [
+        {
+          "kind": "status",
+          "value": "queued to outbox (b33fa7874b)",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "effect_staged",
+    "path": "3",
+    "id": "b33fa7874b",
+    "kind": "send",
+    "summary": "to outbox: [mock:text] 2|Draft|Qwen3 8B|\"Write the reply\"|[mock:text] 1\u2026"
+  },
+  {
+    "type": "run_completed"
+  }
+]

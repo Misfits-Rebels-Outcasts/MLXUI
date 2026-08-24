@@ -1,0 +1,15 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Z-Image Turbo (4-bit)",
+      "refs": [],
+      "settings": "seed=7; preset=(param:quality) \"a lighthouse at sunset, watercolor style\"",
+      "task": "Generate Image"
+    }
+  ],
+  "version": "0.8"
+}

@@ -1,0 +1,145 @@
+{
+  "flags": [
+    "events"
+  ],
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "receipts/; pattern=*.jpg; settle=10s",
+      "task": "On File"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": null,
+      "task": "Read Image"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "ledger.ctx",
+      "task": "Read Context"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 2
+        }
+      ],
+      "settings": null,
+      "task": "OCR"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"merchant, date, total, category\"",
+      "task": "Extract Structured"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "format=csv; ctx+",
+      "task": "Table to Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "ledger.ctx",
+      "task": "Save Context"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "entries",
+      "task": "Count Context"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "clause": {
+        "edges": [
+          {
+            "tag": "escalate",
+            "target": {
+              "kind": "row",
+              "number": 10
+            }
+          },
+          {
+            "tag": "normal",
+            "target": {
+              "kind": "done"
+            }
+          }
+        ],
+        "kind": "decide"
+      },
+      "model": null,
+      "refs": [],
+      "settings": "\"> 50\"",
+      "tags": [
+        "escalate",
+        "normal"
+      ],
+      "task": "Compare"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "\"{1} receipts logged since the last report — worth an early look before Sunday\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "receipts/review-needed.txt",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

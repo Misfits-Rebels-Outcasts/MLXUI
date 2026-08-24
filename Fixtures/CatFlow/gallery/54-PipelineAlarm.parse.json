@@ -1,0 +1,57 @@
+{
+  "flags": [
+    "events"
+  ],
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "IndexSelfTest.cat; status=failed; max_runs=4/day",
+      "task": "On Flow"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Ministral 3B",
+      "refs": [],
+      "settings": "\"Short alert: the index self-test failed; findings below\"",
+      "task": "Draft"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [
+        {
+          "kind": "row",
+          "number": 2
+        },
+        {
+          "kind": "row",
+          "number": 1
+        }
+      ],
+      "settings": "\"{1}\\n\\n{2}\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "alerts-outbox",
+      "task": "Stage Send"
+    }
+  ],
+  "version": "0.8"
+}

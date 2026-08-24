@@ -1,0 +1,7 @@
+catflow 0.8
+1. Range                   3..6
+2. <each variant>   [text] -> [image]
+     1. Template         "a lighthouse at sunset, watercolor style, seed {item}"
+     2. Generate Image   Z-Image Turbo (4-bit); seed={item}
+3. Contact Sheet   (2,1)   cols=2
+4. Save Image              seed-sweep.png

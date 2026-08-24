@@ -1,0 +1,27 @@
+catflow 0.8
+1. Read Text   ticket.txt
+2. Classify    Ministral 3B; "Type? tags: billing, technical, other"
+   -> { billing: 3 | technical: 5 | other: 6 }
+3. <list billing_agent>   # reads billing-kb.index inside
+     1. Read Index               billing-kb.index
+     2. Think        (input:1)   Qwen3 8B; tools: search, calculate, final; max_visits=8; on_budget=final
+        -> { search: call 3 | calculate: call 5 | final: resume }
+     3. Embed                    BGE-M3
+     4. Retrieve     (1,3)       top_k=5
+        resume
+     5. Calculate
+        resume
+4. Rewrite     Ministral 3B; "policy-safe tone"
+   -> 7
+5. <list docs_agent>   # reads docs-kb.index inside
+     1. Read Index               docs-kb.index
+     2. Think        (input:1)   Qwen3 8B; tools: search, calculate, final; max_visits=8; on_budget=final
+        -> { search: call 3 | calculate: call 5 | final: resume }
+     3. Embed                    BGE-M3
+     4. Retrieve     (1,3)       top_k=5
+        resume
+     5. Calculate
+        resume
+   -> 7
+6. Answer      Qwen3 8B; "acknowledge; summarize for a human"
+7. Save Text   reply-draft.txt

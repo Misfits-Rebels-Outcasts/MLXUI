@@ -1,0 +1,29 @@
+{
+  "models": {
+    "Alt Style": "filipstrand/Z-Image-Turbo-mflux-4bit",
+    "Base Style": "filipstrand/Z-Image-Turbo-mflux-4bit"
+  },
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Base Style",
+      "refs": [],
+      "settings": null,
+      "task": "Load Checkpoint"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Alt Style",
+      "refs": [],
+      "settings": "ratio=0.4",
+      "task": "Blend"
+    }
+  ],
+  "version": "0.8"
+}

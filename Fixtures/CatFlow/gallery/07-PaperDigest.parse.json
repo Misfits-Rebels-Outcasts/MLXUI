@@ -1,0 +1,77 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "paper.pdf; layout=markdown",
+      "task": "Read PDF"
+    },
+    {
+      "block_kind": "parallel",
+      "block_name": "two_depths",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": "Qwen3 8B",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"Contribution, method, result — 5 lines\"",
+          "task": "Summarize"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "model": "Qwen3 8B",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": "\"Practitioner notes: what could we apply, and the limitations\"",
+          "task": "Summarize"
+        }
+      ],
+      "declared_signature": "text -> [text, text]",
+      "model": null,
+      "refs": [],
+      "settings": null,
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"One digest, both depths\"",
+      "task": "Merge"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "paper-digest.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

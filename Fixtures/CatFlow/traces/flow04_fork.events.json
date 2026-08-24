@@ -1,0 +1,95 @@
+[
+  {
+    "type": "row_started",
+    "path": "1"
+  },
+  {
+    "type": "row_completed",
+    "path": "1",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 1|Transcribe|Whisper Large v3|lang=en#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "2"
+  },
+  {
+    "type": "row_completed",
+    "path": "2",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 2|Summarize|Qwen3 8B|\"TL;DR\"|[mock:text] 1|Transcribe|Whisper Large v3|lang=en#0#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "4"
+  },
+  {
+    "type": "row_completed",
+    "path": "4",
+    "output": {
+      "items": [
+        {
+          "kind": "text",
+          "value": "[mock:text] 4|Translate|Qwen3 8B|to=French|[mock:text] 1|Transcribe|Whisper Large v3|lang=en#0#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "3"
+  },
+  {
+    "type": "row_completed",
+    "path": "3",
+    "output": {
+      "items": [
+        {
+          "kind": "status",
+          "value": "[mock:status] 3|Save Text||summary.md|[mock:text] 2|Summarize|Qwen3 8B|\"TL;DR\"|[mock:text] 1|Transcribe|Whisper Large v3|lang=en#0#0#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "row_started",
+    "path": "5"
+  },
+  {
+    "type": "row_completed",
+    "path": "5",
+    "output": {
+      "items": [
+        {
+          "kind": "status",
+          "value": "[mock:status] 5|Save Text||translation.md|[mock:text] 4|Translate|Qwen3 8B|to=French|[mock:text] 1|Transcribe|Whisper Large v3|lang=en#0#0#0",
+          "path": null
+        }
+      ]
+    },
+    "duration_ms": 0
+  },
+  {
+    "type": "run_completed"
+  }
+]

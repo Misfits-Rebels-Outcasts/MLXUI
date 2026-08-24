@@ -1,0 +1,213 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "prompts.txt",
+      "task": "Read Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "declared_signature": "text -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": "by=lines",
+      "task": "Split"
+    },
+    {
+      "block_kind": "each",
+      "block_name": "compare_one",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": "list",
+          "block_name": "system_a",
+          "chain_break": false,
+          "children": [
+            {
+              "block_kind": null,
+              "block_name": null,
+              "chain_break": false,
+              "children": [],
+              "model": "Qwen3 8B",
+              "refs": [],
+              "settings": "\"Say hello in one short sentence.\"",
+              "task": "Draft"
+            }
+          ],
+          "model": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": null,
+          "task": null
+        },
+        {
+          "block_kind": "list",
+          "block_name": "system_b",
+          "chain_break": false,
+          "children": [
+            {
+              "block_kind": null,
+              "block_name": null,
+              "chain_break": false,
+              "children": [],
+              "model": "Qwen3 8B",
+              "refs": [],
+              "settings": "\"Say hello in one short sentence.\"",
+              "task": "Draft"
+            }
+          ],
+          "model": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": null,
+          "task": null
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "edges": [
+              {
+                "tag": "a",
+                "target": {
+                  "kind": "row",
+                  "number": 4
+                }
+              },
+              {
+                "tag": "b",
+                "target": {
+                  "kind": "row",
+                  "number": 5
+                }
+              }
+            ],
+            "kind": "decide"
+          },
+          "model": "Qwen3 8B",
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            },
+            {
+              "kind": "row",
+              "number": 1
+            },
+            {
+              "kind": "row",
+              "number": 2
+            }
+          ],
+          "settings": "\"Which better answers the prompt?\"",
+          "tags": [
+            "a",
+            "b"
+          ],
+          "task": "Judge"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "kind": "goto",
+            "target": {
+              "kind": "row",
+              "number": 6
+            }
+          },
+          "model": null,
+          "refs": [],
+          "settings": "\"A\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "\"B\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "\"{1}\"",
+          "task": "Template"
+        }
+      ],
+      "declared_signature": "[text] -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": null,
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "contains=\"A\"",
+      "task": "Filter"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "items",
+      "task": "Count"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "\"A preferred on {1} cases — expand row 3 for details\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "ab-report.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

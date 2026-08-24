@@ -1,0 +1,5 @@
+catflow 0.8
+1. Generate Sound   MusicGen; seed=7
+                    "calm ambient background music, soft piano, no
+                    drums, suitable under narration"
+2. Save Audio        bed.wav
