@@ -1,8 +1,8 @@
 import Foundation
 
-/// Metadata for one gallery flow — a trimmed version of
-/// `catflow-mlx/gallery/_metadata.json`'s entries (the fields CFM-R1-4 names), plus the
-/// R4-4 `notRunnableReason` (nil = runnable in this version).
+/// Metadata for one gallery flow — title/category/description only. The refusal to run is
+/// derived from the live gates (`FlowRunnability`) at load time, never a hand-written string
+/// that can go stale (CFM-R12-FIX-1).
 nonisolated struct GalleryFlowMetadata: Codable, Identifiable, Hashable, Sendable {
     /// The gallery number (1, 8, 21, …).
     var number: Int
@@ -14,8 +14,6 @@ nonisolated struct GalleryFlowMetadata: Codable, Identifiable, Hashable, Sendabl
     var category: String
     /// One-line description.
     var description: String
-    /// Why this flow can't run yet (CFM-R4-4), or nil when it's runnable.
-    var notRunnableReason: String?
 
     var id: Int { number }
 
@@ -23,9 +21,6 @@ nonisolated struct GalleryFlowMetadata: Codable, Identifiable, Hashable, Sendabl
     var flowID: String {
         (filename as NSString).deletingPathExtension
     }
-
-    /// Whether this flow can run in this version.
-    var isRunnable: Bool { notRunnableReason == nil }
 }
 
 /// Loads the bundled gallery: `_metadata.json` for the list, and a `FlowDocument` + the raw

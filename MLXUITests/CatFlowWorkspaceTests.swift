@@ -144,13 +144,6 @@ struct CatFlowWorkspaceTests {
         let metadata = GalleryLoader.loadMetadata()
         // The full gallery ships: 69 entries (66 .cat + 3 .catpipeline).
         #expect(metadata.count == 69)
-        // R7-FIX-2 + R10-Human/Store: the interpreter-runnable flows (46) carry no reason.
-        #expect(metadata.filter { $0.isRunnable }.count == 48)
-        // A genuinely-not-runnable flow carries an honest reason (CFM-R4-4) — 38-ReplyApproval
-        // is blocked by its staged row, not its human row.
-        let reply = try #require(metadata.first { $0.flowID == "38-ReplyApproval" })
-        #expect(reply.notRunnableReason != nil)
-        #expect(reply.notRunnableReason?.contains("staged") == true)
         let spoken = try #require(metadata.first { $0.flowID == "01-SpokenSummary" })
         #expect(spoken.title == "Spoken Summary")
         #expect(spoken.number == 1)

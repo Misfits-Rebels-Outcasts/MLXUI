@@ -688,11 +688,9 @@ struct FlowListView: View {
     /// (bundled gallery vs. the user's shelf) — never a faked `GalleryFlowMetadata`.
     private var display: FlowDisplay? {
         if let metadata { return FlowDisplay(title: metadata.title,
-                                             description: metadata.description,
-                                             notRunnableReason: metadata.notRunnableReason) }
+                                             description: metadata.description) }
         if let userEntry { return FlowDisplay(title: userEntry.title,
-                                              description: nil,
-                                              notRunnableReason: nil) }
+                                              description: nil) }
         return nil
     }
 
@@ -719,15 +717,14 @@ struct FlowListView: View {
         serializedLines = serialized.lines
         lineRanges = serialized.lineRanges
 
-        // The metadata's not-runnable reason is authoritative for structurally-unsupported
-        // flows (.catpipeline, blocks, deciders…); `FlowRunner.canRun` below is the backstop
-        // for a flow the metadata *wrongly* marks runnable (B3).
-        if let meta = metadata, meta.notRunnableReason != nil {
-            notRunnableReason = meta.notRunnableReason
-            return
-        }
-        // Derive the refusal from the language gates, not the JSON string (B3).
-        if case .notRunnable(let reason) = FlowRunner.canRun(doc) {
+        // CFM-R12-FIX-1: the refusal comes from the live gates (canRun + preflight), never
+        // from a hand-written `_metadata.json` string that can go stale. `FlowRunnability`
+        // covers language/doors/tools AND the model-preflight (a row whose model has no
+        // bridge entry) + RAM.
+        let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
+        if let reason = FlowRunnability.refusalReason(for: doc, catalog: catalog,
+                                                      installed: appState.installedModelIDs,
+                                                      totalRAMGB: appState.systemInfo.totalRAMGB) {
             notRunnableReason = reason
             return
         }
@@ -770,7 +767,11 @@ struct FlowListView: View {
         serializedLines = serialized.lines
         lineRanges = serialized.lineRanges
 
-        if case .notRunnable(let reason) = FlowRunner.canRun(doc) {
+        // CFM-R12-FIX-1: a user flow's refusal is the same live gates a bundled flow's is.
+        let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
+        if let reason = FlowRunnability.refusalReason(for: doc, catalog: catalog,
+                                                      installed: appState.installedModelIDs,
+                                                      totalRAMGB: appState.systemInfo.totalRAMGB) {
             notRunnableReason = reason
             return
         }
@@ -796,5 +797,4 @@ struct FlowListView: View {
 nonisolated struct FlowDisplay {
     let title: String
     let description: String?
-    let notRunnableReason: String?
 }

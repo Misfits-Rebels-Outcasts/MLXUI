@@ -164,11 +164,8 @@ struct CatFlowStoreDoorTests {
     // MARK: - The 56 flow's shape runs
 
     @Test func orderTriageQueueIsRunnableNow() throws {
-        // canRun already allowed store rows; the metadata was the only gate. Confirm the
-        // flow is runnable and 56's reason is gone from the metadata.
+        // canRun already allowed store rows; CFM-R12-FIX-1 removed the metadata gate.
         let doc = try GalleryLoader.loadDocument(flowID: "56-OrderTriageQueue")
         #expect(FlowRunner.canRun(doc) == .runnable)
-        let meta = try #require(GalleryLoader.loadMetadata().first { $0.flowID == "56-OrderTriageQueue" })
-        #expect(meta.isRunnable)
     }
 }

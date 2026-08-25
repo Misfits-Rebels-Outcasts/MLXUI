@@ -154,9 +154,9 @@ struct FlowGalleryView: View {
                     Image(systemName: "flowchart")
                         .foregroundStyle(.secondary)
                     Spacer()
-                    // CFM-R12-4: the badge tells the truth — metadata's notRunnableReason
-                    // *or* a live `canRun` refusal (unported tools, net/staged/agent).
-                    if !flow.isRunnable || appState.galleryBlocked.contains(flow.flowID) {
+                    // CFM-R12-FIX-1: the badge's ⚠ comes from the live gates
+                    // (`appState.galleryBlocked`), never a stale metadata string.
+                    if appState.galleryBlocked.contains(flow.flowID) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
                             .accessibilityLabel("Not runnable yet")

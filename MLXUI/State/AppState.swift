@@ -130,13 +130,17 @@ final class AppState {
                                              bundledFlowIDs: bundled)
     }
 
-    /// CFM-R12-4: recompute which bundled flows `canRun` refuses (the ⚠ badges). Called when
-    /// the gallery appears — parsing ~66 small files once per appearance is cheap.
+    /// CFM-R12-4: recompute which bundled flows are refused (the ⚠ badges) from the **live**
+    /// gates — `FlowRunner.canRun` + the model preflight, never a stale metadata string
+    /// (CFM-R12-FIX-1). Called when the gallery appears.
     func refreshGalleryBlocked() {
+        let catalog = browserData?.domains.flatMap { $0.allModels } ?? []
         var blocked: Set<String> = []
         for flow in galleryEntries {
             if let doc = try? GalleryLoader.loadDocument(flowID: flow.flowID),
-               case .notRunnable = FlowRunner.canRun(doc) {
+               FlowRunnability.refusalReason(for: doc, catalog: catalog,
+                                             installed: installedModelIDs,
+                                             totalRAMGB: systemInfo.totalRAMGB) != nil {
                 blocked.insert(flow.flowID)
             }
         }

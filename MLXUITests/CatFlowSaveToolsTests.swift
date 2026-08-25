@@ -95,15 +95,28 @@ struct CatFlowSaveToolsTests {
         #expect(FileManager.default.fileExists(atPath: flowDir.appendingPathComponent("saved/clip.mp4").path))
     }
 
-    /// R12-5's done-when + the unhide audit: porting `Save Image` unblocked 61–65; R12-7
-    /// group d (Watermark, Range, Contact Sheet) unblocked the rest of 60/66. The unhide
-    /// decision (AppState.hiddenFlowNumbers) is handed to the owner in the journal.
+    /// CFM-R12-FIX-1/12 honesty check: Save Image made the *tools* runnable, but of flows
+    /// 60–66 only **65-VoiceoverBed** has a model the bridge can actually run. The rest
+    /// refuse at the live gate (Generate Image / Upscale / Edit Image / Segment have no
+    /// bridge model) — canRun alone proved less than it appeared to.
     @Test func flowsUnblockedBySaveImageAreRunnableNow() throws {
-        let runnable = ["61-EditInPlace", "62-SeeDepth", "63-CutOutSubject", "64-UpscaleSmall", "65-VoiceoverBed",
-                        "60-GenerateProductShot", "66-SeedSweep", "21-PhotoWebPrep"]
-        for fid in runnable {
-            let doc = try GalleryLoader.loadDocument(flowID: fid)
-            #expect(FlowRunner.canRun(doc) == .runnable, "\(fid) should be runnable after Save Image + group d")
+        let catalog = try makeCatalog()
+        func runs(_ fid: String) -> String? {
+            guard let doc = try? GalleryLoader.loadDocument(flowID: fid) else { return "no doc" }
+            return FlowRunnability.refusalReason(for: doc, catalog: catalog,
+                                                 installed: [], totalRAMGB: 32)
         }
+        #expect(runs("65-VoiceoverBed") == nil)
+        for fid in ["61-EditInPlace", "62-SeeDepth", "63-CutOutSubject", "64-UpscaleSmall",
+                    "60-GenerateProductShot", "66-SeedSweep"] {
+            let reason = runs(fid)
+            #expect(reason != nil, "\(fid) should refuse at the live gate (no bridge model)")
+        }
+    }
+
+    private func makeCatalog() throws -> [ModelEntry] {
+        let url = try #require(Bundle.main.url(forResource: "browser", withExtension: "json"))
+        let browser = try JSONDecoder().decode(BrowserData.self, from: Data(contentsOf: url))
+        return browser.domains.flatMap { $0.allModels }
     }
 }
