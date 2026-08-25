@@ -168,7 +168,11 @@ nonisolated struct ReadFilesTool: AssetStage {
             .lowercased() == "true"
         var files: [URL] = []
         if recursive {
-            if let enumerator = fm.enumerator(at: folder, includingPropertiesForKeys: nil),
+            // R13-8: same `.skipsHiddenFiles` treatment as the flat branch — the Save-*
+            // tools' `.trash/` lives in the folder they overwrite, and a re-run's glob must
+            // not pick up the trashed copies.
+            if let enumerator = fm.enumerator(at: folder, includingPropertiesForKeys: nil,
+                                              options: [.skipsHiddenFiles]),
                let contents = enumerator.allObjects as? [URL] {
                 files = contents.filter { !$0.hasDirectoryPath }
             }

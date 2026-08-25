@@ -153,6 +153,26 @@ struct CatFlowReadToolsTests {
         #expect(out.items.count == 2)
     }
 
+    @Test func readFilesRecursiveSkipsTrash() async throws {
+        // R13-8: the recursive branch got the same `.skipsHiddenFiles` as the flat one —
+        // a `Save *` overwrite leaves `.trash/` beside the file, and a re-run's glob must
+        // not enumerate the trashed copies.
+        let (ws, base) = try makeWorkspace()
+        defer { teardown(base) }
+
+        let flowDir = ws.directory(for: "sample-flow")
+        let folder = flowDir.appendingPathComponent("docs", isDirectory: true)
+        let trash = folder.appendingPathComponent(".trash", isDirectory: true)
+        try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+        try Data("one".utf8).write(to: folder.appendingPathComponent("a.txt"))
+        try Data("stale".utf8).write(to: trash.appendingPathComponent("a.txt.1728000000000"))
+
+        let tool = ReadFilesTool(workspace: ws, flowID: "sample-flow", settings: "docs; recursive=true; pattern=*.txt")
+        let out = try await tool.run(Asset(items: [])) { _ in }
+        let names = out.items.map { $0.path?.lastPathComponent ?? "?" }
+        #expect(names == ["a.txt"])
+    }
+
     // MARK: - Read PDF
 
     @Test func readPDFExtractsSelectableText() async throws {

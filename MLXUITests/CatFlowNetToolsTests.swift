@@ -112,4 +112,32 @@ struct CatFlowNetToolsTests {
             _ = try await NetTools.httpGet("file:///etc/passwd")
         }
     }
+
+    // MARK: - Download File overwrite (R13-8)
+
+    /// R13-8: `DownloadFileTool`'s overwrite now ends in `FlowParity.replace(dest:with:)` —
+    /// the same §14.1 seam the Save-* tools' overwrites use, so the old file is **trashed,
+    /// never deleted**. A full-fetch version of this test can't run in the sandboxed test
+    /// scheme (it may not exec a `python3` fixture server or accept loopback), so the seam
+    /// itself is pinned here, exactly as `saveImageTrashesTheOverwrite` pins `moveToTrash`.
+    @Test func downloadOverwriteTrashesThePreviousFile() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-download-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let dest = base.appendingPathComponent("out.bin")
+        try Data("payload v1".utf8).write(to: dest)
+        let tmp = base.appendingPathComponent(".out.bin.tmp")
+        try Data("payload v2".utf8).write(to: tmp)
+
+        try FlowParity.replace(dest: dest, with: tmp)
+
+        #expect(try String(contentsOf: dest, encoding: .utf8) == "payload v2")
+        let trash = base.appendingPathComponent(".trash", isDirectory: true)
+        let trashed = (try FileManager.default.contentsOfDirectory(atPath: trash.path))
+            .filter { $0.hasPrefix("out.bin.") }
+        #expect(trashed.count == 1, "the overwritten file must be trashed, not deleted")
+        #expect(!FileManager.default.fileExists(atPath: tmp.path), "the temp file is consumed by the move")
+    }
 }

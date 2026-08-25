@@ -162,8 +162,9 @@ nonisolated struct DownloadFileTool {
         let tmp = dest.deletingLastPathComponent()
             .appendingPathComponent(".\(dest.lastPathComponent).tmp\(UUID().uuidString)")
         try body.write(to: tmp)
-        if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
-        try fm.moveItem(at: tmp, to: dest)
+        // R13-8: the overwrite follows the same §14.1 rule every other tool uses — the old
+        // file is trashed, never deleted.
+        try FlowParity.replace(dest: dest, with: tmp)
         return Asset(items: [Item(kind: .file, value: nil, path: dest, sourceText: nil)])
     }
 }

@@ -32,4 +32,14 @@ nonisolated enum FlowParity {
         let dest = trash.appendingPathComponent("\(url.lastPathComponent).\(stamp)")
         try fm.moveItem(at: url, to: dest)
     }
+
+    /// Atomically replace *dest* with *tmp*, trashing the previous *dest* first (R13-8).
+    /// `DownloadFileTool`'s copy-to-temp-then-replace ends here, so the §14.1 rule has one
+    /// call site for every overwrite — a canceled copy never leaves a half file, and an
+    /// overwritten file never disappears.
+    static func replace(dest: URL, with tmp: URL) throws {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: dest.path) { try moveToTrash(dest) }
+        try fm.moveItem(at: tmp, to: dest)
+    }
 }
