@@ -58,9 +58,23 @@ struct FlowSerializedRow: View {
                     .help("This row's output was already computed — it was replayed from the flow cache, not recomputed.")
             }
         }
+        semanticParallelNote()
         .padding(.vertical, 4)
         .contentShape(Rectangle())
         .simultaneousGesture(TapGesture().onEnded { onSelect() })
         .help(isSemanticParallel ? "Runs its chains one at a time — semantic parallel, not concurrent." : "")
+    }
+
+    /// CFM-R12-10: a `<parallel>` block says plainly what it does — one chain at a time —
+    /// so nobody infers speed from the word "parallel".
+    @ViewBuilder
+    private func semanticParallelNote() -> some View {
+        if isSemanticParallel {
+            Text("semantic parallel — runs one chain at a time, not faster")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(.leading, 28)
+                .padding(.bottom, 2)
+        }
     }
 }

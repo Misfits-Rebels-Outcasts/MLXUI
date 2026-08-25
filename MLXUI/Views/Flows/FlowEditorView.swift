@@ -323,6 +323,13 @@ struct FlowEditorView: View {
                     Label("Remove", systemImage: "trash")
                 }
             }
+            // CFM-R12-10: a `<parallel>` block says plainly that it runs one chain at a time.
+            if row.blockKind == .parallel {
+                Text("semantic parallel — runs one chain at a time, not faster")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 28 + CGFloat(depth) * 20)
+            }
             if let warning = model.warning(for: row.id) {
                 Text(warning)
                     .font(.caption)
