@@ -53,4 +53,20 @@ struct CatFlowEntityToolsTests {
         let ada = rows.first { $0[1] as? String == "Ada" }
         #expect(ada?[2] as? String == "leads")
     }
+
+    /// CFM-R12-FIX-7: widening tables appends new columns in **source order** (the Python's
+    /// insertion-ordered pairs) — a Set order would change the schema/bytes/cache key.
+    @Test func appendRowWidensInSourceOrder() async throws {
+        let (ws, base) = try makeWorkspace()
+        defer { teardown(base) }
+        let flowDir = ws.directory(for: "f")
+        try FileManager.default.createDirectory(at: flowDir, withIntermediateDirectories: true)
+        let table = flowDir.appendingPathComponent("t.table")
+        try TableTool.writeTable(columns: ["name"], rows: [["Ada"]], to: table)
+
+        let item = Item(kind: .table, value: nil, path: table, sourceText: nil)
+        let out = try TableTool.appendRow(settings: "sales=25; region=EU; tier=gold", from: item)
+        let (columns, _) = try TableTool.readTable(from: try #require(out.items.first?.path))
+        #expect(columns == ["name", "sales", "region", "tier"])
+    }
 }

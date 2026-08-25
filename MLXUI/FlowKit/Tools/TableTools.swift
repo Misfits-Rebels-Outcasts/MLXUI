@@ -287,11 +287,12 @@ nonisolated enum TableTool {
         }
         var (columns, rows) = try readTable(from: path)
         let s = FlowSettings(settings)
-        guard !s.testKeys.isEmpty else {
+        // CFM-R12-FIX-7: source-order pairs (deterministic widening).
+        let pairs = s.orderedPairs
+        guard !pairs.isEmpty else {
             throw FlowError.stageFailure(row: "Set Field", message: "needs at least one `field=value` setting")
         }
-        for field in s.testKeys {
-            let raw = s.value(for: field) ?? ""
+        for (field, raw) in pairs {
             let value = coerce(raw)
             if let idx = columns.firstIndex(of: field) {
                 for i in rows.indices { rows[i][idx] = value }
@@ -313,10 +314,13 @@ nonisolated enum TableTool {
         }
         var (columns, rows) = try readTable(from: path)
         let s = FlowSettings(settings)
-        guard !s.testKeys.isEmpty else {
+        // CFM-R12-FIX-7: widen in source order (the Python's insertion-ordered pairs), never
+        // a Set's iteration order — deterministic schema/bytes/cache key.
+        let pairs = s.orderedPairs
+        guard !pairs.isEmpty else {
             throw FlowError.stageFailure(row: "Append Row", message: "needs at least one `field=value` setting")
         }
-        for field in s.testKeys where !columns.contains(field) {
+        for (field, _) in pairs where !columns.contains(field) {
             columns.append(field)
             for i in rows.indices { rows[i].append(nil) }
         }

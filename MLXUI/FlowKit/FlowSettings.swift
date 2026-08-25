@@ -13,12 +13,22 @@ nonisolated struct FlowSettings {
     private let pairs: [String: String]
     private let multiPairs: [String: [String]]
     private let bare: [String]
+    /// CFM-R12-FIX-7: the `key=` pair keys in **source order** (the Python's insertion-
+    /// ordered `s.pairs`), so table-widening tools produce a deterministic column order —
+    /// a `Set` iteration order would change the schema, the on-disk bytes and the cache key.
+    let orderedKeys: [String]
+
+    /// The `key=value` pairs in source order (Python `s.pairs`).
+    var orderedPairs: [(key: String, value: String)] {
+        orderedKeys.map { ($0, pairs[$0] ?? "") }
+    }
 
     init(_ raw: String?) {
         let text = raw ?? ""
         var pairs: [String: String] = [:]
         var multiPairs: [String: [String]] = [:]
         var bare: [String] = []
+        var orderedKeys: [String] = []
         let regex = NSRegularExpression.compiled(#"(?:lora|controlnet)=[^;]*|[A-Za-z_][A-Za-z0-9_]*="(?:[^"\\]|\\.)*"|"(?:[^"\\]|\\.)*"|[^\s;]+"#)
         let ns = NSRange(text.startIndex..<text.endIndex, in: text)
         for match in regex.matches(in: text, range: ns) {
@@ -32,6 +42,7 @@ nonisolated struct FlowSettings {
                 let key = String(token[..<eq])
                 let value = String(token[token.index(after: eq)...])
                 if Self.isValidKey(key) {
+                    if pairs[key] == nil { orderedKeys.append(key) }
                     let unquoted = Self.unquote(value)
                     pairs[key] = unquoted
                     multiPairs[key, default: []].append(unquoted)
@@ -45,6 +56,7 @@ nonisolated struct FlowSettings {
         self.pairs = pairs
         self.multiPairs = multiPairs
         self.bare = bare
+        self.orderedKeys = orderedKeys
     }
 
     /// `re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key)` — a token only becomes a pair when its
