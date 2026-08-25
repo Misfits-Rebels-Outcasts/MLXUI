@@ -267,6 +267,9 @@ nonisolated struct RealExecutor: FlowExecutor {
         case "Mux":
             return try await MuxTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
                 .run(inputs: inputs)
+        case "Join Video":
+            return try await JoinVideoTool(workspace: workspace, flowID: flowID)
+                .run(inputs: inputs)
         case "Detect Edges":
             return try await DetectEdgesTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
                 .run(inputs.first ?? Asset(items: [])) { _ in }

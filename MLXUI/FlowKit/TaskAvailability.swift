@@ -19,7 +19,8 @@ nonisolated enum TaskAvailability {
         case refusedByChannel(reason: String)
     }
 
-    /// The instant tools with a real `case` in `RealExecutor.runInstant` (45 today).
+    /// The instant tools with a real `case` in `RealExecutor.runInstant` (46 today — the
+    /// catalog has zero unported instant tools since R13-3 ported Join Video).
     static let supportedInstantTools: Set<String> = [
         "Read Audio", "Read Text", "Read Image", "Read Images", "Read Files", "Read PDF",
         "Read Index", "Read Context", "Read Video",
@@ -28,6 +29,7 @@ nonisolated enum TaskAvailability {
         "Count Context", "Calculate", "Compare", "Range", "Chart",
         "Resize", "Crop", "Convert", "Watermark", "Overlay Text", "Contact Sheet",
         "Extract Frame", "Extract Audio", "Trim", "Mux", "Detect Edges", "Detect Pose",
+        "Join Video",
         "Split", "Filter", "Dedupe", "Sort", "Extract", "Count", "Join Text", "Template",
         "Read CSV", "Read JSON", "Query Table", "Set Field", "Table to Text", "Append Row", "Merge Record",
         "Store Query", "Store Read", "Store Write", "Diff",

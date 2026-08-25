@@ -4,7 +4,7 @@ import CoreGraphics
 
 // CFM-R12-7 group e — the video/audio tools, **AVFoundation subset** (owner ruling 2026-08-25: "AVFoundation subset (Recommended)" —
 // no ffmpeg, no entitlement). Trim / Extract Frame / Extract Audio / Mux for common formats;
-// `Read Video` is file-backed; `Join Video` stays honestly unported.
+// `Read Video` is file-backed; `Join Video` was the last unported instant tool (R13-3).
 
 /// Shared AVFoundation plumbing for the video tools.
 nonisolated enum VideoTools {
@@ -210,6 +210,102 @@ nonisolated struct MuxTool {
         guard let session = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else {
             throw FlowError.stageFailure(row: "Mux", message: "no compatible export preset")
         }
+        session.outputURL = out
+        session.outputFileType = .mp4
+        try await VideoTools.export(session)
+        return Asset(items: [Item(kind: .video, value: nil, path: out, sourceText: nil)])
+    }
+}
+
+/// `Join Video` (video list → video): concatenate clips in list order — the last unported
+/// instant tool (R13-3). Same-size clips insert into one `AVMutableComposition` (video +
+/// audio) and export re-encoded as `.mp4`. A clip whose **display size** disagrees with the
+/// first is refused with a plain sentence naming the mismatch — never silently letterboxed,
+/// cropped, or dropped. The Python's `ffmpeg -c copy` concat has the same constraint: the
+/// concat demuxer requires identical parameters, and ffmpeg refuses loudly when they differ
+/// (the App Store build has no ffmpeg, so this is the AVFoundation equivalent of that
+/// loud refusal, ahead of any export work).
+nonisolated struct JoinVideoTool {
+    let workspace: FlowWorkspace
+    let flowID: String
+
+    func run(inputs: [Asset]) async throws -> Asset {
+        let paths = inputs.flatMap { $0.items }.compactMap { $0.path }
+        guard paths.count >= 2 else {
+            throw FlowError.stageFailure(row: "Join Video",
+                                         message: "needs at least two videos to join")
+        }
+
+        // Load every clip's video track and display size up front, so the honest refusal
+        // happens before any composition work (rule 5: refuse, never approximate).
+        var clips: [(url: URL, track: AVAssetTrack, size: CGSize)] = []
+        for (index, path) in paths.enumerated() {
+            let asset = AVURLAsset(url: path)
+            guard let track = try await asset.loadTracks(withMediaType: .video).first else {
+                throw FlowError.stageFailure(row: "Join Video",
+                                             message: "clip \(index + 1) has no video track")
+            }
+            let natural = try await track.load(.naturalSize)
+            let transform = try await track.load(.preferredTransform)
+            let rotated = natural.applying(transform)
+            let size = CGSize(width: abs(rotated.width), height: abs(rotated.height))
+            clips.append((path, track, size))
+        }
+        let first = clips[0].size
+        for clip in clips.dropFirst() where abs(clip.size.width - first.width) > 1
+            || abs(clip.size.height - first.height) > 1 {
+            throw FlowError.stageFailure(row: "Join Video",
+                message: "the clips don't match — clip 1 is \(Int(first.width))×\(Int(first.height)), "
+                    + "another is \(Int(clip.size.width))×\(Int(clip.size.height)). Join Video needs same-size clips.")
+        }
+
+        let composition = AVMutableComposition()
+        guard let videoTrack = composition.addMutableTrack(withMediaType: .video,
+                                                           preferredTrackID: kCMPersistentTrackID_Invalid) else {
+            throw FlowError.stageFailure(row: "Join Video", message: "couldn't build the composition")
+        }
+        var cursor = CMTime.zero
+        var audioTrack: AVMutableCompositionTrack?  // added only if any clip carries audio
+        for clip in clips {
+            let asset = AVURLAsset(url: clip.url)
+            let duration = try await asset.load(.duration)
+            let range = CMTimeRange(start: .zero, duration: duration)
+            if let sourceVideo = try await asset.loadTracks(withMediaType: .video).first {
+                try videoTrack.insertTimeRange(range, of: sourceVideo, at: cursor)
+            }
+            if let sourceAudio = try await asset.loadTracks(withMediaType: .audio).first {
+                if audioTrack == nil {
+                    audioTrack = composition.addMutableTrack(withMediaType: .audio,
+                                                             preferredTrackID: kCMPersistentTrackID_Invalid)
+                }
+                if let audioTrack {
+                    try audioTrack.insertTimeRange(range, of: sourceAudio, at: cursor)
+                }
+            }
+            cursor = CMTimeAdd(cursor, duration)
+        }
+
+        let blobDir = workspace.directory(for: flowID).appendingPathComponent(".blobs")
+        try FileManager.default.createDirectory(at: blobDir, withIntermediateDirectories: true)
+        let out = blobDir.appendingPathComponent("joined-\(UUID().uuidString).mp4")
+        guard let session = AVAssetExportSession(asset: composition,
+                                                 presetName: AVAssetExportPresetHighestQuality) else {
+            throw FlowError.stageFailure(row: "Join Video", message: "no compatible export preset")
+        }
+        // An explicit video composition — AVFoundation can't always infer render size /
+        // frame duration for a multi-insert composition, and a plain export then fails with
+        // "The operation is not supported for this media." The render size is the first
+        // clip's (the size check guarantees they all agree).
+        let fps = max(Int(clips[0].track.nominalFrameRate), 1)
+        let videoComposition = AVMutableVideoComposition()
+        videoComposition.renderSize = clips[0].size
+        videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(fps))
+        let instruction = AVMutableVideoCompositionInstruction()
+        instruction.timeRange = CMTimeRange(start: .zero, duration: cursor)
+        let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: videoTrack)
+        instruction.layerInstructions = [layerInstruction]
+        videoComposition.instructions = [instruction]
+        session.videoComposition = videoComposition
         session.outputURL = out
         session.outputFileType = .mp4
         try await VideoTools.export(session)

@@ -56,16 +56,25 @@ struct CatFlowTaskAvailabilityTests {
 
     // MARK: - canRun refuses before the install prompt
 
-    @Test func canRunRefusesAFlowWithAnUnportedInstantTool() {
+    @Test func canRunRefusesAFlowWithAnUnportedNetTool() {
         let doc = FlowDocument(version: "0.8", rows: [
-            Row(id: UUID(), task: "Join Video", settings: "clips/"),
+            Row(id: UUID(), task: "Web Search", settings: "query=hi"),
         ])
         guard case .notRunnable(let reason) = FlowRunner.canRun(doc) else {
             Issue.record("expected notRunnable")
             return
         }
-        #expect(reason.contains("Join Video"))
+        #expect(reason.contains("Web Search"))
         #expect(reason.contains("doesn't run yet"))
+    }
+
+    @Test func canRunAllowsJoinVideoNowThatItIsPorted() {
+        // R13-3: Join Video was the last unported instant tool; a flow using it is runnable.
+        let doc = FlowDocument(version: "0.8", rows: [
+            Row(id: UUID(), task: "Read Video", settings: "clips/a.mp4"),
+            Row(id: UUID(), task: "Join Video", settings: ""),
+        ])
+        #expect(FlowRunner.canRun(doc) == .runnable)
     }
 
     @Test func canRunStillAllowsAPortedInstantFlow() {
@@ -109,11 +118,11 @@ struct CatFlowTaskAvailabilityTests {
         for task in TaskCatalog.allTasks() {
             #expect((TaskAvailability.marker(for: task) != nil) != TaskAvailability.isAvailable(task.name))
         }
-        // The only unported instant tool is Join Video.
+        // Every instant tool is ported since R13-3 (Join Video was the last).
         let unportedInstant = TaskCatalog.entries.filter {
             $0.taskClass == .instant && !TaskAvailability.supportedInstantTools.contains($0.name)
         }.map(\.name)
-        #expect(unportedInstant == ["Join Video"])
+        #expect(unportedInstant == [])
     }
 
     /// CFM-R12-FIX-12: a model task's availability agrees with `CatalogBridge` — a task is

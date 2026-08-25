@@ -73,11 +73,11 @@ struct CatFlowVisionToolsTests {
         #expect(img.height == 160)
     }
 
-    @Test func onlyJoinVideoIsUnportedNow() {
-        // Every instant catalog tool except Join Video has a real dispatch.
+    @Test func everyInstantToolIsPortedNow() {
+        // R13-3: Join Video was the last unported instant tool; the catalog is at zero.
         let unported = TaskCatalog.entries.filter {
             $0.taskClass == .instant && !TaskAvailability.supportedInstantTools.contains($0.name)
         }.map(\.name)
-        #expect(unported == ["Join Video"])
+        #expect(unported == [])
     }
 }
