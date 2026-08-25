@@ -27,7 +27,7 @@ nonisolated enum TaskAvailability {
         "Store Index", "Retrieve", "Keyword Search",
         "Count Context", "Calculate", "Compare", "Range", "Chart",
         "Resize", "Crop", "Convert", "Watermark", "Overlay Text", "Contact Sheet",
-        "Extract Frame", "Extract Audio", "Trim", "Mux",
+        "Extract Frame", "Extract Audio", "Trim", "Mux", "Detect Edges", "Detect Pose",
         "Split", "Filter", "Dedupe", "Sort", "Extract", "Count", "Join Text", "Template",
         "Read CSV", "Read JSON", "Query Table", "Set Field", "Table to Text", "Append Row", "Merge Record",
         "Store Query", "Store Read", "Store Write", "Diff",

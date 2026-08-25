@@ -243,6 +243,12 @@ nonisolated struct RealExecutor: FlowExecutor {
         case "Mux":
             return try await MuxTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
                 .run(inputs: inputs)
+        case "Detect Edges":
+            return try await DetectEdgesTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Detect Pose":
+            return try await DetectPoseTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
         case "Read JSON":
             return try TableTool.readJSON(settings: row.settings, from: try resolveFile(row: row, inputs: inputs))
         case "Read Context":

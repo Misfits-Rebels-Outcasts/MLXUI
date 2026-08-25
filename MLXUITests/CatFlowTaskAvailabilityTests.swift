@@ -94,13 +94,12 @@ struct CatFlowTaskAvailabilityTests {
     }
 
     @Test func everyUnavailableTaskGetsAPickerMarker() {
-        // Group e ported Read Video/Extract Frame/Extract Audio/Trim/Mux; Join Video stays
-        // unported. 3 instant tools unported (Join Video, Detect Edges, Detect Pose).
-        // Markers = 3 + 5 net + Improvise (App Store) = 9.
+        // Group f ported Detect Edges/Detect Pose: the only unported instant tool is Join
+        // Video. Markers = 1 + 5 net + Improvise (App Store) = 7.
         let unportedInstant = TaskCatalog.entries.filter {
             $0.taskClass == .instant && !TaskAvailability.supportedInstantTools.contains($0.name)
         }.count
-        #expect(unportedInstant == 3)
+        #expect(unportedInstant == 1)
         #expect(TaskCatalog.entries.filter { $0.taskClass == .net }.count == 5)
 
         let expectedUnavailable = TaskCatalog.allTasks().filter {
@@ -113,7 +112,7 @@ struct CatFlowTaskAvailabilityTests {
             }
         }
         #expect(expectedUnavailable.map(\.name).sorted() == computedUnavailable.map(\.name).sorted())
-        #expect(expectedUnavailable.count == 9)   // 3 + 5 + Improvise (App Store)
+        #expect(expectedUnavailable.count == 7)   // 1 + 5 + Improvise (App Store)
         // Every one is labeled, and every available one is not.
         for task in TaskCatalog.allTasks() {
             #expect((TaskAvailability.marker(for: task) != nil) != TaskAvailability.isAvailable(task.name))
