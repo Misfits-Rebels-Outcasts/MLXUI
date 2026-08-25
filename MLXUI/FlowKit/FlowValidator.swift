@@ -639,7 +639,8 @@ extension FlowValidator {
 
     /// `check_flow(flow, registry)` — run every check; issues in row order.
     static func checkFlow(_ flow: ParsedFlow, registry: (any FlowRegistry)? = nil,
-                          workspace: FlowWorkspace? = nil, flowID: String? = nil) -> [FlowIssue] {
+                          workspace: FlowWorkspace? = nil, flowID: String? = nil,
+                          rootFile: URL? = nil) -> [FlowIssue] {
         var issues: [FlowIssue] = []
         let isV08 = flow.version == "0.8"
         let isV04 = ["0.4", "0.7", "0.8"].contains(flow.version)
@@ -657,7 +658,8 @@ extension FlowValidator {
             checkRateBudget(flow.rows, issues: &issues, isV08: isV08, transforms: flow.transforms)
             checkPipelineRules(flow, issues: &issues)
             checkModelsPinned(flow.rows, models: flow.models, registry: registry, issues: &issues)
-            checkDoors(flow, issues: &issues, workspace: workspace, flowID: flowID)
+            checkDoors(flow, issues: &issues, workspace: workspace, flowID: flowID,
+                       registry: registry, rootFile: rootFile)
         }
         if isV08, !flow.uses.isEmpty {
             checkUsesAllNamed(flow.rows, uses: flow.uses, issues: &issues)
@@ -672,7 +674,8 @@ extension FlowValidator {
     /// The `uses:` checks (E114–E117) need a workspace + flowID to resolve sibling flows;
     /// without them they are skipped (the editor always passes both).
     static func checkDoors(_ flow: ParsedFlow, issues: inout [FlowIssue],
-                           workspace: FlowWorkspace?, flowID: String?) {
+                           workspace: FlowWorkspace?, flowID: String?,
+                           registry: (any FlowRegistry)? = nil, rootFile: URL? = nil) {
         let flags = Set(flow.flags)
 
         // E109: an `Improvise` row without the `improvise` header flag.
@@ -733,55 +736,201 @@ extension FlowValidator {
         }
         // E114–E117: the `uses:` checks (sibling-flow resolution; needs the workspace).
         if let workspace, let flowID, !flow.uses.isEmpty {
-            checkUsesDoors(flow, issues: &issues, workspace: workspace, flowID: flowID)
+            checkUsesDoors(flow, issues: &issues, workspace: workspace, flowID: flowID,
+                           registry: registry, rootFile: rootFile)
         }
     }
 
-    /// E114–E117 — `uses:` path outside the folder, cycle, invalid used flow, and the
-    /// transitive capability propagation (a used flow's `code`/`improvise`/`offdevice`
-    /// must be declared here too — R28).
+    /// E114–E117 — a port of `core/uses.py::_resolve_level` (R13-1). A broken entry
+    /// reports its E114/E115/E116 and `continue`s to the next entry (a second `uses:`
+    /// entry is still checked after a first escape), the anchor comes from
+    /// `_first_row_naming` — the lowest-numbered top-level row that calls the entry,
+    /// "1" when nothing does — and every entry that reads, parses and checks clean is
+    /// recursed into before its reachable capabilities propagate to this flow (E117).
     static func checkUsesDoors(_ flow: ParsedFlow, issues: inout [FlowIssue],
-                               workspace: FlowWorkspace, flowID: String) {
-        for (name, path) in flow.uses.sorted(by: { $0.key < $1.key }) {
-            // E115 cycle detection + E117 propagation run together over the chain.
-            var visited: Set<String> = []
-            var chain: [String] = []
-            var cycle = false
-            var inherited = Set<String>()
-            var usedInvalid: (String, String)?
+                               workspace: FlowWorkspace, flowID: String,
+                               registry: (any FlowRegistry)? = nil, rootFile: URL? = nil) {
+        let flowDir = workspace.directory(for: flowID)
+        _ = resolveUsesLevel(flow, flowDir: flowDir, workspace: workspace, flowID: flowID,
+                             stack: rootFile.map { [$0] } ?? [],
+                             registry: registry, issues: &issues)
+    }
 
-            func reach(_ entryPath: String) {
-                if visited.contains(entryPath) { cycle = true; return }
-                visited.insert(entryPath)
-                chain.append(entryPath)
-                guard let url = try? workspace.resolve(entryPath, flowID: flowID) else { return }
-                guard let text = try? String(contentsOf: url, encoding: .utf8),
-                      let used = try? CatParser.parseForValidation(text) else {
-                    if usedInvalid == nil { usedInvalid = (name, entryPath) }
-                    return
-                }
-                inherited.formUnion(used.flags.filter { ["code", "improvise", "offdevice"].contains($0) })
-                for sub in used.uses.values { reach(sub) }
-            }
-            reach(path)
+    /// One resolved `uses:` entry — mirrors `core/uses.py::UsedFlow`. `flow` is nil for a
+    /// broken entry (E114/E115/E116 already reported it); `nested` is the entry's own
+    /// resolved graph, which E117's capability reach walks.
+    private struct ResolvedUsed {
+        var rawPath: String
+        var flow: ParsedFlow?
+        var nested: [String: ResolvedUsed] = [:]
+    }
 
-            // E115: cycle.
-            if cycle {
-                issues.append(FlowIssue(row: "1", code: "E115",
-                                        message: (try? ErrorCatalog.fill(code: "E115", values: ["a": name, "b": chain.count > 1 ? chain[1] : path, "chain": chain.joined(separator: " -> ")], isV08: true)) ?? ""))
+    /// `_first_row_naming` — the lowest-numbered top-level row whose task names the
+    /// entry; an entry nobody calls anchors at "1" instead (same as E112 for a
+    /// flow-level fact with no row of its own).
+    private static func firstRowNaming(_ flow: ParsedFlow, _ name: String) -> String? {
+        for (i, row) in flow.rows.enumerated() where row.blockKind == nil && row.task == name {
+            return String(i + 1)
+        }
+        return nil
+    }
+
+    @discardableResult
+    private static func resolveUsesLevel(_ flow: ParsedFlow, flowDir: URL,
+                                         workspace: FlowWorkspace, flowID: String,
+                                         stack: [URL], registry: (any FlowRegistry)?,
+                                         issues: inout [FlowIssue]) -> [String: ResolvedUsed] {
+        var entries: [String: ResolvedUsed] = [:]
+        for (name, rawPath) in flow.uses.sorted(by: { $0.key < $1.key }) {
+            let anchor = firstRowNaming(flow, name) ?? "1"
+
+            // E114: an absolute path or any escape (`..`, a symlink leaving the tree) —
+            // `workspace.resolve` throws `escapesFlow` for exactly the two conditions
+            // `uses.py` refuses at `_resolve_level`.
+            let candidate: URL
+            do {
+                candidate = try workspace.resolve(rawPath, flowID: flowID)
+            } catch {
+                issues.append(FlowIssue(row: anchor, code: "E114",
+                                        message: (try? ErrorCatalog.fill(code: "E114", values: ["path": rawPath], isV08: true)) ?? ""))
+                entries[name] = ResolvedUsed(rawPath: rawPath)
+                continue
             }
-            // E116: a used flow that doesn't validate.
-            if let usedInvalid {
-                issues.append(FlowIssue(row: "1", code: "E116",
-                                        message: (try? ErrorCatalog.fill(code: "E116", values: ["n": name, "path": usedInvalid.1, "first-error": "it doesn't parse"], isV08: true)) ?? ""))
+
+            // E115: the candidate is already an ancestor in the stack — the edge that
+            // closes the loop. `_report_cycle` names the files, not the entry keys.
+            if let idx = stack.firstIndex(of: candidate) {
+                reportCycle(stack: stack, at: idx, issues: &issues)
+                entries[name] = ResolvedUsed(rawPath: rawPath)
+                continue
             }
-            // E117: a capability inherited through the chain but not declared here.
-            let flags = Set(flow.flags)
-            for flag in inherited.sorted() where !flags.contains(flag) {
-                let chainPhrase = chain.count > 1 ? "through " + chain.dropFirst().map { "`\($0)`" }.joined(separator: " -> ") : ""
-                issues.append(FlowIssue(row: "1", code: "E117",
-                                        message: (try? ErrorCatalog.fill(code: "E117", values: ["path": path, "chain": chainPhrase], isV08: true)) ?? ""))
+
+            // E116: the file isn't there. Python's `is_file()` — a directory is not one.
+            var isDir: ObjCBool = false
+            let exists = FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDir)
+            if !exists || isDir.boolValue {
+                issues.append(FlowIssue(row: anchor, code: "E116",
+                                        message: (try? ErrorCatalog.fill(code: "E116", values: ["n": anchor, "path": rawPath, "first-error": "no such file"], isV08: true)) ?? ""))
+                entries[name] = ResolvedUsed(rawPath: rawPath)
+                continue
             }
+
+            // E116: the file doesn't read or doesn't parse — the first-error is the
+            // parser's own sentence (Python: `str(exc).lstrip("⚠ ").strip()`).
+            let text: String
+            do {
+                text = try String(contentsOf: candidate, encoding: .utf8)
+            } catch {
+                issues.append(FlowIssue(row: anchor, code: "E116",
+                                        message: (try? ErrorCatalog.fill(code: "E116", values: ["n": anchor, "path": rawPath, "first-error": cleanedError(error)], isV08: true)) ?? ""))
+                entries[name] = ResolvedUsed(rawPath: rawPath)
+                continue
+            }
+            let used: ParsedFlow
+            do {
+                used = try CatParser.parseForValidation(text)
+            } catch {
+                issues.append(FlowIssue(row: anchor, code: "E116",
+                                        message: (try? ErrorCatalog.fill(code: "E116", values: ["n": anchor, "path": rawPath, "first-error": cleanedError(error)], isV08: true)) ?? ""))
+                entries[name] = ResolvedUsed(rawPath: rawPath)
+                continue
+            }
+
+            // E116: the used flow must pass its own checks; the first finding is the
+            // first-error (Python: `f"row {first.row}: {first.message}"`).
+            let childIssues = checkFlow(used, registry: registry)
+            if let first = childIssues.first {
+                let firstError = "row \(first.row): \(first.message)"
+                issues.append(FlowIssue(row: anchor, code: "E116",
+                                        message: (try? ErrorCatalog.fill(code: "E116", values: ["n": anchor, "path": rawPath, "first-error": firstError], isV08: true)) ?? ""))
+                entries[name] = ResolvedUsed(rawPath: rawPath)
+                continue
+            }
+
+            // Clean child — recurse, then propagate its reachable capabilities (E117).
+            // The app resolves every uses: path against the flow's own directory (the
+            // sandbox model `FlowWorkspace` documents); the recursion resolves the same
+            // way, so the stack is the same set of resolved URLs at every depth.
+            let nested = resolveUsesLevel(used, flowDir: flowDir, workspace: workspace,
+                                          flowID: flowID, stack: stack + [candidate],
+                                          registry: registry, issues: &issues)
+            entries[name] = ResolvedUsed(rawPath: rawPath, flow: used, nested: nested)
+            checkCapabilityPropagation(flow, rawPath: rawPath, child: used, nested: nested,
+                                       anchor: anchor, issues: &issues)
+        }
+        return entries
+    }
+
+    /// `_report_cycle` — SPEC-Q151's binding: `a` is the file whose own `uses:` entry is
+    /// the direct edge that closes the loop, `b` is the ancestor it names, and `chain`
+    /// lists whatever sits strictly between `b` and `a` along the original path — empty
+    /// for a direct two-file cycle.
+    private static func reportCycle(stack: [URL], at idx: Int, issues: inout [FlowIssue]) {
+        guard let aName = stack.last?.lastPathComponent else { return }
+        let bName = stack[idx].lastPathComponent
+        let between = stack[(idx + 1)..<(stack.count - 1)].map { $0.lastPathComponent }
+        let chain = between.joined(separator: " -> ")
+        issues.append(FlowIssue(row: "1", code: "E115",
+                                message: (try? ErrorCatalog.fill(code: "E115", values: ["a": aName, "b": bName, "chain": chain], isV08: true)) ?? ""))
+    }
+
+    /// The Python's error sentence with the `⚠ ` voice stripped (`str(exc).lstrip("⚠ ")`)
+    /// — used as an E116 `first-error`. For an I/O failure the Cocoa message is shown
+    /// instead (the fixture corpus never reads a non-UTF-8 sibling; that divergence is
+    /// documented in the R13-1 journal).
+    private static func cleanedError(_ error: Error) -> String {
+        var s = String(describing: error)
+        if s.hasPrefix("⚠ ") { s.removeFirst(2) }
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The capability flags E117 propagates (Spec §1.4b, R25/R28) — `core/uses.py`'s
+    /// `_CAPABILITY_FLAGS`.
+    private static let capabilityFlags = ["improvise", "network", "code", "offdevice"]
+
+    /// `_capability_reach` — every capability flag reachable from *flow* at any depth
+    /// through *nested*, mapped to the chain of as-declared raw paths strictly between
+    /// *flow* and whichever descendant first declares it natively. An empty chain means
+    /// *flow* declares the flag itself.
+    private static func capabilityReach(_ flow: ParsedFlow, _ nested: [String: ResolvedUsed]) -> [String: [String]] {
+        var reach: [String: [String]] = [:]
+        for flag in capabilityFlags where flow.flags.contains(flag) {
+            reach[flag] = []
+        }
+        for used in nested.values.sorted(by: { $0.rawPath < $1.rawPath }) {
+            guard let usedFlow = used.flow else { continue }  // broken entry — already reported
+            for (flag, subChain) in capabilityReach(usedFlow, used.nested) where reach[flag] == nil {
+                reach[flag] = [used.rawPath] + subChain
+            }
+        }
+        return reach
+    }
+
+    /// `_check_capability_propagation` — check 20 (E117): every capability flag reachable
+    /// through this entry, at any depth, must also be declared by *this* flow. Runs once
+    /// per entry, at every level of the graph (each flow reaching a capability is
+    /// independently required to say so). `improvise` renders the catalog template; the
+    /// other three flags carry their own verbatim templates from `core/uses.py`.
+    private static func checkCapabilityPropagation(_ flow: ParsedFlow, rawPath: String,
+                                                   child: ParsedFlow, nested: [String: ResolvedUsed],
+                                                   anchor: String, issues: inout [FlowIssue]) {
+        let flags = Set(flow.flags)
+        for (flag, chainFiles) in capabilityReach(child, nested).sorted(by: { $0.key < $1.key })
+        where !flags.contains(flag) {
+            let chain = chainFiles.map { "`\($0)`" }.joined(separator: " -> ")
+            let chainPhrase = chain.isEmpty ? "" : "through \(chain)"
+            let message: String
+            switch flag {
+            case "code":
+                message = "This flow uses `\(rawPath)`, which \(chainPhrase) runs external code — but this header doesn't say `; code`. Add it. What a flow can do has to be readable on line one, even when it happens two files away."
+            case "offdevice":
+                message = "This flow uses `\(rawPath)`, which \(chainPhrase) sends data off this machine — but this header doesn't say `; offdevice`. Add it. What a flow can do has to be readable on line one, even when it happens two files away."
+            case "network":
+                message = "This flow uses `\(rawPath)`, which \(chainPhrase) talks to the internet — but this header doesn't say `; network`. Add it. What a flow can do has to be readable on line one, even when it happens two files away."
+            default:
+                message = (try? ErrorCatalog.fill(code: "E117", values: ["path": rawPath, "chain": chainPhrase], isV08: true)) ?? ""
+            }
+            issues.append(FlowIssue(row: anchor, code: "E117", message: message))
         }
     }
 

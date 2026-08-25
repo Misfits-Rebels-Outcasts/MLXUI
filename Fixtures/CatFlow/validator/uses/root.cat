@@ -1,0 +1,17 @@
+catflow 0.8
+1. Read Text   in.txt
+2. Escape   ../evil.cat
+3. Abs   /etc/hosts
+4. Missing   gone.cat
+5. Broken   broken.cat
+6. Invalid   invalid.cat
+7. Lib   lib.cat
+8. Cycle   cycle_b.cat
+uses:
+  Escape = ../evil.cat
+  Abs = /etc/hosts
+  Missing = gone.cat
+  Broken = broken.cat
+  Invalid = invalid.cat
+  Lib = lib.cat
+  Cycle = cycle_b.cat

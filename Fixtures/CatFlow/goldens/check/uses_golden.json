@@ -1,0 +1,37 @@
+[
+  {
+    "row": "2",
+    "code": "E114",
+    "message": "`uses:` points at `../evil.cat`, which resolves outside this flow's own folder. A flow may only use flows beside it — copy it in, or move it here."
+  },
+  {
+    "row": "3",
+    "code": "E114",
+    "message": "`uses:` points at `/etc/hosts`, which resolves outside this flow's own folder. A flow may only use flows beside it — copy it in, or move it here."
+  },
+  {
+    "row": "4",
+    "code": "E116",
+    "message": "Row 4 uses `gone.cat`, but that file doesn't validate on its own: no such file. Fix it there — every used flow is also an ordinary flow, so opening and checking it works normally."
+  },
+  {
+    "row": "5",
+    "code": "E116",
+    "message": "Row 5 uses `broken.cat`, but that file doesn't validate on its own: Row 2 couldn't be read from \"this is not a valid row…\". A row is: `N. Task  (refs)  model; settings`. The first thing that confused the parser: this doesn't start with a row number.. Fix it there — every used flow is also an ordinary flow, so opening and checking it works normally."
+  },
+  {
+    "row": "6",
+    "code": "E116",
+    "message": "Row 6 uses `invalid.cat`, but that file doesn't validate on its own: row 1: \"Frobnicate\" isn't a recognized task -- check spelling against `catflow tasks`.. Fix it there — every used flow is also an ordinary flow, so opening and checking it works normally."
+  },
+  {
+    "row": "7",
+    "code": "E117",
+    "message": "This flow uses `lib.cat`, which  improvises with a shell — but this header doesn't say `; improvise`. Add it. What a flow can do has to be readable on line one, even when it happens two files away."
+  },
+  {
+    "row": "1",
+    "code": "E115",
+    "message": "`cycle_a.cat` uses `cycle_b.cat`, which (through ) uses `cycle_a.cat` back. A flow can't use itself, directly or at a distance."
+  }
+]

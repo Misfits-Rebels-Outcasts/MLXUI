@@ -1,0 +1,4 @@
+catflow 0.8
+1. Cycle   cycle_b.cat
+uses:
+  Cycle = cycle_b.cat
