@@ -235,6 +235,9 @@ nonisolated enum CatSerializer {
                 }
                 let emitted = emitRowLines(label: prefix, tail: rest, col: tailCol, wrap: wrap)
                 lines.append(contentsOf: emitted); current += emitted.count
+                // QR12R2-1: record every row's range *before* the clause line, so the clause
+                // lives only in clauseRanges — a decider row's `-> {…}` must not render twice.
+                ranges[row.id] = start..<current
             }
             if let clause = row.clause {
                 lines.append("\(clauseIndent)\(renderClause(clause, isV08: isV08))")

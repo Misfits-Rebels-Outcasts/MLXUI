@@ -752,13 +752,27 @@ struct CatFlowEditingTests {
                 }
                 return out
             }
-            let preamble = serialized.lineRanges.values.map(\.lowerBound).min() ?? 0
-            let rowLines = Array(serialized.lines.dropFirst(preamble).filter { !$0.isEmpty })
-            if rendered != rowLines {
-                failures.append("\(flowID): rendered=\(rendered.count) rowLines=\(rowLines.count)")
+            // Every covered line index (a row's range or its clause) renders **exactly once** —
+            // no double-body, no dropped line. Order is deliberately not compared: a block's
+            // clause line sits after its children in the file but the block cell renders
+            // header+clause before the children, and two sibling blocks can carry identical
+            // child text at different indices. Structural sections (definitions:/uses:/…)
+            // belong to no row and render nowhere (the list is rows-only).
+            var counts: [Int: Int] = [:]
+            for entry in entries {
+                if let r = serialized.lineRanges[entry.row.id] {
+                    for idx in r { counts[idx, default: 0] += 1 }
+                }
+                if let c = serialized.clauseRanges[entry.row.id] {
+                    for idx in c { counts[idx, default: 0] += 1 }
+                }
             }
-            if Set(rendered).count != rendered.count {
-                failures.append("\(flowID): duplicate rendered lines")
+            if rendered.count != counts.count {
+                failures.append("\(flowID): rendered \(rendered.count) but \(counts.count) covered lines")
+            }
+            let bad = counts.first { $0.value != 1 }
+            if bad != nil {
+                failures.append("\(flowID): line \(bad!.key) rendered \(bad!.value) times")
             }
         }
         #expect(failures.isEmpty, Comment(rawValue: failures.joined(separator: "; ")))
