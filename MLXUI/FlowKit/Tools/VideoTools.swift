@@ -2,7 +2,7 @@ import Foundation
 import AVFoundation
 import CoreGraphics
 
-// CFM-R12-7 group e — the video/audio tools, **AVFoundation subset** (owner ruling 2026-08-24:
+// CFM-R12-7 group e — the video/audio tools, **AVFoundation subset** (owner ruling 2026-08-25: "AVFoundation subset (Recommended)" —
 // no ffmpeg, no entitlement). Trim / Extract Frame / Extract Audio / Mux for common formats;
 // `Read Video` is file-backed; `Join Video` stays honestly unported.
 

@@ -13,7 +13,7 @@ import MLX
 /// footprint is the catalog's `ramGB` (the same figure the preflight's largest-single-row
 /// rule uses).
 ///
-/// **Budget policy** (owner's call, 2026-08-24): a flat fraction of system RAM —
+/// **Budget policy** (implementer's call, pending owner confirmation — the owner approved building R11-2 but did not pick the budget): a flat fraction of system RAM —
 /// `max(4 GB, totalRAM × 0.6)` — which caps the retained pool that ran to 12.3 GB. The
 /// same budget sets MLX's own `Memory.cacheLimit`, so freed buffers from evicted engines
 /// don't pile up either. The preflight's largest-single-row rule stays the gate that every
