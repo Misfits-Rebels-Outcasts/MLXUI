@@ -115,6 +115,60 @@ struct CatFlowIndexStoreTests {
         for (a, b) in zip(loaded, values) { #expect(abs(a - b) < 0.0001) }
     }
 
+    /// CFM-R12-FIX-6: the `.npy` writer matches `np.save` — 64-byte-aligned header, dict
+    /// then **space padding then a trailing `\n`** (numpy's exact layout), no NUL bytes.
+    @Test func npyWriterMatchesNumpyLayout() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-npy-\(UUID().uuidString).npy")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try NpyCodec.save([1, 2, 3], to: url)
+        let data = try Data(contentsOf: url)
+        let headerLen = Int(UInt16(littleEndian: data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 8, as: UInt16.self) }))
+        // Magic + version + len + header must land the payload on a 64-byte boundary.
+        #expect((10 + headerLen) % 64 == 0)
+        let header = data[10..<(10 + headerLen)]
+        #expect(!header.contains(0x00))          // no NUL padding (numpy rejects it)
+        #expect(header.last == 0x0A)             // trailing \n after the spaces
+        #expect(header[header.count - 2] == 0x20) // the padding is spaces before it
+        let dict = String(data: header, encoding: .ascii) ?? ""
+        #expect(dict.contains("'<f4'"))
+        #expect(dict.contains("(3,)"))
+        // Total matches numpy's own 3-vector file (128-byte header + 12 data).
+        #expect(data.count == 140)
+    }
+
+    /// CFM-R12-FIX-6: loading a float64 `.npy` the Python saved converts to float32.
+    @Test func npyLoadsFloat64() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-npy64-\(UUID().uuidString).npy")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let dict = "{'descr': '<f8', 'fortran_order': False, 'shape': (2,), }\n"
+        var headerLen = UInt16(dict.utf8.count)
+        while (10 + Int(headerLen)) % 64 != 0 { headerLen += 1 }
+        var data = Data([0x93, 0x4E, 0x55, 0x4D, 0x50, 0x59, 0x01, 0x00])
+        data.append(contentsOf: withUnsafeBytes(of: headerLen.littleEndian) { Array($0) })
+        data.append(Data(dict.utf8))
+        data.append(Data(repeating: 0x20, count: Int(headerLen) - dict.utf8.count))
+        var doubles: [Double] = [1.5, -2.25]
+        doubles.withUnsafeBytes { data.append(contentsOf: $0) }
+        try data.write(to: url)
+        let loaded = try NpyCodec.load(from: url)
+        #expect(loaded == [1.5, -2.25])
+    }
+
+    /// CFM-R12-FIX-5: only exactly-zero norms are clamped — the reviewer's case.
+    @Test func retrieveDoesNotClampNormsBelowOne() {
+        let vectors: [[Float]] = [[0.1, 0.1, 0.1], [0.6, 0, 0], [0.05, 0.05, 0]]
+        let query: [Float] = [1, 0, 0]
+        let scores = RetrieveTool.cosineScores(vectors: vectors, query: query)
+        let order = (0..<scores.count).sorted { scores[$0] > scores[$1] }
+        // Python: scores [0.57735, 1.0, 0.707107], ranking [1, 2, 0].
+        #expect(abs(scores[0] - 0.57735) < 0.001)
+        #expect(abs(scores[1] - 1.0) < 0.001)
+        #expect(abs(scores[2] - 0.707107) < 0.001)
+        #expect(order == [1, 2, 0])
+    }
+
     @Test func readIndexValidatesTheDirectory() async throws {
         let (ws, base) = try makeWorkspace()
         defer { teardown(base) }

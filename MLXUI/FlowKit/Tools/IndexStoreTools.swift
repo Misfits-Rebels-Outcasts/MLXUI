@@ -11,33 +11,62 @@ import Foundation
 /// `EmbeddingStage`'s output and the index tools agree. Matches `np.save`/`np.load`.
 nonisolated enum NpyCodec {
     static func save(_ values: [Float], to url: URL) throws {
-        let header = "{'descr': '<f4', 'fortran_order': False, 'shape': (\(values.count),), }"
-        // npy v1.0: magic `\x93NUMPY`, major/minor (1, 0), then the little-endian u16 header
-        // length + dict, padded so the payload starts on a 16-byte boundary.
+        // CFM-R12-FIX-6: match `np.save` exactly — `\x93NUMPY` + version 1.0 + u16 header
+        // length + the dict, **then space padding, then a trailing `\n`**, so the payload
+        // starts on a 64-byte boundary. (numpy's own layout: `{...}` + spaces + `\n` — the
+        // old newline-before-spaces order was a SyntaxError for `ast.literal_eval`, and the
+        // NUL padding numpy rejected outright.)
+        let dict = "{'descr': '<f4', 'fortran_order': False, 'shape': (\(values.count),), }"
+        var headerLen = dict.utf8.count + 1          // + the trailing `\n`
+        while (10 + headerLen) % 64 != 0 { headerLen += 1 }
+        let header = dict
+            + String(repeating: " ", count: headerLen - dict.utf8.count - 1)
+            + "\n"
         var data = Data([0x93, 0x4E, 0x55, 0x4D, 0x50, 0x59, 0x01, 0x00])
-        var headerLen = UInt16(header.utf8.count)
-        while (data.count + 2 + Int(headerLen)) % 16 != 0 { headerLen += 1 }
-        data.append(contentsOf: withUnsafeBytes(of: headerLen.littleEndian) { Array($0) })
+        data.append(contentsOf: withUnsafeBytes(of: UInt16(header.utf8.count).littleEndian) { Array($0) })
         data.append(Data(header.utf8))
-        data.append(Data(repeating: 0, count: Int(headerLen) - header.utf8.count))
         var floats = values
         floats.withUnsafeBytes { data.append(contentsOf: $0) }
         try data.write(to: url)
     }
 
+    /// Load a `.npy` float32 vector. Tolerates numpy v1/v2 headers and reads the `descr`
+    /// from the dict, so a float64 array the Python saved is still loadable (converted to
+    /// float32, matching `np.load(...).astype(np.float32)`).
     static func load(from url: URL) throws -> [Float] {
         let data = try Data(contentsOf: url)
-        guard data.count > 10, data[0] == 0x93,
+        guard data.count > 8, data[0] == 0x93,
               String(data: data[1..<6], encoding: .ascii) == "NUMPY" else {
             throw FlowError.stageFailure(row: "vector", message: "not a .npy file")
         }
-        let headerLen = Int(UInt16(littleEndian: data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 8, as: UInt16.self) }))
-        let headerStart = 10
+        let version = data[6]
+        let headerStart: Int
+        let headerLen: Int
+        if version == 1 {
+            headerStart = 10
+            headerLen = Int(UInt16(littleEndian: data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 8, as: UInt16.self) }))
+        } else {
+            headerStart = 12
+            headerLen = Int(UInt32(littleEndian: data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 8, as: UInt32.self) }))
+        }
+        let dict = String(data: data[headerStart..<(headerStart + min(headerLen, 4096))], encoding: .ascii) ?? ""
+        let isFloat64 = dict.contains("<f8") || dict.contains("float64")
         let bodyStart = headerStart + headerLen
-        guard bodyStart <= data.count, (data.count - bodyStart).isMultiple(of: 4) else {
+        let bytesPerValue = isFloat64 ? 8 : 4
+        guard bodyStart <= data.count, (data.count - bodyStart).isMultiple(of: bytesPerValue) else {
             throw FlowError.stageFailure(row: "vector", message: "malformed .npy payload")
         }
-        let count = (data.count - bodyStart) / 4
+        let count = (data.count - bodyStart) / bytesPerValue
+        if isFloat64 {
+            return data.withUnsafeBytes { raw -> [Float] in
+                var out = [Float](repeating: 0, count: count)
+                for i in 0..<count {
+                    let v = raw.loadUnaligned(fromByteOffset: bodyStart + i * 8, as: Double.self)
+                    out[i] = Float(v)
+                }
+                return out
+            }
+        }
         return data.withUnsafeBytes { raw in
             Array(UnsafeBufferPointer(start: raw.baseAddress!.advanced(by: bodyStart)
                     .assumingMemoryBound(to: Float.self), count: count))
@@ -250,7 +279,10 @@ nonisolated struct RetrieveTool {
         guard qNorm > 0 else { return vectors.map { _ in 0 } }
         return vectors.map { vector in
             let vNorm = sqrt(vector.reduce(0) { $0 + $1 * $1 })
-            let norm = max(vNorm, 1)
+            // CFM-R12-FIX-5: replace only *exactly-zero* norms with 1 (Python's
+            // `vector_norms[vector_norms == 0.0] = 1.0`) — clamping everything below 1
+            // silently changed what ten RAG flows answer with.
+            let norm = vNorm == 0 ? 1 : vNorm
             let dot = zip(vector, query).reduce(0) { $0 + $1.0 * $1.1 }
             return Float(Double(dot) / (Double(norm) * Double(qNorm)))
         }
