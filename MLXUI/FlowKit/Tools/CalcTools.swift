@@ -167,10 +167,10 @@ nonisolated enum CalcEngine {
                     if op == "/" {
                         value = value / rhs
                     } else {
-                        // Python's `%` is floored (non-negative for a positive divisor):
-                        // `-7 % 3 == 2`, not `-1` (CFM-R12-FIX-8a).
+                        // Python's `%` takes the sign of the *divisor*, not of the remainder
+                        // (QR12R2-2a): `-7 % 3 == 2`, `7 % -3 == -2`, `-7 % -3 == -1`.
                         let m = value.truncatingRemainder(dividingBy: rhs)
-                        value = m < 0 ? m + rhs : m
+                        value = (m != 0 && (m < 0) != (rhs < 0)) ? m + rhs : m
                     }
                 }
             }
