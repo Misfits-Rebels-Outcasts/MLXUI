@@ -7,25 +7,43 @@ import Foundation
 /// platform code with a redirect cap + timeout + size cap.
 struct CatFlowNetToolsTests {
 
-    @Test func htmlToTextExtractsPlainAndMarkdown() {
-        let html = """
-        <html><head><title>x</title></head><body>
-        <h1>Hello</h1>
-        <p>Some <b>text</b> and a <a href="https://example.com">link</a>.</p>
-        <ul><li>one</li><li>two</li></ul>
-        <script>var x = 1;</script>
-        </body></html>
-        """
-        let plain = HTMLToText.extract(html, markdown: false)
-        #expect(plain.contains("Hello"))
-        #expect(plain.contains("Some text and a link."))
-        #expect(plain.contains("one"))
-        #expect(!plain.contains("var x"))          // script stripped
-        #expect(!plain.contains("<b>"))
-        let markdown = HTMLToText.extract(html, markdown: true)
-        #expect(markdown.contains("# Hello"))
-        #expect(markdown.contains("[link](https://example.com)"))
-        #expect(markdown.contains("- one"))
+    /// CFM-R12-FIX-9: pinned against Python-generated goldens (`html_golden.json`), not a
+    /// hand-written `contains()`.
+    @Test func htmlToTextMatchesThePythonGoldens() throws {
+        let filePath = #filePath
+        let url = URL(fileURLWithPath: filePath)
+        var dir = url.deletingLastPathComponent()
+        while dir.lastPathComponent != "MLXUITests" { dir = dir.deletingLastPathComponent() }
+        let goldenURL = dir.deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/CatFlow/tools/html_golden.json")
+        let goldens = try JSONDecoder().decode([String: HTMLGolden].self, from: Data(contentsOf: goldenURL))
+        var mismatches: [String] = []
+        for (name, golden) in goldens {
+            for (format, expected) in [(true, golden.markdown), (false, golden.plain)] {
+                let got = HTMLToText.extract(html(name), markdown: format)
+                if got != expected {
+                    mismatches.append("\(name)/\(format ? "md" : "plain"): got \(String(reflecting: got)) expected \(String(reflecting: expected))")
+                }
+            }
+        }
+        #expect(mismatches.isEmpty, Comment(rawValue: mismatches.joined(separator: "; ")))
+    }
+
+    private struct HTMLGolden: Decodable {
+        let markdown: String
+        let plain: String
+    }
+
+    private func html(_ name: String) -> String {
+        switch name {
+        case "alpha_beta": return "<p>Alpha</p><p>Beta</p>"
+        case "entities": return "<p>Ben &amp; Jerry&#39;s &lt;tag&gt; &nbsp;end</p>"
+        case "br": return "<p>a<br/>b</p>"
+        case "links": return "<h1>Hi</h1><p>See <a href=\"https://x.com\">here</a>.</p><ul><li>one</li><li>two</li></ul>"
+        case "script": return "<p>Keep</p><script>var x=1;</script><p>This</p>"
+        case "wrapped": return "<h2>Title</h2><p>A longer paragraph that keeps going and going and wraps.</p>"
+        default: return ""
+        }
     }
 
     @Test func feedParserReadsRSSAndAtom() throws {

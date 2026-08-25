@@ -1,0 +1,26 @@
+{
+ "alpha_beta": {
+  "markdown": "Alpha\n\nBeta",
+  "plain": "Alpha\n\nBeta"
+ },
+ "entities": {
+  "markdown": "Ben & Jerry's <tag>  end",
+  "plain": "Ben & Jerry's <tag>  end"
+ },
+ "br": {
+  "markdown": "a\n\nb",
+  "plain": "a\n\nb"
+ },
+ "links": {
+  "markdown": "# Hi\n\nSee [here](https://x.com).\n\n- one\n\n- two",
+  "plain": "Hi\n\nSee here.\n\none\n\ntwo"
+ },
+ "script": {
+  "markdown": "Keep\n\nThis",
+  "plain": "Keep\n\nThis"
+ },
+ "wrapped": {
+  "markdown": "## Title\n\nA longer paragraph that keeps going and going and wraps.",
+  "plain": "Title\n\nA longer paragraph that keeps going and going and wraps."
+ }
+}

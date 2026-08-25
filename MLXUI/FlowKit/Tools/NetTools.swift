@@ -12,7 +12,8 @@ nonisolated enum NetTools {
     static let defaultMaxBytes: Int64 = 512 * 1024 * 1024
 
     /// GET a URL → `(body, contentType)`. A plain-sentence error on failure, a redirect cap
-    /// (no unbounded following), and the caller's timeout.
+    /// (no unbounded following), a streaming size cap, and **2xx only** (CFM-R12-FIX-10 — a
+    /// 3xx returned by the capped delegate is an error, not content).
     static func httpGet(_ urlString: String, headers: [String: String] = [:],
                         timeout: TimeInterval = defaultTimeout,
                         maxBytes: Int64 = defaultMaxBytes,
@@ -32,9 +33,9 @@ nonisolated enum NetTools {
         let delegate = RedirectCappingDelegate(limit: maxRedirects)
         let session = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
-        let (data, response): (Data, URLResponse)
+        let (bytes, response): (URLSession.AsyncBytes, URLResponse)
         do {
-            (data, response) = try await session.data(for: request)
+            (bytes, response) = try await session.bytes(for: request)
         } catch {
             throw FlowError.stageFailure(row: "network",
                                          message: "couldn't fetch \(urlString): \(error.localizedDescription)")
@@ -42,17 +43,25 @@ nonisolated enum NetTools {
         guard let http = response as? HTTPURLResponse else {
             throw FlowError.stageFailure(row: "network", message: "non-HTTP response for \(urlString)")
         }
-        guard (200..<400).contains(http.statusCode) else {
+        guard (200..<300).contains(http.statusCode) else {
+            if (300..<400).contains(http.statusCode), delegate.capped {
+                throw FlowError.stageFailure(row: "network",
+                                             message: "\(urlString) followed more than \(maxRedirects) redirects — the fetch stopped")
+            }
             throw FlowError.stageFailure(row: "network",
                                          message: "GET \(urlString) returned HTTP \(http.statusCode)")
         }
-        if http.expectedContentLength > maxBytes {
-            throw FlowError.stageFailure(row: "network",
-                                         message: "\(urlString) is larger than the \(maxBytes / 1_048_576) MB cap")
-        }
-        guard Int64(data.count) <= maxBytes else {
-            throw FlowError.stageFailure(row: "network",
-                                         message: "\(urlString) exceeded the \(maxBytes / 1_048_576) MB cap")
+        // Stream, stopping at the cap — a chunked response with no Content-Length must not
+        // be buffered to exhaustion (FIX-10).
+        var data = Data()
+        var total: Int64 = 0
+        for try await byte in bytes {
+            total += 1
+            if total > maxBytes {
+                throw FlowError.stageFailure(row: "network",
+                                             message: "\(urlString) exceeded the \(maxBytes / 1_048_576) MB cap")
+            }
+            data.append(byte)
         }
         let contentType = http.allHeaderFields["Content-Type"] as? String ?? ""
         return (data, contentType.components(separatedBy: ";").first ?? contentType)
@@ -61,6 +70,7 @@ nonisolated enum NetTools {
     /// Cap redirects at `limit` (an unbounded redirect chain is how a fetch becomes a loop).
     private final class RedirectCappingDelegate: NSObject, URLSessionTaskDelegate {
         let limit: Int
+        private(set) var capped = false
         private var count = 0
         init(limit: Int) { self.limit = limit }
 
@@ -69,6 +79,7 @@ nonisolated enum NetTools {
                         newRequest request: URLRequest,
                         completionHandler: @escaping (URLRequest?) -> Void) {
             count += 1
+            if count > limit { capped = true }
             completionHandler(count <= limit ? request : nil)
         }
     }
@@ -133,10 +144,22 @@ nonisolated struct DownloadFileTool {
         }
         let dest = try workspace.resolve(rawPath, flowID: flowID)
         let timeout = NetTools.parseTimeout(s.value(for: "timeout"))
-        let (body, _) = try await NetTools.httpGet(url, timeout: timeout)
-        try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(),
-                                                withIntermediateDirectories: true)
-        try body.write(to: dest)
+        let (body, contentType) = try await NetTools.httpGet(url, timeout: timeout)
+        // CFM-R12-FIX-10: the content-type check the approval named — a raw download that
+        // returns HTML is usually a captive/login page, not the file.
+        if contentType == "text/html" {
+            throw FlowError.stageFailure(row: "Download File",
+                                         message: "\(url) returned an HTML page, not a file — check the URL")
+        }
+        // Copy-to-temp-then-replace (journal 2026-121's Save-* discipline): a cancelled
+        // download must never leave a truncated file that looks complete.
+        let fm = FileManager.default
+        try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let tmp = dest.deletingLastPathComponent()
+            .appendingPathComponent(".\(dest.lastPathComponent).tmp\(UUID().uuidString)")
+        try body.write(to: tmp)
+        if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
+        try fm.moveItem(at: tmp, to: dest)
         return Asset(items: [Item(kind: .file, value: nil, path: dest, sourceText: nil)])
     }
 }
@@ -200,91 +223,138 @@ extension NetTools {
     }
 }
 
-/// A compact HTML → text extractor mirroring `net.py::_HTMLToText`'s rules: skip
-/// script/style/head/noscript, block tags break lines, `markdown` adds heading `#`s and
-/// `[text](href)` links, then collapse whitespace/blank runs.
+/// A compact HTML → text extractor mirroring `net.py::_HTMLToText`'s rules (CFM-R12-FIX-9):
+/// skip script/style/head/noscript, block tags break lines, `markdown` adds heading `#`s and
+/// `[text](href)` links, character references are decoded in text runs, blank lines are kept
+/// (Python's `splitlines()` keeps them), and a self-closing tag (`<br/>`) fires **both** the
+/// start and end handlers (Python's `handle_startendtag`). Pinned against Python goldens.
 nonisolated enum HTMLToText {
     static let skipTags: Set<String> = ["script", "style", "head", "noscript"]
     static let blockTags: Set<String> = ["p", "div", "br", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote"]
 
     static func extract(_ html: String, markdown: Bool) -> String {
+        Parser(markdown: markdown).run(html)
+    }
+
+    private final class Parser {
+        let markdown: Bool
         var parts: [String] = []
         var skipDepth = 0
         var linkHref: String?
-        var i = html.startIndex
-        while i < html.endIndex {
-            if html[i] == "<" {
-                guard let close = html[i...].firstIndex(of: ">") else { break }
-                let tagText = String(html[html.index(after: i)..<close]).lowercased()
-                let isClosing = tagText.hasPrefix("/")
-                let name = tagText.trimmingCharacters(in: .whitespaces)
-                    .replacingOccurrences(of: "^/", with: "", options: .regularExpression)
-                    .split(separator: " ", maxSplits: 1).first.map(String.init) ?? ""
-                if isClosing {
-                    if skipTags.contains(name) { skipDepth = max(0, skipDepth - 1) }
-                    else if skipDepth == 0 {
-                        if name == "a", markdown, let href = linkHref {
-                            parts.append("](\(href))"); linkHref = nil
-                        } else if blockTags.contains(name) {
-                            parts.append("\n")
-                        }
+
+        init(markdown: Bool) { self.markdown = markdown }
+
+        func run(_ html: String) -> String {
+            var i = html.startIndex
+            while i < html.endIndex {
+                if html[i] == "<" {
+                    guard let close = html[i...].firstIndex(of: ">") else {
+                        parts.append(Self.unescape(String(html[i...])))
+                        break
                     }
+                    let tagText = String(html[html.index(after: i)..<close]).lowercased()
+                    let isClosing = tagText.hasPrefix("/")
+                    let isSelfClosing = !isClosing && tagText.hasSuffix("/")   // FIX-9: `<br/>`
+                    var name = tagText.trimmingCharacters(in: .whitespaces)
+                    name = name.replacingOccurrences(of: "^/", with: "", options: .regularExpression)
+                    name = name.replacingOccurrences(of: "/$", with: "", options: .regularExpression)
+                    name = name.split(separator: " ", maxSplits: 1).first.map(String.init) ?? ""
+                    if isClosing {
+                        endTag(name)
+                    } else {
+                        startTag(name, tagText: tagText)
+                        // Python's HTMLParser fires handle_startendtag → starttag **and**
+                        // endtag for `<br/>`, which is why a self-closing block adds two breaks.
+                        if isSelfClosing { endTag(name) }
+                    }
+                    i = html.index(after: close)
                 } else {
-                    if skipTags.contains(name) { skipDepth += 1 }
-                    else if skipDepth == 0 {
-                        if name == "a", markdown {
-                            linkHref = Self.href(of: tagText)
-                            parts.append("[")
-                        } else if name == "li" {
-                            parts.append(markdown ? "\n- " : "\n")
-                        } else if let h = heading(name) {
-                            parts.append("\n" + (markdown ? String(repeating: "#", count: h) + " " : ""))
-                        } else if blockTags.contains(name) {
-                            parts.append("\n")
-                        }
+                    if skipDepth == 0 {
+                        // FIX-9: decode character references in text runs (Python convert_charrefs).
+                        let next = html[i...].firstIndex(of: "<") ?? html.endIndex
+                        parts.append(Self.unescape(String(html[i..<next])))
+                        i = next
+                    } else {
+                        i = html.index(after: i)
                     }
                 }
-                i = html.index(after: close)
-            } else {
-                if skipDepth == 0 { parts.append(String(html[i])) }
-                i = html.index(after: i)
+            }
+            let raw = parts.joined()
+            // FIX-9: keep empty lines (Python splitlines), then collapse blank runs to one.
+            var lines: [String] = []
+            var blankRun = 0
+            for rawLine in raw.split(separator: "\n", omittingEmptySubsequences: false) {
+                let line = rawLine.split(whereSeparator: { $0 == " " || $0 == "\t" }).joined(separator: " ")
+                if line.isEmpty {
+                    blankRun += 1
+                    if blankRun > 1 { continue }
+                } else {
+                    blankRun = 0
+                }
+                lines.append(line)
+            }
+            return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        private func startTag(_ name: String, tagText: String) {
+            if HTMLToText.skipTags.contains(name) { skipDepth += 1 }
+            else if skipDepth == 0 {
+                if name == "a", markdown {
+                    linkHref = Self.href(of: tagText)
+                    parts.append("[")
+                } else if name == "li" {
+                    parts.append(markdown ? "\n- " : "\n")
+                } else if let h = Self.heading(name) {
+                    parts.append("\n" + (markdown ? String(repeating: "#", count: h) + " " : ""))
+                } else if HTMLToText.blockTags.contains(name) {
+                    parts.append("\n")
+                }
             }
         }
-        let raw = parts.joined()
-        var lines: [String] = []
-        var blankRun = 0
-        for rawLine in raw.split(whereSeparator: { $0 == "\n" || $0 == "\r" }) {
-            let line = rawLine.split(whereSeparator: { $0 == " " || $0 == "\t" }).joined(separator: " ")
-            if line.isEmpty {
-                blankRun += 1
-                if blankRun > 1 { continue }
-            } else {
-                blankRun = 0
+
+        private func endTag(_ name: String) {
+            if HTMLToText.skipTags.contains(name) { skipDepth = max(0, skipDepth - 1) }
+            else if skipDepth == 0 {
+                if name == "a", markdown, let href = linkHref {
+                    parts.append("](\(href))"); linkHref = nil
+                } else if HTMLToText.blockTags.contains(name) {
+                    parts.append("\n")
+                }
             }
-            lines.append(line)
         }
-        return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
 
-    private static func heading(_ name: String) -> Int? {
-        guard name.count == 2, name.hasPrefix("h"), let n = Int(String(name.suffix(1))), (1...6).contains(n) else { return nil }
-        return n
-    }
-
-    private static func href(of tag: String) -> String? {
-        guard let r = tag.range(of: "href=") else { return nil }
-        let after = tag[tag.index(r.upperBound, offsetBy: 0)...]
-        let trimmed = after.drop(while: { $0 == " " || $0 == "\t" })
-        guard let first = trimmed.first else { return nil }
-        let value: String
-        if first == "\"" {
-            value = String(trimmed.dropFirst().prefix(while: { $0 != "\"" }))
-        } else if first == "'" {
-            value = String(trimmed.dropFirst().prefix(while: { $0 != "'" }))
-        } else {
-            value = String(trimmed.prefix(while: { $0 != " " && $0 != "\t" && $0 != ">" }))
+        /// FIX-9: decode HTML character references (`&amp;`, `&#39;`, `&lt;`, `&nbsp;`, …)
+        /// the way the Python's `convert_charrefs=True` does. `CFXML…UnescapingEntities`
+        /// covers XML entities + numeric refs; `&nbsp;` (HTML-only) is mapped by hand.
+        static func unescape(_ text: String) -> String {
+            guard text.contains("&") else { return text }
+            let withNbsp = text
+                .replacingOccurrences(of: "&nbsp;", with: "\u{00A0}")
+                .replacingOccurrences(of: "&#160;", with: "\u{00A0}")
+            let cf = CFXMLCreateStringByUnescapingEntities(kCFAllocatorDefault, withNbsp as CFString, nil)
+            return (cf as String?) ?? withNbsp
         }
-        return value.isEmpty ? nil : value
+
+        static func heading(_ name: String) -> Int? {
+            guard name.count == 2, name.hasPrefix("h"), let n = Int(String(name.suffix(1))), (1...6).contains(n) else { return nil }
+            return n
+        }
+
+        static func href(of tag: String) -> String? {
+            guard let r = tag.range(of: "href=") else { return nil }
+            let after = tag[tag.index(r.upperBound, offsetBy: 0)...]
+            let trimmed = after.drop(while: { $0 == " " || $0 == "\t" })
+            guard let first = trimmed.first else { return nil }
+            let value: String
+            if first == "\"" {
+                value = String(trimmed.dropFirst().prefix(while: { $0 != "\"" }))
+            } else if first == "'" {
+                value = String(trimmed.dropFirst().prefix(while: { $0 != "'" }))
+            } else {
+                value = String(trimmed.prefix(while: { $0 != " " && $0 != "\t" && $0 != ">" }))
+            }
+            return value.isEmpty ? nil : value
+        }
     }
 }
 
