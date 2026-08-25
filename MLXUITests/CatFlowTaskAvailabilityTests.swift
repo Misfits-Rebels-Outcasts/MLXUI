@@ -94,14 +94,7 @@ struct CatFlowTaskAvailabilityTests {
     }
 
     @Test func everyUnavailableTaskGetsAPickerMarker() {
-        // R12-9 ported 4 of 5 net tools. Unavailable = Join Video (instant) + Web Search
-        // (net, no provider) + Improvise (App Store agent) = 3 markers.
-        let unportedInstant = TaskCatalog.entries.filter {
-            $0.taskClass == .instant && !TaskAvailability.supportedInstantTools.contains($0.name)
-        }.count
-        #expect(unportedInstant == 1)
-        #expect(TaskCatalog.entries.filter { $0.taskClass == .net }.count == 5)
-
+        // The marker set and the availability state agree by construction.
         let expectedUnavailable = TaskCatalog.allTasks().filter {
             TaskAvailability.marker(for: $0) != nil
         }
@@ -112,10 +105,35 @@ struct CatFlowTaskAvailabilityTests {
             }
         }
         #expect(expectedUnavailable.map(\.name).sorted() == computedUnavailable.map(\.name).sorted())
-        #expect(expectedUnavailable.count == 3)   // Join Video + Web Search + Improvise (App Store)
         // Every one is labeled, and every available one is not.
         for task in TaskCatalog.allTasks() {
             #expect((TaskAvailability.marker(for: task) != nil) != TaskAvailability.isAvailable(task.name))
         }
+        // The only unported instant tool is Join Video.
+        let unportedInstant = TaskCatalog.entries.filter {
+            $0.taskClass == .instant && !TaskAvailability.supportedInstantTools.contains($0.name)
+        }.map(\.name)
+        #expect(unportedInstant == ["Join Video"])
+    }
+
+    /// CFM-R12-FIX-12: a model task's availability agrees with `CatalogBridge` — a task is
+    /// available exactly when one of its pool's models resolves.
+    @Test func modelAvailabilityAgreesWithTheBridge() {
+        let modelTasks = TaskCatalog.entries.filter { $0.taskClass == .model }
+        var mismatches: [String] = []
+        for task in modelTasks {
+            let hasModel = TaskModels.defaultModel(forTask: task.name) != nil
+            if hasModel != TaskAvailability.isAvailable(task.name) {
+                mismatches.append("\(task.name): bridge=\(hasModel) availability=\(TaskAvailability.isAvailable(task.name))")
+            }
+        }
+        #expect(mismatches.isEmpty, "model drift: \(mismatches.joined(separator: "; "))")
+        // The specific gaps the review named.
+        #expect(!TaskAvailability.isAvailable("Segment"))
+        #expect(!TaskAvailability.isAvailable("Upscale"))
+        #expect(!TaskAvailability.isAvailable("Estimate Depth"))
+        #expect(!TaskAvailability.isAvailable("Generate Image"))
+        #expect(!TaskAvailability.isAvailable("OCR"))
+        #expect(TaskAvailability.isAvailable("Summarize"))
     }
 }

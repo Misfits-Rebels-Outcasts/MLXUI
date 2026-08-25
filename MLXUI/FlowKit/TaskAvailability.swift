@@ -43,7 +43,12 @@ nonisolated enum TaskAvailability {
         switch task.taskClass {
         case .instant:
             return supportedInstantTools.contains(task.name) ? .available : .needsNewerSupport
-        case .model, .human, .trigger:
+        case .model:
+            // CFM-R12-FIX-12: a model task is available only when one of its pool's models
+            // actually resolves through `CatalogBridge` (seven display names today). Segment,
+            // Upscale, Generate Image, OCR, … have none — mark them instead of offering them.
+            return TaskModels.defaultModel(forTask: task.name) != nil ? .available : .needsNewerSupport
+        case .human, .trigger:
             return .available
         case .agent:
             return isAppStore
