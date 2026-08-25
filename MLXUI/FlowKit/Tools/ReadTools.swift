@@ -123,7 +123,10 @@ nonisolated struct ReadImagesTool: AssetStage {
                                           inputs: [input], kind: .folder, row: "Read Images")
         let fm = FileManager.default
         let isDir = (try? folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-        guard isDir, let contents = try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) else {
+        // QR12R2-3 note: skip dot-directories (e.g. the Save-* `.trash/`) so a re-run's
+        // folder glob doesn't pick up trashed files.
+        guard isDir, let contents = try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil,
+                                                                options: [.skipsHiddenFiles]) else {
             throw FlowError.fileReadFailed(row: "Read Images", path: folder.path)
         }
         let pattern = FlowSettings(settings).value(for: "pattern")
@@ -169,7 +172,8 @@ nonisolated struct ReadFilesTool: AssetStage {
                let contents = enumerator.allObjects as? [URL] {
                 files = contents.filter { !$0.hasDirectoryPath }
             }
-        } else if let contents = try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) {
+        } else if let contents = try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil,
+                                                             options: [.skipsHiddenFiles]) {
             files = contents.filter { !$0.hasDirectoryPath }
         }
         let matched = files.filter { GlobMatch.matches($0.lastPathComponent, glob: pattern) }

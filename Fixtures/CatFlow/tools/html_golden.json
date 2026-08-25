@@ -22,5 +22,29 @@
  "wrapped": {
   "markdown": "## Title\n\nA longer paragraph that keeps going and going and wraps.",
   "plain": "Title\n\nA longer paragraph that keeps going and going and wraps."
+ },
+ "entities2": {
+  "markdown": "a — b ’s © …",
+  "plain": "a — b ’s © …"
+ },
+ "crlf": {
+  "markdown": "line one\n\nline two",
+  "plain": "line one\n\nline two"
+ },
+ "trailing_nbsp": {
+  "markdown": "tail\n\nnext",
+  "plain": "tail\n\nnext"
+ },
+ "nbsp_lead": {
+  "markdown": "leading space",
+  "plain": "leading space"
+ },
+ "tabs": {
+  "markdown": "a b c",
+  "plain": "a b c"
+ },
+ "deep": {
+  "markdown": "- alpha\n\n-\n- nested",
+  "plain": "alpha\n\nnested"
  }
 }

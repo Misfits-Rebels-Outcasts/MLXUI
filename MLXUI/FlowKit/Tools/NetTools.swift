@@ -53,16 +53,20 @@ nonisolated enum NetTools {
         }
         // Stream, stopping at the cap — a chunked response with no Content-Length must not
         // be buffered to exhaustion (FIX-10).
-        var data = Data()
+        var bytesOut: [UInt8] = []
         var total: Int64 = 0
+        if http.expectedContentLength > 0 {
+            bytesOut.reserveCapacity(Int(min(http.expectedContentLength, maxBytes)))
+        }
         for try await byte in bytes {
             total += 1
             if total > maxBytes {
                 throw FlowError.stageFailure(row: "network",
                                              message: "\(urlString) exceeded the \(maxBytes / 1_048_576) MB cap")
             }
-            data.append(byte)
+            bytesOut.append(byte)
         }
+        let data = Data(bytesOut)
         let contentType = http.allHeaderFields["Content-Type"] as? String ?? ""
         return (data, contentType.components(separatedBy: ";").first ?? contentType)
     }
@@ -283,8 +287,17 @@ nonisolated enum HTMLToText {
             // FIX-9: keep empty lines (Python splitlines), then collapse blank runs to one.
             var lines: [String] = []
             var blankRun = 0
-            for rawLine in raw.split(separator: "\n", omittingEmptySubsequences: false) {
-                let line = rawLine.split(whereSeparator: { $0 == " " || $0 == "\t" }).joined(separator: " ")
+            // QR12R2-3: Python's splitlines() also splits on \r and \r\n (CRLF is what
+            // most servers send); and Python's str.strip() treats U+00A0 as whitespace.
+            let splitLines = raw.split(maxSplits: .max, omittingEmptySubsequences: false,
+                                       whereSeparator: { $0 == "\n" || $0 == "\r" })
+            for rawLine in splitLines {
+                // Python's per-line `re.sub(r"[ \t]+", " ", ln).strip()`: interior
+                // \xa0 survives (it's not a `[ \t]` char), edges strip it (Python's
+                // `'\xa0'.isspace()` is True).
+                let collapsed = rawLine.split(maxSplits: .max, omittingEmptySubsequences: true,
+                                              whereSeparator: { $0 == " " || $0 == "\t" }).joined(separator: " ")
+                let line = collapsed.trimmingCharacters(in: Parser.PythonWhitespace)
                 if line.isEmpty {
                     blankRun += 1
                     if blankRun > 1 { continue }
@@ -328,12 +341,38 @@ nonisolated enum HTMLToText {
         /// covers XML entities + numeric refs; `&nbsp;` (HTML-only) is mapped by hand.
         static func unescape(_ text: String) -> String {
             guard text.contains("&") else { return text }
-            let withNbsp = text
-                .replacingOccurrences(of: "&nbsp;", with: "\u{00A0}")
-                .replacingOccurrences(of: "&#160;", with: "\u{00A0}")
-            let cf = CFXMLCreateStringByUnescapingEntities(kCFAllocatorDefault, withNbsp as CFString, nil)
-            return (cf as String?) ?? withNbsp
+            // QR12R2-3: CFXML decodes only the five XML entities + numeric refs; Python's
+            // convert_charrefs decodes all ~2,000 HTML5 named references. The ones real pages
+            // actually reach are a small table.
+            var out = text
+            for (name, scalar) in namedEntities {
+                out = out.replacingOccurrences(of: "&\(name);", with: String(scalar))
+            }
+            out = out.replacingOccurrences(of: "&#160;", with: "\u{00A0}")
+            let cf = CFXMLCreateStringByUnescapingEntities(kCFAllocatorDefault, out as CFString, nil)
+            return (cf as String?) ?? out
         }
+
+        /// Python's `str.strip()` whitespace — includes U+00A0, which Foundation's
+        /// `whitespacesAndNewlines` does not.
+        static let PythonWhitespace: CharacterSet = {
+            var cs = CharacterSet.whitespacesAndNewlines
+            cs.insert(Unicode.Scalar(0x00A0)!)
+            return cs
+        }()
+
+        /// The HTML5 named references Python decodes that CFXML does not (prose punctuation).
+        static let namedEntities: [(String, Unicode.Scalar)] = [
+            ("mdash", "\u{2014}"), ("ndash", "\u{2013}"), ("rsquo", "\u{2019}"),
+            ("lsquo", "\u{2018}"), ("ldquo", "\u{201C}"), ("rdquo", "\u{201D}"),
+            ("hellip", "\u{2026}"), ("copy", "\u{00A9}"), ("reg", "\u{00AE}"),
+            ("trade", "\u{2122}"), ("bull", "\u{2022}"), ("middot", "\u{00B7}"),
+            ("nbsp", "\u{00A0}"), ("laquo", "\u{00AB}"), ("raquo", "\u{00BB}"),
+            ("deg", "\u{00B0}"), ("plusmn", "\u{00B1}"), ("times", "\u{00D7}"),
+            ("divide", "\u{00F7}"), ("eacute", "\u{00E9}"), ("egrave", "\u{00E8}"),
+            ("agrave", "\u{00E0}"), ("ccedil", "\u{00E7}"), ("uuml", "\u{00FC}"),
+            ("ouml", "\u{00F6}"), ("auml", "\u{00E4}"),
+        ].compactMap { ($0.0, Unicode.Scalar($0.1)) }
 
         static func heading(_ name: String) -> Int? {
             guard name.count == 2, name.hasPrefix("h"), let n = Int(String(name.suffix(1))), (1...6).contains(n) else { return nil }

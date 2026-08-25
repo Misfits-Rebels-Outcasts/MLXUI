@@ -42,6 +42,12 @@ struct CatFlowNetToolsTests {
         case "links": return "<h1>Hi</h1><p>See <a href=\"https://x.com\">here</a>.</p><ul><li>one</li><li>two</li></ul>"
         case "script": return "<p>Keep</p><script>var x=1;</script><p>This</p>"
         case "wrapped": return "<h2>Title</h2><p>A longer paragraph that keeps going and going and wraps.</p>"
+        case "entities2": return "<p>a &mdash; b &rsquo;s &copy; &hellip;</p>"
+        case "crlf": return "<p>line one</p>\r\n<p>line two</p>"
+        case "trailing_nbsp": return "<p>tail&nbsp;</p><p>next</p>"
+        case "nbsp_lead": return "<p>&nbsp;leading&nbsp;space</p>"
+        case "tabs": return "<p>a\tb\tc</p>"
+        case "deep": return "<ul><li>alpha</li><li><ul><li>nested</li></ul></li></ul>"
         default: return ""
         }
     }
