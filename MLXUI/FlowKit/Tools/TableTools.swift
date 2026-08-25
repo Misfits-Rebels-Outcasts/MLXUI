@@ -333,7 +333,9 @@ nonisolated enum TableTool {
     }
 
     /// `merge_record` — a key join of two tables; the second table's last row wins on a
-    /// duplicate key, and its unmatched rows append.
+    /// duplicate key, and its unmatched rows append. CFM-R12-FIX-11: typed key identity
+    /// (`1` ≠ `"1"`), a nil key matches a nil key, and unmatched B rows append in source
+    /// order — the Python's `{row[key]: row for row in rows_b}` semantics exactly.
     static func mergeRecord(settings: String?, inputs: [Asset]) throws -> Asset {
         let allItems = inputs.flatMap { $0.items }.filter { $0.kind == .table }
         guard allItems.count >= 2, let pathA = allItems[0].path, let pathB = allItems[1].path else {
@@ -349,29 +351,47 @@ nonisolated enum TableTool {
             throw FlowError.stageFailure(row: "Merge Record", message: "key column '\(key)' isn't in both tables")
         }
         let columns = columnsA + columnsB.filter { !columnsA.contains($0) }
+        let nilKey = AnyHashable(NSNull())
+        func keyHash(_ value: Any?) -> AnyHashable {
+            guard let value else { return nilKey }
+            // FIX-11: typed identity — `1` ≠ `"1"` (the Python dict keeps the types).
+            switch value {
+            case let n as Int: return AnyHashable(n)
+            case let d as Double: return AnyHashable(d)
+            case let s as String: return AnyHashable(s)
+            case let b as Bool: return AnyHashable(b)
+            default: return AnyHashable(String(describing: value))
+            }
+        }
 
-        // Last row wins on a duplicate key within table B (the Python's dict build).
+        // Last row wins on a duplicate key (Python's dict build); keys in first-seen order
+        // so unmatched B rows append in insertion order.
         var bByKey: [AnyHashable: Row] = [:]
-        for row in rowsB { if let k = row[keyB] { bByKey[AnyHashable(String(describing: k))] = row } }
+        var keyOrder: [AnyHashable] = []
+        for row in rowsB {
+            let k = keyHash(row[keyB])
+            if bByKey[k] == nil { keyOrder.append(k) }
+            bByKey[k] = row
+        }
 
         var merged: [Row] = []
         var matched = Set<AnyHashable>()
         for row in rowsA {
             var record: [String: Any] = [:]
             for (i, c) in columnsA.enumerated() { record[c] = row[i] }
-            if let k = row[keyA] {
-                let keyHash = AnyHashable(String(describing: k))
-                if let bRow = bByKey[keyHash] {
-                    matched.insert(keyHash)
-                    for (i, c) in columnsB.enumerated() { record[c] = bRow[i] }
-                }
+            let k = keyHash(row[keyA])
+            if let bRow = bByKey[k] {
+                matched.insert(k)
+                for (i, c) in columnsB.enumerated() { record[c] = bRow[i] }
             }
             merged.append(columns.map { record[$0] })
         }
-        for (keyHash, bRow) in bByKey where !matched.contains(keyHash) {
-            var record: [String: Any] = [:]
-            for (i, c) in columnsB.enumerated() { record[c] = bRow[i] }
-            merged.append(columns.map { record[$0] })
+        for k in keyOrder where !matched.contains(k) {
+            if let bRow = bByKey[k] {
+                var record: [String: Any] = [:]
+                for (i, c) in columnsB.enumerated() { record[c] = bRow[i] }
+                merged.append(columns.map { record[$0] })
+            }
         }
         return Asset(items: [try tableItem(columns: columns, rows: merged, in: pathA.deletingLastPathComponent())])
     }

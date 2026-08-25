@@ -111,21 +111,23 @@ nonisolated enum IndexFormat {
     static func chunks(from data: Data) throws -> [String] {
         var out: [String] = []
         for line in data.split(separator: 0x0A) where !line.isEmpty {
+            // CFM-R12-FIX-11: a corrupt line raises — skipping it shifts chunk<->vector
+            // alignment and Retrieve returns the wrong text for a vector.
             guard let json = try? JSONSerialization.jsonObject(with: Data(line)),
-                  let dict = json as? [String: Any], let text = dict["text"] as? String else { continue }
+                  let dict = json as? [String: Any], let text = dict["text"] as? String else {
+                throw FlowError.stageFailure(row: "index", message: "corrupt chunks.jsonl line")
+            }
             out.append(text)
         }
         return out
     }
 
     static func chunksData(_ chunks: [String]) -> Data {
-        // Python's `json.dumps({"text": text})` separators put a space after the colon —
-        // match byte for byte.
+        // Python's `json.dumps({"text": text})` separators put a space after the colon, and
+        // `ensure_ascii=True` escapes non-ASCII — match byte for byte (CFM-R12-FIX-11).
         var out = Data()
         for chunk in chunks {
-            let value = String(data: try! JSONSerialization.data(withJSONObject: chunk,
-                                                                 options: [.fragmentsAllowed]),
-                               encoding: .utf8)!
+            let value = FlowParity.asciiJSON(chunk)
             out.append(Data("{\"text\": \(value)}\n".utf8))
         }
         return out
@@ -195,14 +197,18 @@ nonisolated struct StoreIndexTool {
         }
         let dir = try workspace.resolve(name, flowID: flowID)
         let fm = FileManager.default
-        if fm.fileExists(atPath: dir.path) { try fm.removeItem(at: dir) }
+        // FIX-11: an overwrite moves the old index to trash, never deletes (Spec §14.1).
+        try FlowParity.moveToTrash(dir)
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
 
         try IndexFormat.vectorsData(vectors).write(to: dir.appendingPathComponent("vectors.bin"))
         try IndexFormat.chunksData(texts).write(to: dir.appendingPathComponent("chunks.jsonl"))
-        let embedder = s.value(for: "embedder") ?? "unknown"
+        // FIX-11: honor `normalization=` (default none) and `embedder=` (or the embedder.json
+        // sidecar the Python's embed engine writes, when every vector came from one place).
+        let embedder = s.value(for: "embedder") ?? Self.autoEmbedder(inputs[1].items) ?? "unknown"
+        let normalization = s.value(for: "normalization") ?? "none"
         try IndexFormat.manifestData(embedder: embedder, dims: dims,
-                                     normalization: "none", count: texts.count)
+                                     normalization: normalization, count: texts.count)
             .write(to: dir.appendingPathComponent("manifest.json"))
         return Asset(items: [Item(kind: .index, value: nil, path: dir, sourceText: nil)])
     }
@@ -260,11 +266,33 @@ nonisolated struct RetrieveTool {
         let chunks = try IndexFormat.chunks(from: Data(contentsOf: indexDir.appendingPathComponent("chunks.jsonl")))
 
         let s = FlowSettings(settings)
-        let topK = Int(s.value(for: "top_k") ?? "5") ?? 5
-        let minScore = s.value(for: "min_score").flatMap(Double.init)
+        // FIX-11: an invalid `top_k=`/`min_score=` fails the row (Python's ValueError), it
+        // never silently defaults or drops the threshold.
+        let topK: Int
+        if let raw = s.value(for: "top_k") {
+            guard let v = Int(raw) else {
+                throw FlowError.invalidSettings(row: "Retrieve", setting: "top_k", detail: "isn't an integer")
+            }
+            topK = v
+        } else {
+            topK = 5
+        }
+        let minScore: Double?
+        if let raw = s.value(for: "min_score") {
+            guard let v = Double(raw) else {
+                throw FlowError.invalidSettings(row: "Retrieve", setting: "min_score", detail: "isn't a number")
+            }
+            minScore = v
+        } else {
+            minScore = nil
+        }
 
         let scores = Self.cosineScores(vectors: vectors, query: query)
-        let order = (0..<scores.count).sorted { scores[$0] > scores[$1] }
+        // FIX-11: explicit index tie-break — the Python's stable argsort keeps original
+        // order on equal scores (Swift's sort is stable today but not documented to be).
+        let order = (0..<scores.count).sorted {
+            scores[$0] > scores[$1] || (scores[$0] == scores[$1] && $0 < $1)
+        }
         var results: [String] = []
         for i in order {
             if let minScore, Double(scores[i]) < minScore { continue }
@@ -309,10 +337,21 @@ nonisolated struct KeywordSearchTool {
         _ = try IndexFormat.manifest(from: data)
         let chunks = try IndexFormat.chunks(from: Data(contentsOf: indexDir.appendingPathComponent("chunks.jsonl")))
         let query = textItem.value ?? ""
-        let topK = Int(FlowSettings(settings).value(for: "top_k") ?? "5") ?? 5
+        let topK: Int
+        if let raw = FlowSettings(settings).value(for: "top_k") {
+            guard let v = Int(raw) else {
+                throw FlowError.invalidSettings(row: "Keyword Search", setting: "top_k", detail: "isn't an integer")
+            }
+            topK = v
+        } else {
+            topK = 5
+        }
 
         let scores = Self.bm25(chunks: chunks, query: query)
-        let order = (0..<scores.count).sorted { scores[$0] > scores[$1] }
+        // FIX-11: stable index tie-break (the Python's argsort).
+        let order = (0..<scores.count).sorted {
+            scores[$0] > scores[$1] || (scores[$0] == scores[$1] && $0 < $1)
+        }
         let results = order.prefix(topK).filter { scores[$0] > 0 }.map { chunks[$0] }
         return Asset(items: results.map { Item(kind: .text, value: $0, path: nil, sourceText: nil) })
     }
@@ -357,5 +396,20 @@ nonisolated struct KeywordSearchTool {
             }
             return score
         }
+    }
+}
+
+extension StoreIndexTool {
+    /// SPEC-Q22: read the `embedder.json` sidecar when every vector came from the same
+    /// directory (the Python's `engines/embed.py` writes it); nil otherwise.
+    fileprivate static func autoEmbedder(_ vectorItems: [Item]) -> String? {
+        guard let first = vectorItems.first?.path else { return nil }
+        let parents = Set(vectorItems.compactMap { $0.path?.deletingLastPathComponent() })
+        guard parents.count == 1, let dir = parents.first else { return nil }
+        let sidecar = dir.appendingPathComponent("embedder.json")
+        guard let data = try? Data(contentsOf: sidecar),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let embedder = json["embedder"] as? String else { return nil }
+        return embedder
     }
 }

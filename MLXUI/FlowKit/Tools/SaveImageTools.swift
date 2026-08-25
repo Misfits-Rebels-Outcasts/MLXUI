@@ -35,10 +35,11 @@ nonisolated struct SaveImageTool: AssetStage {
         let tmp = dest.deletingLastPathComponent()
             .appendingPathComponent(".\(dest.lastPathComponent).tmp\(UUID().uuidString)")
         try fm.copyItem(at: src, to: tmp)
-        if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
+        // FIX-11: an overwrite moves the previous file to trash, never deletes (Spec §14.1).
+        try FlowParity.moveToTrash(dest)
         try fm.moveItem(at: tmp, to: dest)
         progress(1.0)
-        return Asset(items: [Item(kind: .status, value: "saved to \(rawPath)",
+        return Asset(items: [Item(kind: .status, value: "saved to \(normalizedSavePath(rawPath))",
                                   path: nil, sourceText: nil)])
     }
 }
@@ -68,10 +69,11 @@ nonisolated struct SaveVideoTool: AssetStage {
         let tmp = dest.deletingLastPathComponent()
             .appendingPathComponent(".\(dest.lastPathComponent).tmp\(UUID().uuidString)")
         try fm.copyItem(at: src, to: tmp)
-        if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
+        // FIX-11: trash, never delete.
+        try FlowParity.moveToTrash(dest)
         try fm.moveItem(at: tmp, to: dest)
         progress(1.0)
-        return Asset(items: [Item(kind: .status, value: "saved to \(path)",
+        return Asset(items: [Item(kind: .status, value: "saved to \(normalizedSavePath(path))",
                                   path: nil, sourceText: nil)])
     }
 }
@@ -96,8 +98,13 @@ nonisolated struct SaveImagesTool: AssetStage {
 
         var saved = 0
         for (i, item) in input.items.enumerated() {
-            guard let src = item.path else { continue }
-            guard FileManager.default.fileExists(atPath: src.path) else { continue }
+            guard let src = item.path else {
+                throw FlowError.missingInlineValue(row: "Save Images", kind: .image)
+            }
+            // FIX-11: a missing source is an error, not a silently-lowered success count.
+            guard FileManager.default.fileExists(atPath: src.path) else {
+                throw FlowError.fileReadFailed(row: "Save Images", path: src.lastPathComponent)
+            }
             let name = naming
                 .replacingOccurrences(of: "{n}", with: String(i + 1))
                 .replacingOccurrences(of: "{ext}", with: src.pathExtension.isEmpty ? "" : ".\(src.pathExtension)")
@@ -106,13 +113,20 @@ nonisolated struct SaveImagesTool: AssetStage {
             let fm = FileManager.default
             let tmp = folder.appendingPathComponent(".\(name).tmp\(UUID().uuidString)")
             try fm.copyItem(at: src, to: tmp)
-            if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
+            try FlowParity.moveToTrash(dest)
             try fm.moveItem(at: tmp, to: dest)
             saved += 1
         }
         progress(1.0)
-        let folderName = folder.lastPathComponent.isEmpty ? "." : folder.lastPathComponent
-        return Asset(items: [Item(kind: .status, value: "saved \(saved) image(s) to \(folderName)",
+        return Asset(items: [Item(kind: .status, value: "saved \(saved) image(s) to \(normalizedSavePath(folderRaw))",
                                   path: nil, sourceText: nil)])
     }
+}
+
+/// FIX-11: Python's `Path(raw)` normalisation — `./out.png` → `out.png`.
+nonisolated func normalizedSavePath(_ raw: String) -> String {
+    var s = raw
+    if s.hasPrefix("./") { s = String(s.dropFirst(2)) }
+    while s.hasSuffix("/") { s.removeLast() }
+    return s
 }

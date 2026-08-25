@@ -87,7 +87,9 @@ nonisolated enum OutboxStore {
     }
 
     private static func preview(_ text: String) -> String {
-        text.count <= 60 ? text : String(text.prefix(60)) + "…"
+        // FIX-11: Python's `text[:60]` counts *code points*, not graphemes.
+        let scalars = Array(text.unicodeScalars)
+        return scalars.count <= 60 ? text : String(String.UnicodeScalarView(scalars.prefix(60))) + "…"
     }
 
     /// The Python `json.dumps(entry, indent=2)` shape, field order and all.
@@ -107,9 +109,9 @@ nonisolated enum OutboxStore {
         """
     }
 
-    /// A JSON-escaped, double-quoted string literal (the Python `json.dumps` of a str).
+    /// A JSON-escaped, double-quoted string literal — the Python's `json.dumps(str,
+    /// ensure_ascii=True)` (CFM-R12-FIX-11), so a non-ASCII post still matches byte for byte.
     private static func jstr(_ s: String) -> String {
-        let data = try! JSONSerialization.data(withJSONObject: s, options: [.fragmentsAllowed])
-        return String(data: data, encoding: .utf8)!
+        FlowParity.asciiJSON(s)
     }
 }

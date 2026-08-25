@@ -69,4 +69,28 @@ struct CatFlowEntityToolsTests {
         let (columns, _) = try TableTool.readTable(from: try #require(out.items.first?.path))
         #expect(columns == ["name", "sales", "region", "tier"])
     }
+
+    /// CFM-R12-FIX-11: Merge Record keys are typed (`1` ≠ `"1"`), nil keys match nil, and
+    /// unmatched B rows append in source order.
+    @Test func mergeRecordTypedKeysAndOrder() async throws {
+        let (ws, base) = try makeWorkspace()
+        defer { teardown(base) }
+        let flowDir = ws.directory(for: "f")
+        try FileManager.default.createDirectory(at: flowDir, withIntermediateDirectories: true)
+        let a = flowDir.appendingPathComponent("a.table")
+        let b = flowDir.appendingPathComponent("b.table")
+        // A's key is an Int, B's is the same *string* — a typed join must NOT collapse them,
+        // so neither matches: A's row appends unmatched, and B's row appends unmatched.
+        try TableTool.writeTable(columns: ["id", "name"], rows: [[1, "lin"]], to: a)
+        try TableTool.writeTable(columns: ["id", "role"], rows: [["1", "stringRole"]], to: b)
+        let out = try TableTool.mergeRecord(settings: "key=id",
+                                            inputs: [Asset(items: [Item(kind: .table, value: nil, path: a, sourceText: nil)]),
+                                                     Asset(items: [Item(kind: .table, value: nil, path: b, sourceText: nil)])])
+        let (columns, rows) = try TableTool.readTable(from: try #require(out.items.first?.path))
+        #expect(rows.count == 2)                        // both unmatched, neither collapsed
+        #expect(rows[0][1] as? String == "lin")
+        #expect(rows[1][1] == nil)                      // B's row has no name
+        #expect(rows[1][2] as? String == "stringRole")  // its role lands in the widened column
+    }
+
 }

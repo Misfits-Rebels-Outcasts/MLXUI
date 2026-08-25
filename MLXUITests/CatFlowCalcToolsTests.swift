@@ -114,4 +114,15 @@ struct CatFlowCalcToolsTests {
         #expect(cg != nil)
         #expect(cg?.width ?? 0 > 100)
     }
+
+    /// CFM-R12-FIX-11: `Range step=+2` is refused (Python's `_RE_INT`).
+    @Test func rangeRefusesPlusSignStep() async throws {
+        let (ws, base) = try makeWorkspace()
+        defer { teardown(base) }
+        let tool = RangeTool(workspace: ws, flowID: "f", settings: "0..3; step=+1")
+        await #expect(throws: (any Error).self) {
+            _ = try await tool.run(Asset(items: [])) { _ in }
+        }
+    }
+
 }

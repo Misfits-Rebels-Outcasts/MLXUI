@@ -324,7 +324,12 @@ nonisolated struct RangeTool: AssetStage {
                                             detail: "isn't `a..b` — write an inclusive integer range, e.g. `0..99`")
         }
         let stepRaw = s.value(for: "step") ?? "1"
-        guard let step = Int(stepRaw), step > 0 else {
+        // FIX-11: Python's `_RE_INT` refuses `+2` — the step must be plain digits (optionally
+        // a leading `-`), never a sign-plus.
+        let stepPattern = NSRegularExpression.compiled(#"^-?\d+$"#)
+        let stepNS = NSRange(stepRaw.startIndex..<stepRaw.endIndex, in: stepRaw)
+        guard stepPattern.firstMatch(in: stepRaw, range: stepNS) != nil,
+              let step = Int(stepRaw), step > 0 else {
             throw FlowError.invalidSettings(row: "Range", setting: "step",
                                             detail: "must be a positive integer")
         }

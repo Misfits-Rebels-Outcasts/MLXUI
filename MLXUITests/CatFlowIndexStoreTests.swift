@@ -200,4 +200,37 @@ struct CatFlowIndexStoreTests {
             #expect(FlowRunner.canRun(doc) == .runnable, "\(fid) should be runnable after R12-6")
         }
     }
+
+    /// CFM-R12-FIX-11: invalid `top_k=` fails the row instead of silently defaulting.
+    @Test func retrieveRefusesInvalidTopK() async throws {
+        let (ws, base) = try makeWorkspace()
+        defer { teardown(base) }
+        let idx = try goldenIndexDir()
+        let flowDir = ws.directory(for: "f")
+        try FileManager.default.createDirectory(at: flowDir, withIntermediateDirectories: true)
+        let queryURL = flowDir.appendingPathComponent("q.npy")
+        try NpyCodec.save([1, 0, 0, 0, 0, 0, 0, 0], to: queryURL)
+        let tool = RetrieveTool(workspace: ws, flowID: "f", settings: "top_k=abc")
+        await #expect(throws: FlowError.self) {
+            _ = try await tool.run(inputs: [
+                Asset(items: [Item(kind: .index, value: nil, path: idx, sourceText: nil)]),
+                Asset(items: [Item(kind: .vector, value: nil, path: queryURL, sourceText: nil)]),
+            ])
+        }
+    }
+
+    /// CFM-R12-FIX-11: corrupt chunks.jsonl raises (alignment must not shift).
+    @Test func corruptChunkLineRaises() async throws {
+        let data = Data("{\"text\": \"ok\"}\ngarbage\n{\"text\": \"two\"}".utf8)
+        await #expect(throws: FlowError.self) {
+            _ = try IndexFormat.chunks(from: data)
+        }
+    }
+
+    /// CFM-R12-FIX-11: `asciiJSON` escapes non-ASCII like Python's ensure_ascii.
+    @Test func asciiJSONEscapesNonASCII() {
+        #expect(FlowParity.asciiJSON("café") == "\"caf\\u00e9\"")
+        #expect(FlowParity.asciiJSON("plain") == "\"plain\"")
+    }
+
 }

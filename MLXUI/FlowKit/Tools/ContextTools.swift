@@ -43,16 +43,22 @@ nonisolated struct ReadContextTool: AssetStage {
     var produces: Shape { .single(.context) }
 
     func run(_ input: Asset, progress: @Sendable @escaping (Double) -> Void) async throws -> Asset {
-        guard let path = FlowSettings(settings).pathValue() else {
+        // FIX-11: an upstream file input wins (the Python `_resolve_path` reads it first) —
+        // `Read Context (1)` fed by an upstream `Read Files` row must not fail.
+        let url: URL
+        if let upstream = input.items.first, upstream.kind == .file, let path = upstream.path {
+            url = path
+        } else if let raw = FlowSettings(settings).pathValue() {
+            url = try workspace.resolve(raw, flowID: flowID)
+        } else {
             throw FlowError.missingInlineValue(row: "Read Context", kind: .file)
         }
-        let url = try workspace.resolve(path, flowID: flowID)
         do {
             let raw = try String(contentsOf: url, encoding: .utf8)
             progress(1.0)
             return Asset(items: [Item(kind: .context, value: raw, path: nil, sourceText: nil)])
         } catch {
-            throw FlowError.fileReadFailed(row: "Read Context", path: path)
+            throw FlowError.fileReadFailed(row: "Read Context", path: url.lastPathComponent)
         }
     }
 }

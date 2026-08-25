@@ -119,4 +119,30 @@ struct CatFlowSaveToolsTests {
         let browser = try JSONDecoder().decode(BrowserData.self, from: Data(contentsOf: url))
         return browser.domains.flatMap { $0.allModels }
     }
+
+    /// CFM-R12-FIX-11: an overwrite moves the previous file to `.trash`, never deletes it.
+    @Test func saveImageTrashesTheOverwrite() async throws {
+        let (ws, base) = try makeWorkspace()
+        defer { teardown(base) }
+        let flowDir = ws.directory(for: "f")
+        try FileManager.default.createDirectory(at: flowDir, withIntermediateDirectories: true)
+        let src = flowDir.appendingPathComponent("blob.png")
+        try PNGEncoder.pngData(from: try ImageTools.load(try ImageTools.save(redPixel(), format: nil, blobDirectory: flowDir, row: "t")))?.write(to: src)
+        let tool = SaveImageTool(workspace: ws, flowID: "f", settings: "out.png")
+        _ = try await tool.run(Asset(items: [Item(kind: .image, value: nil, path: src, sourceText: nil)])) { _ in }
+        _ = try await tool.run(Asset(items: [Item(kind: .image, value: nil, path: src, sourceText: nil)])) { _ in }
+        let trash = flowDir.appendingPathComponent(".trash")
+        let entries = (try? FileManager.default.contentsOfDirectory(atPath: trash.path)) ?? []
+        #expect(entries.contains { $0.hasPrefix("out.png.") })
+    }
+
+    private func redPixel() -> CGImage {
+        let ctx = CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                            space: CGColorSpaceCreateDeviceRGB(),
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+        return ctx.makeImage()!
+    }
+
 }
