@@ -19,7 +19,7 @@ nonisolated enum CatSerializer {
     /// `format_flow`'s text half — `render(parse(text))`'s `render`. Ends with a single
     /// trailing newline (or `""` for an empty flow).
     static func serialize(_ doc: FlowDocument, deadRefNumbers: [UUID: Int] = [:]) -> String {
-        let (lines, _) = serializeLines(doc, deadRefNumbers: deadRefNumbers)
+        let (lines, _, _) = serializeLines(doc, deadRefNumbers: deadRefNumbers)
         return lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
     }
 
@@ -28,10 +28,13 @@ nonisolated enum CatSerializer {
     /// `deadRefNumbers` (CFM-R8-3) lets a *display* rendering show a reference to a deleted
     /// row as `(?N)` — the number it held — instead of the read-only path's `-1`. The
     /// editor's save gate never writes a broken reference, so `(?N)` never reaches a file.
-    static func serializeLines(_ doc: FlowDocument, deadRefNumbers: [UUID: Int] = [:]) -> (lines: [String], lineRanges: [UUID: Range<Int>]) {
+    static func serializeLines(_ doc: FlowDocument, deadRefNumbers: [UUID: Int] = [:]) -> (lines: [String], lineRanges: [UUID: Range<Int>], clauseRanges: [UUID: Range<Int>]) {
         let isV08 = doc.version == "0.8"
         var lines: [String] = []
         var ranges: [UUID: Range<Int>] = [:]
+        // QR12R2-1: a block's clause line is emitted *after* its children, so the header-only
+        // range never covers it — record it separately so the flattened list can draw it.
+        var clauseRanges: [UUID: Range<Int>] = [:]
 
         if !doc.version.isEmpty {
             let token = doc.fileKind == .catpipeline ? "catpipeline" : "catflow"
@@ -80,6 +83,7 @@ nonisolated enum CatSerializer {
                               deadRefNumbers: deadRefNumbers)
         lines.append(contentsOf: rows.lines)
         ranges.merge(rows.ranges) { a, _ in a }
+        clauseRanges.merge(rows.clauseRanges) { a, _ in a }
 
         if !doc.definitions.isEmpty {
             lines.append("")
@@ -118,7 +122,7 @@ nonisolated enum CatSerializer {
             }
         }
 
-        return (lines, ranges)
+        return (lines, ranges, clauseRanges)
     }
 
     // MARK: - Section helpers
@@ -174,7 +178,7 @@ nonisolated enum CatSerializer {
     /// `_render_rows` — one pass over a scope so the "N. Task" label column and the ref
     /// column are sized to that scope. Returns each row's absolute line range.
     static func renderRows(_ rows: [Row], wrap: Bool, isV08: Bool,
-                           baseLine: Int, deadRefNumbers: [UUID: Int] = [:]) -> (lines: [String], ranges: [UUID: Range<Int>]) {
+                           baseLine: Int, deadRefNumbers: [UUID: Int] = [:]) -> (lines: [String], ranges: [UUID: Range<Int>], clauseRanges: [UUID: Range<Int>]) {
         let labels = rows.enumerated().map { label(number: $0.offset + 1, row: $0.element, isV08: isV08) }
         let tailWidths = zip(labels, rows).compactMap { $1.blockKind == nil ? $0.unicodeScalars.count : nil }
         let col = tailWidths.isEmpty ? 0 : (tailWidths.max()! + gap)
@@ -185,6 +189,7 @@ nonisolated enum CatSerializer {
 
         var lines: [String] = []
         var ranges: [UUID: Range<Int>] = [:]
+        var clauseRanges: [UUID: Range<Int>] = [:]
         var current = baseLine
         for (row, label, refsStr) in zip(rows, zip(labels, refStrs)).map({ ($0, $1.0, $1.1) }) {
             if row.chainBreak {
@@ -213,6 +218,7 @@ nonisolated enum CatSerializer {
                     current += 1
                 }
                 ranges.merge(children.ranges) { a, _ in a }
+                clauseRanges.merge(children.clauseRanges) { a, _ in a }
             } else {
                 let rest = tail(row: row, isV08: isV08)
                 let prefix: String
@@ -232,6 +238,7 @@ nonisolated enum CatSerializer {
             }
             if let clause = row.clause {
                 lines.append("\(clauseIndent)\(renderClause(clause, isV08: isV08))")
+                clauseRanges[row.id] = current..<(current + 1)
                 current += 1
             }
             // Non-block rows land here with no range yet; a block's header range was already
@@ -240,7 +247,7 @@ nonisolated enum CatSerializer {
                 ranges[row.id] = start..<current
             }
         }
-        return (lines, ranges)
+        return (lines, ranges, clauseRanges)
     }
 
     private static func pad(_ n: Int) -> String {

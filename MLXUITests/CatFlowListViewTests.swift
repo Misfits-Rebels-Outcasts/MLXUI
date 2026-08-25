@@ -23,7 +23,7 @@ struct CatFlowListViewTests {
 
     @Test func spokenSummaryRendersTheSixCanonicalLines() throws {
         let doc = try decode("01-SpokenSummary")
-        let (lines, ranges) = CatSerializer.serializeLines(doc)
+        let (lines, ranges, _) = CatSerializer.serializeLines(doc)
         // The serializer emits the version header as lines[0]; the view slices per row, so
         // assert on the row ranges' slices — the thing the view actually renders (FIX-1).
         #expect(lines.first == "catflow 0.8")
@@ -47,7 +47,7 @@ struct CatFlowListViewTests {
     @Test func spokenSummaryRow6LineHasParen2Ref() throws {
         let doc = try decode("01-SpokenSummary")
         let row6 = try #require(doc.rows.last)
-        let (_, ranges) = CatSerializer.serializeLines(doc)
+        let (_, ranges, _) = CatSerializer.serializeLines(doc)
         let range = try #require(ranges[row6.id])
         // The serializer puts `(2)` in the ref column of row 6's canonical line.
         #expect(CatSerializer.serialize(doc).contains("6. Save Text    (2)   memo-transcript.txt"))

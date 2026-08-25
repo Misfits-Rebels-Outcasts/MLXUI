@@ -31,7 +31,7 @@ struct FlowEditorView: View {
 
     /// The flow list *is* the file: canonical lines, with a deleted row's references
     /// rendered `(?N)` from the editor's tombstones.
-    private var serialized: (lines: [String], lineRanges: [UUID: Range<Int>]) {
+    private var serialized: (lines: [String], lineRanges: [UUID: Range<Int>], clauseRanges: [UUID: Range<Int>]) {
         CatSerializer.serializeLines(model.document, deadRefNumbers: model.tombstones)
     }
 
@@ -332,7 +332,9 @@ struct FlowEditorView: View {
                     .padding(.top, 4)
                 if let range = serialized.lineRanges[row.id] {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        Text(serialized.lines[range].joined(separator: "\n"))
+                        // QR12R2-1: a block's clause line is drawn after its header.
+                        let clause = serialized.clauseRanges[row.id].map { serialized.lines[$0] } ?? []
+                        Text((Array(serialized.lines[range]) + clause).joined(separator: "\n"))
                             .font(.system(.body, design: .monospaced))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())

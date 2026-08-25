@@ -35,6 +35,8 @@ struct FlowListView: View {
     /// in `load()`; `lineRanges` maps each row id to its lines' range in `serializedLines`.
     @State private var serializedLines: [String] = []
     @State private var lineRanges: [UUID: Range<Int>] = [:]
+    /// QR12R2-1: a block's clause line (emitted after its children) — drawn after the header.
+    @State private var clauseLineRanges: [UUID: Range<Int>] = [:]
     /// R7-5: block rows whose children are collapsed (start expanded).
     @State private var collapsedBlocks: Set<UUID> = []
     @State private var session = FlowRunSession()
@@ -277,11 +279,15 @@ struct FlowListView: View {
 
     /// One row's `FlowSerializedRow` — extracted so the row builder stays type-checkable.
     private func rowView(row: Row, range: Range<Int>, isBlock: Bool, isCollapsed: Bool) -> some View {
-        let shownLines: [String]
+        var shownLines: [String]
         if isCollapsed {
             shownLines = Array(serializedLines[range.lowerBound..<min(range.lowerBound + 1, range.upperBound)])
         } else {
             shownLines = Array(serializedLines[range])
+        }
+        // QR12R2-1: a block's clause line is part of its rendered lines (e.g. `-> 7`).
+        if let clauseRange = clauseLineRanges[row.id] {
+            shownLines.append(contentsOf: serializedLines[clauseRange])
         }
         return FlowSerializedRow(lines: shownLines,
                                  status: statusForDisplay(row, isCollapsed: isCollapsed),
@@ -728,6 +734,7 @@ struct FlowListView: View {
         let serialized = CatSerializer.serializeLines(doc)
         serializedLines = serialized.lines
         lineRanges = serialized.lineRanges
+        clauseLineRanges = serialized.clauseRanges
 
         // CFM-R12-FIX-1: the refusal comes from the live gates (canRun + preflight), never
         // from a hand-written `_metadata.json` string that can go stale. `FlowRunnability`
@@ -778,6 +785,7 @@ struct FlowListView: View {
         let serialized = CatSerializer.serializeLines(doc)
         serializedLines = serialized.lines
         lineRanges = serialized.lineRanges
+        clauseLineRanges = serialized.clauseRanges
 
         // CFM-R12-FIX-1: a user flow's refusal is the same live gates a bundled flow's is.
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []

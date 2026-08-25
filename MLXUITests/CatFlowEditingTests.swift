@@ -732,21 +732,51 @@ struct CatFlowEditingTests {
     // MARK: - CFM-R12-FIX-2/4: the block-editing trio
 
     @Test func flattenedRenderCoversEachLineExactlyOnce() throws {
-        // CFM-R12-FIX-2: a block's range is its header only; the flattened list renders
-        // each *row* line exactly once (the double-body bug is gone). Blank lines are
-        // chain-break separators (never part of a row's range, by design) and the serialized
-        // lines include a preamble (the `catflow` version line) that belongs to no row.
-        let doc = try GalleryLoader.loadDocument(flowID: "02-MeetingMinutes")
-        let serialized = CatSerializer.serializeLines(doc)
-        let entries = FlowRowFlatten.flatten(doc.rows, collapsed: [])
-        let rendered = entries.flatMap { entry -> [String] in
-            guard let range = serialized.lineRanges[entry.row.id] else { return [] }
-            return Array(serialized.lines[range])
+        // CFM-R12-FIX-2 + QR12R2-1: a block's range is its header only; the flattened list
+        // renders each *row* line exactly once (the double-body bug is gone), and a block's
+        // clause line (emitted after its children) is drawn too — nothing in the file stops
+        // appearing. Runs over **every** gallery flow, not one.
+        let flows = GalleryLoader.loadMetadata().map(\.flowID)
+        var failures: [String] = []
+        for flowID in flows {
+            guard let doc = try? GalleryLoader.loadDocument(flowID: flowID) else { continue }
+            let serialized = CatSerializer.serializeLines(doc)
+            let entries = FlowRowFlatten.flatten(doc.rows, collapsed: [])
+            let rendered = entries.flatMap { entry -> [String] in
+                var out: [String] = []
+                if let range = serialized.lineRanges[entry.row.id] {
+                    out.append(contentsOf: serialized.lines[range])
+                }
+                if let clause = serialized.clauseRanges[entry.row.id] {
+                    out.append(contentsOf: serialized.lines[clause])
+                }
+                return out
+            }
+            let preamble = serialized.lineRanges.values.map(\.lowerBound).min() ?? 0
+            let rowLines = Array(serialized.lines.dropFirst(preamble).filter { !$0.isEmpty })
+            if rendered != rowLines {
+                failures.append("\(flowID): rendered=\(rendered.count) rowLines=\(rowLines.count)")
+            }
+            if Set(rendered).count != rendered.count {
+                failures.append("\(flowID): duplicate rendered lines")
+            }
         }
-        let preamble = serialized.lineRanges.values.map(\.lowerBound).min() ?? 0
-        let rowLines = Array(serialized.lines.dropFirst(preamble).filter { !$0.isEmpty })
-        #expect(rendered == rowLines)
-        #expect(Set(rendered).count == rendered.count, "no line rendered twice")
+        #expect(failures.isEmpty, Comment(rawValue: failures.joined(separator: "; ")))
+
+        // QR12R2-1's named case: 45-RouterDesk's block clause (`-> 7`) must render.
+        let doc = try GalleryLoader.loadDocument(flowID: "45-RouterDesk")
+        let serialized = CatSerializer.serializeLines(doc)
+        let rendered = FlowRowFlatten.flatten(doc.rows, collapsed: []).flatMap { entry -> [String] in
+            var out: [String] = []
+            if let range = serialized.lineRanges[entry.row.id] {
+                out.append(contentsOf: serialized.lines[range])
+            }
+            if let clause = serialized.clauseRanges[entry.row.id] {
+                out.append(contentsOf: serialized.lines[clause])
+            }
+            return out
+        }
+        #expect(rendered.contains { $0.contains("-> 7") }, "45-RouterDesk's block clause line must render")
     }
 
     @Test func addingWithABlockHeaderSelectedInsertsInside() throws {
