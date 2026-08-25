@@ -48,6 +48,20 @@ struct CatFlowCalcToolsTests {
         let expected: String
     }
 
+    /// CFM-R12-FIX-8 — the four parity cases the golden doesn't cover.
+    @Test func fix8ParityCases() {
+        func run(_ expr: String) -> String {
+            do { return CalcEngine.formatNumber(try CalcEngine.evaluate(expr)) }
+            catch CalcEngine.CalcError.message(let m) { return m }
+            catch { return "unexpected: \(error)" }
+        }
+        #expect(run("-7 % 3") == "2")                       // a: floored modulo
+        #expect(run("2 ^ 100") == "1267650600228229401496703205376")   // b: no crash, exact
+        #expect(run("round(2.675, 2)") == "2.67")           // d: banker's on the exact value
+        #expect(run("round(0.1234565, 6)") == "0.123456")   // c: half-even
+        #expect(run("0 ^ -1") == "division by zero")
+    }
+
     @Test func calculateToolReturnsErrorsAsText() async throws {
         let (ws, base) = try makeWorkspace()
         defer { teardown(base) }

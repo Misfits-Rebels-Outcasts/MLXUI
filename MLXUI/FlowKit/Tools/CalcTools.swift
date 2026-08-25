@@ -41,14 +41,44 @@ nonisolated enum CalcEngine {
         return result
     }
 
-    /// `_format_number` — round to 6 places; integral → `"3"`, else `%.6f` trimmed.
+    /// `_format_number` — `round(x, 6)` (CPython's banker's rounding, applied to the exact
+    /// binary value), then integral → `str(int(x))` (via `%.0f`, which never overflows —
+    /// CFM-R12-FIX-8b) else `%.6f` trimmed.
     static func formatNumber(_ x: Double) -> String {
-        let r = (x * 1_000_000).rounded() / 1_000_000
-        if r == r.rounded() { return String(Int(r.rounded())) }
-        var s = String(format: "%.6f", r)
+        // Already integral: print the exact integer straight from the double — a Decimal
+        // round-trip would lose exact huge values like `2 ^ 100`.
+        if x == x.rounded() {
+            return String(format: "%.0f", x.rounded())
+        }
+        let rounded6 = roundBankers(x, places: 6)
+        var s = String(format: "%.6f", rounded6)
         while s.hasSuffix("0") { s.removeLast() }
         if s.hasSuffix(".") { s.removeLast() }
         return s
+    }
+
+    /// CPython's `round(value, ndigits)`: round half to even on the **exact** decimal of the
+    /// double — `Decimal(double)` alone is not enough (`2.675` round-trips to `2.675`, while
+    /// the binary value is `2.67499…`), so the exact value comes from `%.17g` (CFM-R12-FIX-8d).
+    static func roundBankers(_ x: Double, places: Int) -> Double {
+        var exact = Decimal(string: String(format: "%.17g", x)) ?? Decimal(x)
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &exact, places, .bankers)
+        return NSDecimalNumber(decimal: rounded).doubleValue
+    }
+
+    /// Exact integer-power by squaring — `2 ^ 100` is `1267650600228229401496703205376`,
+    /// matching Python's `2.0**100.0` (which Apple's `pow` misses by one ULP).
+    static func intPow(_ base: Double, _ n: Int) -> Double {
+        var result = 1.0
+        var b = base
+        var e = abs(n)
+        while e > 0 {
+            if e & 1 == 1 { result *= b }
+            e >>= 1
+            if e > 0 { b *= b }
+        }
+        return n < 0 ? 1.0 / result : result
     }
 
     // MARK: Tokenizer
@@ -134,7 +164,14 @@ nonisolated enum CalcEngine {
                     value = value * rhs
                 } else {
                     if rhs == 0 { throw CalcError.message("division by zero") }
-                    value = op == "/" ? value / rhs : value.truncatingRemainder(dividingBy: rhs)
+                    if op == "/" {
+                        value = value / rhs
+                    } else {
+                        // Python's `%` is floored (non-negative for a positive divisor):
+                        // `-7 % 3 == 2`, not `-1` (CFM-R12-FIX-8a).
+                        let m = value.truncatingRemainder(dividingBy: rhs)
+                        value = m < 0 ? m + rhs : m
+                    }
                 }
             }
             return value
@@ -151,7 +188,20 @@ nonisolated enum CalcEngine {
             if peek().kind == "^" {
                 advance()
                 let exponent = try parseUnary()   // right-associative, allows `2^-2`
-                let result = pow(base, exponent)
+                // Python: `0 ^ -1` raises ZeroDivisionError -> "division by zero" (FIX-8).
+                if base == 0 && exponent < 0 { throw CalcError.message("division by zero") }
+                // Integral base+exponent: exact exponentiation by squaring, so `2 ^ 100`
+                // lands on the exact power Apple's `pow` is one ULP below — the printed
+                // integer matches Python's (CFM-R12-FIX-8b). Non-integral falls back.
+                let result: Double
+                if base == base.rounded(), exponent == exponent.rounded(),
+                   base.isFinite, exponent.isFinite,
+                   base >= -9_007_199_254_740_992, base <= 9_007_199_254_740_992,
+                   exponent >= -4_096, exponent <= 4_096 {
+                    result = CalcEngine.intPow(base, Int(exponent))
+                } else {
+                    result = pow(base, exponent)
+                }
                 if result.isNaN { throw CalcError.message("math domain error") }
                 if result.isInfinite { throw CalcError.message("overflow") }
                 return result
@@ -193,8 +243,7 @@ nonisolated enum CalcEngine {
             throw CalcError.message("unexpected token '\(describe(tok))'")
         }
 
-        func callFunction(_ name: String, args: [Double]) throws -> Double {
-            func arity(_ expected: String) -> CalcError { .message("'\(name)' expects \(expected)") }
+        func callFunction(_ name: String, args: [Double]) throws -> Double {            func arity(_ expected: String) -> CalcError { .message("'\(name)' expects \(expected)") }
             switch name {
             case "sqrt":
                 if args.count != 1 { throw arity("1 argument") }
@@ -205,10 +254,7 @@ nonisolated enum CalcEngine {
                 return abs(args[0])
             case "round":
                 if args.count == 1 { return args[0].rounded(.toNearestOrEven) }
-                if args.count == 2 {
-                    let factor = pow(10.0, Double(Int(args[1])))
-                    return (args[0] * factor).rounded(.toNearestOrEven) / factor
-                }
+                if args.count == 2 { return CalcEngine.roundBankers(args[0], places: Int(args[1])) }
                 throw arity("1 or 2 arguments")
             case "ln":
                 if args.count != 1 { throw arity("1 argument") }
