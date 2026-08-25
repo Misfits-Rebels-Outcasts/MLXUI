@@ -30,6 +30,8 @@ struct MLXUIApp: App {
                             Group {
                                 if appState.selectedSection.isHome {
                                     HomeView()
+                                } else if case .overview = appState.selectedSection, !AppState.hideAutomate {
+                                    OverviewView()
                                 } else if case .aiWorkflows = appState.selectedSection, !AppState.hideAutomate {
                                     FlowGalleryView()
                                 } else if let opened = appState.openedCatFlow {

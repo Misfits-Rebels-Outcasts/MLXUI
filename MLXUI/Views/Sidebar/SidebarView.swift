@@ -27,6 +27,8 @@ struct SidebarView: View {
 
             if !AppState.hideFlows, !AppState.hideAutomate, !appState.galleryEntries.isEmpty {
                 Section("Automate") {
+                    Label("Overview", systemImage: "info.circle")
+                        .tag(SidebarItem.overview)
                     Label("AI Workflows", systemImage: "flowchart")
                         .tag(SidebarItem.aiWorkflows)
                 }
