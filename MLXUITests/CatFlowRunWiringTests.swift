@@ -36,6 +36,26 @@ struct CatFlowRunWiringTests {
         }
     }
 
+    /// CFM-R12-FIX-3: block children get their own status dot — `rowStates` is seeded from
+    /// the flattened row set, so a child's `.finished` event records instead of being
+    /// silently dropped.
+    @Test func blockChildrenGetTheirOwnDots() async throws {
+        let doc = try decode("02-MeetingMinutes")
+        let session = FlowRunSession()
+        session.prepareInstall(FlowPreflight.Result())
+        session.start(doc: doc, runner: FlowRunner(), context: makeMockContext())
+        let deadline = Date().addingTimeInterval(10)
+        while session.isRunning && Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        let block = try #require(doc.rows.first { $0.blockKind != nil })
+        #expect(block.children.count >= 3)
+        for child in block.children {
+            #expect(session.status(for: child.id) == .succeeded,
+                    "child \(child.task ?? "?") should have its own succeeded dot")
+        }
+    }
+
     @Test func sessionFailedRowShowsErrorSentence() async throws {
         // CFM-R10-FIX-1: the runner consults `canRun` before starting — a flow with an
         // unknown task surfaces the refusal as a `.failed` sentence, never a partial run.

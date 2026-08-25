@@ -90,6 +90,12 @@ final class FlowRunSession {
         rowStates[rowID]?.status ?? .notRun
     }
 
+    /// CFM-R12-FIX-3: every row a run can touch — top-level and block children alike — so
+    /// `rowStates` seeding and Clear Run cover child ids (a child's dot must advance).
+    nonisolated static func flattenedRows(_ rows: [Row]) -> [Row] {
+        rows.flatMap { [$0] + flattenedRows($0.children) }
+    }
+
     /// Whether any row has earned a result (any succeeded dot) — gates "re-run from here".
     var hasRunResults: Bool {
         rowStates.values.contains { $0.status == .succeeded }
@@ -119,7 +125,8 @@ final class FlowRunSession {
         if startIndex == 0 { cacheHitRows = [] }
         let resumeOutputs = resume ? outputs : [:]
         if startIndex == 0 {
-            rowStates = Dictionary(doc.rows.map { ($0.id, RowState()) }, uniquingKeysWith: { a, _ in a })
+            rowStates = Dictionary(Self.flattenedRows(doc.rows).map { ($0.id, RowState()) },
+                             uniquingKeysWith: { a, _ in a })
         } else {
             // Keep the ✓ rows' states; gray out everything from startIndex down.
             for (id, var state) in rowStates {
@@ -188,7 +195,8 @@ final class FlowRunSession {
     /// store is untouched (Clear Cache is separate).
     func clearRun(doc: FlowDocument) {
         cancel()
-        rowStates = Dictionary(doc.rows.map { ($0.id, RowState()) }, uniquingKeysWith: { a, _ in a })
+        rowStates = Dictionary(Self.flattenedRows(doc.rows).map { ($0.id, RowState()) },
+                             uniquingKeysWith: { a, _ in a })
         outputs = [:]
         selectedRowID = nil
         parked = nil

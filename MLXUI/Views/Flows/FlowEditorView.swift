@@ -8,9 +8,10 @@ import SwiftUI
 ///   last row's (answer `c4`); "Add from Full Catalog" is the escape hatch (answer `l`).
 /// - Add inserts **below** the selected row (answer `c7`); a row that can't take what's
 ///   upstream turns **yellow** with a one-line warning (answers `l`, `h5`).
-/// - Remove is swipe-native + a menu; reorder is `.onMove`, always allowed (answers `c10`,
-///   `c12`). A deleted row's references render `(?N)` and stay yellow — never silently
-///   re-aimed (answers `c5`, `c9`); there is no "fix for me" (answer `h3`).
+/// - Remove is swipe-native + a menu; reorder is drag (`.onMove`, scoped to the row's own
+///   level) + Move up/down in the menu (answers `c10`, `c12`). A deleted row's references
+///   render `(?N)` and stay yellow — never silently re-aimed (answers `c5`, `c9`); there is
+///   no "fix for me" (answer `h3`).
 /// - Undo/redo are whole-document value snapshots (answer `c11`).
 /// - Save writes the canonical `.cat` into the flow's folder (answer `e`); it refuses while
 ///   any reference is broken. Run works like every gallery flow (preflight → run dots).
@@ -261,6 +262,12 @@ struct FlowEditorView: View {
                 ForEach(visibleRows) { display in
                     editorRow(display.row, depth: display.depth)
                 }
+                // CFM-R12-FIX-4: drag reorder is back, scoped to the row's own level — a
+                // child moves among its siblings (moveInside), a top-level row among
+                // top-level rows (move).
+                .onMove { source, destination in
+                    handleMove(from: source, to: destination)
+                }
             }
             .listStyle(.plain)
             if model.selectedRowID != nil {
@@ -270,6 +277,26 @@ struct FlowEditorView: View {
                                      catalog: appState.browserData?.domains.flatMap { $0.allModels } ?? [],
                                      totalRAMGB: appState.systemInfo.totalRAMGB)
             }
+        }
+    }
+
+    /// CFM-R12-FIX-4: map a flattened-list drag onto the model's scope-aware move. The
+    /// destination offset counts same-scope rows before the drop point (the convention
+    /// `Array.move(fromOffsets:toOffset:)` expects in the pre-move list).
+    private func handleMove(from source: IndexSet, to destination: Int) {
+        let rows = visibleRows
+        guard let from = source.first, source.count == 1 else { return }
+        let rowID = rows[from].row.id
+        if let (blockID, childIndex) = model.childIndexOf(rowID) {
+            let beforeDest = rows[..<max(destination, 0)].filter {
+                model.childIndexOf($0.row.id)?.blockID == blockID
+            }.count
+            model.moveInside(blockID: blockID, from: [childIndex], to: beforeDest)
+        } else if let topIndex = model.document.rows.firstIndex(where: { $0.id == rowID }) {
+            let beforeDest = rows[..<max(destination, 0)].filter {
+                model.childIndexOf($0.row.id) == nil
+            }.count
+            model.move(from: [topIndex], to: beforeDest)
         }
     }
 

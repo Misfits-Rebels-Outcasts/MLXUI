@@ -25,9 +25,9 @@ struct CatFlowEditingTests {
 
     private func row(_ task: String?, model: String? = nil, settings: String? = nil,
                      refs: [Ref] = [], children: [Row] = [], blockKind: BlockKind? = nil,
-                     blockName: String? = nil) -> Row {
+                     blockName: String? = nil, clause: Clause? = nil) -> Row {
         Row(id: UUID(), task: task, blockKind: blockKind, blockName: blockName,
-            model: model, settings: settings, refs: refs, children: children)
+            model: model, settings: settings, refs: refs, children: children, clause: clause)
     }
 
     // MARK: - CFM-R8-1: the step picker
@@ -727,5 +727,53 @@ struct CatFlowEditingTests {
         #expect(blockID == block.id)
         #expect(index == 0)
         #expect(model.childCount(of: block.id) == 1)
+    }
+
+    // MARK: - CFM-R12-FIX-2/4: the block-editing trio
+
+    @Test func flattenedRenderCoversEachLineExactlyOnce() throws {
+        // CFM-R12-FIX-2: a block's range is its header only; the flattened list renders
+        // each *row* line exactly once (the double-body bug is gone). Blank lines are
+        // chain-break separators (never part of a row's range, by design) and the serialized
+        // lines include a preamble (the `catflow` version line) that belongs to no row.
+        let doc = try GalleryLoader.loadDocument(flowID: "02-MeetingMinutes")
+        let serialized = CatSerializer.serializeLines(doc)
+        let entries = FlowRowFlatten.flatten(doc.rows, collapsed: [])
+        let rendered = entries.flatMap { entry -> [String] in
+            guard let range = serialized.lineRanges[entry.row.id] else { return [] }
+            return Array(serialized.lines[range])
+        }
+        let preamble = serialized.lineRanges.values.map(\.lowerBound).min() ?? 0
+        let rowLines = Array(serialized.lines.dropFirst(preamble).filter { !$0.isEmpty })
+        #expect(rendered == rowLines)
+        #expect(Set(rendered).count == rendered.count, "no line rendered twice")
+    }
+
+    @Test func addingWithABlockHeaderSelectedInsertsInside() throws {
+        // CFM-R12-FIX-4: "Add step inside" with the block *header* selected appends as the
+        // block's last child — the toolbar label and the action now agree, and an emptied
+        // block can be refilled without undo.
+        let child1 = row("Summarize", model: "Qwen3 8B")
+        let block = row(nil, children: [child1], blockKind: .parallel, blockName: "grp")
+        let model = try editor(rows: [row("Read Text", settings: "m.txt"), block])
+        model.selectedRowID = block.id
+        model.add(task: "Save Text")
+        #expect(model.childCount(of: block.id) == 2)
+        #expect(model.row(withID: block.id)?.children.last?.task == "Save Text")
+        #expect(model.document.rows.count == 2)   // still one top-level block, no stray insert
+    }
+
+    @Test func moveInsideKeepsClauseTargetsPointingAtTheSameRow() throws {
+        // CFM-R12-FIX-4: reordering a block's children runs the same identity reaim as the
+        // top-level move — a decider's edge target never silently re-aims (QR9).
+        let gate = row("Gate", model: "Ministral 3B", clause: .decide(edges: [
+            ClauseEdge(tag: "ok", target: .row(number: 2)),
+        ]))
+        let b = row("Summarize", model: "Qwen3 8B")
+        let block = row(nil, children: [gate, b], blockKind: .parallel, blockName: "grp")
+        let model = try editor(rows: [block])
+        model.moveInside(blockID: block.id, from: [1], to: 0)
+        let edge = try #require(model.row(withID: gate.id)?.clause?.edges?.first)
+        #expect(edge.target == .row(number: 2))
     }
 }

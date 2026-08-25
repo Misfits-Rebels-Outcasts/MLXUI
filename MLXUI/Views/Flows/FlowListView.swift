@@ -299,17 +299,29 @@ struct FlowListView: View {
                                  cached: session.cacheHitRows.contains(row.id))
     }
 
-    /// CFM-R12-3 item 3: a collapsed block's header dot aggregates its children, so a red dot
-    /// (or a running/succeeded state) can never be hidden by collapsing.
+    /// CFM-R12-3 item 3 / CFM-R12-FIX-3: a collapsed block's header dot aggregates its
+    /// descendants recursively, so a red dot at any depth can never be hidden by collapsing.
     private func statusForDisplay(_ row: Row, isCollapsed: Bool) -> FlowStatus {
         let own = session.status(for: row.id)
-        guard row.blockKind != nil, isCollapsed, !row.children.isEmpty else { return own }
-        let childStatuses = row.children.map { session.status(for: $0.id) }
-        if childStatuses.contains(.failed) { return .failed }
-        if childStatuses.allSatisfy({ $0 == .succeeded }) { return .succeeded }
-        if childStatuses.contains(.running) { return .running }
-        if childStatuses.contains(.needsAttention) { return .needsAttention }
-        return own
+        guard row.blockKind != nil, isCollapsed else { return own }
+        return Self.aggregateDescendantStatus(of: row, session: session, fallback: own)
+    }
+
+    private nonisolated static func aggregateDescendantStatus(of row: Row, session: FlowRunSession,
+                                                              fallback: FlowStatus) -> FlowStatus {
+        var worst = fallback
+        for child in row.children {
+            let childStatus = session.status(for: child.id)
+            if childStatus == .failed { return .failed }
+            if childStatus == .running { worst = .running }
+            if childStatus == .succeeded, worst != .running { worst = .succeeded }
+            if childStatus == .needsAttention, worst == .notRun { worst = .needsAttention }
+            if !child.children.isEmpty {
+                worst = aggregateDescendantStatus(of: child, session: session, fallback: worst)
+                if worst == .failed { return .failed }
+            }
+        }
+        return worst
     }
 
     /// The flow cache + engine-cache status line (R11-2 visibility): nil = nothing to say.

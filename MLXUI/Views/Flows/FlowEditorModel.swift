@@ -211,6 +211,11 @@ final class FlowEditorModel {
             if let selectedRowID, let (blockID, _) = childIndex(selectedRowID) {
                 insertChild(newRow, into: blockID, below: selectedRowID)
             } else if let selectedRowID,
+                      let selected = row(withID: selectedRowID), selected.blockKind != nil {
+                // CFM-R12-FIX-4: a block *header* selected — "Add step inside" must actually
+                // append into the block as its last child, not insert a top-level row.
+                insertChild(newRow, into: selectedRowID, below: nil)
+            } else if let selectedRowID,
                       let idx = document.rows.firstIndex(where: { $0.id == selectedRowID }) {
                 document.rows.insert(newRow, at: idx + 1)
             } else {
@@ -337,12 +342,16 @@ final class FlowEditorModel {
         }
     }
 
-    /// Reorder a block's children (CFM-R8-FIX-6 "reordered within").
+    /// Reorder a block's children (CFM-R8-FIX-6 "reordered within"). CFM-R12-FIX-4: reaims
+    /// clause targets by identity, exactly like the top-level `move` — reordering inside a
+    /// block must never silently re-aim a decide edge (the QR9 ruling, half-applied before).
     func moveInside(blockID: UUID, from source: IndexSet, to destination: Int) {
         commitChange {
+            let before = document.rows
             replaceRow(id: blockID) { row in
                 row.children.move(fromOffsets: source, toOffset: destination)
             }
+            reaimClauseTargets(before: before, after: document.rows)
         }
     }
 

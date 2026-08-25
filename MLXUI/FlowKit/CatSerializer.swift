@@ -202,6 +202,10 @@ nonisolated enum CatSerializer {
                 let prefix = refsStr.isEmpty ? label : "\(label)\(pad(gap))\(refsStr)"
                 let emitted = emitRowLines(label: prefix, tail: rest, col: prefix.unicodeScalars.count + gap, wrap: wrap)
                 lines.append(contentsOf: emitted); current += emitted.count
+                // CFM-R12-FIX-2: a block's range covers only its *header* lines — the
+                // flattened list renders children as their own rows, so the full span would
+                // print the body twice. Children get their own ranges via the merge below.
+                ranges[row.id] = start..<current
                 let children = renderRows(row.children, wrap: wrap, isV08: isV08, baseLine: current,
                                           deadRefNumbers: deadRefNumbers)
                 for child in children.lines {
@@ -230,7 +234,11 @@ nonisolated enum CatSerializer {
                 lines.append("\(clauseIndent)\(renderClause(clause, isV08: isV08))")
                 current += 1
             }
-            ranges[row.id] = start..<current
+            // Non-block rows land here with no range yet; a block's header range was already
+            // recorded (FIX-2) and must not be overwritten by the full span.
+            if ranges[row.id] == nil {
+                ranges[row.id] = start..<current
+            }
         }
         return (lines, ranges)
     }
