@@ -183,8 +183,12 @@ nonisolated struct FlowRunner {
                 // send) — in scope now, like the human/trigger channels.
                 break
             case .net:
-                return .notRunnable(reason:
-                    "Row \(position) is a \(desc.taskClass.rawValue) row, which this version of Flows can't complete.")
+                // CFM-R12-9 (approved scope): the ported GET tools are in scope; Web Search
+                // (no provider) and anything else in the class stay refused.
+                if !TaskAvailability.isAvailable(row.task!) {
+                    return .notRunnable(reason:
+                        "Row \(position) uses '\(row.task!)', which this version of Flows doesn't run yet.")
+                }
             }
         }
         return .runnable

@@ -126,14 +126,38 @@ nonisolated struct RealExecutor: FlowExecutor {
                                             transcript: transcript, context: context)
             }
             return try await runModel(desc, row: row, inputs: inputs, path: path)
-        case .human, .trigger, .net, .agent:
+        case .human, .trigger, .agent:
             // Human rows return their default earlier; trigger fires carry their occurrence
-            // via the arming session; net/agent are channel-refused by `canRun`. Keep a
-            // truthful sentence as defense in depth.
+            // via the arming session; agent is channel-refused by `canRun`. Keep a truthful
+            // sentence as defense in depth.
             throw FlowError.unsupportedTask(row: path, task: row.task ?? "?")
         case .staged:
             // CFM-R12-8: Stage Send / Stage Post queue a visible outbox entry — never send.
             return try await runStaged(row: row, inputs: inputs, path: path)
+        case .net:
+            // CFM-R12-9 (approved scope): the four GET tools; Web Search is refused by
+            // `canRun` earlier.
+            return try await runNet(row: row, inputs: inputs, path: path)
+        }
+    }
+
+    /// CFM-R12-9: dispatch the ported networked tools.
+    private func runNet(row: Row, inputs: [Asset], path: String) async throws -> Asset {
+        switch row.task {
+        case "Web Fetch":
+            return try await WebFetchTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs: inputs)
+        case "HTTP Get":
+            return try await HTTPGetTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs: inputs)
+        case "Fetch Feed":
+            return try await FetchFeedTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs: inputs)
+        case "Download File":
+            return try await DownloadFileTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs: inputs)
+        default:
+            throw FlowError.unsupportedTask(row: path, task: row.task ?? "?")
         }
     }
 

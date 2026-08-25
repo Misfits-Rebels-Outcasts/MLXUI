@@ -33,6 +33,10 @@ nonisolated enum TaskAvailability {
         "Store Query", "Store Read", "Store Write", "Diff",
     ]
 
+    /// CFM-R12-9 (approved scope): the networked tools with a real `URLSession` GET
+    /// implementation. `Web Search` stays unported — no provider to name in App Review.
+    static let supportedNetTools: Set<String> = ["Web Fetch", "HTTP Get", "Fetch Feed", "Download File"]
+
     /// A task's verdict in this build.
     static func state(for task: TaskDescriptor,
                       isAppStore: Bool = CapabilityGate.isAppStoreBuild) -> State {
@@ -46,7 +50,9 @@ nonisolated enum TaskAvailability {
                 ? .refusedByChannel(reason: "runs only in the direct build")
                 : .available
         case .net:
-            return .refusedByChannel(reason: "no networked tool is ported in this version")
+            return supportedNetTools.contains(task.name)
+                ? .available
+                : .refusedByChannel(reason: "no provider for this network tool is ported")
         case .staged:
             // CFM-R12-8: Stage Send / Stage Post queue a visible outbox entry (never send).
             return .available

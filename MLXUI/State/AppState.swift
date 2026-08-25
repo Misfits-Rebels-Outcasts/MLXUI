@@ -30,7 +30,8 @@ final class AppState {
     /// …and also hide flow 50:
     /// `static let hiddenFlowNumbers: Set<Int> = [50] + Set(60...69)` (or `Set([50])`).
     /// Empty = show everything.
-    static let hiddenFlowNumbers: Set<Int> = Set(60...69)
+    /// Owner ruling 2026-08-25: unhidden — every flow in 60–69 now passes `canRun`.
+    static let hiddenFlowNumbers: Set<Int> = Set<Int>()   // was Set(60...69)
 
     /// The bundled gallery flows, in gallery order. Empty when `hideFlows` is true.
     var galleryEntries: [GalleryFlowMetadata] = []

@@ -94,8 +94,8 @@ struct CatFlowTaskAvailabilityTests {
     }
 
     @Test func everyUnavailableTaskGetsAPickerMarker() {
-        // Group f ported Detect Edges/Detect Pose: the only unported instant tool is Join
-        // Video. Markers = 1 + 5 net + Improvise (App Store) = 7.
+        // R12-9 ported 4 of 5 net tools. Unavailable = Join Video (instant) + Web Search
+        // (net, no provider) + Improvise (App Store agent) = 3 markers.
         let unportedInstant = TaskCatalog.entries.filter {
             $0.taskClass == .instant && !TaskAvailability.supportedInstantTools.contains($0.name)
         }.count
@@ -112,7 +112,7 @@ struct CatFlowTaskAvailabilityTests {
             }
         }
         #expect(expectedUnavailable.map(\.name).sorted() == computedUnavailable.map(\.name).sorted())
-        #expect(expectedUnavailable.count == 7)   // 1 + 5 + Improvise (App Store)
+        #expect(expectedUnavailable.count == 3)   // Join Video + Web Search + Improvise (App Store)
         // Every one is labeled, and every available one is not.
         for task in TaskCatalog.allTasks() {
             #expect((TaskAvailability.marker(for: task) != nil) != TaskAvailability.isAvailable(task.name))

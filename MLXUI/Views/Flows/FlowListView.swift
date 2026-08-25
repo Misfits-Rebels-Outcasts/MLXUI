@@ -374,6 +374,16 @@ struct FlowListView: View {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
+            // CFM-R12-9: a flow that declares `network` says so before it runs.
+            if doc.flags.contains(.network) {
+                Label("network", systemImage: "network")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.quaternary.opacity(0.5), in: Capsule())
+                    .help("This flow fetches URLs over the network when it runs.")
+            }
             Spacer()
             // CFM-R12-1: bundled flows are read-only — "Duplicate & Edit" copies the flow
             // into the user's flow folder. A user flow is already the user's: "Edit" opens
