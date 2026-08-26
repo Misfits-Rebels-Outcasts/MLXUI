@@ -92,6 +92,9 @@ final class AppState {
     // that flow's detail (title, rows, inspector) onto the detail NavigationStack.
     var selectedFlow: FlowSelection?
 
+    /// Non-nil surfaces a "Remove Flow" failure (unreadable / access denied) as an alert.
+    var flowRemoveError: String?
+
     /// CFM-R11-0: a flow the editor is editing — nil document = a fresh flow (the old
     /// "New Flow" route). Non-nil pushes the editor onto the detail stack.
     var editingFlow: FlowEditTarget?
@@ -129,6 +132,20 @@ final class AppState {
         let bundled = Set(galleryEntries.map(\.flowID))
         userFlowEntries = UserFlowStore.scan(workspace: FlowWorkspace.shared,
                                              bundledFlowIDs: bundled)
+    }
+
+    /// Delete a user flow's folder from disk, refresh the shelf, and clear any navigation
+    /// (detail or editor) that points at it — the current view pops back to the gallery.
+    /// Only user flows reach here: the My Workflows shelf and a user flow's list.
+    func removeUserFlow(flowID: String) {
+        do {
+            try UserFlowStore.remove(flowID: flowID, workspace: FlowWorkspace.shared)
+            reloadUserFlows()
+            if selectedFlow?.flowID == flowID { selectedFlow = nil }
+            if editingFlow?.flowID == flowID { editingFlow = nil }
+        } catch {
+            flowRemoveError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+        }
     }
 
     /// CFM-R12-4: recompute which bundled flows are refused (the ⚠ badges) from the **live**

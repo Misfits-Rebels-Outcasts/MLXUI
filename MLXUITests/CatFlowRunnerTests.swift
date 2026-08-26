@@ -264,6 +264,69 @@ struct CatFlowRunnerTests {
         let value = out.items.first?.value ?? ""
         #expect(value.hasPrefix("[mock:text]"))
     }
+
+    // MARK: - Live streaming (the GUI's row-by-row dots)
+
+    @Test func runnerStreamsEventsLiveRowByRow() async throws {
+        // Six rows × 80 ms per execute ≈ 480 ms if events were buffered until the end.
+        // Streaming: row 1's `.started` must land before row 1's own execute finishes.
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-live-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let blob = base.appendingPathComponent("blobs")
+        let workspace = FlowWorkspace(root: base.appendingPathComponent("flows"))
+        let slow = SlowMockExecutor(delayMS: 80, blobDirectory: blob)
+        let context = FlowRunner.RunContext(flowID: "01-SpokenSummary", workspace: workspace,
+                                            blobDirectory: blob, executor: slow)
+        let doc = try decode("01-SpokenSummary")
+        let runner = FlowRunner()
+        var iterator = runner.run(doc, context: context).makeAsyncIterator()
+
+        let clock = ContinuousClock()
+        let startedAt = clock.now
+        let first = await iterator.next()
+        let elapsed = clock.now - startedAt
+        guard case .started? = first else {
+            Issue.record("first event should be row 1's .started, got \(String(describing: first))")
+            return
+        }
+        // Buffered would be ~480 ms (every row slept through first); a live `.started` is far
+        // sooner than 150 ms even with slack for a slow machine.
+        #expect(elapsed < .milliseconds(150), "first event took \(elapsed) — events look buffered")
+
+        // Drain the rest: every row still delivers its events (nothing is dropped).
+        var count = 1
+        while await iterator.next() != nil { count += 1 }
+        #expect(count >= 6)
+    }
+}
+
+/// A `MockExecutor` that sleeps per row — a stand-in for a real model load, proving the runner
+/// streams events live rather than delivering the whole list when the run completes.
+private final class SlowMockExecutor: FlowExecutor, @unchecked Sendable {
+    private let inner: MockExecutor
+    private let delayMS: UInt64
+
+    init(delayMS: UInt64, blobDirectory: URL) {
+        self.inner = MockExecutor(blobDirectory: blobDirectory)
+        self.delayMS = delayMS
+    }
+
+    func execute(path: String, row: Row, inputs: [Asset],
+                 transcript: [FlowInterpreter.TranscriptEntry]?,
+                 context: [(label: String, content: String)]?,
+                 usedFlowContent: String?) async throws -> Asset {
+        try await Task.sleep(for: .milliseconds(delayMS))
+        return try await inner.execute(path: path, row: row, inputs: inputs,
+                                       transcript: transcript, context: context,
+                                       usedFlowContent: usedFlowContent)
+    }
+
+    var lastCacheHit: Bool { inner.lastCacheHit }
+    var lastTag: String? { inner.lastTag }
+    var lastTimeoutFlag: (code: String, message: String)? { inner.lastTimeoutFlag }
+    var lastStaged: (id: String, kind: String, summary: String)? { inner.lastStaged }
 }
 
 /// An executor that records the inputs each row received (by path) — the B4 harness: it

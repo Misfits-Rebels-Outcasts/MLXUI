@@ -272,10 +272,20 @@ struct FlowEditorView: View {
             .listStyle(.plain)
             if model.selectedRowID != nil {
                 Divider()
-                FlowRowInspectorView(model: model,
-                                     rowID: model.selectedRowID ?? UUID(),
-                                     catalog: appState.browserData?.domains.flatMap { $0.allModels } ?? [],
-                                     totalRAMGB: appState.systemInfo.totalRAMGB)
+                FlowInspectorPane(
+                    output: selectedRowOutput,
+                    rowTitle: selectedRowTitle,
+                    substitutionNote: selectedSubstitutionNote,
+                    savedFile: selectedSavedFile,
+                    savedKind: selectedSavedKind,
+                    initialTab: .properties
+                ) {
+                    FlowRowInspectorView(model: model,
+                                         rowID: model.selectedRowID ?? UUID(),
+                                         catalog: appState.browserData?.domains.flatMap { $0.allModels } ?? [],
+                                         totalRAMGB: appState.systemInfo.totalRAMGB,
+                                         editable: true)
+                }
             }
         }
     }
@@ -298,6 +308,34 @@ struct FlowEditorView: View {
             }.count
             model.move(from: [topIndex], to: beforeDest)
         }
+    }
+
+    // MARK: - Inspector Output tab data (the editor can run, then inspect row outputs)
+
+    /// The selected row's last finished output — the Output tab's content source.
+    private var selectedRowOutput: Asset? {
+        model.selectedRowID.flatMap { session.outputs[$0] }
+    }
+
+    private var selectedRowTitle: String {
+        guard let id = model.selectedRowID, let row = model.row(withID: id) else { return "" }
+        return FlowRowSummary.taskName(for: row)
+    }
+
+    private var selectedSubstitutionNote: String? {
+        model.selectedRowID.flatMap { session.substitutionNotes[$0] }
+    }
+
+    /// The file a selected `Save *` row wrote, resolved against the flow's folder.
+    private var selectedSavedFile: URL? {
+        guard let id = model.selectedRowID, let row = model.row(withID: id) else { return nil }
+        return FlowSavedFile.resolved(row: row, flowID: model.flowID, workspace: model.workspace)
+    }
+
+    /// The saved file's kind, driving how the Output tab presents it.
+    private var selectedSavedKind: Kind? {
+        guard let id = model.selectedRowID, let row = model.row(withID: id) else { return nil }
+        return FlowSavedFile.kind(forTask: row.task)
     }
 
     /// R12-3: every row flattened with depth; a collapsed block hides its children.

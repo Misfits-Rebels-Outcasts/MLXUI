@@ -102,6 +102,14 @@ struct MLXUIApp: App {
             } message: {
                 Text(appState.openCatFlowError ?? "")
             }
+            .alert("Couldn't Remove This Flow", isPresented: Binding(
+                get: { appState.flowRemoveError != nil },
+                set: { if !$0 { appState.flowRemoveError = nil } }
+            )) {
+                Button("OK", role: .cancel) { appState.flowRemoveError = nil }
+            } message: {
+                Text(appState.flowRemoveError ?? "")
+            }
             .onChange(of: appState.filterSource) { _, _ in appState.saveFilters() }
             .onChange(of: appState.sortOrder) { _, _ in appState.saveFilters() }
         }

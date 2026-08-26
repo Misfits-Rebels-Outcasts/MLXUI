@@ -73,6 +73,56 @@ struct CatFlowHumanRowsTests {
         #expect(events.contains { $0.kind == .rowCompleted && $0.path == "3" })
     }
 
+    // MARK: - Timeout rows park and fall back (CFM-R10-Human timeout)
+
+    private let timeoutFlow = """
+    catflow 0.8
+    1. Read Text    memo.txt
+    2. Ask Human    (1)  "Send this reply?" ; timeout=2h; default=edit
+       -> { edit: 3 }
+    3. Save Text    out.md
+    """
+
+    @Test func timeoutRowParksLikeWaitForever() async throws {
+        let doc = try parse(timeoutFlow)
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-human-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let mock = MockExecutor(blobDirectory: base.appendingPathComponent("blobs"))
+        // The GUI path (parkOnTimeout) parks a timeout row; the conformance default doesn't.
+        let events = try await FlowInterpreter.run(doc, executor: mock, parkOnTimeout: true)
+        guard let parked = events.first(where: { $0.kind == .runParked }) else {
+            Issue.record("expected a parked run for a timeout row")
+            return
+        }
+        #expect(parked.path == "2")
+        #expect(parked.parkPrompt == "Send this reply?")
+        #expect(parked.parkPolicy == "timeout=2h")
+    }
+
+    @Test func timeoutDefaultAnswerResolvesWithF002AndCompletes() async throws {
+        let doc = try parse(timeoutFlow)
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-human-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let mock = MockExecutor(blobDirectory: base.appendingPathComponent("blobs"))
+        let events = try await FlowInterpreter.run(
+            doc, executor: mock,
+            answers: ["2": FlowInterpreter.HumanAnswer(tag: nil, text: nil, isTimeoutDefault: true)],
+            parkOnTimeout: true)
+        // The declared default tag fires the clause and the F002 disclosure names it.
+        guard let f002 = events.first(where: { $0.kind == .flagRaised && $0.code == "F002" }) else {
+            Issue.record("expected the F002 timeout disclosure")
+            return
+        }
+        #expect(f002.message == "Nobody answered by 2h — proceeded as `edit`, unreviewed.")
+        #expect(events.contains { $0.kind == .runResumed })
+        #expect(events.contains { $0.kind == .rowCompleted && $0.path == "3" })
+        #expect(events.last?.kind == .runCompleted)
+    }
+
     // MARK: - RealExecutor timeout defaults (the F002 path)
 
     private func realExecutor() -> RealExecutor {
@@ -133,8 +183,52 @@ struct CatFlowHumanRowsTests {
         }
         let parked = try #require(parkedInfo)
         #expect(parked.prompt == "Send this reply?")
+        // A wait=forever row parks without a deadline.
+        #expect(parked.deadline == nil)
 
         session.answer(tag: "approve", for: parked, doc: doc, runner: runner, context: context)
+        for _ in 0..<40 {
+            if session.parked == nil, session.status(for: doc.rows[2].id) == .succeeded { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(session.parked == nil)
+        #expect(session.status(for: doc.rows[2].id) == .succeeded)
+    }
+
+    @Test func sessionFallbackTimeoutRunsToTheDefault() async throws {
+        // A one-second timeout so the deadline is reachable, not a claim about the clock.
+        let doc = try parse("""
+        catflow 0.8
+        1. Read Text    memo.txt
+        2. Ask Human    (1)  "Send this reply?" ; timeout=1s; default=edit
+           -> { edit: 3 }
+        3. Save Text    out.md
+        """)
+        let session = FlowRunSession()
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-human-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let mock = MockExecutor(blobDirectory: base.appendingPathComponent("blobs"))
+        let context = FlowRunner.RunContext(flowID: "t", workspace: FlowWorkspace(root: base),
+                                            blobDirectory: base, executor: mock)
+        let runner = FlowRunner()
+        session.prepareInstall(FlowPreflight.run(doc, catalog: [], installedModelIDs: [],
+                                                 totalRAMGB: 128),
+                               doc: doc)
+
+        session.start(doc: doc, runner: runner, context: context)
+        var parkedInfo: FlowRunSession.ParkedInfo?
+        for _ in 0..<40 {
+            if let parked = session.parked { parkedInfo = parked; break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let parked = try #require(parkedInfo)
+        #expect(parked.policy == "timeout=1s")
+        #expect(parked.deadline != nil)
+
+        // No live answer — the fallback re-runs with the row's default.
+        session.fallbackTimeout(for: parked, doc: doc, runner: runner, context: context)
         for _ in 0..<40 {
             if session.parked == nil, session.status(for: doc.rows[2].id) == .succeeded { break }
             try await Task.sleep(for: .milliseconds(50))

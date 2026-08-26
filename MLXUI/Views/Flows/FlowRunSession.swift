@@ -49,6 +49,8 @@ final class FlowRunSession {
         let policy: String
         /// The interpreter's activation key the answer must be keyed by (`"3@1"`).
         let execPath: String
+        /// When the run falls back to the row's default if unanswered — nil = waits forever.
+        let deadline: Date?
     }
 
     // MARK: - Gating
@@ -172,6 +174,27 @@ final class FlowRunSession {
               answers: [parked.execPath: FlowInterpreter.HumanAnswer(tag: nil, text: text)])
     }
 
+    /// CFM-R10-Human: no live answer by a `timeout=` row's deadline — re-run with the row's
+    /// declared fallback (the `default=` tag for Ask Human, "unchanged" for Human Input),
+    /// which the interpreter resolves and discloses as F002. A no-op if the run is no longer
+    /// parked on this row (the user answered or stopped in the same instant).
+    func fallbackTimeout(for parked: ParkedInfo, doc: FlowDocument,
+                         runner: FlowRunner, context: FlowRunner.RunContext) {
+        guard parked.deadline != nil, self.parked == parked else { return }
+        start(doc: doc, runner: runner, context: context,
+              answers: [parked.execPath: FlowInterpreter.HumanAnswer(tag: nil, text: nil,
+                                                                     isTimeoutDefault: true)])
+    }
+
+    /// Parse a parked row's `timeout=` policy into an absolute deadline — nil when it waits
+    /// forever or the duration doesn't parse.
+    private static func deadline(fromPolicy policy: String) -> Date? {
+        guard policy.hasPrefix("timeout=") else { return nil }
+        let raw = String(policy.dropFirst("timeout=".count))
+        guard let interval = FlowSettingsEditor.parseDuration(raw) else { return nil }
+        return Date().addingTimeInterval(interval)
+    }
+
     /// The index of the first non-`✓` row (the re-run-from-here boundary). A row is gray if
     /// it isn't `.succeeded` (covers `.notRun`, `.failed`, `.needsAttention`). When every
     /// row is already `✓`, returns 0 so a re-run is a fresh run from the top (H7) — the
@@ -239,7 +262,8 @@ final class FlowRunSession {
             rowStates[id]?.errorSentence = message
         case .parked(let id, let prompt, let policy, let execPath):
             isRunning = false
-            parked = ParkedInfo(rowID: id, prompt: prompt, policy: policy, execPath: execPath)
+            parked = ParkedInfo(rowID: id, prompt: prompt, policy: policy, execPath: execPath,
+                                deadline: Self.deadline(fromPolicy: policy))
         }
     }
 

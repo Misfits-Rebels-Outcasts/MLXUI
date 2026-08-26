@@ -8,6 +8,9 @@ struct FlowGalleryView: View {
 
     private let columns = [GridItem(.adaptive(minimum: 220), spacing: 14)]
 
+    /// The My Workflows badge awaiting a Remove confirmation (nil = none).
+    @State private var flowPendingRemoval: UserFlowStore.Entry?
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -25,6 +28,20 @@ struct FlowGalleryView: View {
         .onAppear {
             appState.reloadUserFlows()
             appState.refreshGalleryBlocked()
+        }
+        .confirmationDialog("Remove this flow?", isPresented: Binding(
+            get: { flowPendingRemoval != nil },
+            set: { if !$0 { flowPendingRemoval = nil } }
+        ), titleVisibility: .visible) {
+            Button("Remove", role: .destructive) {
+                if let entry = flowPendingRemoval {
+                    appState.removeUserFlow(flowID: entry.flowID)
+                }
+                flowPendingRemoval = nil
+            }
+            Button("Cancel", role: .cancel) { flowPendingRemoval = nil }
+        } message: {
+            Text(flowPendingRemoval.map { "'\($0.title)' and its files will be deleted from your flows folder. This can't be undone." } ?? "")
         }
     }
 
@@ -109,7 +126,9 @@ struct FlowGalleryView: View {
     }
 
     /// One user flow's badge: title + last-modified, a ⚠ when its file no longer parses.
-    /// Opening it pushes `FlowListView` in the user source.
+    /// Opening it pushes `FlowListView` in the user source. The trash overlay (top-right)
+    /// removes the flow folder with a confirmation — it sits on top, so it captures its own
+    /// click and never also opens the flow.
     private func userFlowBadge(_ entry: UserFlowStore.Entry) -> some View {
         Button {
             appState.selectedFlow = FlowSelection(flowID: entry.flowID, isUserFlow: true)
@@ -143,6 +162,21 @@ struct FlowGalleryView: View {
         }
         .buttonStyle(.plain)
         .contentShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(alignment: .topTrailing) {
+            Button {
+                flowPendingRemoval = entry
+            } label: {
+                Image(systemName: "trash")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .background(.quaternary.opacity(0.75), in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .help("Remove this flow")
+            .padding(8)
+        }
     }
 
     private func badge(for flow: GalleryFlowMetadata) -> some View {

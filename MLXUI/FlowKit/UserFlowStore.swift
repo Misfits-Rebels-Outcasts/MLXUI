@@ -58,6 +58,18 @@ nonisolated enum UserFlowStore {
         return try CatParser.parse(text)
     }
 
+    /// Delete a user flow's folder (and everything in it) from disk. Only the My Workflows
+    /// shelf / a user flow's list may call this — a bundled gallery flow's working directory
+    /// is scratch, and this store never lists it, so it can't reach here by accident.
+    static func remove(flowID: String, workspace: FlowWorkspace) throws {
+        let dir = workspace.directory(for: flowID)
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: dir.path) else {
+            throw UserFlowStoreError.notFound(flowID)
+        }
+        try fm.removeItem(at: dir)
+    }
+
     // MARK: - Helpers
 
     private static func isFlowFile(_ url: URL) -> Bool {
@@ -75,6 +87,18 @@ nonisolated enum UserFlowStore {
             return nil
         } catch {
             return "'\(url.lastPathComponent)' isn't a valid CAT Flow: \(error)"
+        }
+    }
+}
+
+/// UserFlowStore failures. Error voice: one plain sentence implying the fix.
+nonisolated enum UserFlowStoreError: Error, CustomStringConvertible {
+    case notFound(String)
+
+    var description: String {
+        switch self {
+        case .notFound(let flowID):
+            return "The flow's folder isn't in your flows directory anymore — nothing to remove."
         }
     }
 }

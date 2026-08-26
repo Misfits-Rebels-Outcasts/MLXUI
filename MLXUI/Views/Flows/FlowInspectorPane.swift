@@ -2,16 +2,27 @@ import SwiftUI
 import AVFoundation
 import AppKit
 
-/// The inspector pane (CFM-R3-3): a right-hand pane bound to the selected row's cached
-/// `Asset`, presenting each output modality the way the run views do — the presentation
-/// half of `TTSRunView`/`ASRRunView`/`OCRRunView`/`ImageQARunView`/`EmbeddingRunView`
-/// (design doc §6), extracted rather than duplicated, and the standalone Run sheets are
-/// untouched. Also surfaces the `CatalogBridge` substitution note (CFM-R2-2 rule 3) for a
-/// row whose model is `.sameFamily`/`.substitute`.
-struct FlowInspectorPane: View {
+/// The inspector pane (CFM-R3-3): a right-hand pane bound to the selected row, split into
+/// two tabs.
+///
+/// - **Output**: the selected row's cached `Asset`, or a `Save *` row's written file,
+///   presented per modality the way the run views do — the presentation half of
+///   `TTSRunView`/`ASRRunView`/`OCRRunView`/`ImageQARunView`/`EmbeddingRunView`
+///   (design doc §6), extracted rather than duplicated, and the standalone Run sheets are
+///   untouched. Also surfaces the `CatalogBridge` substitution note (CFM-R2-2 rule 3) for a
+///   row whose model is `.sameFamily`/`.substitute`.
+/// - **Properties**: the row's editable details — model, instruction, inputs, settings,
+///   decisions. The flow editor embeds a live `FlowRowInspectorView`; the read-only flow
+///   list embeds a frozen one, so a gallery flow's properties are browsable (scrollable)
+///   but never mutable.
+struct FlowInspectorPane<Properties: View>: View {
+    enum Tab: Hashable {
+        case properties, output
+    }
+
     /// The selected row's cached output, or nil when nothing is selected / no run yet.
     let output: Asset?
-    /// The row's title (task name) for the pane header.
+    /// The row's title (task name) for the output pane header.
     let rowTitle: String
     /// A `CatalogBridge` substitution note (e.g. "running Kokoro 82M as …"), or nil.
     let substitutionNote: String?
@@ -20,12 +31,74 @@ struct FlowInspectorPane: View {
     var savedFile: URL?
     /// The saved file's kind, driving the presentation.
     var savedKind: Kind?
+    /// The row-properties pane — editable in the editor, frozen in the read-only flow list.
+    private let properties: () -> Properties
 
+    @State private var tab: Tab
     @State private var player: AVAudioPlayer?
 
+    init(output: Asset?, rowTitle: String, substitutionNote: String?,
+         savedFile: URL? = nil, savedKind: Kind? = nil,
+         initialTab: Tab = .output,
+         @ViewBuilder properties: @escaping () -> Properties) {
+        self.output = output
+        self.rowTitle = rowTitle
+        self.substitutionNote = substitutionNote
+        self.savedFile = savedFile
+        self.savedKind = savedKind
+        self.properties = properties
+        _tab = State(initialValue: initialTab)
+    }
+
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            tabBar
+            Divider()
+                .padding(.bottom, 10)
+            switch tab {
+            case .properties:
+                properties()
+            case .output:
+                outputPane
+            }
+        }
+        .padding(14)
+        .frame(minWidth: 260, maxWidth: 320, maxHeight: .infinity, alignment: .topLeading)
+        .background(.quaternary.opacity(0.18))
+    }
+
+    // MARK: - Tabs
+
+    private var tabBar: some View {
+        HStack(spacing: 4) {
+            tabButton(.properties, "Properties", systemImage: "slider.horizontal.3")
+            tabButton(.output, "Output", systemImage: "sidebar.right")
+            Spacer()
+        }
+        .padding(.bottom, 8)
+    }
+
+    private func tabButton(_ target: Tab, _ title: String, systemImage: String) -> some View {
+        let isActive = tab == target
+        return Button {
+            tab = target
+        } label: {
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(isActive ? Color.accentColor.opacity(0.15) : Color.clear,
+                            in: Capsule())
+                .foregroundStyle(isActive ? Color.accentColor : Color.secondary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Output tab
+
+    private var outputPane: some View {
         VStack(alignment: .leading, spacing: 12) {
-            header
+            outputHeader
             Divider()
             if let savedFile, let savedKind {
                 savedContent(for: savedFile, kind: savedKind)
@@ -45,14 +118,9 @@ struct FlowInspectorPane: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(14)
-        .frame(minWidth: 260, maxWidth: 320, maxHeight: .infinity, alignment: .topLeading)
-        .background(.quaternary.opacity(0.18))
     }
 
-    // MARK: - Header
-
-    private var header: some View {
+    private var outputHeader: some View {
         HStack(spacing: 6) {
             Image(systemName: "sidebar.right")
                 .foregroundStyle(.secondary)

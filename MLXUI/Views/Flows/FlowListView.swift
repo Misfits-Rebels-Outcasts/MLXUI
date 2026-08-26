@@ -28,6 +28,10 @@ struct FlowListView: View {
     @State private var userEntry: UserFlowStore.Entry?
     @State private var document: FlowDocument?
     @State private var loadError: String?
+    /// A read-only `FlowEditorModel` over the loaded document — the inspector's frozen
+    /// Properties tab is browse-only, but needs the same candidate/input/number resolution
+    /// the editor uses. Never mutated (the flow list has no edit affordance).
+    @State private var inspectModel: FlowEditorModel?
     /// The refusal reason this flow can't run, derived from `FlowRunner.canRun(doc)` — not
     /// blindly trusted from `_metadata.json` (B3). `nil` = runnable.
     @State private var notRunnableReason: String?
@@ -182,8 +186,21 @@ struct FlowListView: View {
                     rowTitle: selectedRowTitle(doc),
                     substitutionNote: session.selectedRowID.flatMap { session.substitutionNotes[$0] },
                     savedFile: savedFileURL(in: doc),
-                    savedKind: savedFileKind(in: doc)
-                )
+                    savedKind: savedFileKind(in: doc),
+                    initialTab: .output
+                ) {
+                    // The Properties tab is browse-only here: bundled gallery flows are
+                    // frozen (dimmed + a lock), a user's own flow reads at full opacity —
+                    // either way the values are never mutable until opened in the editor.
+                    if let inspectModel {
+                        FlowRowInspectorView(model: inspectModel,
+                                             rowID: session.selectedRowID ?? UUID(),
+                                             catalog: appState.browserData?.domains.flatMap { $0.allModels } ?? [],
+                                             totalRAMGB: appState.systemInfo.totalRAMGB,
+                                             editable: false,
+                                             isFrozen: source == .gallery)
+                    }
+                }
             }
             // CFM-R11-2 visibility: the flow's cache state + warm engines, so "is there a
             // cache?" is answerable at a glance instead of a guess.
@@ -215,7 +232,19 @@ struct FlowListView: View {
         // whenever the installed set changes (smoke-30: "Install Required Models" reappearing
         // after the install completed).
         .onChange(of: appState.installedModelIDs) { _, _ in refreshPreflight() }
+        .confirmationDialog("Remove this flow?", isPresented: $flowPendingRemoval,
+                            titleVisibility: .visible) {
+            Button("Remove", role: .destructive) {
+                appState.removeUserFlow(flowID: flowID)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("'\(display.title)' and its files will be deleted from your flows folder. This can't be undone.")
+        }
     }
+
+    /// Whether the user confirmed they want to delete this flow (user flows only).
+    @State private var flowPendingRemoval = false
 
     private func selectedRowTitle(_ doc: FlowDocument) -> String {
         guard let id = session.selectedRowID,
@@ -515,6 +544,15 @@ struct FlowListView: View {
                         }
                     }
                 }
+                // CFM-R12-1: a user's own flow can be removed from disk — the bundled gallery
+                // flows never can. Disabled mid-run so a deleting folder never breaks a run.
+                if source == .user {
+                    Divider()
+                    Button("Remove Flow…", systemImage: "trash", role: .destructive) {
+                        flowPendingRemoval = true
+                    }
+                    .disabled(session.isRunning)
+                }
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
@@ -806,6 +844,10 @@ struct FlowListView: View {
                                                   installedModelIDs: appState.installedModelIDs,
                                                   totalRAMGB: appState.systemInfo.totalRAMGB),
                                doc: doc)
+        // The inspector's frozen Properties tab reuses the editor's resolution machinery
+        // (candidate models, input labels, display numbers) over a read-only model.
+        inspectModel = FlowEditorModel(name: display?.title ?? flowID, flowID: flowID,
+                                       document: doc, savedText: CatSerializer.serialize(doc))
         // CFM-R10-Events: establish the trigger kind so the Arm button shows (and the §14.4
         // refusal when the flow carries a door).
         armSession.inspect(doc: doc)

@@ -723,6 +723,12 @@ final class FlowEditorModel {
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent("\(Self.sanitizedFileName(name)).\(Self.fileExtension(for: document.fileKind))")
         try catText.write(to: url, atomically: true, encoding: .utf8)
+        // A rename (or a `.cat` ↔ `.catpipeline` kind change) writes a *new* file. Drop the
+        // previously-saved one, or the folder holds two `.cat` files and the shelf — which
+        // takes the first it finds — would keep showing the old name.
+        if let previous = savedURL, previous != url, fm.fileExists(atPath: previous.path) {
+            try? fm.removeItem(at: previous)
+        }
         savedURL = url
         savedText = catText
         saveError = nil

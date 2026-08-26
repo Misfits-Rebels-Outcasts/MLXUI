@@ -169,11 +169,15 @@ nonisolated enum FlowInterpreter {
         var payload: String?
     }
 
-    /// `HumanAnswer` — one resolved live answer for a `wait=forever` human row's activation
-    /// (P3-MC-02): `tag` for Ask Human (must name a declared edge), `text` for Human Input.
+    /// `HumanAnswer` — one resolved live answer for a human row's activation (P3-MC-02):
+    /// `tag` for Ask Human (must name a declared edge), `text` for Human Input.
     struct HumanAnswer: Sendable {
         var tag: String?
         var text: String?
+        /// True when this answer is the timeout fallback — nobody answered by the deadline.
+        /// Ask Human resolves to its `default=` tag, Human Input passes its input through
+        /// ("unchanged"), both with an F002 disclosure.
+        var isTimeoutDefault: Bool = false
     }
 
     /// A resolved `uses:` entry (P5-NC-02, Spec §6.7) — the used flow's body plus its own
@@ -210,18 +214,46 @@ nonisolated enum FlowInterpreter {
 
     static let defaultMaxSteps = 1000
 
+    /// A small accumulator that also pushes each event to a listener as it lands — the live
+    /// half of `FlowRunner.run`'s stream (the GUI's dots advance row-by-row instead of all
+    /// arriving when the run finishes). Every `events.append(...)` site is unchanged; a nil
+    /// listener makes it a plain array, so the conformance traces stay byte-for-byte.
+    private struct EventSink {
+        var events: [PathEvent] = []
+        var onEvent: ((PathEvent) -> Void)?
+        mutating func append(_ event: PathEvent) {
+            events.append(event)
+            onEvent?(event)
+        }
+        mutating func append(contentsOf more: [PathEvent]) {
+            for event in more { append(event) }
+        }
+    }
+
     /// Run `doc` to completion, returning the full path-event stream (the Python's
     /// `run_v04_flat`). `definitions` is the flow's own `definitions:` section — a row whose
     /// task names one is expanded into an ordinary `<list>` block (CFM-R7-1, `_expand_composite_call`).
     /// Throws on a row failure (the Python yields `RowFailed` and stops).
+    ///
+    /// **`parkOnTimeout`** — a deliberate, GUI-requested divergence from the Python reference:
+    /// the Python resolves a `timeout=` human row to its default immediately (F002, unattended).
+    /// The app instead **parks** it (like `wait=forever`) so the user can answer before the
+    /// deadline; past it, the session falls back to the default. Default `false` keeps the
+    /// conformance trace byte-for-byte; `FlowRunner.run` passes `true` for the GUI.
+    ///
+    /// **`onEvent`** — called synchronously as each event lands. `FlowRunner.run` maps it to a
+    /// `FlowEvent` and yields it live; the return value is still the full array for the callers
+    /// that assert on the completed trace.
     static func run(_ doc: FlowDocument, executor: any FlowExecutor,
                     maxSteps: Int = defaultMaxSteps,
                     definitions: [String: CompositeDef] = [:],
                     presets: [String: PresetDecl] = [:],
                     usesGraph: [String: UsedFlow] = [:],
                     occurrence: Occurrence? = nil,
-                    answers: [String: HumanAnswer] = [:]) async throws -> [PathEvent] {
-        var events: [PathEvent] = []
+                    answers: [String: HumanAnswer] = [:],
+                    parkOnTimeout: Bool = false,
+                    onEvent: ((PathEvent) -> Void)? = nil) async throws -> [PathEvent] {
+        var events = EventSink(onEvent: onEvent)
         var journal: [JournalEntry] = []
         do {
             _ = try await runScope(
@@ -231,7 +263,8 @@ nonisolated enum FlowInterpreter {
                 definitions: definitions, presets: presets, usesGraph: usesGraph,
                 usedContent: nil,
                 triggerName: triggerName(rows: doc.rows, occurrence: occurrence),
-                occurrence: occurrence, answers: answers, maxSteps: maxSteps)
+                occurrence: occurrence, answers: answers, maxSteps: maxSteps,
+                parkOnTimeout: parkOnTimeout)
             events.append(PathEvent(kind: .runCompleted, path: "", output: nil, index: nil, total: nil,
                                     durationMS: 0, firedTag: nil, edge: nil, code: nil, message: nil, error: nil, staged: nil, transcript: nil,
                                     entry: nil, entryIndex: nil, parkPrompt: nil, parkPolicy: nil, context: nil))
@@ -240,7 +273,7 @@ nonisolated enum FlowInterpreter {
         } catch is StopRun {
             // A row failure was emitted as `.rowFailed`; the run stops there (no run_completed).
         }
-        return events
+        return events.events
     }
 
     // MARK: - _run_scope
@@ -250,12 +283,12 @@ nonisolated enum FlowInterpreter {
     private static func runScope(
         rows: [Row], pathPrefix: String, blockInputs: [Asset],
         executor: any FlowExecutor,
-        events: inout [PathEvent], journal: inout [JournalEntry],
+        events: inout EventSink, journal: inout [JournalEntry],
         onError: String, start: Int, end: Int?, eachIndex: Int?, eachItem: String?,
         definitions: [String: CompositeDef], presets: [String: PresetDecl],
         usesGraph: [String: UsedFlow], usedContent: String?,
         triggerName: String, occurrence: Occurrence?, answers: [String: HumanAnswer],
-        maxSteps: Int
+        maxSteps: Int, parkOnTimeout: Bool
     ) async throws -> Asset? {
         // `visits`/`activations` are **per scope** (the Python's `_run_scope` creates them
         // locally): a block's children get fresh ones, so a child at position 1 doesn't
@@ -378,7 +411,8 @@ nonisolated enum FlowInterpreter {
                                                presets: childPresets, usesGraph: childUsesGraph,
                                                usedContent: childUsedContent,
                                                triggerName: triggerName, occurrence: occurrence,
-                                               answers: answers, maxSteps: maxSteps)
+                                               answers: answers, maxSteps: maxSteps,
+                                               parkOnTimeout: parkOnTimeout)
                 } else if row.blockKind == .parallel {
                     output = try await runParallel(children: row.children, pathPrefix: childPrefix,
                                                    bundle: childBundle, executor: executor,
@@ -388,7 +422,7 @@ nonisolated enum FlowInterpreter {
                                                    usesGraph: childUsesGraph, usedContent: childUsedContent,
                                                    triggerName: triggerName,
                                                    occurrence: occurrence, answers: answers,
-                                                   maxSteps: maxSteps)
+                                                   maxSteps: maxSteps, parkOnTimeout: parkOnTimeout)
                 } else {
                     output = try await runScope(rows: row.children, pathPrefix: childPrefix,
                                                 blockInputs: childBundle, executor: executor,
@@ -399,7 +433,7 @@ nonisolated enum FlowInterpreter {
                                                 usesGraph: childUsesGraph, usedContent: childUsedContent,
                                                 triggerName: triggerName,
                                                 occurrence: occurrence, answers: answers,
-                                                maxSteps: maxSteps)
+                                                maxSteps: maxSteps, parkOnTimeout: parkOnTimeout)
                             ?? Asset(items: [])
                 }
                 activations[position, default: []].append(
@@ -539,13 +573,21 @@ nonisolated enum FlowInterpreter {
             let markers = rowCtxMarkers(execRow)
             let contextArg = markers.reads ? journal.map { ($0.label, $0.content) } : nil
 
-            // A `wait=forever` human row resolves a live answer (P3-MC-02) or parks the run.
+            // A human row parks when it waits forever **or** declares a timeout: it resolves a
+            // live answer (P3-MC-02) — or, past the deadline, its declared fallback — instead
+            // of running through the executor. A row with neither resolves to its default
+            // immediately (the executor's non-parked F002 path).
             var output: Asset
             var firedTag: String?
             if (execRow.task == "Ask Human" || execRow.task == "Human Input")
-                && waitsForever(execRow) {
+                && (waitsForever(execRow) || (hasTimeout(execRow) && parkOnTimeout)) {
                 guard let answer = answers[execPath] else {
-                    throw ParkRun(path: execPath, prompt: rowPromptText(execRow), policy: "wait=forever")
+                    throw ParkRun(path: execPath, prompt: rowPromptText(execRow), policy: parkPolicy(execRow))
+                }
+                // A timeout default (nobody answered by the deadline) is disclosed as F002,
+                // the same sentence the non-parked executor path emits.
+                if answer.isTimeoutDefault, let f002 = timeoutDefaultSentence(execRow) {
+                    events.append(PathEvent.flagRaised(execPath, "F002", f002))
                 }
                 // Resolved without ever touching an executor: Ask Human is a passthrough with
                 // the person's tag; Human Input's reply replaces the content. Emit RunResumed.
@@ -631,13 +673,13 @@ nonisolated enum FlowInterpreter {
     /// iterated source; the rest are broadcast to every item as `(input:2)`, `(input:3)`, …
     private static func runEach(_ path: String, children: [Row], pathPrefix: String, bundle: [Asset],
                                 executor: any FlowExecutor,
-                                events: inout [PathEvent], journal: inout [JournalEntry], onError: String,
+                                events: inout EventSink, journal: inout [JournalEntry], onError: String,
                                 eachIndex: Int?, eachItem: String?,
                                 definitions: [String: CompositeDef], presets: [String: PresetDecl],
                                 usesGraph: [String: UsedFlow], usedContent: String?,
                                 triggerName: String,
                                 occurrence: Occurrence?, answers: [String: HumanAnswer],
-                                maxSteps: Int) async throws -> Asset {
+                                maxSteps: Int, parkOnTimeout: Bool) async throws -> Asset {
         let source = bundle.first ?? Asset(items: [])
         let broadcast = Array(bundle.dropFirst())
         let total = source.items.count
@@ -655,7 +697,7 @@ nonisolated enum FlowInterpreter {
                                                 usesGraph: usesGraph, usedContent: usedContent,
                                                 triggerName: triggerName,
                                                 occurrence: occurrence, answers: answers,
-                                                maxSteps: maxSteps) ?? Asset(items: [])
+                                                maxSteps: maxSteps, parkOnTimeout: parkOnTimeout) ?? Asset(items: [])
                 resultItems.append(contentsOf: output.items)
             } catch let failed as ItemFailed {
                 // FIX-6 (R6/`on_error=skip`): a skipped item flags F003 first — the Python's
@@ -698,18 +740,20 @@ nonisolated enum FlowInterpreter {
     /// sibling's `ctx+` entry (the Python's `context=[]` for a lone `· ctx` chain).
     private static func runParallel(children: [Row], pathPrefix: String, bundle: [Asset],
                                     executor: any FlowExecutor,
-                                    events: inout [PathEvent], journal: inout [JournalEntry], onError: String,
+                                    events: inout EventSink, journal: inout [JournalEntry], onError: String,
                                     eachIndex: Int?, eachItem: String?,
                                     definitions: [String: CompositeDef], presets: [String: PresetDecl],
                                     usesGraph: [String: UsedFlow], usedContent: String?,
                                     triggerName: String,
                                     occurrence: Occurrence?, answers: [String: HumanAnswer],
-                                    maxSteps: Int) async throws -> Asset {
+                                    maxSteps: Int, parkOnTimeout: Bool) async throws -> Asset {
         let chains = parallelChains(children)
         let journalSnapshot = journal
         var tails: [Asset] = []
         for chain in chains {
-            var chainEvents: [PathEvent] = []
+            // A chain's events buffer without a listener — they're committed (and emitted)
+            // by the outer sink below, after the chain's journal index is rewritten.
+            var chainEvents = EventSink()
             var chainJournal = journalSnapshot
             var chainTail: Asset?
             var chainError: Error?
@@ -722,7 +766,7 @@ nonisolated enum FlowInterpreter {
                                                usesGraph: usesGraph, usedContent: usedContent,
                                                triggerName: triggerName,
                                                occurrence: occurrence, answers: answers,
-                                               maxSteps: maxSteps)
+                                               maxSteps: maxSteps, parkOnTimeout: parkOnTimeout)
             } catch {
                 chainError = error
             }
@@ -730,7 +774,7 @@ nonisolated enum FlowInterpreter {
             // journal with its entry_index rewritten (it was only valid against the chain's
             // private copy). The failing chain's events still commit before its error
             // re-raises (the Python's join semantics).
-            for var ev in chainEvents {
+            for var ev in chainEvents.events {
                 if ev.kind == .journalAppended, let entry = ev.entry {
                     journal.append(JournalEntry(label: entry.label, content: entry.content))
                     ev = PathEvent.journalAppended(ev.path, journal.count - 1, entry.label, entry.content)
@@ -1071,11 +1115,48 @@ nonisolated enum FlowInterpreter {
         return settings.range(of: #"\bwait\s*=\s*forever\b"#, options: .regularExpression) != nil
     }
 
+    /// Whether the row declares a `timeout=` — it parks (like `wait=forever`) and falls back
+    /// to its default when the deadline passes unanswered.
+    private static func hasTimeout(_ row: Row) -> Bool {
+        guard let settings = row.settings else { return false }
+        return settings.range(of: #"\btimeout\s*="#, options: .regularExpression) != nil
+    }
+
+    /// The parked row's waiting policy — `wait=forever`, or `timeout=<raw>` so the session can
+    /// parse the deadline for the prompt's countdown + fallback.
+    private static func parkPolicy(_ row: Row) -> String {
+        if let timeout = FlowSettings(row.settings).value(for: "timeout") {
+            return "timeout=\(timeout)"
+        }
+        return "wait=forever"
+    }
+
+    /// The F002 disclosure for a timeout fallback, or nil when none applies (an Ask Human row
+    /// with no declared `default=`) — mirrors `RealExecutor`'s sentence.
+    private static func timeoutDefaultSentence(_ row: Row) -> String? {
+        let s = FlowSettings(row.settings)
+        guard let timeout = s.value(for: "timeout") else { return nil }
+        if row.task == "Ask Human" {
+            guard let dflt = s.value(for: "default"), !dflt.isEmpty else { return nil }
+            return "Nobody answered by \(timeout) — proceeded as `\(dflt)`, unreviewed."
+        }
+        return "Nobody answered by \(timeout) — proceeded as `unchanged`, unreviewed."
+    }
+
     /// `_resolve_human_answer` — a live answer, resolved without touching an executor.
     private static func resolveHumanAnswer(row: Row, inputs: [Asset],
                                            answer: HumanAnswer) -> (Asset, String?) {
         if row.task == "Ask Human" {
-            return (inputs.first ?? Asset(items: []), answer.tag)
+            // A timeout fallback fires the row's declared `default=` tag (the F002 sentence
+            // names it); a live answer fires the chosen tag.
+            let tag = answer.isTimeoutDefault
+                ? FlowSettings(row.settings).value(for: "default")
+                : answer.tag
+            return (inputs.first ?? Asset(items: []), tag)
+        }
+        // Human Input's timeout fallback is "unchanged": pass the input through.
+        if answer.isTimeoutDefault {
+            return (inputs.first ?? Asset(items: []), nil)
         }
         return (Asset(items: [Item(kind: .text, value: answer.text ?? "", path: nil, sourceText: nil)]), nil)
     }

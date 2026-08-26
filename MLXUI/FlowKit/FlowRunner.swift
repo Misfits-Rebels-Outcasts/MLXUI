@@ -222,13 +222,17 @@ nonisolated struct FlowRunner {
                     return
                 }
                 do {
-                    let events = try await FlowInterpreter.run(doc, executor: context.executor,
-                                                               definitions: doc.definitions,
-                                                               presets: doc.presets,
-                                                               occurrence: occurrence,
-                                                               answers: answers)
-                    for event in events {
-                        if Task.isCancelled { break }
+                    // `onEvent` streams each event to the UI the moment it lands — the dots
+                    // advance row-by-row while the flow is still running, instead of the whole
+                    // event list arriving when the run completes (the pre-live-stream behavior).
+                    let _ = try await FlowInterpreter.run(doc, executor: context.executor,
+                                                          definitions: doc.definitions,
+                                                          presets: doc.presets,
+                                                          occurrence: occurrence,
+                                                          answers: answers,
+                                                          // The GUI parks `timeout=` human rows (wait + fallback); the
+                                                          // reference runtime proceeds to the default unattended.
+                                                          parkOnTimeout: true) { event in
                         if let flowEvent = Self.map(event, pathToID: pathToID) {
                             continuation.yield(flowEvent)
                         }

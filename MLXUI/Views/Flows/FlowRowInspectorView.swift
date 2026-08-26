@@ -20,6 +20,12 @@ struct FlowRowInspectorView: View {
     let rowID: UUID
     let catalog: [ModelEntry]
     let totalRAMGB: Double
+    /// Whether the row's details are editable. The flow editor edits in place; the read-only
+    /// flow list passes `false`, so the properties tab is browsable but never mutable.
+    var editable: Bool = true
+    /// Whether the pane is "frozen" — a bundled gallery flow's properties are read-only
+    /// *and* dimmed with a lock badge, while a user flow's stay at full opacity.
+    var isFrozen: Bool = false
 
     private var row: Row? { model.row(withID: rowID) }
 
@@ -55,16 +61,18 @@ struct FlowRowInspectorView: View {
                     }
                     .padding(4)
                 }
+                // Read-only (the flow list): every control is disabled — the pane becomes a
+                // browse-only inspection, the row's values still fully visible. The Advanced
+                // disclosure stays toggleable (it only holds informational labels).
+                .disabled(!editable)
             } else {
-                Text("Select a row to edit it.")
+                Text(editable ? "Select a row to edit it." : "Select a row to inspect its properties.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
         }
-        .padding(14)
-        .frame(minWidth: 280, maxWidth: 340, maxHeight: .infinity, alignment: .topLeading)
-        .background(.quaternary.opacity(0.18))
+        .opacity(isFrozen ? 0.85 : 1)
     }
 
     // MARK: - Header
@@ -78,6 +86,12 @@ struct FlowRowInspectorView: View {
                 .foregroundStyle(.secondary)
             Text(FlowRowSummary.taskName(for: row))
                 .font(.headline)
+            if isFrozen {
+                Image(systemName: "lock.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .help("This flow's properties are read-only — Duplicate & Edit to change them")
+            }
             Spacer()
         }
     }
@@ -132,6 +146,9 @@ struct FlowRowInspectorView: View {
                     .padding(.vertical, 4)
                 }
                 .font(.caption)
+                // The Advanced disclosure holds only informational labels — it stays
+                // toggleable even in read-only mode, so its note is browsable.
+                .disabled(false)
             }
         }
     }
