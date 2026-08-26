@@ -78,6 +78,11 @@ final class FlowEditorModel {
         self.document = document ?? FlowDocument(version: "0.8", rows: [])
         self.sampleSourceDir = sampleSourceDir
         self.savedText = savedText
+        // Opening an existing flow selects its first row so the inspector pane is up and
+        // showing the Properties tab (CFM — a click on a My Workflows flow opens Edit).
+        if let first = self.document.rows.first {
+            self.selectedRowID = first.id
+        }
     }
 
     // MARK: - Step picker (CFM-R8-1, CFM-R8-FIX-2/7)

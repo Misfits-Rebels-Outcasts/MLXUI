@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// The Automate → "AI Workflows" gallery: every bundled flow rendered as a badge in the
 /// detail panel. Selecting a badge pushes the flow's detail (`FlowListView` — title, rows,
@@ -61,8 +62,19 @@ struct FlowGalleryView: View {
 
     private var myWorkflowsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("My Workflows")
-                .font(.title3.weight(.semibold))
+            HStack(spacing: 8) {
+                Text("My Workflows")
+                    .font(.title3.weight(.semibold))
+                Spacer()
+                // CFM — Import copies a picked flow folder (its .cat plus fixtures) into
+                // the flows folder; Export copies a flow's whole folder out to the user.
+                Button {
+                    importFlow()
+                } label: {
+                    Label("Import", systemImage: "square.and.arrow.down")
+                }
+                .help("Copy a flow folder (.cat plus its audio, text, etc.) into My Workflows")
+            }
             LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
                 newFlowBadge
                 ForEach(appState.userFlowEntries) { entry in
@@ -70,7 +82,7 @@ struct FlowGalleryView: View {
                 }
             }
             if appState.userFlowEntries.isEmpty {
-                Text("Flows you save — or duplicate from the gallery — appear here. Start with New Flow.")
+                Text("Flows you save — or duplicate from the gallery — appear here. Start with New Flow, or Import one.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -85,6 +97,54 @@ struct FlowGalleryView: View {
                 ForEach(appState.galleryEntries) { flow in
                     badge(for: flow)
                 }
+            }
+        }
+    }
+
+    // MARK: - CFM: Import / Export
+
+    /// CFM — Import: the user picks a flow folder (a `.cat`/`.catpipeline` plus its fixtures
+    /// like audio and `.txt`); the whole folder is copied into the flows folder under a fresh
+    /// id and the shelf refreshes. Failures surface as the app-level alert.
+    private func importFlow() {
+        let panel = NSOpenPanel()
+        panel.title = "Import a Flow"
+        panel.prompt = "Import"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+            do {
+                _ = try UserFlowStore.importFlow(from: url, workspace: FlowWorkspace.shared)
+                appState.reloadUserFlows()
+            } catch {
+                appState.flowImportError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+            }
+        }
+    }
+
+    /// CFM — Export: the user picks a destination folder; the flow's entire folder (its
+    /// `.cat` plus fixtures) is copied there under the flow's title, then revealed in Finder.
+    private func exportFlow(_ entry: UserFlowStore.Entry) {
+        let panel = NSOpenPanel()
+        panel.title = "Export '\(entry.title)'"
+        panel.prompt = "Export"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+            do {
+                let dest = try UserFlowStore.export(flowID: entry.flowID, name: entry.title,
+                                                    to: url, workspace: FlowWorkspace.shared)
+                NSWorkspace.shared.activateFileViewerSelecting([dest])
+            } catch {
+                appState.flowExportError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
             }
         }
     }
@@ -125,13 +185,27 @@ struct FlowGalleryView: View {
         .contentShape(RoundedRectangle(cornerRadius: 14))
     }
 
+    /// CFM — a click on a My Workflows flow opens it **in the editor** (Edit mode, first row
+    /// selected, inspector up on Properties). A broken file can't be edited — it falls back
+    /// to the read-only list so the parse sentence shows.
+    private func openUserFlow(_ entry: UserFlowStore.Entry) {
+        guard entry.parseIssue == nil,
+              let doc = try? UserFlowStore.loadDocument(entry: entry) else {
+            appState.selectedFlow = FlowSelection(flowID: entry.flowID, isUserFlow: true)
+            return
+        }
+        appState.editingFlow = FlowEditTarget(flowID: entry.flowID,
+                                              name: entry.title,
+                                              document: doc,
+                                              savedText: CatSerializer.serialize(doc))
+    }
+
     /// One user flow's badge: title + last-modified, a ⚠ when its file no longer parses.
-    /// Opening it pushes `FlowListView` in the user source. The trash overlay (top-right)
-    /// removes the flow folder with a confirmation — it sits on top, so it captures its own
-    /// click and never also opens the flow.
+    /// Opening it goes straight into the editor. The export/trash overlay (top-right) sits
+    /// on top, so each captures its own click and never also opens the flow.
     private func userFlowBadge(_ entry: UserFlowStore.Entry) -> some View {
         Button {
-            appState.selectedFlow = FlowSelection(flowID: entry.flowID, isUserFlow: true)
+            openUserFlow(entry)
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
@@ -163,18 +237,32 @@ struct FlowGalleryView: View {
         .buttonStyle(.plain)
         .contentShape(RoundedRectangle(cornerRadius: 14))
         .overlay(alignment: .topTrailing) {
-            Button {
-                flowPendingRemoval = entry
-            } label: {
-                Image(systemName: "trash")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 22, height: 22)
-                    .background(.quaternary.opacity(0.75), in: Circle())
-                    .contentShape(Circle())
+            HStack(spacing: 4) {
+                Button {
+                    exportFlow(entry)
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22, height: 22)
+                        .background(.quaternary.opacity(0.75), in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help("Export this flow to a folder you choose")
+                Button {
+                    flowPendingRemoval = entry
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22, height: 22)
+                        .background(.quaternary.opacity(0.75), in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help("Remove this flow")
             }
-            .buttonStyle(.plain)
-            .help("Remove this flow")
             .padding(8)
         }
     }

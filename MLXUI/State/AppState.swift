@@ -95,6 +95,12 @@ final class AppState {
     /// Non-nil surfaces a "Remove Flow" failure (unreadable / access denied) as an alert.
     var flowRemoveError: String?
 
+    /// Non-nil surfaces a My Workflows Import failure as an alert.
+    var flowImportError: String?
+
+    /// Non-nil surfaces a My Workflows Export failure as an alert.
+    var flowExportError: String?
+
     /// CFM-R11-0: a flow the editor is editing — nil document = a fresh flow (the old
     /// "New Flow" route). Non-nil pushes the editor onto the detail stack.
     var editingFlow: FlowEditTarget?

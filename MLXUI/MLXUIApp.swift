@@ -110,6 +110,22 @@ struct MLXUIApp: App {
             } message: {
                 Text(appState.flowRemoveError ?? "")
             }
+            .alert("Couldn't Import This Flow", isPresented: Binding(
+                get: { appState.flowImportError != nil },
+                set: { if !$0 { appState.flowImportError = nil } }
+            )) {
+                Button("OK", role: .cancel) { appState.flowImportError = nil }
+            } message: {
+                Text(appState.flowImportError ?? "")
+            }
+            .alert("Couldn't Export This Flow", isPresented: Binding(
+                get: { appState.flowExportError != nil },
+                set: { if !$0 { appState.flowExportError = nil } }
+            )) {
+                Button("OK", role: .cancel) { appState.flowExportError = nil }
+            } message: {
+                Text(appState.flowExportError ?? "")
+            }
             .onChange(of: appState.filterSource) { _, _ in appState.saveFilters() }
             .onChange(of: appState.sortOrder) { _, _ in appState.saveFilters() }
         }

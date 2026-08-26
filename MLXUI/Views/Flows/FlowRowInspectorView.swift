@@ -52,6 +52,11 @@ struct FlowRowInspectorView: View {
                         if let task = row.task, isInstructionTask(task) {
                             instructionBox(task, row: row)
                         }
+                        // CFM — a `Save *` row's filename is its path token; let the user
+                        // type it (or a subfolder) instead of hunting in the file list.
+                        if let task = row.task, task.hasPrefix("Save") {
+                            saveFilenameField(row)
+                        }
                         inputs(row)
                         settingsSection(row)
                         if let task = row.task, hasPathSetting(task) {
@@ -194,6 +199,26 @@ struct FlowRowInspectorView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - CFM: Save-row filename
+
+    /// A `Save *` row's output file name, edited in place as the path token (a `path=` value
+    /// or the first bare token). Clearing the box leaves the current name alone — an empty
+    /// path would make the row's save fail, so nothing is written instead.
+    private func saveFilenameField(_ row: Row) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("File name")
+                .font(.subheadline.weight(.semibold))
+            TextField("output.txt", text: Binding(
+                get: { FlowSettings(row.settings).pathValue() ?? "" },
+                set: { newValue in
+                    guard !newValue.isEmpty else { return }
+                    model.setPath(newValue, for: rowID)
+                }
+            ))
+            .textFieldStyle(.roundedBorder)
         }
     }
 
