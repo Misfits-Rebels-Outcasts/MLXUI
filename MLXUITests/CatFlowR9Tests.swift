@@ -89,6 +89,65 @@ struct CatFlowR9Tests {
         #expect(model.row(withID: r1.id)?.model == nil)
     }
 
+    // MARK: - CFM-R14-4: unbridged picks pin into the models: block
+
+    @Test func unbridgedPickWritesIntoModelsBlock() throws {
+        // An R14-2 derived pick whose display is a raw hfModelId (no bridge entry) must be
+        // pinned in `document.models` so the saved .cat names a resolvable model.
+        let r1 = row("Describe Image")
+        let model = try editor([r1])
+        let unbridged = "mlx-community/Qwen3-VL-4B-Instruct-4bit"
+        model.setModel(unbridged, for: r1.id)
+        #expect(model.document.models[unbridged] == unbridged)
+        #expect(model.document.modelsOrder.contains(unbridged))
+        // The serialized file carries the pin and re-parses with the block intact.
+        let reparsed = try CatParser.parse(model.catText)
+        #expect(reparsed.models[unbridged] == unbridged)
+    }
+
+    @Test func bridgedPickStaysOutOfModelsBlock() throws {
+        // A bridge-resolvable display never needs a pin — the bridge resolves it at runtime.
+        let r1 = row("Transcribe")
+        let model = try editor([r1])
+        model.setModel("Whisper Large v3", for: r1.id)
+        #expect(model.document.models.isEmpty)
+    }
+
+    @Test func pinDropsWhenLastRowChangesModel() throws {
+        let r1 = row("Describe Image")
+        let r2 = row("Describe Image")
+        let model = try editor([r1, r2])
+        let unbridged = "mlx-community/Qwen3-VL-4B-Instruct-4bit"
+        model.setModel(unbridged, for: r1.id)
+        model.setModel(unbridged, for: r2.id)
+        #expect(model.document.models[unbridged] == unbridged)
+        // Both rows off it → the pin is dropped (nothing uses it anymore).
+        model.setModel("LFM2-VL 1.6B", for: r1.id)
+        model.setModel("LFM2-VL 1.6B", for: r2.id)
+        #expect(model.document.models[unbridged] == nil)
+    }
+
+    @Test @MainActor func pinRoundTripsThroughFmt() throws {
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let r1 = row("Read Image", settings: "photo.png")
+        let r2 = row("Describe Image", refs: [.rowRef(r1.id)])
+        let model = try editor([r1, r2])
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+        let unbridged = "mlx-community/Qwen3-VL-4B-Instruct-4bit"
+        model.setModel(unbridged, for: r2.id)
+        // fmt idempotence: serialize(parse(serialize(parse(x)))) == serialize(parse(x)).
+        let once = model.catText
+        let reparsed = try CatParser.parse(once)
+        let twice = CatSerializer.serialize(reparsed)
+        #expect(twice == once)
+        // Reloads clean: no E104, no yellow warning.
+        let validation = try CatParser.parseForValidation(once)
+        let issues = FlowValidator.checkFlow(validation, workspace: model.workspace, flowID: model.flowID)
+        #expect(!issues.contains { $0.code == "E104" })
+        #expect(model.warning(for: r2.id) == nil)
+    }
+
     @Test @MainActor func candidateModelsForTaskIncludeThePool() throws {
         let (catalog, claimable) = try loadedCatalogAndClaimable()
         let transcribe = FlowEditorModel.candidateModels(for: "Transcribe", catalog: catalog,

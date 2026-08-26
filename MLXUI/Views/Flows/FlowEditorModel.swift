@@ -405,11 +405,37 @@ final class FlowEditorModel {
         }
     }
 
-    /// Set a row's model display name (nil clears it).
+    /// Set a row's model display name (nil clears it). Also keeps the document's `models:`
+    /// block honest (CFM-R14-4): a display no bridge entry resolves — an R14-2 unbridged pick,
+    /// whose display **is** its `hfModelId` — must be pinned there, or the saved `.cat` names a
+    /// model no other runtime could resolve and E104 flags it on reload. Bridged displays never
+    /// need a pin (the bridge resolves them at runtime). An entry whose display no row uses
+    /// anymore is dropped, so the block never goes stale.
     func setModel(_ display: String?, for rowID: UUID) {
         commitChange {
             replaceRow(id: rowID) { $0.model = display }
+            reconcileModelsBlock()
         }
+    }
+
+    /// CFM-R14-4 — sync `document.models`/`modelsOrder` with the rows' model choices. Pin an
+    /// unbridged display (`display = hfModelId` — the display IS the id), then drop any pin
+    /// whose display no row uses. Runs inside the same `commitChange` as the model edit, so
+    /// undo restores the block with the row.
+    private func reconcileModelsBlock() {
+        var models = document.models
+        var order = document.modelsOrder
+        let used = Set(allRows().compactMap(\.model))
+        for display in used where CatalogBridge.entry(for: display) == nil {
+            models[display] = display
+            if !order.contains(display) { order.append(display) }
+        }
+        for key in models.keys where !used.contains(key) {
+            models.removeValue(forKey: key)
+            order.removeAll { $0 == key }
+        }
+        document.models = models
+        document.modelsOrder = order
     }
 
     /// Edit one `key=value` setting, splicing only that token (the QR9 round-trip: the rest
