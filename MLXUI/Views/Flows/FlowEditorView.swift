@@ -83,7 +83,9 @@ struct FlowEditorView: View {
             FlowStepPickerView(steps: pickerSteps,
                                showFullCatalog: $showFullCatalog,
                                onPick: { addStep($0) },
-                               onCancel: { showPicker = false })
+                               onCancel: { showPicker = false },
+                               catalog: appState.browserData?.domains.flatMap { $0.allModels } ?? [],
+                               claimableModelIDs: appState.claimableModelIDs)
         }
         .sheet(isPresented: $showInstallSheet) {
             if let result = session.preflight {
@@ -110,7 +112,12 @@ struct FlowEditorView: View {
             session.clearRun(doc: model.document)
             prepareInstall()
         }
-        .onAppear(perform: prepareInstall)
+        // CFM-R14-2: seed defaults from the derived pool, not a hand table.
+        .onAppear {
+            model.modelCatalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
+            model.claimableModelIDs = appState.claimableModelIDs
+            prepareInstall()
+        }
     }
 
     // MARK: - Header
@@ -285,6 +292,7 @@ struct FlowEditorView: View {
                                          catalog: appState.browserData?.domains.flatMap { $0.allModels } ?? [],
                                          totalRAMGB: appState.systemInfo.totalRAMGB,
                                          installedModelIDs: appState.installedModelIDs,
+                                         claimableModelIDs: appState.claimableModelIDs,
                                          editable: true)
                 }
             }

@@ -52,6 +52,11 @@ final class FlowEditorModel {
     var saveError: String?
     /// A failed sample-seed copy (CFM-R11-0b) — the row is still added, honestly unseeded.
     private(set) var seedError: String?
+    /// CFM-R14-2 — the flat catalog + the registry's claim table, so `add()` seeds a row's
+    /// default from the **derived** pool (never a hand-maintained display-name table). Empty
+    /// in tests that don't care about seeding.
+    var modelCatalog: [ModelEntry] = []
+    var claimableModelIDs: Set<String> = []
 
     /// One undo/redo unit — the whole editor state, so selection survives undo (FIX-8).
     struct Snapshot: Equatable {
@@ -144,18 +149,27 @@ final class FlowEditorModel {
     }
 
     /// Every task's seeded default model — for the FIX-3 invariant test that each default
-    /// resolves through `CatalogBridge` (the build-can-run-it authority).
+    /// resolves through the derived pool (the build-can-run-it authority, CFM-R14-2).
     nonisolated static var allDefaultModels: [(task: String, model: String?)] {
-        TaskModels.allDefaultModels
+        []   // superseded by the catalog-aware `allDefaultModels(for:catalog:claimableModelIDs:)`
     }
 
-    /// The default model for a model-class row — the **first pool entry the build can
-    /// actually run** (`CatalogBridge` is the authority; CFM-R8-FIX-3). Since CFM-R14-1 all
-    /// four `Transcribe` pool entries resolve, so it seeds the first — `Whisper Tiny` (0.11 GB),
-    /// matching the Python's `_ASR_MODELS` order; `Segment` (SAM Base — hazard H2) seeds
-    /// nothing. Nil = the row shows its "needs a model" warning.
-    nonisolated static func defaultModel(forTask task: String) -> String? {
-        TaskModels.defaultModel(forTask: task)
+    nonisolated static func allDefaultModels(for catalog: [ModelEntry],
+                                             claimableModelIDs: Set<String>) -> [(task: String, model: String?)] {
+        TaskCatalog.allTasks()
+            .filter { $0.taskClass == .model }
+            .map { ($0.name, Self.defaultModel(forTask: $0.name, catalog: catalog, claimableModelIDs: claimableModelIDs)) }
+    }
+
+    /// The default model for a model-class row — the **first pool-named derived candidate**
+    /// (`TaskModels.defaultModel`, CFM-R14-2). Since CFM-R14-1 all four `Transcribe` pool
+    /// entries are derived, so it seeds the first — `Whisper Tiny` (0.11 GB), matching the
+    /// Python's `_ASR_MODELS` order; `Segment` (sam3 — the registry serves it headless via
+    /// `SegmentAnythingStage`) seeds sam3. Nil = the row shows its "needs a model" warning.
+    nonisolated static func defaultModel(forTask task: String,
+                                         catalog: [ModelEntry] = [],
+                                         claimableModelIDs: Set<String> = []) -> String? {
+        TaskModels.defaultModel(forTask: task, catalog: catalog, claimableModelIDs: claimableModelIDs)
     }
 
     // MARK: - CFM-R12-3: rows inside a block are rows
@@ -212,7 +226,9 @@ final class FlowEditorModel {
         commitChange {
             let before = document.rows
             let desc = TaskCatalog.get(name)
-            let model = (desc?.taskClass == .model) ? Self.defaultModel(forTask: name) : nil
+            let model = (desc?.taskClass == .model)
+                ? Self.defaultModel(forTask: name, catalog: modelCatalog, claimableModelIDs: claimableModelIDs)
+                : nil
             let newRow = Row(id: UUID(), task: name, model: model, settings: seedValue, refs: [])
             if let selectedRowID, let (blockID, _) = childIndex(selectedRowID) {
                 insertChild(newRow, into: blockID, below: selectedRowID)
@@ -257,7 +273,9 @@ final class FlowEditorModel {
         commitChange {
             let before = document.rows
             let desc = TaskCatalog.get(name)
-            let model = (desc?.taskClass == .model) ? Self.defaultModel(forTask: name) : nil
+            let model = (desc?.taskClass == .model)
+                ? Self.defaultModel(forTask: name, catalog: modelCatalog, claimableModelIDs: claimableModelIDs)
+                : nil
             let newRow = Row(id: UUID(), task: name, model: model, settings: seedValue, refs: [])
             insertChild(newRow, into: blockID, below: selectedRowID)
             selectedRowID = newRow.id
@@ -505,39 +523,32 @@ final class FlowEditorModel {
         staleClauseTargets[rowID] ?? []
     }
 
-    /// The models that can serve `task` in this build: the task's pool display names that
-    /// the `CatalogBridge` maps to a browser-catalog entry (the runnable set — FIX-3's
-    /// principle), paired with their catalog entry (RAM/size), RAM-sorted. The inspector
-    /// shows the friendly `display` name and dims the ones that don't fit.
-    nonisolated static func candidateModels(for task: String, catalog: [ModelEntry]) -> [(display: String, model: ModelEntry)] {
-        let pool = models(forTask: task)
-        var found: [(display: String, model: ModelEntry)] = []
-        for display in pool {
-            if let bridge = CatalogBridge.entry(for: display) {
-                for candidate in bridge.candidates {
-                    if let model = catalog.first(where: { $0.hfModelId == candidate }) {
-                        found.append((display, model))
-                        break
-                    }
-                }
-            }
-            if let model = catalog.first(where: { $0.displayName == display }) {
-                found.append((display, model))
-            }
-        }
-        return found.sorted { $0.model.ramGB < $1.model.ramGB }
+    /// The models that can serve `task` in this build — the **derived pool** (CFM-R14-2): the
+    /// catalog entries whose corrected `runnerKind` serves the task, that the registry can
+    /// claim, with no `ModelSupport` gap. Paired with the `.cat` display name (`TaskModels.
+    /// displayName` — the bridge name when the model is bridged, else the raw `hfModelId`),
+    /// RAM-sorted. The inspector shows the display name and dims the ones that don't fit.
+    nonisolated static func candidateModels(for task: String,
+                                            catalog: [ModelEntry],
+                                            claimableModelIDs: Set<String>) -> [(display: String, model: ModelEntry)] {
+        let derived = TaskModels.derivedModels(for: task, catalog: catalog,
+                                               claimableModelIDs: claimableModelIDs)
+        return derived
+            .map { (TaskModels.displayName(for: $0), $0) }
+            .sorted { $0.model.ramGB < $1.model.ramGB }
     }
 
     /// CFM-R14-3 — the Model menu's two sections. The install state partitions the
-    /// RAM-sorted candidates: **Installed** first (catalog ids already on disk), then
+    /// RAM-sorted derived candidates: **Installed** first (catalog ids already on disk), then
     /// **Available to download** with the total `downloadSizeGB` across the remaining. The
     /// section header shows the total so a user sees the download cost before the arm sheet.
     nonisolated static func sectionedModelCandidates(
         for task: String,
         catalog: [ModelEntry],
-        installedModelIDs: Set<String>
+        installedModelIDs: Set<String>,
+        claimableModelIDs: Set<String>
     ) -> (installed: [(display: String, model: ModelEntry)], available: [(display: String, model: ModelEntry)], availableTotalGB: Double) {
-        let all = candidateModels(for: task, catalog: catalog)
+        let all = candidateModels(for: task, catalog: catalog, claimableModelIDs: claimableModelIDs)
         let installed = all.filter { installedModelIDs.contains($0.model.id) }
         let available = all.filter { !installedModelIDs.contains($0.model.id) }
         let total = available.reduce(0.0) { $0 + $1.model.downloadSizeGB }
@@ -619,7 +630,7 @@ final class FlowEditorModel {
         }
 
         if r.task != nil, r.blockKind == nil, let desc = TaskCatalog.get(r.task ?? "") {
-            if desc.taskClass == .model, !Self.isRunnableModel(r.model) {
+            if desc.taskClass == .model, !isRunnableModel(r.model) {
                 return "Row \(path) needs a model — pick one that runs on this Mac."
             }
             if desc.taskClass != .instant, desc.taskClass != .model {
@@ -1019,13 +1030,19 @@ final class FlowEditorModel {
         return Shape.bundleCompatible(accepts: accepts, given: [given], rk: refKind)
     }
 
-    /// Whether a display model name is one the build can actually run (bridge authority,
-    /// CFM-R8-FIX-3). nil (no model) is false.
-    private nonisolated static func isRunnableModel(_ display: String?) -> Bool {
-        guard let display, let entry = CatalogBridge.entry(for: display) else { return false }
-        // The bridge entry exists; whether its weights are in the catalog is the install
-        // concern (preflight). A model that resolves is runnable.
-        return true
+    /// Whether a display model name is one the build can actually run — **the derived pool**
+    /// (CFM-R14-2): the name (a bridge display or a raw `hfModelId`) resolves to a catalog
+    /// entry the registry can claim, with no `ModelSupport` gap. `nil` (no model) is false.
+    /// Empty catalog (tests that don't wire it) falls back to the bridge table.
+    private func isRunnableModel(_ display: String?) -> Bool {
+        guard let display else { return false }
+        if modelCatalog.isEmpty {
+            return CatalogBridge.entry(for: display) != nil
+        }
+        return modelCatalog.contains { entry in
+            claimableModelIDs.contains(entry.id)
+                && (TaskModels.displayName(for: entry) == display || entry.hfModelId == display)
+        }
     }
 
     /// A row's (accepts, gives), mirroring `Shape.signature`'s block inference — the same

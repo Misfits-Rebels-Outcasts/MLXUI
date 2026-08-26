@@ -13,6 +13,11 @@ struct FlowStepPickerView: View {
     /// Called with the chosen task name.
     let onPick: (String) -> Void
     var onCancel: () -> Void = {}
+    /// CFM-R14-2 — the derived model pool's inputs: a model task is marked "needs newer
+    /// support" exactly when its registry-claimable pool is empty, so the picker and the
+    /// runtime can't disagree about a task that has no runnable model.
+    var catalog: [ModelEntry] = []
+    var claimableModelIDs: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -29,7 +34,8 @@ struct FlowStepPickerView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(steps, id: \.name) { task in
-                        let marker = TaskAvailability.marker(for: task)
+                        let marker = TaskAvailability.marker(for: task, catalog: catalog,
+                                                             claimableModelIDs: claimableModelIDs)
                         Button {
                             onPick(task.name)
                         } label: {

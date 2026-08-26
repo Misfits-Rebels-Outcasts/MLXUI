@@ -30,6 +30,20 @@ struct CatFlowEditingTests {
             model: model, settings: settings, refs: refs, children: children, clause: clause)
     }
 
+    /// The bundled catalog + the registry's own claim answer — the derived pool's inputs
+    /// (CFM-R14-2). `@MainActor` because `ModelRegistry` is.
+    @MainActor
+    private func loadedCatalogAndClaimable() throws -> (catalog: [ModelEntry], claimable: Set<String>) {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("MLXUI/Resources/browser.json")
+        let catalog = try JSONDecoder().decode(BrowserData.self, from: Data(contentsOf: url))
+            .domains.flatMap { $0.allModels }
+        let registry = ModelRegistry()
+        for module in installedModules { module.register(into: registry) }
+        let claimable = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
+        return (catalog, claimable)
+    }
+
     // MARK: - CFM-R8-1: the step picker
 
     @Test func stepsAcceptingTextOutputListsTextConsumers() {
@@ -87,25 +101,31 @@ struct CatFlowEditingTests {
         #expect(!starts.contains("Speak"))
     }
 
-    @Test func defaultModelIsBridgeRunnable() {
-        // FIX-3: the default is the first pool entry the build can actually run, never a
-        // dead one. CFM-R14-1 bridged Whisper Tiny/Small, so Transcribe now seeds the first
-        // pool entry — Whisper Tiny (0.11 GB) — matching the Python's `_ASR_MODELS` order
-        // (its first entry is Whisper Tiny too). Deliberate: the cheap model is the better
-        // first-run default, and it is faithful, not a divergence.
-        #expect(FlowEditorModel.defaultModel(forTask: "Transcribe") == "Whisper Tiny")
-        #expect(FlowEditorModel.defaultModel(forTask: "Summarize") == "Ministral 3B")
-        #expect(FlowEditorModel.defaultModel(forTask: "Speak") == "Kokoro 82M")
-        #expect(FlowEditorModel.defaultModel(forTask: "Segment") == nil)   // SAM Base = hazard H2
-        #expect(FlowEditorModel.defaultModel(forTask: "Read Text") == nil)
+    @Test @MainActor func defaultModelIsDerivedRunnable() throws {
+        // CFM-R14-2: the default is the first pool-named entry of the **derived** pool (the
+        // registry's own claim answer), never a dead one. Transcribe seeds the first pool
+        // entry — Whisper Tiny (0.11 GB) — matching the Python's `_ASR_MODELS` order. Segment
+        // seeds sam3 (the registry serves it headless via `SegmentAnythingStage`); Read Text
+        // is an instant tool with no model.
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        #expect(FlowEditorModel.defaultModel(forTask: "Transcribe", catalog: catalog, claimableModelIDs: claimable) == "Whisper Tiny")
+        #expect(FlowEditorModel.defaultModel(forTask: "Summarize", catalog: catalog, claimableModelIDs: claimable) == "Ministral 3B")
+        #expect(FlowEditorModel.defaultModel(forTask: "Speak", catalog: catalog, claimableModelIDs: claimable) == "Kokoro 82M")
+        #expect(FlowEditorModel.defaultModel(forTask: "Segment", catalog: catalog, claimableModelIDs: claimable) == "mlx-community/sam3-4bit")
+        #expect(FlowEditorModel.defaultModel(forTask: "Read Text", catalog: catalog, claimableModelIDs: claimable) == nil)
     }
 
-    @Test func everySeededDefaultResolvesThroughTheBridge() {
-        // FIX-3's invariant: whatever a task seeds as its default, the bridge can run it.
-        for entry in FlowEditorModel.allDefaultModels {
+    @Test @MainActor func everySeededDefaultIsInTheDerivedPool() throws {
+        // FIX-3's invariant, CFM-R14-2 edition: whatever a task seeds as its default, the
+        // derived pool can run it (the registry claims it). This is the "one list, cross-
+        // checked" rule the tools already have, applied to the model side.
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        for entry in FlowEditorModel.allDefaultModels(for: catalog, claimableModelIDs: claimable) {
             if let model = entry.model {
-                #expect(CatalogBridge.entry(for: model) != nil,
-                        "\(entry.task) seeds \(model), which isn't a runnable bridge model")
+                let derived = TaskModels.derivedModels(for: entry.task, catalog: catalog,
+                                                       claimableModelIDs: claimable)
+                #expect(derived.contains { $0.hfModelId == model || TaskModels.displayName(for: $0) == model },
+                        "\(entry.task) seeds \(model), which isn't a derived-pool model")
             }
         }
     }
@@ -129,10 +149,13 @@ struct CatFlowEditingTests {
         #expect(model.document.rows[1].task == "Summarize")
     }
 
-    @Test func addGivesModelClassRowADefaultModel() throws {
+    @Test @MainActor func addGivesModelClassRowADefaultModel() throws {
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
         let model = try editor()
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
         model.add(task: "Transcribe")
-        // CFM-R14-1: the seed is the first bridge-runnable pool entry — Whisper Tiny now.
+        // CFM-R14-1/2: the seed is the first pool-named derived entry — Whisper Tiny now.
         #expect(model.document.rows[0].model == "Whisper Tiny")
         model.add(task: "Read Text")
         #expect(model.document.rows[1].model == nil)
@@ -260,8 +283,11 @@ struct CatFlowEditingTests {
         #expect(!model.canSave)
     }
 
-    @Test func firstRowNeedingInputIsYellow() throws {
+    @Test @MainActor func firstRowNeedingInputIsYellow() throws {
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
         let model = try editor()
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
         model.add(task: "Summarize")
         #expect(model.warning(for: model.document.rows[0].id) != nil)   // nothing feeds it
         model.reset()
@@ -271,14 +297,21 @@ struct CatFlowEditingTests {
         #expect(model.warning(for: model.document.rows[1].id) == nil)   // text → text
     }
 
-    @Test func rowWithNoRunnableModelIsYellow() throws {
-        // FIX-3: a model-class row seeded with nothing (e.g. Segment) warns it needs a model.
+    @Test @MainActor func rowWithNoRunnableModelIsYellow() throws {
+        // FIX-3 + CFM-R14-2: a model-class row seeded with no runnable model warns. Upscale
+        // has no catalog model at all → seeds nothing and warns; a row whose model name is
+        // neither a bridge display nor a catalog hfModelId warns too.
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
         let model = try editor()
-        model.add(task: "Segment")
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+        model.add(task: "Upscale")
         #expect(model.document.rows[0].model == nil)
         #expect(model.warning(for: model.document.rows[0].id) != nil)
-        // A row whose model isn't a bridge entry warns too.
-        let model2 = try editor(rows: [row("Transcribe", model: "Whisper Tiny")])
+        // A row whose model isn't in the derived pool warns too.
+        let model2 = try editor(rows: [row("Transcribe", model: "Totally Missing")])
+        model2.modelCatalog = catalog
+        model2.claimableModelIDs = claimable
         #expect(model2.warning(for: model2.document.rows[0].id) != nil)
     }
 
@@ -513,8 +546,11 @@ struct CatFlowEditingTests {
 
     // MARK: - The Spoken-Summary-shaped exit build
 
-    @Test func buildingSpokenSummaryShapeStaysGreenEndToEnd() throws {
+    @Test @MainActor func buildingSpokenSummaryShapeStaysGreenEndToEnd() throws {
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
         let model = try editor(name: "Spoken Summary")
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
         model.add(task: "Read Audio")          // source
         model.add(task: "Transcribe")          // audio → text
         model.add(task: "Summarize")           // text → text

@@ -6,6 +6,10 @@ import Foundation
 /// the catalog and assert `TaskAvailability` agrees with `RealExecutor`'s actual dispatch for
 /// every instant task (drive the executor, observe whether it throws `unsupportedTask`).
 /// Adding a `case` to `RealExecutor` must be the only edit needed to flip a task available.
+///
+/// Model tasks are `@MainActor` here because the derived pool (CFM-R14-2) reads the registry's
+/// claim answer, and the registry is `@MainActor`.
+@MainActor
 struct CatFlowTaskAvailabilityTests {
 
     // MARK: - The cross-check: TaskAvailability ⟺ RealExecutor dispatch
@@ -51,6 +55,40 @@ struct CatFlowTaskAvailabilityTests {
             return false
         } catch {
             return true   // a real tool error (missing input/file) — the case exists
+        }
+    }
+
+    // MARK: - CFM-R14-2: the derived model pool's cross-check
+
+    /// The cross-check the tools already have, applied to the model side: for every
+    /// model-class task, the derived pool is non-empty **iff** the task is offerable, and
+    /// every pool member's entry resolves to a module the registry can claim (the strongest
+    /// "one list" guarantee — check and run can't drift, because both read the same pool).
+    @Test @MainActor func derivedModelPoolAgreesWithAvailabilityAndClaimability() throws {
+        let catalog = try bundledCatalog()
+        let claimable = claimableIDs(catalog: catalog)
+        let registry = ModelRegistry()
+        for module in installedModules { module.register(into: registry) }
+
+        for task in TaskCatalog.entries where task.taskClass == .model {
+            let pool = TaskModels.derivedModels(for: task.name, catalog: catalog,
+                                                claimableModelIDs: claimable)
+            let offerable = TaskAvailability.isAvailable(task.name, catalog: catalog,
+                                                         claimableModelIDs: claimable)
+            // non-empty pool ⟺ offerable.
+            #expect((!pool.isEmpty) == offerable,
+                    "\(task.name): pool=\(pool.map { $0.hfModelId }) offerable=\(offerable)")
+            // every pool member is registry-claimable and stage-buildable.
+            for model in pool {
+                #expect(registry.bestModule(for: model) != nil,
+                        "\(task.name) offers \(model.hfModelId), which no module claims")
+            }
+        }
+        // And the registry claim table agrees with the registry on every catalog entry
+        // (the AppState precompute is not a second, drifting classification).
+        for model in catalog {
+            #expect(claimable.contains(model.id) == (registry.bestModule(for: model) != nil),
+                    "claim table disagrees with the registry for \(model.hfModelId)")
         }
     }
 
@@ -125,26 +163,58 @@ struct CatFlowTaskAvailabilityTests {
         #expect(unportedInstant == [])
     }
 
-    /// CFM-R12-FIX-12: a model task's availability agrees with `CatalogBridge` — a task is
-    /// available exactly when one of its pool's models resolves.
-    @Test func modelAvailabilityAgreesWithTheBridge() {
+    /// The bundled catalog's flat entries.
+    private func bundledCatalog() throws -> [ModelEntry] {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("MLXUI/Resources/browser.json")
+        let data = try Data(contentsOf: url)
+        return try JSONDecoder().decode(BrowserData.self, from: data)
+            .domains.flatMap { $0.allModels }
+    }
+
+    /// The registry's own claim answer over the bundled catalog — a real `ModelRegistry`
+    /// with every shipped module registered, exactly as `AppState.init` builds it.
+    private func claimableIDs(catalog: [ModelEntry]) -> Set<String> {
+        let registry = ModelRegistry()
+        for module in installedModules { module.register(into: registry) }
+        return Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
+    }
+
+    /// CFM-R12-FIX-12 → CFM-R14-2: a model task's availability agrees with its **derived
+    /// pool** — a task is available exactly when the registry-claimable, kind-correct catalog
+    /// set is non-empty. The old bridge-as-authority version is retired with the display-name
+    /// pools; this is the registry's answer.
+    @Test func modelAvailabilityAgreesWithTheDerivedPool() throws {
+        let catalog = try bundledCatalog()
+        let claimable = claimableIDs(catalog: catalog)
         let modelTasks = TaskCatalog.entries.filter { $0.taskClass == .model }
         var mismatches: [String] = []
         for task in modelTasks {
-            let hasModel = TaskModels.defaultModel(forTask: task.name) != nil
-            if hasModel != TaskAvailability.isAvailable(task.name) {
-                mismatches.append("\(task.name): bridge=\(hasModel) availability=\(TaskAvailability.isAvailable(task.name))")
+            let derived = TaskModels.derivedModels(for: task.name, catalog: catalog,
+                                                   claimableModelIDs: claimable)
+            let available = TaskAvailability.isAvailable(task.name, catalog: catalog,
+                                                         claimableModelIDs: claimable)
+            if (derived.isEmpty == available) {
+                mismatches.append("\(task.name): derived=\(derived.map { $0.hfModelId }) availability=\(available)")
             }
         }
         #expect(mismatches.isEmpty, "model drift: \(mismatches.joined(separator: "; "))")
-        // The specific gaps the review named. CFM-R13-9/12 bridged OCR and Describe Image;
-        // Segment, Upscale, Estimate Depth and Generate Image still have no catalog model.
-        #expect(!TaskAvailability.isAvailable("Segment"))
-        #expect(!TaskAvailability.isAvailable("Upscale"))
-        #expect(!TaskAvailability.isAvailable("Estimate Depth"))
-        #expect(!TaskAvailability.isAvailable("Generate Image"))
-        #expect(TaskAvailability.isAvailable("OCR"))
-        #expect(TaskAvailability.isAvailable("Describe Image"))
-        #expect(TaskAvailability.isAvailable("Summarize"))
+        // The specific gaps the review named. CFM-R13-9/12 bridged OCR + Describe Image;
+        // R14-2 derives Generate Image (Flux + SDXL-Turbo) and Segment (sam3) into
+        // availability. Upscale and Estimate Depth have **no catalog model at all** — those
+        // stay marked. Every assertion passes the catalog + claim table: the derived pool is
+        // the availability authority since R14-2.
+        let available = { (name: String) in
+            TaskAvailability.isAvailable(name, catalog: catalog, claimableModelIDs: claimable)
+        }
+        #expect(available("Segment"))
+        #expect(available("Generate Image"))
+        #expect(available("Edit Image"))
+        #expect(!available("Upscale"))
+        #expect(!available("Estimate Depth"))
+        #expect(available("OCR"))
+        #expect(available("Describe Image"))
+        #expect(available("Summarize"))
+        #expect(available("Transcribe"))
     }
 }

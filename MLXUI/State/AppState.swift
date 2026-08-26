@@ -78,6 +78,13 @@ final class AppState {
     // Model module registry — resolves non-LLM models (e.g. Whisper ASR) to their run UI.
     let registry = ModelRegistry()
     var installedModelIDs: Set<String> = []
+
+    /// CFM-R14-2 — the catalog models the registry can claim (`bestModule(for:) != nil`),
+    /// precomputed once after `browserData` loads. The nonisolated model-pool derivation
+    /// (`TaskModels.derivedModels`) reads this instead of touching the `@MainActor` registry —
+    /// the deliberate choice the R14-2 contract offers ("AppState precomputes a claim table
+    /// the nonisolated path can read").
+    var claimableModelIDs: Set<String> = []
     var installedModels: InstalledModels?
     private let installedURL: URL
 
@@ -288,6 +295,7 @@ final class AppState {
             let data = try Data(contentsOf: url)
             let decoder = JSONDecoder()
             browserData = try decoder.decode(BrowserData.self, from: data)
+            recomputeClaimableModelIDs()
             loadFilters()
         } catch let DecodingError.keyNotFound(key, context) {
             let path = context.codingPath.map { $0.stringValue }.joined(separator: " → ")
@@ -312,6 +320,14 @@ final class AppState {
             loadError = "Failed to parse: \(error.localizedDescription)"
             print("DECODE ERROR: \(error)")
         }
+    }
+
+    /// CFM-R14-2 — recompute which catalog models the registry can claim. Called after
+    /// `browserData` decodes (the registry is populated at init). The claim table is what the
+    /// nonisolated model-pool derivation reads instead of the `@MainActor` registry.
+    func recomputeClaimableModelIDs() {
+        let catalog = browserData?.domains.flatMap { $0.allModels } ?? []
+        claimableModelIDs = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
     }
 
     // ── Installed models persistence ──

@@ -163,6 +163,13 @@ nonisolated enum CatalogBridge {
         entries.first { $0.display == display }
     }
 
+    /// The bridge entry that lists `candidateID` as one of its candidates — the reverse
+    /// lookup the derived model pool uses to name a `.cat` display for a catalog model
+    /// (CFM-R14-2). `nil` when the model is unbridged (then its `hfModelId` is the name).
+    static func entry(forCandidate candidateID: String) -> BridgeEntry? {
+        entries.first { $0.candidates.contains(candidateID) }
+    }
+
     /// Resolve a display name to an installable `ModelEntry`. `catalog` is the flat list
     /// of `browser.json` entries. Picks the first candidate present in the catalog
     /// (best-first order is the table's). Returns a not-runnable reason otherwise.

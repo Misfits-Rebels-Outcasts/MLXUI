@@ -89,14 +89,13 @@ struct CatFlowR9Tests {
         #expect(model.row(withID: r1.id)?.model == nil)
     }
 
-    @Test func candidateModelsForTaskIncludeThePool() throws {
-        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().appendingPathComponent("MLXUI/Resources/browser.json")
-        let catalog = try JSONDecoder().decode(BrowserData.self, from: Data(contentsOf: url))
-            .domains.flatMap { $0.allModels }
-        let transcribe = FlowEditorModel.candidateModels(for: "Transcribe", catalog: catalog)
-        // CFM-R14-1 bridged all three ASR gaps: every pool entry now resolves, so all four
-        // (Whisper Tiny, Whisper Small, Whisper Large v3, Voxtral) are offered.
+    @Test @MainActor func candidateModelsForTaskIncludeThePool() throws {
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let transcribe = FlowEditorModel.candidateModels(for: "Transcribe", catalog: catalog,
+                                                         claimableModelIDs: claimable)
+        // CFM-R14-1 bridged all three ASR gaps + R14-2 derives the pool from the registry:
+        // every Transcribe-capable ASR model is offered (Whisper Tiny, Small, Large v3,
+        // Voxtral) by its bridge display name.
         #expect(transcribe.map(\.display).contains("Whisper Large v3"))
         #expect(transcribe.map(\.display).contains("Whisper Tiny"))
         #expect(transcribe.map(\.display).contains("Whisper Small"))
@@ -108,17 +107,15 @@ struct CatFlowR9Tests {
 
     // MARK: - CFM-R14-3: install state sections the Model menu
 
-    @Test func installedModelsSectionFirst() throws {
-        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().appendingPathComponent("MLXUI/Resources/browser.json")
-        let catalog = try JSONDecoder().decode(BrowserData.self, from: Data(contentsOf: url))
-            .domains.flatMap { $0.allModels }
+    @Test @MainActor func installedModelsSectionFirst() throws {
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
         // Say Whisper Large v3 is installed: it must section under Installed, everything else
         // under Available, and the header total must equal the sum of the rest. The set holds
         // `ModelEntry.id` (the `--` form), exactly what AppState.installedModelIDs stores.
         let largeID = "mlx-community--whisper-large-v3-asr-fp16"
         let sections = FlowEditorModel.sectionedModelCandidates(
-            for: "Transcribe", catalog: catalog, installedModelIDs: [largeID])
+            for: "Transcribe", catalog: catalog, installedModelIDs: [largeID],
+            claimableModelIDs: claimable)
         #expect(sections.installed.map(\.display) == ["Whisper Large v3"])
         #expect(sections.available.map(\.display).contains("Whisper Tiny"))
         #expect(sections.available.map(\.display).contains("Whisper Small"))
@@ -127,19 +124,31 @@ struct CatFlowR9Tests {
         #expect(abs(sections.availableTotalGB - expectedTotal) < 0.0001)
     }
 
-    @Test func everyCandidateSectionsIntoExactlyOneBucket() throws {
-        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().appendingPathComponent("MLXUI/Resources/browser.json")
-        let catalog = try JSONDecoder().decode(BrowserData.self, from: Data(contentsOf: url))
-            .domains.flatMap { $0.allModels }
-        let all = FlowEditorModel.candidateModels(for: "Transcribe", catalog: catalog)
+    @Test @MainActor func everyCandidateSectionsIntoExactlyOneBucket() throws {
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let all = FlowEditorModel.candidateModels(for: "Transcribe", catalog: catalog,
+                                                  claimableModelIDs: claimable)
         let sections = FlowEditorModel.sectionedModelCandidates(
-            for: "Transcribe", catalog: catalog, installedModelIDs: [])
+            for: "Transcribe", catalog: catalog, installedModelIDs: [], claimableModelIDs: claimable)
         #expect(sections.installed.isEmpty)
         #expect(sections.available.map { $0.model.id } == all.map { $0.model.id })
         // Installed + available is a partition: no candidate appears in both, none is dropped.
         let ids = Set(all.map(\.model.id))
         #expect(Set(sections.available.map(\.model.id)) == ids)
+    }
+
+    /// The bundled catalog + the registry's own claim answer — the derived pool's inputs
+    /// (CFM-R14-2). `@MainActor` because `ModelRegistry` is.
+    @MainActor
+    private func loadedCatalogAndClaimable() throws -> (catalog: [ModelEntry], claimable: Set<String>) {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("MLXUI/Resources/browser.json")
+        let catalog = try JSONDecoder().decode(BrowserData.self, from: Data(contentsOf: url))
+            .domains.flatMap { $0.allModels }
+        let registry = ModelRegistry()
+        for module in installedModules { module.register(into: registry) }
+        let claimable = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
+        return (catalog, claimable)
     }
     @Test func suggestedInstructionsPerTask() {
         #expect(FlowEditorModel.suggestedInstructions(for: "Summarize").contains("TL;DR in 3 bullets"))

@@ -40,17 +40,26 @@ nonisolated enum TaskAvailability {
     static let supportedNetTools: Set<String> = ["Web Fetch", "HTTP Get", "Fetch Feed", "Download File"]
 
     /// A task's verdict in this build.
+    /// - Parameters:
+    ///   - catalog: the flat `browser.json` entries. Only the `.model` branch needs it —
+    ///     instant/net/staged/agent verdicts are catalog-free, so `FlowRunner` (which never
+    ///     asks about model tasks) passes nothing.
+    ///   - claimableModelIDs: the catalog ids the registry can claim (CFM-R14-2).
     static func state(for task: TaskDescriptor,
-                      isAppStore: Bool = CapabilityGate.isAppStoreBuild) -> State {
+                      isAppStore: Bool = CapabilityGate.isAppStoreBuild,
+                      catalog: [ModelEntry] = [],
+                      claimableModelIDs: Set<String> = []) -> State {
         switch task.taskClass {
         case .instant:
             return supportedInstantTools.contains(task.name) ? .available : .needsNewerSupport
         case .model:
-            // CFM-R12-FIX-12: a model task is available only when one of its pool's models
-            // actually resolves through `CatalogBridge` (eleven display names today, since
-            // CFM-R13-9/12 bridged OCR + Describe Image). Segment, Upscale, Generate Image,
-            // … still have none — mark them instead of offering them.
-            return TaskModels.defaultModel(forTask: task.name) != nil ? .available : .needsNewerSupport
+            // CFM-R14-2: a model task is available exactly when its **derived** pool (the
+            // registry's own claim answer + corrected runnerKind) is non-empty. Segment,
+            // Upscale, Generate Image, … stay marked — their derived pool is empty because no
+            // claimable catalog model serves them (or, for the hidden flags, is still served).
+            return TaskModels.derivedModels(for: task.name, catalog: catalog,
+                                            claimableModelIDs: claimableModelIDs).isEmpty
+                ? .needsNewerSupport : .available
         case .human, .trigger:
             return .available
         case .agent:
@@ -67,18 +76,26 @@ nonisolated enum TaskAvailability {
         }
     }
 
-    /// Whether a task (by name) can run in this build.
+    /// Whether a task (by name) can run in this build. Model tasks need `catalog` +
+    /// `claimableModelIDs` (the derived pool is the availability authority, CFM-R14-2).
     static func isAvailable(_ taskName: String,
-                            isAppStore: Bool = CapabilityGate.isAppStoreBuild) -> Bool {
+                            isAppStore: Bool = CapabilityGate.isAppStoreBuild,
+                            catalog: [ModelEntry] = [],
+                            claimableModelIDs: Set<String> = []) -> Bool {
         guard let desc = TaskCatalog.get(taskName) else { return false }
-        if case .available = state(for: desc, isAppStore: isAppStore) { return true }
+        if case .available = state(for: desc, isAppStore: isAppStore,
+                                   catalog: catalog, claimableModelIDs: claimableModelIDs) { return true }
         return false
     }
 
     /// The one-line marker the picker shows for an unavailable task (or nil when available).
+    /// Model tasks need `catalog` + `claimableModelIDs` (the derived pool is the authority).
     static func marker(for task: TaskDescriptor,
-                       isAppStore: Bool = CapabilityGate.isAppStoreBuild) -> String? {
-        switch state(for: task, isAppStore: isAppStore) {
+                       isAppStore: Bool = CapabilityGate.isAppStoreBuild,
+                       catalog: [ModelEntry] = [],
+                       claimableModelIDs: Set<String> = []) -> String? {
+        switch state(for: task, isAppStore: isAppStore,
+                     catalog: catalog, claimableModelIDs: claimableModelIDs) {
         case .available: return nil
         case .needsNewerSupport: return "needs newer support"
         case .refusedByChannel(let reason): return "refused — \(reason)"

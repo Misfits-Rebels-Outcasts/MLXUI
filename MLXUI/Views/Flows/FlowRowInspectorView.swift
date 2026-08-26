@@ -24,6 +24,8 @@ struct FlowRowInspectorView: View {
     /// Installed first, then Available to download (with the total size). Passed at both call
     /// sites from `AppState.installedModelIDs` (`@Observable`, so an install re-renders live).
     var installedModelIDs: Set<String> = []
+    /// CFM-R14-2 — catalog ids the registry can claim; the Model menu's derived pool filter.
+    var claimableModelIDs: Set<String> = []
     /// Whether the row's details are editable. The flow editor edits in place; the read-only
     /// flow list passes `false`, so the properties tab is browsable but never mutable.
     var editable: Bool = true
@@ -112,7 +114,8 @@ struct FlowRowInspectorView: View {
             Text("Model")
                 .font(.subheadline.weight(.semibold))
             let sections = FlowEditorModel.sectionedModelCandidates(
-                for: task, catalog: catalog, installedModelIDs: installedModelIDs)
+                for: task, catalog: catalog, installedModelIDs: installedModelIDs,
+                claimableModelIDs: claimableModelIDs)
             Menu {
                 Button("None") { model.setModel(nil, for: rowID) }
                 Divider()

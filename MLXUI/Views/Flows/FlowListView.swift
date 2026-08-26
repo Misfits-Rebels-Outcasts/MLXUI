@@ -198,6 +198,7 @@ struct FlowListView: View {
                                              catalog: appState.browserData?.domains.flatMap { $0.allModels } ?? [],
                                              totalRAMGB: appState.systemInfo.totalRAMGB,
                                              installedModelIDs: appState.installedModelIDs,
+                                             claimableModelIDs: appState.claimableModelIDs,
                                              editable: false,
                                              isFrozen: source == .gallery)
                     }
@@ -849,6 +850,8 @@ struct FlowListView: View {
         // (candidate models, input labels, display numbers) over a read-only model.
         inspectModel = FlowEditorModel(name: display?.title ?? flowID, flowID: flowID,
                                        document: doc, savedText: CatSerializer.serialize(doc))
+        inspectModel?.modelCatalog = catalog
+        inspectModel?.claimableModelIDs = appState.claimableModelIDs
         // CFM-R10-Events: establish the trigger kind so the Arm button shows (and the §14.4
         // refusal when the flow carries a door).
         armSession.inspect(doc: doc)
