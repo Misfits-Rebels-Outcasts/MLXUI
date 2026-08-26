@@ -284,6 +284,7 @@ struct FlowEditorView: View {
                                          rowID: model.selectedRowID ?? UUID(),
                                          catalog: appState.browserData?.domains.flatMap { $0.allModels } ?? [],
                                          totalRAMGB: appState.systemInfo.totalRAMGB,
+                                         installedModelIDs: appState.installedModelIDs,
                                          editable: true)
                 }
             }

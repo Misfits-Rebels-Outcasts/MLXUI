@@ -528,6 +528,22 @@ final class FlowEditorModel {
         return found.sorted { $0.model.ramGB < $1.model.ramGB }
     }
 
+    /// CFM-R14-3 — the Model menu's two sections. The install state partitions the
+    /// RAM-sorted candidates: **Installed** first (catalog ids already on disk), then
+    /// **Available to download** with the total `downloadSizeGB` across the remaining. The
+    /// section header shows the total so a user sees the download cost before the arm sheet.
+    nonisolated static func sectionedModelCandidates(
+        for task: String,
+        catalog: [ModelEntry],
+        installedModelIDs: Set<String>
+    ) -> (installed: [(display: String, model: ModelEntry)], available: [(display: String, model: ModelEntry)], availableTotalGB: Double) {
+        let all = candidateModels(for: task, catalog: catalog)
+        let installed = all.filter { installedModelIDs.contains($0.model.id) }
+        let available = all.filter { !installedModelIDs.contains($0.model.id) }
+        let total = available.reduce(0.0) { $0 + $1.model.downloadSizeGB }
+        return (installed, available, total)
+    }
+
     /// Per-task suggested instruction defaults (answer `a5`, the docs' "You write" table).
     nonisolated static func suggestedInstructions(for task: String) -> [String] {
         switch task {

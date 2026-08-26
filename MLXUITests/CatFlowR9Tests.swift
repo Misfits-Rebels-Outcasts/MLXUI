@@ -106,6 +106,41 @@ struct CatFlowR9Tests {
         #expect(ram == ram.sorted())
     }
 
+    // MARK: - CFM-R14-3: install state sections the Model menu
+
+    @Test func installedModelsSectionFirst() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("MLXUI/Resources/browser.json")
+        let catalog = try JSONDecoder().decode(BrowserData.self, from: Data(contentsOf: url))
+            .domains.flatMap { $0.allModels }
+        // Say Whisper Large v3 is installed: it must section under Installed, everything else
+        // under Available, and the header total must equal the sum of the rest. The set holds
+        // `ModelEntry.id` (the `--` form), exactly what AppState.installedModelIDs stores.
+        let largeID = "mlx-community--whisper-large-v3-asr-fp16"
+        let sections = FlowEditorModel.sectionedModelCandidates(
+            for: "Transcribe", catalog: catalog, installedModelIDs: [largeID])
+        #expect(sections.installed.map(\.display) == ["Whisper Large v3"])
+        #expect(sections.available.map(\.display).contains("Whisper Tiny"))
+        #expect(sections.available.map(\.display).contains("Whisper Small"))
+        #expect(sections.available.map(\.display).contains("Voxtral Mini 4B Realtime"))
+        let expectedTotal = sections.available.reduce(0.0) { $0 + $1.model.downloadSizeGB }
+        #expect(abs(sections.availableTotalGB - expectedTotal) < 0.0001)
+    }
+
+    @Test func everyCandidateSectionsIntoExactlyOneBucket() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("MLXUI/Resources/browser.json")
+        let catalog = try JSONDecoder().decode(BrowserData.self, from: Data(contentsOf: url))
+            .domains.flatMap { $0.allModels }
+        let all = FlowEditorModel.candidateModels(for: "Transcribe", catalog: catalog)
+        let sections = FlowEditorModel.sectionedModelCandidates(
+            for: "Transcribe", catalog: catalog, installedModelIDs: [])
+        #expect(sections.installed.isEmpty)
+        #expect(sections.available.map { $0.model.id } == all.map { $0.model.id })
+        // Installed + available is a partition: no candidate appears in both, none is dropped.
+        let ids = Set(all.map(\.model.id))
+        #expect(Set(sections.available.map(\.model.id)) == ids)
+    }
     @Test func suggestedInstructionsPerTask() {
         #expect(FlowEditorModel.suggestedInstructions(for: "Summarize").contains("TL;DR in 3 bullets"))
         #expect(FlowEditorModel.suggestedInstructions(for: "Read Text").isEmpty)

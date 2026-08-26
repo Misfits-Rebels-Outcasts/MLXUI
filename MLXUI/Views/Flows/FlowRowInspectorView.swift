@@ -20,6 +20,10 @@ struct FlowRowInspectorView: View {
     let rowID: UUID
     let catalog: [ModelEntry]
     let totalRAMGB: Double
+    /// CFM-R14-3 — catalog ids already installed on disk. The Model menu sections on this:
+    /// Installed first, then Available to download (with the total size). Passed at both call
+    /// sites from `AppState.installedModelIDs` (`@Observable`, so an install re-renders live).
+    var installedModelIDs: Set<String> = []
     /// Whether the row's details are editable. The flow editor edits in place; the read-only
     /// flow list passes `false`, so the properties tab is browsable but never mutable.
     var editable: Bool = true
@@ -107,21 +111,24 @@ struct FlowRowInspectorView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Model")
                 .font(.subheadline.weight(.semibold))
+            let sections = FlowEditorModel.sectionedModelCandidates(
+                for: task, catalog: catalog, installedModelIDs: installedModelIDs)
             Menu {
                 Button("None") { model.setModel(nil, for: rowID) }
                 Divider()
-                ForEach(FlowEditorModel.candidateModels(for: task, catalog: catalog), id: \.model.id) { candidate in
-                    Button {
-                        model.setModel(candidate.display, for: rowID)
-                    } label: {
-                        HStack {
-                            Text(candidate.display)
-                            Spacer()
-                            Text(String(format: "%.1f GB", candidate.model.ramGB))
-                                .foregroundStyle(candidate.model.ramGB > totalRAMGB ? .orange : .secondary)
+                if !sections.installed.isEmpty {
+                    Section("Installed") {
+                        ForEach(sections.installed, id: \.model.id) { candidate in
+                            modelButton(candidate, row: row)
                         }
                     }
-                    .disabled(candidate.model.ramGB > totalRAMGB)
+                }
+                if !sections.available.isEmpty {
+                    Section("Available to download — \(String(format: "%.1f GB", sections.availableTotalGB))") {
+                        ForEach(sections.available, id: \.model.id) { candidate in
+                            modelButton(candidate, row: row)
+                        }
+                    }
                 }
             } label: {
                 HStack {
@@ -156,6 +163,22 @@ struct FlowRowInspectorView: View {
                 .disabled(false)
             }
         }
+    }
+
+    /// One row of the Model menu: the friendly name, the RAM figure (orange when it exceeds
+    /// this Mac's RAM), disabled when it doesn't fit. Shared by both sections (CFM-R14-3).
+    private func modelButton(_ candidate: (display: String, model: ModelEntry), row: Row) -> some View {
+        Button {
+            model.setModel(candidate.display, for: rowID)
+        } label: {
+            HStack {
+                Text(candidate.display)
+                Spacer()
+                Text(String(format: "%.1f GB", candidate.model.ramGB))
+                    .foregroundStyle(candidate.model.ramGB > totalRAMGB ? .orange : .secondary)
+            }
+        }
+        .disabled(candidate.model.ramGB > totalRAMGB)
     }
 
     private func substitutionNote(for display: String) -> String? {

@@ -197,6 +197,7 @@ struct FlowListView: View {
                                              rowID: session.selectedRowID ?? UUID(),
                                              catalog: appState.browserData?.domains.flatMap { $0.allModels } ?? [],
                                              totalRAMGB: appState.systemInfo.totalRAMGB,
+                                             installedModelIDs: appState.installedModelIDs,
                                              editable: false,
                                              isFrozen: source == .gallery)
                     }
