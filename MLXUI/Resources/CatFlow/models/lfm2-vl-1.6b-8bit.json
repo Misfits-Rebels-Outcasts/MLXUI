@@ -1,0 +1,20 @@
+{
+  "id": "mlx-community/LFM2-VL-1.6B-8bit",
+  "display": "LFM2-VL 1.6B",
+  "kind": "local",
+  "engine": "mlx-vlm",
+  "tasks": [
+    "Describe Image"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 2.06,
+    "ram_gb": 2.47
+  },
+  "source": "https://huggingface.co/mlx-community/LFM2-VL-1.6B-8bit",
+  "checksum": "sha256:50120b0ef29f962f2cac06f4c1091b74cc6dfe48f6b7f3056e8a5e101dc331d5",
+  "license": "lfm1.0",
+  "manifest_version": 1,
+  "pinned": true
+}

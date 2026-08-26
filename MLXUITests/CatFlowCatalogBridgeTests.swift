@@ -51,9 +51,9 @@ struct CatFlowCatalogBridgeTests {
         }
     }
 
-    // MARK: - Seven resolutions return installable models
+    // MARK: - Every display name resolves to an installable model
 
-    @Test func allSevenDisplayNamesResolve() throws {
+    @Test func allBridgeEntriesResolve() throws {
         let catalog = try loadCatalog()
         for entry in CatalogBridge.entries {
             switch CatalogBridge.resolve(entry.display, catalog: catalog) {
@@ -115,7 +115,38 @@ struct CatFlowCatalogBridgeTests {
 
     @Test func samBaseIsNotInTheBridge() {
         #expect(CatalogBridge.entry(for: "SAM Base") == nil)
-        #expect(CatalogBridge.entries.count == 7)
+        #expect(CatalogBridge.entries.count == 11)
+    }
+
+    // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
+
+    @Test func olmOCRResolvesWithASameFamilyNote() throws {
+        let catalog = try loadCatalog()
+        let entry = try #require(CatalogBridge.entry(for: "olmOCR-2 7B"))
+        #expect(entry.equivalence == .sameFamily)
+        switch CatalogBridge.resolve("olmOCR-2 7B", catalog: catalog) {
+        case .runnable(_, _, let note):
+            #expect(note != nil)   // a different repo is surfaced, never hidden
+            #expect(note?.contains("olmOCR") == true)
+        case .notRunnable:
+            Issue.record("olmOCR-2 7B should resolve")
+        }
+    }
+
+    @Test func lfm2AndGemmaResolveForDescribeImage() throws {
+        let catalog = try loadCatalog()
+        for display in ["LFM2-VL 1.6B", "Gemma 3 4B"] {
+            switch CatalogBridge.resolve(display, catalog: catalog) {
+            case .runnable(let model, _, _):
+                // The cheap one is the pool's first entry, so a bare Describe Image row
+                // defaults to LFM2-VL 1.6B (0.33 GB), not Gemma 3 4B (3.38 GB).
+                if display == "LFM2-VL 1.6B" {
+                    #expect(model.ramGB < 1.0)
+                }
+            case .notRunnable(let d, let reason):
+                Issue.record("\(d) should resolve: \(reason)")
+            }
+        }
     }
 
     // MARK: - Manifest settings decode (the settings authority)

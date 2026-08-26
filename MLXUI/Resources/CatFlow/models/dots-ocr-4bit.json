@@ -1,0 +1,20 @@
+{
+  "id": "mlx-community/dots.ocr-4bit",
+  "display": "dots.ocr",
+  "kind": "local",
+  "engine": "mlx-vlm",
+  "tasks": [
+    "OCR"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 3.54,
+    "ram_gb": 4.23
+  },
+  "source": "https://huggingface.co/mlx-community/dots.ocr-4bit",
+  "checksum": "sha256:a9eb6e1b0431605ace94a596268ee2acc07214259af3e08b5af8c943fed6359e",
+  "license": "MIT",
+  "manifest_version": 1,
+  "pinned": true
+}

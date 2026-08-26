@@ -55,8 +55,14 @@ nonisolated enum CatalogBridgeResolution: Sendable, Equatable {
 /// the curated manifest (`Resources/CatFlow/models/`); only the *weights* are substituted.
 nonisolated enum CatalogBridge {
 
-    /// The seven display names R2 runs. **Do not add `SAM Base`** (hazard H2 — `Segment`
-    /// has no headless path and `sam3-4bit` is a different model generation).
+    /// The eleven display names the bridge runs. **Do not add `SAM Base`** (hazard H2 —
+    /// `Segment` has no headless path and `sam3-4bit` is a different model generation).
+    /// CFM-R13-9/12: OCR (`olmOCR-2 7B`, `dots.ocr`) and `Describe Image` (`LFM2-VL 1.6B`,
+    /// `Gemma 3 4B`) joined 2026-08-26 — all four models were already in `browser.json`, so
+    /// this is a table change only, no catalog intake. `olmOCR-2 7B` resolves to the
+    /// `-mlx` build of the same 1025 checkpoint (a different repo → `.sameFamily`, so the
+    /// substitution is surfaced, never hidden); `LFM2-VL 1.6B` is pinned 8-bit in the
+    /// manifest but ships 4-bit in the catalog (`.requantized`, silent).
     static let entries: [BridgeEntry] = [
         BridgeEntry(
             display: "Whisper Large v3",
@@ -100,6 +106,32 @@ nonisolated enum CatalogBridge {
             candidates: ["mlx-community/Meta-Llama-3.1-8B-Instruct-4bit"],
             equivalence: .same,
             manifestFile: "llama-3.1-8b-4bit.json"),
+        // CFM-R13-9 — OCR.
+        BridgeEntry(
+            display: "olmOCR-2 7B",
+            pinnedID: "mlx-community/olmOCR-2-7B-1025-4bit",
+            candidates: ["mlx-community/olmOCR-2-7B-1025-mlx-4bit"],
+            equivalence: .sameFamily,
+            manifestFile: "olmocr-2-7b-1025-4bit.json"),
+        BridgeEntry(
+            display: "dots.ocr",
+            pinnedID: "mlx-community/dots.ocr-4bit",
+            candidates: ["mlx-community/dots.ocr-4bit"],
+            equivalence: .same,
+            manifestFile: "dots-ocr-4bit.json"),
+        // CFM-R13-12 — Describe Image.
+        BridgeEntry(
+            display: "LFM2-VL 1.6B",
+            pinnedID: "mlx-community/LFM2-VL-1.6B-8bit",
+            candidates: ["mlx-community/LFM2-VL-1.6B-4bit"],
+            equivalence: .requantized,
+            manifestFile: "lfm2-vl-1.6b-8bit.json"),
+        BridgeEntry(
+            display: "Gemma 3 4B",
+            pinnedID: "mlx-community/gemma-3-4b-it-4bit",
+            candidates: ["mlx-community/gemma-3-4b-it-4bit"],
+            equivalence: .same,
+            manifestFile: "gemma-3-4b-it-4bit.json"),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {

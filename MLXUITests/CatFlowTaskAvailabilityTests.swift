@@ -137,12 +137,14 @@ struct CatFlowTaskAvailabilityTests {
             }
         }
         #expect(mismatches.isEmpty, "model drift: \(mismatches.joined(separator: "; "))")
-        // The specific gaps the review named.
+        // The specific gaps the review named. CFM-R13-9/12 bridged OCR and Describe Image;
+        // Segment, Upscale, Estimate Depth and Generate Image still have no catalog model.
         #expect(!TaskAvailability.isAvailable("Segment"))
         #expect(!TaskAvailability.isAvailable("Upscale"))
         #expect(!TaskAvailability.isAvailable("Estimate Depth"))
         #expect(!TaskAvailability.isAvailable("Generate Image"))
-        #expect(!TaskAvailability.isAvailable("OCR"))
+        #expect(TaskAvailability.isAvailable("OCR"))
+        #expect(TaskAvailability.isAvailable("Describe Image"))
         #expect(TaskAvailability.isAvailable("Summarize"))
     }
 }
