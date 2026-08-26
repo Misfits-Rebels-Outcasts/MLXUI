@@ -1,5 +1,5 @@
 ---
-description: Onboard a new MLX model — check mlx-swift support, then expand the RSI backlog with catalog + Run-UI tasks.
+description: Onboard a new MLX model — check mlx-swift support, then expand the RSI backlog with catalog + Run-UI + AI Workflows wiring tasks.
 argument-hint: <mlx-community/repo>  e.g. mlx-community/GLM-4.7-Flash-4bit
 ---
 
@@ -15,7 +15,10 @@ Read `MLXUI/RSI/prompts/add-model.md` and follow it exactly, treating `<REPO>` a
 3. **Expand the backlog** (Step C) — append a chained `### $ARGUMENTS` AM-task group under
    *## Add-a-model intake* in `MLXUI/RSI/backlog.md`. For a SUPPORTED model collapse the
    download/module/UI steps into a single verify+smoke task; for NEEDS-PORT emit the full
-   port cycle.
+   port cycle. Either way, include **AM-W (Workflows wiring)** — the step that adds a
+   `BridgeEntry` to `CatalogBridge.swift`, the display name to `TaskModels.taskModels`,
+   and a curated manifest JSON under `Resources/CatFlow/models/`, so the model is
+   available in `Automate → AI Workflows`.
 4. **Prompt to start the RSI loop** (AM6) — present the group and ask before implementing.
    Do not begin coding without my go-ahead (L1 autonomy).
 
