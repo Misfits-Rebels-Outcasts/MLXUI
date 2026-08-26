@@ -525,13 +525,24 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// Build the `StageConfig` for a model row. For TTS rows the settings' bare token (or
     /// `voice=`) is the voice — matching the Python's `voice = s.get("voice") or
     /// s.first_bare() or "af_heart"` — so `Speak Kokoro 82M; af_heart` uses `af_heart`.
-    /// Internal (not `private`) so the settings→voice mapping is unit-testable.
+    /// For ASR rows the settings' `lang=` becomes the language — the Python's
+    /// `lang = s.get("lang")` — but **defaulted to "en"**: the app's `MLXAudioSTT` has no real
+    /// auto-detection, and a `nil` language makes a weak model (e.g. Whisper Small) loop
+    /// ("mother mother mother…"). The standalone run sheet already defaults to "en" for the
+    /// same reason; this makes the flow behave identically. The default is a deliberate
+    /// divergence from the Python (which leaves `language` unset and lets its own `mlx_whisper`
+    /// detect) — recorded, not silent.
+    /// Internal (not `private`) so the settings→voice/language mapping is unit-testable.
     func stageConfig(for desc: TaskDescriptor, row: Row) -> StageConfig {
         let settings = FlowSettings(row.settings)
         if desc.refName == "engines.tts.speak" {
             let voice = settings.value(for: "voice") ?? settings.firstBare()
             let speed = Float(settings.value(for: "speed") ?? "") ?? 1.0
             return StageConfig(voice: voice, speed: speed)
+        }
+        if desc.refName == "engines.asr.transcribe" {
+            let language = settings.value(for: "lang") ?? "en"
+            return StageConfig(language: language)
         }
         return .default
     }

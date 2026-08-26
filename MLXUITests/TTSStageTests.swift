@@ -133,6 +133,38 @@ struct TTSStageTests {
         let config = executor.stageConfig(for: desc, row: row)
         #expect(config.voice == "am_adam")
     }
+
+    // MARK: - CFM-R14-FIX: Transcribe row settings → language (the ASR repetition-loop fix)
+
+    @Test func transcribeLangSettingBecomesLanguage() {
+        // Python's `lang = s.get("lang")`: `Transcribe Whisper Small; lang=en` pins "en".
+        let desc = try! #require(TaskCatalog.get("Transcribe"))
+        let row = Row(task: "Transcribe", model: "Whisper Small", settings: "lang=en")
+        let executor = RealExecutor(workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory),
+                                    flowID: "t",
+                                    blobDirectory: FileManager.default.temporaryDirectory,
+                                    makeModelStage: { _, _ in TTSStubStage() },
+                                    installedModelIDs: [],
+                                    catalog: [])
+        let config = executor.stageConfig(for: desc, row: row)
+        #expect(config.language == "en")
+    }
+
+    @Test func transcribeWithoutLangDefaultsToEnglish() {
+        // The app's MLXAudioSTT has no real auto-detection — `nil` makes a weak model loop
+        // ("mother mother mother…"). The standalone run sheet defaults to "en" for the same
+        // reason; the flow now matches it instead of handing the engine a nil language.
+        let desc = try! #require(TaskCatalog.get("Transcribe"))
+        let row = Row(task: "Transcribe", model: "Whisper Small", settings: "")
+        let executor = RealExecutor(workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory),
+                                    flowID: "t",
+                                    blobDirectory: FileManager.default.temporaryDirectory,
+                                    makeModelStage: { _, _ in TTSStubStage() },
+                                    installedModelIDs: [],
+                                    catalog: [])
+        let config = executor.stageConfig(for: desc, row: row)
+        #expect(config.language == "en")
+    }
 }
 
 /// A local text→text stub for RealExecutor config tests (no model needed).
