@@ -150,9 +150,10 @@ final class FlowEditorModel {
     }
 
     /// The default model for a model-class row — the **first pool entry the build can
-    /// actually run** (`CatalogBridge` is the authority; CFM-R8-FIX-3). `Whisper Tiny` is in
-    /// the pool but not the bridge, so `Transcribe` seeds `Whisper Large v3`; `Segment`
-    /// (SAM Base — hazard H2) seeds nothing. Nil = the row shows its "needs a model" warning.
+    /// actually run** (`CatalogBridge` is the authority; CFM-R8-FIX-3). Since CFM-R14-1 all
+    /// four `Transcribe` pool entries resolve, so it seeds the first — `Whisper Tiny` (0.11 GB),
+    /// matching the Python's `_ASR_MODELS` order; `Segment` (SAM Base — hazard H2) seeds
+    /// nothing. Nil = the row shows its "needs a model" warning.
     nonisolated static func defaultModel(forTask task: String) -> String? {
         TaskModels.defaultModel(forTask: task)
     }

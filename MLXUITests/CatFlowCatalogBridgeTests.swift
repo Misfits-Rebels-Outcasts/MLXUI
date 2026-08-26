@@ -115,7 +115,7 @@ struct CatFlowCatalogBridgeTests {
 
     @Test func samBaseIsNotInTheBridge() {
         #expect(CatalogBridge.entry(for: "SAM Base") == nil)
-        #expect(CatalogBridge.entries.count == 11)
+        #expect(CatalogBridge.entries.count == 14)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
@@ -147,6 +147,44 @@ struct CatFlowCatalogBridgeTests {
                 Issue.record("\(d) should resolve: \(reason)")
             }
         }
+    }
+
+    // MARK: - CFM-R14-1: the three ASR gaps
+
+    @Test func theThreeAsrGapsResolve() throws {
+        let catalog = try loadCatalog()
+        for display in ["Whisper Tiny", "Whisper Small", "Voxtral Mini 4B Realtime"] {
+            switch CatalogBridge.resolve(display, catalog: catalog) {
+            case .runnable(let model, _, _):
+                #expect(model.runnerKind == .asr)
+            case .notRunnable(let d, let reason):
+                Issue.record("\(d) should resolve: \(reason)")
+            }
+        }
+    }
+
+    @Test func whisperTinyAndSmallResolveFromTheCatalog() throws {
+        let catalog = try loadCatalog()
+        let tiny = try #require(CatalogBridge.entry(for: "Whisper Tiny"))
+        #expect(tiny.pinnedID == "mlx-community/whisper-tiny")
+        #expect(tiny.candidates == ["mlx-community/whisper-tiny-asr-fp16"])
+        // A pinned catflow id ≠ candidate id (whisper-tiny vs the -asr-fp16 build) → the
+        // requantized class runs silently, never .same.
+        #expect(tiny.equivalence == .requantized)
+        let small = try #require(CatalogBridge.entry(for: "Whisper Small"))
+        #expect(small.pinnedID == "mlx-community/whisper-small-asr-fp16")
+        #expect(small.equivalence == .same)
+        let voxtral = try #require(CatalogBridge.entry(for: "Voxtral Mini 4B Realtime"))
+        #expect(voxtral.pinnedID == "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit")
+        #expect(voxtral.equivalence == .same)
+    }
+
+    @Test func whisperSmallManifestShips() throws {
+        let data = try Data(contentsOf: manifestURL("whisper-small.json"))
+        let manifest = try JSONDecoder().decode(CuratedManifest.self, from: data)
+        #expect(manifest.id == "mlx-community/whisper-small-asr-fp16")
+        #expect(manifest.display == "Whisper Small")
+        #expect(manifest.settings.isEmpty)
     }
 
     // MARK: - Manifest settings decode (the settings authority)

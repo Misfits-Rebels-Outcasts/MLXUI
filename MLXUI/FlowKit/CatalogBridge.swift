@@ -55,7 +55,7 @@ nonisolated enum CatalogBridgeResolution: Sendable, Equatable {
 /// the curated manifest (`Resources/CatFlow/models/`); only the *weights* are substituted.
 nonisolated enum CatalogBridge {
 
-    /// The eleven display names the bridge runs. **Do not add `SAM Base`** (hazard H2 —
+    /// The fourteen display names the bridge runs. **Do not add `SAM Base`** (hazard H2 —
     /// `Segment` has no headless path and `sam3-4bit` is a different model generation).
     /// CFM-R13-9/12: OCR (`olmOCR-2 7B`, `dots.ocr`) and `Describe Image` (`LFM2-VL 1.6B`,
     /// `Gemma 3 4B`) joined 2026-08-26 — all four models were already in `browser.json`, so
@@ -63,6 +63,9 @@ nonisolated enum CatalogBridge {
     /// `-mlx` build of the same 1025 checkpoint (a different repo → `.sameFamily`, so the
     /// substitution is surfaced, never hidden); `LFM2-VL 1.6B` is pinned 8-bit in the
     /// manifest but ships 4-bit in the catalog (`.requantized`, silent).
+    /// CFM-R14-1: the three ASR gaps (`Whisper Tiny`, `Whisper Small`, `Voxtral Mini 4B
+    /// Realtime`) joined 2026-08-26, so every `browser.json` ASR entry is reachable from
+    /// the `Transcribe` row's Model menu.
     static let entries: [BridgeEntry] = [
         BridgeEntry(
             display: "Whisper Large v3",
@@ -70,6 +73,28 @@ nonisolated enum CatalogBridge {
             candidates: ["mlx-community/whisper-large-v3-asr-fp16"],
             equivalence: .requantized,
             manifestFile: "whisper-large-v3.json"),
+        // CFM-R14-1 — the ASR gaps. whisper-tiny/whisper-small have no catflow manifest for
+        // Whisper Small (author one below); Whisper Tiny pins the catflow `whisper-tiny`
+        // manifest id but loads the `-asr-fp16` catalog build (same checkpoint, packaged for
+        // the app — `.requantized`, silent). Voxtral resolves exactly.
+        BridgeEntry(
+            display: "Whisper Tiny",
+            pinnedID: "mlx-community/whisper-tiny",
+            candidates: ["mlx-community/whisper-tiny-asr-fp16"],
+            equivalence: .requantized,
+            manifestFile: "whisper-tiny.json"),
+        BridgeEntry(
+            display: "Whisper Small",
+            pinnedID: "mlx-community/whisper-small-asr-fp16",
+            candidates: ["mlx-community/whisper-small-asr-fp16"],
+            equivalence: .same,
+            manifestFile: "whisper-small.json"),
+        BridgeEntry(
+            display: "Voxtral Mini 4B Realtime",
+            pinnedID: "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
+            candidates: ["mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit"],
+            equivalence: .same,
+            manifestFile: "voxtral-mini-4b-realtime-2602-4bit.json"),
         BridgeEntry(
             display: "Qwen3 8B",
             pinnedID: "mlx-community/Qwen3-8B-4bit",

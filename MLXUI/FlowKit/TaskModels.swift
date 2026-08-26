@@ -12,7 +12,7 @@ nonisolated enum TaskModels {
     /// `models_for_task` — a task's usual model pool (display names), ported from
     /// `catalog/models.py::TASK_MODELS`.
     private static let taskModels: [String: [String]] = [
-        "Transcribe": ["Whisper Tiny", "Whisper Large v3", "Voxtral Mini 4B Realtime"],
+        "Transcribe": ["Whisper Tiny", "Whisper Small", "Whisper Large v3", "Voxtral Mini 4B Realtime"],
         "Embed": ["BGE-M3"],
         "Generate": llmModels,
         "Summarize": llmModels,

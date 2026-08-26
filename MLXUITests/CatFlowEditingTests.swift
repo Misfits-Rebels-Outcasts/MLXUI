@@ -89,8 +89,11 @@ struct CatFlowEditingTests {
 
     @Test func defaultModelIsBridgeRunnable() {
         // FIX-3: the default is the first pool entry the build can actually run, never a
-        // dead one. "Whisper Tiny" is in the pool but not the bridge → Whisper Large v3.
-        #expect(FlowEditorModel.defaultModel(forTask: "Transcribe") == "Whisper Large v3")
+        // dead one. CFM-R14-1 bridged Whisper Tiny/Small, so Transcribe now seeds the first
+        // pool entry — Whisper Tiny (0.11 GB) — matching the Python's `_ASR_MODELS` order
+        // (its first entry is Whisper Tiny too). Deliberate: the cheap model is the better
+        // first-run default, and it is faithful, not a divergence.
+        #expect(FlowEditorModel.defaultModel(forTask: "Transcribe") == "Whisper Tiny")
         #expect(FlowEditorModel.defaultModel(forTask: "Summarize") == "Ministral 3B")
         #expect(FlowEditorModel.defaultModel(forTask: "Speak") == "Kokoro 82M")
         #expect(FlowEditorModel.defaultModel(forTask: "Segment") == nil)   // SAM Base = hazard H2
@@ -129,7 +132,8 @@ struct CatFlowEditingTests {
     @Test func addGivesModelClassRowADefaultModel() throws {
         let model = try editor()
         model.add(task: "Transcribe")
-        #expect(model.document.rows[0].model == "Whisper Large v3")
+        // CFM-R14-1: the seed is the first bridge-runnable pool entry — Whisper Tiny now.
+        #expect(model.document.rows[0].model == "Whisper Tiny")
         model.add(task: "Read Text")
         #expect(model.document.rows[1].model == nil)
     }

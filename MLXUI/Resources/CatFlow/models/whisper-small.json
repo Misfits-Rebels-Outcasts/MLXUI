@@ -1,0 +1,19 @@
+{
+  "id": "mlx-community/whisper-small-asr-fp16",
+  "display": "Whisper Small",
+  "kind": "local",
+  "engine": "mlx-whisper",
+  "tasks": [
+    "Transcribe"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 0.48,
+    "ram_gb": 0.72
+  },
+  "source": "https://huggingface.co/mlx-community/whisper-small-asr-fp16",
+  "license": "MIT",
+  "manifest_version": 1,
+  "pinned": true
+}

@@ -95,9 +95,12 @@ struct CatFlowR9Tests {
         let catalog = try JSONDecoder().decode(BrowserData.self, from: Data(contentsOf: url))
             .domains.flatMap { $0.allModels }
         let transcribe = FlowEditorModel.candidateModels(for: "Transcribe", catalog: catalog)
-        // Only the bridge-runnable pool entry is offered (Whisper Tiny isn't in the bridge).
+        // CFM-R14-1 bridged all three ASR gaps: every pool entry now resolves, so all four
+        // (Whisper Tiny, Whisper Small, Whisper Large v3, Voxtral) are offered.
         #expect(transcribe.map(\.display).contains("Whisper Large v3"))
-        #expect(!transcribe.map(\.display).contains("Whisper Tiny"))
+        #expect(transcribe.map(\.display).contains("Whisper Tiny"))
+        #expect(transcribe.map(\.display).contains("Whisper Small"))
+        #expect(transcribe.map(\.display).contains("Voxtral Mini 4B Realtime"))
         // RAM-sorted ascending.
         let ram = transcribe.map { $0.model.ramGB }
         #expect(ram == ram.sorted())

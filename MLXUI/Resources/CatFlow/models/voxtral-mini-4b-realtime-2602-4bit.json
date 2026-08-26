@@ -1,0 +1,20 @@
+{
+  "id": "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
+  "display": "Voxtral Mini 4B Realtime",
+  "kind": "local",
+  "engine": "mlx-audio-swift",
+  "tasks": [
+    "Transcribe"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 3.15,
+    "ram_gb": 3.76
+  },
+  "source": "https://huggingface.co/mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
+  "checksum": "sha256:f4a3b410b99edb54c042e812e89cebbf495bf1472e38e4d1222f0e582445ac25",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true
+}
