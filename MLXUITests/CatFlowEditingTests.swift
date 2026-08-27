@@ -23,6 +23,18 @@ struct CatFlowEditingTests {
                                workspace: FlowWorkspace(root: root))
     }
 
+    /// An editor with the real catalog + claim table wired, so a model row's runnability is
+    /// judged against the derived pool (CFM-R14-FIX-6: an empty catalog is "no verdict", so
+    /// tests that assert a model row is green must supply one). `@MainActor` for the registry.
+    @MainActor
+    private func wiredEditor(rows: [Row]) throws -> FlowEditorModel {
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let model = try editor(rows: rows)
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+        return model
+    }
+
     private func row(_ task: String?, model: String? = nil, settings: String? = nil,
                      refs: [Ref] = [], children: [Row] = [], blockKind: BlockKind? = nil,
                      blockName: String? = nil, clause: Clause? = nil) -> Row {
@@ -263,13 +275,13 @@ struct CatFlowEditingTests {
         #expect(model.canSave)
     }
 
-    @Test func settingAReferenceFixesAYellowRow() throws {
+    @Test @MainActor func settingAReferenceFixesAYellowRow() throws {
         // [Read Audio, Save Text, Transcribe]: Transcribe sits below Save Text (status),
         // so it can't auto-chain — yellow until it's pointed at the audio source (answer l).
         let audio = row("Read Audio", settings: "memo.m4a")
         let save = row("Save Text", settings: "out.txt")
         let transcribe = row("Transcribe", model: "Whisper Large v3")
-        let model = try editor(rows: [audio, save, transcribe])
+        let model = try wiredEditor(rows: [audio, save, transcribe])
         #expect(model.warning(for: transcribe.id) != nil)
         model.setReference(to: audio.id, for: transcribe.id)
         #expect(model.warning(for: transcribe.id) == nil)
@@ -407,10 +419,10 @@ struct CatFlowEditingTests {
         #expect(model.document.rows[0].children[0].id == childB.id)
     }
 
-    @Test func chainBreakSetAndCleared() throws {
+    @Test @MainActor func chainBreakSetAndCleared() throws {
         let r1 = row("Read Text", settings: "memo.txt")
         let r2 = row("Summarize", model: "Ministral 3B")
-        let model = try editor(rows: [r1, r2])
+        let model = try wiredEditor(rows: [r1, r2])
         #expect(model.warning(for: r2.id) == nil)   // auto-chains from r1
         model.setChainBreak(true, for: r1.id)
         #expect(model.warning(for: r2.id) != nil)   // blank line breaks the chain

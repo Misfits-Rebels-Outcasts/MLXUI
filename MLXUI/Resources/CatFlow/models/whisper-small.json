@@ -15,5 +15,6 @@
   "source": "https://huggingface.co/mlx-community/whisper-small-asr-fp16",
   "license": "MIT",
   "manifest_version": 1,
-  "pinned": true
+  "pinned": true,
+  "notes": "CFM-R14-1 (SPEC-Q209): authored in MLXUI — the reference has no curated manifest for Whisper Small (its _ASR_MODELS is Whisper Tiny / Whisper Large v3 / Voxtral Mini 4B Realtime). No checksum: the pinned id is the browser.json hfModelId itself, and there is no catflow source manifest to inherit an authoritative file hash from. The checksum field on every other manifest here is copied verbatim from catflow-mlx/models/curated/; this one has no source, so it carries none rather than invent one."
 }

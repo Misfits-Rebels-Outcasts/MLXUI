@@ -162,10 +162,13 @@ nonisolated enum TaskModels {
 
     /// The display name a `.cat` should write for a derived model: the bridge display name
     /// when the model is a bridge candidate (what the Python's `.cat` files use), else the
-    /// raw `hfModelId` (what CFM-R14-4 pins into the flow's `models:` block — a name no other
-    /// runtime could resolve would be a portability lie).
+    /// catalog's own `displayName` (CFM-R14-FIX-7: a **readable** name, not the raw id — the
+    /// `models:` block then pins that name to the `hfModelId`, so display and id stay two
+    /// different strings, exactly what the block exists for). A flow naming
+    /// `Qwen3-VL-4B-Instruct` with `models: { Qwen3-VL-4B-Instruct = mlx-community/... }`
+    /// reads like a flow; the raw id version read like a dump.
     static func displayName(for model: ModelEntry) -> String {
-        CatalogBridge.entry(forCandidate: model.hfModelId)?.display ?? model.hfModelId
+        CatalogBridge.entry(forCandidate: model.hfModelId)?.display ?? model.displayName
     }
 
     /// The default model for a model-class task — the **first pool-named derived candidate**

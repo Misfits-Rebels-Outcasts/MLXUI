@@ -89,20 +89,27 @@ struct CatFlowR9Tests {
         #expect(model.row(withID: r1.id)?.model == nil)
     }
 
-    // MARK: - CFM-R14-4: unbridged picks pin into the models: block
+    // MARK: - CFM-R14-4 + FIX-7: unbridged picks pin into the models: block
 
-    @Test func unbridgedPickWritesIntoModelsBlock() throws {
-        // An R14-2 derived pick whose display is a raw hfModelId (no bridge entry) must be
-        // pinned in `document.models` so the saved .cat names a resolvable model.
+    @Test @MainActor func unbridgedPickWritesIntoModelsBlock() throws {
+        // An R14-2 derived pick with no bridge entry is displayed by its catalog `displayName`
+        // and pinned `displayName = hfModelId` (FIX-7: display and id are two different
+        // strings — a readable row plus a real pin). These need the catalog wired: the pin
+        // resolves the displayName → id via the model catalog.
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
         let r1 = row("Describe Image")
         let model = try editor([r1])
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+        let display = "Qwen3-VL-4B-Instruct"
         let unbridged = "mlx-community/Qwen3-VL-4B-Instruct-4bit"
-        model.setModel(unbridged, for: r1.id)
-        #expect(model.document.models[unbridged] == unbridged)
-        #expect(model.document.modelsOrder.contains(unbridged))
+        model.setModel(display, for: r1.id)
+        #expect(model.row(withID: r1.id)?.model == display)
+        #expect(model.document.models[display] == unbridged)
+        #expect(model.document.modelsOrder.contains(display))
         // The serialized file carries the pin and re-parses with the block intact.
         let reparsed = try CatParser.parse(model.catText)
-        #expect(reparsed.models[unbridged] == unbridged)
+        #expect(reparsed.models[display] == unbridged)
     }
 
     @Test func bridgedPickStaysOutOfModelsBlock() throws {
@@ -113,18 +120,22 @@ struct CatFlowR9Tests {
         #expect(model.document.models.isEmpty)
     }
 
-    @Test func pinDropsWhenLastRowChangesModel() throws {
+    @Test @MainActor func pinDropsWhenLastRowChangesModel() throws {
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
         let r1 = row("Describe Image")
         let r2 = row("Describe Image")
         let model = try editor([r1, r2])
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+        let display = "Qwen3-VL-4B-Instruct"
         let unbridged = "mlx-community/Qwen3-VL-4B-Instruct-4bit"
-        model.setModel(unbridged, for: r1.id)
-        model.setModel(unbridged, for: r2.id)
-        #expect(model.document.models[unbridged] == unbridged)
+        model.setModel(display, for: r1.id)
+        model.setModel(display, for: r2.id)
+        #expect(model.document.models[display] == unbridged)
         // Both rows off it → the pin is dropped (nothing uses it anymore).
         model.setModel("LFM2-VL 1.6B", for: r1.id)
         model.setModel("LFM2-VL 1.6B", for: r2.id)
-        #expect(model.document.models[unbridged] == nil)
+        #expect(model.document.models[display] == nil)
     }
 
     @Test @MainActor func pinRoundTripsThroughFmt() throws {
@@ -134,8 +145,8 @@ struct CatFlowR9Tests {
         let model = try editor([r1, r2])
         model.modelCatalog = catalog
         model.claimableModelIDs = claimable
-        let unbridged = "mlx-community/Qwen3-VL-4B-Instruct-4bit"
-        model.setModel(unbridged, for: r2.id)
+        let display = "Qwen3-VL-4B-Instruct"
+        model.setModel(display, for: r2.id)
         // fmt idempotence: serialize(parse(serialize(parse(x)))) == serialize(parse(x)).
         let once = model.catText
         let reparsed = try CatParser.parse(once)
@@ -584,11 +595,15 @@ struct CatFlowR9Tests {
 
     // MARK: - The R9 exit: 02-MeetingMinutes editable from the inspector
 
-    @Test func loadedMeetingMinutesStaysGreenAndEditable() throws {
+    @Test @MainActor func loadedMeetingMinutesStaysGreenAndEditable() throws {
         // The real gallery flow loads into the editor without going yellow, and the
-        // inspector's edits round-trip.
+        // inspector's edits round-trip. Needs the catalog wired: Meeting Minutes has model
+        // rows (Transcribe, Summarize), and FIX-6's empty-catalog is "no verdict".
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
         let doc = try GalleryLoader.loadDocument(flowID: "02-MeetingMinutes")
         let model = try editor(doc.rows)
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
         for row in doc.rows {
             #expect(model.warning(for: row.id) == nil, "\(row.task ?? "<block>") should be green")
         }

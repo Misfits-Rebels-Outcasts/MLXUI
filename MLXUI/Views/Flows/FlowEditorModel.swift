@@ -418,18 +418,24 @@ final class FlowEditorModel {
         }
     }
 
-    /// CFM-R14-4 — sync `document.models`/`modelsOrder` with the rows' model choices. Pin an
-    /// unbridged display (`display = hfModelId` — the display IS the id), then drop any pin
-    /// whose display no row uses. Runs inside the same `commitChange` as the model edit, so
-    /// undo restores the block with the row.
+    /// CFM-R14-4 + FIX-7 — sync `document.models`/`modelsOrder` with the rows' model choices.
+    /// An unbridged pick (display = the catalog `displayName`, no bridge row) is pinned as
+    /// `displayName = hfModelId` — two different strings, which is the whole point of the
+    /// `models:` block (a readable row plus a real pin). Bridged displays need no pin (the
+    /// bridge resolves them). A pin whose display no row uses is dropped. Runs inside the same
+    /// `commitChange` as the model edit, so undo restores the block with the row.
     private func reconcileModelsBlock() {
         var models = document.models
         var order = document.modelsOrder
-        let used = Set(allRows().compactMap(\.model))
-        for display in used where CatalogBridge.entry(for: display) == nil {
-            models[display] = display
+        for row in allRows() {
+            guard let display = row.model, CatalogBridge.entry(for: display) == nil else { continue }
+            guard let entry = modelCatalog.first(where: {
+                $0.displayName == display || $0.hfModelId == display
+            }) else { continue }
+            models[display] = entry.hfModelId
             if !order.contains(display) { order.append(display) }
         }
+        let used = Set(allRows().compactMap(\.model))
         for key in models.keys where !used.contains(key) {
             models.removeValue(forKey: key)
             order.removeAll { $0 == key }
@@ -656,7 +662,7 @@ final class FlowEditorModel {
         }
 
         if r.task != nil, r.blockKind == nil, let desc = TaskCatalog.get(r.task ?? "") {
-            if desc.taskClass == .model, !isRunnableModel(r.model) {
+            if desc.taskClass == .model, !isRunnableModel(r.model, for: r.task ?? "") {
                 return "Row \(path) needs a model — pick one that runs on this Mac."
             }
             if desc.taskClass != .instant, desc.taskClass != .model {
@@ -1056,18 +1062,17 @@ final class FlowEditorModel {
         return Shape.bundleCompatible(accepts: accepts, given: [given], rk: refKind)
     }
 
-    /// Whether a display model name is one the build can actually run — **the derived pool**
-    /// (CFM-R14-2): the name (a bridge display or a raw `hfModelId`) resolves to a catalog
-    /// entry the registry can claim, with no `ModelSupport` gap. `nil` (no model) is false.
-    /// Empty catalog (tests that don't wire it) falls back to the bridge table.
-    private func isRunnableModel(_ display: String?) -> Bool {
-        guard let display else { return false }
-        if modelCatalog.isEmpty {
-            return CatalogBridge.entry(for: display) != nil
-        }
-        return modelCatalog.contains { entry in
-            claimableModelIDs.contains(entry.id)
-                && (TaskModels.displayName(for: entry) == display || entry.hfModelId == display)
+    /// Whether a display model name can run **the row's task** — membership in that task's
+    /// derived pool (CFM-R14-2 + FIX-6). Asking "is this display any claimable catalog entry?"
+    /// would let a `Transcribe` row name `Kokoro 82M` and pass; the pool for the row's task is
+    /// the single authority. `nil` (no model) is false. With no catalog wired yet, the answer
+    /// is **false** (the warning shows), never a different authority: the bridge table is not a
+    /// second source of truth for "can this run".
+    private func isRunnableModel(_ display: String?, for task: String) -> Bool {
+        guard let display, !modelCatalog.isEmpty else { return false }
+        return TaskModels.derivedModels(for: task, catalog: modelCatalog,
+                                        claimableModelIDs: claimableModelIDs).contains { entry in
+            TaskModels.displayName(for: entry) == display || entry.hfModelId == display
         }
     }
 
