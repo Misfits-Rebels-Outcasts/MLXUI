@@ -186,10 +186,11 @@ struct CatFlowTaskAvailabilityTests {
         return Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
     }
 
-    /// CFM-R12-FIX-12 → CFM-R14-2: a model task's availability agrees with its **derived
-    /// pool** — a task is available exactly when the registry-claimable, kind-correct catalog
-    /// set is non-empty. The old bridge-as-authority version is retired with the display-name
-    /// pools; this is the registry's answer.
+    /// CFM-R12-FIX-12 → CFM-R14-2 + FIX-2: a model task's availability agrees with its
+    /// **derived pool** — a task is available exactly when the registry-claimable, kind-correct
+    /// catalog set is non-empty **and the executor genuinely serves the task**. The old
+    /// bridge-as-authority version is retired with the display-name pools; this is the
+    /// registry's answer.
     @Test func modelAvailabilityAgreesWithTheDerivedPool() throws {
         let catalog = try bundledCatalog()
         let claimable = claimableIDs(catalog: catalog)
@@ -205,22 +206,52 @@ struct CatFlowTaskAvailabilityTests {
             }
         }
         #expect(mismatches.isEmpty, "model drift: \(mismatches.joined(separator: "; "))")
-        // The specific gaps the review named. CFM-R13-9/12 bridged OCR + Describe Image;
-        // R14-2 derives Generate Image (Flux + SDXL-Turbo) and Segment (sam3) into
-        // availability. Upscale and Estimate Depth have **no catalog model at all** — those
-        // stay marked. Every assertion passes the catalog + claim table: the derived pool is
-        // the availability authority since R14-2.
+        // The specific gaps the review named (CFM-R14-FIX-2). OCR + Describe Image are bridged;
+        // Generate Image derives Flux + SDXL-Turbo (the executor serves generate_image).
+        // Segment has a catalog model (sam3) but **no sanctioned executor path** — hazard H2 /
+        // CFM-R13-6 is the owner's to answer, so it stays marked. The latent family, Edit
+        // Image, and Inpaint map to `.image` but no stage accepts what those rows hand the
+        // executor, so they stay marked. Upscale and Estimate Depth have no catalog model.
         let available = { (name: String) in
             TaskAvailability.isAvailable(name, catalog: catalog, claimableModelIDs: claimable)
         }
-        #expect(available("Segment"))
+        #expect(!available("Segment"))
+        #expect(!available("Edit Image"))
+        #expect(!available("Inpaint"))
+        #expect(!available("Init Latent"))
+        #expect(!available("Decode Latent"))
         #expect(available("Generate Image"))
-        #expect(available("Edit Image"))
         #expect(!available("Upscale"))
         #expect(!available("Estimate Depth"))
         #expect(available("OCR"))
         #expect(available("Describe Image"))
         #expect(available("Summarize"))
         #expect(available("Transcribe"))
+    }
+
+    /// CFM-R14-FIX-2 — the executor-served allow-list is the authority: a model task is
+    /// offerable only when `RealExecutor` genuinely has a path for it, not merely because a
+    /// catalog model exists for its kind. This pins the FIX-2 decision and why, so a future
+    /// "just add the kind" can't silently re-offer a task nobody can run.
+    @Test func offerableModelTasksAreExecutorServed() {
+        // Served: an executor path exists for each (LLM frames, ASR, TTS, VLM, embed, the
+        // diffusion generators). Frame-backed LLM tasks are covered by `refKind == .frame`.
+        let served = ["Generate", "Summarize", "Translate", "Answer", "Rewrite", "Draft",
+                      "Ask", "Title", "Critique", "Verify", "Revise", "Merge",
+                      "Extract Structured", "Text to Table",
+                      "Transcribe", "Speak", "Describe Image", "OCR", "Embed",
+                      "Generate Image", "Generate Video", "Generate Sound"]
+        for name in served {
+            #expect(TaskModels.isServedByExecutor(name), "\(name) should be executor-served")
+        }
+        // NOT served: a catalog model may exist for the kind, but the executor has no path.
+        // Segment is pending the owner's CFM-R13-6 ruling; the latent family and the
+        // edit/inpaint rows have no stage accepting what they hand the executor.
+        let unserved = ["Segment", "Edit Image", "Instruct Edit", "Inpaint",
+                        "Init Latent", "Encode Latent", "Decode Latent", "Denoise",
+                        "Upscale", "Estimate Depth", "Animate", "Rerank"]
+        for name in unserved {
+            #expect(!TaskModels.isServedByExecutor(name), "\(name) should NOT be executor-served")
+        }
     }
 }

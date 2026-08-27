@@ -10,9 +10,10 @@ import Foundation
 ///
 /// `defaultModel(forTask:catalog:claimableModelIDs:)` returns the first derived candidate that
 /// the pool names, or nil when the build can't run any of them — which is how
-/// `Segment`/`Upscale`/`Generate Image`/… honestly report that no model exists in this build
-/// (Upscale/Rerank/Estimate Depth have no `taskKinds` entry and no catalog model, so their
-/// pools stay empty).
+/// `Segment`/`Upscale`/`Rerank`/… honestly report that no runnable model exists in this build
+/// (CFM-R14-FIX-2: the derived pool requires the executor to genuinely serve the task, so a
+/// `.image`-kind model for the latent family or `Segment` — pending the owner's `CFM-R13-6`
+/// ruling — does not make them offerable).
 nonisolated enum TaskModels {
     /// The capability declaration — a model task names the `RunnerKind` it needs. This is
     /// what replaced the display-name pools as the *filter*. Tasks with no entry here (e.g.
@@ -55,6 +56,36 @@ nonisolated enum TaskModels {
     /// row for `Transcribe` wants whisper/voxtral-family ASR, but every `.asr` catalog entry
     /// today already is one, so the table stays empty until a case names itself).
     private static let taskFamilies: [String: String] = [:]
+
+    /// CFM-R14-FIX-2 — the refName prefixes `RealExecutor` genuinely serves. Availability must
+    /// depend on **the executor having a path for the task**, not only on a model existing for
+    /// its kind. A `.image`-kind model exists for `Edit Image`/`Inpaint`/the latent family, but
+    /// no stage accepts what those rows hand it, so offering one would be a confidently wrong
+    /// answer. `engines.diffusion.segment` is deliberately absent: `SegmentAnythingStage` has a
+    /// headless default, but `CFM-R13-6` (hazard H2) is the owner's to answer — it is not
+    /// available until ruled. Kept as an explicit allow-list (not a denylist) so a newly ported
+    /// task must opt in.
+    private static let servedRefNamePrefixes: [String] = [
+        "engines.llm.",          // plain LLM (Generate, Extract Structured, Text to Table)
+        "engines.asr.",          // Transcribe (audio → text)
+        "engines.tts.",          // Speak (text → audio)
+        "engines.vlm.",          // Describe Image / OCR (image → text)
+        "engines.embed.",        // Embed (text → vector)
+        "engines.diffusion.generate_image",   // text → image
+        "engines.diffusion.generate_video",   // text → video
+        "engines.diffusion.generate_sound",   // text → music
+    ]
+
+    /// Whether `RealExecutor` genuinely serves `task` (CFM-R14-FIX-2). A **frame-backed** task
+    /// (refKind == .frame — Summarize, Rewrite, the deciders, …) is served: `runModel` renders
+    /// the runtime-owned frame and runs the LLM stage on it. An engine task is served only when
+    /// its refName matches a served prefix. Anything else has no executor path and therefore no
+    /// derived pool, whatever the registry could claim.
+    static func isServedByExecutor(_ task: String) -> Bool {
+        guard let desc = TaskCatalog.get(task) else { return false }
+        if desc.refKind == .frame { return true }
+        return servedRefNamePrefixes.contains { desc.refName.hasPrefix($0) }
+    }
 
     /// The `RunnerKind` a model task needs, or nil for a task with no model requirement.
     static func runnerKind(forTask task: String) -> RunnerKind? {
@@ -108,13 +139,15 @@ nonisolated enum TaskModels {
     }
 
     /// The derived pool for a model task — **the** candidates in this build. Filtered by the
-    /// corrected `runnerKind` (never `modelType`), the registry's own claim answer, and
-    /// `ModelSupport`. This is the function the editor, the picker, and availability all read
-    /// — "check and run can't drift" applied to the model side.
+    /// corrected `runnerKind` (never `modelType`), the registry's own claim answer, `ModelSupport`,
+    /// **and the executor genuinely serving the task** (CFM-R14-FIX-2 — a model existing for a
+    /// kind is not enough; the runtime must have a path for that task). This is the function the
+    /// editor, the picker, and availability all read — "check and run can't drift" applied to
+    /// the model side.
     static func derivedModels(for task: String,
                               catalog: [ModelEntry],
                               claimableModelIDs: Set<String>) -> [ModelEntry] {
-        guard let kind = taskKinds[task] else { return [] }
+        guard let kind = taskKinds[task], isServedByExecutor(task) else { return [] }
         let family = taskFamilies[task]?.lowercased()
         return catalog.filter { entry in
             guard entry.runnerKind == kind,

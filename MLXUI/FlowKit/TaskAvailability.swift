@@ -53,10 +53,14 @@ nonisolated enum TaskAvailability {
         case .instant:
             return supportedInstantTools.contains(task.name) ? .available : .needsNewerSupport
         case .model:
-            // CFM-R14-2: a model task is available exactly when its **derived** pool (the
-            // registry's own claim answer + corrected runnerKind) is non-empty. Segment,
-            // Upscale, Generate Image, … stay marked — their derived pool is empty because no
-            // claimable catalog model serves them (or, for the hidden flags, is still served).
+            // CFM-R14-2 + CFM-R14-FIX-2: a model task is available exactly when its **derived**
+            // pool (the registry's own claim answer + corrected runnerKind + the executor
+            // genuinely serving the task) is non-empty. Segment and the latent family have a
+            // catalog model for their kind but **no sanctioned executor path** — Segment is
+            // pending the owner's CFM-R13-6 ruling, the latent tasks have no stage that accepts
+            // what they hand it — so they stay marked. `Rerank`/`Upscale`/`Estimate Depth` have
+            // no catalog model at all. Their pools are empty for these different reasons; the
+            // picker's single "needs newer support" marker is the honest surface for all of them.
             return TaskModels.derivedModels(for: task.name, catalog: catalog,
                                             claimableModelIDs: claimableModelIDs).isEmpty
                 ? .needsNewerSupport : .available

@@ -102,16 +102,18 @@ struct CatFlowEditingTests {
     }
 
     @Test @MainActor func defaultModelIsDerivedRunnable() throws {
-        // CFM-R14-2: the default is the first pool-named entry of the **derived** pool (the
-        // registry's own claim answer), never a dead one. Transcribe seeds the first pool
-        // entry — Whisper Tiny (0.11 GB) — matching the Python's `_ASR_MODELS` order. Segment
-        // seeds sam3 (the registry serves it headless via `SegmentAnythingStage`); Read Text
-        // is an instant tool with no model.
+        // CFM-R14-2 + CFM-R14-FIX-2: the default is the first pool-named entry of the
+        // **derived** pool (the registry's own claim answer + the executor genuinely serving
+        // the task), never a dead one. Transcribe seeds the first pool entry — Whisper Tiny
+        // (0.11 GB) — matching the Python's `_ASR_MODELS` order. Segment seeds nothing: the
+        // registry could serve sam3 headless, but hazard H2 (`CFM-R13-6`) is the owner's to
+        // answer, so its pool stays empty (implementer's call, pending owner confirmation).
+        // Read Text is an instant tool with no model.
         let (catalog, claimable) = try loadedCatalogAndClaimable()
         #expect(FlowEditorModel.defaultModel(forTask: "Transcribe", catalog: catalog, claimableModelIDs: claimable) == "Whisper Tiny")
         #expect(FlowEditorModel.defaultModel(forTask: "Summarize", catalog: catalog, claimableModelIDs: claimable) == "Ministral 3B")
         #expect(FlowEditorModel.defaultModel(forTask: "Speak", catalog: catalog, claimableModelIDs: claimable) == "Kokoro 82M")
-        #expect(FlowEditorModel.defaultModel(forTask: "Segment", catalog: catalog, claimableModelIDs: claimable) == "mlx-community/sam3-4bit")
+        #expect(FlowEditorModel.defaultModel(forTask: "Segment", catalog: catalog, claimableModelIDs: claimable) == nil)
         #expect(FlowEditorModel.defaultModel(forTask: "Read Text", catalog: catalog, claimableModelIDs: claimable) == nil)
     }
 

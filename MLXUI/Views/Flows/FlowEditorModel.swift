@@ -164,8 +164,10 @@ final class FlowEditorModel {
     /// The default model for a model-class row — the **first pool-named derived candidate**
     /// (`TaskModels.defaultModel`, CFM-R14-2). Since CFM-R14-1 all four `Transcribe` pool
     /// entries are derived, so it seeds the first — `Whisper Tiny` (0.11 GB), matching the
-    /// Python's `_ASR_MODELS` order; `Segment` (sam3 — the registry serves it headless via
-    /// `SegmentAnythingStage`) seeds sam3. Nil = the row shows its "needs a model" warning.
+    /// Python's `_ASR_MODELS` order. `Segment` seeds nothing: the registry could serve sam3 via
+    /// `SegmentAnythingStage`'s headless default, but hazard H2 (`CFM-R13-6`) is the owner's
+    /// to answer — implementer's call, pending owner confirmation, so the pool stays empty
+    /// until ruled. Nil = the row shows its "needs a model" warning.
     nonisolated static func defaultModel(forTask task: String,
                                          catalog: [ModelEntry] = [],
                                          claimableModelIDs: Set<String> = []) -> String? {
