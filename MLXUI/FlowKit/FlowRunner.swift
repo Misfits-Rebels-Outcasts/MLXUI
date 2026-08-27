@@ -159,8 +159,9 @@ nonisolated struct FlowRunner {
             case .instant:
                 // CFM-R12-4: refuse a flow that uses an unported instant tool *before* the
                 // install prompt, not three rows in after the models downloaded. Honest and
-                // early, naming the task.
-                if !TaskAvailability.isAvailable(row.task!) {
+                // early, naming the task. Instant verdicts are catalog-free, so the empty
+                // catalog/claim sets are correct here (CFM-R14-FIX-3).
+                if !TaskAvailability.isAvailable(row.task!, catalog: [], claimableModelIDs: []) {
                     return .notRunnable(reason:
                         "Row \(position) uses '\(row.task!)', which this version of Flows doesn't run yet.")
                 }
@@ -184,8 +185,9 @@ nonisolated struct FlowRunner {
                 break
             case .net:
                 // CFM-R12-9 (approved scope): the ported GET tools are in scope; Web Search
-                // (no provider) and anything else in the class stay refused.
-                if !TaskAvailability.isAvailable(row.task!) {
+                // (no provider) and anything else in the class stay refused. Net verdicts are
+                // catalog-free too (CFM-R14-FIX-3).
+                if !TaskAvailability.isAvailable(row.task!, catalog: [], claimableModelIDs: []) {
                     return .notRunnable(reason:
                         "Row \(position) uses '\(row.task!)', which this version of Flows doesn't run yet.")
                 }

@@ -41,14 +41,16 @@ nonisolated enum TaskAvailability {
 
     /// A task's verdict in this build.
     /// - Parameters:
-    ///   - catalog: the flat `browser.json` entries. Only the `.model` branch needs it —
-    ///     instant/net/staged/agent verdicts are catalog-free, so `FlowRunner` (which never
-    ///     asks about model tasks) passes nothing.
+    ///   - catalog: the flat `browser.json` entries. Only the `.model` branch consults it, but
+    ///     it is a **required** argument (CFM-R14-FIX-3): the derived pool is the availability
+    ///     authority, and a silently-empty catalog would report every model task as unavailable
+    ///     — a wrong answer that looks correct. `FlowRunner` passes explicit empties because it
+    ///     only ever asks about `.instant`/`.net` tasks, which never read the catalog.
     ///   - claimableModelIDs: the catalog ids the registry can claim (CFM-R14-2).
     static func state(for task: TaskDescriptor,
                       isAppStore: Bool = CapabilityGate.isAppStoreBuild,
-                      catalog: [ModelEntry] = [],
-                      claimableModelIDs: Set<String> = []) -> State {
+                      catalog: [ModelEntry],
+                      claimableModelIDs: Set<String>) -> State {
         switch task.taskClass {
         case .instant:
             return supportedInstantTools.contains(task.name) ? .available : .needsNewerSupport
@@ -80,12 +82,13 @@ nonisolated enum TaskAvailability {
         }
     }
 
-    /// Whether a task (by name) can run in this build. Model tasks need `catalog` +
-    /// `claimableModelIDs` (the derived pool is the availability authority, CFM-R14-2).
+    /// Whether a task (by name) can run in this build. `catalog` + `claimableModelIDs` are
+    /// required (CFM-R14-FIX-3): the derived pool is the availability authority, and a model
+    /// task asked about without them would get a silently-wrong answer.
     static func isAvailable(_ taskName: String,
                             isAppStore: Bool = CapabilityGate.isAppStoreBuild,
-                            catalog: [ModelEntry] = [],
-                            claimableModelIDs: Set<String> = []) -> Bool {
+                            catalog: [ModelEntry],
+                            claimableModelIDs: Set<String>) -> Bool {
         guard let desc = TaskCatalog.get(taskName) else { return false }
         if case .available = state(for: desc, isAppStore: isAppStore,
                                    catalog: catalog, claimableModelIDs: claimableModelIDs) { return true }
@@ -93,11 +96,11 @@ nonisolated enum TaskAvailability {
     }
 
     /// The one-line marker the picker shows for an unavailable task (or nil when available).
-    /// Model tasks need `catalog` + `claimableModelIDs` (the derived pool is the authority).
+    /// `catalog` + `claimableModelIDs` are required (CFM-R14-FIX-3), same as `state`.
     static func marker(for task: TaskDescriptor,
                        isAppStore: Bool = CapabilityGate.isAppStoreBuild,
-                       catalog: [ModelEntry] = [],
-                       claimableModelIDs: Set<String> = []) -> String? {
+                       catalog: [ModelEntry],
+                       claimableModelIDs: Set<String>) -> String? {
         switch state(for: task, isAppStore: isAppStore,
                      catalog: catalog, claimableModelIDs: claimableModelIDs) {
         case .available: return nil

@@ -80,13 +80,18 @@ struct CatFlowNetToolsTests {
     }
 
     @Test func availabilityFlipsForTheApprovedNetTools() {
-        #expect(TaskAvailability.isAvailable("Web Fetch"))
-        #expect(TaskAvailability.isAvailable("HTTP Get"))
-        #expect(TaskAvailability.isAvailable("Fetch Feed"))
-        #expect(TaskAvailability.isAvailable("Download File"))
+        // Net verdicts are catalog-free, so explicit empties are correct (CFM-R14-FIX-3).
+        let emptyCatalog: [ModelEntry] = []
+        let emptyClaim: Set<String> = []
+        #expect(TaskAvailability.isAvailable("Web Fetch", catalog: emptyCatalog, claimableModelIDs: emptyClaim))
+        #expect(TaskAvailability.isAvailable("HTTP Get", catalog: emptyCatalog, claimableModelIDs: emptyClaim))
+        #expect(TaskAvailability.isAvailable("Fetch Feed", catalog: emptyCatalog, claimableModelIDs: emptyClaim))
+        #expect(TaskAvailability.isAvailable("Download File", catalog: emptyCatalog, claimableModelIDs: emptyClaim))
         // Web Search stays honestly refused — no provider.
-        #expect(!TaskAvailability.isAvailable("Web Search"))
-        if case .refusedByChannel = TaskAvailability.state(for: TaskCatalog.get("Web Search")!) {} else {
+        #expect(!TaskAvailability.isAvailable("Web Search", catalog: emptyCatalog, claimableModelIDs: emptyClaim))
+        if case .refusedByChannel = TaskAvailability.state(for: TaskCatalog.get("Web Search")!,
+                                                           catalog: emptyCatalog,
+                                                           claimableModelIDs: emptyClaim) {} else {
             Issue.record("Web Search should be channel-refused")
         }
     }

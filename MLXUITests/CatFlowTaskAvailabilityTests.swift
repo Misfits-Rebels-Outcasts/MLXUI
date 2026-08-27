@@ -32,7 +32,8 @@ struct CatFlowTaskAvailabilityTests {
         var mismatches: [String] = []
         for task in instant {
             let dispatched = await dispatches(task.name, executor: executor)
-            let available = TaskAvailability.isAvailable(task.name)
+            // Instant verdicts are catalog-free (CFM-R14-FIX-3) — explicit empties.
+            let available = TaskAvailability.isAvailable(task.name, catalog: [], claimableModelIDs: [])
             if dispatched != available {
                 mismatches.append("\(task.name): dispatched=\(dispatched) available=\(available)")
             }
@@ -132,27 +133,35 @@ struct CatFlowTaskAvailabilityTests {
     // MARK: - The channel states
 
     @Test func netIsRefusedButStagedNowRuns() {
+        // Net/staged verdicts are catalog-free (CFM-R14-FIX-3) — explicit empties.
+        let emptyCatalog: [ModelEntry] = []
+        let emptyClaim: Set<String> = []
         let web = TaskCatalog.get("Web Search")!
-        if case .refusedByChannel = TaskAvailability.state(for: web) {} else { Issue.record("net not refused") }
-        #expect(!TaskAvailability.isAvailable("Web Search"))
+        if case .refusedByChannel = TaskAvailability.state(for: web, catalog: emptyCatalog, claimableModelIDs: emptyClaim) {} else { Issue.record("net not refused") }
+        #expect(!TaskAvailability.isAvailable("Web Search", catalog: emptyCatalog, claimableModelIDs: emptyClaim))
         // CFM-R12-8: staged rows now queue a visible outbox entry.
-        #expect(TaskAvailability.isAvailable("Stage Send"))
-        #expect(TaskAvailability.isAvailable("Stage Post"))
+        #expect(TaskAvailability.isAvailable("Stage Send", catalog: emptyCatalog, claimableModelIDs: emptyClaim))
+        #expect(TaskAvailability.isAvailable("Stage Post", catalog: emptyCatalog, claimableModelIDs: emptyClaim))
     }
 
     @Test func agentIsChannelRefusedOnlyUnderAppStore() {
         let improvise = TaskCatalog.get("Improvise")!
-        #expect(TaskAvailability.state(for: improvise, isAppStore: true) == .refusedByChannel(reason: "runs only in the direct build"))
-        #expect(TaskAvailability.state(for: improvise, isAppStore: false) == .available)
+        let emptyCatalog: [ModelEntry] = []
+        let emptyClaim: Set<String> = []
+        #expect(TaskAvailability.state(for: improvise, isAppStore: true, catalog: emptyCatalog, claimableModelIDs: emptyClaim) == .refusedByChannel(reason: "runs only in the direct build"))
+        #expect(TaskAvailability.state(for: improvise, isAppStore: false, catalog: emptyCatalog, claimableModelIDs: emptyClaim) == .available)
     }
 
-    @Test func everyUnavailableTaskGetsAPickerMarker() {
-        // The marker set and the availability state agree by construction.
+    @Test @MainActor func everyUnavailableTaskGetsAPickerMarker() throws {
+        // The marker set and the availability state agree by construction. Model tasks need
+        // the real catalog + claim table (CFM-R14-FIX-3); instant/net verdicts ignore them.
+        let catalog = try bundledCatalog()
+        let claimable = claimableIDs(catalog: catalog)
         let expectedUnavailable = TaskCatalog.allTasks().filter {
-            TaskAvailability.marker(for: $0) != nil
+            TaskAvailability.marker(for: $0, catalog: catalog, claimableModelIDs: claimable) != nil
         }
         let computedUnavailable = TaskCatalog.allTasks().filter { task in
-            switch TaskAvailability.state(for: task) {
+            switch TaskAvailability.state(for: task, catalog: catalog, claimableModelIDs: claimable) {
             case .available: return false
             case .needsNewerSupport, .refusedByChannel: return true
             }
@@ -160,7 +169,8 @@ struct CatFlowTaskAvailabilityTests {
         #expect(expectedUnavailable.map(\.name).sorted() == computedUnavailable.map(\.name).sorted())
         // Every one is labeled, and every available one is not.
         for task in TaskCatalog.allTasks() {
-            #expect((TaskAvailability.marker(for: task) != nil) != TaskAvailability.isAvailable(task.name))
+            #expect((TaskAvailability.marker(for: task, catalog: catalog, claimableModelIDs: claimable) != nil)
+                    != TaskAvailability.isAvailable(task.name, catalog: catalog, claimableModelIDs: claimable))
         }
         // Every instant tool is ported since R13-3 (Join Video was the last).
         let unportedInstant = TaskCatalog.entries.filter {

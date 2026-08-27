@@ -148,12 +148,10 @@ final class FlowEditorModel {
         TaskModels.models(forTask: task)
     }
 
-    /// Every task's seeded default model — for the FIX-3 invariant test that each default
-    /// resolves through the derived pool (the build-can-run-it authority, CFM-R14-2).
-    nonisolated static var allDefaultModels: [(task: String, model: String?)] {
-        []   // superseded by the catalog-aware `allDefaultModels(for:catalog:claimableModelIDs:)`
-    }
-
+    /// Every model task's seeded default — for the FIX-3 invariant test that each default
+    /// resolves through the derived pool (the build-can-run-it authority, CFM-R14-2). The
+    /// catalog + claim table are required inputs — there is no catalog-free default anymore
+    /// (CFM-R14-FIX-5: the old zero-returning stub made the invariant test vacuous).
     nonisolated static func allDefaultModels(for catalog: [ModelEntry],
                                              claimableModelIDs: Set<String>) -> [(task: String, model: String?)] {
         TaskCatalog.allTasks()
