@@ -111,6 +111,36 @@ struct CatFlowCatalogBridgeTests {
         }
     }
 
+    // MARK: - CFM-R14-FIX-1: the derived-pool resolve fallback
+
+    /// An R14-2 unbridged pick — display name is the raw `hfModelId` — must resolve `.same`
+    /// with no manifest, so the runtime (preflight / executor) doesn't refuse it.
+    @Test func unbridgedHfModelIdResolvesAsSame() throws {
+        let catalog = try loadCatalog()
+        let unbridged = "mlx-community/Qwen3-VL-4B-Instruct-4bit"
+        switch CatalogBridge.resolve(unbridged, catalog: catalog) {
+        case .runnable(let model, let equivalence, let note):
+            #expect(model.hfModelId == unbridged)
+            #expect(equivalence == .same)
+            #expect(note == nil)
+        case .notRunnable(let display, let reason):
+            Issue.record("\(display) should resolve via the derived-pool fallback: \(reason)")
+        }
+    }
+
+    /// The FIX-7 display shape (a catalog `displayName`, not the id) also resolves.
+    @Test func unbridgedDisplayNameResolvesAsSame() throws {
+        let catalog = try loadCatalog()
+        // Qwen3-VL's browser.json displayName is the friendly name, not the id.
+        let displayName = "Qwen3-VL-4B-Instruct"
+        switch CatalogBridge.resolve(displayName, catalog: catalog) {
+        case .runnable(let model, _, _):
+            #expect(model.hfModelId == "mlx-community/Qwen3-VL-4B-Instruct-4bit")
+        case .notRunnable(let display, let reason):
+            Issue.record("\(display) should resolve by catalog display name: \(reason)")
+        }
+    }
+
     // MARK: - SAM Base is deliberately absent (hazard H2)
 
     @Test func samBaseIsNotInTheBridge() {

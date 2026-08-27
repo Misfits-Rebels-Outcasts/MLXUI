@@ -172,20 +172,32 @@ nonisolated enum CatalogBridge {
 
     /// Resolve a display name to an installable `ModelEntry`. `catalog` is the flat list
     /// of `browser.json` entries. Picks the first candidate present in the catalog
-    /// (best-first order is the table's). Returns a not-runnable reason otherwise.
+    /// (best-first order is the table's).
+    ///
+    /// **CFM-R14-FIX-1 — the derived-pool fallback.** R14-2's derived pool offers catalog
+    /// models with no bridge row; their display name is either the `hfModelId` itself or (after
+    /// FIX-7) the catalog `displayName`. A bridge miss is therefore **not** "can't run" anymore —
+    /// fall back to matching the display against the catalog by id or display name, and resolve
+    /// `.same` with no curated manifest (a manifest-less model is non-stochastic: `withSeed`
+    /// already tolerates the missing file). Without this, 20 of the 34 catalog entries would be
+    /// selectable and pinned yet refused at Run.
     static func resolve(_ display: String, catalog: [ModelEntry]) -> CatalogBridgeResolution {
-        guard let entry = entry(for: display) else {
-            return .notRunnable(display: display,
-                                reason: "\(display) isn't in the runnable-model table — this flow needs a model MLXUI can't run yet.")
-        }
-        for candidate in entry.candidates {
-            if let model = catalog.first(where: { $0.hfModelId == candidate }) {
-                let note = entry.equivalence.note(display: display, substitutedID: candidate)
-                return .runnable(model, equivalence: entry.equivalence, note: note)
+        if let entry = entry(for: display) {
+            for candidate in entry.candidates {
+                if let model = catalog.first(where: { $0.hfModelId == candidate }) {
+                    let note = entry.equivalence.note(display: display, substitutedID: candidate)
+                    return .runnable(model, equivalence: entry.equivalence, note: note)
+                }
             }
+            return .notRunnable(display: display,
+                                reason: "\(display) isn't installed in the model catalog — add it to the catalog before this flow can run.")
+        }
+        // No bridge row: an R14-2/7 derived pick. Match the catalog directly.
+        if let model = catalog.first(where: { $0.hfModelId == display || $0.displayName == display }) {
+            return .runnable(model, equivalence: .same, note: nil)
         }
         return .notRunnable(display: display,
-                            reason: "\(display) isn't installed in the model catalog — add it to the catalog before this flow can run.")
+                            reason: "\(display) isn't in the runnable-model table — this flow needs a model MLXUI can't run yet.")
     }
 }
 

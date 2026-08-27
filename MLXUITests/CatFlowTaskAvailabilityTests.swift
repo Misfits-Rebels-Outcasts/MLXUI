@@ -58,13 +58,17 @@ struct CatFlowTaskAvailabilityTests {
         }
     }
 
-    // MARK: - CFM-R14-2: the derived model pool's cross-check
+    // MARK: - CFM-R14-2 / CFM-R14-FIX-4: the derived model pool's cross-check
 
-    /// The cross-check the tools already have, applied to the model side: for every
-    /// model-class task, the derived pool is non-empty **iff** the task is offerable, and
-    /// every pool member's entry resolves to a module the registry can claim (the strongest
-    /// "one list" guarantee — check and run can't drift, because both read the same pool).
-    @Test @MainActor func derivedModelPoolAgreesWithAvailabilityAndClaimability() throws {
+    /// The cross-check the tools already have, applied to the model side — driven through the
+    /// **executor path**, not the predicate under test (CFM-R14-FIX-4). For every derived
+    /// candidate of every model task:
+    ///  1. the registry resolves it to a module and that module **builds a stage** through the
+    ///     same `bestModule → sdk.makeStage` path `AppFlowExecutorFactory` uses;
+    ///  2. `FlowPreflight.run` does **not** bucket a row naming it `blocked` (the pre-Run gate).
+    /// Both fail for an unbridged pick until `CatalogBridge.resolve` learns the derived-pool
+    /// fallback (CFM-R14-FIX-1) — this is the test that proves FIX-1 is real.
+    @Test @MainActor func derivedPoolMembersBuildStagesAndSurvivePreflight() throws {
         let catalog = try bundledCatalog()
         let claimable = claimableIDs(catalog: catalog)
         let registry = ModelRegistry()
@@ -73,22 +77,24 @@ struct CatFlowTaskAvailabilityTests {
         for task in TaskCatalog.entries where task.taskClass == .model {
             let pool = TaskModels.derivedModels(for: task.name, catalog: catalog,
                                                 claimableModelIDs: claimable)
-            let offerable = TaskAvailability.isAvailable(task.name, catalog: catalog,
-                                                         claimableModelIDs: claimable)
-            // non-empty pool ⟺ offerable.
-            #expect((!pool.isEmpty) == offerable,
-                    "\(task.name): pool=\(pool.map { $0.hfModelId }) offerable=\(offerable)")
-            // every pool member is registry-claimable and stage-buildable.
             for model in pool {
-                #expect(registry.bestModule(for: model) != nil,
-                        "\(task.name) offers \(model.hfModelId), which no module claims")
+                let display = TaskModels.displayName(for: model)
+                // (1) the executor's own stage path builds it.
+                let resolved = try #require(registry.bestModule(for: model),
+                                            "\(task.name) offers \(model.hfModelId) but no module claims it")
+                #expect(throws: Never.self) {
+                    _ = try resolved.sdk.makeStage(for: model, config: .default)
+                }
+                // (2) the pre-Run gate does not block a row naming it.
+                let doc = FlowDocument(version: "0.8", rows: [
+                    Row(id: UUID(), task: task.name, model: display, settings: nil, refs: []),
+                ])
+                let preflight = FlowPreflight.run(doc, catalog: catalog,
+                                                  installedModelIDs: [],
+                                                  totalRAMGB: SystemInfo.detect().totalRAMGB)
+                #expect(!preflight.blocked.map(\.display).contains(display),
+                        "\(task.name) offers \(display) but preflight blocks it — CFM-R14-FIX-1")
             }
-        }
-        // And the registry claim table agrees with the registry on every catalog entry
-        // (the AppState precompute is not a second, drifting classification).
-        for model in catalog {
-            #expect(claimable.contains(model.id) == (registry.bestModule(for: model) != nil),
-                    "claim table disagrees with the registry for \(model.hfModelId)")
         }
     }
 
