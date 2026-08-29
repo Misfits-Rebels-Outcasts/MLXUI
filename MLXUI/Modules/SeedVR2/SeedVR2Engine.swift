@@ -47,11 +47,10 @@ private struct SeedVR2EulerScheduler {
         timesteps = (0 ..< numSteps).map { Float(1000 - $0 * (1000 / max(numSteps, 1))) }
     }
 
-    /// Euler step: denoised = latents - (t/1000) * noisePred.
+    /// Single-step x₀-prediction: the transformer predicts the clean HR latent directly.
+    /// noisePred range ≈ encoded range (±0.6), not velocity range (±4), confirming x₀-pred.
     func step(noisePred: MLXArray, timestepIdx: Int, latents: MLXArray) -> MLXArray {
-        let t = timesteps[timestepIdx]
-        let tNorm = MLXArray(t / 1000.0).asType(latents.dtype)
-        return latents - tNorm * noisePred
+        return noisePred
     }
 }
 
@@ -175,14 +174,27 @@ nonisolated enum SeedVR2Engine {
         let h = encoded.dim(3), w = encoded.dim(4)
         var latents = SeedVR2LatentCreator.noiseLatents(seed: seed, height: h, width: w)
 
+        func rng(_ a: MLXArray) -> String {
+            let f = a.asType(.float32)
+            eval(f)
+            let mn = f.min(keepDims: false).item(Float.self)
+            let mx = f.max(keepDims: false).item(Float.self)
+            return "[\(String(format: "%.3f", mn)), \(String(format: "%.3f", mx))]"
+        }
+        print("[SeedVR2-D] encoded    : \(rng(encoded))")
+        print("[SeedVR2-D] condition  : \(rng(condition))")
+        print("[SeedVR2-D] noise      : \(rng(latents))")
+
         let scheduler = SeedVR2EulerScheduler(numSteps: 1)
         for (idx, t) in scheduler.timesteps.enumerated() {
             let modelInput = MLX.concatenated([latents, condition], axis: 1)  // [1, 33, 1, h, w]
             let tTensor    = MLXArray(t).asType(.bfloat16)
             let noisePred  = transformer(modelInput, textEmb: textEmb, timestep: tTensor)
             eval(noisePred)
+            print("[SeedVR2-D] noisePred  : \(rng(noisePred))")
             latents = scheduler.step(noisePred: noisePred, timestepIdx: idx, latents: latents)
             eval(latents)
+            print("[SeedVR2-D] denoised   : \(rng(latents))")
             progress(0.25 + 0.75 * Double(idx + 1) / Double(scheduler.timesteps.count))
             await Task.yield()
         }
