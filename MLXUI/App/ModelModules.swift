@@ -16,7 +16,8 @@ import Foundation
 ///
 /// Coverage (browser.json): chat (LLM) · ASR (Whisper, Voxtral) · TTS (Kokoro + generic) ·
 /// Vision (VLM) · OCR (MLXVLM + PaddleOCR-VL + dots.ocr + DeepSeek-OCR) · Embeddings ·
-/// Image generation (FLUX.1) · Image segmentation (SAM3) · Video generation (WAN 2.1).
+/// Image generation (FLUX.1) · Image segmentation (SAM3) · Video generation (WAN 2.1) ·
+/// Image super-resolution (SeedVR2 3B, SV-AM4).
 /// `ChatModule` is deliberately **last**: it claims `.llm`, which no other SDK claims, so
 /// appending keeps every existing claim resolution byte-identical (the CFM-R1-1 table test
 /// guards this).
@@ -38,5 +39,6 @@ let installedModules: [ModelModule.Type] = [
     FluxModule.self,
     SegmentAnythingModule.self,
     WanVideoModule.self,
+    SeedVR2Module.self,
     ChatModule.self,
 ]

@@ -96,9 +96,9 @@ struct CatFlowSaveToolsTests {
     }
 
     /// CFM-R12-FIX-1/12 honesty check: Save Image made the *tools* runnable, but of flows
-    /// 60–66 only **65-VoiceoverBed** has a model the bridge can actually run. The rest
-    /// refuse at the live gate (Generate Image / Upscale / Edit Image / Segment have no
-    /// bridge model) — canRun alone proved less than it appeared to.
+    /// 60–66 only **65-VoiceoverBed** and **64-UpscaleSmall** (SeedVR2 3B now in catalog,
+    /// SV-AM1) have a model the bridge can resolve. The rest refuse at the live gate
+    /// (Generate Image / Edit Image / Segment have no bridge model).
     @Test func flowsUnblockedBySaveImageAreRunnableNow() throws {
         let catalog = try makeCatalog()
         func runs(_ fid: String) -> String? {
@@ -106,8 +106,11 @@ struct CatFlowSaveToolsTests {
             return FlowRunnability.refusalReason(for: doc, catalog: catalog,
                                                  installed: [], totalRAMGB: 32)
         }
+        // These flows have a resolvable model in the catalog (not blocked at the bridge gate).
         #expect(runs("65-VoiceoverBed") == nil)
-        for fid in ["61-EditInPlace", "62-SeeDepth", "63-CutOutSubject", "64-UpscaleSmall",
+        #expect(runs("64-UpscaleSmall") == nil, "SeedVR2 3B is in the catalog (SV-AM1)")
+        // These still refuse: no bridge model exists for their task.
+        for fid in ["61-EditInPlace", "62-SeeDepth", "63-CutOutSubject",
                     "60-GenerateProductShot", "66-SeedSweep"] {
             let reason = runs(fid)
             #expect(reason != nil, "\(fid) should refuse at the live gate (no bridge model)")

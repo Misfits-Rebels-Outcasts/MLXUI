@@ -5,7 +5,7 @@ import Foundation
 /// Covers the R5 pre-parsed-JSON retirement (CFM-FIX-5 / M11): the bundled gallery ships
 /// `.cat` text only (no `*.parse.json` in the app bundle), and `CatParser` reproduces every
 /// gallery flow's parse tree **byte-for-byte** against trees regenerated from the Python
-/// runtime into `Fixtures/CatFlow/gallery/`. 69 free conformance cases — the retired
+/// runtime into `Fixtures/CatFlow/gallery/`. 70 free conformance cases — the retired
 /// `*.parse.json` corpus, restored as fixtures instead of deleted.
 struct CatFlowGalleryReproductionTests {
 
@@ -35,7 +35,7 @@ struct CatFlowGalleryReproductionTests {
         let files = try FileManager.default.contentsOfDirectory(atPath: galleryDir.path)
             .filter { $0.hasSuffix(".cat") || $0.hasSuffix(".catpipeline") }
             .sorted()
-        #expect(files.count == 69, "the gallery drifted — expected 69 flows, found \(files.count)")
+        #expect(files.count == 70, "the gallery drifted — expected 70 flows, found \(files.count)")
 
         var checked = 0
         for f in files {
@@ -66,7 +66,7 @@ struct CatFlowGalleryReproductionTests {
         let files = try FileManager.default.contentsOfDirectory(atPath: galleryDir.path)
             .filter { $0.hasSuffix(".cat") || $0.hasSuffix(".catpipeline") }
             .sorted()
-        #expect(files.count == 69)
+        #expect(files.count == 70)
 
         var checked = 0
         for f in files {

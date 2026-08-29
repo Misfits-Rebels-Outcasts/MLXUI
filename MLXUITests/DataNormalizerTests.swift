@@ -70,4 +70,15 @@ struct DataNormalizerTests {
     @Test func architectureMapsWanDiT() {
         #expect(DataNormalizer.normalizeArchitecture("WanDiT") == "Wan DiT")
     }
+
+    // SV-AM2: upscale tag mappings
+    @Test func taskTagsMapsImageSuperResolution() {
+        let tags = DataNormalizer.normalizeTaskTags(["image-super-resolution", "image-upscaling", "video-restoration"], domainId: "upscale")
+        #expect(Set(tags) == Set(["upscaling", "restoration"]))
+    }
+
+    @Test func taskTagsDomainFallbackUpscale() {
+        let tags = DataNormalizer.normalizeTaskTags([], domainId: "upscale")
+        #expect(tags == ["upscaling"])
+    }
 }

@@ -1,0 +1,4 @@
+catflow 0.8
+1. Read Audio   canond.wav
+2. Transcribe   Whisper Small; lang=en
+3. Save Text    transcript.txt

@@ -22,6 +22,7 @@ enum ModelSupport {
         // ModernBERT (nomicai-modernbert-embed) → standalone runner (SUP-4, journal/2026-41).
         // SAM3 (sam3_video / Sam3VideoModel) → SegmentAnythingEngine ported in SA-AM4.
         // WAN 2.1 → WanVideoEngine ported in WAN-AM4 (journal/2026-93).
+        // SeedVR2 3B → SeedVR2Engine ported in SV-AM4 (journal/2026-162).
     ]
 
     /// A human-readable reason this model can't run yet, or `nil` if it should run.

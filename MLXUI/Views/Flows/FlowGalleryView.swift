@@ -18,8 +18,13 @@ struct FlowGalleryView: View {
                 header
                 // CFM-R12-1: the user's own saved flows. The New Flow badge lives here too —
                 // it is a user action, not a bundled flow.
-                myWorkflowsSection
-                gallerySection
+                if !AppState.hideMyWorkflows {
+                    myWorkflowsSection
+                }
+                basicGallerySection
+                if !AppState.hideAdvanceGallery {
+                    advanceGallerySection
+                }
             }
             .padding(20)
         }
@@ -89,12 +94,33 @@ struct FlowGalleryView: View {
         }
     }
 
-    private var gallerySection: some View {
+    /// The "Basic Gallery" shelf: the simple bundled flows — read-only like Advance
+    /// Gallery (Duplicate & Edit / Reveal in Finder / Run), shown above it. Hidden
+    /// when empty so a shelf with no basic flows renders no stray heading.
+    private var basicGallerySection: some View {
+        if appState.basicGalleryEntries.isEmpty {
+            return AnyView(EmptyView())
+        }
+        return AnyView(
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Basic Gallery")
+                    .font(.title3.weight(.semibold))
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
+                    ForEach(appState.basicGalleryEntries) { flow in
+                        badge(for: flow)
+                    }
+                }
+            }
+        )
+    }
+
+    /// The "Advance Gallery" shelf: every bundled flow that isn't basic.
+    private var advanceGallerySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Gallery Workflows")
+            Text("Advance Gallery")
                 .font(.title3.weight(.semibold))
             LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
-                ForEach(appState.galleryEntries) { flow in
+                ForEach(appState.advanceGalleryEntries) { flow in
                     badge(for: flow)
                 }
             }

@@ -300,4 +300,24 @@ struct ModelFileSelectorTests {
         #expect(!out.contains("README.md"))
         #expect(!out.contains(".gitattributes"))
     }
+
+    @Test func seedvr2RepoDownloadsAllRequiredFiles() {
+        // SV-AM3: mlx-community/SeedVR2-3B-mlx-int8 ships three top-level non-standard
+        // weight files (transformer, vae, pos_emb) plus config.json. No standard
+        // model.safetensors → the fallback path selects all top-level *.safetensors.
+        let out = selected([
+            "transformer.safetensors",
+            "vae.safetensors",
+            "pos_emb.safetensors",
+            "config.json",
+            "README.md",
+            ".gitattributes",
+        ])
+        #expect(out.contains("transformer.safetensors"))
+        #expect(out.contains("vae.safetensors"))
+        #expect(out.contains("pos_emb.safetensors"))
+        #expect(out.contains("config.json"))
+        #expect(!out.contains("README.md"))
+        #expect(!out.contains(".gitattributes"))
+    }
 }

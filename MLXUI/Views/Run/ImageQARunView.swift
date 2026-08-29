@@ -151,12 +151,17 @@ struct ImageQARunView: View {
     /// Load a picked file URL into a fully-decoded, memory-resident `CGImage` (sandbox-safe:
     /// the scope is only open here, so the image must not stay file-mapped — see `ImageLoader`).
     private func load(_ url: URL) {
-        guard let cg = ImageLoader.decodedCGImage(fromSecurityScoped: url) else {
-            model.errorText = "Could not read image."
-            return
+        Task {
+            let cg = await Task.detached(priority: .userInitiated) {
+                ImageLoader.decodedCGImage(fromSecurityScoped: url)
+            }.value
+            if let cg {
+                image = cg
+                imageName = url.lastPathComponent
+            } else {
+                model.errorText = "Could not read image."
+            }
         }
-        image = cg
-        imageName = url.lastPathComponent
     }
 
     /// Load dropped image data directly.

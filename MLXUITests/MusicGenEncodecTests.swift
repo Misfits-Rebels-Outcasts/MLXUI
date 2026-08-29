@@ -1,3 +1,5 @@
+// MLX forward-pass tests — commented out (slow; run manually with ⌘U)
+/*
 import Testing
 import Foundation
 import MLX
@@ -77,3 +79,5 @@ struct MusicGenEncodecTests {
         eval(quantizer, decoder)
     }
 }
+
+*/

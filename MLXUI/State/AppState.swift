@@ -11,7 +11,7 @@ final class AppState {
 
     /// Set to `true` to hide the "Image Segmentation" domain (and every model listed
     /// under it, e.g. SAM3) from the catalog UI. Mirrors `hideVideoGeneration`.
-    static let hideImageSegmentation = true
+    static let hideImageSegmentation = false
 
     /// Set to `true` to hide the entire "Flows" section (sidebar, gallery, run views).
     /// When `true`, `galleryEntries` is empty and the section does not render — the app
@@ -23,8 +23,18 @@ final class AppState {
     /// When `true`, `galleryEntries` is empty. Mirrors `hideFlows`.
     static let hideAutomate = false
 
+    /// Set to `true` to hide the "My Workflows" shelf (the user's own saved flows and the
+    /// New Flow badge) on the Automate → AI Workflows page. The two bundled shelves —
+    /// Basic Gallery and Advance Gallery — still render.
+    static let hideMyWorkflows = false
+
+    /// Set to `true` to hide the "Advance Gallery" shelf (every bundled flow that isn't
+    /// basic) on the Automate → AI Workflows page. My Workflows and Basic Gallery still
+    /// render.
+    static let hideAdvanceGallery = false
+
     /// Hide individual gallery flows (badges) by gallery number. Numbers are the
-    /// `_metadata.json` `number` field (1–69 today), stable across renames. Ranges
+    /// `_metadata.json` `number` field (1–70 today), stable across renames. Ranges
     /// read naturally — hide flows 60–69:
     /// `static let hiddenFlowNumbers: Set<Int> = Set(60...69)`
     /// …and also hide flow 50:
@@ -35,6 +45,16 @@ final class AppState {
     
     /// The bundled gallery flows, in gallery order. Empty when `hideFlows` is true.
     var galleryEntries: [GalleryFlowMetadata] = []
+
+    /// The "Basic Gallery" shelf — the simple bundled flows, in gallery order.
+    var basicGalleryEntries: [GalleryFlowMetadata] {
+        galleryEntries.filter(\.isBasic)
+    }
+
+    /// The "Advance Gallery" shelf — every bundled flow that isn't basic.
+    var advanceGalleryEntries: [GalleryFlowMetadata] {
+        galleryEntries.filter { !$0.isBasic }
+    }
 
     /// CFM-R12-1: the user's saved flows (the "My Workflows" shelf), newest first. Loaded by
     /// `reloadUserFlows()` — never trusted to be current across an editor save.

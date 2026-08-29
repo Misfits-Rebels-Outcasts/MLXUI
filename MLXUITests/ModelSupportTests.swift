@@ -26,4 +26,10 @@ struct ModelSupportTests {
         let entry = makeEntry(id: "mlx-community--sam3-4bit")
         #expect(ModelSupport.unsupportedReason(for: entry) == nil)
     }
+
+    // SV-AM4: SeedVR2 engine ported — gap removed; resolves to SeedVR2Engine.
+    @Test func seedvr2NowHasARunner() {
+        let entry = makeEntry(id: "mlx-community--SeedVR2-3B-mlx-int8")
+        #expect(ModelSupport.unsupportedReason(for: entry) == nil)
+    }
 }

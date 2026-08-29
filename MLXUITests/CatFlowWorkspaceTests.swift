@@ -142,8 +142,8 @@ struct CatFlowWorkspaceTests {
 
     @Test func galleryLoaderFindsAllFlows() throws {
         let metadata = GalleryLoader.loadMetadata()
-        // The full gallery ships: 69 entries (66 .cat + 3 .catpipeline).
-        #expect(metadata.count == 69)
+        // The full gallery ships: 70 entries (67 .cat + 3 .catpipeline).
+        #expect(metadata.count == 70)
         let spoken = try #require(metadata.first { $0.flowID == "01-SpokenSummary" })
         #expect(spoken.title == "Spoken Summary")
         #expect(spoken.number == 1)

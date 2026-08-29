@@ -112,6 +112,51 @@ struct RoutingTests {
         #expect(entry.ramGB == 10.0)
     }
 
+    @Test func runnerKindMapsUpscaleToUpscale() {
+        // SV-AM1: image upscaling routes to .upscale (engine: Modules/SeedVR2, SV-AM4).
+        #expect(makeEntry(modelType: .upscale).runnerKind == .upscale)
+    }
+
+    @Test func seedvr2CatalogEntryDecodes() throws {
+        // SV-AM1: verifies the mlx-community/SeedVR2-3B-mlx-int8 entry shape decodes and routes correctly.
+        let json = """
+        {
+            "id": "mlx-community--SeedVR2-3B-mlx-int8",
+            "family": "SeedVR2",
+            "displayName": "SeedVR2 3B",
+            "paramSize": "3B",
+            "paramCountB": 3.0,
+            "modelType": "upscale",
+            "source": "mlx",
+            "format": "mlx-int8",
+            "platforms": ["macOS 14+"],
+            "minMacOSVersion": "14.0",
+            "hfRepo": "mlx-community",
+            "hfModelId": "mlx-community/SeedVR2-3B-mlx-int8",
+            "ramGB": 4.5,
+            "downloadSizeGB": 3.0,
+            "contextWindow": null,
+            "variants": [
+                {
+                    "quantization": "int8",
+                    "format": "mlx-int8",
+                    "ramGB": 4.5,
+                    "downloadSizeGB": 3.0,
+                    "qualityPercent": 95,
+                    "hfModelId": "mlx-community/SeedVR2-3B-mlx-int8",
+                    "recommended": true
+                }
+            ]
+        }
+        """
+        let entry = try JSONDecoder().decode(ModelEntry.self, from: Data(json.utf8))
+        #expect(entry.modelType == .upscale)
+        #expect(entry.runnerKind == .upscale)
+        #expect(entry.source == .mlx)
+        #expect(entry.paramCountB == 3.0)
+        #expect(entry.ramGB == 4.5)
+    }
+
     // MARK: runnerKind — catalog mislabel overrides (family beats modelType)
 
     @Test func runnerKindOverridesOuteTTSFromASRToTTS() {

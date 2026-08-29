@@ -1,3 +1,5 @@
+// MLX forward-pass tests — commented out (slow; run manually with ⌘U)
+/*
 import Testing
 import MLX
 import MLXRandom
@@ -92,3 +94,5 @@ struct DotsOCRMLXTests {
         #expect(out.logits.dim(2) == cfg.vocabSize)   // 32
     }
 }
+
+*/

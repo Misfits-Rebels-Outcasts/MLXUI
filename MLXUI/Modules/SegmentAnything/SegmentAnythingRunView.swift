@@ -282,11 +282,16 @@ struct SegmentAnythingRunView: View {
     }
 
     private func loadImage(_ url: URL) {
-        guard let cg = ImageLoader.decodedCGImage(fromSecurityScoped: url) else {
-            model.errorText = "Could not read image."
-            return
+        Task {
+            let cg = await Task.detached(priority: .userInitiated) {
+                ImageLoader.decodedCGImage(fromSecurityScoped: url)
+            }.value
+            if let cg {
+                model.setImage(cg)
+            } else {
+                model.errorText = "Could not read image."
+            }
         }
-        model.setImage(cg)
     }
 
     private func loadDropped(_ providers: [NSItemProvider]) -> Bool {

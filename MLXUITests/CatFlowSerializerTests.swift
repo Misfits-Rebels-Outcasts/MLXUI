@@ -57,7 +57,7 @@ struct CatFlowSerializerTests {
         let files = try FileManager.default.contentsOfDirectory(atPath: galleryDir.path)
             .filter { $0.hasSuffix(".cat") || $0.hasSuffix(".catpipeline") }
             .sorted()
-        #expect(files.count == 69)
+        #expect(files.count == 70)
 
         var checked = 0
         var failing: [String] = []
@@ -71,7 +71,7 @@ struct CatFlowSerializerTests {
             }
             checked += 1
         }
-        #expect(checked == 69)
+        #expect(checked == 70)
         #expect(failing.isEmpty,
                 "non-canonical gallery files (serialize(parse(x)) != x): \(failing.joined(separator: ", "))")
         if !failing.isEmpty {

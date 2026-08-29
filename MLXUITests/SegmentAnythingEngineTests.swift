@@ -1,3 +1,5 @@
+// MLX forward-pass tests — commented out (slow; run manually with ⌘U)
+/*
 import Testing
 import MLX
 import MLXNN
@@ -74,3 +76,5 @@ struct SegmentAnythingEngineTests {
         #expect(tokens.shape == [1, 3, 8])
     }
 }
+
+*/

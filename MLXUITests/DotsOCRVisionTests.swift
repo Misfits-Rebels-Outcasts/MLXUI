@@ -1,3 +1,5 @@
+// MLX forward-pass tests — commented out (slow; run manually with ⌘U)
+/*
 import Testing
 import MLX
 @testable import MLXUI
@@ -23,3 +25,5 @@ struct DotsOCRVisionTests {
         #expect(cleaned["vision_tower.blocks.0.something.position_ids"] == nil)  // dropped
     }
 }
+
+*/

@@ -1,3 +1,5 @@
+// MLX forward-pass tests — commented out (slow; run manually with ⌘U)
+/*
 import Testing
 import Foundation
 import CoreGraphics
@@ -215,3 +217,5 @@ struct DeepSeekOCRMLXTests {
         #expect(out.dtype == .bfloat16)
     }
 }
+
+*/

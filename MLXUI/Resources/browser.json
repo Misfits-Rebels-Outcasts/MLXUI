@@ -26,7 +26,8 @@
       "domainIds": [
         "imagegen",
         "segmentation",
-        "videogen"
+        "videogen",
+        "upscale"
       ]
     },
     {
@@ -84,6 +85,10 @@
     "segmentation": {
       "icon": "lasso",
       "description": "Image Segmentation"
+    },
+    "upscale": {
+      "icon": "sparkle.magnifyingglass",
+      "description": "Image Upscaling"
     }
   },
   "domains": [
@@ -2169,6 +2174,74 @@
           ],
           "descriptionSource": "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
           "summary": "Alibaba's open-source text-to-video model (1.3B DiT) — enter a prompt and generate a short video clip on Apple Silicon. Peak RAM ~10 GB during text encoding, ~3 GB during denoising (Apache 2.0)."
+        }
+      ]
+    },
+    {
+      "id": "upscale",
+      "name": "Image Upscaling",
+      "sfSymbol": "sparkle.magnifyingglass",
+      "children": null,
+      "models": [
+        {
+          "id": "mlx-community--SeedVR2-3B-mlx-int8",
+          "family": "SeedVR2",
+          "displayName": "SeedVR2 3B",
+          "paramSize": "3B",
+          "paramCountB": 3.0,
+          "modelType": "upscale",
+          "source": "mlx",
+          "format": "mlx-int8",
+          "platforms": [
+            "macOS 14+"
+          ],
+          "minMacOSVersion": "14.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/SeedVR2-3B-mlx-int8",
+          "ramGB": 4.5,
+          "downloadSizeGB": 3.0,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": "https://huggingface.co/ByteDance-Seed/SeedVR2-3B/blob/main/LICENSE",
+          "description": "# SeedVR2 3B (int8 MLX)\n\nSeedVR2 is ByteDance's one-step diffusion-based super-resolution model (ICLR 2026). Given a low-resolution image, it produces a high-resolution output in a single denoising step.\n\nThe model uses a Diffusion Transformer (RoPE + SwiGLU + adaptive windowed attention) with a 3D-causal-conv VAE encoder/decoder. Positional embeddings are stored separately as `pos_emb.safetensors` (shape [58, 5120]).\n\nThis int8 MLX variant runs on Apple Silicon with ~4.5 GB RAM. An fp16 variant (`mlx-community/SeedVR2-3B-mlx`, ~9 GB) is also available.\n\n**License:** Apache 2.0 (ByteDance Research).",
+          "architecture": "SeedVR2DiT",
+          "languages": [
+            "en"
+          ],
+          "lastUpdated": "2026-01-01",
+          "taskTags": [
+            "image-super-resolution",
+            "image-upscaling",
+            "video-restoration"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 0,
+          "communityLikes": 0,
+          "variants": [
+            {
+              "quantization": "int8",
+              "format": "mlx-int8",
+              "ramGB": 4.5,
+              "downloadSizeGB": 3.0,
+              "qualityPercent": 95,
+              "hfModelId": "mlx-community/SeedVR2-3B-mlx-int8",
+              "recommended": true
+            },
+            {
+              "quantization": "float16",
+              "format": "mlx-fp16",
+              "ramGB": 9.0,
+              "downloadSizeGB": 6.0,
+              "qualityPercent": 100,
+              "hfModelId": "mlx-community/SeedVR2-3B-mlx",
+              "recommended": false
+            }
+          ],
+          "descriptionSource": "mlx-community/SeedVR2-3B-mlx-int8",
+          "summary": "ByteDance's one-step diffusion super-resolution model (ICLR 2026) — upscale any image in a single forward pass on Apple Silicon, int8 (~4.5 GB RAM, Apache 2.0)."
         }
       ]
     }

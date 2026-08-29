@@ -35,7 +35,8 @@ enum KokoroEngine {
         modelDirectory: URL
     ) async throws -> AudioBuffer {
         do {
-            let model = try await KokoroModel.fromModelDirectory(modelDirectory)
+            let model = try await KokoroModel.fromModelDirectory(
+                modelDirectory, textProcessor: KokoroMultilingualProcessor())
             model.speed = speed
             let segments = textSegments(text)
             var allSamples: [Float] = []

@@ -343,8 +343,8 @@
 			baseConfigurationReferenceRelativePath = Direct.xcconfig;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CURRENT_PROJECT_VERSION = 9;
-				MARKETING_VERSION = 0.13;
+				CURRENT_PROJECT_VERSION = 10;
+				MARKETING_VERSION = 0.14;
 			};
 			name = Debug;
 		};
@@ -354,8 +354,8 @@
 			baseConfigurationReferenceRelativePath = Direct.xcconfig;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CURRENT_PROJECT_VERSION = 9;
-				MARKETING_VERSION = 0.13;
+				CURRENT_PROJECT_VERSION = 10;
+				MARKETING_VERSION = 0.14;
 			};
 			name = Release;
 		};
@@ -524,8 +524,8 @@
 			baseConfigurationReferenceAnchor = 2098BCB2301B850B00CA4BBC /* Config */;
 			baseConfigurationReferenceRelativePath = AppStore.xcconfig;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 9;
-				MARKETING_VERSION = 0.13;
+				CURRENT_PROJECT_VERSION = 10;
+				MARKETING_VERSION = 0.14;
 			};
 			name = Debug;
 		};
@@ -534,8 +534,8 @@
 			baseConfigurationReferenceAnchor = 2098BCB2301B850B00CA4BBC /* Config */;
 			baseConfigurationReferenceRelativePath = AppStore.xcconfig;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 9;
-				MARKETING_VERSION = 0.13;
+				CURRENT_PROJECT_VERSION = 10;
+				MARKETING_VERSION = 0.14;
 			};
 			name = Release;
 		};

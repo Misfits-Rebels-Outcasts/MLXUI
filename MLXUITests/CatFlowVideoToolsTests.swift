@@ -204,8 +204,19 @@ struct CatFlowVideoToolsTests {
         writer.add(input)
         writer.startWriting()
         writer.startSession(atSourceTime: .zero)
+        var attempts = 0
+        while !input.isReadyForMoreMediaData {
+            attempts += 1
+            if attempts > 200 { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
         var pb: CVPixelBuffer?
-        CVPixelBufferPoolCreatePixelBuffer(nil, adaptor.pixelBufferPool!, &pb)
+        guard let pool = adaptor.pixelBufferPool else {
+            input.markAsFinished()
+            await writer.finishWriting()
+            throw FlowError.stageFailure(row: "test-setup", message: "pixelBufferPool unavailable for big clip")
+        }
+        CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pb)
         if let buffer = pb {
             CVPixelBufferLockBaseAddress(buffer, [])
             if let baddr = CVPixelBufferGetBaseAddress(buffer) {

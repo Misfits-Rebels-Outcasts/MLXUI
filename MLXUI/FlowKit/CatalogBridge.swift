@@ -55,7 +55,7 @@ nonisolated enum CatalogBridgeResolution: Sendable, Equatable {
 /// the curated manifest (`Resources/CatFlow/models/`); only the *weights* are substituted.
 nonisolated enum CatalogBridge {
 
-    /// The fourteen display names the bridge runs. **Do not add `SAM Base`** (hazard H2 —
+    /// The fifteen display names the bridge runs. **Do not add `SAM Base`** (hazard H2 —
     /// `Segment` has no headless path and `sam3-4bit` is a different model generation).
     /// CFM-R13-9/12: OCR (`olmOCR-2 7B`, `dots.ocr`) and `Describe Image` (`LFM2-VL 1.6B`,
     /// `Gemma 3 4B`) joined 2026-08-26 — all four models were already in `browser.json`, so
@@ -157,6 +157,16 @@ nonisolated enum CatalogBridge {
             candidates: ["mlx-community/gemma-3-4b-it-4bit"],
             equivalence: .same,
             manifestFile: "gemma-3-4b-it-4bit.json"),
+        // SV-AM-W — SeedVR2 3B super-resolution (ported in SV-AM4/AM5, journal/2026-162).
+        // candidates[1] is the fp16 variant — same checkpoint, heavier quantization; `.same`
+        // since int8 is the primary and the pool entry pins it.
+        BridgeEntry(
+            display: "SeedVR2 3B",
+            pinnedID: "mlx-community/SeedVR2-3B-mlx-int8",
+            candidates: ["mlx-community/SeedVR2-3B-mlx-int8",
+                         "mlx-community/SeedVR2-3B-mlx"],
+            equivalence: .same,
+            manifestFile: "seedvr2-3b.json"),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {

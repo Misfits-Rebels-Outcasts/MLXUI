@@ -1,0 +1,34 @@
+{
+  "id": "mlx-community/SeedVR2-3B-mlx-int8",
+  "display": "SeedVR2 3B",
+  "kind": "local",
+  "engine": "mlx-upscale",
+  "tasks": [
+    "Upscale"
+  ],
+  "settings": {
+    "scale": {
+      "type": "number",
+      "min": 1,
+      "max": 4,
+      "default": 2.0,
+      "maps_to": "--scale"
+    },
+    "seed": {
+      "type": "number",
+      "min": 0,
+      "max": 4294967295,
+      "maps_to": "seed",
+      "auto_ok": true
+    }
+  },
+  "resources": {
+    "disk_gb": 4.0,
+    "ram_gb": 4.5,
+    "bits": 8
+  },
+  "source": "https://huggingface.co/mlx-community/SeedVR2-3B-mlx-int8",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true
+}

@@ -144,7 +144,7 @@ nonisolated enum IndexFormat {
             (0..<dims).map { col in
                 let i = (row * dims + col) * 2
                 let bits = UInt16(littleEndian: bin.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: i, as: UInt16.self) })
-                return Float(Float16(bitPattern: bits))
+                return f16ToF32(bits)
             }
         }
     }
@@ -154,11 +154,42 @@ nonisolated enum IndexFormat {
         var out = Data()
         for vector in vectors {
             for value in vector {
-                let half = Float16(value)
-                out.append(contentsOf: withUnsafeBytes(of: half.bitPattern.littleEndian) { Array($0) })
+                let halfBits = f32ToF16(value)
+                out.append(contentsOf: withUnsafeBytes(of: halfBits.littleEndian) { Array($0) })
             }
         }
         return out
+    }
+
+    // Float16 ↔ Float32 via bit manipulation — Float16 type conversions are arm64-only
+    // in the Swift stdlib and fail to compile on x86_64 (universal archive builds).
+    private static func f16ToF32(_ h: UInt16) -> Float {
+        let s = UInt32(h & 0x8000) << 16
+        let e = UInt32(h >> 10) & 0x1F
+        let m = UInt32(h & 0x3FF)
+        switch e {
+        case 0:
+            if m == 0 { return Float(bitPattern: s) }
+            var exp = UInt32(113), man = m
+            while man & 0x400 == 0 { exp -= 1; man <<= 1 }
+            return Float(bitPattern: s | (exp << 23) | ((man & 0x3FF) << 13))
+        case 31:
+            return Float(bitPattern: s | 0x7F800000 | (m << 13))
+        default:
+            return Float(bitPattern: s | ((e + 112) << 23) | (m << 13))
+        }
+    }
+
+    private static func f32ToF16(_ f: Float) -> UInt16 {
+        let b = f.bitPattern
+        let s = UInt16(b >> 16) & 0x8000
+        let e = Int((b >> 23) & 0xFF)
+        let m = b & 0x7FFFFF
+        if e == 0xFF { return s | 0x7C00 | UInt16(m >> 13) }
+        let h = e - 127 + 15
+        if h <= 0 { return s }
+        if h >= 31 { return s | 0x7C00 }
+        return s | (UInt16(h) << 10) | UInt16(m >> 13)
     }
 }
 

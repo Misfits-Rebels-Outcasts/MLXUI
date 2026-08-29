@@ -428,6 +428,8 @@ final class ModelRunner {
             showUnsupported("Music generation", model)
         case .segmentation:
             showUnsupported("Image segmentation", model)
+        case .upscale:
+            showUnsupported("Image upscaling", model)
         }
     }
 

@@ -482,6 +482,14 @@
    "filename": "69-PickALook.catpipeline",
    "category": "Diffusion & Generation",
    "description": "Presets (Q199): a `.catpipeline` bundles named settings behind one caller-facing knob, so `steps=`/`width=`/`height=` never has to leak into a business user's own file. `presets:` declares three looks; `preset=(param:quality)` binds whichever one the caller names through `params:` — the row itself never says `steps=9`, only \"the look I was given.\" A `.cat` caller picks one the same way it picks any other value: `uses: PickALook.catpipeline as Look` then `2. Look  (1); quality=studio` — no `preset=` in sight, because presets are pipeline-only."
+  },
+  {
+   "number": 70,
+   "title": "Transcribe Audio",
+   "filename": "70-TranscribeAudio.cat",
+   "category": "Basic",
+   "description": "The simple starting flow: read an audio file, transcribe it with Whisper, save the transcript.",
+   "tier": "basic"
   }
  ]
 }

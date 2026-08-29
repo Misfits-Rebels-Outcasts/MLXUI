@@ -14,8 +14,15 @@ nonisolated struct GalleryFlowMetadata: Codable, Identifiable, Hashable, Sendabl
     var category: String
     /// One-line description.
     var description: String
+    /// The gallery shelf this flow lives on: `"basic"` → "Basic Gallery", anything
+    /// else/nil → "Advance Gallery". Decoded additively — a missing key is an advance
+    /// flow, so pre-existing metadata entries stay untouched.
+    var tier: String?
 
     var id: Int { number }
+
+    /// Whether this flow belongs in the "Basic Gallery" shelf.
+    var isBasic: Bool { tier == "basic" }
 
     /// The flow id — the filename minus the `.cat` extension (e.g. `01-SpokenSummary`).
     var flowID: String {
@@ -264,6 +271,8 @@ nonisolated enum GalleryLoader {
             ]
         case "56-OrderTriageQueue":
             return [("new_orders.csv", "new_orders.csv"), ("orders.db", "orders.db")]
+        case "70-TranscribeAudio":
+            return [("canond.wav", "canond.wav")]
         default:
             return []
         }
