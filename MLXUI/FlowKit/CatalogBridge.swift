@@ -55,8 +55,10 @@ nonisolated enum CatalogBridgeResolution: Sendable, Equatable {
 /// the curated manifest (`Resources/CatFlow/models/`); only the *weights* are substituted.
 nonisolated enum CatalogBridge {
 
-    /// The fifteen display names the bridge runs. **Do not add `SAM Base`** (hazard H2 —
-    /// `Segment` has no headless path and `sam3-4bit` is a different model generation).
+    /// The sixteen display names the bridge runs. **`SAM Base`** joined 2026-08-27 (CFM-R15-1):
+    /// hazard H2 / `CFM-R13-6` was **ruled option (1)** — a headless default — and the bridge
+    /// maps the reference's own `SAM Base` id onto the one installable segmentation entry,
+    /// `sam3-4bit`, as a `.substitute` so the substitution is shown on the row, never hidden.
     /// CFM-R13-9/12: OCR (`olmOCR-2 7B`, `dots.ocr`) and `Describe Image` (`LFM2-VL 1.6B`,
     /// `Gemma 3 4B`) joined 2026-08-26 — all four models were already in `browser.json`, so
     /// this is a table change only, no catalog intake. `olmOCR-2 7B` resolves to the
@@ -158,15 +160,26 @@ nonisolated enum CatalogBridge {
             equivalence: .same,
             manifestFile: "gemma-3-4b-it-4bit.json"),
         // SV-AM-W — SeedVR2 3B super-resolution (ported in SV-AM4/AM5, journal/2026-162).
-        // candidates[1] is the fp16 variant — same checkpoint, heavier quantization; `.same`
-        // since int8 is the primary and the pool entry pins it.
+        // Only the int8 build ships in browser.json today; the fp16 variant
+        // (`mlx-community/SeedVR2-3B-mlx`) has no catalog entry, so it is **not** listed —
+        // the golden `everyCandidateExistsInBrowserCatalog` exists exactly to catch a
+        // candidate that names no catalog model (CFM-R15 drive-by fix).
         BridgeEntry(
             display: "SeedVR2 3B",
             pinnedID: "mlx-community/SeedVR2-3B-mlx-int8",
-            candidates: ["mlx-community/SeedVR2-3B-mlx-int8",
-                         "mlx-community/SeedVR2-3B-mlx"],
+            candidates: ["mlx-community/SeedVR2-3B-mlx-int8"],
             equivalence: .same,
             manifestFile: "seedvr2-3b.json"),
+        // CFM-R15-1 — Segment. `63-CutOutSubject` names `SAM Base` (the reference manifest's
+        // own id `mlx/sam-base`); the only installable segmentation entry is SAM3. `.substitute`
+        // renders "running SAM Base as mlx-community/sam3-4bit" on the row, so the different
+        // generation is *shown* — the MusicGen precedent (`meta/musicgen-small` → MusicGen).
+        BridgeEntry(
+            display: "SAM Base",
+            pinnedID: "mlx/sam-base",
+            candidates: ["mlx-community/sam3-4bit"],
+            equivalence: .substitute,
+            manifestFile: "sam-base.json"),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {

@@ -117,15 +117,15 @@ struct CatFlowEditingTests {
         // CFM-R14-2 + CFM-R14-FIX-2: the default is the first pool-named entry of the
         // **derived** pool (the registry's own claim answer + the executor genuinely serving
         // the task), never a dead one. Transcribe seeds the first pool entry — Whisper Tiny
-        // (0.11 GB) — matching the Python's `_ASR_MODELS` order. Segment seeds nothing: the
-        // registry could serve sam3 headless, but hazard H2 (`CFM-R13-6`) is the owner's to
-        // answer, so its pool stays empty (implementer's call, pending owner confirmation).
-        // Read Text is an instant tool with no model.
+        // (0.11 GB) — matching the Python's `_ASR_MODELS` order. Segment seeds **SAM Base**
+        // since CFM-R15-1: the owner ruled hazard H2 option (1) 2026-08-27, the executor
+        // serves `engines.diffusion.segment`, and `SAM Base` bridges onto the derived sam3
+        // entry (`.substitute`). Read Text is an instant tool with no model.
         let (catalog, claimable) = try loadedCatalogAndClaimable()
         #expect(FlowEditorModel.defaultModel(forTask: "Transcribe", catalog: catalog, claimableModelIDs: claimable) == "Whisper Tiny")
         #expect(FlowEditorModel.defaultModel(forTask: "Summarize", catalog: catalog, claimableModelIDs: claimable) == "Ministral 3B")
         #expect(FlowEditorModel.defaultModel(forTask: "Speak", catalog: catalog, claimableModelIDs: claimable) == "Kokoro 82M")
-        #expect(FlowEditorModel.defaultModel(forTask: "Segment", catalog: catalog, claimableModelIDs: claimable) == nil)
+        #expect(FlowEditorModel.defaultModel(forTask: "Segment", catalog: catalog, claimableModelIDs: claimable) == "SAM Base")
         #expect(FlowEditorModel.defaultModel(forTask: "Read Text", catalog: catalog, claimableModelIDs: claimable) == nil)
     }
 

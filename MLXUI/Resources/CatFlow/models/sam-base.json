@@ -1,0 +1,24 @@
+{
+  "id": "mlx/sam-base",
+  "display": "SAM Base",
+  "kind": "local",
+  "engine": "mlx-diffusion",
+  "tasks": [
+    "Segment"
+  ],
+  "settings": {},
+  "capabilities": {
+    "variant": "sam"
+  },
+  "resources": {
+    "disk_gb": 0.4,
+    "ram_gb": 1.5,
+    "bits": 8
+  },
+  "source": "https://huggingface.co/facebook/sam-vit-base",
+  "checksum": "N/A",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": false,
+  "notes": "P6-G1-06b (SPEC-Q191): the smallest SAM checkpoint (vit_b), matching this registry's default-to-small pattern. The HF checkpoint is torch-layout; on first `Segment` use the engine downloads it and runs the vendored convert.py (src/catflow/engines/vendor/segment_anything/, mlx-examples @ 796f5b53) to produce MLX model.safetensors + config.json under $CATFLOW_WEIGHTS_DIR/mlx__sam-base. vit_l/vit_h are NOT here -- each is a follow-up manifest-only addition, same shape as any other model-size variant, to add when a real need names itself."
+}

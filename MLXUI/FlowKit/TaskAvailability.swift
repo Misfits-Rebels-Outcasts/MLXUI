@@ -57,12 +57,13 @@ nonisolated enum TaskAvailability {
         case .model:
             // CFM-R14-2 + CFM-R14-FIX-2: a model task is available exactly when its **derived**
             // pool (the registry's own claim answer + corrected runnerKind + the executor
-            // genuinely serving the task) is non-empty. Segment and the latent family have a
-            // catalog model for their kind but **no sanctioned executor path** — Segment is
-            // pending the owner's CFM-R13-6 ruling, the latent tasks have no stage that accepts
-            // what they hand it — so they stay marked. `Rerank`/`Upscale`/`Estimate Depth` have
-            // no catalog model at all. Their pools are empty for these different reasons; the
-            // picker's single "needs newer support" marker is the honest surface for all of them.
+            // genuinely serving the task) is non-empty. Segment was pending the owner's
+            // CFM-R13-6 ruling; it was **ruled option (1) 2026-08-27** and the executor now
+            // serves `engines.diffusion.segment` (CFM-R15-1), so `SAM3` derives and Segment is
+            // available. The latent tasks still have no stage accepting what they hand it, and
+            // `Rerank`/`Upscale`/`Estimate Depth` have no catalog model at all. Their pools are
+            // empty for these different reasons; the picker's single "needs newer support"
+            // marker is the honest surface for all of them.
             return TaskModels.derivedModels(for: task.name, catalog: catalog,
                                             claimableModelIDs: claimableModelIDs).isEmpty
                 ? .needsNewerSupport : .available

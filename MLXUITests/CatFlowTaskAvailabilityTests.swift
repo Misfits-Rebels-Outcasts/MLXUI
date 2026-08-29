@@ -216,16 +216,17 @@ struct CatFlowTaskAvailabilityTests {
             }
         }
         #expect(mismatches.isEmpty, "model drift: \(mismatches.joined(separator: "; "))")
-        // The specific gaps the review named (CFM-R14-FIX-2). OCR + Describe Image are bridged;
-        // Generate Image derives Flux + SDXL-Turbo (the executor serves generate_image).
-        // Segment has a catalog model (sam3) but **no sanctioned executor path** — hazard H2 /
-        // CFM-R13-6 is the owner's to answer, so it stays marked. The latent family, Edit
+        // The specific gaps the review named (CFM-R14-FIX-2 → CFM-R15-1). OCR + Describe
+        // Image are bridged; Generate Image derives Flux + SDXL-Turbo (the executor serves
+        // generate_image). Segment was pending the owner's CFM-R13-6 ruling and became
+        // available 2026-08-27 when the ruling landed option (1) — the executor now serves
+        // engines.diffusion.segment and SAM3 derives (CFM-R15-1). The latent family, Edit
         // Image, and Inpaint map to `.image` but no stage accepts what those rows hand the
         // executor, so they stay marked. Upscale and Estimate Depth have no catalog model.
         let available = { (name: String) in
             TaskAvailability.isAvailable(name, catalog: catalog, claimableModelIDs: claimable)
         }
-        #expect(!available("Segment"))
+        #expect(available("Segment"))
         #expect(!available("Edit Image"))
         #expect(!available("Inpaint"))
         #expect(!available("Init Latent"))
@@ -245,19 +246,21 @@ struct CatFlowTaskAvailabilityTests {
     /// "just add the kind" can't silently re-offer a task nobody can run.
     @Test func offerableModelTasksAreExecutorServed() {
         // Served: an executor path exists for each (LLM frames, ASR, TTS, VLM, embed, the
-        // diffusion generators). Frame-backed LLM tasks are covered by `refKind == .frame`.
+        // diffusion generators, and — since the owner ruled CFM-R13-6 option (1) 2026-08-27 —
+        // Segment). Frame-backed LLM tasks are covered by `refKind == .frame`.
         let served = ["Generate", "Summarize", "Translate", "Answer", "Rewrite", "Draft",
                       "Ask", "Title", "Critique", "Verify", "Revise", "Merge",
                       "Extract Structured", "Text to Table",
                       "Transcribe", "Speak", "Describe Image", "OCR", "Embed",
-                      "Generate Image", "Generate Video", "Generate Sound"]
+                      "Generate Image", "Generate Video", "Generate Sound",
+                      "Segment"]
         for name in served {
             #expect(TaskModels.isServedByExecutor(name), "\(name) should be executor-served")
         }
         // NOT served: a catalog model may exist for the kind, but the executor has no path.
-        // Segment is pending the owner's CFM-R13-6 ruling; the latent family and the
-        // edit/inpaint rows have no stage accepting what they hand the executor.
-        let unserved = ["Segment", "Edit Image", "Instruct Edit", "Inpaint",
+        // The latent family and the edit/inpaint rows have no stage accepting what they hand
+        // the executor; Upscale/Estimate Depth/Rerank have no catalog model at all.
+        let unserved = ["Edit Image", "Instruct Edit", "Inpaint",
                         "Init Latent", "Encode Latent", "Decode Latent", "Denoise",
                         "Upscale", "Estimate Depth", "Animate", "Rerank"]
         for name in unserved {

@@ -8,11 +8,13 @@ import MLXNN
 enum SegmentAnythingError: Error, LocalizedError {
     case missingWeights(String)
     case imageConversionFailed
+    case maskRenderFailed
 
     var errorDescription: String? {
         switch self {
         case .missingWeights(let f): "SAM3 weights not found: \(f)"
         case .imageConversionFailed: "Failed to convert image to MLX tensor"
+        case .maskRenderFailed: "Failed to render the segmentation mask"
         }
     }
 }
@@ -194,17 +196,62 @@ nonisolated enum SegmentAnythingEngine {
 
     // MARK: Mask rendering
 
-    /// Render the highest-IoU mask as a red-tinted overlay on the source image.
-    /// Kept here (nonisolated enum) so callers on any actor can invoke it without inference issues.
+    /// The highest-IoU mask of a `decodeMasks` result, flattened and thresholded to 0/1.
+    private static func topBinaryMask(masks: MLXArray, iouScores: MLXArray) -> (binary: [Float], w: Int, h: Int) {
+        let scores = iouScores[0].asArray(Float.self)
+        let bestIdx = scores.enumerated().max(by: { $0.element < $1.element })?.offset ?? 0
+        let (h, w) = (masks.dim(1), masks.dim(2))
+        let logits = masks[0, 0..., 0..., bestIdx]
+        return ((logits .> 0).asArray(Float.self), w, h)
+    }
+
+    /// Render the highest-IoU mask as a **binary** mask: white = mask, black = background, and
+    /// nothing of the source photo survives — the `tools/media.py::save_mask` L-mode boundary
+    /// the `.cat` contract expects (`63-CutOutSubject`'s row 3 is `Save Image photo-mask.png`).
+    /// This is the stage's renderer (CFM-R15-1); the red-tinted overlay is the interactive
+    /// display rendering and belongs to `SegmentAnythingRunView` alone. Written straight into an
+    /// 8-bit grayscale pixel buffer, one store per pixel.
+    static func renderBinaryMask(
+        masks: MLXArray, iouScores: MLXArray, width: Int, height: Int
+    ) -> CGImage? {
+        let (binary, w, h) = topBinaryMask(masks: masks, iouScores: iouScores)
+        return renderBinaryMask(binary: binary, maskWidth: w, maskHeight: h, width: width, height: height)
+    }
+
+    /// The pure pixel-buffer writer behind `renderBinaryMask` — testable without weights.
+    /// `binary` is the flattened highest-IoU mask at `maskWidth`×`maskHeight`; the output is a
+    /// two-valued grayscale image at `width`×`height`, nearest-neighbour upsampled from the mask
+    /// grid. The source photo is never drawn, so no source pixel can survive.
+    static func renderBinaryMask(
+        binary: [Float], maskWidth: Int, maskHeight: Int, width: Int, height: Int
+    ) -> CGImage? {
+        guard width > 0, height > 0, maskWidth > 0, maskHeight > 0,
+              binary.count == maskWidth * maskHeight,
+              let ctx = CGContext(data: nil, width: width, height: height,
+                                  bitsPerComponent: 8, bytesPerRow: width,
+                                  space: CGColorSpaceCreateDeviceGray(),
+                                  bitmapInfo: CGImageAlphaInfo.none.rawValue),
+              let data = ctx.data else { return nil }
+        let pixels = data.assumingMemoryBound(to: UInt8.self)
+        for py in 0 ..< height {
+            let my = min(py * maskHeight / height, maskHeight - 1)
+            for px in 0 ..< width {
+                let mx = min(px * maskWidth / width, maskWidth - 1)
+                pixels[py * width + px] = binary[my * maskWidth + mx] > 0.5 ? 255 : 0
+            }
+        }
+        return ctx.makeImage()
+    }
+
+    /// Render the highest-IoU mask as a red-tinted overlay on the source image — the interactive
+    /// *display* rendering for `SegmentAnythingRunView` (SPEC-Q210: the flow boundary wants the
+    /// binary mask above; the overlay belongs here alone). Written straight into the context's
+    /// premultiplied pixel buffer — one blend per mask pixel, not one `CGContext.fill` per pixel
+    /// (the previous loop was ~12M CoreGraphics calls on a phone-camera photo).
     static func renderTopMask(
         masks: MLXArray, iouScores: MLXArray, sourceImage: CGImage
     ) -> CGImage {
-        let scores = iouScores[0].asArray(Float.self)
-        let bestIdx = scores.enumerated().max(by: { $0.element < $1.element })?.offset ?? 0
-
-        let (h, w) = (masks.dim(1), masks.dim(2))
-        let logits = masks[0, 0..., 0..., bestIdx]
-        let binary  = (logits .> 0).asArray(Float.self)
+        let (binary, w, h) = topBinaryMask(masks: masks, iouScores: iouScores)
 
         let W = sourceImage.width, H = sourceImage.height
         guard let ctx = CGContext(
@@ -212,18 +259,21 @@ nonisolated enum SegmentAnythingEngine {
             bitsPerComponent: 8, bytesPerRow: W * 4,
             space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return sourceImage }
+        ), let data = ctx.data else { return sourceImage }
 
         ctx.draw(sourceImage, in: CGRect(x: 0, y: 0, width: W, height: H))
-        ctx.setBlendMode(.normal)
+        let pixels = data.assumingMemoryBound(to: UInt8.self)
         for py in 0 ..< H {
+            let my = min(py * h / H, h - 1)
             for px in 0 ..< W {
-                let mx = min(Int(Float(px) / Float(W) * Float(w)), w - 1)
-                let my = min(Int(Float(py) / Float(H) * Float(h)), h - 1)
-                if binary[my * w + mx] > 0.5 {
-                    ctx.setFillColor(red: 1.0, green: 0.0, blue: 0.0, alpha: 0.4)
-                    ctx.fill(CGRect(x: px, y: H - 1 - py, width: 1, height: 1))
-                }
+                let mx = min(px * w / W, w - 1)
+                guard binary[my * w + mx] > 0.5 else { continue }
+                let i = py * W * 4 + px * 4
+                // Straight 40%-opaque red over the source pixel, in one buffer pass — the
+                // equivalent of the old per-pixel `fill`, without the per-pixel CG call.
+                pixels[i + 0] = UInt8(min(255, Int(Double(pixels[i + 0]) * 0.6) + 102))
+                pixels[i + 1] = UInt8(Double(pixels[i + 1]) * 0.6)
+                pixels[i + 2] = UInt8(Double(pixels[i + 2]) * 0.6)
             }
         }
         return ctx.makeImage() ?? sourceImage

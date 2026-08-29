@@ -91,12 +91,12 @@ struct CatFlowCatalogBridgeTests {
 
     @Test func unknownDisplayNameIsNotRunnable() throws {
         let catalog = try loadCatalog()
-        switch CatalogBridge.resolve("SAM Base", catalog: catalog) {
+        switch CatalogBridge.resolve("Turbo Chat 5000", catalog: catalog) {
         case .notRunnable(let display, let reason):
-            #expect(display == "SAM Base")
-            #expect(reason.contains("SAM Base"))
+            #expect(display == "Turbo Chat 5000")
+            #expect(reason.contains("Turbo Chat 5000"))
         case .runnable:
-            Issue.record("SAM Base must NOT resolve (hazard H2)")
+            Issue.record("an unknown display name must be not-runnable")
         }
     }
 
@@ -141,11 +141,29 @@ struct CatFlowCatalogBridgeTests {
         }
     }
 
-    // MARK: - SAM Base is deliberately absent (hazard H2)
+    // MARK: - CFM-R15-1: SAM Base is in the bridge (hazard H2 ruled option (1) 2026-08-27)
 
-    @Test func samBaseIsNotInTheBridge() {
-        #expect(CatalogBridge.entry(for: "SAM Base") == nil)
-        #expect(CatalogBridge.entries.count == 14)
+    @Test func samBaseResolvesAsASubstituteOntoSam3() throws {
+        let catalog = try loadCatalog()
+        let entry = try #require(CatalogBridge.entry(for: "SAM Base"))
+        #expect(entry.pinnedID == "mlx/sam-base")
+        #expect(entry.candidates == ["mlx-community/sam3-4bit"])
+        #expect(entry.equivalence == .substitute)
+        #expect(entry.manifestFile == "sam-base.json")
+        // The .cat stays byte-identical to the reference ("Segment SAM Base"); the different
+        // model generation is *shown*, never hidden — the MusicGen precedent.
+        switch CatalogBridge.resolve("SAM Base", catalog: catalog) {
+        case .runnable(let model, let equivalence, let note):
+            #expect(model.hfModelId == "mlx-community/sam3-4bit")
+            #expect(equivalence == .substitute)
+            #expect(note != nil)
+            #expect(note?.contains("SAM Base") == true)
+            #expect(note?.contains("mlx-community/sam3-4bit") == true)
+        case .notRunnable(let display, let reason):
+            Issue.record("SAM Base should resolve: \(reason)")
+            _ = display
+        }
+        #expect(CatalogBridge.entries.count == 16)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows

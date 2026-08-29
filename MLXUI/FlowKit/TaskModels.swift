@@ -12,8 +12,9 @@ import Foundation
 /// the pool names, or nil when the build can't run any of them — which is how
 /// `Segment`/`Upscale`/`Rerank`/… honestly report that no runnable model exists in this build
 /// (CFM-R14-FIX-2: the derived pool requires the executor to genuinely serve the task, so a
-/// `.image`-kind model for the latent family or `Segment` — pending the owner's `CFM-R13-6`
-/// ruling — does not make them offerable).
+/// `.image`-kind model for the latent family does not make them offerable). `Segment` was in
+/// that honest-empty set until the owner ruled `CFM-R13-6` option (1) 2026-08-27 — the
+/// executor now serves it and `SAM3` derives (CFM-R15-1).
 nonisolated enum TaskModels {
     /// The capability declaration — a model task names the `RunnerKind` it needs. This is
     /// what replaced the display-name pools as the *filter*. Tasks with no entry here (e.g.
@@ -61,10 +62,10 @@ nonisolated enum TaskModels {
     /// depend on **the executor having a path for the task**, not only on a model existing for
     /// its kind. A `.image`-kind model exists for `Edit Image`/`Inpaint`/the latent family, but
     /// no stage accepts what those rows hand it, so offering one would be a confidently wrong
-    /// answer. `engines.diffusion.segment` is deliberately absent: `SegmentAnythingStage` has a
-    /// headless default, but `CFM-R13-6` (hazard H2) is the owner's to answer — it is not
-    /// available until ruled. Kept as an explicit allow-list (not a denylist) so a newly ported
-    /// task must opt in.
+    /// answer. `engines.diffusion.segment` was deliberately absent while hazard H2 / `CFM-R13-6`
+    /// was the owner's to answer; it was **ruled option (1) 2026-08-27** (a headless default),
+    /// so the prefix is served and `Segment` is offerable — CFM-R15-1. Kept as an explicit
+    /// allow-list (not a denylist) so a newly ported task must opt in.
     private static let servedRefNamePrefixes: [String] = [
         "engines.llm.",          // plain LLM (Generate, Extract Structured, Text to Table)
         "engines.asr.",          // Transcribe (audio → text)
@@ -74,6 +75,7 @@ nonisolated enum TaskModels {
         "engines.diffusion.generate_image",   // text → image
         "engines.diffusion.generate_video",   // text → video
         "engines.diffusion.generate_sound",   // text → music
+        "engines.diffusion.segment",          // Segment (image → binary mask) — CFM-R15-1
     ]
 
     /// Whether `RealExecutor` genuinely serves `task` (CFM-R14-FIX-2). A **frame-backed** task

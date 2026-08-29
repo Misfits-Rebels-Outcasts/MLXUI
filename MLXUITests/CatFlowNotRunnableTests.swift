@@ -44,11 +44,18 @@ struct CatFlowNotRunnableTests {
         #expect(research?.contains("Web Search") == true)
         // 60 — Generate Image has no bridge model.
         #expect(try refusal("60-GenerateProductShot") != nil)
-        // 63 — Segment (hazard H2, deliberately no headless path).
-        #expect(try refusal("63-CutOutSubject") != nil)
         // 67-69 — .catpipeline model-space flows have no runnable models.
         #expect(try refusal("67-DriveTheLatent") != nil)
         #expect(try refusal("69-PickALook") != nil)
+    }
+
+    /// CFM-R15-1 — `63-CutOutSubject` runs now that the owner ruled hazard H2 option (1)
+    /// (2026-08-27): the executor serves `engines.diffusion.segment`, `SAM Base` bridges onto
+    /// `mlx-community/sam3-4bit` as a `.substitute`, and the preflight buckets it to-download
+    /// instead of blocking.
+    @Test func cutOutSubjectRunsSinceSegmentIsServed() throws {
+        #expect(try refusal("63-CutOutSubject") == nil,
+                "63-CutOutSubject should run after CFM-R15-1")
     }
 
     @Test func notRunnableFlowsStillShipRawCatText() throws {
