@@ -63,9 +63,9 @@ extension SegmentAnythingStage {
             id: "segmentation.\(modelID)",
             name: "SAM3 (\(modelID))"
         ) { cgImage in
-            let embedding = try await SegmentAnythingEngine.encodeImage(cgImage, modelID: modelID)
+            let features = try await SegmentAnythingEngine.encodeImage(cgImage, modelID: modelID)
             let (masks, iouScores) = try await SegmentAnythingEngine.decodeMasks(
-                embedding: embedding,
+                features: features,
                 points: [[0.5, 0.5]],
                 labels: [1],
                 modelID: modelID)

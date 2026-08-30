@@ -13,15 +13,19 @@ final class AppState {
     /// under it, e.g. SAM3) from the catalog UI. Mirrors `hideVideoGeneration`.
     static let hideImageSegmentation = false
 
+    /// Set to `true` to hide the "Image Upscaling" domain (and every model listed
+    /// under it, e.g. SeedVR2 3B) from the catalog UI. Mirrors `hideVideoGeneration`.
+    static let hideSeedVR2 = true
+
     /// Set to `true` to hide the entire "Flows" section (sidebar, gallery, run views).
     /// When `true`, `galleryEntries` is empty and the section does not render — the app
     /// returns to its pre-Flows behavior exactly. Mirrors `hideVideoGeneration`.
-    static let hideFlows = false
+    static let hideFlows = true
 
     /// Set to `true` to hide the **Automate → AI Workflows** gallery specifically (the
     /// sidebar section and the bundled flow badges), independently of the rest of Flows.
     /// When `true`, `galleryEntries` is empty. Mirrors `hideFlows`.
-    static let hideAutomate = false
+    static let hideAutomate = true
 
     /// Set to `true` to hide the "My Workflows" shelf (the user's own saved flows and the
     /// New Flow badge) on the Automate → AI Workflows page. The two bundled shelves —
@@ -205,13 +209,14 @@ final class AppState {
     }
 
     /// Domain ids for a browse section, minus domains hidden by `hideVideoGeneration` /
-    /// `hideImageSegmentation`.
+    /// `hideImageSegmentation` / `hideSeedVR2`.
     private func domainIDsForSection(_ sectionID: String) -> [String] {
         guard let data = browserData else { return [] }
         let ids = data.sidebarSections.first(where: { $0.id == sectionID })?.domainIds ?? []
         return ids.filter {
             !(Self.hideVideoGeneration && $0 == "videogen")
                 && !(Self.hideImageSegmentation && $0 == "segmentation")
+                && !(Self.hideSeedVR2 && $0 == "upscale")
         }
     }
 

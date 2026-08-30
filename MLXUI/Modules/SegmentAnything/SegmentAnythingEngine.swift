@@ -21,35 +21,42 @@ enum SegmentAnythingError: Error, LocalizedError {
 
 // MARK: - Model container
 
-/// Top-level module holding the three SAM3 inference components.
-/// Weight key mapping from mlx-community/sam3-4bit:
-///   `detector_model.vision_encoder.backbone.*` → backbone
-///   `detector_model.mask_decoder.*`            → maskDecoder / iouPredictor
-///   `tracker_model.prompt_encoder.*`           → promptEncoder
+/// Top-level module holding the SAM3 image-segmentation components.
 nonisolated final class SAM3ModelContainer: Module {
     @ModuleInfo var backbone: SAM3ViTBackbone
-    @ModuleInfo var maskDecoder: SAM3PixelDecoder
-    @ModuleInfo var iouPredictor: SAM3IoUPredictor
+    @ModuleInfo var neck: SAM3Neck
     @ModuleInfo var promptEncoder: SAM3PromptEncoder
+    @ModuleInfo var maskDecoder: SAM3MaskDecoder
+    var noMemEmbed: MLXArray   // [1, 1, 256], loaded manually (a buffer)
 
     override init() {
         _backbone.wrappedValue      = SAM3ViTBackbone()
-        _maskDecoder.wrappedValue   = SAM3PixelDecoder()
-        _iouPredictor.wrappedValue  = SAM3IoUPredictor()
+        _neck.wrappedValue          = SAM3Neck()
         _promptEncoder.wrappedValue = SAM3PromptEncoder()
+        _maskDecoder.wrappedValue   = SAM3MaskDecoder()
+        noMemEmbed = MLXArray.zeros([1, 1, 256])
         super.init()
     }
 }
 
+// MARK: - Encoded image features
+
+/// The cached image-side tensors produced once per image (`encodeImage`), re-used on every
+/// prompt decode. `imagePe` is the dense positional encoding of the 72×72 grid.
+struct SAM3ImageFeatures {
+    let imageEmbedding: MLXArray     // [1, 72, 72, 256]  (with `no_mem_embed` added)
+    let highResFeatures: [MLXArray]  // [[1,288,288,32] (conv_s0), [1,144,144,64] (conv_s1)]
+    let imagePe: MLXArray            // [1, 72, 72, 256]
+}
+
 // MARK: - Engine
 
-/// Public interface for SAM3 image segmentation (SA-AM4).
+/// Public interface for SAM3 image segmentation.
 nonisolated enum SegmentAnythingEngine {
 
-    // Positional embeddings in mlx-community/sam3-4bit have 576 = 24×24 tokens,
-    // so the patch grid must be 24×24: imageSize = 24 × patchSize(14) = 336.
-    static let imageSize = 336
-    static let gridSize  = imageSize / 14   // 24
+    // SAM3 image encoder input: 1008² (square resize, aspect-distorting), patch 14 → 72×72.
+    static let imageSize = 1008
+    static let gridSize  = imageSize / 14   // 72
 
     // MARK: Weight loading
 
@@ -62,58 +69,76 @@ nonisolated enum SegmentAnythingEngine {
         let raw = try MLX.loadArrays(url: url)
         let weights = remapKeys(raw)
 
-        // Convert Linear → QuantizedLinear for any layer present in the 4-bit checkpoint.
-        // The sam3-4bit repo uses standard 4-bit affine quantization (group_size=64).
-        // Layers without a corresponding .scales entry (Conv2d, LayerNorm) are left as-is.
-        quantize(model: model) { path, _ in
-            weights["\(path).scales"] != nil ? (64, 4, QuantizationMode.affine) : nil
+        print("[SAM3] weight coverage: \(weights.count)/\(raw.count) checkpoint tensors remapped into module paths")
+
+        // Raw buffers are assigned by hand below (they are not `@ModuleInfo` params).
+        let positionEmbeddings = weights["backbone.embeddings.positionEmbeddings"]
+        let gaussianMatrix = weights["promptEncoder.gaussianMatrix"]
+        let noMemEmbed = weights["noMemEmbed"]
+        var moduleWeights = weights
+        for k in ["backbone.embeddings.positionEmbeddings", "promptEncoder.gaussianMatrix", "noMemEmbed"] {
+            moduleWeights.removeValue(forKey: k)
         }
 
-        try model.update(parameters: ModuleParameters.unflattened(weights), verify: .none)
+        // Convert Linear → QuantizedLinear for any layer present in the 4-bit checkpoint.
+        quantize(model: model) { path, _ in
+            moduleWeights["\(path).scales"] != nil ? (64, 4, QuantizationMode.affine) : nil
+        }
+
+        try model.update(parameters: ModuleParameters.unflattened(moduleWeights), verify: .none)
+        if let pe = positionEmbeddings { model.backbone.embeddings.positionEmbeddings = pe }
+        if let gm = gaussianMatrix { model.promptEncoder.gaussianMatrix = gm }
+        if let nm = noMemEmbed { model.noMemEmbed = nm }
         eval(model)
         return model
     }
 
-    /// Remap mlx-community/sam3-4bit weight keys to the Swift module path hierarchy.
-    /// Also converts snake_case path components to camelCase to match Swift property names
-    /// (e.g. `q_proj` → `qProj`, `layer_norm1` → `layerNorm1`, `neck_conv` → `neckConv`).
+    /// Remap mlx-community/sam3-4bit keys into the Swift module hierarchy.
     private static func remapKeys(_ raw: [String: MLXArray]) -> [String: MLXArray] {
         var out: [String: MLXArray] = [:]
         for (key, val) in raw {
-            let prefix: String
-            let suffix: Substring
             switch true {
             case key.hasPrefix("detector_model.vision_encoder.backbone."):
-                prefix = "backbone."
-                suffix = key.dropFirst("detector_model.vision_encoder.backbone.".count)
-            case key.hasPrefix("detector_model.mask_decoder.pixel_decoder."):
-                prefix = "maskDecoder."
-                suffix = key.dropFirst("detector_model.mask_decoder.pixel_decoder.".count)
-            case key.hasPrefix("detector_model.mask_decoder.mask_embedder."):
-                prefix = "maskDecoder.maskEmbedder."
-                suffix = key.dropFirst("detector_model.mask_decoder.mask_embedder.".count)
-            case key.hasPrefix("detector_model.mask_decoder.instance_projection"):
-                prefix = "maskDecoder.instanceProjection"
-                suffix = key.dropFirst("detector_model.mask_decoder.instance_projection".count)
-            case key.hasPrefix("detector_model.mask_decoder.iou_predictor."):
-                prefix = "iouPredictor."
-                suffix = key.dropFirst("detector_model.mask_decoder.iou_predictor.".count)
-            case key.hasPrefix("tracker_model.prompt_encoder.point_embed"):
-                prefix = "promptEncoder.pointEmbed"
-                suffix = key.dropFirst("tracker_model.prompt_encoder.point_embed".count)
-            case key.hasPrefix("tracker_model.prompt_encoder.no_mask_embed"):
-                prefix = "promptEncoder.noMaskEmbed"
-                suffix = key.dropFirst("tracker_model.prompt_encoder.no_mask_embed".count)
+                let suffix = key.dropFirst("detector_model.vision_encoder.backbone.".count)
+                out["backbone." + camelPath(suffix)] = val
+            case key.hasPrefix("tracker_model.prompt_encoder.shared_embedding.positional_embedding"):
+                out["promptEncoder.gaussianMatrix"] = val
+            case key.hasPrefix("tracker_model.prompt_encoder."):
+                let suffix = key.dropFirst("tracker_model.prompt_encoder.".count)
+                out["promptEncoder." + camelPath(suffix)] = val
+            case key.hasPrefix("tracker_model.mask_decoder."):
+                let suffix = key.dropFirst("tracker_model.mask_decoder.".count)
+                out["maskDecoder." + camelPath(suffix)] = val
+            case key.hasPrefix("tracker_neck."):
+                if let mapped = neckRemap(key) { out[mapped] = val }
+            case key == "tracker_model.no_memory_embedding":
+                out["noMemEmbed"] = val
             default:
-                continue   // skip tracker/FPN weights not needed for still-image inference
+                continue
             }
-            out[prefix + camelPath(suffix)] = val
         }
         return out
     }
 
+    /// `tracker_neck.fpn_layers.{i}.{proj1|proj2|scale_layers.N}.*` → `neck.levels.{i}.{...}`.
+    private static func neckRemap(_ key: String) -> String? {
+        let body = key.dropFirst("tracker_neck.fpn_layers.".count)
+        let parts = body.split(separator: ".", maxSplits: 1)
+        guard parts.count == 2 else { return nil }
+        let level = parts[0]
+        let rest = String(parts[1])
+        let mapped: String
+        switch true {
+        case rest.hasPrefix("proj1."): mapped = "proj1." + String(rest.dropFirst("proj1.".count))
+        case rest.hasPrefix("proj2."): mapped = "proj2." + String(rest.dropFirst("proj2.".count))
+        case rest.hasPrefix("scale_layers.0."): mapped = "upsample1." + String(rest.dropFirst("scale_layers.0.".count))
+        case rest.hasPrefix("scale_layers.2."): mapped = "upsample2." + String(rest.dropFirst("scale_layers.2.".count))
+        default: return nil
+        }
+        return "neck.levels.\(level).\(mapped)"
+    }
+
     /// Convert a dot-separated path of snake_case segments to camelCase Swift property names.
-    /// "layers.0.q_proj.weight" → "layers.0.qProj.weight"
     private static func camelPath(_ s: Substring) -> String {
         s.split(separator: ".", omittingEmptySubsequences: false)
             .map { snakeToCamel(String($0)) }
@@ -139,6 +164,8 @@ nonisolated enum SegmentAnythingEngine {
 
     // MARK: Image preprocessing
 
+    /// Square-resize to 1008² (aspect-distorting, matching SAM2Transforms) and normalize
+    /// with mean/std 0.5 → values in [-1, 1], RGB.
     private static func preprocessImage(_ cgImage: CGImage) -> MLXArray? {
         let side = imageSize
         guard let ctx = CGContext(
@@ -153,75 +180,109 @@ nonisolated enum SegmentAnythingEngine {
         let byteCount = side * side * 4
         let bytes = Array(UnsafeBufferPointer(
             start: data.assumingMemoryBound(to: UInt8.self), count: byteCount))
-        let mean: [Float] = [0.485, 0.456, 0.406]
-        let std:  [Float] = [0.229, 0.224, 0.225]
         var rgb = [Float](repeating: 0, count: side * side * 3)
         for i in 0 ..< side * side {
-            rgb[i * 3 + 0] = (Float(bytes[i * 4 + 0]) / 255.0 - mean[0]) / std[0]
-            rgb[i * 3 + 1] = (Float(bytes[i * 4 + 1]) / 255.0 - mean[1]) / std[1]
-            rgb[i * 3 + 2] = (Float(bytes[i * 4 + 2]) / 255.0 - mean[2]) / std[2]
+            rgb[i * 3 + 0] = Float(bytes[i * 4 + 0]) / 255.0 * 2.0 - 1.0
+            rgb[i * 3 + 1] = Float(bytes[i * 4 + 1]) / 255.0 * 2.0 - 1.0
+            rgb[i * 3 + 2] = Float(bytes[i * 4 + 2]) / 255.0 * 2.0 - 1.0
         }
         return MLXArray(rgb, [1, side, side, 3])
     }
 
     // MARK: Public API
 
-    /// Returns [1, gridSize, gridSize, 256]
-    static func encodeImage(_ image: CGImage, modelID: String) async throws -> MLXArray {
+    /// Encodes the image once: backbone → FPN neck → image embedding (+no_mem_embed) and
+    /// the two pre-projected high-res feature maps.
+    static func encodeImage(_ image: CGImage, modelID: String) async throws -> SAM3ImageFeatures {
         let model = try await loadModel(from: ModelStore.shared.directory(forModelID: modelID))
         guard let tensor = preprocessImage(image) else {
             throw SegmentAnythingError.imageConversionFailed
         }
-        let embedding = model.backbone(tensor)
-        eval(embedding)
-        return embedding
+        let backboneOut = model.backbone(tensor)          // [1, 72, 72, 1024]
+        let levels = model.neck(backboneOut)              // [288², 144², 72²] @256
+        let featS0 = model.maskDecoder.convS0(levels[0])  // [1, 288, 288, 32]
+        let featS1 = model.maskDecoder.convS1(levels[1])  // [1, 144, 144, 64]
+        let imageEmbed = levels[2] + model.noMemEmbed.reshaped([1, 1, 1, 256])  // [1, 72, 72, 256]
+        let imagePe = model.promptEncoder.densePositionalEncoding()
+        eval(featS0, featS1, imageEmbed, imagePe)
+        return SAM3ImageFeatures(imageEmbedding: imageEmbed, highResFeatures: [featS0, featS1], imagePe: imagePe)
     }
 
-    /// Returns (masks: [1, H', W', 3], iouScores: [1, 3])
+    /// Decodes point prompts into masks. `points` are normalized [0,1]; `labels` 1=foreground, 0=background.
+    /// Returns (masks: [1, 288, 288, 3], iouScores: [1, 3]) — the 3 multimask candidates.
     static func decodeMasks(
-        embedding: MLXArray,
+        features: SAM3ImageFeatures,
         points: [[Float]],
         labels: [Int],
         modelID: String
     ) async throws -> (masks: MLXArray, iouScores: MLXArray) {
         let model = try await loadModel(from: ModelStore.shared.directory(forModelID: modelID))
-        let pts = MLXArray(points.flatMap { $0 }, [points.count, 2])
+        let pts = MLXArray(points.flatMap { $0 }.map { $0 * Float(imageSize) }, [points.count, 2])
         let lbl = MLXArray(labels.map { Int32($0) })
-        let promptTokens = model.promptEncoder(points: pts, labels: lbl)
-        let masks        = model.maskDecoder(embedding, promptTokens: promptTokens)
-        let iouScores    = model.iouPredictor(embedding)
-        eval(masks, iouScores)
-        return (masks, iouScores)
+        let sparse = model.promptEncoder(points: pts, labels: lbl)            // [1, N+1, 256]
+        let dense = model.promptEncoder.noMaskEmbed(MLXArray([Int32(0)]))     // [1, 256]
+            .reshaped([1, 1, 1, 256])
+        let (masks, iou) = model.maskDecoder(
+            imageEmbedding: features.imageEmbedding,
+            imagePe: features.imagePe,
+            sparsePrompts: sparse,
+            densePrompts: dense,
+            highResFeatures: features.highResFeatures)                        // masks [1,4,288,288], iou [1,4]
+        // multimask_output: drop the single-mask token (index 0), keep candidates 1..3.
+        let multiMasks = stacked((1 ..< 4).map { masks[0..., $0, 0..., 0...] }, axis: 1)  // [1,3,288,288]
+        let multiIou = stacked((1 ..< 4).map { iou[0..., $0] }, axis: 1)                  // [1,3]
+        let masksOut = multiMasks.transposed(0, 2, 3, 1)  // [1, 288, 288, 3]
+        eval(masksOut, multiIou)
+        return (masksOut, multiIou)
     }
 
     // MARK: Mask rendering
 
-    /// The highest-IoU mask of a `decodeMasks` result, flattened and thresholded to 0/1.
-    private static func topBinaryMask(masks: MLXArray, iouScores: MLXArray) -> (binary: [Float], w: Int, h: Int) {
+    /// The highest-IoU mask of a `decodeMasks` result, as raw logits (float, un-thresholded).
+    private static func topMaskLogits(masks: MLXArray, iouScores: MLXArray) -> (logits: [Float], w: Int, h: Int) {
         let scores = iouScores[0].asArray(Float.self)
         let bestIdx = scores.enumerated().max(by: { $0.element < $1.element })?.offset ?? 0
         let (h, w) = (masks.dim(1), masks.dim(2))
         let logits = masks[0, 0..., 0..., bestIdx]
-        return ((logits .> 0).asArray(Float.self), w, h)
+        return (logits.asArray(Float.self), w, h)
     }
 
-    /// Render the highest-IoU mask as a **binary** mask: white = mask, black = background, and
-    /// nothing of the source photo survives — the `tools/media.py::save_mask` L-mode boundary
-    /// the `.cat` contract expects (`63-CutOutSubject`'s row 3 is `Save Image photo-mask.png`).
-    /// This is the stage's renderer (CFM-R15-1); the red-tinted overlay is the interactive
-    /// display rendering and belongs to `SegmentAnythingRunView` alone. Written straight into an
-    /// 8-bit grayscale pixel buffer, one store per pixel.
+    /// Bilinear resize (align_corners=false, matching `F.interpolate(mode="bilinear")`).
+    private static func bilinearResize(_ src: [Float], srcW: Int, srcH: Int, dstW: Int, dstH: Int) -> [Float] {
+        guard srcW > 0, srcH > 0, dstW > 0, dstH > 0, src.count == srcW * srcH else { return src }
+        if srcW == dstW && srcH == dstH { return src }
+        let scaleX = Float(srcW) / Float(dstW)
+        let scaleY = Float(srcH) / Float(dstH)
+        var out = [Float](repeating: 0, count: dstW * dstH)
+        for py in 0 ..< dstH {
+            let sy = min(max((Float(py) + 0.5) * scaleY - 0.5, 0), Float(srcH - 1))
+            let y0 = Int(sy)
+            let y1 = min(y0 + 1, srcH - 1)
+            let fy = sy - Float(y0)
+            let row0 = y0 * srcW, row1 = y1 * srcW
+            let outRow = py * dstW
+            for px in 0 ..< dstW {
+                let sx = min(max((Float(px) + 0.5) * scaleX - 0.5, 0), Float(srcW - 1))
+                let x0 = Int(sx)
+                let x1 = min(x0 + 1, srcW - 1)
+                let fx = sx - Float(x0)
+                let top = src[row0 + x0] * (1 - fx) + src[row0 + x1] * fx
+                let bottom = src[row1 + x0] * (1 - fx) + src[row1 + x1] * fx
+                out[outRow + px] = top * (1 - fy) + bottom * fy
+            }
+        }
+        return out
+    }
+
     static func renderBinaryMask(
         masks: MLXArray, iouScores: MLXArray, width: Int, height: Int
     ) -> CGImage? {
-        let (binary, w, h) = topBinaryMask(masks: masks, iouScores: iouScores)
-        return renderBinaryMask(binary: binary, maskWidth: w, maskHeight: h, width: width, height: height)
+        let (logits, w, h) = topMaskLogits(masks: masks, iouScores: iouScores)
+        let resized = bilinearResize(logits, srcW: w, srcH: h, dstW: width, dstH: height)
+        let binary = resized.map { $0 > 0 ? Float(1.0) : Float(0.0) }
+        return renderBinaryMask(binary: binary, maskWidth: width, maskHeight: height, width: width, height: height)
     }
 
-    /// The pure pixel-buffer writer behind `renderBinaryMask` — testable without weights.
-    /// `binary` is the flattened highest-IoU mask at `maskWidth`×`maskHeight`; the output is a
-    /// two-valued grayscale image at `width`×`height`, nearest-neighbour upsampled from the mask
-    /// grid. The source photo is never drawn, so no source pixel can survive.
     static func renderBinaryMask(
         binary: [Float], maskWidth: Int, maskHeight: Int, width: Int, height: Int
     ) -> CGImage? {
@@ -243,17 +304,13 @@ nonisolated enum SegmentAnythingEngine {
         return ctx.makeImage()
     }
 
-    /// Render the highest-IoU mask as a red-tinted overlay on the source image — the interactive
-    /// *display* rendering for `SegmentAnythingRunView` (SPEC-Q210: the flow boundary wants the
-    /// binary mask above; the overlay belongs here alone). Written straight into the context's
-    /// premultiplied pixel buffer — one blend per mask pixel, not one `CGContext.fill` per pixel
-    /// (the previous loop was ~12M CoreGraphics calls on a phone-camera photo).
     static func renderTopMask(
         masks: MLXArray, iouScores: MLXArray, sourceImage: CGImage
     ) -> CGImage {
-        let (binary, w, h) = topBinaryMask(masks: masks, iouScores: iouScores)
-
         let W = sourceImage.width, H = sourceImage.height
+        let (logits, w, h) = topMaskLogits(masks: masks, iouScores: iouScores)
+        let resized = bilinearResize(logits, srcW: w, srcH: h, dstW: W, dstH: H)
+
         guard let ctx = CGContext(
             data: nil, width: W, height: H,
             bitsPerComponent: 8, bytesPerRow: W * 4,
@@ -264,13 +321,10 @@ nonisolated enum SegmentAnythingEngine {
         ctx.draw(sourceImage, in: CGRect(x: 0, y: 0, width: W, height: H))
         let pixels = data.assumingMemoryBound(to: UInt8.self)
         for py in 0 ..< H {
-            let my = min(py * h / H, h - 1)
+            let row = py * W
             for px in 0 ..< W {
-                let mx = min(px * w / W, w - 1)
-                guard binary[my * w + mx] > 0.5 else { continue }
-                let i = py * W * 4 + px * 4
-                // Straight 40%-opaque red over the source pixel, in one buffer pass — the
-                // equivalent of the old per-pixel `fill`, without the per-pixel CG call.
+                guard resized[row + px] > 0 else { continue }
+                let i = row * 4 + px * 4
                 pixels[i + 0] = UInt8(min(255, Int(Double(pixels[i + 0]) * 0.6) + 102))
                 pixels[i + 1] = UInt8(Double(pixels[i + 1]) * 0.6)
                 pixels[i + 2] = UInt8(Double(pixels[i + 2]) * 0.6)

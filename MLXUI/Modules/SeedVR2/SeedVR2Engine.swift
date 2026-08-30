@@ -47,10 +47,12 @@ private struct SeedVR2EulerScheduler {
         timesteps = (0 ..< numSteps).map { Float(1000 - $0 * (1000 / max(numSteps, 1))) }
     }
 
-    /// Single-step x₀-prediction: the transformer predicts the clean HR latent directly.
-    /// noisePred range ≈ encoded range (±0.6), not velocity range (±4), confirming x₀-pred.
+    /// Euler step (v-prediction): pred_x0 = latents − (t/T) · noise.
+    /// At the single-step case (t=T=1000) this reduces to `latents − noise`.
     func step(noisePred: MLXArray, timestepIdx: Int, latents: MLXArray) -> MLXArray {
-        return noisePred
+        let t = timesteps[timestepIdx]
+        let tNorm = MLXArray(t / 1000.0).asType(latents.dtype)
+        return latents - tNorm * noisePred
     }
 }
 
@@ -142,6 +144,7 @@ nonisolated enum SeedVR2Engine {
         let vae = SeedVR2VAE()
         try vae.update(parameters: ModuleParameters.unflattened(weights), verify: .none)
         eval(vae)
+        print("[SeedVR2] VAE weight coverage: \(weights.count) vae tensors")
         progress(0.5)
 
         let enc = vae.encode(input)
@@ -167,6 +170,7 @@ nonisolated enum SeedVR2Engine {
         }
         try transformer.update(parameters: ModuleParameters.unflattened(weights), verify: .none)
         eval(transformer)
+        print("[SeedVR2] weight coverage: \(weights.count) transformer tensors")
         progress(0.25)
 
         // Build condition and noise

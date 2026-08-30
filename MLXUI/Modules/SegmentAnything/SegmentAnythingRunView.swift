@@ -50,10 +50,10 @@ final class SegmentAnythingRunModel {
         Task {
             do {
                 progress = 0.1
-                let embedding = try await SegmentAnythingEngine.encodeImage(source, modelID: modelID)
+                let features = try await SegmentAnythingEngine.encodeImage(source, modelID: modelID)
                 progress = 0.7
                 let (masks, iouScores) = try await SegmentAnythingEngine.decodeMasks(
-                    embedding: embedding,
+                    features: features,
                     points: floatPts,
                     labels: labels,
                     modelID: modelID)

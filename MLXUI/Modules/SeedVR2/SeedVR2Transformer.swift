@@ -11,60 +11,190 @@ private func svHidden(_ dim: Int, expand: Int) -> Int {
     return (raw + 255) / 256 * 256
 }
 
-/// Affine-free LayerNorm over the last axis, computed in float32 for stability.
-/// Equivalent to `nn.LayerNorm(affine=False)`. No checkpoint weights.
-/// Required before every ada scale/shift to prevent exponential token growth across blocks.
-private func preNorm(_ x: MLXArray) -> MLXArray {
-    let xF   = x.asType(.float32)
-    let mean = xF.mean(axes: [-1], keepDims: true)
-    let diff = xF - mean
-    let std  = MLX.sqrt((diff * diff).mean(axes: [-1], keepDims: true) + 1e-5)
-    return (diff / std).asType(x.dtype)
+/// Affine-free RMSNorm (ones weight) over the last axis.
+private func rmsNormOnes(_ x: MLXArray, eps: Float) -> MLXArray {
+    let d = x.shape[x.ndim - 1]
+    return MLXFast.rmsNorm(x, weight: MLXArray.ones([d]).asType(x.dtype), eps: eps)
+}
+
+private func ceilDiv(_ a: Int, _ b: Int) -> Int { (a + b - 1) / b }
+
+// MARK: - Window partitioner
+
+/// Gather/scatter indices that reorder video tokens into variable-size windows.
+struct SeedVR2WindowPartitioner {
+    let forwardIdx: MLXArray
+    let reverseIdx: MLXArray
+    let windowShapes: [[Int]]
+    let windowCounts: [Int]
+
+    init(vidShape: [[Int]], window: [Int], shift: Bool = false) {
+        var forward: [Int32] = []
+        var shapes: [[Int]] = []
+        var counts: [Int] = []
+        var base = 0
+        for s in vidShape {
+            let (t, h, w) = (s[0], s[1], s[2])
+            let wins = Self.makeWindows(t: t, h: h, w: w, num: window, shift: shift)
+            counts.append(wins.count)
+            for win in wins {
+                let (t0, t1, h0, h1, w0, w1) = win
+                shapes.append([t1 - t0, h1 - h0, w1 - w0])
+                for tt in t0 ..< t1 {
+                    for hh in h0 ..< h1 {
+                        for ww in w0 ..< w1 {
+                            forward.append(Int32(base + tt * (h * w) + hh * w + ww))
+                        }
+                    }
+                }
+            }
+            base += t * h * w
+        }
+        self.forwardIdx = MLXArray(forward)
+        self.windowShapes = shapes
+        self.windowCounts = counts
+        self.reverseIdx = argSort(MLXArray(forward), axis: 0)
+    }
+
+    func partition(_ x: MLXArray) -> MLXArray { x[forwardIdx] }
+    func reverse(_ x: MLXArray) -> MLXArray { x[reverseIdx] }
+
+    /// Window bounds (t0,t1,h0,h1,w0,w1), iterating iw (outer) → ih → it (inner).
+    static func makeWindows(t: Int, h: Int, w: Int, num: [Int], shift: Bool = false) -> [(Int, Int, Int, Int, Int, Int)] {
+        let (rnt, rnh, rnw) = (num[0], num[1], num[2])
+        let scale = (Double(45 * 80) / Double(h * w)).squareRoot()
+        let resizedH = Int((Double(h) * scale).rounded(.toNearestOrEven))
+        let resizedW = Int((Double(w) * scale).rounded(.toNearestOrEven))
+        let wh = ceilDiv(resizedH, rnh)
+        let ww = ceilDiv(resizedW, rnw)
+        let wt = ceilDiv(min(t, 30), rnt)
+
+        let st: Double, sh: Double, sw: Double
+        let nt: Int, nh: Int, nw: Int
+        if shift {
+            st = wt < t ? 0.5 : 0
+            sh = wh < h ? 0.5 : 0
+            sw = ww < w ? 0.5 : 0
+            nt = st > 0 ? ceilDiv(Int((Double(t) - st).rounded(.up)), wt) + 1 : 1
+            nh = sh > 0 ? ceilDiv(Int((Double(h) - sh).rounded(.up)), wh) + 1 : 1
+            nw = sw > 0 ? ceilDiv(Int((Double(w) - sw).rounded(.up)), ww) + 1 : 1
+        } else {
+            st = 0; sh = 0; sw = 0
+            nt = ceilDiv(t, wt); nh = ceilDiv(h, wh); nw = ceilDiv(w, ww)
+        }
+
+        var out: [(Int, Int, Int, Int, Int, Int)] = []
+        for iw in 0 ..< nw {
+            let w0 = max(Int((Double(iw) - sw) * Double(ww)), 0)
+            let w1 = min(Int((Double(iw) - sw + 1) * Double(ww)), w)
+            if w1 <= w0 { continue }
+            for ih in 0 ..< nh {
+                let h0 = max(Int((Double(ih) - sh) * Double(wh)), 0)
+                let h1 = min(Int((Double(ih) - sh + 1) * Double(wh)), h)
+                if h1 <= h0 { continue }
+                for it in 0 ..< nt {
+                    let t0 = max(Int((Double(it) - st) * Double(wt)), 0)
+                    let t1 = min(Int((Double(it) - st + 1) * Double(wt)), t)
+                    if t1 <= t0 { continue }
+                    out.append((t0, t1, h0, h1, w0, w1))
+                }
+            }
+        }
+        return out
+    }
 }
 
 // MARK: - RoPE
 
-/// Per-block learned RoPE. The checkpoint stores `freqs` as [headDim/6] base theta values
-/// for the H and W spatial components of a 3-D T/H/W RoPE.
+/// Axial 3-D rotary embedding. `freqs` (21 values) is loaded from the checkpoint.
 nonisolated final class SeedVR2RoPE: Module {
     @ParameterInfo(key: "freqs") var freqs: MLXArray  // [headDim/6]
 
-    init(ropeDim: Int) {
-        self._freqs.wrappedValue = MLXArray.zeros([ropeDim / 6])
+    init(dim: Int = 128) {
+        self._freqs.wrappedValue = MLXArray.zeros([dim / 3 / 2])
         super.init()
     }
 
-    func apply(_ x: MLXArray, nT: Int, nH: Int, nW: Int) -> MLXArray {
-        let d     = x.dim(-1)
-        let dHalf = freqs.dim(0)  // 21 = d/6
-        let dHW   = 2 * dHalf    // 42
-        let dT    = d - 2 * dHW  // 44
-        let L     = nT * nH * nW
+    private var freqDimPerAxis: Int { freqs.shape[0] * 2 }   // 42
+    private var ropeAxes: Int { 3 }
 
-        let (_, hPos, wPos) = wanMakePositions(nT: nT, nH: nH, nW: nW)
-        let fF = freqs.asType(.float32)
-        let aH = hPos.asType(.float32).expandedDimensions(axis: 1) * fF.expandedDimensions(axis: 0)
-        let aW = wPos.asType(.float32).expandedDimensions(axis: 1) * fF.expandedDimensions(axis: 0)
-        let aT = MLXArray.zeros([L, dT / 2])
+    /// Axial freqs over a grid `dims` (with an optional offset for the first axis).
+    /// Returns [dims..., freqDimPerAxis * dims.count].
+    private func axialFreqs(_ dims: [Int], temporalOffset: Int = 0) -> MLXArray {
+        let fdpa = freqDimPerAxis
+        let f32 = freqs.asType(.float32)
+        var parts: [MLXArray] = []
+        for (ind, d) in dims.enumerated() {
+            let start = ind == 0 ? temporalOffset : 0
+            let pos = MLXArray((start ..< (start + d)).map { Float($0) })
+            var af = outer(pos, f32)                    // [d, 21]
+            af = repeated(af, count: 2, axis: -1)       // [d, 42]
+            var shape = Array(repeating: 1, count: dims.count) + [fdpa]
+            shape[ind] = d
+            af = af.reshaped(shape)
+            af = broadcast(af, to: dims + [fdpa])
+            parts.append(af)
+        }
+        return concatenated(parts, axis: -1)            // [dims..., 42*3]
+    }
 
-        let dtype = x.dtype
-        let fT = aT.expandedDimensions(axis: 0).expandedDimensions(axis: 2).asType(dtype)
-        let fH = aH.expandedDimensions(axis: 0).expandedDimensions(axis: 2).asType(dtype)
-        let fW = aW.expandedDimensions(axis: 0).expandedDimensions(axis: 2).asType(dtype)
+    private static func rotateHalf(_ x: MLXArray) -> MLXArray {
+        let s = x.shape
+        var r = x.reshaped(Array(s.dropLast()) + [-1, 2])
+        let x1 = r[.ellipsis, 0]
+        let x2 = r[.ellipsis, 1]
+        r = stacked([-x2, x1], axis: -1)
+        return r.reshaped(s)
+    }
 
-        return MLX.concatenated([
-            wanApplyRoPE1D(x[.ellipsis, 0 ..< dT], freqs: fT),
-            wanApplyRoPE1D(x[.ellipsis, dT ..< dT + dHW], freqs: fH),
-            wanApplyRoPE1D(x[.ellipsis, dT + dHW ..< d], freqs: fW),
-        ], axis: -1)
+    /// freqs: [..., rotDim]; t: [N, heads, headDim]. Rotate the first rotDim dims.
+    private static func applyRotary(_ freqs: MLXArray, _ t: MLXArray) -> MLXArray {
+        let rotDim = freqs.shape[freqs.ndim - 1]
+        let dim = t.shape[t.ndim - 1]
+        let tMid = t[.ellipsis, 0 ..< rotDim].asType(.float32)
+        let f = freqs.asType(.float32)
+        var out = tMid * cos(f) + rotateHalf(tMid) * sin(f)
+        out = out.asType(t.dtype)
+        if dim > rotDim {
+            return concatenated([out, t[.ellipsis, rotDim ..< dim]], axis: -1)
+        }
+        return out
+    }
+
+    /// Video-only RoPE. windowShapes: [[t,h,w]] per window.
+    func applyVid(_ vidQ: MLXArray, _ vidK: MLXArray, windowShapes: [[Int]]) -> (MLXArray, MLXArray) {
+        var parts: [MLXArray] = []
+        for s in windowShapes {
+            let vf = axialFreqs(s).reshaped([-1, freqDimPerAxis * ropeAxes])
+            parts.append(vf)
+        }
+        let vidFreqs = concatenated(parts, axis: 0).expandedDimensions(axis: 1)
+        return (Self.applyRotary(vidFreqs, vidQ), Self.applyRotary(vidFreqs, vidK))
+    }
+
+    /// Multi-modal RoPE: vid temporal positions are offset by txtLen.
+    func applyMM(_ vidQ: MLXArray, _ vidK: MLXArray, windowShapes: [[Int]],
+                 _ txtQ: MLXArray, _ txtK: MLXArray, txtLens: [Int]) -> (MLXArray, MLXArray, MLXArray, MLXArray) {
+        var vidParts: [MLXArray] = []
+        var txtParts: [MLXArray] = []
+        for (i, s) in windowShapes.enumerated() {
+            let (f, h, w) = (s[0], s[1], s[2])
+            let tl = txtLens[i]
+            let full = axialFreqs([tl + f, h, w])
+            let vidSlice = full[tl ..< (tl + f)].reshaped([-1, freqDimPerAxis * ropeAxes])
+            vidParts.append(vidSlice)
+            let txt1d = axialFreqs([tl])
+            txtParts.append(tiled(txt1d, repetitions: [1, ropeAxes]))
+        }
+        let vidFreqs = concatenated(vidParts, axis: 0).expandedDimensions(axis: 1)
+        let txtFreqs = concatenated(txtParts, axis: 0).expandedDimensions(axis: 1)
+        return (Self.applyRotary(vidFreqs, vidQ), Self.applyRotary(vidFreqs, vidK),
+                Self.applyRotary(txtFreqs, txtQ), Self.applyRotary(txtFreqs, txtK))
     }
 }
 
 // MARK: - Ada Modulation
 
-/// Six learned per-block adaptive modulation vectors.
-/// These are ADDED to the global time-conditioned emb_in output (which provides the
-/// timestep-varying base modulation). Each vector is [dim].
 nonisolated final class SeedVR2AdaParams: Module {
     @ParameterInfo(key: "attn_shift") var attnShift: MLXArray
     @ParameterInfo(key: "attn_scale") var attnScale: MLXArray
@@ -73,32 +203,64 @@ nonisolated final class SeedVR2AdaParams: Module {
     @ParameterInfo(key: "mlp_scale")  var mlpScale:  MLXArray
     @ParameterInfo(key: "mlp_gate")   var mlpGate:   MLXArray
 
-    init(dim: Int) {
+    init(_ dim: Int) {
         self._attnShift.wrappedValue = MLXArray.zeros([dim])
-        self._attnScale.wrappedValue = MLXArray.zeros([dim])
+        self._attnScale.wrappedValue = MLXArray.ones([dim])
         self._attnGate.wrappedValue  = MLXArray.zeros([dim])
         self._mlpShift.wrappedValue  = MLXArray.zeros([dim])
-        self._mlpScale.wrappedValue  = MLXArray.zeros([dim])
+        self._mlpScale.wrappedValue  = MLXArray.ones([dim])
         self._mlpGate.wrappedValue   = MLXArray.zeros([dim])
         super.init()
     }
+
+    func shift(_ layer: Int) -> MLXArray { layer == 0 ? attnShift : mlpShift }
+    func scale(_ layer: Int) -> MLXArray { layer == 0 ? attnScale : mlpScale }
+    func gate(_ layer: Int) -> MLXArray { layer == 0 ? attnGate : mlpGate }
 }
 
 nonisolated final class SeedVR2Ada: Module {
-    @ModuleInfo(key: "params_vid") var paramsVid: SeedVR2AdaParams
+    @ModuleInfo(key: "params_all") var paramsAll: SeedVR2AdaParams?
+    @ModuleInfo(key: "params_vid") var paramsVid: SeedVR2AdaParams?
     @ModuleInfo(key: "params_txt") var paramsTxt: SeedVR2AdaParams?
+    let shared: Bool
+    let isLastLayer: Bool
 
-    init(dim: Int, isMM: Bool) {
-        self._paramsVid.wrappedValue = SeedVR2AdaParams(dim: dim)
-        if isMM { self._paramsTxt.wrappedValue = SeedVR2AdaParams(dim: dim) }
+    init(dim: Int, shared: Bool, isLastLayer: Bool) {
+        self.shared = shared
+        self.isLastLayer = isLastLayer
+        if shared {
+            self._paramsAll.wrappedValue = SeedVR2AdaParams(dim)
+        } else {
+            self._paramsVid.wrappedValue = SeedVR2AdaParams(dim)
+            self._paramsTxt.wrappedValue = isLastLayer ? nil : SeedVR2AdaParams(dim)
+        }
         super.init()
+    }
+
+    private func apply(_ hidden: MLXArray, _ emb: MLXArray, _ p: SeedVR2AdaParams, _ layer: Int, _ modeOut: Bool) -> MLXArray {
+        let mod = emb[0..., 0..., layer]  // [B, dim, 3]
+        if modeOut {
+            let gate = (mod[.ellipsis, 2] + p.gate(layer)).expandedDimensions(axis: 1)
+            return hidden * gate
+        } else {
+            let shift = (mod[.ellipsis, 0] + p.shift(layer)).expandedDimensions(axis: 1)
+            let scale = (mod[.ellipsis, 1] + p.scale(layer)).expandedDimensions(axis: 1)
+            return hidden * scale + shift
+        }
+    }
+
+    func modulateVid(_ hidden: MLXArray, _ emb: MLXArray, _ layer: Int, _ modeOut: Bool) -> MLXArray {
+        apply(hidden, emb, shared ? paramsAll! : paramsVid!, layer, modeOut)
+    }
+
+    func modulateTxt(_ hidden: MLXArray, _ emb: MLXArray, _ layer: Int, _ modeOut: Bool) -> MLXArray {
+        if isLastLayer { return hidden }
+        return apply(hidden, emb, shared ? paramsAll! : paramsTxt!, layer, modeOut)
     }
 }
 
-// MARK: - SwiGLU MLP (split gate/up projections)
+// MARK: - SwiGLU MLP
 
-/// One SwiGLU branch: silu(proj_in_gate(x)) × proj_in(x), then proj_out.
-/// Gate and up are stored as separate Linear layers in the checkpoint.
 nonisolated final class SeedVR2SwiGLUBranch: Module {
     @ModuleInfo(key: "proj_in")      var projIn:     Linear
     @ModuleInfo(key: "proj_in_gate") var projInGate: Linear
@@ -112,85 +274,135 @@ nonisolated final class SeedVR2SwiGLUBranch: Module {
     }
 
     func callAsFunction(_ x: MLXArray) -> MLXArray {
-        let gate = MLXNN.silu(projInGate(x))
-        return projOut(gate * projIn(x))
+        projOut(MLXNN.silu(projInGate(x)) * projIn(x))
     }
 }
 
 nonisolated final class SeedVR2MMSwiGLU: Module {
-    @ModuleInfo(key: "vid") var vid: SeedVR2SwiGLUBranch
+    @ModuleInfo(key: "all") var all: SeedVR2SwiGLUBranch?
+    @ModuleInfo(key: "vid") var vid: SeedVR2SwiGLUBranch?
     @ModuleInfo(key: "txt") var txt: SeedVR2SwiGLUBranch?
+    let shared: Bool
+    let isLastLayer: Bool
 
-    init(dim: Int, expandRatio: Int, isMM: Bool) {
+    init(dim: Int, expandRatio: Int, shared: Bool, isLastLayer: Bool) {
         let hid = svHidden(dim, expand: expandRatio)
-        self._vid.wrappedValue = SeedVR2SwiGLUBranch(dim: dim, hidDim: hid)
-        if isMM { self._txt.wrappedValue = SeedVR2SwiGLUBranch(dim: dim, hidDim: hid) }
+        self.shared = shared
+        self.isLastLayer = isLastLayer
+        if shared {
+            self._all.wrappedValue = SeedVR2SwiGLUBranch(dim: dim, hidDim: hid)
+        } else {
+            self._vid.wrappedValue = SeedVR2SwiGLUBranch(dim: dim, hidDim: hid)
+            self._txt.wrappedValue = isLastLayer ? nil : SeedVR2SwiGLUBranch(dim: dim, hidDim: hid)
+        }
         super.init()
+    }
+
+    func callAsFunction(_ vidIn: MLXArray, _ txtIn: MLXArray) -> (MLXArray, MLXArray) {
+        let v = (shared ? all! : vid!)(vidIn)
+        if isLastLayer { return (v, txtIn) }
+        let t = (shared ? all! : txt!)(txtIn)
+        return (v, t)
     }
 }
 
-// MARK: - Multi-Modal Attention
+// MARK: - Multi-Modal Windowed Attention
 
-/// Joint vid+txt global attention with:
-/// - Per-head QK RMSNorm (norm_q_vid, norm_k_vid) applied before RoPE
-/// - 3-D RoPE on video tokens
-// Checkpoint confirms ALL 32 blocks have txt attention components — they are never optional.
 nonisolated final class SeedVR2MMAttention: Module {
     @ModuleInfo(key: "proj_qkv_vid") var projQkvVid: Linear
-    @ModuleInfo(key: "proj_qkv_txt") var projQkvTxt: Linear
     @ModuleInfo(key: "proj_out_vid") var projOutVid: Linear
-    @ModuleInfo(key: "proj_out_txt") var projOutTxt: Linear
     @ModuleInfo(key: "norm_q_vid")   var normQVid:   RMSNorm
     @ModuleInfo(key: "norm_k_vid")   var normKVid:   RMSNorm
+    @ModuleInfo(key: "proj_qkv_txt") var projQkvTxt: Linear
+    @ModuleInfo(key: "proj_out_txt") var projOutTxt: Linear
     @ModuleInfo(key: "norm_q_txt")   var normQTxt:   RMSNorm
     @ModuleInfo(key: "norm_k_txt")   var normKTxt:   RMSNorm
     @ModuleInfo(key: "rope")         var rope:       SeedVR2RoPE
 
-    let heads: Int; let headDim: Int
+    let heads: Int, headDim: Int, scale: Float, window: [Int], ropeOnText: Bool, shift: Bool
 
-    init(dim: Int, heads: Int, headDim: Int, ropeDim: Int) {
-        self.heads = heads; self.headDim = headDim
-        let qkvDim = heads * headDim
-        self._projQkvVid.wrappedValue = Linear(dim, 3 * qkvDim, bias: false)
-        self._projQkvTxt.wrappedValue = Linear(dim, 3 * qkvDim, bias: false)
-        self._projOutVid.wrappedValue = Linear(qkvDim, dim, bias: true)
-        self._projOutTxt.wrappedValue = Linear(qkvDim, dim, bias: true)
+    init(dim: Int, heads: Int, headDim: Int, ropeDim: Int, ropeOnText: Bool, window: [Int], shift: Bool) {
+        self.heads = heads
+        self.headDim = headDim
+        self.scale = powf(Float(headDim), -0.5)
+        self.window = window
+        self.ropeOnText = ropeOnText
+        self.shift = shift
+        let inner = heads * headDim
+        self._projQkvVid.wrappedValue = Linear(dim, 3 * inner, bias: false)
+        self._projOutVid.wrappedValue = Linear(inner, dim, bias: true)
         self._normQVid.wrappedValue   = RMSNorm(dimensions: headDim)
         self._normKVid.wrappedValue   = RMSNorm(dimensions: headDim)
+        self._projQkvTxt.wrappedValue = Linear(dim, 3 * inner, bias: false)
+        self._projOutTxt.wrappedValue = Linear(inner, dim, bias: true)
         self._normQTxt.wrappedValue   = RMSNorm(dimensions: headDim)
         self._normKTxt.wrappedValue   = RMSNorm(dimensions: headDim)
-        self._rope.wrappedValue       = SeedVR2RoPE(ropeDim: ropeDim)
+        self._rope.wrappedValue       = SeedVR2RoPE(dim: ropeDim)
         super.init()
     }
 
-    func callAsFunction(
-        vid: MLXArray, txt: MLXArray, nT: Int, nH: Int, nW: Int
-    ) -> (vid: MLXArray, txt: MLXArray) {
-        let B = vid.dim(0), H = heads, D = headDim
-        let Lv = vid.dim(1), Lt = txt.dim(1)
+    /// vid [1,L,dim], txt [1,Lt,dim]. vidShape [[t,h,w]]. txtLen scalar.
+    func callAsFunction(_ vid: MLXArray, _ txt: MLXArray, vidShape: [[Int]], txtLen: Int) -> (MLXArray, MLXArray) {
+        let (B, L) = (vid.shape[0], vid.shape[1])
+        let Lt = txt.shape[1]
+        let inner = heads * headDim
 
-        func splitQKV(_ x: MLXArray, L: Int) -> (MLXArray, MLXArray, MLXArray) {
-            let r = x.reshaped([B, L, 3, H, D]).transposed(2, 0, 3, 1, 4)
-            return (r[0], r[1], r[2])
+        // 1. project to qkv: [N, 3, heads, headDim]
+        var qkvVid = projQkvVid(vid.reshaped([-1, vid.shape[2]])).reshaped([-1, 3, heads, headDim])
+        let qkvTxt = projQkvTxt(txt.reshaped([-1, txt.shape[2]])).reshaped([-1, 3, heads, headDim])
+
+        let part = SeedVR2WindowPartitioner(vidShape: vidShape, window: window, shift: shift)
+        qkvVid = part.partition(qkvVid)
+
+        // 2. normalize q,k; replicate text into every window
+        let qVid = normQVid(qkvVid[0..., 0])
+        let kVid = normKVid(qkvVid[0..., 1])
+        let vVid = qkvVid[0..., 2]
+        let qTxt = normQTxt(qkvTxt[0..., 0])
+        let kTxt = normKTxt(qkvTxt[0..., 1])
+        let vTxt = qkvTxt[0..., 2]
+        let nWin = part.windowShapes.count
+        let qTxtTiled = tiled(qTxt, repetitions: [nWin, 1, 1])
+        let kTxtTiled = tiled(kTxt, repetitions: [nWin, 1, 1])
+        let vTxtTiled = tiled(vTxt, repetitions: [nWin, 1, 1])
+
+        // 3. RoPE
+        let qV: MLXArray, kV: MLXArray, qT: MLXArray, kT: MLXArray
+        if ropeOnText {
+            let txtLens = Array(repeating: txtLen, count: nWin)
+            (qV, kV, qT, kT) = rope.applyMM(qVid, kVid, windowShapes: part.windowShapes,
+                                            qTxtTiled, kTxtTiled, txtLens: txtLens)
+        } else {
+            (qV, kV) = rope.applyVid(qVid, kVid, windowShapes: part.windowShapes)
+            qT = qTxtTiled; kT = kTxtTiled
         }
 
-        var (vq, vk, vv) = splitQKV(projQkvVid(vid), L: Lv)
-        vq = normQVid(vq)
-        vk = normKVid(vk)
-        vq = rope.apply(vq.transposed(0, 2, 1, 3), nT: nT, nH: nH, nW: nW).transposed(0, 2, 1, 3)
-        vk = rope.apply(vk.transposed(0, 2, 1, 3), nT: nT, nH: nH, nW: nW).transposed(0, 2, 1, 3)
+        // 4. per-window SDPA over [vid ++ text]
+        let vidLens = part.windowShapes.map { $0[0] * $0[1] * $0[2] }
+        var vidOutBlocks: [MLXArray] = []
+        var txtOutBlocks: [MLXArray] = []
+        var vOff = 0
+        for i in 0 ..< nWin {
+            let vl = vidLens[i]
+            let tOff = i * Lt
+            let q = concatenated([qV[vOff ..< (vOff + vl)], qT[tOff ..< (tOff + Lt)]], axis: 0)
+                .expandedDimensions(axis: 0).transposed(0, 2, 1, 3)
+            let k = concatenated([kV[vOff ..< (vOff + vl)], kT[tOff ..< (tOff + Lt)]], axis: 0)
+                .expandedDimensions(axis: 0).transposed(0, 2, 1, 3)
+            let v = concatenated([vVid[vOff ..< (vOff + vl)], vTxtTiled[tOff ..< (tOff + Lt)]], axis: 0)
+                .expandedDimensions(axis: 0).transposed(0, 2, 1, 3)
+            var o = MLXFast.scaledDotProductAttention(queries: q, keys: k, values: v, scale: scale, mask: .none)
+            o = o.transposed(0, 2, 1, 3).squeezed(axis: 0).reshaped([-1, inner])
+            vidOutBlocks.append(o[0 ..< vl])
+            txtOutBlocks.append(o[vl ..< (vl + Lt)])
+            vOff += vl
+        }
 
-        var (tq, tk, tv) = splitQKV(projQkvTxt(txt), L: Lt)
-        tq = normQTxt(tq); tk = normKTxt(tk)
-        let q = MLX.concatenated([vq, tq], axis: 2)
-        let k = MLX.concatenated([vk, tk], axis: 2)
-        let v = MLX.concatenated([vv, tv], axis: 2)
-
-        let scale = 1.0 / sqrt(Float(D))
-        let out  = scaledDotProductAttention(queries: q, keys: k, values: v, scale: scale, mask: nil)
-        let flat = out.transposed(0, 2, 1, 3).reshaped([B, -1, H * D])
-        return (projOutVid(flat[0..., ..<Lv, 0...]),
-                projOutTxt(flat[0..., Lv ..< Lv + Lt, 0...]))
+        // 5. coalesce: vid scattered back; text averaged across windows
+        let vidOut = part.reverse(concatenated(vidOutBlocks, axis: 0))
+        let txtOut = mean(stacked(txtOutBlocks, axis: 0), axis: 0)
+        return (projOutVid(vidOut).reshaped([B, L, -1]),
+                projOutTxt(txtOut).reshaped([B, Lt, -1]))
     }
 }
 
@@ -200,67 +412,42 @@ nonisolated final class SeedVR2TransformerBlock: Module {
     @ModuleInfo(key: "attn") var attn: SeedVR2MMAttention
     @ModuleInfo(key: "mlp")  var mlp:  SeedVR2MMSwiGLU
     @ModuleInfo(key: "ada")  var ada:  SeedVR2Ada
+    let isLastLayer: Bool
+    let eps: Float
 
-    init(c: SeedVR2Config, isMM: Bool) {
+    init(c: SeedVR2Config, shared: Bool, isLastLayer: Bool, shift: Bool) {
+        self.isLastLayer = isLastLayer
+        self.eps = c.normEps
         self._attn.wrappedValue = SeedVR2MMAttention(
-            dim: c.vidDim, heads: c.heads, headDim: c.headDim, ropeDim: c.ropeDim)
-        self._mlp.wrappedValue  = SeedVR2MMSwiGLU(dim: c.vidDim, expandRatio: c.expandRatio, isMM: isMM)
-        self._ada.wrappedValue  = SeedVR2Ada(dim: c.vidDim, isMM: isMM)
+            dim: c.vidDim, heads: c.heads, headDim: c.headDim, ropeDim: c.ropeDim,
+            ropeOnText: c.ropeOnText, window: c.window, shift: shift)
+        self._mlp.wrappedValue = SeedVR2MMSwiGLU(
+            dim: c.vidDim, expandRatio: c.expandRatio, shared: shared, isLastLayer: isLastLayer)
+        self._ada.wrappedValue = SeedVR2Ada(dim: c.vidDim, shared: shared, isLastLayer: isLastLayer)
         super.init()
     }
 
-    /// emb: [B, 6*dim] global time-conditioned modulation from emb_in.
-    /// Ada for this block = global emb reshaped to [B, 6, dim] + per-block learned offset.
     func callAsFunction(
-        vid: MLXArray, txt: MLXArray, emb: MLXArray, nT: Int, nH: Int, nW: Int
+        vid: MLXArray, txt: MLXArray, emb: MLXArray, vidShape: [[Int]], txtLen: Int
     ) -> (vid: MLXArray, txt: MLXArray) {
-        let B = vid.dim(0)
-        let dim = vid.dim(-1)
-        let e = emb.reshaped([B, 6, dim]).asType(vid.dtype)  // [B, 6, dim]
-
-        // Global slot i + per-block learned offset → [B, 1, dim] for broadcasting.
-        // preNorm() normalizes tokens to unit std before each scale/shift, preventing
-        // exponential growth. Same pattern as WanVideo's norm1/norm3 (affine=false LayerNorm).
-        func vSlot(_ i: Int, _ p: MLXArray) -> MLXArray {
-            (e[0..., i, 0...] + p.expandedDimensions(axis: 0)).expandedDimensions(axis: 1)
-        }
-        let v = ada.paramsVid
-        let vShiftA = vSlot(0, v.attnShift); let vScaleA = vSlot(1, v.attnScale)
-        let vGateA  = vSlot(2, v.attnGate)
-        let vShiftM = vSlot(3, v.mlpShift);  let vScaleM = vSlot(4, v.mlpScale)
-        let vGateM  = vSlot(5, v.mlpGate)
-
         var vidX = vid, txtX = txt
 
-        if let pt = ada.paramsTxt {
-            // MM block: modulate both vid and txt
-            func tSlot(_ i: Int, _ p: MLXArray) -> MLXArray {
-                (e[0..., i, 0...] + p.expandedDimensions(axis: 0)).expandedDimensions(axis: 1)
-            }
-            let tShiftA = tSlot(0, pt.attnShift); let tScaleA = tSlot(1, pt.attnScale)
-            let tGateA  = tSlot(2, pt.attnGate)
-            let tShiftM = tSlot(3, pt.mlpShift);  let tScaleM = tSlot(4, pt.mlpScale)
-            let tGateM  = tSlot(5, pt.mlpGate)
+        var vidAttn = ada.modulateVid(rmsNormOnes(vidX, eps: eps), emb, 0, false)
+        var txtAttn = ada.modulateTxt(rmsNormOnes(txtX, eps: eps), emb, 0, false)
+        (vidAttn, txtAttn) = attn(vidAttn, txtAttn, vidShape: vidShape, txtLen: txtLen)
+        vidAttn = ada.modulateVid(vidAttn, emb, 0, true)
+        txtAttn = ada.modulateTxt(txtAttn, emb, 0, true)
+        vidX = vidX + vidAttn
+        if !isLastLayer { txtX = txtX + txtAttn }
 
-            let vAttnIn = preNorm(vidX) * (1 + vScaleA) + vShiftA
-            let tAttnIn = preNorm(txtX) * (1 + tScaleA) + tShiftA
-            let (vAttnOut, tAttnOut) = attn(vid: vAttnIn, txt: tAttnIn, nT: nT, nH: nH, nW: nW)
-            vidX = vidX + vGateA * vAttnOut
-            txtX = txtX + tGateA * tAttnOut
-
-            let vMlpOut = mlp.vid(preNorm(vidX) * (1 + vScaleM) + vShiftM)
-            let tMlpOut = mlp.txt!(preNorm(txtX) * (1 + tScaleM) + tShiftM)
-            vidX = vidX + vGateM * vMlpOut
-            txtX = txtX + tGateM * tMlpOut
-        } else {
-            // Non-MM block: vid gets full ada modulation; txt enters attention pre-normalized
-            // (no ada params_txt) to keep V values bounded.
-            let vAttnIn = preNorm(vidX) * (1 + vScaleA) + vShiftA
-            let (vAttnOut, tAttnOut) = attn(vid: vAttnIn, txt: preNorm(txtX), nT: nT, nH: nH, nW: nW)
-            vidX = vidX + vGateA * vAttnOut
-            txtX = txtX + tAttnOut
-            vidX = vidX + vGateM * mlp.vid(preNorm(vidX) * (1 + vScaleM) + vShiftM)
-        }
+        var vidMlp = ada.modulateVid(rmsNormOnes(vidX, eps: eps), emb, 1, false)
+        let txtNorm = isLastLayer ? txtX : rmsNormOnes(txtX, eps: eps)
+        var txtMlp = ada.modulateTxt(txtNorm, emb, 1, false)
+        (vidMlp, txtMlp) = mlp(vidMlp, txtMlp)
+        vidMlp = ada.modulateVid(vidMlp, emb, 1, true)
+        txtMlp = ada.modulateTxt(txtMlp, emb, 1, true)
+        vidX = vidX + vidMlp
+        if !isLastLayer { txtX = txtX + txtMlp }
 
         return (vidX, txtX)
     }
@@ -268,13 +455,11 @@ nonisolated final class SeedVR2TransformerBlock: Module {
 
 // MARK: - Patch Embed / Unpack
 
-/// [B, C, T, H, W] → [B, nT×nH×nW, dim] via volume patching.
 nonisolated final class SeedVR2PatchIn: Module {
     @ModuleInfo(key: "proj") var proj: Linear
     let pT: Int; let pH: Int; let pW: Int
 
     init(inCh: Int, dim: Int, patchSize: [Int]) {
-        precondition(patchSize.count == 3)
         self.pT = patchSize[0]; self.pH = patchSize[1]; self.pW = patchSize[2]
         self._proj.wrappedValue = Linear(inCh * pT * pH * pW, dim, bias: true)
         super.init()
@@ -283,20 +468,20 @@ nonisolated final class SeedVR2PatchIn: Module {
     func callAsFunction(_ x: MLXArray) -> (tokens: MLXArray, nT: Int, nH: Int, nW: Int) {
         let (B, C, T, H, W) = (x.dim(0), x.dim(1), x.dim(2), x.dim(3), x.dim(4))
         let nT = T / pT; let nH = H / pH; let nW = W / pW
-        let x8 = x.reshaped([B, C, nT, pT, nH, pH, nW, pW])
-                   .transposed(0, 2, 4, 6, 1, 3, 5, 7)
-                   .reshaped([B, nT * nH * nW, C * pT * pH * pW])
-        return (proj(x8.asType(.bfloat16)), nT, nH, nW)
+        // [B, C, nT, pT, nH, pH, nW, pW] → [B, nT, nH, nW, pT, pH, pW, C] → token dim = pixel-major (t,h,w,C)
+        var vid = x.reshaped([B, C, nT, pT, nH, pH, nW, pW])
+        vid = vid.transposed(0, 2, 4, 6, 3, 5, 7, 1)
+        vid = vid.reshaped([B, nT, nH, nW, C * pT * pH * pW])
+        vid = proj(vid.asType(.bfloat16))
+        return (vid.reshaped([B, nT * nH * nW, vid.dim(-1)]), nT, nH, nW)
     }
 }
 
-/// [B, L, dim] → [B, outCh, T, H, W].
 nonisolated final class SeedVR2PatchOut: Module {
     @ModuleInfo(key: "proj") var proj: Linear
     let pT: Int; let pH: Int; let pW: Int; let outCh: Int
 
     init(dim: Int, outCh: Int, patchSize: [Int]) {
-        precondition(patchSize.count == 3)
         self.pT = patchSize[0]; self.pH = patchSize[1]; self.pW = patchSize[2]
         self.outCh = outCh
         self._proj.wrappedValue = Linear(dim, outCh * pT * pH * pW, bias: true)
@@ -305,17 +490,16 @@ nonisolated final class SeedVR2PatchOut: Module {
 
     func callAsFunction(_ x: MLXArray, nT: Int, nH: Int, nW: Int) -> MLXArray {
         let B = x.dim(0)
-        return proj(x)
-            .reshaped([B, nT, nH, nW, outCh, pT, pH, pW])
-            .transposed(0, 4, 1, 5, 2, 6, 3, 7)
-            .reshaped([B, outCh, nT * pT, nH * pH, nW * pW])
+        var vid = proj(x)   // [B, L, outCh*pT*pH*pW]
+        // [B, nT, nH, nW, pT, pH, pW, outCh] → transpose → [B, outCh, nT, pT, nH, pH, nW, pW]
+        vid = vid.reshaped([B, nT, nH, nW, pT, pH, pW, outCh])
+        vid = vid.transposed(0, 7, 1, 4, 2, 5, 3, 6)
+        return vid.reshaped([B, outCh, nT * pT, nH * pH, nW * pW])
     }
 }
 
 // MARK: - Timestep Embedding
 
-/// Sinusoidal timestep → projIn → silu → projHid → silu → projOut.
-/// projOut outputs 6×vidDim — these are the global time-conditioned ada params.
 nonisolated final class SeedVR2TimeEmbedding: Module {
     @ModuleInfo(key: "proj_in")  var projIn:  Linear
     @ModuleInfo(key: "proj_hid") var projHid: Linear
@@ -331,7 +515,6 @@ nonisolated final class SeedVR2TimeEmbedding: Module {
         super.init()
     }
 
-    /// Returns [B, 6×vidDim] — the global ada modulation vector for all blocks.
     func callAsFunction(_ t: MLXArray) -> MLXArray {
         let tF  = t.asType(.float32).reshaped([-1])
         let emb = sinusoidalEmbed(tF, dim: freqDim)
@@ -342,87 +525,67 @@ nonisolated final class SeedVR2TimeEmbedding: Module {
 
     private func sinusoidalEmbed(_ t: MLXArray, dim: Int) -> MLXArray {
         let half  = dim / 2
-        let freqs = exp(
-            -log(10000.0) * MLXArray(Int32(0) ..< Int32(half)).asType(.float32) / Float(half)
-        )
+        let freqs = exp(-log(10000.0) * MLXArray((0 ..< half).map { Float($0) }) / Float(half))
         let args = t.expandedDimensions(axis: 1) * freqs.expandedDimensions(axis: 0)
-        return MLX.concatenated([cos(args), sin(args)], axis: -1)
+        return MLX.concatenated([sin(args), cos(args)], axis: -1)
     }
 }
 
 // MARK: - SeedVR2Transformer
 
 nonisolated final class SeedVR2Transformer: Module {
-    @ModuleInfo(key: "vid_in")      var vidIn:      SeedVR2PatchIn
-    @ModuleInfo(key: "txt_in")      var txtIn:      Linear
-    @ModuleInfo(key: "emb_in")      var embIn:      SeedVR2TimeEmbedding
-    @ModuleInfo(key: "blocks")      var blocks:     [SeedVR2TransformerBlock]
+    @ModuleInfo(key: "vid_in")       var vidIn:      SeedVR2PatchIn
+    @ModuleInfo(key: "txt_in")       var txtIn:      Linear
+    @ModuleInfo(key: "emb_in")       var embIn:      SeedVR2TimeEmbedding
+    @ModuleInfo(key: "blocks")       var blocks:     [SeedVR2TransformerBlock]
     @ModuleInfo(key: "vid_out_norm") var vidOutNorm: RMSNorm
-    @ModuleInfo(key: "vid_out")     var vidOut:     SeedVR2PatchOut
-    @ParameterInfo(key: "out_scale") var outScale:  MLXArray  // [vidDim]
-    @ParameterInfo(key: "out_shift") var outShift:  MLXArray  // [vidDim]
+    @ModuleInfo(key: "vid_out")      var vidOut:     SeedVR2PatchOut
+    @ParameterInfo(key: "out_shift") var outShift:   MLXArray
+    @ParameterInfo(key: "out_scale") var outScale:   MLXArray
+
+    let vidDim: Int
 
     init(c: SeedVR2Config = SeedVR2Config()) {
-        self._vidIn.wrappedValue      = SeedVR2PatchIn(
+        self.vidDim = c.vidDim
+        self._vidIn.wrappedValue = SeedVR2PatchIn(
             inCh: c.vidInChannels, dim: c.vidDim, patchSize: c.patchSize)
-        self._txtIn.wrappedValue      = Linear(c.txtInDim, c.vidDim, bias: true)
-        self._embIn.wrappedValue      = SeedVR2TimeEmbedding(freqDim: 256, vidDim: c.vidDim)
-        self._blocks.wrappedValue     = (0 ..< c.numLayers).map { i in
-            SeedVR2TransformerBlock(c: c, isMM: i < c.mmLayers)
+        self._txtIn.wrappedValue = Linear(c.txtInDim, c.vidDim, bias: true)
+        self._embIn.wrappedValue = SeedVR2TimeEmbedding(freqDim: 256, vidDim: c.vidDim)
+        self._blocks.wrappedValue = (0 ..< c.numLayers).map { i in
+            SeedVR2TransformerBlock(c: c, shared: i >= c.mmLayers, isLastLayer: i == c.numLayers - 1, shift: i % 2 == 1)
         }
         self._vidOutNorm.wrappedValue = RMSNorm(dimensions: c.vidDim, eps: c.normEps)
-        self._vidOut.wrappedValue     = SeedVR2PatchOut(
+        self._vidOut.wrappedValue = SeedVR2PatchOut(
             dim: c.vidDim, outCh: c.vidOutChannels, patchSize: c.patchSize)
-        self._outScale.wrappedValue   = MLXArray.zeros([c.vidDim])
-        self._outShift.wrappedValue   = MLXArray.zeros([c.vidDim])
+        self._outShift.wrappedValue = MLXArray.zeros([c.vidDim])
+        self._outScale.wrappedValue = MLXArray.ones([c.vidDim])
         super.init()
     }
 
-    /// - x: [B, vidInChannels, T, H, W]
-    /// - textEmb: [L_txt, txtInDim]
-    /// - timestep: scalar or [B] float in [0, 1000]
     func callAsFunction(_ x: MLXArray, textEmb: MLXArray, timestep: MLXArray) -> MLXArray {
-        let (vidTokens, nT, nH, nW) = vidIn(x)  // [B, L_vid, vidDim]
+        let (vidTokens, nT, nH, nW) = vidIn(x)
         let B = vidTokens.dim(0)
 
-        // Project text embedding and tile to batch
         let txtProj   = txtIn(textEmb.asType(.bfloat16)).expandedDimensions(axis: 0)
         let txtTokens = MLX.tiled(txtProj, repetitions: [B, 1, 1])
+        let txtLen = txtTokens.dim(1)
 
-        // Global time-conditioned ada: [B, 6*vidDim]
-        let emb = embIn(timestep)
-
-        func hasNaN(_ a: MLXArray) -> Bool {
-            let f = a.asType(.float32); eval(f)
-            return MLX.any(MLX.isNaN(f)).item(Bool.self)
-        }
-        func rng2(_ a: MLXArray) -> String {
-            let f = a.asType(.float32); eval(f)
-            let mn = f.min(keepDims: false).item(Float.self)
-            let mx = f.max(keepDims: false).item(Float.self)
-            return "[\(String(format: "%.3f", mn)), \(String(format: "%.3f", mx))]"
-        }
-        print("[SeedVR2-D] emb: \(rng2(emb))")
+        var emb = embIn(timestep)
+        emb = emb.reshaped([B, vidDim, 2, 3])
 
         var vid = vidTokens
         var txt = txtTokens
-        for (i, block) in blocks.enumerated() {
-            (vid, txt) = block(vid: vid, txt: txt, emb: emb, nT: nT, nH: nH, nW: nW)
-            eval(vid); eval(txt)
-            if hasNaN(vid) || hasNaN(txt) {
-                print("[SeedVR2-D] NaN first at block \(i): vid=\(rng2(vid)) txt=\(rng2(txt))")
-                break
-            }
-            if i == 0 || i == 9 || i == 10 {
-                print("[SeedVR2-D] block \(i): vid=\(rng2(vid)) txt=\(rng2(txt))")
-            }
+        let vidShape = [[nT, nH, nW]]
+        for block in blocks {
+            (vid, txt) = block(vid: vid, txt: txt, emb: emb, vidShape: vidShape, txtLen: txtLen)
         }
 
-        // Output: norm → final scale/shift → unpatch
-        let normed = vidOutNorm(vid)  // [B, L, vidDim]
-        let scale  = outScale.expandedDimensions(axis: 0).expandedDimensions(axis: 0).asType(normed.dtype)
-        let shift  = outShift.expandedDimensions(axis: 0).expandedDimensions(axis: 0).asType(normed.dtype)
-        let modulated = normed * (1 + scale) + shift
-        return vidOut(modulated, nT: nT, nH: nH, nW: nW)
+        vid = vidOutNorm(vid)
+        let mod = emb[0..., 0..., 0]
+        let shiftA = mod[.ellipsis, 0].expandedDimensions(axis: 1)
+        let scaleA = mod[.ellipsis, 1].expandedDimensions(axis: 1)
+        vid = vid * (scaleA + outScale) + (shiftA + outShift)
+
+        return vidOut(vid, nT: nT, nH: nH, nW: nW)
     }
 }
