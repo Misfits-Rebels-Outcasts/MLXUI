@@ -10,6 +10,10 @@ nonisolated struct StageConfig: Sendable, Hashable {
     var maxTokens: Int         // llm
     var language: String?      // asr
     var prompt: String?        // vlm — the question asked about the image
+    var seed: UInt64?          // diffusion — the concrete PRNG seed (CFM-R16-1)
+    var width: Int?            // diffusion — requested output width (CFM-R16-1)
+    var height: Int?           // diffusion — requested output height (CFM-R16-1)
+    var steps: Int?            // diffusion — requested denoise steps (CFM-R16-1)
 
     init(
         voice: String? = nil,
@@ -17,7 +21,11 @@ nonisolated struct StageConfig: Sendable, Hashable {
         systemPrompt: String? = nil,
         maxTokens: Int = 512,
         language: String? = nil,
-        prompt: String? = nil
+        prompt: String? = nil,
+        seed: UInt64? = nil,
+        width: Int? = nil,
+        height: Int? = nil,
+        steps: Int? = nil
     ) {
         self.voice = voice
         self.speed = speed
@@ -25,6 +33,10 @@ nonisolated struct StageConfig: Sendable, Hashable {
         self.maxTokens = maxTokens
         self.language = language
         self.prompt = prompt
+        self.seed = seed
+        self.width = width
+        self.height = height
+        self.steps = steps
     }
 
     static let `default` = StageConfig()

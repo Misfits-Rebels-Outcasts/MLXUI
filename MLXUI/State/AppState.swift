@@ -20,12 +20,12 @@ final class AppState {
     /// Set to `true` to hide the entire "Flows" section (sidebar, gallery, run views).
     /// When `true`, `galleryEntries` is empty and the section does not render — the app
     /// returns to its pre-Flows behavior exactly. Mirrors `hideVideoGeneration`.
-    static let hideFlows = true
+    static let hideFlows = false
 
     /// Set to `true` to hide the **Automate → AI Workflows** gallery specifically (the
     /// sidebar section and the bundled flow badges), independently of the rest of Flows.
     /// When `true`, `galleryEntries` is empty. Mirrors `hideFlows`.
-    static let hideAutomate = true
+    static let hideAutomate = false
 
     /// Set to `true` to hide the "My Workflows" shelf (the user's own saved flows and the
     /// New Flow badge) on the Automate → AI Workflows page. The two bundled shelves —

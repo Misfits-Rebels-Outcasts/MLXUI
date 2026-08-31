@@ -39,7 +39,7 @@ struct SeedVR2ShapeTests {
 
     @Test(.disabled("SV-AM4 shape test — Apple Silicon only, ~5s"))
     func causalConv3dOutputShape() {
-        let conv = SeedVR2CausalConv3d(inCh: 4, outCh: 8)
+        let conv = SeedVR2CausalConv3d(4, 8)
         // [B, C, T, H, W] — single frame
         let x   = MLXRandom.normal([1, 4, 1, 16, 16]).asType(.bfloat16)
         let out = conv(x)
@@ -49,8 +49,7 @@ struct SeedVR2ShapeTests {
 
     @Test(.disabled("SV-AM4 shape test — Apple Silicon only"))
     func causalConv3dStrideDownsample() {
-        let conv = SeedVR2CausalConv3d(inCh: 4, outCh: 4, kT: 3, kH: 3, kW: 3,
-                                        sT: 2, sH: 2, sW: 2)
+        let conv = SeedVR2CausalConv3d(4, 4, kernel: (3, 3, 3), stride: (2, 2, 2))
         let x   = MLXRandom.normal([1, 4, 1, 16, 16]).asType(.bfloat16)
         let out = conv(x)
         eval(out)

@@ -68,6 +68,9 @@ nonisolated enum FlowErrorDisplay {
                 return "The \(stage) engine failed — \(cause). Check the model files and try again."
             }
             return "The \(stage) engine failed — check the model files and try again."
+        case .unsupportedSetting(let setting):
+            // CFM-R16-1: a row named a setting (width/height/steps) the engine can't honour.
+            return "This step's \(setting) setting isn't supported by this engine yet — remove it or use a model that supports it."
         }
     }
 }

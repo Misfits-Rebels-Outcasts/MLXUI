@@ -57,7 +57,8 @@ struct FlowGalleryView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("AI Workflows")
                 .font(.largeTitle.weight(.bold))
-            Text("\(appState.galleryEntries.count) bundled flows — and anything you've saved under My Workflows. Pick one to see and run it, or start your own.")
+            //Text("\(appState.galleryEntries.count) bundled flows — and anything you've saved under My Workflows. Pick one to see and run it, or start your own.")
+            Text("Readable AI Workflows. Pick one to see, understand, and run it.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }

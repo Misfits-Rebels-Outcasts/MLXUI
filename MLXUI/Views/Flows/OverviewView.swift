@@ -35,7 +35,7 @@ struct OverviewView: View {
 
     private var background: some View {
         VStack(alignment: .leading, spacing: 14) {
-            //header1("Background")
+            header1("Why?")
             Text("\u{201C}AI is making software construction more accessible, but also making software harder to understand.\u{201D}")
                 .font(.title3.weight(.medium))
                 .italic()
@@ -47,10 +47,10 @@ struct OverviewView: View {
 
     private var whatIsIt: some View {
         VStack(alignment: .leading, spacing: 14) {
-            //header1("What is mlx-workflow?")
-            //Text("A Readable AI Workflow you can Run locally")
-            //    .font(.title3.weight(.semibold))
-            header1("A Readable AI Workflow you can Run locally")
+            header1("What is mlx-workflow?")
+            Text("A Readable AI Workflow you can Run locally")
+                .font(.title3.weight(.semibold))
+            //header1("A Readable AI Workflow you can Run locally")
             workflowCode("""
                 1. Read Audio   client-call.m4a
                 2. Transcribe   Whisper Large v3

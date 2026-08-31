@@ -532,7 +532,12 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// same reason; this makes the flow behave identically. The default is a deliberate
     /// divergence from the Python (which leaves `language` unset and lets its own `mlx_whisper`
     /// detect) — recorded, not silent.
-    /// Internal (not `private`) so the settings→voice/language mapping is unit-testable.
+    /// For diffusion rows (CFM-R16-1) the settings' `seed`/`width`/`height`/`steps` become
+    /// the config. The `{item}`/`{index}` substitution (an enclosing `<each>`) and the
+    /// `_with_seed` derivation (`CachingExecutor`) have **already** run by the time dispatch
+    /// reaches here, so `seed` is a concrete number when the row is stochastic — the stage
+    /// sees exactly what the row settled on, never the `seed=auto`/`{item}` token.
+    /// Internal (not `private`) so the settings→voice/language/seed mapping is unit-testable.
     func stageConfig(for desc: TaskDescriptor, row: Row) -> StageConfig {
         let settings = FlowSettings(row.settings)
         if desc.refName == "engines.tts.speak" {
@@ -543,6 +548,17 @@ nonisolated struct RealExecutor: FlowExecutor {
         if desc.refName == "engines.asr.transcribe" {
             let language = settings.value(for: "lang") ?? "en"
             return StageConfig(language: language)
+        }
+        if desc.refName.hasPrefix("engines.diffusion.") {
+            let number = { (key: String) -> String? in
+                settings.value(for: key)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            return StageConfig(
+                seed: number("seed").flatMap(UInt64.init),
+                width: number("width").flatMap(Int.init),
+                height: number("height").flatMap(Int.init),
+                steps: number("steps").flatMap(Int.init)
+            )
         }
         return .default
     }
