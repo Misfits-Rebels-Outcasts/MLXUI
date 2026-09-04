@@ -171,6 +171,101 @@ struct CatFlowParserTests {
         #expect(checked == cases.count)
     }
 
+    // MARK: - CFM-R18-1: `mlxflow`/`mlxpipeline` header aliases (SPEC-Q — `mlxflow 0.8`,
+    // the header keyword the reference already writes; `parser.py:219/230`'s four-spelling
+    // alias + `:346`'s normalization to the two-value internal vocabulary). This is the
+    // whole owned alias regression once `CFM-R18-6` flips every other `catflow 0.8`
+    // literal in this test corpus to `mlxflow 0.8` — do not delete these as "redundant"
+    // with the fixture corpus; the 30 old-spelling conformance inputs are regenerated
+    // from upstream and are not ours to keep.
+
+    @Test(arguments: ["catflow", "mlxflow"])
+    func flowFamilyAliasesParseIdenticalDocuments(_ keyword: String) throws {
+        let doc = try CatParser.parse("\(keyword) 0.8; code\n1. Read Audio  talk.m4a\n")
+        #expect(doc.version == "0.8")
+        #expect(doc.headerKeyword == keyword)
+        #expect(doc.fileKind == .catflow)
+        #expect(doc.flags.contains(.code))
+        #expect(doc.rows.count == 1)
+        #expect(doc.rows.first?.task == "Read Audio")
+    }
+
+    @Test(arguments: ["catpipeline", "mlxpipeline"])
+    func pipelineFamilyAliasesParseIdenticalDocuments(_ keyword: String) throws {
+        let doc = try CatParser.parse("\(keyword) 0.8\n  pipeline Test Pipeline\n  accepts: [text]\n  gives:   text\n1. Read Text  a.txt\n")
+        #expect(doc.version == "0.8")
+        #expect(doc.headerKeyword == keyword)
+        #expect(doc.fileKind == .catpipeline)
+        #expect(doc.pipelineName == "Test Pipeline")
+        #expect(doc.accepts == [.text])
+        #expect(doc.gives == "text")
+        #expect(doc.rows.count == 1)
+    }
+
+    /// A pre-0.8 version under the `mlxflow` spelling still raises E101, and the error's
+    /// `token` — the piece a caller can render or log — quotes exactly what was written
+    /// (`"mlxflow 0.7"`), not a hardcoded `catflow`. The rendered `.description` still says
+    /// `catflow` until `CFM-R18-2` rebrands the template; this test pins the structured
+    /// data, not the (soon to change) rendered string.
+    @Test func mlxflowInvalidVersionQuotesTheWrittenToken() throws {
+        do {
+            _ = try CatParser.parse("mlxflow 0.7\n1. Read Audio  talk.m4a\n")
+            Issue.record("expected E101")
+        } catch let err as CatParserError {
+            guard case .needsVersion(let token, let version, let line) = err else {
+                Issue.record("expected needsVersion, got \(err)")
+                return
+            }
+            #expect(token == "mlxflow 0.7")
+            #expect(version == "0.7")
+            #expect(line == 1)
+        }
+    }
+
+    /// Every accepted spelling still refuses a non-0.8 version.
+    @Test(arguments: ["catflow", "catpipeline", "mlxflow", "mlxpipeline"])
+    func everyAliasSpellingStillGatesOnVersion(_ keyword: String) {
+        #expect(throws: CatParserError.self) {
+            _ = try CatParser.parse("\(keyword) 0.7\n1. Read Audio  talk.m4a\n")
+        }
+    }
+
+    /// `parse(fmt(x)) == parse(x)` for both families — round-tripping through the
+    /// serializer never changes the parse tree, whichever header family wrote it.
+    @Test(arguments: ["catflow", "mlxflow", "catpipeline", "mlxpipeline"])
+    func fmtRoundTripPreservesTheParseTreeForBothFamilies(_ keyword: String) throws {
+        let isPipeline = keyword.hasSuffix("pipeline")
+        let source = isPipeline
+            ? "\(keyword) 0.8\n  pipeline Test Pipeline\n  gives:   text\n1. Read Text  a.txt\n"
+            : "\(keyword) 0.8; code\n1. Read Audio  talk.m4a\n"
+
+        let original = try CatParser.parse(source)
+        let formatted = CatSerializer.serialize(original)
+        let reparsed = try CatParser.parse(formatted)
+
+        let originalTree = try parseTreeJSON(from: try original.toParseTreeJSON())
+        let reparsedTree = try parseTreeJSON(from: try reparsed.toParseTreeJSON())
+        #expect(anyEquals(originalTree, reparsedTree), "\(keyword): parse(fmt(x)) != parse(x)")
+        #expect(reparsed.headerKeyword == keyword, "\(keyword): fmt round-trip lost the header family")
+    }
+
+    /// The regression this whole item exists to catch: `fmt` of a `catflow`-headed file
+    /// must still emit `catflow` — `fmt.py:215-216` preserves the source family, it does
+    /// not canonicalize to whatever the reference's own default is. Mirrors the fact that
+    /// all eight `tests/goldens/fmt/*.fmt.cat` still say `catflow 0.8`.
+    @Test func fmtOfACatflowHeadedFileStillEmitsCatflow() throws {
+        let doc = try CatParser.parse("catflow 0.8\n1. Read Audio  talk.m4a\n")
+        let out = CatSerializer.serialize(doc)
+        #expect(out.hasPrefix("catflow 0.8\n"))
+    }
+
+    /// And the mirror: `fmt` of an `mlxflow`-headed file emits `mlxflow`, not `catflow`.
+    @Test func fmtOfAnMlxflowHeadedFileStillEmitsMlxflow() throws {
+        let doc = try CatParser.parse("mlxflow 0.8\n1. Read Audio  talk.m4a\n")
+        let out = CatSerializer.serialize(doc)
+        #expect(out.hasPrefix("mlxflow 0.8\n"))
+    }
+
     // MARK: - E105 / E106 / E107 parse errors
 
     @Test func nonRowLineRaisesE105() throws {

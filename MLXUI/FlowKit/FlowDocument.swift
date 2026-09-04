@@ -24,6 +24,12 @@ nonisolated struct FlowDocument: Codable, Sendable, Equatable {
     var fileKind: FileKind
     var rows: [Row]
 
+    /// The raw header keyword as written (`catflow`/`catpipeline`/`mlxflow`/`mlxpipeline`) —
+    /// `model.py:211`'s `header_keyword`. `fileKind` stays the two-value normalized
+    /// vocabulary every downstream check keys off; this is kept alongside it purely so
+    /// `CatSerializer` can preserve the family the source file wrote (CFM-R18-1).
+    var headerKeyword: String
+
     // The remaining fields are the design-sketch shape; the pre-parsed JSON only ever
     // carries `version` + `rows` (+ optional `flags`/`definitions`/`models`), so these
     // default and are populated by the R5 parser.
@@ -52,6 +58,7 @@ nonisolated struct FlowDocument: Codable, Sendable, Equatable {
     init(
         version: String,
         fileKind: FileKind = .catflow,
+        headerKeyword: String = "catflow",
         rows: [Row] = [],
         flags: Set<CapabilityFlag> = [],
         flagsOrder: [CapabilityFlag] = [],
@@ -72,6 +79,7 @@ nonisolated struct FlowDocument: Codable, Sendable, Equatable {
     ) {
         self.version = version
         self.fileKind = fileKind
+        self.headerKeyword = headerKeyword
         self.rows = rows
         self.flags = flags
         self.flagsOrder = flagsOrder
@@ -97,6 +105,7 @@ nonisolated struct FlowDocument: Codable, Sendable, Equatable {
         let raw = try RawFlow(from: decoder)
         self.version = raw.version ?? ""
         self.fileKind = .catflow
+        self.headerKeyword = "catflow"
         self.flags = Set((raw.flags ?? []).compactMap { CapabilityFlag(rawValue: $0) })
         self.flagsOrder = (raw.flagsOrder ?? []).compactMap { CapabilityFlag(rawValue: $0) }
         self.models = raw.models ?? [:]

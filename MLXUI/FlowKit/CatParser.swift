@@ -62,8 +62,14 @@ nonisolated enum CatParser {
     /// Known header capability flags — `core/parser.py::_KNOWN_HEADER_FLAGS`.
     static let knownHeaderFlags: Set<String> = ["network", "events", "improvise", "code", "offdevice"]
 
-    private static let reHeader = NSRegularExpression.compiled("^(catflow|catpipeline)\\s+(\\S+)((?:\\s*·\\s*\\S+)*)\\s*$")
-    private static let reHeaderV08 = NSRegularExpression.compiled("^(catflow|catpipeline)\\s+(\\S+)((?:\\s*;\\s*\\S+)*)\\s*$")
+    private static let reHeader = NSRegularExpression.compiled("^(catflow|catpipeline|mlxflow|mlxpipeline)\\s+(\\S+)((?:\\s*·\\s*\\S+)*)\\s*$")
+    private static let reHeaderV08 = NSRegularExpression.compiled("^(catflow|catpipeline|mlxflow|mlxpipeline)\\s+(\\S+)((?:\\s*;\\s*\\S+)*)\\s*$")
+
+    /// `parser.py:346` — the header keyword the reference normalizes to the internal
+    /// two-value vocabulary. The raw keyword (pre-normalization) is kept as
+    /// `FlowDocument.headerKeyword` / `ParsedFlow.headerKeyword` so `CatSerializer` can
+    /// preserve the family the source file wrote (CFM-R18-1).
+    private static let headerKeywordAliases: [String: String] = ["mlxflow": "catflow", "mlxpipeline": "catpipeline"]
     private static let reNumbered = NSRegularExpression.compiled("^(\\s*)(\\d+)\\.\\s+(.+?)\\s*$")
     private static let reBlockHeader = NSRegularExpression.compiled("^<(list|each|parallel)(?:\\s+([\\w_-]+))?\\s*(?:·\\s*(.+?))?\\s*>(.*)$", options: [.caseInsensitive])
     private static let reBlockHeaderV08 = NSRegularExpression.compiled("^<(list|each|parallel)(?:\\s+([\\w_-]+))?\\s*(?:;\\s*(.+?))?\\s*(?<!-)>(.*)$", options: [.caseInsensitive])
@@ -112,6 +118,7 @@ nonisolated enum CatParser {
         var start = 0
         var version = ""
         var fileKind = "catflow"
+        var headerKeyword = "catflow"
         var flags: [String] = []
         var pipelineName: String?
         var accepts: [Kind]?
@@ -149,7 +156,8 @@ nonisolated enum CatParser {
                     }
                 }
                 version = v
-                fileKind = kind
+                headerKeyword = kind
+                fileKind = headerKeywordAliases[kind] ?? kind
                 start = i + 1
             }
             break  // first non-blank line processed
@@ -233,6 +241,7 @@ nonisolated enum CatParser {
         return FlowDocument(
             version: version,
             fileKind: fileKind == "catpipeline" ? .catpipeline : .catflow,
+            headerKeyword: headerKeyword,
             rows: try resolve(parsedRows),
             flags: Set(flags.compactMap { CapabilityFlag(rawValue: $0) }),
             flagsOrder: flags.compactMap { CapabilityFlag(rawValue: $0) },
@@ -261,6 +270,7 @@ nonisolated enum CatParser {
         var start = 0
         var version = ""
         var fileKind = "catflow"
+        var headerKeyword = "catflow"
         var flags: [String] = []
         var accepts: [Kind]?
         var gives: String?
@@ -296,7 +306,8 @@ nonisolated enum CatParser {
                     }
                 }
                 version = v
-                fileKind = kind
+                headerKeyword = kind
+                fileKind = headerKeywordAliases[kind] ?? kind
                 start = i + 1
             }
             break
@@ -368,6 +379,7 @@ nonisolated enum CatParser {
         return ParsedFlow(
             version: version,
             fileKind: fileKind == "catpipeline" ? .catpipeline : .catflow,
+            headerKeyword: headerKeyword,
             flags: flags,
             rows: parsedRows,
             uses: uses,
@@ -387,6 +399,7 @@ nonisolated enum CatParser {
         FlowDocument(
             version: parsed.version,
             fileKind: parsed.fileKind,
+            headerKeyword: parsed.headerKeyword,
             rows: try resolve(parsed.rows),
             flags: Set(parsed.flags.compactMap { CapabilityFlag(rawValue: $0) }),
             uses: parsed.uses,
@@ -1602,6 +1615,10 @@ enum ParsedRef: Equatable {
 nonisolated struct ParsedFlow {
     var version: String
     var fileKind: FileKind
+    /// The raw header keyword as written — see `FlowDocument.headerKeyword`. Defaults to
+    /// `"catflow"` (`model.py:211`) for callers that build a `ParsedFlow` without a parsed
+    /// header (e.g. tests constructing one directly).
+    var headerKeyword: String = "catflow"
     var flags: [String]
     var rows: [ParsedRow]
     var uses: [String: String]

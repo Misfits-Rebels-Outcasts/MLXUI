@@ -37,7 +37,10 @@ nonisolated enum CatSerializer {
         var clauseRanges: [UUID: Range<Int>] = [:]
 
         if !doc.version.isEmpty {
-            let token = doc.fileKind == .catpipeline ? "catpipeline" : "catflow"
+            // `fmt.py:215-216` — preserve the family the source wrote (`cat`/`mlx`), do not
+            // canonicalize it (CFM-R18-1).
+            let family = doc.headerKeyword.hasPrefix("mlx") ? "mlx" : "cat"
+            let token = family + (doc.fileKind == .catpipeline ? "pipeline" : "flow")
             var header = "\(token) \(doc.version)"
             let joiner = isV08 ? "; " : " · "
             // Source order when the parser saw it; a stable order otherwise (Set is unordered).
