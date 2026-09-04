@@ -141,14 +141,13 @@ nonisolated enum WorkspaceKnowledge {
     ///
     /// `usesGraphs` is `[file: doc's own resolved uses: graph]` (CFM-R17-FIX-11(e)) — sparse,
     /// only flows with a `uses:` section need an entry, and a missing one classifies that flow
-    /// with no inheritance (same as omitting the parameter). **The caller must not include a
-    /// flow that is itself the *target* of some sibling's `uses:` line in `flows`** — a `uses:`
-    /// composite (`RagQuery.cat`) is a library component, not a runnable entry point (its first
-    /// row typically takes input the caller supplies, per `AppFlowExecutorFactory`'s
-    /// caller-only `transforms` map — the same "the caller supplies what the callee needs"
-    /// shape `-10` found for `transforms:`); leaving it in would make it compete with, and
-    /// often out-vote, the caller its `uses:` line exists to reach — the exact defect this item
-    /// fixes, arrived at a different way.
+    /// with no inheritance (same as omitting the parameter). **The caller should not include a
+    /// flow that is a called-and-resolved `uses:` target *and* cannot stand alone**
+    /// (`canStandAlone(_:)`, CFM-R17-FIX-12(b)) — leaving one in would make it compete with,
+    /// and often out-vote, the caller its `uses:` line exists to reach. A callee that *can*
+    /// stand alone (a self-contained flow some other flow also happens to call once) is a
+    /// legitimate entry point in its own right and belongs in `flows`. `classifyWorkspace`
+    /// applies this; a caller of `classify` directly is responsible for the same filtering.
     static func classify(flows: [(file: String, doc: FlowDocument)],
                          usesGraphs: [String: [String: FlowInterpreter.UsedFlow]] = [:]) -> [IndexCard] {
         var builders: [String: [String]] = [:]
@@ -188,11 +187,23 @@ nonisolated enum WorkspaceKnowledge {
     /// file its own candidacy — only an entry that would actually run as a composite call does.
     /// (Was: excluded whenever named by **any** sibling's `uses:` line, unconditionally — see
     /// journal `2026-188` for what that over-excluded.)
+    ///
+    /// **CFM-R17-FIX-12(b) (owner-ruled 2026-09-04, recommended option A): and only when the
+    /// target cannot stand alone** (`canStandAlone(_:)`). Being a `uses:` target names nothing
+    /// about a file's own runnability — `RagQuery.cat` can't run standalone because its row 1
+    /// needs an input the caller supplies, not because something else calls it. A self-contained
+    /// flow (`RagFlow.cat`: builds and queries one index end to end) that some other flow also
+    /// happens to call once (`BatchReport.cat`, an unattended job) keeps its own card; if the
+    /// caller also ends up inheriting the same index use, that shows up as an honest ambiguity
+    /// (two real entry points, `ambiguityNote` names both) rather than the caller silently
+    /// winning a card whose Ask has no `Human Input` row.
     static func classifyWorkspace(
         flows: [(file: String, doc: FlowDocument, url: URL)],
         resolveUses: (_ doc: FlowDocument, _ selfFile: URL) -> [String: FlowInterpreter.UsedFlow],
         resolvePath: (_ rawPath: String) -> URL?
     ) -> [IndexCard] {
+        let docsByURL = Dictionary(
+            flows.map { ($0.url.resolvingSymlinksInPath(), $0.doc) }, uniquingKeysWith: { a, _ in a })
         var usesGraphs: [String: [String: FlowInterpreter.UsedFlow]] = [:]
         var calleeURLs: Set<URL> = []
         for entry in flows where !entry.doc.uses.isEmpty {
@@ -207,9 +218,13 @@ nonisolated enum WorkspaceKnowledge {
             })
             for (alias, rawPath) in entry.doc.uses {
                 guard calledAliases.contains(alias), graph[alias] != nil else { continue }
-                if let resolved = resolvePath(rawPath) {
-                    calleeURLs.insert(resolved.resolvingSymlinksInPath())
-                }
+                guard let resolved = resolvePath(rawPath) else { continue }
+                let resolvedKey = resolved.resolvingSymlinksInPath()
+                // -12(b): a target we can verify stands alone keeps its own candidacy. Can't
+                // verify (its doc isn't in `flows`) → fall back to excluding it, the safe
+                // default this rule replaces.
+                if let calleeDoc = docsByURL[resolvedKey], canStandAlone(calleeDoc) { continue }
+                calleeURLs.insert(resolvedKey)
             }
         }
         let candidates = flows
@@ -225,6 +240,25 @@ nonisolated enum WorkspaceKnowledge {
     /// that can see disk, `WorkspaceListView.manifest(for:)`) supplies `indexExists`.
     static func isCardWorthRendering(_ card: IndexCard, indexExists: Bool) -> Bool {
         card.builder != .none || indexExists
+    }
+
+    /// Whether `doc` could run as its own entry point, independent of anything that calls it
+    /// (CFM-R17-FIX-12(b), owner-ruled 2026-09-04, recommended option A). Row 1 has no upstream
+    /// and no ref by construction (nothing precedes it), so the question reduces to: is it a
+    /// trigger (self-starting), or does it carry its own value — a path, a name, a quoted
+    /// literal, anything in `settings`? `Embed BGE-M3` alone needs whatever a caller was going
+    /// to feed it (`RagQuery.cat`'s actual shape); `Embed BGE-M3; "literal text"` or
+    /// `Read Index kb.index` supply their own. Descends into a leading block's first child
+    /// (`<each>`/`<list>`/`<parallel>` all execute their first child first).
+    ///
+    /// This is a proxy, not a full preflight — it doesn't know which tasks structurally need an
+    /// asset versus which settings actually carry a usable value it can't parse. It is the
+    /// property this item names: "one whose first row needs an input no row supplies (no
+    /// inline value, no upstream, not a trigger)."
+    static func canStandAlone(_ doc: FlowDocument) -> Bool {
+        guard let first = firstExecutedRow(doc.rows) else { return false }
+        if let task = first.task, FlowInterpreter.triggerTasks.contains(task) { return true }
+        return !(first.settings ?? "").trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     // MARK: - Helpers
@@ -276,6 +310,14 @@ nonisolated enum WorkspaceKnowledge {
 
     private static func flatten(_ rows: [Row]) -> [Row] {
         rows.flatMap { [$0] + flatten($0.children) }
+    }
+
+    /// The row that runs first — descends into a leading block's first child, since
+    /// `<each>`/`<list>`/`<parallel>` all execute their first child before anything after the
+    /// block. `nil` for an empty row list or an empty leading block.
+    private static func firstExecutedRow(_ rows: [Row]) -> Row? {
+        guard let first = rows.first else { return nil }
+        return first.blockKind != nil ? firstExecutedRow(first.children) : first
     }
 
     /// `builds`/`queries` over one row list, un-deduplicated (the caller dedupes after

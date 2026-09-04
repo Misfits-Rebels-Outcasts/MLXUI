@@ -544,14 +544,15 @@ struct CatFlowWorkspaceKnowledgeTests {
         #expect(cards.isEmpty)   // A.cat has no index use of its own — nothing to exclude either
     }
 
-    @Test func classifyWorkspaceAgainstRealFilesConfirmsATrueMutualUsesCycleStillExcludesBoth() throws {
-        // CFM-R17-FIX-12(a) done-when covers "a uses: cycle" — verified here against the REAL
-        // `UsesResolver`/`FlowWorkspace`, not a synthetic graph, because a genuinely symmetric
-        // mutual cycle (A calls B, B calls A, both resolve) is the one shape "called and
-        // resolved" does *not* fix: each file's own top-level resolve succeeds in binding the
-        // other (only the *nested*, one-level-deeper back-reference is dropped, E115), so each
-        // one's caller-row genuinely calls-and-resolves its sibling. Recorded as a known
-        // residual in the backlog item, not silently assumed fixed.
+    @Test func classifyWorkspaceResolvesAMutualUsesCycleWhenOneSideCanStandAlone() throws {
+        // CFM-R17-FIX-12(a)+(b) against the REAL `UsesResolver`/`FlowWorkspace`: A calls B, B
+        // calls A, both genuinely resolve (only the *nested*, one-level-deeper back-reference
+        // is dropped, E115 — "called and resolved" alone can't tell these two exclusions apart,
+        // journal `2026-189`'s residual). `-12(b)` breaks the tie: A's row 1 (`Embed BGE-M3`,
+        // no inline value) can't stand alone, so A stays excluded; B's row 1 (`Read Index
+        // library.index`) can, so B keeps its candidacy — and, inheriting A's `Store Index`
+        // through the very `uses: A` that would have excluded it, ends up the single clean
+        // card for the index both files touch.
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("catflow-kb-cycle-\(UUID().uuidString)")
         let root = base.appendingPathComponent("workspaces")
@@ -576,9 +577,113 @@ struct CatFlowWorkspaceKnowledgeTests {
             },
             resolvePath: { raw in try? ws.resolve(raw, flowID: "cycle") })
 
-        // Both genuinely call and resolve each other, so both are excluded — no card at all.
-        // This is the documented residual, not a regression: pre-`-12(a)` this was also empty.
+        let card = try #require(cards.first { $0.indexName == "library.index" })
+        #expect(card.builder == .one("B.cat"))
+        #expect(card.querier == .one("B.cat"))
+    }
+
+    @Test func classifyWorkspaceLeavesAMutualCycleExcludedWhenNeitherSideCanStandAlone() throws {
+        // The narrower residual `-12(b)` doesn't reach: both A and B genuinely need external
+        // input (empty settings on row 1) and call each other. Neither can verify the other as
+        // a real entry point, so both stay excluded — arguably correct, not just unresolved:
+        // nothing in this pair can actually be kicked off without a caller from outside it.
+        let a = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n3. B\n\nuses:\n  B = ./B.cat\n")
+        let b = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Read Index   library.index\n3. Retrieve   (1,2)\n4. A\n\nuses:\n  A = ./A.cat\n")
+        let aURL = URL(fileURLWithPath: "/ws/A.cat")
+        let bURL = URL(fileURLWithPath: "/ws/B.cat")
+        let aUsed = try usedFlow("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n")
+        let bUsed = try usedFlow("catflow 0.8\n1. Embed   BGE-M3\n2. Read Index   library.index\n3. Retrieve   (1,2)\n")
+
+        let cards = WorkspaceKnowledge.classifyWorkspace(
+            flows: [("A.cat", a, aURL), ("B.cat", b, bURL)],
+            resolveUses: { _, selfFile in selfFile == aURL ? ["B": bUsed] : ["A": aUsed] },
+            resolvePath: { raw in raw == "./B.cat" ? bURL : (raw == "./A.cat" ? aURL : nil) })
+
         #expect(cards.isEmpty)
+    }
+
+    // MARK: - CFM-R17-FIX-12(b): only a callee that cannot stand alone is excluded
+
+    @Test func canStandAloneChecksRowOneForItsOwnValue() throws {
+        #expect(!WorkspaceKnowledge.canStandAlone(try doc("catflow 0.8\n1. Embed   BGE-M3\n")))
+        #expect(WorkspaceKnowledge.canStandAlone(
+            try doc("catflow 0.8\n1. Embed   BGE-M3; \"literal text\"\n")))
+        #expect(WorkspaceKnowledge.canStandAlone(try doc("catflow 0.8\n1. Read Index   kb.index\n")))
+        #expect(WorkspaceKnowledge.canStandAlone(try doc("catflow 0.8; events\n1. On File   inbox/\n")))
+        #expect(!WorkspaceKnowledge.canStandAlone(FlowDocument(version: "0.8", rows: [])))
+    }
+
+    @Test func canStandAloneDescendsIntoALeadingBlocksFirstChild() throws {
+        // `<each>`/`<list>`/`<parallel>` all execute their first child before anything after
+        // the block, so a leading block's own "row 1" is really its first child.
+        let withValue = FlowDocument(version: "0.8", rows: [
+            Row(blockKind: .each, blockName: "e", children: [Row(task: "Read Index", settings: "kb.index")]),
+        ])
+        #expect(WorkspaceKnowledge.canStandAlone(withValue))
+        let withoutValue = FlowDocument(version: "0.8", rows: [
+            Row(blockKind: .each, blockName: "e", children: [Row(task: "Embed", model: "BGE-M3")]),
+        ])
+        #expect(!WorkspaceKnowledge.canStandAlone(withoutValue))
+    }
+
+    @Test func classifyWorkspaceKeepsACalleeThatCanStandAloneAsItsOwnCandidate() throws {
+        // CFM-R17-FIX-12(b) (owner-ruled, recommended option A): `RagFlow.cat` is a
+        // self-contained ingest-then-ask flow — being `BatchReport.cat`'s `uses:` target
+        // doesn't cost it its own card. Both end up registering `kb.index` (`RagFlow.cat`
+        // directly, `BatchReport.cat` by inheritance through the very call that would have
+        // excluded it) — an honest ambiguity naming two real entry points, not
+        // `BatchReport.cat` silently winning Ask with no `Human Input` row.
+        let ragFlowText = "catflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n3. Embed   BGE-M3\n4. Store Index   kb.index\n"
+        let ragFlow = try doc(ragFlowText)
+        let ragFlowUsed = try usedFlow(ragFlowText)
+        let batchReport = try doc("catflow 0.8\n1. RagFlow\n\nuses:\n  RagFlow = ./RagFlow.cat\n")
+        let ragFlowURL = URL(fileURLWithPath: "/ws/RagFlow.cat")
+        let batchURL = URL(fileURLWithPath: "/ws/BatchReport.cat")
+        #expect(WorkspaceKnowledge.canStandAlone(ragFlow))
+
+        let cards = WorkspaceKnowledge.classifyWorkspace(
+            flows: [
+                ("BatchReport.cat", batchReport, batchURL),
+                ("RagFlow.cat", ragFlow, ragFlowURL),
+            ],
+            resolveUses: { _, selfFile in selfFile == batchURL ? ["RagFlow": ragFlowUsed] : [:] },
+            resolvePath: { raw in raw == "./RagFlow.cat" ? ragFlowURL : nil })
+
+        let card = try #require(cards.first { $0.indexName == "kb.index" })
+        if case .ambiguous(let builders) = card.builder {
+            #expect(Set(builders) == ["BatchReport.cat", "RagFlow.cat"])
+        } else {
+            Issue.record("builder side should be ambiguous — both are real entry points")
+        }
+        if case .ambiguous(let queriers) = card.querier {
+            #expect(Set(queriers) == ["BatchReport.cat", "RagFlow.cat"])
+        } else {
+            Issue.record("querier side should be ambiguous — both are real entry points")
+        }
+    }
+
+    @Test func classifyWorkspaceStillExcludesACalleeThatCannotStandAlone() throws {
+        // Regression guard: RagQuery.cat's shape (row 1 `Embed BGE-M3`, no inline value) still
+        // gets excluded — -12(b) narrows the rule further, it doesn't remove it.
+        let ragQueryText = "catflow 0.8\n1. Embed   BGE-M3\n2. Read Index   kb.index\n3. Retrieve   (1,2)\n"
+        let ragQuery = try doc(ragQueryText)
+        #expect(!WorkspaceKnowledge.canStandAlone(ragQuery))
+        let ragQueryUsed = try usedFlow(ragQueryText)
+        let caller = try doc("catflow 0.8\n1. RagQuery\n\nuses:\n  RagQuery = ./RagQuery.cat\n")
+        let callerURL = URL(fileURLWithPath: "/ws/AskYourDocs.cat")
+        let ragQueryURL = URL(fileURLWithPath: "/ws/RagQuery.cat")
+
+        let cards = WorkspaceKnowledge.classifyWorkspace(
+            flows: [
+                ("AskYourDocs.cat", caller, callerURL),
+                ("RagQuery.cat", ragQuery, ragQueryURL),
+            ],
+            resolveUses: { _, selfFile in selfFile == callerURL ? ["RagQuery": ragQueryUsed] : [:] },
+            resolvePath: { raw in raw == "./RagQuery.cat" ? ragQueryURL : nil })
+
+        #expect(cards.count == 1)
+        let card = try #require(cards.first)
+        #expect(card.querier == .one("AskYourDocs.cat"))
     }
 
     // MARK: - Freshness at the cache-key boundary
