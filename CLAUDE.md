@@ -175,10 +175,12 @@ The Python runtime in the sibling **`catflow-mlx`** repo is the **parity referen
 - **Bundled workspaces** (R17) — a multi-flow directory the app ships — live in
   `Resources/Workspaces/` (files flat, `<id>--` prefixed) and are enumerated by
   `FlowKit/BundledWorkspaces.swift`, which `prepare`s them into `workspaces/<id>/` on first
-  use. `uses_example` is the first: `AskYourDocs.cat` calling `RagQuery.cat` via `uses:`.
-  `UsesResolver` builds the `uses:` graph the interpreter runs; `FlowRunner` passes it and
-  `canRun` recognises a `uses:` call row (all reachable only through a `FlowScope` whose
-  `locationID` is a workspace id — CFM-R17-1).
+  use. Two ship: `uses_example` (`AskYourDocs.cat` calls `RagQuery.cat` via `uses:` —
+  `UsesResolver` builds the graph the interpreter runs; `canRun` recognises the call) and
+  `ask_your_docs` (`Ingest.cat` builds `library.index` from its own `docs/`, `DocChat.cat`
+  queries it — the RAG loop, with no prebuilt index). All reachable only through a `FlowScope`
+  whose `locationID` is a workspace id (CFM-R17-1). `FlowKit/WorkspaceKnowledge.swift` derives
+  the builder/querier pairing that `WorkspaceListView`'s knowledge-base card renders.
 
 ## How the data flows
 

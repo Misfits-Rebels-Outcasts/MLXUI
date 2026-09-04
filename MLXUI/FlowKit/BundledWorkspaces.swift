@@ -10,10 +10,14 @@ import Foundation
 /// `5e0f622`, 2026-08-07): `AskYourDocs.cat` calls `RagQuery.cat` through
 /// `uses: RagQuery = ./RagQuery.cat`. It is the first thing to actually exercise the app's
 /// `uses:` expansion, sibling resolution, and the App Store E117 channel guarantee end to end.
+///
+/// `ask_your_docs` (CFM-R17-6) is `16-IngestFolder` + `18-DocChat` sharing one `library.index`:
+/// `Ingest.cat` builds the index from the workspace's own `docs/` PDFs, `DocChat.cat` reads and
+/// chats against it. It ships **no prebuilt index** — Build creates it (CFM-R17-4's card).
 nonisolated enum BundledWorkspaces {
 
-    /// One flow file inside a bundled workspace: the flat bundle resource name (no
-    /// extension), the extension, and the filename it must have inside the workspace.
+    /// One file inside a bundled workspace: the flat bundle resource name (no extension), the
+    /// extension, and the path it must have inside the workspace (may name a subdirectory).
     struct BundledFile: Sendable {
         let resource: String
         let ext: String
@@ -25,7 +29,7 @@ nonisolated enum BundledWorkspaces {
         let id: String
         let title: String
         let description: String
-        /// The flow file a caller opens/runs first (the others are its `uses:` targets).
+        /// The flow file a caller opens/runs first.
         let entryFlow: String
         let files: [BundledFile]
     }
@@ -38,6 +42,19 @@ nonisolated enum BundledWorkspaces {
              files: [
                 BundledFile(resource: "uses_example--AskYourDocs", ext: "cat", destination: "AskYourDocs.cat"),
                 BundledFile(resource: "uses_example--RagQuery", ext: "cat", destination: "RagQuery.cat"),
+             ]),
+        Meta(id: "ask_your_docs",
+             title: "Ask Your Docs",
+             description: "Ingest.cat builds library.index from the docs/ folder; DocChat.cat reads it and answers questions, looping so you can keep asking.",
+             entryFlow: "DocChat.cat",
+             files: [
+                BundledFile(resource: "ask_your_docs--Ingest", ext: "cat", destination: "Ingest.cat"),
+                BundledFile(resource: "ask_your_docs--DocChat", ext: "cat", destination: "DocChat.cat"),
+                // The corpus — no prebuilt library.index. `doc-{a,b,c}.pdf` are the same flat
+                // bundle resources `16-IngestFolder` ships (globally unique, read-only copy).
+                BundledFile(resource: "doc-a", ext: "pdf", destination: "docs/doc-a.pdf"),
+                BundledFile(resource: "doc-b", ext: "pdf", destination: "docs/doc-b.pdf"),
+                BundledFile(resource: "doc-c", ext: "pdf", destination: "docs/doc-c.pdf"),
              ]),
     ]
 
@@ -61,6 +78,7 @@ nonisolated enum BundledWorkspaces {
             guard let src = bundle.url(forResource: file.resource, withExtension: file.ext) else {
                 throw BundledWorkspaceError.missingResource("\(file.resource).\(file.ext)")
             }
+            try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
             try fm.copyItem(at: src, to: dest)
         }
     }
