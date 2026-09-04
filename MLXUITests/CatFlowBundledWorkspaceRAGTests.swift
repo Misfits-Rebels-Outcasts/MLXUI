@@ -44,12 +44,13 @@ struct CatFlowBundledWorkspaceRAGTests {
         let parsed = listed.flows.compactMap { f -> (file: String, doc: FlowDocument)? in
             (try? WorkspaceStore.loadDocument(flow: f)).map { (f.url.lastPathComponent, $0) }
         }
-        let pairs = WorkspaceKnowledge.pairings(flows: parsed)
-        #expect(pairs.count == 1)
-        let p = try #require(pairs.first)
-        #expect(p.indexName == "library.index")
-        #expect(p.builderFile == "Ingest.cat")
-        #expect(p.querierFile == "DocChat.cat")
+        let c = WorkspaceKnowledge.classify(flows: parsed)
+        #expect(c.count == 1)
+        let card = try #require(c.first)
+        #expect(card.indexName == "library.index")
+        #expect(card.builder == .one("Ingest.cat"))
+        #expect(card.querier == .one("DocChat.cat"))
+        #expect(card.ambiguityNote == nil)
     }
 
     @Test func theBuilderFlowCanRunUnderTheWorkspaceScope() throws {

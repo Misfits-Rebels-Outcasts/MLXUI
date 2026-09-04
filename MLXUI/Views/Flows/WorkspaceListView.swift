@@ -14,10 +14,10 @@ struct WorkspaceListView: View {
 
     private var columns: [GridItem] { [GridItem(.adaptive(minimum: 240), spacing: 14)] }
 
-    /// CFM-R17-4: parse each flow once, then pair a builder with a querier of the same index.
-    /// CFM-R17-FIX-5: a name with more than one builder or querier surfaces as a collision
-    /// notice rather than a silent coin-flip.
-    private var knowledge: WorkspaceKnowledge.Knowledge {
+    /// CFM-R17-4: parse each flow once, then a Knowledge Base card per index that has both a
+    /// builder and a querier. CFM-R17-FIX-5/-9(c): an ambiguous side drops its own button and
+    /// notes the collision; the unambiguous side keeps working.
+    private var knowledgeCards: [WorkspaceKnowledge.IndexCard] {
         let parsed = workspace.flows.compactMap { flow -> (file: String, doc: FlowDocument)? in
             guard let doc = try? WorkspaceStore.loadDocument(flow: flow) else { return nil }
             return (flow.url.lastPathComponent, doc)
@@ -48,8 +48,8 @@ struct WorkspaceListView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
-                let kb = knowledge
-                if !kb.isEmpty { indexSection(kb) }
+                let cards = knowledgeCards
+                if !cards.isEmpty { indexSection(cards) }
                 flowsSection
                 if !sharedFiles.isEmpty { sharedFilesSection }
             }
@@ -93,69 +93,66 @@ struct WorkspaceListView: View {
 
     // MARK: - CFM-R17-4: the knowledge-base card
 
-    private func indexSection(_ kb: WorkspaceKnowledge.Knowledge) -> some View {
+    private func indexSection(_ cards: [WorkspaceKnowledge.IndexCard]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Knowledge Base")
                 .font(.title3.weight(.semibold))
-            ForEach(kb.pairings, id: \.indexName) { pair in
-                indexCard(pair)
-            }
-            ForEach(kb.collisions, id: \.indexName) { collision in
-                collisionNotice(collision)
+            ForEach(cards, id: \.indexName) { card in
+                indexCard(card)
             }
         }
     }
 
-    /// CFM-R17-FIX-5 — an index whose builders or queriers collide gets a notice, not a card
-    /// wired to whichever flow happened to sort first.
-    private func collisionNotice(_ collision: WorkspaceKnowledge.IndexCollision) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            Text(collision.message)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-        .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(Color.orange.opacity(0.3), lineWidth: 1) }
-    }
-
-    private func indexCard(_ pair: WorkspaceKnowledge.IndexPairing) -> some View {
-        let m = manifest(for: pair.indexName)
+    /// CFM-R17-FIX-9(c): a Build/Ask button appears only for a side with exactly one flow; an
+    /// ambiguous side drops its button and the card carries a note naming the colliding flows.
+    private func indexCard(_ card: WorkspaceKnowledge.IndexCard) -> some View {
+        let m = manifest(for: card.indexName)
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: "books.vertical").foregroundStyle(.secondary)
-                Text(pair.indexName).font(.headline)
+                Text(card.indexName).font(.headline)
                 Spacer()
             }
             if let m {
                 Text("\(m.embedder) · \(m.dims)-dim · \(m.count) chunk\(m.count == 1 ? "" : "s")")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
+            } else if let builder = card.buildFile {
+                Text("not built yet — run \(builder) to create it")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             } else {
-                Text("not built yet — run \(pair.builderFile) to create it")
+                Text("not built yet")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             HStack(spacing: 10) {
-                Button {
-                    runFlow(pair.builderFile)
-                } label: {
-                    Label(m == nil ? "Build" : "Rebuild", systemImage: "hammer")
+                if let builder = card.buildFile {
+                    Button {
+                        runFlow(builder)
+                    } label: {
+                        Label(m == nil ? "Build" : "Rebuild", systemImage: "hammer")
+                    }
                 }
-                Button {
-                    runFlow(pair.querierFile)
-                } label: {
-                    Label("Ask", systemImage: "text.bubble")
+                if let querier = card.askFile {
+                    Button {
+                        runFlow(querier)
+                    } label: {
+                        Label("Ask", systemImage: "text.bubble")
+                    }
+                    .disabled(m == nil)
                 }
-                .disabled(m == nil)
                 Spacer()
-                Text("\(pair.builderFile) builds · \(pair.querierFile) queries")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+            }
+            if let note = card.ambiguityNote {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(note)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .padding(14)

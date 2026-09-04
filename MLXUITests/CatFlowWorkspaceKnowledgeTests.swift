@@ -11,6 +11,11 @@ struct CatFlowWorkspaceKnowledgeTests {
 
     private func doc(_ text: String) throws -> FlowDocument { try CatParser.parse(text) }
 
+    /// Classify a set of `(file, .cat text)` pairs into Knowledge Base cards.
+    private func cards(_ flows: [(String, String)]) throws -> [WorkspaceKnowledge.IndexCard] {
+        WorkspaceKnowledge.classify(flows: try flows.map { ($0.0, try doc($0.1)) })
+    }
+
     // MARK: - Classification
 
     @Test func lastRowStoreIndexBuilds() throws {
@@ -80,19 +85,20 @@ struct CatFlowWorkspaceKnowledgeTests {
         #expect(WorkspaceKnowledge.role(of: d) == .plain)
     }
 
-    // MARK: - CFM-R17-FIX-5: normalization + ambiguous pairings
+    // MARK: - CFM-R17-FIX-5 / -9(c): normalization, and ambiguity that keeps the good side
 
     @Test func aLeadingDotSlashAndATrailingSlashNormaliseToTheSameName() throws {
         // Both names sit where the tools read them (`name=` / `path=`), so both rows run —
         // and `./library.index` normalises to `library.index` for the pairing (CFM-R17-FIX-5;
         // FIX-9(a) took the `row.model` fallback back out, so a *bare* `./x` no longer pairs).
-        let builder = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   name=library.index\n")
-        let querier = try doc("catflow 0.8\n1. Read Index   path=./library.index\n2. Retrieve   (1,1)\n")
-        let pairs = WorkspaceKnowledge.pairings(flows: [
-            (file: "Build.cat", doc: builder), (file: "Ask.cat", doc: querier),
+        let c = try cards([
+            ("Build.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   name=library.index\n"),
+            ("Ask.cat", "catflow 0.8\n1. Read Index   path=./library.index\n2. Retrieve   (1,1)\n"),
         ])
-        #expect(pairs.count == 1)
-        #expect(pairs.first?.indexName == "library.index")
+        #expect(c.count == 1)
+        #expect(c.first?.indexName == "library.index")
+        #expect(c.first?.builder == .one("Build.cat"))
+        #expect(c.first?.querier == .one("Ask.cat"))
     }
 
     @Test func aBareSlashNameLandsInModelAndIsNotClassified() throws {
@@ -104,57 +110,75 @@ struct CatFlowWorkspaceKnowledgeTests {
         let querier = try doc("catflow 0.8\n1. Read Index   ./kb.index\n2. Retrieve   (1,1)\n")
         #expect(WorkspaceKnowledge.role(of: builder) == .plain)
         #expect(WorkspaceKnowledge.role(of: querier) == .plain)
-        #expect(WorkspaceKnowledge.classify(flows: [
-            (file: "Build.cat", doc: builder), (file: "Ask.cat", doc: querier),
+        #expect(try cards([
+            ("Build.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   indexes/kb.index\n"),
+            ("Ask.cat", "catflow 0.8\n1. Read Index   ./kb.index\n2. Retrieve   (1,1)\n"),
         ]).isEmpty)
     }
 
-    @Test func twoBuildersOfOneNameCollideInsteadOfCoinFlipping() throws {
-        let k = WorkspaceKnowledge.classify(flows: [
-            (file: "Ingest.cat", doc: try doc("catflow 0.8\n1. Read Files   docs/\n2. Embed   BGE-M3\n3. Store Index   (1,2)   library.index\n")),
-            (file: "InboxIngest.cat", doc: try doc("catflow 0.8\n1. On File   inbox/\n2. Embed   BGE-M3\n3. Store Index   (1,2)   library.index\n")),
-            (file: "Ask.cat", doc: try doc("catflow 0.8\n1. Read Index   library.index\n2. Retrieve   (1,1)\n")),
-        ])
-        #expect(k.pairings.isEmpty)
-        let c = try #require(k.collisions.first)
+    @Test func twoBuildersKeepTheAskButtonAndNoteTheBuildCollision() throws {
+        // CFM-R17-FIX-9(c): the Ask side is unambiguous, so the card keeps its Ask button —
+        // the old collision notice threw it away.
+        let c = try #require(try cards([
+            ("Ingest.cat", "catflow 0.8\n1. Read Files   docs/\n2. Embed   BGE-M3\n3. Store Index   (1,2)   library.index\n"),
+            ("InboxIngest.cat", "catflow 0.8\n1. On File   inbox/\n2. Embed   BGE-M3\n3. Store Index   (1,2)   library.index\n"),
+            ("Ask.cat", "catflow 0.8\n1. Read Index   library.index\n2. Retrieve   (1,1)\n"),
+        ]).first)
         #expect(c.indexName == "library.index")
-        #expect(Set(c.builderFiles) == ["Ingest.cat", "InboxIngest.cat"])
-        #expect(c.message.contains("Ingest.cat"))
-        #expect(c.message.contains("InboxIngest.cat"))
-        #expect(c.message.contains("all build it"))
+        #expect(c.buildFile == nil)              // ambiguous — no Build button
+        #expect(c.askFile == "Ask.cat")          // ...but Ask still works
+        if case .ambiguous(let b) = c.builder { #expect(Set(b) == ["Ingest.cat", "InboxIngest.cat"]) }
+        else { Issue.record("builder side should be .ambiguous") }
+        let note = try #require(c.ambiguityNote)
+        #expect(note.contains("Ingest.cat") && note.contains("InboxIngest.cat"))
+        #expect(note.contains("Build") && !note.contains("Ask"))   // only the ambiguous side
     }
 
-    @Test func twoQueriersOfOneNameCollide() throws {
-        let k = WorkspaceKnowledge.classify(flows: [
-            (file: "Build.cat", doc: try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   kb.index\n")),
-            (file: "AskA.cat", doc: try doc("catflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n")),
-            (file: "AskB.cat", doc: try doc("catflow 0.8\n1. Read Index   kb.index\n2. Keyword Search   (1,1)\n")),
-        ])
-        #expect(k.pairings.isEmpty)
-        #expect(k.collisions.first?.querierFiles.sorted() == ["AskA.cat", "AskB.cat"])
-        #expect(k.collisions.first?.message.contains("all query it") == true)
+    @Test func twoQueriersKeepTheBuildButtonAndNoteTheAskCollision() throws {
+        let c = try #require(try cards([
+            ("Build.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   kb.index\n"),
+            ("AskA.cat", "catflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n"),
+            ("AskB.cat", "catflow 0.8\n1. Read Index   kb.index\n2. Keyword Search   (1,1)\n"),
+        ]).first)
+        #expect(c.buildFile == "Build.cat")      // unambiguous — Build works
+        #expect(c.askFile == nil)                // ambiguous — no Ask button
+        let note = try #require(c.ambiguityNote)
+        #expect(note.contains("AskA.cat") && note.contains("AskB.cat"))
+        #expect(note.contains("Ask") && !note.contains("Build"))
     }
 
-    @Test func twoBuildersButNoQuerierIsNotACollision() throws {
-        // One-sided stays CFM-R17-3 behaviour: no card, and nothing to disambiguate.
-        let k = WorkspaceKnowledge.classify(flows: [
-            (file: "A.cat", doc: try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   x.index\n")),
-            (file: "B.cat", doc: try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   x.index\n")),
-        ])
-        #expect(k.isEmpty)
+    @Test func bothSidesAmbiguousIsACardWithNoButtonsAndTwoNotes() throws {
+        let c = try #require(try cards([
+            ("B1.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   kb.index\n"),
+            ("B2.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   kb.index\n"),
+            ("Q1.cat", "catflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n"),
+            ("Q2.cat", "catflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n"),
+        ]).first)
+        #expect(c.buildFile == nil)
+        #expect(c.askFile == nil)
+        let note = try #require(c.ambiguityNote)
+        #expect(note.contains("Build") && note.contains("Ask"))
+    }
+
+    @Test func twoBuildersButNoQuerierIsNotACard() throws {
+        // One-sided stays CFM-R17-3 behaviour: no card at all.
+        #expect(try cards([
+            ("A.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   x.index\n"),
+            ("B.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   x.index\n"),
+        ]).isEmpty)
     }
 
     @Test func twoIndexAnalystPlusTwoBuildersProducesTwoCards() throws {
         let two = try String(contentsOf: galleryURL("20-TwoIndexAnalyst"), encoding: .utf8)
-        let k = WorkspaceKnowledge.classify(flows: [
-            (file: "Analyst.cat", doc: try doc(two)),
-            (file: "BuildHR.cat", doc: try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   hr.index\n")),
-            (file: "BuildEng.cat", doc: try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   eng.index\n")),
+        let c = try cards([
+            ("Analyst.cat", two),
+            ("BuildHR.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   hr.index\n"),
+            ("BuildEng.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   eng.index\n"),
         ])
-        #expect(k.collisions.isEmpty)
-        #expect(k.pairings.map(\.indexName) == ["eng.index", "hr.index"])
-        #expect(k.pairings.allSatisfy { $0.querierFile == "Analyst.cat" })
-        #expect(Set(k.pairings.map(\.builderFile)) == ["BuildHR.cat", "BuildEng.cat"])
+        #expect(c.map(\.indexName) == ["eng.index", "hr.index"])
+        #expect(c.allSatisfy { $0.querier == .one("Analyst.cat") })
+        #expect(c.allSatisfy { $0.ambiguityNote == nil })
+        #expect(Set(c.map(\.buildFile)) == ["BuildHR.cat", "BuildEng.cat"])
     }
 
     @Test func readIndexAloneIsPlain() throws {
@@ -172,31 +196,28 @@ struct CatFlowWorkspaceKnowledgeTests {
     @Test func ingestAndDocChatRowsPairIntoOneIndexCard() throws {
         let ingest = try String(contentsOf: galleryURL("16-IngestFolder"), encoding: .utf8)
         let docChat = try String(contentsOf: galleryURL("18-DocChat"), encoding: .utf8)
-        let pairs = WorkspaceKnowledge.pairings(flows: [
-            (file: "Ingest.cat", doc: try doc(ingest)),
-            (file: "Ask.cat", doc: try doc(docChat)),
-        ])
-        #expect(pairs.count == 1)
-        let p = try #require(pairs.first)
-        #expect(p.indexName == "library.index")
-        #expect(p.builderFile == "Ingest.cat")
-        #expect(p.querierFile == "Ask.cat")
+        let c = try cards([("Ingest.cat", ingest), ("Ask.cat", docChat)])
+        #expect(c.count == 1)
+        let card = try #require(c.first)
+        #expect(card.indexName == "library.index")
+        #expect(card.builder == .one("Ingest.cat"))
+        #expect(card.querier == .one("Ask.cat"))
+        #expect(card.ambiguityNote == nil)
     }
 
     @Test func flowsThatDoNotPairUpYieldNoCard() throws {
-        let pairs = WorkspaceKnowledge.pairings(flows: [
-            (file: "A.cat", doc: try doc("catflow 0.8\n1. Read Text   a.txt\n2. Save Text   b.md\n")),
-            (file: "B.cat", doc: try doc("catflow 0.8\n1. Read Index   only.index\n2. Retrieve   (1,1)\n")),
-        ])
-        #expect(pairs.isEmpty)   // a querier with no matching builder — not an error, no card
+        // a querier with no matching builder — not an error, no card
+        #expect(try cards([
+            ("A.cat", "catflow 0.8\n1. Read Text   a.txt\n2. Save Text   b.md\n"),
+            ("B.cat", "catflow 0.8\n1. Read Index   only.index\n2. Retrieve   (1,1)\n"),
+        ]).isEmpty)
     }
 
     @Test func differentIndexNamesDoNotPair() throws {
-        let pairs = WorkspaceKnowledge.pairings(flows: [
-            (file: "Build.cat", doc: try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   hr.index\n")),
-            (file: "Ask.cat", doc: try doc("catflow 0.8\n1. Read Index   eng.index\n2. Retrieve   (1,1)\n")),
-        ])
-        #expect(pairs.isEmpty)
+        #expect(try cards([
+            ("Build.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   hr.index\n"),
+            ("Ask.cat", "catflow 0.8\n1. Read Index   eng.index\n2. Retrieve   (1,1)\n"),
+        ]).isEmpty)
     }
 
     // MARK: - Freshness at the cache-key boundary

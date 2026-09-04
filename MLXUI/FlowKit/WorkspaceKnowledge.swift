@@ -22,57 +22,52 @@ nonisolated enum WorkspaceKnowledge {
         case plain
     }
 
-    /// One index a workspace's flows pair up on.
-    struct IndexPairing: Equatable, Sendable {
+    /// One index a workspace's flows work with — a card in the Knowledge Base. A `Side` is
+    /// `.one` when exactly one flow does that job (its button runs that flow), `.ambiguous`
+    /// when more than one does (no button for it — the note names them), `.none` when none do.
+    /// A card exists only when **both** sides have at least one flow (CFM-R17-3: a one-sided
+    /// name still just lists plainly).
+    ///
+    /// CFM-R17-FIX-9(c): an ambiguous side no longer suppresses the whole card. `1 builder +
+    /// 2 queriers` keeps its Build button and notes the Ask collision; the mirror keeps Ask.
+    struct IndexCard: Equatable, Sendable {
         let indexName: String
-        /// The `.cat` file whose terminal row builds it.
-        let builderFile: String
-        /// The `.cat` file that reads and retrieves from it.
-        let querierFile: String
-    }
+        let builder: Side
+        let querier: Side
 
-    /// An index name more than one flow builds, or more than one flow queries — so a single
-    /// "Build"/"Ask" button would be a silent coin-flip (CFM-R17-FIX-5). Surfaced instead of
-    /// paired.
-    struct IndexCollision: Equatable, Sendable {
-        let indexName: String
-        /// Every flow whose terminal row builds this name (source order).
-        let builderFiles: [String]
-        /// Every flow that queries this name (source order).
-        let querierFiles: [String]
+        enum Side: Equatable, Sendable {
+            case none
+            case one(String)
+            /// More than one flow, in source order.
+            case ambiguous([String])
+        }
 
-        /// A plain sentence naming which flows collide and how to fix it.
-        var message: String {
+        /// The flow the **Build** button runs, or nil when the builder side is empty or
+        /// ambiguous.
+        var buildFile: String? {
+            if case .one(let f) = builder { return f }
+            return nil
+        }
+
+        /// The flow the **Ask** button runs, or nil when the querier side is empty or
+        /// ambiguous.
+        var askFile: String? {
+            if case .one(let f) = querier { return f }
+            return nil
+        }
+
+        /// A plain note covering only the ambiguous side(s), or nil when both are unambiguous.
+        var ambiguityNote: String? {
             var clauses: [String] = []
-            if builderFiles.count > 1 {
-                clauses.append("\(list(builderFiles)) all build it")
+            if case .ambiguous(let files) = builder {
+                clauses.append("\(WorkspaceKnowledge.list(files)) all build ‘\(indexName)’ — no single Build button")
             }
-            if querierFiles.count > 1 {
-                clauses.append("\(list(querierFiles)) all query it")
+            if case .ambiguous(let files) = querier {
+                clauses.append("\(WorkspaceKnowledge.list(files)) all query ‘\(indexName)’ — no single Ask button")
             }
-            let detail = clauses.joined(separator: "; ")
-            return "'\(indexName)' isn't paired into a card: \(detail). Rename an index so each one has a single builder and a single querier."
+            guard !clauses.isEmpty else { return nil }
+            return clauses.joined(separator: "; ") + ". Rename one so this index has a single flow on each side."
         }
-
-        private func list(_ files: [String]) -> String {
-            switch files.count {
-            case 0, 1: return files.joined()
-            case 2: return "\(files[0]) and \(files[1])"
-            default: return files.dropLast().joined(separator: ", ") + ", and " + files[files.count - 1]
-            }
-        }
-    }
-
-    /// The knowledge base derived from a workspace's flows: the unambiguous pairs, and the
-    /// name collisions that were held back from pairing.
-    struct Knowledge: Equatable, Sendable {
-        /// Builder + querier pairs where exactly one flow does each, sorted by index name.
-        let pairings: [IndexPairing]
-        /// Names where more than one flow builds or more than one queries (both sides present
-        /// — a one-sided name still just lists plainly, CFM-R17-3), sorted by index name.
-        let collisions: [IndexCollision]
-
-        var isEmpty: Bool { pairings.isEmpty && collisions.isEmpty }
     }
 
     /// Classify one parsed flow.
@@ -94,11 +89,11 @@ nonisolated enum WorkspaceKnowledge {
         return .plain
     }
 
-    /// The knowledge base across a workspace's flows (filename → parsed doc). A builder and a
-    /// querier of the same normalized name pair; a name with builders **and** queriers but
-    /// more than one on a side is a collision, not a coin-flip (CFM-R17-FIX-5); a name with
-    /// only one side does not pair and its flows still list plainly (CFM-R17-3).
-    static func classify(flows: [(file: String, doc: FlowDocument)]) -> Knowledge {
+    /// The Knowledge Base cards across a workspace's flows (filename → parsed doc), sorted by
+    /// index name. One card per normalized index name that has **both** a builder and a
+    /// querier; each side is `.one` / `.ambiguous` / `.none` per how many flows do that job.
+    /// A name with only one side present produces no card (CFM-R17-3).
+    static func classify(flows: [(file: String, doc: FlowDocument)]) -> [IndexCard] {
         var builders: [String: [String]] = [:]
         var queriers: [String: [String]] = [:]
         for entry in flows {
@@ -111,28 +106,33 @@ nonisolated enum WorkspaceKnowledge {
                 continue
             }
         }
-        var pairings: [IndexPairing] = []
-        var collisions: [IndexCollision] = []
+        func side(_ files: [String]) -> IndexCard.Side {
+            switch files.count {
+            case 0: return .none
+            case 1: return .one(files[0])
+            default: return .ambiguous(files)
+            }
+        }
+        var cards: [IndexCard] = []
         for name in Set(builders.keys).union(queriers.keys).sorted() {
             let b = builders[name] ?? []
             let q = queriers[name] ?? []
-            guard !b.isEmpty, !q.isEmpty else { continue }   // one-sided → no card, no collision
-            if b.count == 1, q.count == 1 {
-                pairings.append(IndexPairing(indexName: name, builderFile: b[0], querierFile: q[0]))
-            } else {
-                collisions.append(IndexCollision(indexName: name, builderFiles: b, querierFiles: q))
-            }
+            guard !b.isEmpty, !q.isEmpty else { continue }   // one-sided → no card (CFM-R17-3)
+            cards.append(IndexCard(indexName: name, builder: side(b), querier: side(q)))
         }
-        return Knowledge(pairings: pairings, collisions: collisions)
-    }
-
-    /// The unambiguous index pairings only — the pre-CFM-R17-FIX-5 shape, kept for callers
-    /// that render just the cards.
-    static func pairings(flows: [(file: String, doc: FlowDocument)]) -> [IndexPairing] {
-        classify(flows: flows).pairings
+        return cards
     }
 
     // MARK: - Helpers
+
+    /// "a", "a and b", "a, b, and c".
+    static func list(_ files: [String]) -> String {
+        switch files.count {
+        case 0, 1: return files.joined()
+        case 2: return "\(files[0]) and \(files[1])"
+        default: return files.dropLast().joined(separator: ", ") + ", and " + files[files.count - 1]
+        }
+    }
 
     /// The name a `Store Index` row writes: `name=`, else the first bare token — exactly what
     /// `StoreIndexTool` resolves (`value(for: "name") ?? firstBare()`, and `index_store.py`'s
