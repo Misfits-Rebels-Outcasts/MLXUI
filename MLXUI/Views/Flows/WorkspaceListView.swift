@@ -15,12 +15,14 @@ struct WorkspaceListView: View {
     private var columns: [GridItem] { [GridItem(.adaptive(minimum: 240), spacing: 14)] }
 
     /// CFM-R17-4: parse each flow once, then pair a builder with a querier of the same index.
-    private var pairings: [WorkspaceKnowledge.IndexPairing] {
+    /// CFM-R17-FIX-5: a name with more than one builder or querier surfaces as a collision
+    /// notice rather than a silent coin-flip.
+    private var knowledge: WorkspaceKnowledge.Knowledge {
         let parsed = workspace.flows.compactMap { flow -> (file: String, doc: FlowDocument)? in
             guard let doc = try? WorkspaceStore.loadDocument(flow: flow) else { return nil }
             return (flow.url.lastPathComponent, doc)
         }
-        return WorkspaceKnowledge.pairings(flows: parsed)
+        return WorkspaceKnowledge.classify(flows: parsed)
     }
 
     /// The `manifest.json` of an index in this workspace, read fresh from disk — never cached
@@ -46,8 +48,8 @@ struct WorkspaceListView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
-                let pairs = pairings
-                if !pairs.isEmpty { indexSection(pairs) }
+                let kb = knowledge
+                if !kb.isEmpty { indexSection(kb) }
                 flowsSection
                 if !sharedFiles.isEmpty { sharedFilesSection }
             }
@@ -91,14 +93,34 @@ struct WorkspaceListView: View {
 
     // MARK: - CFM-R17-4: the knowledge-base card
 
-    private func indexSection(_ pairs: [WorkspaceKnowledge.IndexPairing]) -> some View {
+    private func indexSection(_ kb: WorkspaceKnowledge.Knowledge) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Knowledge Base")
                 .font(.title3.weight(.semibold))
-            ForEach(pairs, id: \.indexName) { pair in
+            ForEach(kb.pairings, id: \.indexName) { pair in
                 indexCard(pair)
             }
+            ForEach(kb.collisions, id: \.indexName) { collision in
+                collisionNotice(collision)
+            }
         }
+    }
+
+    /// CFM-R17-FIX-5 — an index whose builders or queriers collide gets a notice, not a card
+    /// wired to whichever flow happened to sort first.
+    private func collisionNotice(_ collision: WorkspaceKnowledge.IndexCollision) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text(collision.message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(Color.orange.opacity(0.3), lineWidth: 1) }
     }
 
     private func indexCard(_ pair: WorkspaceKnowledge.IndexPairing) -> some View {
