@@ -27,18 +27,20 @@ final class AppState {
     /// When `true`, `galleryEntries` is empty. Mirrors `hideFlows`.
     static let hideAutomate = false
 
-    /// Set to `true` to hide the "My Workflows" shelf (the user's own saved flows and the
-    /// New Flow badge) on the Automate → AI Workflows page. The two bundled shelves —
-    /// Basic Gallery and Advance Gallery — still render.
-    static let hideMyWorkflows = false
+    /// Set to `true` to **freeze** the "My Workflows" shelf (the user's own saved flows and
+    /// the New Flow badge) on the Automate → AI Workflows page: the section stays visible but
+    /// every control in it — New Flow, Import, a flow's badge, its export/trash — is
+    /// disabled and dimmed. The two bundled shelves — Basic Gallery and Advance Gallery —
+    /// still render and remain interactive.
+    static let hideMyWorkflows = true
 
     /// Set to `true` to hide the "Advance Gallery" shelf (every bundled flow that isn't
     /// basic) on the Automate → AI Workflows page. My Workflows and Basic Gallery still
     /// render.
-    static let hideAdvanceGallery = false
+    static let hideAdvanceGallery = true
 
     /// Hide individual gallery flows (badges) by gallery number. Numbers are the
-    /// `_metadata.json` `number` field (1–70 today), stable across renames. Ranges
+    /// `_metadata.json` `number` field (1–71 today), stable across renames. Ranges
     /// read naturally — hide flows 60–69:
     /// `static let hiddenFlowNumbers: Set<Int> = Set(60...69)`
     /// …and also hide flow 50:

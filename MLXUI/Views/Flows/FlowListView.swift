@@ -444,6 +444,7 @@ struct FlowListView: View {
                     Label("Duplicate & Edit", systemImage: "square.and.pencil")
                 }
                 .help("Copy this flow into your flows folder and open it in the editor")
+                .disabled(true)
             } else {
                 Button {
                     appState.editingFlow = FlowEditTarget(flowID: flowID, name: display.title,

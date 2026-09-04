@@ -35,10 +35,10 @@ struct OverviewView: View {
 
     private var background: some View {
         VStack(alignment: .leading, spacing: 14) {
-            header1("Why?")
-            Text("\u{201C}AI is making software construction more accessible, but also making software harder to understand.\u{201D}")
+            header1("Why a Readable AI Workflow?")
+            Text("AI is making software construction more accessible, but also making software harder to understand.")
                 .font(.title3.weight(.medium))
-                .italic()
+            Text("AI coding agents can generate thousands of lines of code, modify multiple files, connect services, and make architectural decisions in minutes—often faster than humans can follow. The result may work, but understanding how and why it works becomes increasingly difficult. mlx-workflow addresses this by making AI-driven work readable. Instead of leaving processes buried in agent transcripts, tool calls, and hidden state, mlx-workflow represents work as clear transformations that humans can inspect, follow, and modify. As AI builds more software, mlx-workflow aims to ensure that humans remain able to understand and control it.")
         }
         .padding(.bottom, 28)
     }
@@ -62,7 +62,7 @@ struct OverviewView: View {
                 .foregroundStyle(.secondary)
             Text("That's an entire AI Workflow. You can read it, so you can change it. No developer, no canvas full of boxes and arrows, no wondering what it did while you weren't looking.")
             Text("It runs on your own machine\u{2014}we're currently on Mac\u{2014}so your client files never leave it, and running it costs you nothing.")
-            Text("Keep using Claude or ChatGPT for the thinking and the one-off stuff. That's what they're for. When something becomes a weekly habit, move it here and it becomes a button you press.")
+            Text("Keep using frontier agents for the thinking and the one-off stuff. That's what they're for. When something becomes a weekly habit, move it here and it becomes a button you press.")
         }
         .padding(.bottom, 28)
     }
@@ -71,7 +71,7 @@ struct OverviewView: View {
 
     private var threeThings: some View {
         VStack(alignment: .leading, spacing: 14) {
-            header1("3 Things to Know")
+            header1("3 Things to Know to Get Started")
             //Text("\u{201C}Your data. Your intelligence. Your workflow.\u{201D}")
             //    .font(.title3.weight(.medium))
             //    .italic()

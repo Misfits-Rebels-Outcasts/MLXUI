@@ -17,10 +17,12 @@ struct FlowGalleryView: View {
             VStack(alignment: .leading, spacing: 20) {
                 header
                 // CFM-R12-1: the user's own saved flows. The New Flow badge lives here too —
-                // it is a user action, not a bundled flow.
-                if !AppState.hideMyWorkflows {
-                    myWorkflowsSection
-                }
+                // it is a user action, not a bundled flow. With `hideMyWorkflows` on, the
+                // whole section stays visible but is frozen — every button inside (New Flow,
+                // Import, a flow's badge, its export/trash) is disabled.
+                myWorkflowsSection
+                    .disabled(AppState.hideMyWorkflows)
+                    .opacity(AppState.hideMyWorkflows ? 0.5 : 1)
                 basicGallerySection
                 if !AppState.hideAdvanceGallery {
                     advanceGallerySection
@@ -34,6 +36,16 @@ struct FlowGalleryView: View {
         .onAppear {
             appState.reloadUserFlows()
             appState.refreshGalleryBlocked()
+        }
+        // The gallery is the NavigationStack root, so `onAppear` does **not** fire again
+        // when the editor pops back to it after a rename-and-save — the badge would keep the
+        // old title until the user left the section and returned. Refresh whenever the editor
+        // closes instead (editingFlow goes non-nil → nil), which covers both direct edits and
+        // Duplicate & Edit copies.
+        .onChange(of: appState.editingFlow) { _, newValue in
+            if newValue == nil {
+                appState.reloadUserFlows()
+            }
         }
         .confirmationDialog("Remove this flow?", isPresented: Binding(
             get: { flowPendingRemoval != nil },
@@ -107,22 +119,24 @@ struct FlowGalleryView: View {
                 Text("Basic Gallery")
                     .font(.title3.weight(.semibold))
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
-                    ForEach(appState.basicGalleryEntries) { flow in
-                        badge(for: flow)
+                    ForEach(Array(appState.basicGalleryEntries.enumerated()), id: \.element.id) { index, flow in
+                        badge(for: flow, number: index + 1)
                     }
                 }
             }
         )
     }
 
-    /// The "Advance Gallery" shelf: every bundled flow that isn't basic.
+    /// The "Advance Gallery" shelf: every bundled flow that isn't basic. Numbered within its
+    /// own shelf (starting at 1) just like Basic Gallery — the two shelves never share a
+    /// number, so a "Transcribe Audio" badge in Basic Gallery reads 1 rather than 70.
     private var advanceGallerySection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Advance Gallery")
                 .font(.title3.weight(.semibold))
             LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
-                ForEach(appState.advanceGalleryEntries) { flow in
-                    badge(for: flow)
+                ForEach(Array(appState.advanceGalleryEntries.enumerated()), id: \.element.id) { index, flow in
+                    badge(for: flow, number: index + 1)
                 }
             }
         }
@@ -294,7 +308,10 @@ struct FlowGalleryView: View {
         }
     }
 
-    private func badge(for flow: GalleryFlowMetadata) -> some View {
+    /// One bundled gallery badge. `number` is the **shelf-local** number (the per-shelf
+    /// ordinal 1…N, not the metadata's global `number`), so Basic and Advance each read
+    /// starting at 1.
+    private func badge(for flow: GalleryFlowMetadata, number: Int) -> some View {
         Button {
             appState.selectedFlow = FlowSelection(flowID: flow.flowID)
         } label: {
@@ -312,7 +329,7 @@ struct FlowGalleryView: View {
                     }
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("\(flow.number)")
+                    Text("\(number)")
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                     Text(flow.title)
