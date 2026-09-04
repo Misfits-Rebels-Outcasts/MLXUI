@@ -355,6 +355,9 @@ struct CatFlowUsesEndToEndTests {
         let dir = ws.directory(for: "uses_example")
         #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("AskYourDocs.cat").path))
         #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("RagQuery.cat").path))
+        // CFM-R17-FIX-6: the assets the rows read ship too — no failure on row 1.
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("question.txt").path))
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("kb.index/manifest.json").path))
 
         // It lists as a two-flow workspace, and is excluded from a user's own list.
         let listed = try #require(WorkspaceStore.scan(workspace: ws).first)
@@ -362,7 +365,10 @@ struct CatFlowUsesEndToEndTests {
         #expect(listed.flows.map(\.title).sorted() == ["AskYourDocs", "RagQuery"])
         #expect(WorkspaceStore.scan(workspace: ws, bundledWorkspaceIDs: BundledWorkspaces.ids).isEmpty)
 
-        // And the bundled pair runs end to end.
+        // The `uses:` graph resolves and the interpreter walks both flows. (This uses
+        // `MockExecutor`, which synthesizes every output from the task shape and never touches
+        // the filesystem — it proves the composition, not that a real RAG run succeeds. The
+        // real-executor floor is `bundledUsesExampleClearsRowOneUnderARealExecutor`.)
         let text = try String(contentsOf: dir.appendingPathComponent(meta.entryFlow), encoding: .utf8)
         let doc = try CatParser.parse(text)
         let graph = UsesResolver.resolve(doc, workspace: ws, flowID: "uses_example",
@@ -371,6 +377,45 @@ struct CatFlowUsesEndToEndTests {
         let events = try await FlowInterpreter.run(doc, executor: MockExecutor(blobDirectory: base.appendingPathComponent("blobs")),
                                                    definitions: doc.definitions, presets: doc.presets, usesGraph: graph)
         #expect(events.last?.kind == .runCompleted)
+    }
+
+    /// CFM-R17-FIX-6 — with the shipped `question.txt` and `kb.index/`, materialising the
+    /// bundled workspace and running it under a **real** executor clears row 1 (`Read Text
+    /// question.txt`). The run still can't finish in a unit host with no model weights — the
+    /// wall is the `Embed` row inside `RagQuery`, one row into the used flow, which is exactly
+    /// where journal `2026-169` expects it, not on row 1.
+    @Test func bundledUsesExampleClearsRowOneUnderARealExecutor() async throws {
+        let meta = try #require(BundledWorkspaces.meta(id: "uses_example"))
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-bw-real-\(UUID().uuidString)")
+        let root = base.appendingPathComponent("workspaces")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let ws = FlowWorkspace(root: root)
+
+        try BundledWorkspaces.prepare(meta, workspace: ws)
+        let dir = ws.directory(for: "uses_example")
+        let text = try String(contentsOf: dir.appendingPathComponent(meta.entryFlow), encoding: .utf8)
+        let doc = try CatParser.parse(text)
+        let blob = base.appendingPathComponent("blobs")
+        let graph = UsesResolver.resolve(doc, workspace: ws, flowID: "uses_example",
+                                         selfFile: dir.appendingPathComponent(meta.entryFlow))
+        let executor = RealExecutor(
+            workspace: ws, flowID: "uses_example", blobDirectory: blob,
+            makeModelStage: { _, _ in throw FlowError.unknownTask(row: "no model weights in a unit host") },
+            installedModelIDs: [], catalog: [])
+        let events = try await FlowInterpreter.run(doc, executor: executor,
+                                                   definitions: doc.definitions, presets: doc.presets,
+                                                   usesGraph: graph)
+
+        // Row 1 read its file.
+        #expect(events.contains { $0.kind == .rowCompleted && $0.path == "1" },
+                "Read Text question.txt should complete — the asset ships now")
+        // The used flow was entered and it's the model row that stops it, not row 1.
+        #expect(events.contains { $0.kind == .rowFailed && $0.path == "2.1" },
+                "the wall is `Embed` (RagQuery row 1 → 2.1), one row into the used flow")
+        #expect(!events.contains { $0.kind == .rowCompleted && $0.path == "3" },
+                "Save Text must not run — the flow never reaches it")
     }
 
     @Test func prepareIsIdempotentAndLeavesEditsAlone() throws {

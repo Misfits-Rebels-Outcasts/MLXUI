@@ -10,6 +10,13 @@ import Foundation
 /// `5e0f622`, 2026-08-07): `AskYourDocs.cat` calls `RagQuery.cat` through
 /// `uses: RagQuery = ./RagQuery.cat`. It is the first thing to actually exercise the app's
 /// `uses:` expansion, sibling resolution, and the App Store E117 channel guarantee end to end.
+/// It also ships the two assets its rows read — a sample `question.txt` and the prebuilt
+/// `kb.index/` (`RagQuery.cat` row 2) — so opening it and pressing Run works once BGE-M3 and
+/// Qwen3 8B are installed, exactly as `gallery/17-AskYourDocs.cat` (the same flow with the
+/// retrieval rows written out) does. The Python reference leaves both files for the caller to
+/// supply (`tests/test_uses_example.py::_install`); the app has no such step, so a shelf user
+/// would otherwise fail on row 1 (CFM-R17-FIX-6). `kb.index/` is the same corpus gallery 17
+/// ships (API-key docs) — hence the sample question.
 ///
 /// `ask_your_docs` (CFM-R17-6) is `16-IngestFolder` + `18-DocChat` sharing one `library.index`:
 /// `Ingest.cat` builds the index from the workspace's own `docs/` PDFs, `DocChat.cat` reads and
@@ -42,6 +49,13 @@ nonisolated enum BundledWorkspaces {
              files: [
                 BundledFile(resource: "uses_example--AskYourDocs", ext: "cat", destination: "AskYourDocs.cat"),
                 BundledFile(resource: "uses_example--RagQuery", ext: "cat", destination: "RagQuery.cat"),
+                // The two assets the rows read. `question.txt` — `AskYourDocs.cat` row 1;
+                // `kb.index/` — `RagQuery.cat` row 2, the same prebuilt corpus `16/17/18`
+                // ship (globally unique flat resources, read-only copy).
+                BundledFile(resource: "uses_example--question", ext: "txt", destination: "question.txt"),
+                BundledFile(resource: "library-chunks", ext: "jsonl", destination: "kb.index/chunks.jsonl"),
+                BundledFile(resource: "library-manifest", ext: "json", destination: "kb.index/manifest.json"),
+                BundledFile(resource: "library-vectors", ext: "bin", destination: "kb.index/vectors.bin"),
              ]),
         Meta(id: "ask_your_docs",
              title: "Ask Your Docs",
