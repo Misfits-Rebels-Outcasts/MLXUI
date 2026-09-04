@@ -5,8 +5,11 @@ import Foundation
 /// Covers the R5 pre-parsed-JSON retirement (CFM-FIX-5 / M11): the bundled gallery ships
 /// `.cat` text only (no `*.parse.json` in the app bundle), and `CatParser` reproduces every
 /// gallery flow's parse tree **byte-for-byte** against trees regenerated from the Python
-/// runtime into `Fixtures/CatFlow/gallery/`. 70 free conformance cases — the retired
-/// `*.parse.json` corpus, restored as fixtures instead of deleted.
+/// runtime into `Fixtures/CatFlow/gallery/`. 71 free conformance cases — the retired
+/// `*.parse.json` corpus, restored as fixtures instead of deleted. Two shelves ship the flows:
+/// `MLXUI/Resources/Gallery` (Advance) and `MLXUI/Resources/BasicGallery` (Basic) — both are
+/// flattened into the same app-bundle `Contents/Resources/` root, so every test here reads
+/// both directories.
 struct CatFlowGalleryReproductionTests {
 
     private var galleryDir: URL {
@@ -15,6 +18,31 @@ struct CatFlowGalleryReproductionTests {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("MLXUI/Resources/Gallery")
+    }
+
+    private var basicGalleryDir: URL {
+        let filePath = #filePath
+        return URL(fileURLWithPath: filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("MLXUI/Resources/BasicGallery")
+    }
+
+    /// Every bundled `.cat`/`.catpipeline` filename across both shelves, sorted.
+    private func allGalleryFiles() throws -> [String] {
+        let suffixes = [".cat", ".catpipeline"]
+        let advance = try FileManager.default.contentsOfDirectory(atPath: galleryDir.path)
+            .filter { name in suffixes.contains { name.hasSuffix($0) } }
+        let basic = try FileManager.default.contentsOfDirectory(atPath: basicGalleryDir.path)
+            .filter { name in suffixes.contains { name.hasSuffix($0) } }
+        return (advance + basic).sorted()
+    }
+
+    /// Resolve a flow's flat filename to the directory (Gallery or BasicGallery) it lives in.
+    private func directory(for filename: String) -> URL {
+        FileManager.default.fileExists(atPath: basicGalleryDir.appendingPathComponent(filename).path)
+            ? basicGalleryDir
+            : galleryDir
     }
 
     private var fixturesGalleryDir: URL {
@@ -32,15 +60,13 @@ struct CatFlowGalleryReproductionTests {
     }
 
     @Test func everyGalleryFlowParses() throws {
-        let files = try FileManager.default.contentsOfDirectory(atPath: galleryDir.path)
-            .filter { $0.hasSuffix(".cat") || $0.hasSuffix(".catpipeline") }
-            .sorted()
-        #expect(files.count == 70, "the gallery drifted — expected 70 flows, found \(files.count)")
+        let files = try allGalleryFiles()
+        #expect(files.count == 71, "the gallery drifted — expected 71 flows, found \(files.count)")
 
         var checked = 0
         for f in files {
             let id = (f as NSString).deletingPathExtension
-            let text = try String(contentsOf: galleryDir.appendingPathComponent(f), encoding: .utf8)
+            let text = try String(contentsOf: directory(for: f).appendingPathComponent(f), encoding: .utf8)
             let doc: FlowDocument
             do {
                 doc = try CatParser.parse(text)
@@ -63,15 +89,13 @@ struct CatFlowGalleryReproductionTests {
     /// CFM-FIX-5 / M11: every gallery flow's parse tree matches the Python-generated golden
     /// in `Fixtures/CatFlow/gallery/`, byte-for-byte on the canonical JSON.
     @Test func everyGalleryFlowMatchesPythonParseTree() throws {
-        let files = try FileManager.default.contentsOfDirectory(atPath: galleryDir.path)
-            .filter { $0.hasSuffix(".cat") || $0.hasSuffix(".catpipeline") }
-            .sorted()
-        #expect(files.count == 70)
+        let files = try allGalleryFiles()
+        #expect(files.count == 71)
 
         var checked = 0
         for f in files {
             let id = (f as NSString).deletingPathExtension
-            let catURL = galleryDir.appendingPathComponent(f)
+            let catURL = directory(for: f).appendingPathComponent(f)
             let doc = try CatParser.parse(try String(contentsOf: catURL, encoding: .utf8))
 
             let goldenURL = fixturesGalleryDir.appendingPathComponent("\(id).parse.json")
@@ -88,9 +112,12 @@ struct CatFlowGalleryReproductionTests {
     }
 
     @Test func noParseJSONResourcesRemain() throws {
-        let leftover = try FileManager.default.contentsOfDirectory(atPath: galleryDir.path)
+        let leftoverAdvance = try FileManager.default.contentsOfDirectory(atPath: galleryDir.path)
             .filter { $0.hasSuffix(".parse.json") }
-        #expect(leftover.isEmpty, "pre-parsed JSON retired — found: \(leftover)")
+        let leftoverBasic = try FileManager.default.contentsOfDirectory(atPath: basicGalleryDir.path)
+            .filter { $0.hasSuffix(".parse.json") }
+        #expect(leftoverAdvance.isEmpty, "pre-parsed JSON retired — found: \(leftoverAdvance)")
+        #expect(leftoverBasic.isEmpty, "pre-parsed JSON retired — found: \(leftoverBasic)")
     }
 
     @Test func galleryLoaderParsesAtRuntime() throws {

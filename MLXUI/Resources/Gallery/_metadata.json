@@ -486,9 +486,17 @@
   {
    "number": 70,
    "title": "Transcribe Audio",
-   "filename": "70-TranscribeAudio.cat",
+   "filename": "1-TranscribeAudio.cat",
    "category": "Basic",
    "description": "The simple starting flow: read an audio file, transcribe it with Whisper, save the transcript.",
+   "tier": "basic"
+  },
+  {
+   "number": 71,
+   "title": "Summary From Audio",
+   "filename": "2-SummaryFromAudio.cat",
+   "category": "Basic",
+   "description": "One step past Transcribe Audio: the same transcript, boiled down to a three-word takeaway and saved alongside it.",
    "tier": "basic"
   }
  ]

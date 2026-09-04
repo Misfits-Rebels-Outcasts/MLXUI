@@ -1,0 +1,45 @@
+{
+ "rows": [
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "canond.wav",
+   "task": "Read Audio"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": "Whisper Small",
+   "refs": [],
+   "settings": "lang=en",
+   "task": "Transcribe"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": "Qwen3 8B",
+   "refs": [],
+   "settings": "\"3 words\"",
+   "task": "Summarize"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "summarize.txt",
+   "task": "Save Text"
+  }
+ ],
+ "version": "0.8"
+}

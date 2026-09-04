@@ -1,0 +1,5 @@
+catflow 0.8
+1. Read Audio   canond.wav
+2. Transcribe   Whisper Small; lang=en
+3. Summarize    Qwen3 8B; "3 words"
+4. Save Text    summarize.txt

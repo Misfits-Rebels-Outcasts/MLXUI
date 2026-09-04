@@ -261,8 +261,8 @@ struct FlowGalleryView: View {
                 Text("Basic Gallery")
                     .font(.title3.weight(.semibold))
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
-                    ForEach(appState.basicGalleryEntries) { flow in
-                        badge(for: flow)
+                    ForEach(Array(appState.basicGalleryEntries.enumerated()), id: \.element.id) { index, flow in
+                        badge(for: flow, displayNumber: index + 1)
                     }
                 }
             }
@@ -448,7 +448,12 @@ struct FlowGalleryView: View {
         }
     }
 
-    private func badge(for flow: GalleryFlowMetadata) -> some View {
+    /// - Parameter displayNumber: the digit the badge shows. Defaults to `flow.number` (the
+    ///   stable, globally-unique identity Advance Gallery has always shown). Basic Gallery
+    ///   passes its own 1-based shelf position instead, so its badges read "1, 2, …" even
+    ///   though `flow.number` stays in the single global sequence underneath (AppState.swift's
+    ///   `hiddenFlowNumbers` doc comment).
+    private func badge(for flow: GalleryFlowMetadata, displayNumber: Int? = nil) -> some View {
         Button {
             appState.selectedFlow = FlowSelection(flowID: flow.flowID)
         } label: {
@@ -466,7 +471,7 @@ struct FlowGalleryView: View {
                     }
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("\(flow.number)")
+                    Text("\(displayNumber ?? flow.number)")
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                     Text(flow.title)

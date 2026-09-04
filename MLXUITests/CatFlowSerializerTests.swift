@@ -24,6 +24,28 @@ struct CatFlowSerializerTests {
             .appendingPathComponent("MLXUI/Resources/Gallery")
     }
 
+    private var basicGalleryDir: URL {
+        let filePath = #filePath
+        return URL(fileURLWithPath: filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("MLXUI/Resources/BasicGallery")
+    }
+
+    /// Every bundled `.cat`/`.catpipeline` across both shelves (Gallery + BasicGallery,
+    /// both flattened into the same app-bundle `Contents/Resources/` root), as
+    /// `(filename, directory)` pairs sorted by filename.
+    private func allGalleryFiles() throws -> [(name: String, dir: URL)] {
+        let suffixes = [".cat", ".catpipeline"]
+        let advance = try FileManager.default.contentsOfDirectory(atPath: galleryDir.path)
+            .filter { name in suffixes.contains { name.hasSuffix($0) } }
+            .map { (name: $0, dir: galleryDir) }
+        let basic = try FileManager.default.contentsOfDirectory(atPath: basicGalleryDir.path)
+            .filter { name in suffixes.contains { name.hasSuffix($0) } }
+            .map { (name: $0, dir: basicGalleryDir) }
+        return (advance + basic).sorted { $0.name < $1.name }
+    }
+
     // MARK: - The 8 exact-output goldens (parse → serialize == .fmt.cat)
 
     @Test func eightFmtGoldensReproduceByteForByte() throws {
@@ -54,16 +76,14 @@ struct CatFlowSerializerTests {
     // MARK: - Whole-gallery round-trip (serialize(parse(x)) == x)
 
     @Test func wholeGalleryRoundTripsByteForByte() throws {
-        let files = try FileManager.default.contentsOfDirectory(atPath: galleryDir.path)
-            .filter { $0.hasSuffix(".cat") || $0.hasSuffix(".catpipeline") }
-            .sorted()
-        #expect(files.count == 70)
+        let files = try allGalleryFiles()
+        #expect(files.count == 71)
 
         var checked = 0
         var failing: [String] = []
-        for f in files {
+        for (f, dir) in files {
             let id = (f as NSString).deletingPathExtension
-            let source = try String(contentsOf: galleryDir.appendingPathComponent(f), encoding: .utf8)
+            let source = try String(contentsOf: dir.appendingPathComponent(f), encoding: .utf8)
             let doc = try CatParser.parse(source)
             let actual = CatSerializer.serialize(doc)
             if actual != source {
@@ -71,7 +91,7 @@ struct CatFlowSerializerTests {
             }
             checked += 1
         }
-        #expect(checked == 70)
+        #expect(checked == 71)
         #expect(failing.isEmpty,
                 "non-canonical gallery files (serialize(parse(x)) != x): \(failing.joined(separator: ", "))")
         if !failing.isEmpty {
@@ -84,11 +104,9 @@ struct CatFlowSerializerTests {
     // MARK: - Idempotence
 
     @Test func serializeIsIdempotent() throws {
-        let files = try FileManager.default.contentsOfDirectory(atPath: galleryDir.path)
-            .filter { $0.hasSuffix(".cat") || $0.hasSuffix(".catpipeline") }
-            .sorted()
-        for f in files {
-            let source = try String(contentsOf: galleryDir.appendingPathComponent(f), encoding: .utf8)
+        let files = try allGalleryFiles()
+        for (f, dir) in files {
+            let source = try String(contentsOf: dir.appendingPathComponent(f), encoding: .utf8)
             let once = CatSerializer.serialize(try CatParser.parse(source))
             let twice = CatSerializer.serialize(try CatParser.parse(once))
             #expect(once == twice, "\(f): not idempotent")
