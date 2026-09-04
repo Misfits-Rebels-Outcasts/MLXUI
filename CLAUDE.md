@@ -55,7 +55,7 @@ Work is driven from `RSI/`, one reviewable cycle at a time. Not ad hoc.
 
 | File | Role |
 |---|---|
-| `RSI/policies.md` | **Read first, every cycle.** Current autonomy level (**L1** — one task per cycle, every diff reviewed) and the standing guardrails. |
+| `RSI/policies.md` | **Read first, every cycle.** Current autonomy level (**L2** — one task per cycle, scorecard-first review; promoted from L1 on 2026-09-04, journal `2026-172`) and the standing guardrails. |
 | `RSI/backlog.md` | The owner's backlog. `/add-mlxui` appends `AM-*` intake groups here. |
 | `RSI/DelegateMergeBacklog.md` | The CAT Flow merge phases (R1…R16), delegated for external implementation. |
 | `RSI/journal/` | One entry per task — what was done, what the gates said, what was found. |
