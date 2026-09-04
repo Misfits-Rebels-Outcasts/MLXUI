@@ -21,12 +21,36 @@ struct WorkspaceListView: View {
     /// that can see disk, so it decides what's worth showing: a builder makes a card always
     /// actionable (Build); with no builder, only an index that already exists on disk earns a
     /// card (Ask, no Build) — a querier with nothing to read yet is a dead end, not a card.
+    ///
+    /// CFM-R17-FIX-11(e): a caller's `uses:` graph is resolved here (`UsesResolver` needs a
+    /// workspace + id — `classify`/`role` stay pure) and passed in so a caller inherits its
+    /// callees' index use; a `.cat` that is itself the *target* of some sibling's `uses:` line
+    /// is excluded from the candidate list — it's a library component (its rows typically take
+    /// input the caller supplies), not a runnable entry point, and left in it would outnumber
+    /// and out-vote the caller its `uses:` line exists to reach (`AskYourDocs.cat` calling
+    /// `RagQuery.cat`: both would classify as the sole querier of `kb.index`, an ambiguous
+    /// card with no working Ask — the very defect this fixes, arrived a different way).
     private var knowledgeCards: [WorkspaceKnowledge.IndexCard] {
-        let parsed = workspace.flows.compactMap { flow -> (file: String, doc: FlowDocument)? in
+        let ws = FlowWorkspace(root: ModelStore.shared.workspacesDirectory)
+        let flowID = workspace.workspaceID
+        let parsed = workspace.flows.compactMap { flow -> (file: String, doc: FlowDocument, url: URL)? in
             guard let doc = try? WorkspaceStore.loadDocument(flow: flow) else { return nil }
-            return (flow.url.lastPathComponent, doc)
+            return (flow.url.lastPathComponent, doc, flow.url)
         }
-        return WorkspaceKnowledge.classify(flows: parsed).filter {
+        var usesGraphs: [String: [String: FlowInterpreter.UsedFlow]] = [:]
+        var calleeURLs: Set<URL> = []
+        for entry in parsed where !entry.doc.uses.isEmpty {
+            usesGraphs[entry.file] = UsesResolver.resolve(entry.doc, workspace: ws, flowID: flowID, selfFile: entry.url)
+            for rawPath in entry.doc.uses.values {
+                if let resolved = try? ws.resolve(rawPath, flowID: flowID) {
+                    calleeURLs.insert(resolved.resolvingSymlinksInPath())
+                }
+            }
+        }
+        let candidates = parsed
+            .filter { !calleeURLs.contains($0.url.resolvingSymlinksInPath()) }
+            .map { (file: $0.file, doc: $0.doc) }
+        return WorkspaceKnowledge.classify(flows: candidates, usesGraphs: usesGraphs).filter {
             WorkspaceKnowledge.isCardWorthRendering($0, indexExists: manifest(for: $0.indexName) != nil)
         }
     }

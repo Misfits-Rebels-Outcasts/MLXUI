@@ -105,30 +105,46 @@ nonisolated enum WorkspaceKnowledge {
         }
     }
 
-    /// Classify one parsed flow.
-    static func role(of doc: FlowDocument) -> FlowIndexUse {
-        let rows = flatten(doc.rows)
-        let builds = dedupe(rows
-            .compactMap { $0.task == "Store Index" ? storeIndexName($0) : nil }
-            .map(normalizedIndexName))
-        var queries: [String] = []
-        if rows.contains(where: { $0.task == "Retrieve" || $0.task == "Keyword Search" }) {
-            queries = dedupe(rows
-                .compactMap { $0.task == "Read Index" ? readIndexName($0) : nil }
-                .map(normalizedIndexName))
+    /// Classify one parsed flow. `usesGraph` is `doc`'s own resolved `uses:` graph (the caller
+    /// resolves it — `UsesResolver` needs a workspace + id, so this stays pure); a row calling
+    /// an entry in it inherits that used flow's index use, recursively through its own further
+    /// `uses:` (CFM-R17-FIX-11(e), owner-ruled 2026-09-04). A caller whose retrieval lives
+    /// entirely behind a `uses:` composite — `AskYourDocs.cat` calling `RagQuery.cat` — used to
+    /// classify `.plain`; it now inherits `RagQuery`'s `Read Index`/`Retrieve` and classifies as
+    /// the querier. `usesGraph` defaults empty, so a flow with no `uses:` (or a caller nobody
+    /// passed a graph for) classifies exactly as before.
+    static func role(of doc: FlowDocument, usesGraph: [String: FlowInterpreter.UsedFlow] = [:]) -> FlowIndexUse {
+        var use = indexUse(rows: doc.rows)
+        for row in flatten(doc.rows) {
+            guard let task = row.task, let used = usesGraph[task] else { continue }
+            let callee = indexUseOfUsedFlow(used)
+            use.builds += callee.builds
+            use.queries += callee.queries
         }
-        return FlowIndexUse(builds: builds, queries: queries)
+        return FlowIndexUse(builds: dedupe(use.builds), queries: dedupe(use.queries))
     }
 
     /// The Knowledge Base card candidates across a workspace's flows (filename → parsed doc),
     /// sorted by index name — one card per name **any** flow mentions on either side, absent
     /// side `.none` (CFM-R17-FIX-11(c)). Pure: no filesystem access, so the caller decides what
-    /// to render.
-    static func classify(flows: [(file: String, doc: FlowDocument)]) -> [IndexCard] {
+    /// to render (and, per `usesGraphs` below, what counts as a candidate at all).
+    ///
+    /// `usesGraphs` is `[file: doc's own resolved uses: graph]` (CFM-R17-FIX-11(e)) — sparse,
+    /// only flows with a `uses:` section need an entry, and a missing one classifies that flow
+    /// with no inheritance (same as omitting the parameter). **The caller must not include a
+    /// flow that is itself the *target* of some sibling's `uses:` line in `flows`** — a `uses:`
+    /// composite (`RagQuery.cat`) is a library component, not a runnable entry point (its first
+    /// row typically takes input the caller supplies, per `AppFlowExecutorFactory`'s
+    /// caller-only `transforms` map — the same "the caller supplies what the callee needs"
+    /// shape `-10` found for `transforms:`); leaving it in would make it compete with, and
+    /// often out-vote, the caller its `uses:` line exists to reach — the exact defect this item
+    /// fixes, arrived at a different way.
+    static func classify(flows: [(file: String, doc: FlowDocument)],
+                         usesGraphs: [String: [String: FlowInterpreter.UsedFlow]] = [:]) -> [IndexCard] {
         var builders: [String: [String]] = [:]
         var queriers: [String: [String]] = [:]
         for entry in flows {
-            let use = role(of: entry.doc)
+            let use = role(of: entry.doc, usesGraph: usesGraphs[entry.file] ?? [:])
             for name in use.builds { builders[name, default: []].append(entry.file) }
             for name in use.queries { queriers[name, default: []].append(entry.file) }
         }
@@ -201,5 +217,37 @@ nonisolated enum WorkspaceKnowledge {
 
     private static func flatten(_ rows: [Row]) -> [Row] {
         rows.flatMap { [$0] + flatten($0.children) }
+    }
+
+    /// `builds`/`queries` over one row list, un-deduplicated (the caller dedupes after
+    /// merging in whatever a `uses:` expansion contributes) — the row-scanning half of `role`,
+    /// shared with `indexUseOfUsedFlow` since a used flow's `rows` is the same `[Row]` shape.
+    private static func indexUse(rows: [Row]) -> FlowIndexUse {
+        let flat = flatten(rows)
+        let builds = flat
+            .compactMap { $0.task == "Store Index" ? storeIndexName($0) : nil }
+            .map(normalizedIndexName)
+        var queries: [String] = []
+        if flat.contains(where: { $0.task == "Retrieve" || $0.task == "Keyword Search" }) {
+            queries = flat
+                .compactMap { $0.task == "Read Index" ? readIndexName($0) : nil }
+                .map(normalizedIndexName)
+        }
+        return FlowIndexUse(builds: builds, queries: queries)
+    }
+
+    /// CFM-R17-FIX-11(e): a used flow's own index use, plus whatever it inherits through its
+    /// further `uses:` (`used.nested` — `UsesResolver` already resolved these recursively and
+    /// ruled out cycles, E115). Mirrors `role(of:usesGraph:)`'s row-walk, over
+    /// `FlowInterpreter.UsedFlow.rows` instead of a `FlowDocument`'s.
+    private static func indexUseOfUsedFlow(_ used: FlowInterpreter.UsedFlow) -> FlowIndexUse {
+        var use = indexUse(rows: used.rows)
+        for row in flatten(used.rows) {
+            guard let task = row.task, let nested = used.nested[task] else { continue }
+            let callee = indexUseOfUsedFlow(nested)
+            use.builds += callee.builds
+            use.queries += callee.queries
+        }
+        return use
     }
 }

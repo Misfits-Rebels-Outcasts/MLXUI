@@ -313,6 +313,92 @@ struct CatFlowWorkspaceKnowledgeTests {
                 "a prebuilt, queryable index is a real state — uses_example ships exactly this")
     }
 
+    // MARK: - CFM-R17-FIX-11(e): a caller inherits its callees' index use through uses:
+
+    /// A resolved `uses:` entry built directly from source text — the shape `UsesResolver`
+    /// would hand `role(of:usesGraph:)`, without needing a workspace on disk.
+    private func usedFlow(_ text: String, nested: [String: FlowInterpreter.UsedFlow] = [:]) throws -> FlowInterpreter.UsedFlow {
+        let d = try doc(text)
+        return FlowInterpreter.UsedFlow(params: d.params, rows: d.rows,
+                                        definitions: d.definitions, presets: d.presets, nested: nested)
+    }
+
+    @Test func aCallerInheritsItsCalleesIndexUse() throws {
+        // uses_example-shaped: AskYourDocs.cat calls RagQuery.cat, and RagQuery.cat's own
+        // Read Index + Retrieve is what makes AskYourDocs a querier — it has neither itself.
+        let caller = try doc("catflow 0.8\n1. RagQuery\n\nuses:\n  RagQuery = ./RagQuery.cat\n")
+        let ragQuery = try usedFlow("""
+        catflow 0.8
+        1. Embed       BGE-M3
+        2. Read Index  kb.index
+        3. Retrieve    (2,1)
+        4. Answer      Qwen3 8B
+        """)
+        // Without the graph, still `.plain` — inheritance is opt-in per call site.
+        #expect(WorkspaceKnowledge.role(of: caller).isPlain)
+        #expect(WorkspaceKnowledge.role(of: caller, usesGraph: ["RagQuery": ragQuery])
+            == WorkspaceKnowledge.FlowIndexUse(queries: ["kb.index"]))
+    }
+
+    @Test func inheritanceRecursesThroughNestedUsesChains() throws {
+        // A uses B uses C; C is where the Read Index + Retrieve actually live.
+        let c = try usedFlow("catflow 0.8\n1. Read Index   deep.index\n2. Retrieve   (1,1)\n")
+        let b = try usedFlow("catflow 0.8\n1. C\n\nuses:\n  C = ./C.cat\n", nested: ["C": c])
+        let a = try doc("catflow 0.8\n1. B\n\nuses:\n  B = ./B.cat\n")
+        #expect(WorkspaceKnowledge.role(of: a, usesGraph: ["B": b])
+            == WorkspaceKnowledge.FlowIndexUse(queries: ["deep.index"]))
+    }
+
+    @Test func classifyWithAUsesGraphMakesTheCallerTheSoleQuerier() throws {
+        // Mirrors what `WorkspaceListView` does: the callee is excluded from `flows` entirely
+        // (it's a library component, not a candidate) — only its resolved graph is passed,
+        // attributed to the caller. One card, one unambiguous Ask, no coin-flip with the callee.
+        let ragQuery = try usedFlow("""
+        catflow 0.8
+        1. Embed       BGE-M3
+        2. Read Index  kb.index
+        3. Retrieve    (2,1)
+        4. Answer      Qwen3 8B
+        """)
+        let c = WorkspaceKnowledge.classify(
+            flows: [("AskYourDocs.cat", try doc("catflow 0.8\n1. RagQuery\n\nuses:\n  RagQuery = ./RagQuery.cat\n"))],
+            usesGraphs: ["AskYourDocs.cat": ["RagQuery": ragQuery]])
+        #expect(c.count == 1)
+        #expect(c.first?.indexName == "kb.index")
+        #expect(c.first?.querier == .one("AskYourDocs.cat"))
+        #expect(c.first?.askFile == "AskYourDocs.cat")
+    }
+
+    @Test func bundledUsesExampleKnowledgeCardAsksTheCallerNotTheCallee() throws {
+        // The real fixture: `AskYourDocs.cat` calls `RagQuery.cat` (which cannot run standalone
+        // — its row 1 `Embed` has no inline value and no upstream). Mirroring
+        // `WorkspaceListView.knowledgeCards`'s exclusion, `RagQuery.cat` never enters `flows`.
+        let meta = try #require(BundledWorkspaces.meta(id: "uses_example"))
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-kb-uses-\(UUID().uuidString)")
+        let root = base.appendingPathComponent("workspaces")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let ws = FlowWorkspace(root: root)
+        try BundledWorkspaces.prepare(meta, workspace: ws)
+        let dir = ws.directory(for: "uses_example")
+        let askURL = dir.appendingPathComponent("AskYourDocs.cat")
+        let askDoc = try CatParser.parse(try String(contentsOf: askURL, encoding: .utf8))
+        let graph = UsesResolver.resolve(askDoc, workspace: ws, flowID: "uses_example", selfFile: askURL)
+
+        let c = WorkspaceKnowledge.classify(
+            flows: [("AskYourDocs.cat", askDoc)],
+            usesGraphs: ["AskYourDocs.cat": graph])
+        #expect(c.count == 1)
+        let card = try #require(c.first)
+        #expect(card.indexName == "kb.index")
+        #expect(card.querier == .one("AskYourDocs.cat"))
+        #expect(card.askFile == "AskYourDocs.cat")
+        // The real-executor proof that this target actually clears row 1 lives in
+        // `CatFlowUsesEndToEndTests.bundledUsesExampleClearsRowOneUnderARealExecutor` — this
+        // test is the other half: the card now points there, not at `RagQuery.cat`.
+    }
+
     // MARK: - Freshness at the cache-key boundary
 
     @Test func rebuildingTheIndexChangesRetrievesCacheKey() async throws {
