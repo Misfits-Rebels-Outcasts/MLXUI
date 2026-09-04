@@ -490,14 +490,6 @@
    "category": "Basic",
    "description": "The simple starting flow: read an audio file, transcribe it with Whisper, save the transcript.",
    "tier": "basic"
-  },
-  {
-   "number": 71,
-   "title": "Summary from Audio",
-   "filename": "71-SummaryFromAudio.cat",
-   "category": "Basic",
-   "description": "Read an audio file, transcribe it with Whisper, and boil it down to a three-word summary saved as text.",
-   "tier": "basic"
   }
  ]
 }

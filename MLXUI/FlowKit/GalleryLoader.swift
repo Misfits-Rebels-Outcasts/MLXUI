@@ -273,8 +273,6 @@ nonisolated enum GalleryLoader {
             return [("new_orders.csv", "new_orders.csv"), ("orders.db", "orders.db")]
         case "70-TranscribeAudio":
             return [("canond.wav", "canond.wav")]
-        case "71-SummaryFromAudio":
-            return [("71-SummaryFromAudio-canond.wav", "canond.wav")]
         default:
             return []
         }
