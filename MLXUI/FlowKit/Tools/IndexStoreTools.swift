@@ -289,6 +289,13 @@ nonisolated struct RetrieveTool {
         }
         let manifest = try IndexFormat.manifest(from: data)
         let query = try NpyCodec.load(from: vectorPath)
+        // SPEC-Q211 / CFM-R17-7: runtime compares **dims only**, matching
+        // `index_store.py::retrieve` — a same-dims query from a different embedder retrieves
+        // silently-wrong chunks in both runtimes. Embedder-identity mismatch is a
+        // validation-time check (E209/E707); the query vector carries no embedder id here, so
+        // a runtime refusal naming both isn't expressible without new sidecar plumbing. The
+        // `Read Index`-loaded / workspace-built case that neither layer catches in MLXUI is
+        // recorded in `catflow-mlx/SPEC_QUESTIONS.md` Q211 as an unported validator path.
         guard query.count == manifest.dims else {
             throw FlowError.stageFailure(row: "Retrieve",
                                          message: "query has \(query.count) dims, index expects \(manifest.dims)")

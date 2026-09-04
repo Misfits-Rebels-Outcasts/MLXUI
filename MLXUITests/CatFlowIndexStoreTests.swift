@@ -233,4 +233,46 @@ struct CatFlowIndexStoreTests {
         #expect(FlowParity.asciiJSON("plain") == "\"plain\"")
     }
 
+    /// SPEC-Q211 / CFM-R17-7: `Retrieve` compares **dims only**, matching
+    /// `index_store.py::retrieve`. An index whose `manifest.embedder` differs from whatever
+    /// produced the query is *not* refused at run time — the chunks come back (silently), and
+    /// this test locks that deliberate parity so a future well-meaning "tightening" trips a
+    /// test rather than diverging from the reference unnoticed. Embedder-identity mismatch is
+    /// the validator's job (E209/E707); the `Read Index`-loaded gap is recorded as Q211.
+    @Test func retrieveDoesNotRefuseAMismatchedEmbedderAtRuntime() async throws {
+        let (ws, base) = try makeWorkspace()
+        defer { teardown(base) }
+        let flowDir = ws.directory(for: "f")
+        try FileManager.default.createDirectory(at: flowDir, withIntermediateDirectories: true)
+
+        // Build an index that declares embedder "BGE-M3" (8-dim one-hots).
+        let chunks = ["alpha chunk", "beta chunk", "gamma chunk"]
+        let vectors: [[Float]] = [[1,0,0,0,0,0,0,0], [0,1,0,0,0,0,0,0], [0,0,1,0,0,0,0,0]]
+        let vectorItems = try vectors.enumerated().map { i, v -> Item in
+            let url = flowDir.appendingPathComponent("v\(i).npy")
+            try NpyCodec.save(v, to: url)
+            return Item(kind: .vector, value: nil, path: url, sourceText: nil)
+        }
+        let store = StoreIndexTool(workspace: ws, flowID: "f", settings: "kb; embedder=BGE-M3")
+        let indexAsset = try await store.run(inputs: [
+            Asset(items: chunks.map { Item(kind: .text, value: $0, path: nil, sourceText: nil) }),
+            Asset(items: vectorItems),
+        ])
+        let indexDir = try #require(indexAsset.items.first?.path)
+        let manifest = try IndexFormat.manifest(
+            from: Data(contentsOf: indexDir.appendingPathComponent("manifest.json")))
+        #expect(manifest.embedder == "BGE-M3")
+
+        // Query with a same-dimension vector from a *different* embedder (no embedder id on it).
+        let queryURL = flowDir.appendingPathComponent("q.npy")
+        try NpyCodec.save([0, 0.9, 0.1, 0, 0, 0, 0, 0], to: queryURL)
+        let retrieve = RetrieveTool(workspace: ws, flowID: "f", settings: "top_k=1")
+        let out = try await retrieve.run(inputs: [
+            Asset(items: [Item(kind: .index, value: nil, path: indexDir, sourceText: nil)]),
+            Asset(items: [Item(kind: .vector, value: nil, path: queryURL, sourceText: nil)]),
+        ])
+        // No throw; it returns the nearest chunk by cosine, embedder mismatch notwithstanding.
+        #expect(out.items.map { $0.value ?? "" } == ["beta chunk"])
+    }
+
 }
