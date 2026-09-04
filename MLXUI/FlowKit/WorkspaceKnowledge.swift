@@ -164,6 +164,44 @@ nonisolated enum WorkspaceKnowledge {
         }
     }
 
+    /// Knowledge Base cards for a whole workspace — the `uses:` candidate-exclusion and graph
+    /// construction `-11(e)` added, plus `classify` itself. Extracted here (CFM-R17-FIX-12(c))
+    /// from `WorkspaceListView.knowledgeCards`, a **private computed property on a SwiftUI
+    /// view** — nothing could test any of this while it lived there; the two tests that
+    /// appeared to cover it hand-performed the exclusion instead of exercising it. Pure:
+    /// `resolveUses`/`resolvePath` are the filesystem-touching halves (`uses:` graph
+    /// resolution via `UsesResolver`, raw-path resolution via `FlowWorkspace.resolve`) — the
+    /// caller supplies them, the same shape `isCardWorthRendering` uses for `indexExists`.
+    ///
+    /// **Current rule, unchanged by this extraction — CFM-R17-FIX-12(a) is next:** a `.cat` is
+    /// excluded from the candidate set when its resolved path is named by **any** sibling's
+    /// `uses:` line, unconditionally — regardless of whether a row actually calls that alias or
+    /// the entry survived into the resolved graph. This over-excludes (a declared-but-uncalled
+    /// entry, or either side of a `uses:` cycle, loses its card even though nothing about it
+    /// changed) — `-12(a)` narrows the rule to "called and resolved." This function is what
+    /// makes that narrowing (and `-12(b)`'s callee-runnability rule) an ordinary unit test
+    /// instead of something only arguable from reading the code.
+    static func classifyWorkspace(
+        flows: [(file: String, doc: FlowDocument, url: URL)],
+        resolveUses: (_ doc: FlowDocument, _ selfFile: URL) -> [String: FlowInterpreter.UsedFlow],
+        resolvePath: (_ rawPath: String) -> URL?
+    ) -> [IndexCard] {
+        var usesGraphs: [String: [String: FlowInterpreter.UsedFlow]] = [:]
+        var calleeURLs: Set<URL> = []
+        for entry in flows where !entry.doc.uses.isEmpty {
+            usesGraphs[entry.file] = resolveUses(entry.doc, entry.url)
+            for rawPath in entry.doc.uses.values {
+                if let resolved = resolvePath(rawPath) {
+                    calleeURLs.insert(resolved.resolvingSymlinksInPath())
+                }
+            }
+        }
+        let candidates = flows
+            .filter { !calleeURLs.contains($0.url.resolvingSymlinksInPath()) }
+            .map { (file: $0.file, doc: $0.doc) }
+        return classify(flows: candidates, usesGraphs: usesGraphs)
+    }
+
     /// Whether `card` is worth rendering as a Knowledge Base card (CFM-R17-FIX-11(c),
     /// owner-ruled 2026-09-04): a builder makes it always actionable (Build creates the
     /// index); with no builder, only an index that already exists earns a card — a querier

@@ -16,20 +16,18 @@ struct WorkspaceListView: View {
 
     /// CFM-R17-4: parse each flow once, then a Knowledge Base card per index worth rendering.
     /// CFM-R17-FIX-5/-9(c): an ambiguous side drops its own button and notes the collision; the
-    /// unambiguous side keeps working. CFM-R17-FIX-11(c): `classify` is pure and returns a card
-    /// for every index name any flow mentions, `.none` sides included — this is the one place
-    /// that can see disk, so it decides what's worth showing: a builder makes a card always
+    /// unambiguous side keeps working. CFM-R17-FIX-11(c): a builder makes a card always
     /// actionable (Build); with no builder, only an index that already exists on disk earns a
     /// card (Ask, no Build) — a querier with nothing to read yet is a dead end, not a card.
+    /// CFM-R17-FIX-11(e): a caller inherits its `uses:` callees' index use; a `.cat` that is
+    /// itself the target of a sibling's `uses:` line is excluded from the candidate set (a
+    /// library component, not a runnable entry point).
     ///
-    /// CFM-R17-FIX-11(e): a caller's `uses:` graph is resolved here (`UsesResolver` needs a
-    /// workspace + id — `classify`/`role` stay pure) and passed in so a caller inherits its
-    /// callees' index use; a `.cat` that is itself the *target* of some sibling's `uses:` line
-    /// is excluded from the candidate list — it's a library component (its rows typically take
-    /// input the caller supplies), not a runnable entry point, and left in it would outnumber
-    /// and out-vote the caller its `uses:` line exists to reach (`AskYourDocs.cat` calling
-    /// `RagQuery.cat`: both would classify as the sole querier of `kb.index`, an ambiguous
-    /// card with no working Ask — the very defect this fixes, arrived a different way).
+    /// CFM-R17-FIX-12(c): the candidate-set/graph construction that used to live in this
+    /// property is now `WorkspaceKnowledge.classifyWorkspace` — a pure, directly-tested
+    /// function. This is just plumbing: parse the flows, hand `UsesResolver`/`FlowWorkspace`
+    /// to it as closures (the filesystem-touching halves it can't do itself), then apply the
+    /// one filter that's still this view's own call — whether an index exists on disk.
     private var knowledgeCards: [WorkspaceKnowledge.IndexCard] {
         let ws = FlowWorkspace(root: ModelStore.shared.workspacesDirectory)
         let flowID = workspace.workspaceID
@@ -37,20 +35,13 @@ struct WorkspaceListView: View {
             guard let doc = try? WorkspaceStore.loadDocument(flow: flow) else { return nil }
             return (flow.url.lastPathComponent, doc, flow.url)
         }
-        var usesGraphs: [String: [String: FlowInterpreter.UsedFlow]] = [:]
-        var calleeURLs: Set<URL> = []
-        for entry in parsed where !entry.doc.uses.isEmpty {
-            usesGraphs[entry.file] = UsesResolver.resolve(entry.doc, workspace: ws, flowID: flowID, selfFile: entry.url)
-            for rawPath in entry.doc.uses.values {
-                if let resolved = try? ws.resolve(rawPath, flowID: flowID) {
-                    calleeURLs.insert(resolved.resolvingSymlinksInPath())
-                }
-            }
-        }
-        let candidates = parsed
-            .filter { !calleeURLs.contains($0.url.resolvingSymlinksInPath()) }
-            .map { (file: $0.file, doc: $0.doc) }
-        return WorkspaceKnowledge.classify(flows: candidates, usesGraphs: usesGraphs).filter {
+        let cards = WorkspaceKnowledge.classifyWorkspace(
+            flows: parsed,
+            resolveUses: { doc, selfFile in
+                UsesResolver.resolve(doc, workspace: ws, flowID: flowID, selfFile: selfFile)
+            },
+            resolvePath: { rawPath in try? ws.resolve(rawPath, flowID: flowID) })
+        return cards.filter {
             WorkspaceKnowledge.isCardWorthRendering($0, indexExists: manifest(for: $0.indexName) != nil)
         }
     }

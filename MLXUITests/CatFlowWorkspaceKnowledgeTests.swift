@@ -376,9 +376,10 @@ struct CatFlowWorkspaceKnowledgeTests {
     }
 
     @Test func bundledUsesExampleKnowledgeCardAsksTheCallerNotTheCallee() throws {
-        // The real fixture: `AskYourDocs.cat` calls `RagQuery.cat` (which cannot run standalone
-        // — its row 1 `Embed` has no inline value and no upstream). Mirroring
-        // `WorkspaceListView.knowledgeCards`'s exclusion, `RagQuery.cat` never enters `flows`.
+        // The real fixture, through the real extracted pipeline (CFM-R17-FIX-12(c)): both
+        // `AskYourDocs.cat` *and* `RagQuery.cat` go into `flows` — `classifyWorkspace` itself
+        // must do the exclusion (`RagQuery.cat` cannot run standalone — its row 1 `Embed` has
+        // no inline value and no upstream), not a test that hand-picks which file to pass.
         let meta = try #require(BundledWorkspaces.meta(id: "uses_example"))
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("catflow-kb-uses-\(UUID().uuidString)")
@@ -388,13 +389,18 @@ struct CatFlowWorkspaceKnowledgeTests {
         let ws = FlowWorkspace(root: root)
         try BundledWorkspaces.prepare(meta, workspace: ws)
         let dir = ws.directory(for: "uses_example")
-        let askURL = dir.appendingPathComponent("AskYourDocs.cat")
-        let askDoc = try CatParser.parse(try String(contentsOf: askURL, encoding: .utf8))
-        let graph = UsesResolver.resolve(askDoc, workspace: ws, flowID: "uses_example", selfFile: askURL)
+        let flows = try meta.files.filter { $0.ext == "cat" }.map { file -> (file: String, doc: FlowDocument, url: URL) in
+            let url = dir.appendingPathComponent(file.destination)
+            return (file.destination, try CatParser.parse(try String(contentsOf: url, encoding: .utf8)), url)
+        }
+        #expect(Set(flows.map(\.file)) == ["AskYourDocs.cat", "RagQuery.cat"])
 
-        let c = WorkspaceKnowledge.classify(
-            flows: [("AskYourDocs.cat", askDoc)],
-            usesGraphs: ["AskYourDocs.cat": graph])
+        let c = WorkspaceKnowledge.classifyWorkspace(
+            flows: flows,
+            resolveUses: { doc, selfFile in
+                UsesResolver.resolve(doc, workspace: ws, flowID: "uses_example", selfFile: selfFile)
+            },
+            resolvePath: { rawPath in try? ws.resolve(rawPath, flowID: "uses_example") })
         #expect(c.count == 1)
         let card = try #require(c.first)
         #expect(card.indexName == "kb.index")
@@ -403,6 +409,79 @@ struct CatFlowWorkspaceKnowledgeTests {
         // The real-executor proof that this target actually clears row 1 lives in
         // `CatFlowUsesEndToEndTests.bundledUsesExampleClearsRowOneUnderARealExecutor` — this
         // test is the other half: the card now points there, not at `RagQuery.cat`.
+    }
+
+    @Test func classifyWorkspaceLeavesAnUnrelatedThirdFlowAsACandidate() throws {
+        // Only the actual uses: target is excluded — a third flow with no relation to the
+        // caller/callee pair stays a normal candidate, on either side.
+        let caller = try doc("catflow 0.8\n1. RagQuery\n\nuses:\n  RagQuery = ./RagQuery.cat\n")
+        let calleeText = "catflow 0.8\n1. Embed   BGE-M3\n2. Read Index   kb.index\n3. Retrieve   (2,1)\n"
+        let callee = try doc(calleeText)
+        let calleeUsed = try usedFlow(calleeText)
+        let other = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   other.index\n")
+        let callerURL = URL(fileURLWithPath: "/ws/AskYourDocs.cat")
+        let calleeURL = URL(fileURLWithPath: "/ws/RagQuery.cat")
+        let otherURL = URL(fileURLWithPath: "/ws/Other.cat")
+
+        let cards = WorkspaceKnowledge.classifyWorkspace(
+            flows: [
+                ("AskYourDocs.cat", caller, callerURL),
+                ("RagQuery.cat", callee, calleeURL),
+                ("Other.cat", other, otherURL),
+            ],
+            resolveUses: { _, selfFile in selfFile == callerURL ? ["RagQuery": calleeUsed] : [:] },
+            resolvePath: { raw in raw == "./RagQuery.cat" ? calleeURL : nil })
+
+        #expect(cards.map(\.indexName).sorted() == ["kb.index", "other.index"])
+        let kbCard = try #require(cards.first { $0.indexName == "kb.index" })
+        #expect(kbCard.querier == .one("AskYourDocs.cat"))
+        #expect(kbCard.builder == .none)
+        let otherCard = try #require(cards.first { $0.indexName == "other.index" })
+        #expect(otherCard.builder == .one("Other.cat"))
+    }
+
+    @Test func classifyWorkspaceWithNoUsesAnywhereNeverCallsTheResolvers() throws {
+        let build = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   kb.index\n")
+        let ask = try doc("catflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n")
+        var resolverCalls = 0
+        let cards = WorkspaceKnowledge.classifyWorkspace(
+            flows: [
+                ("Build.cat", build, URL(fileURLWithPath: "/ws/Build.cat")),
+                ("Ask.cat", ask, URL(fileURLWithPath: "/ws/Ask.cat")),
+            ],
+            resolveUses: { _, _ in resolverCalls += 1; return [:] },
+            resolvePath: { _ in resolverCalls += 1; return nil })
+        #expect(resolverCalls == 0, "no flow declares uses: — the resolvers must never be invoked")
+        #expect(cards.count == 1)
+        #expect(cards.first?.builder == .one("Build.cat"))
+        #expect(cards.first?.querier == .one("Ask.cat"))
+    }
+
+    @Test func classifyWorkspaceExcludesADeclaredButNeverCalledEntryPendingFIX12a() throws {
+        // CFM-R17-FIX-12(a) (not yet fixed — this pins TODAY's blunt rule, which the next
+        // cycle narrows to "called and resolved"): `Nightly.cat` declares `uses: Ingest =
+        // ./Ingest.cat` but no row calls it (mid-edit, commented out). `Ingest.cat` still
+        // builds `library.index` on its own rows, and is excluded anyway, purely because
+        // *some* sibling names its path — regardless of ever being reached.
+        let nightly = try doc("catflow 0.8\n1. Save Text   noop.md\n\nuses:\n  Ingest = ./Ingest.cat\n")
+        let ingest = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n")
+        let ask = try doc("catflow 0.8\n1. Read Index   library.index\n2. Retrieve   (1,1)\n")
+        let ingestURL = URL(fileURLWithPath: "/ws/Ingest.cat")
+
+        let cards = WorkspaceKnowledge.classifyWorkspace(
+            flows: [
+                ("Nightly.cat", nightly, URL(fileURLWithPath: "/ws/Nightly.cat")),
+                ("Ingest.cat", ingest, ingestURL),
+                ("Ask.cat", ask, URL(fileURLWithPath: "/ws/Ask.cat")),
+            ],
+            resolveUses: { _, _ in [:] },   // "Ingest" never survives the resolve either way
+            resolvePath: { raw in raw == "./Ingest.cat" ? ingestURL : nil })
+
+        // TODAY: `Ingest.cat` is excluded regardless of never being called. `-12(a)` flips this
+        // to `.one("Ingest.cat")` once the rule narrows to "called and resolved" — flip this
+        // assertion when it lands, don't just delete the test.
+        let libraryCard = try #require(cards.first { $0.indexName == "library.index" })
+        #expect(libraryCard.builder == .none)
     }
 
     // MARK: - Freshness at the cache-key boundary
