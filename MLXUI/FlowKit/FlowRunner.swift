@@ -325,12 +325,13 @@ nonisolated struct FlowRunner {
         rows.flatMap { [$0] + enumeratedRows($0.children) }
     }
 
-    /// CFM-R17-5 / CFM-R17-FIX-2: the first row inside a resolved used flow (recursively,
+    /// CFM-R17-5 / CFM-R17-FIX-2 / -10: the first row inside a resolved used flow (recursively,
     /// through its own nested `uses:` and block children) that this tier refuses — an unknown
-    /// task, an App-Store-refused door (`.agent`), or an unported instant/net task — as a
-    /// short phrase for the caller's refusal, or `nil` when every row runs. Applies the
-    /// **same** `rowClassRefusal` rule as `canRun`'s top-level loop, so a capability can't
-    /// reach a run through `uses:` that a plain flow would be refused for.
+    /// task, an App-Store-refused door (`.agent`), an unported instant/net task, or a call to a
+    /// `transforms:` the used flow declares (unsupported — the executor only carries the
+    /// caller's) — as a short phrase for the caller's refusal, or `nil` when every row runs.
+    /// Applies the **same** `rowClassRefusal` rule as `canRun`'s top-level loop, so a
+    /// capability can't reach a run through `uses:` that a plain flow would be refused for.
     private static func usedFlowRefusal(_ used: FlowInterpreter.UsedFlow) -> String? {
         for row in enumeratedRows(used.rows) {
             guard let task = row.task else {
@@ -342,6 +343,16 @@ nonisolated struct FlowRunner {
                 continue
             }
             if used.definitions[task] != nil { continue }
+            // CFM-R17-FIX-10: a row calling a `transforms:` the *used* flow declares. The
+            // executor's `transforms` map is built once from the caller's `doc.transforms`
+            // (`AppFlowExecutorFactory`), so this could never run — in **either** edition.
+            // Refuse it up front with the real reason (not "unknown task"), and not behind an
+            // `isAppStoreBuild` branch: used-flow transforms are unsupported, full stop. If
+            // that ever changes, `UsedFlow.transformNames` is the hook — and widening it needs
+            // an owner line, because it moves the Direct fence.
+            if used.transformNames.contains(task) {
+                return "`\(task)`, a `transforms:` script the used flow declares — a used flow can't run its own transforms; inline it into the calling flow instead"
+            }
             switch rowClassRefusal(task) {
             case .unknownTask:
                 return "`\(task)`, which isn't a task this version of Flows knows"

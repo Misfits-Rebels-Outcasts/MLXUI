@@ -193,6 +193,12 @@ nonisolated enum FlowInterpreter {
         var presets: [String: PresetDecl]
         var nested: [String: UsedFlow] = [:]
         var sourceText: String? = nil
+        /// CFM-R17-FIX-10: the **names** of any `transforms:` the used flow declares — not the
+        /// bodies. `RealExecutor.transforms` only ever carries the *caller's*, so a used flow's
+        /// own transform can't execute; `FlowRunner.canRun` refuses a row that calls one, with
+        /// a sentence that says *that* rather than "unknown task". Carrying names (not scripts)
+        /// keeps the Direct fence exactly where it was.
+        var transformNames: Set<String> = []
     }
 
     /// One completed tool-call round trip for a transcript-keeping decider (`Think`,

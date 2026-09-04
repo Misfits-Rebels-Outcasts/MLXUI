@@ -340,6 +340,53 @@ struct CatFlowUsesEndToEndTests {
     // (a well-formed `uses:` call still resolving to `.runnable` is covered by
     // `canRunAcceptsAResolvedUsesCall` above — the FIX-2 recursion runs on that path too.)
 
+    // MARK: - CFM-R17-FIX-10 — a used flow's own `transforms:` is unsupported
+
+    private var callerOfHelper: String {
+        "catflow 0.8\n1. Helper\n\nuses:\n  Helper = ./Helper.cat\n"
+    }
+
+    /// `RealExecutor.transforms` is built once from the *caller's* `doc.transforms`
+    /// (`AppFlowExecutorFactory`), so a transform declared inside a used flow could never run.
+    /// FIX-2(b) caught it only incidentally, as `.unknownTask`. FIX-10: refuse it up front with
+    /// the real reason — and **not** behind an `isAppStoreBuild` branch, so it holds in the
+    /// Direct build too (where a caller's own `transforms:` *would* run, fenced).
+    @Test func aUsedFlowCallingItsOwnTransformIsRefusedWithTheRealReason() throws {
+        let (ws, id, base) = try makeWorkspace(files: [
+            ("Caller.cat", callerOfHelper),
+            ("Helper.cat", "catflow 0.8\n1. Tidy\n\ntransforms:\n  Tidy  text -> text\n    run: script.sh\n"),
+        ])
+        defer { try? FileManager.default.removeItem(at: base) }
+        let doc = try CatParser.parse(callerOfHelper)
+        let scope = FlowScope(identity: "Caller", workspace: ws, locationID: id, flowText: callerOfHelper,
+                              selfFile: ws.directory(for: id).appendingPathComponent("Caller.cat"))
+
+        guard case .notRunnable(let reason) = FlowRunner.canRun(doc, scope: scope) else {
+            Issue.record("a used flow that declares and calls its own `transforms:` must be refused up front")
+            return
+        }
+        #expect(reason.contains("Tidy"))
+        #expect(reason.contains("transforms:"))
+        #expect(reason.contains("can't run its own transforms"))
+        // Not "unknown task" (the old incidental path), and edition-independent.
+        #expect(!reason.contains("isn't a task this version of Flows knows"))
+        #expect(!reason.contains("App Store"))
+    }
+
+    /// The limit is "declares **and calls**": a used flow that declares a transform it never
+    /// invokes still runs (the `transformNames` check keys on the row, not the section).
+    @Test func aUsedFlowThatDeclaresButNeverCallsATransformStillRuns() throws {
+        let (ws, id, base) = try makeWorkspace(files: [
+            ("Caller.cat", callerOfHelper),
+            ("Helper.cat", "catflow 0.8\n1. Read Text   a.txt\n2. Save Text   b.md\n\ntransforms:\n  Tidy  text -> text\n    run: script.sh\n"),
+        ])
+        defer { try? FileManager.default.removeItem(at: base) }
+        let doc = try CatParser.parse(callerOfHelper)
+        let scope = FlowScope(identity: "Caller", workspace: ws, locationID: id, flowText: callerOfHelper,
+                              selfFile: ws.directory(for: id).appendingPathComponent("Caller.cat"))
+        #expect(FlowRunner.canRun(doc, scope: scope) == .runnable)
+    }
+
     // MARK: - The bundled workspace
 
     @Test func bundledUsesExampleMaterializesAndListsAsAWorkspace() async throws {

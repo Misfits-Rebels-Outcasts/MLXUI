@@ -42,7 +42,9 @@ nonisolated enum UsesResolver {
             out[name] = FlowInterpreter.UsedFlow(
                 params: used.params, rows: used.rows,
                 definitions: used.definitions, presets: used.presets,
-                nested: nested, sourceText: text)
+                nested: nested, sourceText: text,
+                // CFM-R17-FIX-10: names only — the bodies are deliberately dropped.
+                transformNames: Set(used.transforms.keys))
         }
         return out
     }
