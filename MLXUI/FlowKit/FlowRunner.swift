@@ -123,12 +123,17 @@ nonisolated struct FlowRunner {
     /// are refused; in the **Direct** build they run fenced (`sandbox-exec`).
     /// CFM-R17-1 convenience: resolve the E117 `uses:` chain against a `FlowScope` — the
     /// used `.cat` sits at `workspace/<locationID>/`, so location, not identity, is the key.
+    /// CFM-R17-5: also resolves the `uses:` graph so a row that calls a used flow is
+    /// recognised (rather than refused as an unknown task).
     static func canRun(_ doc: FlowDocument, scope: FlowScope) -> Runnability {
-        canRun(doc, flowID: scope.locationID, workspace: scope.workspace)
+        let graph = doc.uses.isEmpty ? [:] : UsesResolver.resolve(
+            doc, workspace: scope.workspace, flowID: scope.locationID, selfFile: scope.selfFile)
+        return canRun(doc, flowID: scope.locationID, workspace: scope.workspace, usesGraph: graph)
     }
 
     static func canRun(_ doc: FlowDocument, flowID: String? = nil,
-                       workspace: FlowWorkspace? = nil) -> Runnability {
+                       workspace: FlowWorkspace? = nil,
+                       usesGraph: [String: FlowInterpreter.UsedFlow] = [:]) -> Runnability {
         if CapabilityGate.isAppStoreBuild {
             // E117 (CFM-R10-FIX-3): the App Store refusal must see capabilities inherited
             // through `uses:` — a used flow declaring `code`/`improvise` while the header
@@ -165,6 +170,20 @@ nonisolated struct FlowRunner {
                 if CapabilityGate.isAppStoreBuild {
                     return .notRunnable(reason:
                         "Row \(position) calls transform '\(row.task!)', which the App Store build refuses — distribute it directly instead.")
+                }
+                continue
+            }
+            // CFM-R17-5: a row naming a `uses:` entry. The `scope` overload resolved the
+            // sibling `.cat` into `usesGraph`; the interpreter expands it like a composite.
+            // The entry must have resolved, and every row inside the used flow must be one
+            // this version knows (recursively, through its own nested `uses:`).
+            if doc.uses[row.task!] != nil {
+                guard let used = usesGraph[row.task!] else {
+                    return .notRunnable(reason:
+                        "Row \(position) uses `\(row.task!)`, but that flow couldn't be resolved — check its `uses:` line points at a `.cat` beside it in this workspace.")
+                }
+                if let bad = Self.unknownRowInUsedFlow(used) {
+                    return .notRunnable(reason: "Row \(position) uses `\(row.task!)`, which names \(bad).")
                 }
                 continue
             }
@@ -242,6 +261,13 @@ nonisolated struct FlowRunner {
                     continuation.finish()
                     return
                 }
+                // CFM-R17-5: resolve the flow's `uses:` section into the graph the interpreter
+                // expands. Empty for every plain flow (`doc.uses` is empty), so the conformance
+                // traces are byte-for-byte unchanged.
+                let usesGraph: [String: FlowInterpreter.UsedFlow] = doc.uses.isEmpty ? [:]
+                    : UsesResolver.resolve(doc, workspace: context.scope.workspace,
+                                           flowID: context.scope.locationID,
+                                           selfFile: context.scope.selfFile)
                 do {
                     // `onEvent` streams each event to the UI the moment it lands — the dots
                     // advance row-by-row while the flow is still running, instead of the whole
@@ -249,6 +275,7 @@ nonisolated struct FlowRunner {
                     let _ = try await FlowInterpreter.run(doc, executor: context.executor,
                                                           definitions: doc.definitions,
                                                           presets: doc.presets,
+                                                          usesGraph: usesGraph,
                                                           occurrence: occurrence,
                                                           answers: answers,
                                                           // The GUI parks `timeout=` human rows (wait + fallback); the
@@ -294,6 +321,28 @@ nonisolated struct FlowRunner {
     /// — `canRun` must see a task nested inside a block.
     private static func enumeratedRows(_ rows: [Row]) -> [Row] {
         rows.flatMap { [$0] + enumeratedRows($0.children) }
+    }
+
+    /// CFM-R17-5: the first row inside a resolved used flow (recursively, through its own
+    /// nested `uses:`) whose task this version doesn't know — a short phrase for the E113-ish
+    /// refusal — or `nil` when every row is a catalog task, a composite in the used flow's
+    /// own `definitions:`, or a further `uses:` call.
+    private static func unknownRowInUsedFlow(_ used: FlowInterpreter.UsedFlow) -> String? {
+        for row in enumeratedRows(used.rows) {
+            guard let task = row.task else {
+                if row.blockKind != nil { continue }
+                return "a row that is neither a task nor a block"
+            }
+            if let nested = used.nested[task] {
+                if let bad = unknownRowInUsedFlow(nested) { return bad }
+                continue
+            }
+            if used.definitions[task] != nil { continue }
+            if TaskCatalog.get(task) == nil {
+                return "`\(task)`, which isn't a task this version of Flows knows"
+            }
+        }
+        return nil
     }
 
     /// Every row's dotted exec path (the interpreter's path identity) → its row id, so the

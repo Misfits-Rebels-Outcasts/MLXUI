@@ -1,0 +1,7 @@
+catflow 0.8
+1. Read Text   question.txt
+2. RagQuery    top_k=5
+3. Save Text   answer.md
+
+uses:
+  RagQuery = ./RagQuery.cat

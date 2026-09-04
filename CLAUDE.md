@@ -114,7 +114,7 @@ Modules ─ one per model family (see below)
 FlowKit ─ the CAT Flow runtime: parser, validator, interpreter, executors, cache, bridge, tools
 Services ─ ModelRunner (MLX chat + agent sessions) · KeychainHelper (in InstallManager.swift)
 Normalization ─ DataNormalizer (license / architecture / task-tag display strings)
-Resources ─ browser.json · Gallery/ (bundled .cat flows) · CatFlow/{frames,models}
+Resources ─ browser.json · Gallery/ (bundled .cat flows) · Workspaces/ (bundled multi-flow workspaces) · CatFlow/{frames,models}
 Vendor ─── PaddleOCRVL (local SPM package)
 ```
 
@@ -172,6 +172,13 @@ The Python runtime in the sibling **`catflow-mlx`** repo is the **parity referen
   there and mark the code `// SPEC-Q<n>`. Don't start a second one here.
 - Bundled gallery flows live in `Resources/Gallery/` with `_metadata.json`;
   `AppState.hiddenFlowNumbers` hides individual ones by number.
+- **Bundled workspaces** (R17) — a multi-flow directory the app ships — live in
+  `Resources/Workspaces/` (files flat, `<id>--` prefixed) and are enumerated by
+  `FlowKit/BundledWorkspaces.swift`, which `prepare`s them into `workspaces/<id>/` on first
+  use. `uses_example` is the first: `AskYourDocs.cat` calling `RagQuery.cat` via `uses:`.
+  `UsesResolver` builds the `uses:` graph the interpreter runs; `FlowRunner` passes it and
+  `canRun` recognises a `uses:` call row (all reachable only through a `FlowScope` whose
+  `locationID` is a workspace id — CFM-R17-1).
 
 ## How the data flows
 

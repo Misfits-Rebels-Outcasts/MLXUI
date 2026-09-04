@@ -1,0 +1,7 @@
+catflow 0.8
+params: top_k = 5
+1. Embed                BGE-M3
+2. Read Index           kb.index
+3. Retrieve     (2,1)   top_k={top_k}
+4. Template             "Context:\n{input}\n\nAnswer the question."
+5. Answer               Qwen3 8B

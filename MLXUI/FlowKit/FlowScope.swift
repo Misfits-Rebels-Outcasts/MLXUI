@@ -25,12 +25,19 @@ nonisolated struct FlowScope: Sendable {
     /// seed. `nil` falls back to the bundled gallery text keyed on `identity` (the
     /// pre-R17 behaviour for every `flows/` flow).
     let flowText: String?
+    /// The flow's own `.cat` file on disk (CFM-R17-5). Only a workspace flow with a `uses:`
+    /// section needs it — it is the first frame of the cycle stack (`A → B → A`) and the
+    /// `rootFile` the validator's E115 check keys on. `nil` for a plain `flows/` flow, which
+    /// never carries a `uses:` section.
+    let selfFile: URL?
 
-    init(identity: String, workspace: FlowWorkspace, locationID: String, flowText: String? = nil) {
+    init(identity: String, workspace: FlowWorkspace, locationID: String,
+         flowText: String? = nil, selfFile: URL? = nil) {
         self.identity = identity
         self.workspace = workspace
         self.locationID = locationID
         self.flowText = flowText
+        self.selfFile = selfFile
     }
 
     /// A plain `flows/`-rooted flow: identity and location are the same id, and the run
