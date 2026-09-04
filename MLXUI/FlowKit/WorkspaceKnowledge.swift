@@ -117,10 +117,16 @@ nonisolated enum WorkspaceKnowledge {
     /// classify `.plain`; it now inherits `RagQuery`'s `Read Index`/`Retrieve` and classifies as
     /// the querier. `usesGraph` defaults empty, so a flow with no `uses:` (or a caller nobody
     /// passed a graph for) classifies exactly as before.
+    ///
+    /// CFM-R17-FIX-12(a): `doc.definitions[task] == nil` gates the `uses:` lookup — the
+    /// interpreter dispatches a row to a same-named `definitions:` composite *first*
+    /// (`FlowInterpreter.swift`'s scope-expansion switch) and never consults `usesGraph` for
+    /// that row at all. A flow declaring both a `definitions:` entry and a `uses:` alias of the
+    /// same name would otherwise inherit index use the interpreter never actually executes.
     static func role(of doc: FlowDocument, usesGraph: [String: FlowInterpreter.UsedFlow] = [:]) -> FlowIndexUse {
         var use = indexUse(rows: doc.rows)
         for row in flatten(doc.rows) {
-            guard let task = row.task, let used = usesGraph[task] else { continue }
+            guard let task = row.task, doc.definitions[task] == nil, let used = usesGraph[task] else { continue }
             let callee = indexUseOfUsedFlow(used)
             use.builds += callee.builds
             use.queries += callee.queries
@@ -173,14 +179,15 @@ nonisolated enum WorkspaceKnowledge {
     /// resolution via `UsesResolver`, raw-path resolution via `FlowWorkspace.resolve`) — the
     /// caller supplies them, the same shape `isCardWorthRendering` uses for `indexExists`.
     ///
-    /// **Current rule, unchanged by this extraction — CFM-R17-FIX-12(a) is next:** a `.cat` is
-    /// excluded from the candidate set when its resolved path is named by **any** sibling's
-    /// `uses:` line, unconditionally — regardless of whether a row actually calls that alias or
-    /// the entry survived into the resolved graph. This over-excludes (a declared-but-uncalled
-    /// entry, or either side of a `uses:` cycle, loses its card even though nothing about it
-    /// changed) — `-12(a)` narrows the rule to "called and resolved." This function is what
-    /// makes that narrowing (and `-12(b)`'s callee-runnability rule) an ordinary unit test
-    /// instead of something only arguable from reading the code.
+    /// **CFM-R17-FIX-12(a): a `.cat` is excluded from the candidate set only when it is both
+    /// *called* and *resolved*** — some row in the caller genuinely dispatches to the alias
+    /// (`definitions:` doesn't intercept it first, the same precedence `role` applies) **and**
+    /// the alias survived into the caller's own resolved graph (wasn't dropped by `UsesResolver`
+    /// for escaping the workspace, closing a cycle, or failing to parse). Declaring a `uses:`
+    /// entry no row calls, or one that names a file that doesn't resolve, no longer costs that
+    /// file its own candidacy — only an entry that would actually run as a composite call does.
+    /// (Was: excluded whenever named by **any** sibling's `uses:` line, unconditionally — see
+    /// journal `2026-188` for what that over-excluded.)
     static func classifyWorkspace(
         flows: [(file: String, doc: FlowDocument, url: URL)],
         resolveUses: (_ doc: FlowDocument, _ selfFile: URL) -> [String: FlowInterpreter.UsedFlow],
@@ -189,8 +196,17 @@ nonisolated enum WorkspaceKnowledge {
         var usesGraphs: [String: [String: FlowInterpreter.UsedFlow]] = [:]
         var calleeURLs: Set<URL> = []
         for entry in flows where !entry.doc.uses.isEmpty {
-            usesGraphs[entry.file] = resolveUses(entry.doc, entry.url)
-            for rawPath in entry.doc.uses.values {
+            let graph = resolveUses(entry.doc, entry.url)
+            usesGraphs[entry.file] = graph
+            // The same "does a row actually dispatch here" set `role` computes for inheritance:
+            // a row whose task names an alias, unless a same-named `definitions:` composite
+            // would run instead.
+            let calledAliases = Set(flatten(entry.doc.rows).compactMap { row -> String? in
+                guard let task = row.task, entry.doc.definitions[task] == nil else { return nil }
+                return task
+            })
+            for (alias, rawPath) in entry.doc.uses {
+                guard calledAliases.contains(alias), graph[alias] != nil else { continue }
                 if let resolved = resolvePath(rawPath) {
                     calleeURLs.insert(resolved.resolvingSymlinksInPath())
                 }
@@ -286,7 +302,8 @@ nonisolated enum WorkspaceKnowledge {
     private static func indexUseOfUsedFlow(_ used: FlowInterpreter.UsedFlow) -> FlowIndexUse {
         var use = indexUse(rows: used.rows)
         for row in flatten(used.rows) {
-            guard let task = row.task, let nested = used.nested[task] else { continue }
+            // CFM-R17-FIX-12(a): same definitions:-first precedence as `role`, one level in.
+            guard let task = row.task, used.definitions[task] == nil, let nested = used.nested[task] else { continue }
             let callee = indexUseOfUsedFlow(nested)
             use.builds += callee.builds
             use.queries += callee.queries

@@ -457,12 +457,10 @@ struct CatFlowWorkspaceKnowledgeTests {
         #expect(cards.first?.querier == .one("Ask.cat"))
     }
 
-    @Test func classifyWorkspaceExcludesADeclaredButNeverCalledEntryPendingFIX12a() throws {
-        // CFM-R17-FIX-12(a) (not yet fixed — this pins TODAY's blunt rule, which the next
-        // cycle narrows to "called and resolved"): `Nightly.cat` declares `uses: Ingest =
-        // ./Ingest.cat` but no row calls it (mid-edit, commented out). `Ingest.cat` still
-        // builds `library.index` on its own rows, and is excluded anyway, purely because
-        // *some* sibling names its path — regardless of ever being reached.
+    @Test func classifyWorkspaceLeavesADeclaredButNeverCalledEntryUntouched() throws {
+        // CFM-R17-FIX-12(a): `Nightly.cat` declares `uses: Ingest = ./Ingest.cat` but no row
+        // calls it (mid-edit, commented out). `Ingest.cat` still builds `library.index` on its
+        // own rows and must keep its card — a declaration alone no longer costs it candidacy.
         let nightly = try doc("catflow 0.8\n1. Save Text   noop.md\n\nuses:\n  Ingest = ./Ingest.cat\n")
         let ingest = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n")
         let ask = try doc("catflow 0.8\n1. Read Index   library.index\n2. Retrieve   (1,1)\n")
@@ -474,14 +472,113 @@ struct CatFlowWorkspaceKnowledgeTests {
                 ("Ingest.cat", ingest, ingestURL),
                 ("Ask.cat", ask, URL(fileURLWithPath: "/ws/Ask.cat")),
             ],
-            resolveUses: { _, _ in [:] },   // "Ingest" never survives the resolve either way
+            resolveUses: { _, _ in [:] },   // never consulted — "Ingest" is never *called*
             resolvePath: { raw in raw == "./Ingest.cat" ? ingestURL : nil })
 
-        // TODAY: `Ingest.cat` is excluded regardless of never being called. `-12(a)` flips this
-        // to `.one("Ingest.cat")` once the rule narrows to "called and resolved" — flip this
-        // assertion when it lands, don't just delete the test.
         let libraryCard = try #require(cards.first { $0.indexName == "library.index" })
-        #expect(libraryCard.builder == .none)
+        #expect(libraryCard.builder == .one("Ingest.cat"))
+        #expect(libraryCard.querier == .one("Ask.cat"))
+    }
+
+    @Test func classifyWorkspaceKeepsAnEntryShadowedByASameNamedDefinitionsComposite() throws {
+        // CFM-R17-FIX-12(a): `Caller.cat` declares both `definitions: Ingest` (a plain inline
+        // composite) *and* `uses: Ingest = ./Ingest.cat` — same name. The interpreter dispatches
+        // `1. Ingest` to the `definitions:` composite first and never reaches the `uses:` entry
+        // (`FlowInterpreter`'s scope-expansion switch). `Ingest.cat` must not lose its card.
+        let caller = try doc("""
+        catflow 0.8
+        1. Ingest
+
+        definitions:
+          composite Ingest   text -> text
+             1. Save Text   noop.md
+
+        uses:
+          Ingest = ./Ingest.cat
+        """)
+        let ingest = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n")
+        let ingestURL = URL(fileURLWithPath: "/ws/Ingest.cat")
+
+        let cards = WorkspaceKnowledge.classifyWorkspace(
+            flows: [
+                ("Caller.cat", caller, URL(fileURLWithPath: "/ws/Caller.cat")),
+                ("Ingest.cat", ingest, ingestURL),
+            ],
+            resolveUses: { _, _ in [:] },
+            resolvePath: { raw in raw == "./Ingest.cat" ? ingestURL : nil })
+
+        let libraryCard = try #require(cards.first { $0.indexName == "library.index" })
+        #expect(libraryCard.builder == .one("Ingest.cat"))
+    }
+
+    @Test func roleDoesNotInheritThroughAnAliasShadowedByADefinitionsComposite() throws {
+        // The inheritance half of the same precedence: `Caller.cat` would otherwise inherit
+        // `RagQuery.cat`'s Read Index/Retrieve, but `definitions: RagQuery` intercepts the row
+        // first, so nothing is ever actually reached — `role` must not inherit from it.
+        let caller = try doc("""
+        catflow 0.8
+        1. RagQuery
+
+        definitions:
+          composite RagQuery   text -> text
+             1. Save Text   noop.md
+
+        uses:
+          RagQuery = ./RagQuery.cat
+        """)
+        let ragQuery = try usedFlow("catflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n")
+        #expect(WorkspaceKnowledge.role(of: caller, usesGraph: ["RagQuery": ragQuery]).isPlain)
+    }
+
+    @Test func classifyWorkspaceHandlesASelfReferencingUsesEntry() throws {
+        // CFM-R17-FIX-12(a): `A.cat` declares `uses: A = ./A.cat` (self-use) and calls it.
+        // `UsesResolver` drops a self-referencing entry outright (E115, the candidate is
+        // already on the stack), so it's never in the resolved graph — `graph["A"] == nil`,
+        // which the "called and resolved" rule reads as "never survived," not excluded.
+        let a = try doc("catflow 0.8\n1. A\n\nuses:\n  A = ./A.cat\n")
+        let aURL = URL(fileURLWithPath: "/ws/A.cat")
+        let cards = WorkspaceKnowledge.classifyWorkspace(
+            flows: [("A.cat", a, aURL)],
+            resolveUses: { _, _ in [:] },   // mirrors UsesResolver: a self-reference never resolves
+            resolvePath: { raw in raw == "./A.cat" ? aURL : nil })
+        #expect(cards.isEmpty)   // A.cat has no index use of its own — nothing to exclude either
+    }
+
+    @Test func classifyWorkspaceAgainstRealFilesConfirmsATrueMutualUsesCycleStillExcludesBoth() throws {
+        // CFM-R17-FIX-12(a) done-when covers "a uses: cycle" — verified here against the REAL
+        // `UsesResolver`/`FlowWorkspace`, not a synthetic graph, because a genuinely symmetric
+        // mutual cycle (A calls B, B calls A, both resolve) is the one shape "called and
+        // resolved" does *not* fix: each file's own top-level resolve succeeds in binding the
+        // other (only the *nested*, one-level-deeper back-reference is dropped, E115), so each
+        // one's caller-row genuinely calls-and-resolves its sibling. Recorded as a known
+        // residual in the backlog item, not silently assumed fixed.
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-kb-cycle-\(UUID().uuidString)")
+        let root = base.appendingPathComponent("workspaces")
+        let dir = root.appendingPathComponent("cycle", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let aText = "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n3. B\n\nuses:\n  B = ./B.cat\n"
+        let bText = "catflow 0.8\n1. Read Index   library.index\n2. Retrieve   (1,1)\n3. A\n\nuses:\n  A = ./A.cat\n"
+        let aURL = dir.appendingPathComponent("A.cat")
+        let bURL = dir.appendingPathComponent("B.cat")
+        try aText.write(to: aURL, atomically: true, encoding: .utf8)
+        try bText.write(to: bURL, atomically: true, encoding: .utf8)
+        let ws = FlowWorkspace(root: root)
+
+        let cards = WorkspaceKnowledge.classifyWorkspace(
+            flows: [
+                ("A.cat", try CatParser.parse(aText), aURL),
+                ("B.cat", try CatParser.parse(bText), bURL),
+            ],
+            resolveUses: { doc, selfFile in
+                UsesResolver.resolve(doc, workspace: ws, flowID: "cycle", selfFile: selfFile)
+            },
+            resolvePath: { raw in try? ws.resolve(raw, flowID: "cycle") })
+
+        // Both genuinely call and resolve each other, so both are excluded — no card at all.
+        // This is the documented residual, not a regression: pre-`-12(a)` this was also empty.
+        #expect(cards.isEmpty)
     }
 
     // MARK: - Freshness at the cache-key boundary
