@@ -182,54 +182,56 @@ nonisolated struct FlowRunner {
                     return .notRunnable(reason:
                         "Row \(position) uses `\(row.task!)`, but that flow couldn't be resolved — check its `uses:` line points at a `.cat` beside it in this workspace.")
                 }
-                if let bad = Self.unknownRowInUsedFlow(used) {
+                // CFM-R17-FIX-2: the same per-row class verdicts below, applied recursively
+                // to the used flow's rows — an undeclared `Improvise`, an unported instant/net
+                // task or a transform call inside a used flow must be refused up front, not
+                // reached mid-run.
+                if let bad = Self.usedFlowRefusal(used) {
                     return .notRunnable(reason: "Row \(position) uses `\(row.task!)`, which names \(bad).")
                 }
                 continue
             }
-            guard let desc = TaskCatalog.get(row.task!) else {
+            switch Self.rowClassRefusal(row.task!) {
+            case .unknownTask:
                 return .notRunnable(reason:
                     "Row \(position) uses '\(row.task!)', which isn't a task this version of Flows knows.")
-            }
-            switch desc.taskClass {
-            case .instant:
-                // CFM-R12-4: refuse a flow that uses an unported instant tool *before* the
-                // install prompt, not three rows in after the models downloaded. Honest and
-                // early, naming the task. Instant verdicts are catalog-free, so the empty
-                // catalog/claim sets are correct here (CFM-R14-FIX-3).
-                if !TaskAvailability.isAvailable(row.task!, catalog: [], claimableModelIDs: []) {
-                    return .notRunnable(reason:
-                        "Row \(position) uses '\(row.task!)', which this version of Flows doesn't run yet.")
-                }
-            case .model:
-                break   // in scope (deciders are model-class — the interpreter routes them)
-            case .human:
-                break   // CFM-R10-Human: the interpreter parks `wait=forever` rows for an
-                        // answer and resolves timeout rows to their default (F002).
-            case .trigger:
-                break   // CFM-R10-Events: a trigger row's payload is the occurrence the
-                        // arming session supplies when it fires (the interpreter builds it).
-            case .agent:
+            case .appStoreDoor(let cls):
                 // CFM-R10-Direct: `Improvise` runs only in the Direct build, behind the fence.
-                if CapabilityGate.isAppStoreBuild {
-                    return .notRunnable(reason:
-                        "Row \(position) is an \(desc.taskClass.rawValue) row, which the App Store build refuses — distribute it directly instead.")
-                }
-            case .staged:
-                // CFM-R12-8: Stage Send / Stage Post queue a visible outbox entry (never
-                // send) — in scope now, like the human/trigger channels.
-                break
-            case .net:
-                // CFM-R12-9 (approved scope): the ported GET tools are in scope; Web Search
-                // (no provider) and anything else in the class stay refused. Net verdicts are
-                // catalog-free too (CFM-R14-FIX-3).
-                if !TaskAvailability.isAvailable(row.task!, catalog: [], claimableModelIDs: []) {
-                    return .notRunnable(reason:
-                        "Row \(position) uses '\(row.task!)', which this version of Flows doesn't run yet.")
-                }
+                return .notRunnable(reason:
+                    "Row \(position) is an \(cls) row, which the App Store build refuses — distribute it directly instead.")
+            case .unported:
+                // CFM-R12-4 / R12-9: refuse an unported instant/net tool *before* the install
+                // prompt, naming the task. Both verdicts are catalog-free (CFM-R14-FIX-3).
+                return .notRunnable(reason:
+                    "Row \(position) uses '\(row.task!)', which this version of Flows doesn't run yet.")
+            case nil:
+                break   // model / human / trigger / staged, and available instant/net — in scope
             }
         }
         return .runnable
+    }
+
+    /// Why this tier refuses `task` as a bare row — independent of position or the flow it
+    /// sits in, so `canRun`'s top-level loop and `usedFlowRefusal` share one rule set
+    /// (CFM-R17-FIX-2: two loops with different rules is what let a capability through `uses:`).
+    /// `nil` = the row's class is in scope.
+    enum RowClassRefusal: Equatable {
+        case unknownTask
+        case appStoreDoor(String)   // the task class name, e.g. "agent"
+        case unported               // an instant/net task with no runner yet
+    }
+
+    static func rowClassRefusal(_ task: String) -> RowClassRefusal? {
+        guard let desc = TaskCatalog.get(task) else { return .unknownTask }
+        switch desc.taskClass {
+        case .agent where CapabilityGate.isAppStoreBuild:
+            return .appStoreDoor(desc.taskClass.rawValue)
+        case .instant, .net:
+            return TaskAvailability.isAvailable(task, catalog: [], claimableModelIDs: [])
+                ? nil : .unported
+        default:
+            return nil   // model / human / trigger / staged, and `.agent` in the Direct build
+        }
     }
 
     /// Run `doc` with the linear engine, starting at `startIndex` (0 = the whole flow; a
@@ -323,23 +325,32 @@ nonisolated struct FlowRunner {
         rows.flatMap { [$0] + enumeratedRows($0.children) }
     }
 
-    /// CFM-R17-5: the first row inside a resolved used flow (recursively, through its own
-    /// nested `uses:`) whose task this version doesn't know — a short phrase for the E113-ish
-    /// refusal — or `nil` when every row is a catalog task, a composite in the used flow's
-    /// own `definitions:`, or a further `uses:` call.
-    private static func unknownRowInUsedFlow(_ used: FlowInterpreter.UsedFlow) -> String? {
+    /// CFM-R17-5 / CFM-R17-FIX-2: the first row inside a resolved used flow (recursively,
+    /// through its own nested `uses:` and block children) that this tier refuses — an unknown
+    /// task, an App-Store-refused door (`.agent`), or an unported instant/net task — as a
+    /// short phrase for the caller's refusal, or `nil` when every row runs. Applies the
+    /// **same** `rowClassRefusal` rule as `canRun`'s top-level loop, so a capability can't
+    /// reach a run through `uses:` that a plain flow would be refused for.
+    private static func usedFlowRefusal(_ used: FlowInterpreter.UsedFlow) -> String? {
         for row in enumeratedRows(used.rows) {
             guard let task = row.task else {
                 if row.blockKind != nil { continue }
                 return "a row that is neither a task nor a block"
             }
             if let nested = used.nested[task] {
-                if let bad = unknownRowInUsedFlow(nested) { return bad }
+                if let bad = usedFlowRefusal(nested) { return bad }
                 continue
             }
             if used.definitions[task] != nil { continue }
-            if TaskCatalog.get(task) == nil {
+            switch rowClassRefusal(task) {
+            case .unknownTask:
                 return "`\(task)`, which isn't a task this version of Flows knows"
+            case .appStoreDoor(let cls):
+                return "`\(task)`, an \(cls) row the App Store build refuses — distribute it directly instead"
+            case .unported:
+                return "`\(task)`, which this version of Flows doesn't run yet"
+            case nil:
+                continue
             }
         }
         return nil

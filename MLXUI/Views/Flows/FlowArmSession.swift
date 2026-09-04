@@ -39,19 +39,73 @@ final class FlowArmSession {
     private(set) var armRefusal: String?
     var isArmable: Bool { isTriggerFlow && armRefusal == nil }
 
-    /// Whether `doc` carries a door (`Improvise`, a `transforms:` call, or `code`/`improvise`
-    /// header flags) — §14.4 forbids arming (unattended execution) when it does.
-    static func doorIn(_ doc: FlowDocument) -> Bool {
-        for row in doc.rows {
-            if row.task == "Improvise" || doc.transforms[row.task ?? ""] != nil { return true }
+    /// The door in `doc` — an `Improvise` row, a `transforms:` call, or a `code`/`improvise`
+    /// header flag — **at any depth, inside blocks, and through `uses:`** — or `nil` when
+    /// there is none. §14.4 forbids arming (unattended execution) when one is present, and the
+    /// returned sentence names where the door is. `workspace`/`flowID` resolve the `uses:`
+    /// chain; without them only this file is inspected (CFM-R17-FIX-3).
+    static func doorIn(_ doc: FlowDocument, workspace: FlowWorkspace? = nil, flowID: String? = nil) -> String? {
+        // Header flags — this flow, plus any inherited through `uses:` when the chain resolves.
+        let flags: [String] = (workspace != nil && flowID != nil)
+            ? CapabilityGate.effectiveFlags(doc, workspace: workspace, flowID: flowID)
+            : doc.flags.map(\.rawValue)
+        if let flag = flags.first(where: { $0 == "code" || $0 == "improvise" }) {
+            return "§14.4: this flow declares `\(flag)` and fires on events — it must never run unattended."
         }
-        let flags = Set(doc.flags.map(\.rawValue))
-        return !flags.isDisjoint(with: ["code", "improvise"])
+        // Rows in this flow, including block children.
+        if let sentence = doorInRows(doc.rows, transforms: doc.transforms, where: "this flow") {
+            return sentence
+        }
+        // Used flows, recursively (their rows and their own nested `uses:`).
+        if let workspace, let flowID, !doc.uses.isEmpty {
+            for (name, used) in UsesResolver.resolve(doc, workspace: workspace, flowID: flowID) {
+                if let sentence = usedFlowDoor(used, calledAs: name) { return sentence }
+            }
+        }
+        return nil
+    }
+
+    /// The first `Improvise` row or `transforms:` call in `rows` or any block child.
+    private static func doorInRows(_ rows: [Row], transforms: [String: TransformDef],
+                                   where label: String) -> String? {
+        for row in rows {
+            if row.task == "Improvise" {
+                return "§14.4: \(label) runs an `Improvise` row and fires on events — it must never run unattended."
+            }
+            if let task = row.task, transforms[task] != nil {
+                return "§14.4: \(label) calls the transform `\(task)` and fires on events — it must never run unattended."
+            }
+            if !row.children.isEmpty,
+               let nested = doorInRows(row.children, transforms: transforms, where: label) {
+                return nested
+            }
+        }
+        return nil
+    }
+
+    /// An `Improvise` row inside a used flow (its rows, block children, and nested `uses:`).
+    /// A used flow's `transforms:` section is dropped by `UsesResolver`, so a transform call
+    /// there surfaces to `canRun` as an unknown task, not here.
+    private static func usedFlowDoor(_ used: FlowInterpreter.UsedFlow, calledAs name: String) -> String? {
+        func scan(_ rows: [Row]) -> Bool {
+            for row in rows {
+                if row.task == "Improvise" { return true }
+                if !row.children.isEmpty, scan(row.children) { return true }
+            }
+            return false
+        }
+        if scan(used.rows) {
+            return "§14.4: the used flow `\(name)` runs an `Improvise` row — a trigger flow must never run one unattended."
+        }
+        for (sub, nested) in used.nested {
+            if let sentence = usedFlowDoor(nested, calledAs: "\(name) → \(sub)") { return sentence }
+        }
+        return nil
     }
 
     /// Establish the trigger kind (and the §14.4 refusal, when a door is present) without
     /// starting any watcher — the header's Arm button visibility depends on it.
-    func inspect(doc: FlowDocument) {
+    func inspect(doc: FlowDocument, workspace: FlowWorkspace? = nil, flowID: String? = nil) {
         guard let first = doc.rows.first, let settings = first.settings,
               let task = first.task, task.hasPrefix("On ") else {
             kind = .none
@@ -60,9 +114,9 @@ final class FlowArmSession {
         kind = .none
         armRefusal = nil
         if task == "On File" || task == "On Schedule" || task == "On Flow" {
-            if Self.doorIn(doc) {
+            if let door = Self.doorIn(doc, workspace: workspace, flowID: flowID) {
                 kind = .onFile
-                armRefusal = "§14.4: this flow fires on events and runs fenced code — it must never run unattended."
+                armRefusal = door
             } else {
                 switch task {
                 case "On File": kind = .onFile
@@ -94,10 +148,10 @@ final class FlowArmSession {
         let s = FlowSettings(settings)
         switch first.task {
         case "On File", "On Schedule", "On Flow":
-            if Self.doorIn(doc) {
+            if let door = Self.doorIn(doc, workspace: workspace, flowID: flowID) {
                 // §14.4: this flow would run fenced code unattended — refuse to arm.
                 kind = .none
-                armRefusal = "§14.4: this flow fires on events and runs fenced code — it must never run unattended."
+                armRefusal = door
                 isArmed = false
                 return false
             }

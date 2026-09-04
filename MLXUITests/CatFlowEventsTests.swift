@@ -115,6 +115,67 @@ struct CatFlowEventsTests {
         #expect(arm.armRefusal != nil)
     }
 
+    // MARK: - CFM-R17-FIX-3: the arm gate sees a door through `uses:` and inside blocks
+
+    /// A workspace directory `id` with the given sibling `.cat` files.
+    private func armWorkspace(id: String = "t",
+                              files: [(name: String, text: String)]) throws -> (FlowWorkspace, String, URL) {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-armdoor-\(UUID().uuidString)")
+        let dir = base.appendingPathComponent("workspaces").appendingPathComponent(id, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        for f in files {
+            try f.text.write(to: dir.appendingPathComponent(f.name), atomically: true, encoding: .utf8)
+        }
+        return (FlowWorkspace(root: base.appendingPathComponent("workspaces")), id, base)
+    }
+
+    @Test func armingRefusesATriggerFlowWhoseUsedFlowHasAnImproviseRow() throws {
+        let watch = "catflow 0.8; events\n1. On Schedule   at=06:30\n2. Helper\n\nuses:\n  Helper = ./Helper.cat\n"
+        let helper = "catflow 0.8\n1. Improvise   \"fix the headers\"\n"
+        let (ws, id, base) = try armWorkspace(files: [("Watch.cat", watch), ("Helper.cat", helper)])
+        defer { try? FileManager.default.removeItem(at: base) }
+        let doc = try parse(watch)
+
+        let arm = FlowArmSession()
+        arm.inspect(doc: doc, workspace: ws, flowID: id)
+        #expect(arm.isTriggerFlow)
+        var fired = false
+        let armed = arm.arm(flowID: id, doc: doc, workspace: ws) { _ in fired = true }
+        #expect(armed == false)
+        #expect(fired == false)
+        #expect(!arm.isArmable)
+        #expect(arm.armRefusal?.contains("unattended") == true)
+        #expect(arm.armRefusal?.contains("Helper") == true, "the refusal must name where the door is")
+    }
+
+    @Test func armingRefusesATriggerFlowWhoseUsedFlowDeclaresTheImproviseFlag() throws {
+        let watch = "catflow 0.8; events\n1. On File   inbox/\n2. Helper\n\nuses:\n  Helper = ./Helper.cat\n"
+        let helper = "catflow 0.8; improvise\n1. Read Text   lib.txt\n"
+        let (ws, id, base) = try armWorkspace(files: [("Watch.cat", watch), ("Helper.cat", helper)])
+        defer { try? FileManager.default.removeItem(at: base) }
+        let doc = try parse(watch)
+
+        let arm = FlowArmSession()
+        let armed = arm.arm(flowID: id, doc: doc, workspace: ws) { _ in }
+        #expect(armed == false)
+        #expect(arm.armRefusal?.contains("improvise") == true)
+    }
+
+    @Test func armingRefusesATriggerFlowWithAnImproviseNestedInABlock() throws {
+        // The door is a block child, not a top-level row — `doorIn` must flatten `children`.
+        let onFile = Row(task: "On File", settings: "inbox/")
+        let block = Row(blockKind: .each, blockName: "each_row",
+                        children: [Row(task: "Improvise", settings: "\"fix it\"")])
+        var doc = FlowDocument(version: "0.8", rows: [onFile, block])
+        doc.flags = [.events]
+        let arm = FlowArmSession()
+        let armed = arm.arm(flowID: "t", doc: doc,
+                            workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory)) { _ in }
+        #expect(armed == false)
+        #expect(arm.armRefusal?.contains("unattended") == true)
+    }
+
     // MARK: - CFM-R10-FIX-1: the runner consults canRun (no UI path around it)
 
     @Test func runnerRefusesADoorFlowBeforeStarting() async throws {

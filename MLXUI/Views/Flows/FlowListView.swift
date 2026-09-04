@@ -918,8 +918,9 @@ struct FlowListView: View {
         inspectModel?.modelCatalog = catalog
         inspectModel?.claimableModelIDs = appState.claimableModelIDs
         // CFM-R10-Events: establish the trigger kind so the Arm button shows (and the §14.4
-        // refusal when the flow carries a door).
-        armSession.inspect(doc: doc)
+        // refusal when the flow carries a door — CFM-R17-FIX-3: including one reached through
+        // a workspace-sibling `uses:` flow, which needs the workspace + location to resolve).
+        armSession.inspect(doc: doc, workspace: flowWorkspace, flowID: locationID)
 
         // CFM-R17-4: the workspace index card opened this flow to run it. `canRun` needs the
         // preflight (just set) to settle through `@Observable`, so hop a runloop.
