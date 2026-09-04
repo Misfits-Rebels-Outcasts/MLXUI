@@ -81,6 +81,17 @@ final class FlowRunSession {
         return true
     }
 
+    /// The only thing between this flow and a run is downloading models — no hard block
+    /// (a door, an out-of-subset language, a RAM ceiling), just an install. CFM-R17-FIX-7:
+    /// an auto-run opens the install sheet in this case instead of doing nothing.
+    var blockedOnlyOnDownloads: Bool {
+        guard !isRunning, !isInstalling else { return false }
+        guard let preflight else { return false }
+        if preflight.isBlocked { return false }
+        if case .notRunnable = runnability { return false }
+        return !preflight.toDownload.isEmpty
+    }
+
     /// The sentence explaining why Run is disabled, or nil when runnable.
     var runDisabledReason: String? {
         if isInstalling { return "Installing the required models…" }

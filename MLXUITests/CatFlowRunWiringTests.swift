@@ -172,6 +172,41 @@ struct CatFlowRunWiringTests {
         #expect(session.runDisabledReason?.contains("Missing Model") == true)
     }
 
+    // MARK: - CFM-R17-FIX-7: an auto-run blocked only on a download opens the install path
+
+    @Test func autoRunBlockedOnlyOnAMissingModelIsNotAHardRefusal() throws {
+        // A runnable flow whose one model isn't installed: `canRun` is false, but the block
+        // is a download, not a door/RAM/scope refusal — so an auto-run raises the install
+        // sheet (via `run(doc)`) instead of doing nothing, and `didAutoRun` is left unspent.
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let catalog = try JSONDecoder().decode(
+            BrowserData.self,
+            from: Data(contentsOf: repoRoot.appendingPathComponent("MLXUI/Resources/browser.json")))
+            .domains.flatMap { $0.allModels }
+
+        let doc = FlowDocument(version: "0.8", rows: [Row(task: "Transcribe", model: "Whisper Large v3")])
+        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 16)
+        #expect(!result.toDownload.isEmpty, "the model must be uninstalled for this to test anything")
+        #expect(!result.isBlocked)
+
+        let session = FlowRunSession()
+        session.prepareInstall(result, doc: doc)
+        #expect(session.canRun == false)
+        #expect(session.blockedOnlyOnDownloads == true)
+        #expect(session.runDisabledReason?.contains("Install") == true)
+    }
+
+    @Test func aHardRefusalIsNotBlockedOnlyOnDownloads() throws {
+        // An out-of-subset row (Improvise) — `blockedOnlyOnDownloads` must stay false so the
+        // auto-run leaves it to the disabled Run + reason, not the install sheet.
+        let doc = FlowDocument(version: "0.8", rows: [Row(task: "Improvise", model: "Qwen3 8B")])
+        let session = FlowRunSession()
+        session.prepareInstall(FlowPreflight.Result(), doc: doc)
+        #expect(session.canRun == false)
+        #expect(session.blockedOnlyOnDownloads == false)
+    }
+
     // MARK: - B3: the session's Run gate consults FlowRunner.canRun(doc)
 
     @Test func sessionCanRunRefusesOutOfScopeLanguage() throws {

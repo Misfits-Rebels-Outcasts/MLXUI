@@ -924,10 +924,17 @@ struct FlowListView: View {
 
         // CFM-R17-4: the workspace index card opened this flow to run it. `canRun` needs the
         // preflight (just set) to settle through `@Observable`, so hop a runloop.
+        // CFM-R17-FIX-7: burn `didAutoRun` only once we actually act — run when we can, or
+        // (when the sole blocker is missing models) let `run(doc)` raise the install sheet so
+        // auto-run isn't a silent no-op. A hard refusal (door / capability / RAM) leaves the
+        // disabled Run + `runDisabledReason` to explain it; there's nothing to open, so the
+        // guard stays unspent.
         if autoRun, !didAutoRun {
-            didAutoRun = true
             DispatchQueue.main.async {
-                if session.canRun { run(doc) }
+                guard autoRun, !didAutoRun else { return }
+                guard session.canRun || session.blockedOnlyOnDownloads else { return }
+                didAutoRun = true
+                run(doc)
             }
         }
     }
