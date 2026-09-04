@@ -6,13 +6,17 @@ import Foundation
 /// view offers it as one card with two verbs.
 nonisolated enum WorkspaceKnowledge {
 
-    /// How a flow relates to an index.
+    /// How a flow relates to an index. Row lists are walked pre-order (`flatten`) — **source
+    /// order**, recursing into blocks; branch clauses (`-> { tag: N }`, `-> N`, `resume`) are
+    /// not followed, so "last row" means last in the text, not last actually executed
+    /// (CFM-R17-FIX-9(d)). No bundled flow's branches skip a trailing `Store Index`.
     enum FlowRole: Equatable, Sendable {
-        /// The flow's **terminal** row — the last row in execution order, recursing into a
-        /// trailing block — is `Store Index <name>`. (CFM-R17-FIX-4: was the last *top-level*
-        /// row, so a `Store Index` ending a `<list>` was invisible; the querier side has
-        /// always scanned every depth, and now both sides do.)
-        case builds(index: String)
+        /// The flow's last row (source order, recursing into a trailing block) is `Store Index`
+        /// — its job is to produce an index. Carries **every** `Store Index` name in the flow
+        /// (CFM-R17-FIX-9(b): a flow ending `Store Index a` / `Store Index b` builds both);
+        /// names de-duplicated, source order, normalized. (CFM-R17-FIX-4: the last row is
+        /// found at any block depth, not just top level.)
+        case builds(indexes: [String])
         /// The flow reads one or more indexes (`Read Index <name>` at any depth) **and** has a
         /// `Retrieve` / `Keyword Search`. It queries *every* index it reads — names in source
         /// order, de-duplicated, normalized (CFM-R17-FIX-4: a flow reading N indexes yields N
@@ -73,10 +77,13 @@ nonisolated enum WorkspaceKnowledge {
     /// Classify one parsed flow.
     static func role(of doc: FlowDocument) -> FlowRole {
         let rows = flatten(doc.rows)
-        // builds — the terminal row (last in execution order) is Store Index <name>.
-        if let terminal = rows.last, terminal.task == "Store Index",
-           let name = storeIndexName(terminal) {
-            return .builds(index: normalizedIndexName(name))
+        // builds — the last row (source order) is Store Index, and its job is to produce every
+        // index it stores (CFM-R17-FIX-9(b)).
+        if rows.last?.task == "Store Index" {
+            let names = rows
+                .compactMap { $0.task == "Store Index" ? storeIndexName($0) : nil }
+                .map(normalizedIndexName)
+            if !names.isEmpty { return .builds(indexes: dedupe(names)) }
         }
         // queries — every Read Index <name>, plus a Retrieve / Keyword Search somewhere.
         let names = rows
@@ -98,8 +105,8 @@ nonisolated enum WorkspaceKnowledge {
         var queriers: [String: [String]] = [:]
         for entry in flows {
             switch role(of: entry.doc) {
-            case .builds(let name):
-                builders[name, default: []].append(entry.file)
+            case .builds(let names):
+                for name in names { builders[name, default: []].append(entry.file) }
             case .queries(let names):
                 for name in names { queriers[name, default: []].append(entry.file) }
             case .plain:

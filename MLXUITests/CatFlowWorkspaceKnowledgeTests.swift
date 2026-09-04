@@ -20,13 +20,31 @@ struct CatFlowWorkspaceKnowledgeTests {
 
     @Test func lastRowStoreIndexBuilds() throws {
         let d = try doc("catflow 0.8\n1. Read Files   docs/\n2. Embed   BGE-M3\n6. Store Index   (1,2)   library.index\n")
-        #expect(WorkspaceKnowledge.role(of: d) == .builds(index: "library.index"))
+        #expect(WorkspaceKnowledge.role(of: d) == .builds(indexes: ["library.index"]))
     }
 
     @Test func storeIndexNotLastIsNotABuilder() throws {
         // Store Index in the middle, a Save Text after it — not "the last row".
         let d = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n3. Save Text   done.md\n")
         #expect(WorkspaceKnowledge.role(of: d) == .plain)
+    }
+
+    @Test func aFlowEndingInTwoStoreIndexRowsBuildsBoth() throws {
+        // CFM-R17-FIX-9(b): the builder side collects every `Store Index` name, not just the
+        // last row's — symmetric with the querier side.
+        let d = try doc("catflow 0.8\n1. Read Files   docs/\n2. Embed   BGE-M3\n3. Store Index   (1,2)   name=hr.index\n4. Store Index   (1,2)   name=eng.index\n")
+        #expect(WorkspaceKnowledge.role(of: d) == .builds(indexes: ["hr.index", "eng.index"]))
+    }
+
+    @Test func aBuilderOfTwoIndexesPlusTwoQueriersProducesTwoCards() throws {
+        let c = try cards([
+            ("BuildBoth.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   name=hr.index\n3. Store Index   (1,1)   name=eng.index\n"),
+            ("AskHR.cat", "catflow 0.8\n1. Read Index   hr.index\n2. Retrieve   (1,1)\n"),
+            ("AskEng.cat", "catflow 0.8\n1. Read Index   eng.index\n2. Retrieve   (1,1)\n"),
+        ])
+        #expect(c.map(\.indexName) == ["eng.index", "hr.index"])
+        #expect(c.allSatisfy { $0.builder == .one("BuildBoth.cat") })
+        #expect(Set(c.compactMap(\.askFile)) == ["AskHR.cat", "AskEng.cat"])
     }
 
     @Test func readIndexPlusRetrieveQueries() throws {
@@ -63,7 +81,7 @@ struct CatFlowWorkspaceKnowledgeTests {
     }
 
     @Test func storeIndexEndingATrailingListStillBuilds() throws {
-        // The asymmetry FIX-4 names: the terminal row is `Store Index`, one level down.
+        // The asymmetry FIX-4 names: the last row is `Store Index`, one level down.
         let d = try doc("""
         catflow 0.8
         1. Read Files   docs/
@@ -71,7 +89,7 @@ struct CatFlowWorkspaceKnowledgeTests {
              1. Embed         BGE-M3
              2. Store Index   library.index
         """)
-        #expect(WorkspaceKnowledge.role(of: d) == .builds(index: "library.index"))
+        #expect(WorkspaceKnowledge.role(of: d) == .builds(indexes: ["library.index"]))
     }
 
     @Test func storeIndexInATrailingListFollowedByMoreIsNotABuilder() throws {
@@ -188,7 +206,7 @@ struct CatFlowWorkspaceKnowledgeTests {
 
     @Test func explicitNameSettingWins() throws {
         let d = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   name=hr.index\n")
-        #expect(WorkspaceKnowledge.role(of: d) == .builds(index: "hr.index"))
+        #expect(WorkspaceKnowledge.role(of: d) == .builds(indexes: ["hr.index"]))
     }
 
     // MARK: - Pairing (the 16 + 18 done-when)
