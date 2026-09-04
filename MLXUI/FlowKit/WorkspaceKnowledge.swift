@@ -28,6 +28,12 @@ nonisolated enum WorkspaceKnowledge {
         /// `Keyword Search` somewhere — source order, de-duplicated, normalized. Empty when the
         /// flow reads an index but never retrieves from it (CFM-R17-3: `readIndexAloneIsPlain`).
         var queries: [String] = []
+        /// CFM-R17-FIX-12(d): index names in `builds`/`queries` that came **only** from a
+        /// `uses:` call — not this flow's own rows — mapped to the alias (the `uses:` line's
+        /// own name) they were inherited from. The ambiguity note needs this: the index name
+        /// actually lives in the callee, so "rename one of these files" is meaningless advice
+        /// when every file in the collision only inherited the name.
+        var inheritedFrom: [String: String] = [:]
 
         var isPlain: Bool { builds.isEmpty && queries.isEmpty }
     }
@@ -52,6 +58,13 @@ nonisolated enum WorkspaceKnowledge {
         let indexName: String
         let builder: Side
         let querier: Side
+        /// CFM-R17-FIX-12(d): `[file: callee alias]`, for a file on `builder`/`querier` whose
+        /// registration is **purely inherited** (via `uses:`, not its own rows) — populated
+        /// only for such files, so a lookup miss means "registered directly." Feeds
+        /// `ambiguityNote`; otherwise unused (`buildFile`/`askFile`/`namesCaption` don't care
+        /// where a `.one` registration came from).
+        var builderOrigins: [String: String] = [:]
+        var querierOrigins: [String: String] = [:]
 
         enum Side: Equatable, Sendable {
             case none
@@ -79,16 +92,34 @@ nonisolated enum WorkspaceKnowledge {
         }
 
         /// A plain note covering only the ambiguous side(s), or nil when neither is ambiguous.
+        ///
+        /// CFM-R17-FIX-12(d): when every ambiguous file on a side inherited `indexName` from
+        /// the **same** `uses:` callee, names that callee — the index name lives there, not in
+        /// any of the ambiguous files, so "rename one of these" fixes nothing. Otherwise (any
+        /// mix of direct registrations, or inheritance from different callees) falls back to
+        /// the general "rename one" advice, which is still correct there.
         var ambiguityNote: String? {
             var clauses: [String] = []
             if case .ambiguous(let files) = builder {
-                clauses.append("\(WorkspaceKnowledge.joinedNames(files)) all build ‘\(indexName)’ — no single Build button")
+                clauses.append(Self.ambiguityClause(files, origins: builderOrigins, indexName: indexName,
+                                                    verb: "build", button: "Build"))
             }
             if case .ambiguous(let files) = querier {
-                clauses.append("\(WorkspaceKnowledge.joinedNames(files)) all query ‘\(indexName)’ — no single Ask button")
+                clauses.append(Self.ambiguityClause(files, origins: querierOrigins, indexName: indexName,
+                                                    verb: "query", button: "Ask"))
             }
             guard !clauses.isEmpty else { return nil }
-            return clauses.joined(separator: "; ") + ". Rename one so this index has a single flow on each side."
+            return clauses.joined(separator: " ")
+        }
+
+        private static func ambiguityClause(_ files: [String], origins: [String: String], indexName: String,
+                                            verb: String, button: String) -> String {
+            let who = WorkspaceKnowledge.joinedNames(files)
+            let aliases = Set(files.compactMap { origins[$0] })
+            if files.allSatisfy({ origins[$0] != nil }), let alias = aliases.count == 1 ? aliases.first : nil {
+                return "\(who) all \(verb) ‘\(indexName)’ — inherited from `\(alias)`, through `uses:` — no single \(button) button. `\(alias)`'s index name is what collides; rename it there, or have only one caller reach it."
+            }
+            return "\(who) all \(verb) ‘\(indexName)’ — no single \(button) button. Rename one so this index has a single flow on each side."
         }
 
         /// "`Ingest.cat` builds" / "`DocChat.cat` queries" / both joined — the flow each button
@@ -124,14 +155,26 @@ nonisolated enum WorkspaceKnowledge {
     /// that row at all. A flow declaring both a `definitions:` entry and a `uses:` alias of the
     /// same name would otherwise inherit index use the interpreter never actually executes.
     static func role(of doc: FlowDocument, usesGraph: [String: FlowInterpreter.UsedFlow] = [:]) -> FlowIndexUse {
-        var use = indexUse(rows: doc.rows)
+        let own = indexUse(rows: doc.rows)
+        var builds = own.builds
+        var queries = own.queries
+        // CFM-R17-FIX-12(d): a name this flow's own rows also produce isn't "purely inherited"
+        // — only tag one that came *solely* from a callee, so the ambiguity note only points
+        // at a callee when renaming the caller genuinely wouldn't help.
+        var inheritedFrom: [String: String] = [:]
         for row in flatten(doc.rows) {
             guard let task = row.task, doc.definitions[task] == nil, let used = usesGraph[task] else { continue }
             let callee = indexUseOfUsedFlow(used)
-            use.builds += callee.builds
-            use.queries += callee.queries
+            for name in callee.builds {
+                builds.append(name)
+                if !own.builds.contains(name) { inheritedFrom[name] = task }
+            }
+            for name in callee.queries {
+                queries.append(name)
+                if !own.queries.contains(name) { inheritedFrom[name] = task }
+            }
         }
-        return FlowIndexUse(builds: dedupe(use.builds), queries: dedupe(use.queries))
+        return FlowIndexUse(builds: dedupe(builds), queries: dedupe(queries), inheritedFrom: inheritedFrom)
     }
 
     /// The Knowledge Base card candidates across a workspace's flows (filename → parsed doc),
@@ -152,10 +195,20 @@ nonisolated enum WorkspaceKnowledge {
                          usesGraphs: [String: [String: FlowInterpreter.UsedFlow]] = [:]) -> [IndexCard] {
         var builders: [String: [String]] = [:]
         var queriers: [String: [String]] = [:]
+        // CFM-R17-FIX-12(d): [indexName: [file: alias]] — only for a (name, file) pair whose
+        // registration is purely inherited, feeding `ambiguityNote`.
+        var builderOrigins: [String: [String: String]] = [:]
+        var querierOrigins: [String: [String: String]] = [:]
         for entry in flows {
             let use = role(of: entry.doc, usesGraph: usesGraphs[entry.file] ?? [:])
-            for name in use.builds { builders[name, default: []].append(entry.file) }
-            for name in use.queries { queriers[name, default: []].append(entry.file) }
+            for name in use.builds {
+                builders[name, default: []].append(entry.file)
+                if let alias = use.inheritedFrom[name] { builderOrigins[name, default: [:]][entry.file] = alias }
+            }
+            for name in use.queries {
+                queriers[name, default: []].append(entry.file)
+                if let alias = use.inheritedFrom[name] { querierOrigins[name, default: [:]][entry.file] = alias }
+            }
         }
         func side(_ files: [String]) -> IndexCard.Side {
             switch files.count {
@@ -165,7 +218,8 @@ nonisolated enum WorkspaceKnowledge {
             }
         }
         return Set(builders.keys).union(queriers.keys).sorted().map { name in
-            IndexCard(indexName: name, builder: side(builders[name] ?? []), querier: side(queriers[name] ?? []))
+            IndexCard(indexName: name, builder: side(builders[name] ?? []), querier: side(queriers[name] ?? []),
+                     builderOrigins: builderOrigins[name] ?? [:], querierOrigins: querierOrigins[name] ?? [:])
         }
     }
 

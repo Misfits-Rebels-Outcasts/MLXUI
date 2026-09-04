@@ -342,8 +342,10 @@ struct CatFlowWorkspaceKnowledgeTests {
         """)
         // Without the graph, still `.plain` — inheritance is opt-in per call site.
         #expect(WorkspaceKnowledge.role(of: caller).isPlain)
+        // CFM-R17-FIX-12(d): `inheritedFrom` records "kb.index" came from the "RagQuery" alias,
+        // not the caller's own rows — the ambiguity note needs this if two callers collide.
         #expect(WorkspaceKnowledge.role(of: caller, usesGraph: ["RagQuery": ragQuery])
-            == WorkspaceKnowledge.FlowIndexUse(queries: ["kb.index"]))
+            == WorkspaceKnowledge.FlowIndexUse(queries: ["kb.index"], inheritedFrom: ["kb.index": "RagQuery"]))
     }
 
     @Test func inheritanceRecursesThroughNestedUsesChains() throws {
@@ -352,7 +354,7 @@ struct CatFlowWorkspaceKnowledgeTests {
         let b = try usedFlow("catflow 0.8\n1. C\n\nuses:\n  C = ./C.cat\n", nested: ["C": c])
         let a = try doc("catflow 0.8\n1. B\n\nuses:\n  B = ./B.cat\n")
         #expect(WorkspaceKnowledge.role(of: a, usesGraph: ["B": b])
-            == WorkspaceKnowledge.FlowIndexUse(queries: ["deep.index"]))
+            == WorkspaceKnowledge.FlowIndexUse(queries: ["deep.index"], inheritedFrom: ["deep.index": "B"]))
     }
 
     @Test func classifyWithAUsesGraphMakesTheCallerTheSoleQuerier() throws {
@@ -684,6 +686,57 @@ struct CatFlowWorkspaceKnowledgeTests {
         #expect(cards.count == 1)
         let card = try #require(cards.first)
         #expect(card.querier == .one("AskYourDocs.cat"))
+    }
+
+    // MARK: - CFM-R17-FIX-12(d): the ambiguity note names the callee for inherited use
+
+    @Test func ambiguityNoteNamesTheCalleeWhenTwoCallersInheritFromIt() throws {
+        // Two callers, `X.cat` and `Z.cat`, both `uses: Y = ./Y.cat`. `Y.cat` (row 1 `Embed
+        // BGE-M3`, no inline value) can't stand alone, so it's excluded — both callers inherit
+        // its query of `kb.index` and collide. The old note said "rename one of these files";
+        // neither `X.cat` nor `Z.cat` mentions `kb.index` at all — the name lives in `Y.cat`.
+        let yText = "catflow 0.8\n1. Embed   BGE-M3\n2. Read Index   kb.index\n3. Retrieve   (1,2)\n"
+        let y = try doc(yText)
+        let yUsed = try usedFlow(yText)
+        #expect(!WorkspaceKnowledge.canStandAlone(y))
+        let x = try doc("catflow 0.8\n1. Y\n\nuses:\n  Y = ./Y.cat\n")
+        let z = try doc("catflow 0.8\n1. Y\n\nuses:\n  Y = ./Y.cat\n")
+        let xURL = URL(fileURLWithPath: "/ws/X.cat")
+        let zURL = URL(fileURLWithPath: "/ws/Z.cat")
+        let yURL = URL(fileURLWithPath: "/ws/Y.cat")
+
+        let cards = WorkspaceKnowledge.classifyWorkspace(
+            flows: [("X.cat", x, xURL), ("Z.cat", z, zURL), ("Y.cat", y, yURL)],
+            resolveUses: { _, _ in ["Y": yUsed] },
+            resolvePath: { raw in raw == "./Y.cat" ? yURL : nil })
+
+        let card = try #require(cards.first { $0.indexName == "kb.index" })
+        #expect(card.builder == .none)
+        guard case .ambiguous(let files) = card.querier else {
+            Issue.record("querier side should be ambiguous — X.cat and Z.cat both inherit it")
+            return
+        }
+        #expect(Set(files) == ["X.cat", "Z.cat"])
+        let note = try #require(card.ambiguityNote)
+        // Names the callee the collision actually lives in...
+        #expect(note.contains("`Y`"))
+        #expect(note.contains("inherited"))
+        // ...and does NOT tell the user to rename one of the two files that are ambiguous —
+        // that was the old, unactionable advice this item exists to fix.
+        #expect(!note.contains("Rename one so this index"))
+    }
+
+    @Test func ambiguityNoteFallsBackToTheGeneralAdviceWhenNotPurelyInherited() throws {
+        // A direct collision (both files register the name in their own rows, no uses:
+        // involved) keeps the general "rename one" advice — it's still correct there.
+        let c = try #require(try cards([
+            ("A.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   x.index\n"),
+            ("B.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   x.index\n"),
+            ("Ask.cat", "catflow 0.8\n1. Read Index   x.index\n2. Retrieve   (1,1)\n"),
+        ]).first)
+        let note = try #require(c.ambiguityNote)
+        #expect(note.contains("Rename one so this index"))
+        #expect(!note.contains("inherited"))
     }
 
     // MARK: - Freshness at the cache-key boundary
