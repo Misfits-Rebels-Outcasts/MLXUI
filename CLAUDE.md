@@ -205,7 +205,8 @@ un-sandboxed, so the path is the same, not a container). Built **only** via `Cor
 installed.json            registry (version + per-model metadata)
 models/{model-id}/        config.json, *.safetensors, tokenizer.json, .installed marker
 downloads/{model-id}/     temp; deleted on completion or cancel
-flows/{flow-id}/          user flows, their .blobs/ and run state
+flows/{flow-id}/          user flows, their .blobs/ and run state — exactly one .cat per folder
+workspaces/{workspace-id}/  R17: multi-flow workspaces — sibling .cat files + shared docs/ + index/
 agent-index/              the agent's local index
 WhisperKit/               legacy CoreML ASR assets (superseded by the MLX path)
 ```

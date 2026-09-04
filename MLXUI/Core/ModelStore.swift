@@ -85,6 +85,15 @@ nonisolated struct ModelStore: Sendable {
         baseDirectory.appendingPathComponent("flows", isDirectory: true)
     }
 
+    /// CFM-R17-2 — the workspaces root (`…/workspaces/`), beside `flowsDirectory`. A
+    /// workspace is a directory here holding **one or more** `.cat` files side by side plus
+    /// the files they share; every flow in it resolves its paths against the one workspace
+    /// directory (`FlowWorkspace(root: workspacesDirectory)` + the workspace id). The
+    /// "one flow, one folder" rule of `flows/` is untouched — this is a second, additive root.
+    var workspacesDirectory: URL {
+        baseDirectory.appendingPathComponent("workspaces", isDirectory: true)
+    }
+
     // MARK: - Per-model
 
     /// Where `InstallManager` places a model's files. `id` is the catalog id with
