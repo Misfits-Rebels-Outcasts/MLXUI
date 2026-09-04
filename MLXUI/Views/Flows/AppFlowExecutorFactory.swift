@@ -5,17 +5,20 @@ import Foundation
     /// module). CFM-R11-2: the `makeModelStage` closure routes through the shared
     /// `EngineCache`, so a model's engine stays warm across rows (and runs) within the RAM
     /// budget instead of reloading per row.
+    ///
+    /// CFM-R17-1: every entry point takes a `FlowScope`. The executor is built with the
+    /// scope's *location* (`workspace` + `locationID`) — for a workspace flow that is the
+    /// shared workspace directory — while the `RunContext` keeps the scope's *identity* for
+    /// `On Flow` matching and run records.
     nonisolated enum AppFlowExecutorFactory {
 
-    /// Build the real executor for `flowID`, resolving model stages through `appState`.
+    /// Build the real executor for `scope`, resolving model stages through `appState`.
     static func make(
-        flowID: String,
+        scope: FlowScope,
         appState: AppState,
         transforms: [String: TransformDef] = [:]
     ) -> RealExecutor {
-        let workspace = FlowWorkspace(root: ModelStore.shared.flowsDirectory)
-        let flowDir = workspace.directory(for: flowID)
-        let blobDir = flowDir.appendingPathComponent(".blobs", isDirectory: true)
+        let blobDir = scope.directory.appendingPathComponent(".blobs", isDirectory: true)
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
         let installed = appState.installedModelIDs
 
@@ -31,7 +34,8 @@ import Foundation
             }
         }
 
-        var executor = RealExecutor(workspace: workspace, flowID: flowID, blobDirectory: blobDir,
+        var executor = RealExecutor(workspace: scope.workspace, flowID: scope.locationID,
+                                    blobDirectory: blobDir,
                                     makeModelStage: makeStage, installedModelIDs: installed,
                                     catalog: catalog)
         executor.transforms = transforms
@@ -43,30 +47,23 @@ import Foundation
     /// captured per-executor in `make`.
 
     /// The `RunContext` for a run, using the real executor.
-    static func context(flowID: String, appState: AppState) -> FlowRunner.RunContext {
-        let workspace = FlowWorkspace(root: ModelStore.shared.flowsDirectory)
-        let flowDir = workspace.directory(for: flowID)
-        let blobDir = flowDir.appendingPathComponent(".blobs", isDirectory: true)
-        return FlowRunner.RunContext(flowID: flowID, workspace: workspace,
-                                     blobDirectory: blobDir,
-                                     executor: make(flowID: flowID, appState: appState))
+    static func context(scope: FlowScope, appState: AppState) -> FlowRunner.RunContext {
+        let blobDir = scope.directory.appendingPathComponent(".blobs", isDirectory: true)
+        return FlowRunner.RunContext(scope: scope, blobDirectory: blobDir,
+                                     executor: make(scope: scope, appState: appState))
     }
 
     /// The `RunContext` with the real executor wrapped in the content-addressed cache
     /// (CFM-R3-2/4): a deterministic run seed is derived from the flow's raw text, so cached
     /// keys are stable across runs and `_with_seed` derives the same concrete seeds.
-    static func cachingContext(flowID: String, appState: AppState,
+    static func cachingContext(scope: FlowScope, appState: AppState,
                                transforms: [String: TransformDef] = [:]) -> FlowRunner.RunContext {
-        let workspace = FlowWorkspace(root: ModelStore.shared.flowsDirectory)
-        let flowDir = workspace.directory(for: flowID)
-        let blobDir = flowDir.appendingPathComponent(".blobs", isDirectory: true)
+        let blobDir = scope.directory.appendingPathComponent(".blobs", isDirectory: true)
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
-        let runSeed = (try? GalleryLoader.rawCatText(flowID: flowID)).map { FlowSeed.runSeed(for: $0) } ?? 0
-        let inner = make(flowID: flowID, appState: appState, transforms: transforms)
+        let inner = make(scope: scope, appState: appState, transforms: transforms)
         let caching = CachingExecutor(inner: inner, store: FlowCacheStore.shared,
-                                      cacheTier: "real", catalog: catalog, runSeed: runSeed,
-                                      workspace: workspace, flowID: flowID)
-        return FlowRunner.RunContext(flowID: flowID, workspace: workspace,
-                                     blobDirectory: blobDir, executor: caching)
+                                      cacheTier: "real", catalog: catalog, runSeed: scope.runSeed,
+                                      workspace: scope.workspace, flowID: scope.locationID)
+        return FlowRunner.RunContext(scope: scope, blobDirectory: blobDir, executor: caching)
     }
 }

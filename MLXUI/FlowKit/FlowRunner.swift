@@ -86,8 +86,9 @@ nonisolated struct FlowRunner {
     /// the runner — the `RunContext` divergence (SPEC-Q): `last_frame`/`last_tag`/
     /// `last_duration_ms` thread-locals become this value, passed alongside.
     struct RunContext: Sendable {
-        let flowID: String
-        let workspace: FlowWorkspace
+        /// CFM-R17-1: identity vs. location, carried together. A plain flow's `scope` has
+        /// `identity == locationID` and a `flows/`-rooted workspace.
+        let scope: FlowScope
         let blobDirectory: URL
         /// The executor that turns rows into assets (mock in CI, real in the app).
         let executor: any FlowExecutor
@@ -95,12 +96,22 @@ nonisolated struct FlowRunner {
         /// runner itself never touches the registry — the executor does.
         var realism: String = "mock"
 
-        init(flowID: String, workspace: FlowWorkspace, blobDirectory: URL,
-             executor: any FlowExecutor) {
-            self.flowID = flowID
-            self.workspace = workspace
+        /// Identity — the run seed source, `On Flow` matching, run records.
+        var flowID: String { scope.identity }
+        /// Location — the root a `.cat`'s paths resolve against.
+        var workspace: FlowWorkspace { scope.workspace }
+
+        init(scope: FlowScope, blobDirectory: URL, executor: any FlowExecutor) {
+            self.scope = scope
             self.blobDirectory = blobDirectory
             self.executor = executor
+        }
+
+        /// Back-compat: a plain flow whose identity and location are the same id.
+        init(flowID: String, workspace: FlowWorkspace, blobDirectory: URL,
+             executor: any FlowExecutor) {
+            self.init(scope: FlowScope(identity: flowID, workspace: workspace, locationID: flowID),
+                      blobDirectory: blobDirectory, executor: executor)
         }
     }
 
@@ -110,6 +121,12 @@ nonisolated struct FlowRunner {
     /// the doors the App Store tier refuses outright (CFM-R10-Direct): in the **App Store**
     /// build, `code`/`improvise` header flags, `transforms:`, and `.agent` rows (Improvise)
     /// are refused; in the **Direct** build they run fenced (`sandbox-exec`).
+    /// CFM-R17-1 convenience: resolve the E117 `uses:` chain against a `FlowScope` — the
+    /// used `.cat` sits at `workspace/<locationID>/`, so location, not identity, is the key.
+    static func canRun(_ doc: FlowDocument, scope: FlowScope) -> Runnability {
+        canRun(doc, flowID: scope.locationID, workspace: scope.workspace)
+    }
+
     static func canRun(_ doc: FlowDocument, flowID: String? = nil,
                        workspace: FlowWorkspace? = nil) -> Runnability {
         if CapabilityGate.isAppStoreBuild {
@@ -214,8 +231,10 @@ nonisolated struct FlowRunner {
             let task = Task {
                 let pathToID = Self.buildPathMap(doc.rows, prefix: "")
                 // CFM-R10-FIX-1: no UI path can route around the refusal — the runner itself
-                // consults `canRun` and refuses before starting.
-                if case .notRunnable(let reason) = Self.canRun(doc) {
+                // consults `canRun` and refuses before starting. CFM-R17-1: pass the run's
+                // scope so the App Store E117 door sees capabilities inherited through a
+                // workspace-sibling `uses:` flow, not just the header's declared flags.
+                if case .notRunnable(let reason) = Self.canRun(doc, scope: context.scope) {
                     if let row = pathToID["1"] {
                         continuation.yield(.failed(rowID: row,
                                                    FlowError.stageFailure(row: "1", message: reason)))

@@ -81,7 +81,7 @@ struct FlowListView: View {
                     doc: document,
                     session: session,
                     runner: FlowRunner(),
-                    context: AppFlowExecutorFactory.cachingContext(flowID: flowID, appState: appState, transforms: document.transforms))
+                    context: AppFlowExecutorFactory.cachingContext(scope: .plain(flowID), appState: appState, transforms: document.transforms))
             }
         }
     }
@@ -625,7 +625,7 @@ struct FlowListView: View {
     private func startRun(_ doc: FlowDocument) {
         // Re-run from here when some rows already have results; a fresh run otherwise.
         let resume = session.hasRunResults
-        let context = AppFlowExecutorFactory.cachingContext(flowID: flowID, appState: appState, transforms: doc.transforms)
+        let context = AppFlowExecutorFactory.cachingContext(scope: .plain(flowID), appState: appState, transforms: doc.transforms)
         let occurrence = pendingOccurrence
         pendingOccurrence = nil
         session.start(doc: doc, runner: FlowRunner(), context: context, resume: resume,

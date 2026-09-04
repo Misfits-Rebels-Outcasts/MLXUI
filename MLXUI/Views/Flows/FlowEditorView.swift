@@ -104,7 +104,7 @@ struct FlowEditorView: View {
                     doc: model.document,
                     session: session,
                     runner: FlowRunner(),
-                    context: AppFlowExecutorFactory.cachingContext(flowID: model.flowID, appState: appState, transforms: model.document.transforms))
+                    context: AppFlowExecutorFactory.cachingContext(scope: .plain(model.flowID), appState: appState, transforms: model.document.transforms))
             }
         }
         // Editing invalidates run results; preflight follows the document.
@@ -634,7 +634,7 @@ struct FlowEditorView: View {
     }
 
     private func startRun() {
-        let context = AppFlowExecutorFactory.cachingContext(flowID: model.flowID, appState: appState, transforms: model.document.transforms)
+        let context = AppFlowExecutorFactory.cachingContext(scope: .plain(model.flowID), appState: appState, transforms: model.document.transforms)
         session.start(doc: model.document, runner: FlowRunner(), context: context,
                       resume: session.hasRunResults)
     }
