@@ -232,6 +232,91 @@ struct CatFlowUsesEndToEndTests {
         #expect("\(error)".contains("improvise") || "\(error)".contains("App Store"))
     }
 
+    // MARK: - CFM-R17-FIX-2(a) — canRun's per-row class gates must recurse into `uses:`
+
+    // The caller (`AskYourDocs.cat`) declares nothing; the *used* flow carries an
+    // **undeclared** `Improvise` row (no `; improvise` header). `CapabilityGate.effectiveFlags`
+    // sees no flag, and `unknownRowInUsedFlow` only asks `TaskCatalog.get(task) == nil` —
+    // `Improvise` is in the catalog, so today `canRun` returns `.runnable` in the App Store
+    // build. The `.agent` refusal lives in the caller's row loop, which never contains a used
+    // flow's rows. These two tests are the failing evidence for CFM-R17-FIX-2(b); each wraps
+    // exactly the assertion that flips once `-2(b)` makes the class gates recurse, so `-2(b)`
+    // removes the `withKnownIssue`.
+
+    private var usedImproviseUndeclared: String {
+        // No `; improvise` — the row is undeclared.
+        "catflow 0.8\n1. Improvise   \"rewrite the file\"\n"
+    }
+
+    /// The caller flow: a `Save Text` **before** the `uses:` call, so a mid-run refusal has
+    /// already written a real file by the time it fires.
+    private var callerWithSaveBeforeUses: String {
+        """
+        catflow 0.8
+        1. Read Text   q.txt
+        2. Save Text   out.md
+        3. Helper
+
+        uses:
+          Helper = ./Helper.cat
+        """
+    }
+
+    @Test func appStoreCanRunRefusesAnUndeclaredImproviseReachedThroughUses() throws {
+        #expect(CapabilityGate.isAppStoreBuild, "this proof only holds in the APPSTORE_BUILD test host")
+        let (ws, id, base) = try makeWorkspace(files: [
+            ("AskYourDocs.cat", callerWithSaveBeforeUses),
+            ("Helper.cat", usedImproviseUndeclared),
+        ])
+        defer { try? FileManager.default.removeItem(at: base) }
+        let doc = try CatParser.parse(callerWithSaveBeforeUses)
+        let scope = FlowScope(identity: "AskYourDocs", workspace: ws, locationID: id,
+                              flowText: callerWithSaveBeforeUses,
+                              selfFile: ws.directory(for: id).appendingPathComponent("AskYourDocs.cat"))
+
+        let verdict = FlowRunner.canRun(doc, scope: scope)
+        withKnownIssue("CFM-R17-FIX-2(b): canRun's per-row class gates don't recurse into `uses:` — an undeclared Improvise inside a used flow is not refused up front") {
+            guard case .notRunnable = verdict else {
+                Issue.record("App Store build must refuse an undeclared `improvise` row reached through `uses:`, got \(verdict)")
+                return
+            }
+        }
+    }
+
+    @Test func appStoreRefusalForAUsedImproviseHaltsBeforeAnyRowAndWritesNothing() async throws {
+        #expect(CapabilityGate.isAppStoreBuild, "this proof only holds in the APPSTORE_BUILD test host")
+        let (ws, id, base) = try makeWorkspace(files: [
+            ("AskYourDocs.cat", callerWithSaveBeforeUses),
+            ("Helper.cat", usedImproviseUndeclared),
+        ])
+        defer { try? FileManager.default.removeItem(at: base) }
+        let dir = ws.directory(for: id)
+        try "the question".write(to: dir.appendingPathComponent("q.txt"), atomically: true, encoding: .utf8)
+        let outURL = dir.appendingPathComponent("out.md")
+
+        let doc = try CatParser.parse(callerWithSaveBeforeUses)
+        let blob = base.appendingPathComponent("blobs")
+        let scope = FlowScope(identity: "AskYourDocs", workspace: ws, locationID: id,
+                              flowText: callerWithSaveBeforeUses,
+                              selfFile: dir.appendingPathComponent("AskYourDocs.cat"))
+        // A real executor so `Save Text` genuinely writes — the damage FIX-2 is about is files
+        // on disk from rows that ran before a refusal that should have fired before row 1.
+        let executor = RealExecutor(
+            workspace: ws, flowID: id, blobDirectory: blob,
+            makeModelStage: { _, _ in throw FlowError.unknownTask(row: "no model in this flow") },
+            installedModelIDs: [], catalog: [])
+        let context = FlowRunner.RunContext(scope: scope, blobDirectory: blob, executor: executor)
+
+        var events: [FlowEvent] = []
+        for await event in FlowRunner().run(doc, context: context) { events.append(event) }
+
+        let anyFinished = events.contains { if case .finished = $0 { return true } else { return false } }
+        withKnownIssue("CFM-R17-FIX-2(b): the run gate doesn't recurse into `uses:`, so the refusal lands mid-run — after `Save Text` has written out.md and rows have finished") {
+            #expect(!anyFinished, "no row should finish — the flow must be refused before row 1")
+            #expect(!FileManager.default.fileExists(atPath: outURL.path), "out.md must not be written")
+        }
+    }
+
     // MARK: - The bundled workspace
 
     @Test func bundledUsesExampleMaterializesAndListsAsAWorkspace() async throws {
