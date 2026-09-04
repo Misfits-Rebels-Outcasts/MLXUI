@@ -65,6 +65,23 @@ nonisolated enum BundledWorkspaces {
 
     static func meta(id: String) -> Meta? { all.first { $0.id == id } }
 
+    /// True when `workspaceID` names a workspace that ships in the app bundle. A bundled
+    /// workspace's Remove is a **tombstone** (CFM-R17-FIX-1), not an outright delete — the
+    /// user can bring it back — so the callers word its dialog and wire its restore path
+    /// differently from a user workspace.
+    static func isBundled(_ workspaceID: String) -> Bool { ids.contains(workspaceID) }
+
+    /// Materialise every bundled workspace whose id is **not** in `removed` into
+    /// `workspaces/<id>/`. Idempotent (`prepare` only writes missing files); a tombstoned id
+    /// is left absent so a removed bundled workspace does not resurrect on the next reload
+    /// (CFM-R17-FIX-1).
+    static func prepareAll(into workspace: FlowWorkspace, removed: Set<String> = [],
+                           bundle: Bundle = .main) {
+        for meta in all where !removed.contains(meta.id) {
+            try? prepare(meta, workspace: workspace, bundle: bundle)
+        }
+    }
+
     /// Copy `meta`'s flow files into `workspaces/<id>/` if they aren't already there.
     /// **Idempotent** — a file the user has since edited is left alone (only missing files
     /// are written), matching `FlowWorkspace.prepare`.
@@ -80,6 +97,28 @@ nonisolated enum BundledWorkspaces {
             }
             try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
             try fm.copyItem(at: src, to: dest)
+        }
+    }
+}
+
+/// CFM-R17-FIX-1 — the ids of bundled workspaces the user has removed, persisted in
+/// `UserDefaults`. `AppState.reloadWorkspaces()` passes this set to `prepareAll` so a
+/// removed bundled workspace stays removed across launches; "Restore bundled workspaces"
+/// clears it. Stale ids (a workspace that no longer ships) are dropped on read and write.
+nonisolated enum BundledWorkspaceTombstones {
+    static let defaultsKey = "removedBundledWorkspaceIDs"
+
+    static func load(from defaults: UserDefaults = .standard) -> Set<String> {
+        let stored = (defaults.array(forKey: defaultsKey) as? [String]) ?? []
+        return Set(stored).intersection(BundledWorkspaces.ids)
+    }
+
+    static func save(_ ids: Set<String>, to defaults: UserDefaults = .standard) {
+        let live = ids.intersection(BundledWorkspaces.ids)   // never persist a stale id
+        if live.isEmpty {
+            defaults.removeObject(forKey: defaultsKey)
+        } else {
+            defaults.set(live.sorted(), forKey: defaultsKey)
         }
     }
 }

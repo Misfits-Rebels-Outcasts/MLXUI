@@ -64,7 +64,9 @@ struct FlowGalleryView: View {
             }
             Button("Cancel", role: .cancel) { workspacePendingRemoval = nil }
         } message: {
-            Text(workspacePendingRemoval.map { WorkspaceStore.deletionSummary($0) } ?? "")
+            Text(workspacePendingRemoval.map {
+                WorkspaceStore.deletionSummary($0, bundled: BundledWorkspaces.isBundled($0.workspaceID))
+            } ?? "")
         }
     }
 
@@ -103,6 +105,16 @@ struct FlowGalleryView: View {
                     Label("Import Workspace", systemImage: "square.and.arrow.down.on.square")
                 }
                 .help("Copy a workspace folder (its .cat files plus shared docs/index) into My Workflows")
+                // CFM-R17-FIX-1: only shown once the user has removed a bundled workspace —
+                // brings the shipped originals back.
+                if !appState.removedBundledWorkspaceIDs.isEmpty {
+                    Button {
+                        appState.restoreBundledWorkspaces()
+                    } label: {
+                        Label("Restore bundled workspaces", systemImage: "arrow.clockwise")
+                    }
+                    .help("Bring back the example workspaces you've removed (their shipped flows and sample docs)")
+                }
             }
             LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
                 newFlowBadge

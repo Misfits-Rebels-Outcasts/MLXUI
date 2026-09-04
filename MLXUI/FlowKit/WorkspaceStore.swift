@@ -81,13 +81,22 @@ nonisolated enum WorkspaceStore {
     /// A plain sentence for the delete confirmation. "'X' and its files" understates a
     /// workspace, so this names what is actually going — N flows, and any index directories
     /// (CFM-R17-3 wires it into the dialog).
-    static func deletionSummary(_ workspace: Workspace) -> String {
+    ///
+    /// CFM-R17-FIX-1: `bundled` picks the wording for a workspace that ships in the app.
+    /// Removing one is a tombstone, not a permanent delete — so the sentence must **not**
+    /// claim irreversibility, but it must still say that the index the user built and any
+    /// documents they added here are lost (only the shipped original comes back on Restore).
+    static func deletionSummary(_ workspace: Workspace, bundled: Bool = false) -> String {
         let flowsPhrase = workspace.flows.count == 1 ? "1 flow" : "\(workspace.flows.count) flows"
         var parts = [flowsPhrase]
         let indexes = indexDirectoryCount(in: workspace.url)
         if indexes == 1 { parts.append("1 index") }
         else if indexes > 1 { parts.append("\(indexes) indexes") }
-        return "'\(workspace.title)' — \(parts.joined(separator: " and ")) — will be deleted from your workspaces folder. This can't be undone."
+        let inventory = parts.joined(separator: " and ")
+        if bundled {
+            return "'\(workspace.title)' — \(inventory) — will be removed. Any documents you added and any index you built here will be lost; you can bring the original back with “Restore bundled workspaces” in AI Workflows."
+        }
+        return "'\(workspace.title)' — \(inventory) — will be deleted from your workspaces folder. This can't be undone."
     }
 
     /// Delete a workspace's folder (and everything in it) from disk.

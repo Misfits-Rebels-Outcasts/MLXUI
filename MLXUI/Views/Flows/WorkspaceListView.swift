@@ -62,7 +62,8 @@ struct WorkspaceListView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(WorkspaceStore.deletionSummary(workspace))
+            Text(WorkspaceStore.deletionSummary(
+                workspace, bundled: BundledWorkspaces.isBundled(workspace.workspaceID)))
         }
     }
 

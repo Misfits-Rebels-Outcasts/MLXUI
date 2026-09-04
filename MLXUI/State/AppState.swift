@@ -73,6 +73,11 @@ final class AppState {
     var workspaceImportError: String?
     var workspaceRemoveError: String?
 
+    /// CFM-R17-FIX-1: bundled workspace ids the user has removed. Mirrored from `UserDefaults`
+    /// so the shelf and the "Restore bundled workspaces" affordance react; `reloadWorkspaces()`
+    /// will not re-materialise these. A *user* workspace never has an entry here.
+    private(set) var removedBundledWorkspaceIDs: Set<String> = []
+
     /// CFM-R12-4: the bundled flows `FlowRunner.canRun` refuses — the gallery's ⚠ badge tells
     /// the truth for every blocked flow (net/staged/agent channels, unported instant tools),
     /// not just the ~10 the metadata's `notRunnableReason` happens to name. Computed on
@@ -170,6 +175,7 @@ final class AppState {
                 .filter { !Self.hiddenFlowNumbers.contains($0.number) }
         }
         reloadUserFlows()
+        removedBundledWorkspaceIDs = BundledWorkspaceTombstones.load()
         reloadWorkspaces()
     }
 
@@ -187,18 +193,24 @@ final class AppState {
     /// flow's working directory) — it is a real, editable workspace the user can run.
     func reloadWorkspaces() {
         let ws = FlowWorkspace(root: ModelStore.shared.workspacesDirectory)
-        for meta in BundledWorkspaces.all {
-            try? BundledWorkspaces.prepare(meta, workspace: ws)
-        }
+        // CFM-R17-FIX-1: a tombstoned bundled workspace is not re-materialised — Remove means
+        // removed until the user restores it.
+        BundledWorkspaces.prepareAll(into: ws, removed: removedBundledWorkspaceIDs)
         workspaceEntries = WorkspaceStore.scan(workspace: ws)
     }
 
     /// Delete a workspace's whole directory, refresh the shelf, and clear any navigation
-    /// pointing into it.
+    /// pointing into it. For a *bundled* workspace this also writes a tombstone
+    /// (CFM-R17-FIX-1) so `reloadWorkspaces()` does not put it straight back; the user brings
+    /// it back with `restoreBundledWorkspaces()`.
     func removeWorkspace(workspaceID: String) {
         do {
             try WorkspaceStore.remove(workspaceID: workspaceID,
                                       workspace: FlowWorkspace(root: ModelStore.shared.workspacesDirectory))
+            if BundledWorkspaces.isBundled(workspaceID) {
+                removedBundledWorkspaceIDs.insert(workspaceID)
+                BundledWorkspaceTombstones.save(removedBundledWorkspaceIDs)
+            }
             reloadWorkspaces()
             if selectedWorkspace?.workspaceID == workspaceID { selectedWorkspace = nil }
             if selectedFlow?.workspace?.workspaceID == workspaceID { selectedFlow = nil }
@@ -206,6 +218,16 @@ final class AppState {
         } catch {
             workspaceRemoveError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
         }
+    }
+
+    /// CFM-R17-FIX-1: bring back every bundled workspace the user has removed. Their flows and
+    /// stock corpus are re-materialised on the next `reloadWorkspaces()`; a bundled workspace
+    /// the user still has on disk (never removed) is untouched, as is every user workspace.
+    func restoreBundledWorkspaces() {
+        guard !removedBundledWorkspaceIDs.isEmpty else { return }
+        removedBundledWorkspaceIDs.removeAll()
+        BundledWorkspaceTombstones.save([])
+        reloadWorkspaces()
     }
 
     /// Delete a user flow's folder from disk, refresh the shelf, and clear any navigation
