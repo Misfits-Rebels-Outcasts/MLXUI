@@ -56,7 +56,11 @@ nonisolated enum WorkspaceKnowledge {
         enum Side: Equatable, Sendable {
             case none
             case one(String)
-            /// More than one flow, in source order.
+            /// More than one flow, in whatever order `classify(flows:)` was handed them —
+            /// `WorkspaceListView` builds that list from `WorkspaceStore.scan`'s filename sort
+            /// (`localizedStandardCompare`), so in practice this is filename order, stable and
+            /// matching what the shelf shows (CFM-R17-FIX-11(d); this used to say "source
+            /// order", which named the wrong thing — nothing here reads row source order).
             case ambiguous([String])
         }
 
@@ -78,10 +82,10 @@ nonisolated enum WorkspaceKnowledge {
         var ambiguityNote: String? {
             var clauses: [String] = []
             if case .ambiguous(let files) = builder {
-                clauses.append("\(WorkspaceKnowledge.list(files)) all build ‘\(indexName)’ — no single Build button")
+                clauses.append("\(WorkspaceKnowledge.joinedNames(files)) all build ‘\(indexName)’ — no single Build button")
             }
             if case .ambiguous(let files) = querier {
-                clauses.append("\(WorkspaceKnowledge.list(files)) all query ‘\(indexName)’ — no single Ask button")
+                clauses.append("\(WorkspaceKnowledge.joinedNames(files)) all query ‘\(indexName)’ — no single Ask button")
             }
             guard !clauses.isEmpty else { return nil }
             return clauses.joined(separator: "; ") + ". Rename one so this index has a single flow on each side."
@@ -171,8 +175,9 @@ nonisolated enum WorkspaceKnowledge {
 
     // MARK: - Helpers
 
-    /// "a", "a and b", "a, b, and c".
-    static func list(_ files: [String]) -> String {
+    /// "a", "a and b", "a, b, and c". (CFM-R17-FIX-11(d): named `joinedNames`, not `list` —
+    /// the type's surface stays about classification, not generic string-joining.)
+    static func joinedNames(_ files: [String]) -> String {
         switch files.count {
         case 0, 1: return files.joined()
         case 2: return "\(files[0]) and \(files[1])"

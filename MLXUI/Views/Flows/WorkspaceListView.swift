@@ -166,23 +166,28 @@ struct WorkspaceListView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            HStack(spacing: 10) {
-                if let builder = card.buildFile {
-                    Button {
-                        runFlow(builder)
-                    } label: {
-                        Label(m == nil ? "Build" : "Rebuild", systemImage: "hammer")
+            // CFM-R17-FIX-11(d): omit the row entirely when neither side has a button (both
+            // ambiguous, or ambiguous + none) — `-11(c)` made that shape reachable, and an
+            // empty `HStack { Spacer() }` was ~16pt of dead space where the buttons would be.
+            if card.buildFile != nil || card.askFile != nil {
+                HStack(spacing: 10) {
+                    if let builder = card.buildFile {
+                        Button {
+                            runFlow(builder)
+                        } label: {
+                            Label(m == nil ? "Build" : "Rebuild", systemImage: "hammer")
+                        }
                     }
-                }
-                if let querier = card.askFile {
-                    Button {
-                        runFlow(querier)
-                    } label: {
-                        Label("Ask", systemImage: "text.bubble")
+                    if let querier = card.askFile {
+                        Button {
+                            runFlow(querier)
+                        } label: {
+                            Label("Ask", systemImage: "text.bubble")
+                        }
+                        .disabled(m == nil)
                     }
-                    .disabled(m == nil)
+                    Spacer()
                 }
-                Spacer()
             }
             if let note = card.ambiguityNote {
                 HStack(alignment: .top, spacing: 6) {

@@ -163,33 +163,39 @@ struct CatFlowWorkspaceKnowledgeTests {
     @Test func twoBuildersKeepTheAskButtonAndNoteTheBuildCollision() throws {
         // CFM-R17-FIX-9(c): the Ask side is unambiguous, so the card keeps its Ask button —
         // the old collision notice threw it away.
+        // CFM-R17-FIX-11(d): "Nightly.cat"/"InboxIngest.cat", not "Ingest.cat"/"InboxIngest.cat"
+        // — the latter pair made the `note.contains("Ingest.cat")` conjunct vacuous, since
+        // "InboxIngest.cat" contains "Ingest.cat" as a substring.
         let c = try #require(try cards([
-            ("Ingest.cat", "catflow 0.8\n1. Read Files   docs/\n2. Embed   BGE-M3\n3. Store Index   (1,2)   library.index\n"),
+            ("Nightly.cat", "catflow 0.8\n1. Read Files   docs/\n2. Embed   BGE-M3\n3. Store Index   (1,2)   library.index\n"),
             ("InboxIngest.cat", "catflow 0.8\n1. On File   inbox/\n2. Embed   BGE-M3\n3. Store Index   (1,2)   library.index\n"),
             ("Ask.cat", "catflow 0.8\n1. Read Index   library.index\n2. Retrieve   (1,1)\n"),
         ]).first)
         #expect(c.indexName == "library.index")
         #expect(c.buildFile == nil)              // ambiguous — no Build button
         #expect(c.askFile == "Ask.cat")          // ...but Ask still works
-        if case .ambiguous(let b) = c.builder { #expect(Set(b) == ["Ingest.cat", "InboxIngest.cat"]) }
+        if case .ambiguous(let b) = c.builder { #expect(Set(b) == ["Nightly.cat", "InboxIngest.cat"]) }
         else { Issue.record("builder side should be .ambiguous") }
         let note = try #require(c.ambiguityNote)
-        #expect(note.contains("Ingest.cat") && note.contains("InboxIngest.cat"))
+        #expect(note.contains("Nightly.cat") && note.contains("InboxIngest.cat"))
         #expect(note.contains("Build") && !note.contains("Ask"))   // only the ambiguous side
         // CFM-R17-FIX-11(b): the button that survives is still named on the card.
         #expect(c.namesCaption == "Ask.cat queries")
     }
 
     @Test func twoQueriersKeepTheBuildButtonAndNoteTheAskCollision() throws {
+        // CFM-R17-FIX-11(d): "QueryA.cat"/"QueryB.cat", not "AskA.cat"/"AskB.cat" — the latter
+        // pair made `note.contains("Ask")` vacuous (satisfied by the filenames regardless of
+        // the sentence); only `!note.contains("Build")` carried information.
         let c = try #require(try cards([
             ("Build.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   kb.index\n"),
-            ("AskA.cat", "catflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n"),
-            ("AskB.cat", "catflow 0.8\n1. Read Index   kb.index\n2. Keyword Search   (1,1)\n"),
+            ("QueryA.cat", "catflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n"),
+            ("QueryB.cat", "catflow 0.8\n1. Read Index   kb.index\n2. Keyword Search   (1,1)\n"),
         ]).first)
         #expect(c.buildFile == "Build.cat")      // unambiguous — Build works
         #expect(c.askFile == nil)                // ambiguous — no Ask button
         let note = try #require(c.ambiguityNote)
-        #expect(note.contains("AskA.cat") && note.contains("AskB.cat"))
+        #expect(note.contains("QueryA.cat") && note.contains("QueryB.cat"))
         #expect(note.contains("Ask") && !note.contains("Build"))
         #expect(c.namesCaption == "Build.cat builds")
     }
