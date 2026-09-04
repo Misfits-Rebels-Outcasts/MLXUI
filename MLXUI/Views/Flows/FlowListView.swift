@@ -18,12 +18,19 @@ struct FlowListView: View {
     /// against the shared workspace directory, and it runs under a workspace-rooted scope.
     let workspaceRef: WorkspaceRef?
 
+    /// CFM-R17-4: run the flow once as soon as it loads (the workspace index card's Build /
+    /// Ask verbs).
+    let autoRun: Bool
+    @State private var didAutoRun = false
+
     /// A user flow has no bundled assets, so `prepare` is called with an empty list (it is
     /// already idempotent). A gallery flow's input assets come from the flattened bundle.
-    init(flowID: String, source: Source = .gallery, workspace: WorkspaceRef? = nil) {
+    init(flowID: String, source: Source = .gallery, workspace: WorkspaceRef? = nil,
+         autoRun: Bool = false) {
         self.flowID = flowID
         self.source = source
         self.workspaceRef = workspace
+        self.autoRun = autoRun
     }
 
     /// The workspace a flow's paths resolve against — the shared workspace directory for a
@@ -913,6 +920,15 @@ struct FlowListView: View {
         // CFM-R10-Events: establish the trigger kind so the Arm button shows (and the §14.4
         // refusal when the flow carries a door).
         armSession.inspect(doc: doc)
+
+        // CFM-R17-4: the workspace index card opened this flow to run it. `canRun` needs the
+        // preflight (just set) to settle through `@Observable`, so hop a runloop.
+        if autoRun, !didAutoRun {
+            didAutoRun = true
+            DispatchQueue.main.async {
+                if session.canRun { run(doc) }
+            }
+        }
     }
 }
 

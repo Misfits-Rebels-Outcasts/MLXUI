@@ -579,16 +579,22 @@ struct FlowSelection: Hashable, Identifiable {
     /// CFM-R17-3: set when this flow lives inside a workspace — `FlowListView` then resolves
     /// its `.cat` paths against the shared workspace directory, not `flows/<flowID>/`.
     let workspace: WorkspaceRef?
+    /// CFM-R17-4: `FlowListView` runs the flow once as soon as it loads — the workspace
+    /// index card's Build / Ask verbs open the flow and start it.
+    let autoRun: Bool
 
-    init(flowID: String, isUserFlow: Bool = false, workspace: WorkspaceRef? = nil) {
+    init(flowID: String, isUserFlow: Bool = false, workspace: WorkspaceRef? = nil,
+         autoRun: Bool = false) {
         self.flowID = flowID
         self.isUserFlow = isUserFlow
         self.workspace = workspace
+        self.autoRun = autoRun
     }
 
     var id: String {
-        if let workspace { return "w-\(workspace.workspaceID)/\(workspace.flowFile)" }
-        return "\(isUserFlow ? "u" : "g")-\(flowID)"
+        let run = autoRun ? "!" : ""
+        if let workspace { return "w\(run)-\(workspace.workspaceID)/\(workspace.flowFile)" }
+        return "\(isUserFlow ? "u" : "g")\(run)-\(flowID)"
     }
 }
 

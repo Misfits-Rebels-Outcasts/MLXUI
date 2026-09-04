@@ -14,6 +14,23 @@ struct WorkspaceListView: View {
 
     private var columns: [GridItem] { [GridItem(.adaptive(minimum: 240), spacing: 14)] }
 
+    /// CFM-R17-4: parse each flow once, then pair a builder with a querier of the same index.
+    private var pairings: [WorkspaceKnowledge.IndexPairing] {
+        let parsed = workspace.flows.compactMap { flow -> (file: String, doc: FlowDocument)? in
+            guard let doc = try? WorkspaceStore.loadDocument(flow: flow) else { return nil }
+            return (flow.url.lastPathComponent, doc)
+        }
+        return WorkspaceKnowledge.pairings(flows: parsed)
+    }
+
+    /// The `manifest.json` of an index in this workspace, read fresh from disk — never cached
+    /// in app state, so a card that disagrees with the disk is impossible (CFM-R17-4).
+    private func manifest(for indexName: String) -> IndexFormat.Manifest? {
+        let url = workspace.url.appendingPathComponent(indexName).appendingPathComponent("manifest.json")
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? IndexFormat.manifest(from: data)
+    }
+
     /// The non-`.cat` entries in the directory the flows share — indexes, `docs/`, fixtures.
     private var sharedFiles: [URL] {
         let flowNames = Set(workspace.flows.map { $0.url.lastPathComponent })
@@ -29,6 +46,8 @@ struct WorkspaceListView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
+                let pairs = pairings
+                if !pairs.isEmpty { indexSection(pairs) }
                 flowsSection
                 if !sharedFiles.isEmpty { sharedFilesSection }
             }
@@ -67,6 +86,66 @@ struct WorkspaceListView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    // MARK: - CFM-R17-4: the knowledge-base card
+
+    private func indexSection(_ pairs: [WorkspaceKnowledge.IndexPairing]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Knowledge Base")
+                .font(.title3.weight(.semibold))
+            ForEach(pairs, id: \.indexName) { pair in
+                indexCard(pair)
+            }
+        }
+    }
+
+    private func indexCard(_ pair: WorkspaceKnowledge.IndexPairing) -> some View {
+        let m = manifest(for: pair.indexName)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "books.vertical").foregroundStyle(.secondary)
+                Text(pair.indexName).font(.headline)
+                Spacer()
+            }
+            if let m {
+                Text("\(m.embedder) · \(m.dims)-dim · \(m.count) chunk\(m.count == 1 ? "" : "s")")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("not built yet — run \(pair.builderFile) to create it")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            HStack(spacing: 10) {
+                Button {
+                    runFlow(pair.builderFile)
+                } label: {
+                    Label(m == nil ? "Build" : "Rebuild", systemImage: "hammer")
+                }
+                Button {
+                    runFlow(pair.querierFile)
+                } label: {
+                    Label("Ask", systemImage: "text.bubble")
+                }
+                .disabled(m == nil)
+                Spacer()
+                Text("\(pair.builderFile) builds · \(pair.querierFile) queries")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.accentColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+        .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(Color.accentColor.opacity(0.3), lineWidth: 1) }
+    }
+
+    /// Open the flow and run it — Build/Rebuild the builder, Ask the querier (which parks on
+    /// its Human Input row and is drawn by the existing `FlowHumanPromptView`).
+    private func runFlow(_ file: String) {
+        let ref = WorkspaceRef(workspaceID: workspace.workspaceID, flowFile: file)
+        appState.selectedFlow = FlowSelection(flowID: ref.workspaceID, workspace: ref, autoRun: true)
     }
 
     private var flowsSection: some View {

@@ -50,7 +50,9 @@ struct MLXUIApp: App {
                             // flow's detail (title, rows, inspector) with a back button.
                             .navigationDestination(item: $appState.selectedFlow) { selection in
                                 FlowListView(flowID: selection.flowID,
-                                             source: selection.isUserFlow ? .user : .gallery)
+                                             source: selection.isUserFlow ? .user : .gallery,
+                                             workspace: selection.workspace,
+                                             autoRun: selection.autoRun)
                                     .id(selection.id)
                             }
                             // CFM-R8/R11-0: the flow editor — a fresh flow (nil document) or
