@@ -8,32 +8,46 @@ nonisolated enum WorkspaceKnowledge {
 
     /// How a flow relates to an index. Row lists are walked pre-order (`flatten`) — **source
     /// order**, recursing into blocks; branch clauses (`-> { tag: N }`, `-> N`, `resume`) are
-    /// not followed, so "last row" means last in the text, not last actually executed
-    /// (CFM-R17-FIX-9(d)). No bundled flow's branches skip a trailing `Store Index`.
-    enum FlowRole: Equatable, Sendable {
-        /// The flow's last row (source order, recursing into a trailing block) is `Store Index`
-        /// — its job is to produce an index. Carries **every** `Store Index` name in the flow
-        /// (CFM-R17-FIX-9(b): a flow ending `Store Index a` / `Store Index b` builds both);
-        /// names de-duplicated, source order, normalized. (CFM-R17-FIX-4: the last row is
-        /// found at any block depth, not just top level.)
-        case builds(indexes: [String])
-        /// The flow reads one or more indexes (`Read Index <name>` at any depth) **and** has a
-        /// `Retrieve` / `Keyword Search`. It queries *every* index it reads — names in source
-        /// order, de-duplicated, normalized (CFM-R17-FIX-4: a flow reading N indexes yields N
-        /// names, not just the first).
-        case queries(indexes: [String])
-        /// Anything else.
-        case plain
+    /// not followed, so "row order" means source order, not execution order (CFM-R17-FIX-9(d)).
+    ///
+    /// CFM-R17-FIX-11(a) (owner-ruled 2026-09-04): **non-exclusive and position-free.** A flow
+    /// that stores an index builds it, full stop — every `Store Index` row anywhere counts, not
+    /// only the flow's last row. A flow that reads an index and retrieves from it queries it. A
+    /// flow may do both, to the same or different names (a self-contained "ingest then ask"
+    /// flow is a real shape). The two arms used to be exclusive (`builds` was tested first and
+    /// shadowed `queries`) and the builder arm alone was gated on `rows.last?.task ==
+    /// "Store Index"` — which made whether an *earlier* `Store Index` counted depend on an
+    /// unrelated later row, and collected names from `Gate`/`<each>` branches that might never
+    /// execute. Both are gone: `builds` and `queries` are each computed independently over the
+    /// whole flattened row list.
+    struct FlowIndexUse: Equatable, Sendable {
+        /// Every `Store Index <name>` row in the flow (any depth), source order, de-duplicated,
+        /// normalized.
+        var builds: [String] = []
+        /// Every `Read Index <name>` row (any depth), when the flow has a `Retrieve` /
+        /// `Keyword Search` somewhere — source order, de-duplicated, normalized. Empty when the
+        /// flow reads an index but never retrieves from it (CFM-R17-3: `readIndexAloneIsPlain`).
+        var queries: [String] = []
+
+        var isPlain: Bool { builds.isEmpty && queries.isEmpty }
     }
 
-    /// One index a workspace's flows work with — a card in the Knowledge Base. A `Side` is
-    /// `.one` when exactly one flow does that job (its button runs that flow), `.ambiguous`
-    /// when more than one does (no button for it — the note names them), `.none` when none do.
-    /// A card exists only when **both** sides have at least one flow (CFM-R17-3: a one-sided
-    /// name still just lists plainly).
+    /// One index name at least one flow mentions — a candidate for a Knowledge Base card. A
+    /// `Side` is `.one` when exactly one flow does that job (its button runs that flow),
+    /// `.ambiguous` when more than one does (no button for it — the note names them), `.none`
+    /// when no flow does.
     ///
     /// CFM-R17-FIX-9(c): an ambiguous side no longer suppresses the whole card. `1 builder +
     /// 2 queriers` keeps its Build button and notes the Ask collision; the mirror keeps Ask.
+    ///
+    /// CFM-R17-FIX-11(c) (owner-ruled 2026-09-04): `.none` is now reachable — `classify` emits
+    /// a card for **every** name any flow mentions, including one-sided names; it stays pure
+    /// (no filesystem) and leaves *whether to render* to the caller, since only the caller can
+    /// see disk. `WorkspaceListView` renders a card when it has a builder, or when the index
+    /// exists on disk (a prebuilt, queryable index — `uses_example`'s `kb.index` — is a real,
+    /// fully-functional state with no builder in the workspace) — and suppresses a
+    /// querier-only card for an index that doesn't exist yet (nothing actionable, and a card
+    /// reading "not built yet" with no Build button is a dead end).
     struct IndexCard: Equatable, Sendable {
         let indexName: String
         let builder: Side
@@ -60,7 +74,7 @@ nonisolated enum WorkspaceKnowledge {
             return nil
         }
 
-        /// A plain note covering only the ambiguous side(s), or nil when both are unambiguous.
+        /// A plain note covering only the ambiguous side(s), or nil when neither is ambiguous.
         var ambiguityNote: String? {
             var clauses: [String] = []
             if case .ambiguous(let files) = builder {
@@ -74,8 +88,8 @@ nonisolated enum WorkspaceKnowledge {
         }
 
         /// "`Ingest.cat` builds" / "`DocChat.cat` queries" / both joined — the flow each button
-        /// runs, for whichever side is unambiguous. `nil` only when neither side has a button
-        /// (both ambiguous — `ambiguityNote` already names those files).
+        /// runs, for whichever side is `.one`. `nil` when neither side is (both `.none`, both
+        /// `.ambiguous`, or one of each) — `ambiguityNote` names an ambiguous side instead.
         ///
         /// CFM-R17-FIX-11(b): `WorkspaceListView` used to name a flow only in the "not built
         /// yet" placeholder, which vanished the moment a manifest existed — after the first
@@ -92,43 +106,31 @@ nonisolated enum WorkspaceKnowledge {
     }
 
     /// Classify one parsed flow.
-    static func role(of doc: FlowDocument) -> FlowRole {
+    static func role(of doc: FlowDocument) -> FlowIndexUse {
         let rows = flatten(doc.rows)
-        // builds — the last row (source order) is Store Index, and its job is to produce every
-        // index it stores (CFM-R17-FIX-9(b)).
-        if rows.last?.task == "Store Index" {
-            let names = rows
-                .compactMap { $0.task == "Store Index" ? storeIndexName($0) : nil }
-                .map(normalizedIndexName)
-            if !names.isEmpty { return .builds(indexes: dedupe(names)) }
+        let builds = dedupe(rows
+            .compactMap { $0.task == "Store Index" ? storeIndexName($0) : nil }
+            .map(normalizedIndexName))
+        var queries: [String] = []
+        if rows.contains(where: { $0.task == "Retrieve" || $0.task == "Keyword Search" }) {
+            queries = dedupe(rows
+                .compactMap { $0.task == "Read Index" ? readIndexName($0) : nil }
+                .map(normalizedIndexName))
         }
-        // queries — every Read Index <name>, plus a Retrieve / Keyword Search somewhere.
-        let names = rows
-            .compactMap { $0.task == "Read Index" ? readIndexName($0) : nil }
-            .map(normalizedIndexName)
-        if !names.isEmpty,
-           rows.contains(where: { $0.task == "Retrieve" || $0.task == "Keyword Search" }) {
-            return .queries(indexes: dedupe(names))
-        }
-        return .plain
+        return FlowIndexUse(builds: builds, queries: queries)
     }
 
-    /// The Knowledge Base cards across a workspace's flows (filename → parsed doc), sorted by
-    /// index name. One card per normalized index name that has **both** a builder and a
-    /// querier; each side is `.one` / `.ambiguous` / `.none` per how many flows do that job.
-    /// A name with only one side present produces no card (CFM-R17-3).
+    /// The Knowledge Base card candidates across a workspace's flows (filename → parsed doc),
+    /// sorted by index name — one card per name **any** flow mentions on either side, absent
+    /// side `.none` (CFM-R17-FIX-11(c)). Pure: no filesystem access, so the caller decides what
+    /// to render.
     static func classify(flows: [(file: String, doc: FlowDocument)]) -> [IndexCard] {
         var builders: [String: [String]] = [:]
         var queriers: [String: [String]] = [:]
         for entry in flows {
-            switch role(of: entry.doc) {
-            case .builds(let names):
-                for name in names { builders[name, default: []].append(entry.file) }
-            case .queries(let names):
-                for name in names { queriers[name, default: []].append(entry.file) }
-            case .plain:
-                continue
-            }
+            let use = role(of: entry.doc)
+            for name in use.builds { builders[name, default: []].append(entry.file) }
+            for name in use.queries { queriers[name, default: []].append(entry.file) }
         }
         func side(_ files: [String]) -> IndexCard.Side {
             switch files.count {
@@ -137,14 +139,18 @@ nonisolated enum WorkspaceKnowledge {
             default: return .ambiguous(files)
             }
         }
-        var cards: [IndexCard] = []
-        for name in Set(builders.keys).union(queriers.keys).sorted() {
-            let b = builders[name] ?? []
-            let q = queriers[name] ?? []
-            guard !b.isEmpty, !q.isEmpty else { continue }   // one-sided → no card (CFM-R17-3)
-            cards.append(IndexCard(indexName: name, builder: side(b), querier: side(q)))
+        return Set(builders.keys).union(queriers.keys).sorted().map { name in
+            IndexCard(indexName: name, builder: side(builders[name] ?? []), querier: side(queriers[name] ?? []))
         }
-        return cards
+    }
+
+    /// Whether `card` is worth rendering as a Knowledge Base card (CFM-R17-FIX-11(c),
+    /// owner-ruled 2026-09-04): a builder makes it always actionable (Build creates the
+    /// index); with no builder, only an index that already exists earns a card — a querier
+    /// with nothing to read yet is a dead end, not a card. Pure: the caller (the one place
+    /// that can see disk, `WorkspaceListView.manifest(for:)`) supplies `indexExists`.
+    static func isCardWorthRendering(_ card: IndexCard, indexExists: Bool) -> Bool {
+        card.builder != .none || indexExists
     }
 
     // MARK: - Helpers

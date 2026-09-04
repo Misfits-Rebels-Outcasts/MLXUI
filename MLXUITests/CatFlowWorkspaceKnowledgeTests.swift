@@ -2,16 +2,20 @@ import Testing
 import Foundation
 @testable import MLXUI
 
-/// CFM-R17-4 — the knowledge-base surface is **derived** from the rows: a flow whose last row
-/// is `Store Index <name>` builds it; a flow with `Read Index <name>` plus `Retrieve` /
-/// `Keyword Search` queries it; a builder + a querier of the same name pair into one card.
-/// Freshness needs no new machinery — a rebuilt index changes `Retrieve`'s cache key through
-/// the directory hash.
+/// CFM-R17-4 — the knowledge-base surface is **derived** from the rows: a flow builds every
+/// index its `Store Index` rows name (anywhere, CFM-R17-FIX-11(a)); a flow with `Read Index`
+/// plus `Retrieve`/`Keyword Search` queries every index it reads. The two are independent — a
+/// flow may build, query, or do both to the same or different names. `classify` pairs a
+/// builder and a querier of the same name into one card; a name only one side mentions still
+/// gets a card, one-sided (CFM-R17-FIX-11(c)) — whether that's worth *rendering* is the
+/// caller's call (`isCardWorthRendering`), since only the caller can see whether the index
+/// exists on disk. Freshness needs no new machinery — a rebuilt index changes `Retrieve`'s
+/// cache key through the directory hash.
 struct CatFlowWorkspaceKnowledgeTests {
 
     private func doc(_ text: String) throws -> FlowDocument { try CatParser.parse(text) }
 
-    /// Classify a set of `(file, .cat text)` pairs into Knowledge Base cards.
+    /// Classify a set of `(file, .cat text)` pairs into Knowledge Base card candidates.
     private func cards(_ flows: [(String, String)]) throws -> [WorkspaceKnowledge.IndexCard] {
         WorkspaceKnowledge.classify(flows: try flows.map { ($0.0, try doc($0.1)) })
     }
@@ -20,20 +24,38 @@ struct CatFlowWorkspaceKnowledgeTests {
 
     @Test func lastRowStoreIndexBuilds() throws {
         let d = try doc("catflow 0.8\n1. Read Files   docs/\n2. Embed   BGE-M3\n6. Store Index   (1,2)   library.index\n")
-        #expect(WorkspaceKnowledge.role(of: d) == .builds(indexes: ["library.index"]))
+        #expect(WorkspaceKnowledge.role(of: d) == WorkspaceKnowledge.FlowIndexUse(builds: ["library.index"]))
     }
 
-    @Test func storeIndexNotLastIsNotABuilder() throws {
-        // Store Index in the middle, a Save Text after it — not "the last row".
+    @Test func storeIndexAnywhereBuildsRegardlessOfLaterRows() throws {
+        // CFM-R17-FIX-11(a) (owner-ruled 2026-09-04): position-free. Before, this was `.plain`
+        // because the `Store Index` wasn't the flow's *last* row — whether it counted depended
+        // on the unrelated `Save Text` after it.
         let d = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n3. Save Text   done.md\n")
-        #expect(WorkspaceKnowledge.role(of: d) == .plain)
+        #expect(WorkspaceKnowledge.role(of: d) == WorkspaceKnowledge.FlowIndexUse(builds: ["library.index"]))
     }
 
     @Test func aFlowEndingInTwoStoreIndexRowsBuildsBoth() throws {
-        // CFM-R17-FIX-9(b): the builder side collects every `Store Index` name, not just the
-        // last row's — symmetric with the querier side.
+        // CFM-R17-FIX-9(b): the builder side collects every `Store Index` name, not just one —
+        // symmetric with the querier side.
         let d = try doc("catflow 0.8\n1. Read Files   docs/\n2. Embed   BGE-M3\n3. Store Index   (1,2)   name=hr.index\n4. Store Index   (1,2)   name=eng.index\n")
-        #expect(WorkspaceKnowledge.role(of: d) == .builds(indexes: ["hr.index", "eng.index"]))
+        #expect(WorkspaceKnowledge.role(of: d) == WorkspaceKnowledge.FlowIndexUse(builds: ["hr.index", "eng.index"]))
+    }
+
+    @Test func aFlowThatBothBuildsAndQueriesOneIndexRegistersOnBothSides() throws {
+        // CFM-R17-FIX-11(a): the two arms used to be exclusive — `role` tested `builds` first
+        // and returned immediately, so a flow whose last row is `Store Index` never had its
+        // earlier `Read Index`/`Retrieve` rows checked. Now independent: a self-contained
+        // "ingest, then ask" flow (single-file RAG) is a real, expressible shape.
+        let d = try doc("""
+        catflow 0.8
+        1. Read Index   library.index
+        2. Retrieve     (1,1)
+        3. Embed        BGE-M3
+        4. Store Index  library.index
+        """)
+        #expect(WorkspaceKnowledge.role(of: d) == WorkspaceKnowledge.FlowIndexUse(
+            builds: ["library.index"], queries: ["library.index"]))
     }
 
     @Test func aBuilderOfTwoIndexesPlusTwoQueriersProducesTwoCards() throws {
@@ -49,12 +71,12 @@ struct CatFlowWorkspaceKnowledgeTests {
 
     @Test func readIndexPlusRetrieveQueries() throws {
         let d = try doc("catflow 0.8\n1. Read Index   library.index\n2. Embed   BGE-M3\n3. Retrieve   (1,2)\n4. Answer   Qwen3 8B\n")
-        #expect(WorkspaceKnowledge.role(of: d) == .queries(indexes: ["library.index"]))
+        #expect(WorkspaceKnowledge.role(of: d) == WorkspaceKnowledge.FlowIndexUse(queries: ["library.index"]))
     }
 
     @Test func readIndexPlusKeywordSearchQueries() throws {
         let d = try doc("catflow 0.8\n1. Read Index   kb.index\n2. Keyword Search   (1,1)\n")
-        #expect(WorkspaceKnowledge.role(of: d) == .queries(indexes: ["kb.index"]))
+        #expect(WorkspaceKnowledge.role(of: d) == WorkspaceKnowledge.FlowIndexUse(queries: ["kb.index"]))
     }
 
     // MARK: - CFM-R17-FIX-4: N indexes → N names; builder/querier over the same row set
@@ -62,12 +84,14 @@ struct CatFlowWorkspaceKnowledgeTests {
     @Test func aFlowReadingTwoIndexesQueriesBoth() throws {
         // `20-TwoIndexAnalyst`-shaped: both Read Index rows live inside a `<list>` block.
         let two = try String(contentsOf: galleryURL("20-TwoIndexAnalyst"), encoding: .utf8)
-        #expect(WorkspaceKnowledge.role(of: try doc(two)) == .queries(indexes: ["hr.index", "eng.index"]))
+        #expect(WorkspaceKnowledge.role(of: try doc(two)) == WorkspaceKnowledge.FlowIndexUse(
+            queries: ["hr.index", "eng.index"]))
     }
 
     @Test func routerDeskQueriesBothBranchIndexes() throws {
         let router = try String(contentsOf: galleryURL("45-RouterDesk"), encoding: .utf8)
-        #expect(WorkspaceKnowledge.role(of: try doc(router)) == .queries(indexes: ["billing-kb.index", "docs-kb.index"]))
+        #expect(WorkspaceKnowledge.role(of: try doc(router)) == WorkspaceKnowledge.FlowIndexUse(
+            queries: ["billing-kb.index", "docs-kb.index"]))
     }
 
     @Test func repeatedReadIndexNameIsListedOnce() throws {
@@ -77,7 +101,7 @@ struct CatFlowWorkspaceKnowledgeTests {
         2. Read Index   kb.index
         3. Retrieve   (1,1)
         """)
-        #expect(WorkspaceKnowledge.role(of: d) == .queries(indexes: ["kb.index"]))
+        #expect(WorkspaceKnowledge.role(of: d) == WorkspaceKnowledge.FlowIndexUse(queries: ["kb.index"]))
     }
 
     @Test func storeIndexEndingATrailingListStillBuilds() throws {
@@ -89,10 +113,12 @@ struct CatFlowWorkspaceKnowledgeTests {
              1. Embed         BGE-M3
              2. Store Index   library.index
         """)
-        #expect(WorkspaceKnowledge.role(of: d) == .builds(indexes: ["library.index"]))
+        #expect(WorkspaceKnowledge.role(of: d) == WorkspaceKnowledge.FlowIndexUse(builds: ["library.index"]))
     }
 
-    @Test func storeIndexInATrailingListFollowedByMoreIsNotABuilder() throws {
+    @Test func storeIndexInATrailingListStillBuildsEvenFollowedByMore() throws {
+        // Position-free (CFM-R17-FIX-11(a)) — the same reclassification as
+        // `storeIndexAnywhereBuildsRegardlessOfLaterRows`, one level down inside a block.
         let d = try doc("""
         catflow 0.8
         1. <list build>
@@ -100,7 +126,7 @@ struct CatFlowWorkspaceKnowledgeTests {
              2. Store Index   library.index
         2. Save Text   done.md
         """)
-        #expect(WorkspaceKnowledge.role(of: d) == .plain)
+        #expect(WorkspaceKnowledge.role(of: d) == WorkspaceKnowledge.FlowIndexUse(builds: ["library.index"]))
     }
 
     // MARK: - CFM-R17-FIX-5 / -9(c): normalization, and ambiguity that keeps the good side
@@ -122,12 +148,12 @@ struct CatFlowWorkspaceKnowledgeTests {
     @Test func aBareSlashNameLandsInModelAndIsNotClassified() throws {
         // CFM-R17-FIX-9(a): `Store Index dir/kb.index` / `Read Index ./kb.index` — the parser
         // parks the name in `row.model`, where neither the tools nor the Python read it. The
-        // classifier must not pair a card whose Build/Ask would always throw; the rows stay
-        // unclassified (`.plain`), exactly as before CFM-R17-FIX-5.
+        // classifier must not offer a card whose Build/Ask would always throw; the rows stay
+        // unclassified.
         let builder = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   indexes/kb.index\n")
         let querier = try doc("catflow 0.8\n1. Read Index   ./kb.index\n2. Retrieve   (1,1)\n")
-        #expect(WorkspaceKnowledge.role(of: builder) == .plain)
-        #expect(WorkspaceKnowledge.role(of: querier) == .plain)
+        #expect(WorkspaceKnowledge.role(of: builder).isPlain)
+        #expect(WorkspaceKnowledge.role(of: querier).isPlain)
         #expect(try cards([
             ("Build.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   indexes/kb.index\n"),
             ("Ask.cat", "catflow 0.8\n1. Read Index   ./kb.index\n2. Retrieve   (1,1)\n"),
@@ -183,14 +209,6 @@ struct CatFlowWorkspaceKnowledgeTests {
         #expect(c.namesCaption == nil)
     }
 
-    @Test func twoBuildersButNoQuerierIsNotACard() throws {
-        // One-sided stays CFM-R17-3 behaviour: no card at all.
-        #expect(try cards([
-            ("A.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   x.index\n"),
-            ("B.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   x.index\n"),
-        ]).isEmpty)
-    }
-
     @Test func twoIndexAnalystPlusTwoBuildersProducesTwoCards() throws {
         let two = try String(contentsOf: galleryURL("20-TwoIndexAnalyst"), encoding: .utf8)
         let c = try cards([
@@ -206,12 +224,12 @@ struct CatFlowWorkspaceKnowledgeTests {
 
     @Test func readIndexAloneIsPlain() throws {
         let d = try doc("catflow 0.8\n1. Read Index   kb.index\n2. Save Text   x.md\n")
-        #expect(WorkspaceKnowledge.role(of: d) == .plain)
+        #expect(WorkspaceKnowledge.role(of: d).isPlain)
     }
 
     @Test func explicitNameSettingWins() throws {
         let d = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   name=hr.index\n")
-        #expect(WorkspaceKnowledge.role(of: d) == .builds(indexes: ["hr.index"]))
+        #expect(WorkspaceKnowledge.role(of: d) == WorkspaceKnowledge.FlowIndexUse(builds: ["hr.index"]))
     }
 
     // MARK: - Pairing (the 16 + 18 done-when)
@@ -231,19 +249,68 @@ struct CatFlowWorkspaceKnowledgeTests {
         #expect(card.namesCaption == "Ingest.cat builds · Ask.cat queries")
     }
 
-    @Test func flowsThatDoNotPairUpYieldNoCard() throws {
-        // a querier with no matching builder — not an error, no card
-        #expect(try cards([
+    // MARK: - CFM-R17-FIX-11(c): one-sided names still classify, as their own card
+
+    @Test func aQuerierWithNoMatchingBuilderStillProducesAOneSidedCard() throws {
+        // `classify` is pure and no longer requires both sides — a querier with no builder in
+        // this workspace is `uses_example`'s exact shape (a prebuilt `kb.index`, nothing here
+        // builds it). Whether the *view* renders it is `isCardWorthRendering`'s call, below.
+        let c = try #require(try cards([
             ("A.cat", "catflow 0.8\n1. Read Text   a.txt\n2. Save Text   b.md\n"),
             ("B.cat", "catflow 0.8\n1. Read Index   only.index\n2. Retrieve   (1,1)\n"),
-        ]).isEmpty)
+        ]).first)
+        #expect(c.indexName == "only.index")
+        #expect(c.builder == .none)
+        #expect(c.buildFile == nil)
+        #expect(c.querier == .one("B.cat"))
     }
 
-    @Test func differentIndexNamesDoNotPair() throws {
-        #expect(try cards([
+    @Test func twoBuildersButNoQuerierProducesAOneSidedCard() throws {
+        let c = try #require(try cards([
+            ("A.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   x.index\n"),
+            ("B.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   x.index\n"),
+        ]).first)
+        #expect(c.indexName == "x.index")
+        #expect(c.querier == .none)
+        #expect(c.askFile == nil)
+        if case .ambiguous(let b) = c.builder { #expect(Set(b) == ["A.cat", "B.cat"]) }
+        else { Issue.record("builder side should be .ambiguous") }
+    }
+
+    @Test func differentIndexNamesProduceTwoOneSidedCards() throws {
+        let c = try cards([
             ("Build.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   hr.index\n"),
             ("Ask.cat", "catflow 0.8\n1. Read Index   eng.index\n2. Retrieve   (1,1)\n"),
-        ]).isEmpty)
+        ])
+        #expect(c.map(\.indexName) == ["eng.index", "hr.index"])
+        let engCard = try #require(c.first { $0.indexName == "eng.index" })
+        #expect(engCard.builder == .none)
+        #expect(engCard.querier == .one("Ask.cat"))
+        let hrCard = try #require(c.first { $0.indexName == "hr.index" })
+        #expect(hrCard.builder == .one("Build.cat"))
+        #expect(hrCard.querier == .none)
+    }
+
+    @Test func aCardWithABuilderIsWorthRenderingRegardlessOfDisk() throws {
+        let c = try #require(try cards([
+            ("Ingest.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   kb.index\n"),
+        ]).first)
+        #expect(WorkspaceKnowledge.isCardWorthRendering(c, indexExists: false))
+        #expect(WorkspaceKnowledge.isCardWorthRendering(c, indexExists: true))
+    }
+
+    @Test func aQuerierOnlyCardNeedsTheIndexOnDiskToBeWorthRendering() throws {
+        // uses_example-shaped: a flow queries a prebuilt kb.index nothing in the workspace
+        // builds. Not worth a card until the index actually exists — otherwise it's a dead
+        // end (a card reading "not built yet" with no Build button).
+        let c = try #require(try cards([
+            ("RagQuery.cat", "catflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n"),
+        ]).first)
+        #expect(c.builder == .none)
+        #expect(!WorkspaceKnowledge.isCardWorthRendering(c, indexExists: false),
+                "nothing actionable yet — a dead end, not a card")
+        #expect(WorkspaceKnowledge.isCardWorthRendering(c, indexExists: true),
+                "a prebuilt, queryable index is a real state — uses_example ships exactly this")
     }
 
     // MARK: - Freshness at the cache-key boundary

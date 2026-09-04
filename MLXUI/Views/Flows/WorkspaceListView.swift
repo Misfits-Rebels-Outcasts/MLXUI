@@ -14,15 +14,21 @@ struct WorkspaceListView: View {
 
     private var columns: [GridItem] { [GridItem(.adaptive(minimum: 240), spacing: 14)] }
 
-    /// CFM-R17-4: parse each flow once, then a Knowledge Base card per index that has both a
-    /// builder and a querier. CFM-R17-FIX-5/-9(c): an ambiguous side drops its own button and
-    /// notes the collision; the unambiguous side keeps working.
+    /// CFM-R17-4: parse each flow once, then a Knowledge Base card per index worth rendering.
+    /// CFM-R17-FIX-5/-9(c): an ambiguous side drops its own button and notes the collision; the
+    /// unambiguous side keeps working. CFM-R17-FIX-11(c): `classify` is pure and returns a card
+    /// for every index name any flow mentions, `.none` sides included — this is the one place
+    /// that can see disk, so it decides what's worth showing: a builder makes a card always
+    /// actionable (Build); with no builder, only an index that already exists on disk earns a
+    /// card (Ask, no Build) — a querier with nothing to read yet is a dead end, not a card.
     private var knowledgeCards: [WorkspaceKnowledge.IndexCard] {
         let parsed = workspace.flows.compactMap { flow -> (file: String, doc: FlowDocument)? in
             guard let doc = try? WorkspaceStore.loadDocument(flow: flow) else { return nil }
             return (flow.url.lastPathComponent, doc)
         }
-        return WorkspaceKnowledge.classify(flows: parsed)
+        return WorkspaceKnowledge.classify(flows: parsed).filter {
+            WorkspaceKnowledge.isCardWorthRendering($0, indexExists: manifest(for: $0.indexName) != nil)
+        }
     }
 
     /// The `manifest.json` of an index in this workspace, read fresh from disk — never cached
