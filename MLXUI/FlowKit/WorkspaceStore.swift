@@ -43,17 +43,18 @@ nonisolated enum WorkspaceStore {
         var id: String { workspaceID }
     }
 
-    /// Scan the workspaces root for workspaces, newest first. `bundledWorkspaceIDs` are the
-    /// ids of any workspace whose directory the app copies in from the bundle (CFM-R17-5/-6)
-    /// — a scratch copy, not the user's own, excluded exactly as `UserFlowStore` excludes a
-    /// gallery flow's working directory.
-    static func scan(workspace: FlowWorkspace, bundledWorkspaceIDs: Set<String> = []) -> [Workspace] {
+    /// Scan the workspaces root for workspaces, newest first. **Unlike `UserFlowStore.scan`,
+    /// this does not exclude any ids.** A bundled workspace (CFM-R17-5/-6) materialises into a
+    /// real, editable directory the user runs and can Remove/Restore (CFM-R17-FIX-1), so it
+    /// lists like every other workspace — there is nothing to hide, and `AppState` calls this
+    /// with no exclusion set on purpose.
+    static func scan(workspace: FlowWorkspace) -> [Workspace] {
         let fm = FileManager.default
         guard let dirs = try? fm.contentsOfDirectory(
             at: workspace.root, includingPropertiesForKeys: [.contentModificationDateKey],
             options: [.skipsHiddenFiles]) else { return [] }
         var out: [Workspace] = []
-        for dir in dirs where dir.hasDirectoryPath && !bundledWorkspaceIDs.contains(dir.lastPathComponent) {
+        for dir in dirs where dir.hasDirectoryPath {
             guard let contents = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { continue }
             let flowFiles = contents.filter { isFlowFile($0) }
                 .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
@@ -92,6 +93,12 @@ nonisolated enum WorkspaceStore {
         let indexes = indexDirectoryCount(in: workspace.url)
         if indexes == 1 { parts.append("1 index") }
         else if indexes > 1 { parts.append("\(indexes) indexes") }
+        // CFM-R17-FIX-8: `.trash` grows one full copy of the previous index per Rebuild and is
+        // hidden from Shared Files by `.skipsHiddenFiles` — name it here so a Build/Rebuild
+        // loop's disk cost is visible at the one point the folder is about to go.
+        if let trash = directorySizePhrase(workspace.url.appendingPathComponent(".trash", isDirectory: true)) {
+            parts.append("\(trash) of earlier versions in .trash")
+        }
         let inventory = parts.joined(separator: " and ")
         if bundled {
             return "'\(workspace.title)' — \(inventory) — will be removed. Any documents you added and any index you built here will be lost; you can bring the original back with “Restore bundled workspaces” in AI Workflows."
@@ -189,6 +196,25 @@ nonisolated enum WorkspaceStore {
         } catch {
             return "'\(url.lastPathComponent)' isn't a valid CAT Flow: \(error)"
         }
+    }
+
+    /// A short "12.4 MB" phrase for `dir`'s total size on disk, or nil when it doesn't exist
+    /// or is empty. Used only for the delete-confirmation sentence (CFM-R17-FIX-8).
+    private static func directorySizePhrase(_ dir: URL) -> String? {
+        let fm = FileManager.default
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else { return nil }
+        guard let en = fm.enumerator(at: dir, includingPropertiesForKeys: [.totalFileAllocatedSizeKey, .fileAllocatedSizeKey]) else { return nil }
+        var bytes = 0
+        for case let url as URL in en {
+            let v = try? url.resourceValues(forKeys: [.totalFileAllocatedSizeKey, .fileAllocatedSizeKey])
+            bytes += v?.totalFileAllocatedSize ?? v?.fileAllocatedSize ?? 0
+        }
+        guard bytes > 0 else { return nil }
+        let f = ByteCountFormatter()
+        f.allowedUnits = [.useKB, .useMB, .useGB]
+        f.countStyle = .file
+        return f.string(fromByteCount: Int64(bytes))
     }
 
     /// Immediate subdirectories of `dir` that are index directories (they carry a

@@ -72,9 +72,11 @@ nonisolated enum BundledWorkspaces {
              ]),
     ]
 
-    /// The ids of every bundled workspace — `WorkspaceStore.scan`'s `bundledWorkspaceIDs`
-    /// excludes these from a user's "my workspaces" list (their materialized copy is scratch,
-    /// like a gallery flow's working directory).
+    /// The ids of every bundled workspace. Used to tell a bundled workspace's Remove/Restore
+    /// (a tombstone — CFM-R17-FIX-1) from a user workspace's delete, and to keep a stale id
+    /// out of the tombstone set. A bundled workspace **does** show in "My Workflows" — its
+    /// materialised copy is a real, editable workspace, not scratch — so this is *not* a
+    /// scan-exclusion list (contrast `GalleryLoader` + `UserFlowStore`).
     static var ids: Set<String> { Set(all.map(\.id)) }
 
     static func meta(id: String) -> Meta? { all.first { $0.id == id } }

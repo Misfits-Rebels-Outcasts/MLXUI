@@ -63,20 +63,54 @@ struct CatFlowScopeTests {
         let text = "catflow 0.8\n1. Read Audio other.m4a\n"
         let scope = FlowScope(identity: "w", workspace: FlowWorkspace(root: URL(fileURLWithPath: "/tmp")),
                               locationID: "shared", flowText: text)
-        #expect(scope.runSeed == FlowSeed.runSeed(for: text))
-        #expect(scope.runSeed != 0)   // did not fall through to an absent bundled file
+        // Stored, not re-derived: int.from_bytes(SHA-256(text)[:4], "big") of the string above.
+        // A workspace scope seeds from the text it is handed, never from a bundled-file lookup
+        // keyed on `identity` — `identity` is "w", which has no bundled `.cat`, so an identity
+        // lookup would give the `?? 0` fallback the second expectation rules out.
+        #expect(scope.runSeed == 3_747_261_887)
+        #expect(scope.runSeed != 0)
     }
 
     // MARK: - canRun sees the scope
 
     @Test func canRunScopeOverloadForwardsLocationNotIdentity() throws {
-        let doc = try GalleryLoader.loadDocument(flowID: "16-IngestFolder")
-        let ws = FlowWorkspace(root: ModelStore.shared.flowsDirectory)
-        // The scope overload must key the E117 `uses:` resolution on `locationID` +
-        // `workspace`, never on `identity` — identical verdict to the explicit form.
+        // A flow whose `uses:` target only resolves against `locationID` — so a wrong
+        // `identity` and a wrong `locationID` give *different* verdicts, and the overload's
+        // choice is observable (the old test used a `uses:`-free doc where it wasn't).
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-scope-\(UUID().uuidString)")
+        let root = base.appendingPathComponent("workspaces")
+        let dir = root.appendingPathComponent("kb", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let caller = "catflow 0.8\n1. Helper\n\nuses:\n  Helper = ./Helper.cat\n"
+        try caller.write(to: dir.appendingPathComponent("Caller.cat"), atomically: true, encoding: .utf8)
+        try "catflow 0.8\n1. Read Text a.txt\n2. Save Text b.md\n"
+            .write(to: dir.appendingPathComponent("Helper.cat"), atomically: true, encoding: .utf8)
+        let ws = FlowWorkspace(root: root)
+        let doc = try CatParser.parse(caller)
+
+        // `identity` is junk, `locationID` is the real workspace → `Helper.cat` resolves and
+        // the flow is runnable.
         let viaScope = FlowRunner.canRun(
-            doc, scope: FlowScope(identity: "unrelated", workspace: ws, locationID: "16-IngestFolder"))
-        let viaExplicit = FlowRunner.canRun(doc, flowID: "16-IngestFolder", workspace: ws)
+            doc, scope: FlowScope(identity: "unrelated", workspace: ws, locationID: "kb", flowText: caller))
+        #expect(viaScope == .runnable)
+
+        // Identical to the explicit form keyed on the same location (the scope overload's only
+        // job is to build that `usesGraph` from `locationID` + `workspace` and forward it).
+        let viaExplicit = FlowRunner.canRun(
+            doc, flowID: "kb", workspace: ws,
+            usesGraph: UsesResolver.resolve(doc, workspace: ws, flowID: "kb"))
         #expect(viaScope == viaExplicit)
+
+        // Swap them: a real id in `identity`, junk in `locationID` → `Helper.cat` does not
+        // resolve, so the `Helper` row is refused. Different verdict ⇒ the overload keys on
+        // `locationID`, not `identity` (the old test's `uses:`-free doc couldn't see this).
+        let viaWrongLocation = FlowRunner.canRun(
+            doc, scope: FlowScope(identity: "kb", workspace: ws, locationID: "unrelated", flowText: caller))
+        #expect(viaWrongLocation != viaScope)
+        if case .runnable = viaWrongLocation {
+            Issue.record("a used flow that can't resolve must not report .runnable")
+        }
     }
 }

@@ -359,11 +359,11 @@ struct CatFlowUsesEndToEndTests {
         #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("question.txt").path))
         #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("kb.index/manifest.json").path))
 
-        // It lists as a two-flow workspace, and is excluded from a user's own list.
+        // It lists as a two-flow workspace (a bundled workspace shows in the shelf like any
+        // other — CFM-R17-FIX-8).
         let listed = try #require(WorkspaceStore.scan(workspace: ws).first)
         #expect(listed.workspaceID == "uses_example")
         #expect(listed.flows.map(\.title).sorted() == ["AskYourDocs", "RagQuery"])
-        #expect(WorkspaceStore.scan(workspace: ws, bundledWorkspaceIDs: BundledWorkspaces.ids).isEmpty)
 
         // The `uses:` graph resolves and the interpreter walks both flows. (This uses
         // `MockExecutor`, which synthesizes every output from the task shape and never touches

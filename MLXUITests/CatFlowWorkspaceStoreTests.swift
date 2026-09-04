@@ -93,13 +93,16 @@ struct CatFlowWorkspaceStoreTests {
         #expect(WorkspaceStore.scan(workspace: ws).map(\.workspaceID) == ["newer", "older"])
     }
 
-    @Test func bundledWorkspaceIsExcluded() throws {
+    @Test func aBundledWorkspaceIDListsLikeAnyOther() throws {
+        // CFM-R17-FIX-8: `scan` has no exclusion set — a bundled workspace's materialised copy
+        // is a real, editable, Remove/Restore-able workspace (CFM-R17-FIX-1), so it appears in
+        // the shelf next to the user's own. (Contrast `UserFlowStore.scan`'s `bundledFlowIDs`,
+        // which is live: a gallery flow's working directory *is* hidden.)
         let (ws, base) = try makeRoot()
         defer { teardown(base) }
         try makeWorkspace(root: ws.root, id: "mine", flows: [("A", validCat)])
-        try makeWorkspace(root: ws.root, id: "AskYourDocs", flows: [("Ask", validCat)])
-        #expect(WorkspaceStore.scan(workspace: ws, bundledWorkspaceIDs: ["AskYourDocs"])
-            .map(\.workspaceID) == ["mine"])
+        try makeWorkspace(root: ws.root, id: "ask_your_docs", flows: [("Ask", validCat)])
+        #expect(Set(WorkspaceStore.scan(workspace: ws).map(\.workspaceID)) == ["mine", "ask_your_docs"])
     }
 
     // MARK: - loadDocument
@@ -134,6 +137,30 @@ struct CatFlowWorkspaceStoreTests {
         #expect(sentence.contains("1 index"))
         #expect(sentence.contains("workspaces folder"))
         #expect(sentence.contains("can't be undone"))
+    }
+
+    @Test func deletionSummaryCountsTheHiddenTrash() throws {
+        // CFM-R17-FIX-8: `.trash` accumulates a full copy of the previous index on every
+        // Rebuild and is invisible in Shared Files — the delete sentence must name its size.
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "docs", flows: [("Ask", validCat)])
+        let trash = ws.root.appendingPathComponent("docs/.trash", isDirectory: true)
+        try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+        try Data(repeating: 0, count: 40_000).write(to: trash.appendingPathComponent("library.index.1700000000000"))
+
+        let w = try #require(WorkspaceStore.scan(workspace: ws).first)
+        let sentence = WorkspaceStore.deletionSummary(w)
+        #expect(sentence.contains(".trash"))
+        #expect(sentence.contains("earlier versions"))
+    }
+
+    @Test func deletionSummarySkipsAnAbsentTrash() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "docs", flows: [("Ask", validCat)])
+        let w = try #require(WorkspaceStore.scan(workspace: ws).first)
+        #expect(!WorkspaceStore.deletionSummary(w).contains(".trash"))
     }
 
     @Test func deletionSummarySingularAndNoIndex() throws {
