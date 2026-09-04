@@ -150,6 +150,8 @@ struct CatFlowWorkspaceKnowledgeTests {
         let note = try #require(c.ambiguityNote)
         #expect(note.contains("Ingest.cat") && note.contains("InboxIngest.cat"))
         #expect(note.contains("Build") && !note.contains("Ask"))   // only the ambiguous side
+        // CFM-R17-FIX-11(b): the button that survives is still named on the card.
+        #expect(c.namesCaption == "Ask.cat queries")
     }
 
     @Test func twoQueriersKeepTheBuildButtonAndNoteTheAskCollision() throws {
@@ -163,6 +165,7 @@ struct CatFlowWorkspaceKnowledgeTests {
         let note = try #require(c.ambiguityNote)
         #expect(note.contains("AskA.cat") && note.contains("AskB.cat"))
         #expect(note.contains("Ask") && !note.contains("Build"))
+        #expect(c.namesCaption == "Build.cat builds")
     }
 
     @Test func bothSidesAmbiguousIsACardWithNoButtonsAndTwoNotes() throws {
@@ -176,6 +179,8 @@ struct CatFlowWorkspaceKnowledgeTests {
         #expect(c.askFile == nil)
         let note = try #require(c.ambiguityNote)
         #expect(note.contains("Build") && note.contains("Ask"))
+        // CFM-R17-FIX-11(b): nothing unambiguous to name — the note already names both sides.
+        #expect(c.namesCaption == nil)
     }
 
     @Test func twoBuildersButNoQuerierIsNotACard() throws {
@@ -221,6 +226,9 @@ struct CatFlowWorkspaceKnowledgeTests {
         #expect(card.builder == .one("Ingest.cat"))
         #expect(card.querier == .one("Ask.cat"))
         #expect(card.ambiguityNote == nil)
+        // CFM-R17-FIX-11(b): both sides unambiguous — the card names both, always (not only
+        // in the pre-build placeholder, which this Ingest.cat/DocChat.cat pair also covers).
+        #expect(card.namesCaption == "Ingest.cat builds · Ask.cat queries")
     }
 
     @Test func flowsThatDoNotPairUpYieldNoCard() throws {

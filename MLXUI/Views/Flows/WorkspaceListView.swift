@@ -105,6 +105,11 @@ struct WorkspaceListView: View {
 
     /// CFM-R17-FIX-9(c): a Build/Ask button appears only for a side with exactly one flow; an
     /// ambiguous side drops its button and the card carries a note naming the colliding flows.
+    /// CFM-R17-FIX-11(b): the card names the flow each button runs — every row on this page
+    /// renders as the literal `.cat` so the user can see what will happen before they click,
+    /// and this card had stopped doing that the moment a manifest existed and the placeholder
+    /// line (the card's only filename) disappeared. The caption below is unconditional on
+    /// whether the index is built, so `runFlow`'s `autoRun: true` never fires unnamed.
     private func indexCard(_ card: WorkspaceKnowledge.IndexCard) -> some View {
         let m = manifest(for: card.indexName)
         return VStack(alignment: .leading, spacing: 8) {
@@ -112,6 +117,11 @@ struct WorkspaceListView: View {
                 Image(systemName: "books.vertical").foregroundStyle(.secondary)
                 Text(card.indexName).font(.headline)
                 Spacer()
+            }
+            if let caption = card.namesCaption {
+                Text(caption)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
             if let m {
                 Text("\(m.embedder) · \(m.dims)-dim · \(m.count) chunk\(m.count == 1 ? "" : "s")")

@@ -72,6 +72,23 @@ nonisolated enum WorkspaceKnowledge {
             guard !clauses.isEmpty else { return nil }
             return clauses.joined(separator: "; ") + ". Rename one so this index has a single flow on each side."
         }
+
+        /// "`Ingest.cat` builds" / "`DocChat.cat` queries" / both joined — the flow each button
+        /// runs, for whichever side is unambiguous. `nil` only when neither side has a button
+        /// (both ambiguous — `ambiguityNote` already names those files).
+        ///
+        /// CFM-R17-FIX-11(b): `WorkspaceListView` used to name a flow only in the "not built
+        /// yet" placeholder, which vanished the moment a manifest existed — after the first
+        /// Build the card read `[Rebuild] [Ask]` with no filenames anywhere, and `runFlow`'s
+        /// `autoRun: true` meant a click executed a flow the user was never shown the name of.
+        /// This is unconditional on whether the index is built.
+        var namesCaption: String? {
+            var parts: [String] = []
+            if let builder = buildFile { parts.append("\(builder) builds") }
+            if let querier = askFile { parts.append("\(querier) queries") }
+            guard !parts.isEmpty else { return nil }
+            return parts.joined(separator: " · ")
+        }
     }
 
     /// Classify one parsed flow.
