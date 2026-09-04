@@ -83,13 +83,30 @@ struct CatFlowWorkspaceKnowledgeTests {
     // MARK: - CFM-R17-FIX-5: normalization + ambiguous pairings
 
     @Test func aLeadingDotSlashAndATrailingSlashNormaliseToTheSameName() throws {
+        // Both names sit where the tools read them (`name=` / `path=`), so both rows run —
+        // and `./library.index` normalises to `library.index` for the pairing (CFM-R17-FIX-5;
+        // FIX-9(a) took the `row.model` fallback back out, so a *bare* `./x` no longer pairs).
         let builder = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   name=library.index\n")
-        let querier = try doc("catflow 0.8\n1. Read Index   ./library.index\n2. Retrieve   (1,1)\n")
+        let querier = try doc("catflow 0.8\n1. Read Index   path=./library.index\n2. Retrieve   (1,1)\n")
         let pairs = WorkspaceKnowledge.pairings(flows: [
             (file: "Build.cat", doc: builder), (file: "Ask.cat", doc: querier),
         ])
         #expect(pairs.count == 1)
         #expect(pairs.first?.indexName == "library.index")
+    }
+
+    @Test func aBareSlashNameLandsInModelAndIsNotClassified() throws {
+        // CFM-R17-FIX-9(a): `Store Index dir/kb.index` / `Read Index ./kb.index` — the parser
+        // parks the name in `row.model`, where neither the tools nor the Python read it. The
+        // classifier must not pair a card whose Build/Ask would always throw; the rows stay
+        // unclassified (`.plain`), exactly as before CFM-R17-FIX-5.
+        let builder = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   indexes/kb.index\n")
+        let querier = try doc("catflow 0.8\n1. Read Index   ./kb.index\n2. Retrieve   (1,1)\n")
+        #expect(WorkspaceKnowledge.role(of: builder) == .plain)
+        #expect(WorkspaceKnowledge.role(of: querier) == .plain)
+        #expect(WorkspaceKnowledge.classify(flows: [
+            (file: "Build.cat", doc: builder), (file: "Ask.cat", doc: querier),
+        ]).isEmpty)
     }
 
     @Test func twoBuildersOfOneNameCollideInsteadOfCoinFlipping() throws {

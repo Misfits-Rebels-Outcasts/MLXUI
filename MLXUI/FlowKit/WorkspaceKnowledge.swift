@@ -134,22 +134,26 @@ nonisolated enum WorkspaceKnowledge {
 
     // MARK: - Helpers
 
-    /// The name a `Store Index` row writes: `name=`, else the first bare token, else the row's
-    /// `model` slot — the parser's model/settings heuristic parks a `./`-prefixed path there
-    /// (`CatParser.splitModelSettings`, Python-parity), so a bare `./library.index` shows up
-    /// as `row.model`, not in `settings`.
+    /// The name a `Store Index` row writes: `name=`, else the first bare token — exactly what
+    /// `StoreIndexTool` resolves (`value(for: "name") ?? firstBare()`, and `index_store.py`'s
+    /// `s.get("name") or s.first_bare()`). CFM-R17-FIX-9(a): **no `row.model` fallback.** The
+    /// parser's model/settings split does park a bare `/`-containing name (`Store Index
+    /// dir/kb.index`, `Read Index ./kb.index`) in `row.model` — but the tools don't read it
+    /// there and neither does the Python, so such a row cannot run in either runtime. Reading
+    /// it here would pair a card whose buttons always throw; leave it unclassified instead.
     static func storeIndexName(_ row: Row) -> String? {
         let s = FlowSettings(row.settings)
-        return s.value(for: "name") ?? s.firstBare() ?? row.model
+        return s.value(for: "name") ?? s.firstBare()
     }
 
-    /// The name a `Read Index` row reads — `path=`, else the first bare token, else `row.model`
-    /// (same parser quirk as `storeIndexName`).
+    /// The name a `Read Index` row reads — `path=`, else the first bare token — matching
+    /// `ReadIndexTool` / `_resolve_path`. No `row.model` fallback (CFM-R17-FIX-9(a); see
+    /// `storeIndexName`).
     static func readIndexName(_ row: Row) -> String? {
-        FlowSettings(row.settings).pathValue() ?? row.model
+        FlowSettings(row.settings).pathValue()
     }
 
-    /// Normalise an index name for pairing. `Read Index ./library.index` and `Store Index
+    /// Normalise an index name for pairing. `Read Index path=./library.index` and `Store Index
     /// name=library.index` name the same directory (`FlowWorkspace.resolve` collapses both);
     /// compared raw they never pair (CFM-R17-FIX-5). Strips surrounding whitespace, a leading
     /// `./`, and a trailing slash.
