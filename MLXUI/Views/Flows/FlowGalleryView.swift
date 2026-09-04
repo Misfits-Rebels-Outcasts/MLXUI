@@ -11,6 +11,8 @@ struct FlowGalleryView: View {
 
     /// The My Workflows badge awaiting a Remove confirmation (nil = none).
     @State private var flowPendingRemoval: UserFlowStore.Entry?
+    /// CFM-R17-3: the workspace badge awaiting a Remove confirmation.
+    @State private var workspacePendingRemoval: WorkspaceStore.Workspace?
 
     var body: some View {
         ScrollView {
@@ -33,6 +35,7 @@ struct FlowGalleryView: View {
         // every appearance so the shelf is never stale.
         .onAppear {
             appState.reloadUserFlows()
+            appState.reloadWorkspaces()
             appState.refreshGalleryBlocked()
         }
         .confirmationDialog("Remove this flow?", isPresented: Binding(
@@ -48,6 +51,20 @@ struct FlowGalleryView: View {
             Button("Cancel", role: .cancel) { flowPendingRemoval = nil }
         } message: {
             Text(flowPendingRemoval.map { "'\($0.title)' and its files will be deleted from your flows folder. This can't be undone." } ?? "")
+        }
+        .confirmationDialog("Remove this workspace?", isPresented: Binding(
+            get: { workspacePendingRemoval != nil },
+            set: { if !$0 { workspacePendingRemoval = nil } }
+        ), titleVisibility: .visible) {
+            Button("Remove", role: .destructive) {
+                if let ws = workspacePendingRemoval {
+                    appState.removeWorkspace(workspaceID: ws.workspaceID)
+                }
+                workspacePendingRemoval = nil
+            }
+            Button("Cancel", role: .cancel) { workspacePendingRemoval = nil }
+        } message: {
+            Text(workspacePendingRemoval.map { WorkspaceStore.deletionSummary($0) } ?? "")
         }
     }
 
@@ -77,20 +94,145 @@ struct FlowGalleryView: View {
                 Button {
                     importFlow()
                 } label: {
-                    Label("Import", systemImage: "square.and.arrow.down")
+                    Label("Import Flow", systemImage: "square.and.arrow.down")
                 }
                 .help("Copy a flow folder (.cat plus its audio, text, etc.) into My Workflows")
+                Button {
+                    importWorkspace()
+                } label: {
+                    Label("Import Workspace", systemImage: "square.and.arrow.down.on.square")
+                }
+                .help("Copy a workspace folder (its .cat files plus shared docs/index) into My Workflows")
             }
             LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
                 newFlowBadge
+                newWorkspaceBadge
+                ForEach(appState.workspaceEntries) { workspace in
+                    workspaceBadge(workspace)
+                }
                 ForEach(appState.userFlowEntries) { entry in
                     userFlowBadge(entry)
                 }
             }
-            if appState.userFlowEntries.isEmpty {
-                Text("Flows you save — or duplicate from the gallery — appear here. Start with New Flow, or Import one.")
+            if appState.userFlowEntries.isEmpty && appState.workspaceEntries.isEmpty {
+                Text("Flows you save — or duplicate from the gallery — appear here. Start with New Flow, or Import one. A Workspace holds several flows that share a folder.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// CFM-R17-3 — New Workspace: create `workspaces/<uuid>/` with one starter flow and open
+    /// the workspace page. Failures surface as the app-level alert.
+    private var newWorkspaceBadge: some View {
+        Button {
+            createWorkspace()
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Image(systemName: "folder.badge.plus")
+                        .font(.title3)
+                        .foregroundStyle(Color.accentColor)
+                    Spacer()
+                }
+                Text("New Workspace")
+                    .font(.headline)
+                Text("Several flows that share one folder — a builder and a querier, an index they both use.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 110, alignment: .leading)
+            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(Color.accentColor.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [5]))
+            }
+        }
+        .buttonStyle(.plain)
+        .contentShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    /// One workspace badge: name + flow count, opens the workspace page. The trash overlay
+    /// sits on top and captures its own click.
+    private func workspaceBadge(_ workspace: WorkspaceStore.Workspace) -> some View {
+        Button {
+            appState.selectedWorkspace = workspace
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Image(systemName: "folder.badge.gearshape").foregroundStyle(.secondary)
+                    Spacer()
+                }
+                Text(workspace.title)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text("\(workspace.flows.count) flow\(workspace.flows.count == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 110, alignment: .leading)
+            .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 14))
+            .overlay { RoundedRectangle(cornerRadius: 14).strokeBorder(.quaternary, lineWidth: 1) }
+        }
+        .buttonStyle(.plain)
+        .contentShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(alignment: .topTrailing) {
+            Button {
+                workspacePendingRemoval = workspace
+            } label: {
+                Image(systemName: "trash")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .background(.quaternary.opacity(0.75), in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .help("Remove this workspace")
+            .padding(8)
+        }
+    }
+
+    private func createWorkspace() {
+        let ws = FlowWorkspace(root: ModelStore.shared.workspacesDirectory)
+        let id = "Workspace-\(UUID().uuidString.prefix(8))"
+        let dir = ws.directory(for: id)
+        let starter = "catflow 0.8\n1. Read Text   notes.txt\n2. Save Text   out.md\n"
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try starter.write(to: dir.appendingPathComponent("Flow.cat"), atomically: true, encoding: .utf8)
+        } catch {
+            appState.workspaceImportError = "Couldn't create the workspace folder."
+            return
+        }
+        appState.reloadWorkspaces()
+        appState.selectedWorkspace = appState.workspaceEntries.first { $0.workspaceID == id }
+    }
+
+    /// CFM-R17-3 — Import Workspace: the user picks a directory of `.cat` files (plus shared
+    /// docs/index); the whole folder is copied into `workspaces/` under its own name.
+    private func importWorkspace() {
+        let panel = NSOpenPanel()
+        panel.title = "Import a Workspace"
+        panel.prompt = "Import"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+            do {
+                _ = try WorkspaceStore.importWorkspace(
+                    from: url, workspace: FlowWorkspace(root: ModelStore.shared.workspacesDirectory))
+                appState.reloadWorkspaces()
+            } catch {
+                appState.workspaceImportError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
             }
         }
     }

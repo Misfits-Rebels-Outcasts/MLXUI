@@ -14,13 +14,31 @@ struct FlowListView: View {
 
     let flowID: String
     let source: Source
+    /// CFM-R17-3: non-nil when this flow lives inside a workspace — its `.cat` paths resolve
+    /// against the shared workspace directory, and it runs under a workspace-rooted scope.
+    let workspaceRef: WorkspaceRef?
 
     /// A user flow has no bundled assets, so `prepare` is called with an empty list (it is
     /// already idempotent). A gallery flow's input assets come from the flattened bundle.
-    init(flowID: String, source: Source = .gallery) {
+    init(flowID: String, source: Source = .gallery, workspace: WorkspaceRef? = nil) {
         self.flowID = flowID
         self.source = source
+        self.workspaceRef = workspace
     }
+
+    /// The workspace a flow's paths resolve against — the shared workspace directory for a
+    /// workspace flow, `flows/` otherwise.
+    private var flowWorkspace: FlowWorkspace { workspaceRef?.workspace ?? .shared }
+    /// The id `flowWorkspace.directory(for:)` / `resolve` keys on — the workspace id for a
+    /// workspace flow, the flow id otherwise.
+    private var locationID: String { workspaceRef?.workspaceID ?? flowID }
+    /// The run/edit scope: a workspace flow keeps its own identity but resolves in the shared
+    /// directory (CFM-R17-1); a plain flow is `.plain(flowID)`.
+    private func makeScope() -> FlowScope {
+        workspaceRef?.scope(text: rawText) ?? .plain(flowID)
+    }
+    /// The flow's own `.cat` text, read at load — feeds the run seed for a workspace flow.
+    @State private var rawText: String?
 
     @Environment(AppState.self) private var appState
     @State private var metadata: GalleryFlowMetadata?
@@ -81,7 +99,7 @@ struct FlowListView: View {
                     doc: document,
                     session: session,
                     runner: FlowRunner(),
-                    context: AppFlowExecutorFactory.cachingContext(scope: .plain(flowID), appState: appState, transforms: document.transforms))
+                    context: AppFlowExecutorFactory.cachingContext(scope: makeScope(), appState: appState, transforms: document.transforms))
             }
         }
     }
@@ -257,7 +275,7 @@ struct FlowListView: View {
     /// CFM-R12-8: the flow's pending staged effects. Nothing sends — the whole point is that
     /// a person reads each entry before it goes anywhere (which in this version is nowhere).
     private var outboxDisclosure: some View {
-        let entries = OutboxStore.entries(workspace: FlowWorkspace.shared, flowID: flowID)
+        let entries = OutboxStore.entries(workspace: flowWorkspace, flowID: locationID)
         return DisclosureGroup {
             if entries.isEmpty {
                 Text("No pending entries — a Stage Send / Stage Post row queues one here.")
@@ -298,7 +316,7 @@ struct FlowListView: View {
     private func savedFileURL(in doc: FlowDocument) -> URL? {
         guard let id = session.selectedRowID,
               let row = doc.rows.first(where: { $0.id == id }) else { return nil }
-        return FlowSavedFile.resolved(row: row, flowID: flowID, workspace: FlowWorkspace.shared)
+        return FlowSavedFile.resolved(row: row, flowID: locationID, workspace: flowWorkspace)
     }
 
     /// The kind of the saved file (drives how the inspector presents it).
@@ -455,11 +473,11 @@ struct FlowListView: View {
                 .help("Open this flow in the editor")
             }
             Button {
-                try? FlowWorkspace.shared.prepare(
-                    flowID: flowID,
+                try? flowWorkspace.prepare(
+                    flowID: locationID,
                     sourceDir: source == .gallery ? GalleryLoader.resourcesDirectory : nil,
                     bundledAssets: source == .gallery ? GalleryLoader.bundledAssets(flowID: flowID) : [])
-                FlowWorkspace.shared.revealInFinder(flowID: flowID)
+                flowWorkspace.revealInFinder(flowID: locationID)
             } label: {
                 Label("Reveal in Finder", systemImage: "folder")
             }
@@ -509,8 +527,8 @@ struct FlowListView: View {
                     .help(armSession.armedDescription ?? "Armed")
                 } else {
                     Button {
-                        armSession.arm(flowID: flowID, doc: doc,
-                                       workspace: FlowWorkspace(root: ModelStore.shared.flowsDirectory),
+                        armSession.arm(flowID: locationID, doc: doc,
+                                       workspace: flowWorkspace,
                                        onFire: { occurrence in
                                            DispatchQueue.main.async { run(doc, occurrence: occurrence) }
                                        })
@@ -538,8 +556,8 @@ struct FlowListView: View {
                         do {
                             let sentence = try session.undoImprovise(
                                 doc: doc,
-                                workspace: FlowWorkspace(root: ModelStore.shared.flowsDirectory),
-                                flowID: flowID)
+                                workspace: flowWorkspace,
+                                flowID: locationID)
                             cacheClearNotice = sentence
                         } catch {
                             cacheClearNotice = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
@@ -608,7 +626,7 @@ struct FlowListView: View {
         let result = FlowPreflight.run(doc, catalog: catalog,
                                        installedModelIDs: appState.installedModelIDs,
                                        totalRAMGB: appState.systemInfo.totalRAMGB)
-        session.prepareInstall(result, doc: doc)
+        session.prepareInstall(result, doc: doc, scope: workspaceRef != nil ? makeScope() : nil)
         pendingOccurrence = occurrence
         guard !result.toDownload.isEmpty else {
             startRun(doc)
@@ -625,7 +643,7 @@ struct FlowListView: View {
     private func startRun(_ doc: FlowDocument) {
         // Re-run from here when some rows already have results; a fresh run otherwise.
         let resume = session.hasRunResults
-        let context = AppFlowExecutorFactory.cachingContext(scope: .plain(flowID), appState: appState, transforms: doc.transforms)
+        let context = AppFlowExecutorFactory.cachingContext(scope: makeScope(), appState: appState, transforms: doc.transforms)
         let occurrence = pendingOccurrence
         pendingOccurrence = nil
         session.start(doc: doc, runner: FlowRunner(), context: context, resume: resume,
@@ -721,7 +739,7 @@ struct FlowListView: View {
         session.prepareInstall(FlowPreflight.run(doc, catalog: catalog,
                                                   installedModelIDs: appState.installedModelIDs,
                                                   totalRAMGB: appState.systemInfo.totalRAMGB),
-                               doc: doc)
+                               doc: doc, scope: workspaceRef != nil ? makeScope() : nil)
     }
 
     private var installManager: InstallManager {
@@ -753,11 +771,50 @@ struct FlowListView: View {
     }
 
     private func load() {
-        if source == .gallery {
+        if workspaceRef != nil {
+            loadWorkspaceFlow()
+        } else if source == .gallery {
             loadGallery()
         } else {
             loadUserFlow()
         }
+    }
+
+    /// CFM-R17-3: load a flow that lives inside a workspace. Its `.cat` sits beside its
+    /// siblings in the shared directory; everything else (serialize, refusal, preflight)
+    /// runs exactly as a user flow's does, only against the workspace-rooted scope.
+    private func loadWorkspaceFlow() {
+        guard let ref = workspaceRef else { return }
+        let text: String
+        do {
+            text = try String(contentsOf: ref.fileURL, encoding: .utf8)
+        } catch {
+            loadError = "This workspace flow's file isn't there anymore — \(ref.flowFile)."
+            return
+        }
+        rawText = text
+        do {
+            document = try CatParser.parse(text)
+        } catch {
+            loadError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+            return
+        }
+        guard let doc = document else { return }
+
+        let serialized = CatSerializer.serializeLines(doc)
+        serializedLines = serialized.lines
+        lineRanges = serialized.lineRanges
+        clauseLineRanges = serialized.clauseRanges
+
+        let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
+        if let reason = FlowRunnability.refusalReason(for: doc, catalog: catalog,
+                                                     installed: appState.installedModelIDs,
+                                                     totalRAMGB: appState.systemInfo.totalRAMGB,
+                                                     scope: makeScope()) {
+            notRunnableReason = reason
+            return
+        }
+        finishLoad(doc)
     }
 
     private func loadGallery() {
@@ -793,8 +850,8 @@ struct FlowListView: View {
         // fresh flow (e.g. 15-HouseStyle's `Read Text draft.md`) failed with
         // "couldn't read" until the user had clicked it. Idempotent: only missing
         // files are copied, so user edits to inputs survive.
-        try? FlowWorkspace.shared.prepare(
-            flowID: flowID,
+        try? flowWorkspace.prepare(
+            flowID: locationID,
             sourceDir: GalleryLoader.resourcesDirectory,
             bundledAssets: GalleryLoader.bundledAssets(flowID: flowID))
         finishLoad(doc)
@@ -845,11 +902,12 @@ struct FlowListView: View {
         session.prepareInstall(FlowPreflight.run(doc, catalog: catalog,
                                                   installedModelIDs: appState.installedModelIDs,
                                                   totalRAMGB: appState.systemInfo.totalRAMGB),
-                               doc: doc)
+                               doc: doc, scope: workspaceRef != nil ? makeScope() : nil)
         // The inspector's frozen Properties tab reuses the editor's resolution machinery
         // (candidate models, input labels, display numbers) over a read-only model.
-        inspectModel = FlowEditorModel(name: display?.title ?? flowID, flowID: flowID,
-                                       document: doc, savedText: CatSerializer.serialize(doc))
+        inspectModel = FlowEditorModel(name: display?.title ?? flowID, flowID: locationID,
+                                       document: doc, workspace: flowWorkspace,
+                                       savedText: CatSerializer.serialize(doc))
         inspectModel?.modelCatalog = catalog
         inspectModel?.claimableModelIDs = appState.claimableModelIDs
         // CFM-R10-Events: establish the trigger kind so the Arm button shows (and the §14.4

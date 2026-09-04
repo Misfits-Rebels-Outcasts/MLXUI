@@ -10,10 +10,14 @@ import Foundation
 /// string. B3's original ask ("derive the refusal from the language gates, not the JSON
 /// string"), now applied to both gate layers.
 nonisolated enum FlowRunnability {
-    /// The refusal sentence for a flow, or nil when it can run.
+    /// The refusal sentence for a flow, or nil when it can run. `scope` (CFM-R17-3) resolves
+    /// a workspace flow's `uses:` graph so a used-flow call isn't refused as an unknown task;
+    /// `nil` keeps the pre-R17 plain-flow check.
     static func refusalReason(for doc: FlowDocument, catalog: [ModelEntry],
-                              installed: Set<String>, totalRAMGB: Double) -> String? {
-        if case .notRunnable(let reason) = FlowRunner.canRun(doc) {
+                              installed: Set<String>, totalRAMGB: Double,
+                              scope: FlowScope? = nil) -> String? {
+        let runnability = scope.map { FlowRunner.canRun(doc, scope: $0) } ?? FlowRunner.canRun(doc)
+        if case .notRunnable(let reason) = runnability {
             return reason
         }
         let preflight = FlowPreflight.run(doc, catalog: catalog,

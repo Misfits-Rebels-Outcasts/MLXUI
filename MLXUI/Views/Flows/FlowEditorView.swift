@@ -23,10 +23,25 @@ struct FlowEditorView: View {
     @State private var showInstallSheet = false
     @State private var session = FlowRunSession()
 
+    /// CFM-R17-3: non-nil when the flow being edited lives inside a workspace — the model
+    /// then saves into and resolves against the shared workspace directory.
+    private let workspaceRef: WorkspaceRef?
+
     init(flowID: String = UUID().uuidString, name: String = "Untitled Flow",
-         document: FlowDocument? = nil, savedText: String? = nil) {
-        _model = State(initialValue: FlowEditorModel(name: name, flowID: flowID,
-                                                     document: document, savedText: savedText))
+         document: FlowDocument? = nil, savedText: String? = nil,
+         workspace: WorkspaceRef? = nil) {
+        self.workspaceRef = workspace
+        _model = State(initialValue: FlowEditorModel(
+            name: workspace?.flowStem ?? name,
+            flowID: workspace?.workspaceID ?? flowID,
+            document: document,
+            workspace: workspace?.workspace ?? .shared,
+            savedText: savedText))
+    }
+
+    /// The run scope for this flow — workspace-rooted when it lives in one (CFM-R17-1).
+    private func makeScope() -> FlowScope {
+        workspaceRef?.scope(text: model.catText) ?? .plain(model.flowID)
     }
 
     /// The flow list *is* the file: canonical lines, with a deleted row's references
@@ -104,7 +119,7 @@ struct FlowEditorView: View {
                     doc: model.document,
                     session: session,
                     runner: FlowRunner(),
-                    context: AppFlowExecutorFactory.cachingContext(scope: .plain(model.flowID), appState: appState, transforms: model.document.transforms))
+                    context: AppFlowExecutorFactory.cachingContext(scope: makeScope(), appState: appState, transforms: model.document.transforms))
             }
         }
         // Editing invalidates run results; preflight follows the document.
@@ -625,7 +640,7 @@ struct FlowEditorView: View {
         let result = FlowPreflight.run(model.document, catalog: catalog,
                                        installedModelIDs: appState.installedModelIDs,
                                        totalRAMGB: appState.systemInfo.totalRAMGB)
-        session.prepareInstall(result, doc: model.document)
+        session.prepareInstall(result, doc: model.document, scope: workspaceRef != nil ? makeScope() : nil)
         guard !result.toDownload.isEmpty else {
             startRun()
             return
@@ -634,7 +649,7 @@ struct FlowEditorView: View {
     }
 
     private func startRun() {
-        let context = AppFlowExecutorFactory.cachingContext(scope: .plain(model.flowID), appState: appState, transforms: model.document.transforms)
+        let context = AppFlowExecutorFactory.cachingContext(scope: makeScope(), appState: appState, transforms: model.document.transforms)
         session.start(doc: model.document, runner: FlowRunner(), context: context,
                       resume: session.hasRunResults)
     }
@@ -644,7 +659,7 @@ struct FlowEditorView: View {
         session.prepareInstall(FlowPreflight.run(model.document, catalog: catalog,
                                                  installedModelIDs: appState.installedModelIDs,
                                                  totalRAMGB: appState.systemInfo.totalRAMGB),
-                               doc: model.document)
+                               doc: model.document, scope: workspaceRef != nil ? makeScope() : nil)
     }
 
     private func installSheet(_ result: FlowPreflight.Result) -> some View {

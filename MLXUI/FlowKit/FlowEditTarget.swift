@@ -9,17 +9,24 @@ nonisolated struct FlowEditTarget: Hashable, Identifiable {
     /// The canonical text the file was last written with — a copied flow opens clean (not
     /// dirty) until the user edits it.
     let savedText: String?
+    /// CFM-R17-3: set when the flow being edited lives inside a workspace — the editor then
+    /// saves into and resolves against the shared workspace directory.
+    var workspace: WorkspaceRef? = nil
 
-    var id: String { flowID }
+    var id: String {
+        if let workspace { return "w-\(workspace.workspaceID)/\(workspace.flowFile)" }
+        return flowID
+    }
 
-    /// Identity is the flow folder; the document payload is deliberately excluded so the
-    /// navigation destination doesn't invalidate on every edit.
+    /// Identity is the flow folder (or, in a workspace, the folder + file); the document
+    /// payload is deliberately excluded so the navigation destination doesn't invalidate on
+    /// every edit.
     static func == (lhs: FlowEditTarget, rhs: FlowEditTarget) -> Bool {
-        lhs.flowID == rhs.flowID
+        lhs.id == rhs.id
     }
 
     func hash(into hasher: inout Hasher) {
-        hasher.combine(flowID)
+        hasher.combine(id)
     }
 }
 

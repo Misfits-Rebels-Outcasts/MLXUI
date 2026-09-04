@@ -64,6 +64,15 @@ final class AppState {
     /// `reloadUserFlows()` — never trusted to be current across an editor save.
     private(set) var userFlowEntries: [UserFlowStore.Entry] = []
 
+    /// CFM-R17-3: the workspaces on the "My Workflows" shelf — every directory under
+    /// `workspaces/` that holds one or more `.cat` files, plus the bundled ones materialised
+    /// on first launch. Loaded by `reloadWorkspaces()`.
+    private(set) var workspaceEntries: [WorkspaceStore.Workspace] = []
+    /// A workspace whose page is pushed onto the detail stack (CFM-R17-3).
+    var selectedWorkspace: WorkspaceStore.Workspace?
+    var workspaceImportError: String?
+    var workspaceRemoveError: String?
+
     /// CFM-R12-4: the bundled flows `FlowRunner.canRun` refuses — the gallery's ⚠ badge tells
     /// the truth for every blocked flow (net/staged/agent channels, unported instant tools),
     /// not just the ~10 the metadata's `notRunnableReason` happens to name. Computed on
@@ -161,6 +170,7 @@ final class AppState {
                 .filter { !Self.hiddenFlowNumbers.contains($0.number) }
         }
         reloadUserFlows()
+        reloadWorkspaces()
     }
 
     /// CFM-R12-1: refresh the "My Workflows" shelf from the flow folder. Called at launch and
@@ -169,6 +179,33 @@ final class AppState {
         let bundled = Set(galleryEntries.map(\.flowID))
         userFlowEntries = UserFlowStore.scan(workspace: FlowWorkspace.shared,
                                              bundledFlowIDs: bundled)
+    }
+
+    /// CFM-R17-3: materialise every bundled workspace into `workspaces/` (idempotent — a
+    /// user's edits are left alone), then refresh the workspace shelf. A bundled workspace's
+    /// scratch copy lists like any other, so it is **not** excluded here (unlike a gallery
+    /// flow's working directory) — it is a real, editable workspace the user can run.
+    func reloadWorkspaces() {
+        let ws = FlowWorkspace(root: ModelStore.shared.workspacesDirectory)
+        for meta in BundledWorkspaces.all {
+            try? BundledWorkspaces.prepare(meta, workspace: ws)
+        }
+        workspaceEntries = WorkspaceStore.scan(workspace: ws)
+    }
+
+    /// Delete a workspace's whole directory, refresh the shelf, and clear any navigation
+    /// pointing into it.
+    func removeWorkspace(workspaceID: String) {
+        do {
+            try WorkspaceStore.remove(workspaceID: workspaceID,
+                                      workspace: FlowWorkspace(root: ModelStore.shared.workspacesDirectory))
+            reloadWorkspaces()
+            if selectedWorkspace?.workspaceID == workspaceID { selectedWorkspace = nil }
+            if selectedFlow?.workspace?.workspaceID == workspaceID { selectedFlow = nil }
+            if editingFlow?.workspace?.workspaceID == workspaceID { editingFlow = nil }
+        } catch {
+            workspaceRemoveError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+        }
     }
 
     /// Delete a user flow's folder from disk, refresh the shelf, and clear any navigation
@@ -539,13 +576,20 @@ struct FlowSelection: Hashable, Identifiable {
     let flowID: String
     /// CFM-R12-1: whether this is a user flow (the shelf) or a bundled gallery flow.
     let isUserFlow: Bool
+    /// CFM-R17-3: set when this flow lives inside a workspace — `FlowListView` then resolves
+    /// its `.cat` paths against the shared workspace directory, not `flows/<flowID>/`.
+    let workspace: WorkspaceRef?
 
-    init(flowID: String, isUserFlow: Bool = false) {
+    init(flowID: String, isUserFlow: Bool = false, workspace: WorkspaceRef? = nil) {
         self.flowID = flowID
         self.isUserFlow = isUserFlow
+        self.workspace = workspace
     }
 
-    var id: String { "\(isUserFlow ? "u" : "g")-\(flowID)" }
+    var id: String {
+        if let workspace { return "w-\(workspace.workspaceID)/\(workspace.flowFile)" }
+        return "\(isUserFlow ? "u" : "g")-\(flowID)"
+    }
 }
 
 enum SortOrder: String, CaseIterable, Identifiable {

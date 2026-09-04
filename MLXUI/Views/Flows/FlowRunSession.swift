@@ -36,6 +36,9 @@ final class FlowRunSession {
     /// The parsed flow document — lets `canRun` consult `FlowRunner.canRun(doc)` (B3), so the
     /// Run button refuses out-of-scope language even if the gallery metadata mis-tags a flow.
     private(set) var document: FlowDocument?
+    /// CFM-R17-3: the run scope for a workspace flow, so `runnability` resolves its `uses:`
+    /// graph instead of refusing a used-flow call as an unknown task. `nil` for a plain flow.
+    private(set) var scope: FlowScope?
     /// True while the flow's to-download models are being installed (spinner state).
     var isInstalling = false
     var showInstallSheet = false
@@ -61,8 +64,11 @@ final class FlowRunSession {
     }
 
     /// The `FlowRunner.canRun` verdict for the loaded document, or nil when no document.
+    /// CFM-R17-3: a workspace flow is checked against its scope so its `uses:` graph resolves.
     var runnability: Runnability? {
-        document.map { FlowRunner.canRun($0) }
+        guard let document else { return nil }
+        if let scope { return FlowRunner.canRun(document, scope: scope) }
+        return FlowRunner.canRun(document)
     }
 
     /// Whether Run is available: not running/installing, no blocked models, nothing left to
@@ -318,8 +324,10 @@ final class FlowRunSession {
     /// Register the preflight result and compute substitution notes. Does **not** prompt —
     /// the install sheet is shown only on explicit user action ("Install Required Models").
     /// The `doc` is kept so `canRun`/`runnability` consult `FlowRunner.canRun(doc)` (B3).
-    func prepareInstall(_ result: FlowPreflight.Result, doc: FlowDocument? = nil) {
+    func prepareInstall(_ result: FlowPreflight.Result, doc: FlowDocument? = nil,
+                        scope: FlowScope? = nil) {
         document = doc
+        self.scope = scope
         preflight = result
         substitutionNotes = Self.substitutionNotes(result, doc: doc)
     }

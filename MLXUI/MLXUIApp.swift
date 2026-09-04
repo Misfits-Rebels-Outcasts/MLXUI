@@ -59,7 +59,14 @@ struct MLXUIApp: App {
                                 FlowEditorView(flowID: target.flowID,
                                                name: target.name,
                                                document: target.document,
-                                               savedText: target.savedText)
+                                               savedText: target.savedText,
+                                               workspace: target.workspace)
+                            }
+                            // CFM-R17-3: a workspace page — the flows in it, its shared
+                            // files, Reveal in Finder on the one directory they share.
+                            .navigationDestination(item: $appState.selectedWorkspace) { ws in
+                                WorkspaceListView(workspace: ws)
+                                    .id(ws.id)
                             }
                         }
                     }
@@ -125,6 +132,22 @@ struct MLXUIApp: App {
                 Button("OK", role: .cancel) { appState.flowExportError = nil }
             } message: {
                 Text(appState.flowExportError ?? "")
+            }
+            .alert("Couldn't Import This Workspace", isPresented: Binding(
+                get: { appState.workspaceImportError != nil },
+                set: { if !$0 { appState.workspaceImportError = nil } }
+            )) {
+                Button("OK", role: .cancel) { appState.workspaceImportError = nil }
+            } message: {
+                Text(appState.workspaceImportError ?? "")
+            }
+            .alert("Couldn't Remove This Workspace", isPresented: Binding(
+                get: { appState.workspaceRemoveError != nil },
+                set: { if !$0 { appState.workspaceRemoveError = nil } }
+            )) {
+                Button("OK", role: .cancel) { appState.workspaceRemoveError = nil }
+            } message: {
+                Text(appState.workspaceRemoveError ?? "")
             }
             .onChange(of: appState.filterSource) { _, _ in appState.saveFilters() }
             .onChange(of: appState.sortOrder) { _, _ in appState.saveFilters() }
