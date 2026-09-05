@@ -163,7 +163,7 @@ struct CatFlowCatalogBridgeTests {
             Issue.record("SAM Base should resolve: \(reason)")
             _ = display
         }
-        #expect(CatalogBridge.entries.count == 16)
+        #expect(CatalogBridge.entries.count == 17)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
