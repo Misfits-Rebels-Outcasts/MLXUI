@@ -144,6 +144,30 @@ struct CatFlowEditingTests {
         }
     }
 
+    // MARK: - MoC-2-4: appending "Qwen3.5 9B" to llmModels must not move the seed
+
+    /// Decision D as ruled 2026-09-05: "Qwen3.5 9B" joins `llmModels` **last**, so every
+    /// llmModels-keyed task must still seed "Ministral 3B" — a test that would fail the moment
+    /// someone "helpfully" moves the new name toward the front of that array.
+    @Test @MainActor func llmModelsSeedIsUnchangedByQwen35NineB() throws {
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let llmModelsKeyedTasks = ["Generate", "Summarize", "Translate", "Answer", "Rewrite",
+                                   "Draft", "Ask", "Title", "Critique", "Verify", "Revise",
+                                   "Merge", "Text to Table"]
+        for task in llmModelsKeyedTasks {
+            #expect(TaskModels.defaultModel(forTask: task, catalog: catalog, claimableModelIDs: claimable) == "Ministral 3B",
+                    "\(task) should still seed Ministral 3B")
+        }
+    }
+
+    /// The new entry is menu-reachable even though it never seeds — CFM-R14-2's "pools order,
+    /// never filter" applied to a freshly-appended name.
+    @Test @MainActor func qwen35NineBIsReachableFromTheGenerateMenu() throws {
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let derived = TaskModels.derivedModels(for: "Generate", catalog: catalog, claimableModelIDs: claimable)
+        #expect(derived.contains { TaskModels.displayName(for: $0) == "Qwen3.5 9B" })
+    }
+
     // MARK: - CFM-R8-2: add / remove / reorder
 
     @Test func addInsertsBelowSelection() throws {

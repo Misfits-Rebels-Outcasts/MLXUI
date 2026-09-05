@@ -146,6 +146,53 @@
           "summary": "A 27B hybrid GatedDeltaNet + full-attention model shipped as a 2-bit ternary MLX quantization; runs text-only on Apple Silicon via MLX."
         },
         {
+          "id": "mlx-community--Qwen3.5-9B-MLX-4bit",
+          "family": "Qwen3.5",
+          "displayName": "Qwen3.5-9B",
+          "paramSize": "9B",
+          "paramCountB": 9.0,
+          "modelType": "llm",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Qwen3.5-9B-MLX-4bit",
+          "ramGB": 8.96,
+          "downloadSizeGB": 5.97,
+          "contextWindow": 262144,
+          "license": "apache-2.0",
+          "licenseUrl": "https://huggingface.co/Qwen/Qwen3.5-9B/blob/main/LICENSE",
+          "description": "Qwen/Qwen3.5-9B is a multimodal (text + vision) checkpoint; this catalog entry is the mlx-community MLX 4-bit conversion of its **language tower only** — the download includes vision weights, but this entry does not load them. Runs through MLXLLM's `qwen3_5` → `Qwen35Model` text runner. A separate vision-typed entry exposing Describe Image, sharing this same download rather than fetching it twice, follows once the install path can share one download between two catalog entries (`RSI/DelegateMoCBacklog.md` MoC-5/MoC-6).\n\nQwen3.5's hybrid attention schedule is what makes a 9B affordable for long-context work: of its 32 transformer layers, only 8 (every 4th) hold a full KV cache — the other 24 use a constant-size linear-attention (GatedDeltaNet-style) recurrent state instead, so per-token memory grows far slower than a standard 32-layer model this size would. The card advertises up to 262,144 tokens of context; how much of that a given Mac can actually hold alongside the weights depends on its available RAM.\n\nNo independent benchmark exists yet for this family in this app — speed and quality here are unmeasured, not estimated from a number (see the RSI smoke checklist and MoC-2-5's comparison against the current default, Ministral 3B). Licensed Apache-2.0, inherited from Qwen/Qwen3.5-9B.",
+          "architecture": "Qwen3_5ForConditionalGeneration",
+          "languages": null,
+          "lastUpdated": "2026-03-23",
+          "taskTags": [
+            "text-generation"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": true,
+          "communityDownloads": 26348,
+          "communityLikes": 163,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 8.96,
+              "downloadSizeGB": 5.97,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/Qwen3.5-9B-MLX-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/Qwen3.5-9B-MLX-4bit",
+          "summary": "The mlx-community 4-bit MLX conversion of Qwen3.5-9B's language tower — a hybrid-attention (24 linear / 8 full) text model with up to 262K advertised context. The vision tower in this same download is exposed as a separate entry once install-path sharing lands (MoC-6)."
+        },
+        {
           "id": "mlx-community--gemma-3-1b-it-qat-4bit",
           "family": "gemma",
           "displayName": "gemma-3-1b-it-qat",

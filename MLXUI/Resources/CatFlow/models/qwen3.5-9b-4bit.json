@@ -1,0 +1,36 @@
+{
+  "id": "mlx-community/Qwen3.5-9B-MLX-4bit",
+  "display": "Qwen3.5 9B",
+  "kind": "local",
+  "engine": "mlx-lm",
+  "tasks": [
+    "Generate",
+    "Decide"
+  ],
+  "settings": {
+    "temperature": {
+      "type": "number",
+      "min": 0.0,
+      "max": 2.0,
+      "default": 0.6,
+      "maps_to": "temp"
+    },
+    "max_tokens": {
+      "type": "number",
+      "min": 1,
+      "max": 32768,
+      "default": 2048,
+      "maps_to": "max_tokens"
+    }
+  },
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 5.97,
+    "ram_gb": 8.96
+  },
+  "source": "https://huggingface.co/mlx-community/Qwen3.5-9B-MLX-4bit",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true,
+  "notes": "MLXUI-authored (RSI/DelegateMoCBacklog.md MoC-2-4) -- catflow-mlx has no Qwen3.5 9B manifest to port, so this was written from qwen3-8b-4bit.json's shape per the backlog's explicit instruction, with temperature default 0.6 (not 0.3) as pinned there. max_tokens is not seeded from this model's 262144-token context window -- see the backlog's §0 for why that ceiling isn't reachable on a typical Mac. resources.ram_gb is browser.json's ramGB (the 1.5x-heuristic gate figure), not a Python-measured number."
+}
