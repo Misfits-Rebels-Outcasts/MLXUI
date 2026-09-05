@@ -22,6 +22,10 @@ enum InstallState: Equatable {
 
 @Observable
 final class InstallManager {
+    /// MoC-5-1: injectable so tests can point storage at a temp directory rather than the
+    /// real `Application Support/AI Browser/`. `ModelStore` stays the one place per-model
+    /// paths are built — every path below routes through it, never hand-rolled here.
+    private let store: ModelStore
     private let modelsDir: URL
     private let downloadsDir: URL
     private let installedURL: URL
@@ -32,8 +36,8 @@ final class InstallManager {
     var modelStates: [String: InstallState] = [:]
     var onInstallComplete: ((String) -> Void)?
 
-    init() {
-        let store = ModelStore.shared
+    init(store: ModelStore = .shared) {
+        self.store = store
         modelsDir = store.modelsDirectory
         downloadsDir = store.downloadsDirectory
         installedURL = store.installedRegistryURL
@@ -87,12 +91,12 @@ final class InstallManager {
         activeTasks[modelId]?.forEach { $0.cancel() }
         activeTasks[modelId] = nil
         modelStates[modelId] = .idle
-        let downloadDir = downloadsDir.appendingPathComponent(modelId)
+        let downloadDir = store.downloadDirectory(forModelID: modelId)
         try? FileManager.default.removeItem(at: downloadDir)
     }
 
     func uninstall(_ modelId: String) {
-        let modelDir = modelsDir.appendingPathComponent(modelId)
+        let modelDir = store.directory(forModelID: modelId)
         try? FileManager.default.removeItem(at: modelDir)
         modelStates[modelId] = .idle
     }
@@ -109,13 +113,13 @@ final class InstallManager {
 
     func isInstalled(_ modelId: String) -> Bool {
         if case .installed = modelStates[modelId] { return true }
-        return FileManager.default.fileExists(atPath: modelsDir.appendingPathComponent(modelId).appendingPathComponent(".installed").path)
+        return FileManager.default.fileExists(atPath: store.installedMarker(forModelID: modelId).path)
     }
 
     func loadInstalled(modelIDs: Set<String>) -> Set<String> {
         var installed = Set<String>()
         for id in modelIDs {
-            let marker = modelsDir.appendingPathComponent(id).appendingPathComponent(".installed")
+            let marker = store.installedMarker(forModelID: id)
             if FileManager.default.fileExists(atPath: marker.path) {
                 installed.insert(id)
                 modelStates[id] = .installed
@@ -163,7 +167,7 @@ final class InstallManager {
             }
 
             // 2. Create download directory
-            let downloadDir = downloadsDir.appendingPathComponent(modelId)
+            let downloadDir = store.downloadDirectory(forModelID: modelId)
             if FileManager.default.fileExists(atPath: downloadDir.path) {
                 try FileManager.default.removeItem(at: downloadDir)
             }
@@ -260,13 +264,13 @@ final class InstallManager {
             }
 
             // 5. Atomic move
-            let modelDir = modelsDir.appendingPathComponent(modelId)
+            let modelDir = store.directory(forModelID: modelId)
             if FileManager.default.fileExists(atPath: modelDir.path) {
                 try FileManager.default.removeItem(at: modelDir)
             }
             try FileManager.default.copyItem(at: downloadDir, to: modelDir)
             try FileManager.default.removeItem(at: downloadDir)
-            FileManager.default.createFile(atPath: modelDir.appendingPathComponent(".installed").path, contents: nil)
+            FileManager.default.createFile(atPath: store.installedMarker(forModelID: modelId).path, contents: nil)
 
             print("[Install] Success: \(model.displayName)")
             await MainActor.run {
@@ -365,13 +369,13 @@ final class InstallManager {
         var models: [String: InstalledModel] = [:]
         var found = 0
         for id in installedIDs {
-            let marker = modelsDir.appendingPathComponent(id).appendingPathComponent(".installed")
+            let marker = store.installedMarker(forModelID: id)
             guard FileManager.default.fileExists(atPath: marker.path) else {
                 print("[Registry] Marker not found for \(id) at \(marker.path)")
                 continue
             }
             found += 1
-            let modelDir = modelsDir.appendingPathComponent(id)
+            let modelDir = store.directory(forModelID: id)
             let totalSize = (try? FileManager.default.contentsOfDirectory(at: modelDir, includingPropertiesForKeys: [.fileSizeKey], options: .skipsHiddenFiles))?
                 .compactMap { try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize }
                 .reduce(0, +) ?? 0
