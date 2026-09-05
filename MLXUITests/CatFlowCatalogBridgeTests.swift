@@ -163,7 +163,7 @@ struct CatFlowCatalogBridgeTests {
             Issue.record("SAM Base should resolve: \(reason)")
             _ = display
         }
-        #expect(CatalogBridge.entries.count == 18)
+        #expect(CatalogBridge.entries.count == 19)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
@@ -269,7 +269,48 @@ struct CatFlowCatalogBridgeTests {
         case .notRunnable(let display, let reason):
             Issue.record("\(display) should resolve: \(reason)")
         }
-        #expect(CatalogBridge.entries.count == 18)
+        #expect(CatalogBridge.entries.count == 19)
+    }
+
+    // MARK: - MoC-4-4: Qwen3 Reranker 0.6B joins the bridge, the model on MoC-3's seam
+
+    @Test func qwen3RerankerResolvesAsSame() throws {
+        let catalog = try loadCatalog()
+        let entry = try #require(CatalogBridge.entry(for: "Qwen3 Reranker 0.6B"))
+        #expect(entry.pinnedID == "mlx-community/Qwen3-Reranker-0.6B-4bit")
+        #expect(entry.candidates == ["mlx-community/Qwen3-Reranker-0.6B-4bit"])
+        #expect(entry.equivalence == .same)
+        #expect(entry.manifestFile == "qwen3-reranker-0.6b-4bit.json")
+        switch CatalogBridge.resolve("Qwen3 Reranker 0.6B", catalog: catalog) {
+        case .runnable(let model, let equivalence, let note):
+            #expect(model.hfModelId == "mlx-community/Qwen3-Reranker-0.6B-4bit")
+            #expect(model.runnerKind == .rerank)
+            #expect(equivalence == .same)
+            #expect(note == nil)
+        case .notRunnable(let display, let reason):
+            Issue.record("\(display) should resolve: \(reason)")
+        }
+    }
+
+    @Test func qwen3RerankerManifestShips() throws {
+        let data = try Data(contentsOf: manifestURL("qwen3-reranker-0.6b-4bit.json"))
+        let manifest = try JSONDecoder().decode(CuratedManifest.self, from: data)
+        #expect(manifest.id == "mlx-community/Qwen3-Reranker-0.6B-4bit")
+        #expect(manifest.display == "Qwen3 Reranker 0.6B")
+        #expect(manifest.settings.isEmpty)
+    }
+
+    /// The done-when this whole arc has been building toward: `defaultModel(forTask:
+    /// "Rerank")` flips from `nil` (MoC-1…MoC-3) to a name, for the first time.
+    @MainActor
+    @Test func defaultModelForRerankIsNoLongerNil() throws {
+        let catalog = try loadCatalog()
+        let registry = ModelRegistry()
+        for module in installedModules { module.register(into: registry) }
+        let claimable = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
+        #expect(TaskModels.defaultModel(forTask: "Rerank", catalog: catalog, claimableModelIDs: claimable) == "Qwen3 Reranker 0.6B")
+        let derived = TaskModels.derivedModels(for: "Rerank", catalog: catalog, claimableModelIDs: claimable)
+        #expect(derived.count == 1)
     }
 
     @Test func qwen35NineBManifestShips() throws {

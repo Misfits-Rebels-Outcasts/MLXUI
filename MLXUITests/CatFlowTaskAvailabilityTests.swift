@@ -275,20 +275,19 @@ struct CatFlowTaskAvailabilityTests {
     // MARK: - MoC-4: Rerank stopped being honestly empty once MoC-4-1/4-3 landed
 
     /// Updated from MoC-3-1's "stays empty until MoC-4" version now that MoC-4-1 (catalog
-    /// entry) and MoC-4-3 (`RerankSDK`, claims it) have both landed — the CFM-R14-FIX-2
-    /// discipline this guards is now "the derived pool matches what the runtime can
-    /// actually do," not "empty." `defaultModel` returns the catalog's own `displayName`
-    /// (`"Qwen3-Reranker-0.6B"`, hyphenated) rather than the pool's spaced name
-    /// (`"Qwen3 Reranker 0.6B"`) because no `CatalogBridge` entry exists yet to connect
-    /// them — that's MoC-4-4's `defaultModel(forTask: "Rerank")` done-when clause, not this
-    /// one's; this test will need updating again when that entry lands.
+    /// entry), MoC-4-3 (`RerankSDK`, claims it), and MoC-4-4 (the `CatalogBridge` entry
+    /// connecting the catalog's raw `displayName` to the pool's spaced display name) have
+    /// all landed — the CFM-R14-FIX-2 discipline this guards is now "the derived pool
+    /// matches what the runtime can actually do," not "empty." `defaultModel` now returns
+    /// `"Qwen3 Reranker 0.6B"` — the bridge display name, which is also `taskModels["Rerank"]`'s
+    /// pool string — for the first time since `Rerank` existed as a task.
     @Test func rerankDerivedPoolNowContainsTheLandedModel() throws {
         let catalog = try bundledCatalog()
         let claimable = claimableIDs(catalog: catalog)
         let derived = TaskModels.derivedModels(for: "Rerank", catalog: catalog, claimableModelIDs: claimable)
         #expect(derived.count == 1)
         #expect(derived.first?.hfModelId == "mlx-community/Qwen3-Reranker-0.6B-4bit")
-        #expect(TaskModels.defaultModel(forTask: "Rerank", catalog: catalog, claimableModelIDs: claimable) == "Qwen3-Reranker-0.6B")
+        #expect(TaskModels.defaultModel(forTask: "Rerank", catalog: catalog, claimableModelIDs: claimable) == "Qwen3 Reranker 0.6B")
     }
 
     /// The bundled catalog decodes with the `rerank` domain leaf now carrying the
