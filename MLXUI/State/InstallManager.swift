@@ -73,6 +73,18 @@ final class InstallManager {
         let repo = ModelStore.repoSlug(for: model.hfModelId)
         cardIDsByRepo[repo, default: []].insert(model.id)
 
+        // MoC-5-FIX-2: the repo's files are already on disk — a sibling card sharing this
+        // download installed them (MoC-6), or this card did in an earlier session and the
+        // in-memory state was lost. Mark installed and fire completion; never re-fetch bytes
+        // that are already present. Defence in depth: independent of how the read path
+        // resolves the marker, so it holds even if that path regresses again.
+        if FileManager.default.fileExists(
+            atPath: store.installedMarker(forHFModelID: model.hfModelId).path) {
+            modelStates[model.id] = .installed
+            onComplete(model.id)
+            return
+        }
+
         // MoC-5-4: another card is already downloading this repo — join it rather than
         // starting a duplicate. Mirror whichever state that download is currently in;
         // every future update for `repo` fans out to every id in `cardIDsByRepo[repo]`,
