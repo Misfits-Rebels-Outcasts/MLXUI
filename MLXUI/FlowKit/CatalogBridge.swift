@@ -314,8 +314,12 @@ nonisolated struct CuratedManifest: Codable, Sendable, Equatable {
     }
 
     static func load(bundle: Bundle = .main, manifestFile: String) -> CuratedManifest? {
+        // The `Resources/CatFlow/models/` group is a synchronized folder, and Xcode's
+        // resource copy flattens it to the top of `Contents/Resources/` — every curated
+        // manifest ships there, not under a `CatFlow/models` subdirectory. Confirmed against
+        // the built product for every existing manifest, not just this one.
         guard let url = bundle.url(forResource: (manifestFile as NSString).deletingPathExtension,
-                                   withExtension: "json", subdirectory: "CatFlow/models"),
+                                   withExtension: "json"),
               let data = try? Data(contentsOf: url) else { return nil }
         return try? JSONDecoder().decode(CuratedManifest.self, from: data)
     }
