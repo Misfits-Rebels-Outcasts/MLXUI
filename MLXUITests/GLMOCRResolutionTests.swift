@@ -98,4 +98,33 @@ struct GLMOCRResolutionTests {
         #expect(stage.accepts == .image)
         #expect(stage.produces == .text)
     }
+
+    // MARK: - R1 carry-over (a): the two done-when clauses MoC-1-4/1-5 shipped without
+
+    /// The silent failure R1 was told to look for: an `XcodeWrite` that never synced the
+    /// manifest into the app target. `Bundle.main` resolves to `MLXUI.app` here because
+    /// `MLXUITests` is host-app-hosted (`TEST_HOST` in the project settings) — see the
+    /// precedent at `Bundle.main.url(forResource: "browser", …)` in `CatFlowNotRunnableTests`.
+    @Test func glmOCRManifestLoadsFromTheBundle() throws {
+        let manifest = try #require(CuratedManifest.load(manifestFile: "glm-ocr-4bit.json"))
+        #expect(manifest.id == "mlx-community/GLM-OCR-4bit")
+        #expect(manifest.display == "GLM-OCR")
+    }
+
+    /// Decision C left the `"OCR"` pool untouched — GLM-OCR is selectable but not seeded.
+    /// Pins today's default so a later pool edit (MoC-1-5, if ever ruled) can't move the
+    /// seed silently; this is the exact regression `defaultModel(forTask:)`'s callers
+    /// (fourteen task rows, three gallery flows for OCR specifically) would never notice
+    /// on their own.
+    @MainActor
+    @Test func ocrDefaultModelIsUnchangedByGLMOCR() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("MLXUI/Resources/browser.json")
+        let catalog = try JSONDecoder().decode(BrowserData.self, from: Data(contentsOf: url))
+            .domains.flatMap { $0.allModels }
+        let registry = ModelRegistry()
+        for module in installedModules { module.register(into: registry) }
+        let claimable = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
+        #expect(TaskModels.defaultModel(forTask: "OCR", catalog: catalog, claimableModelIDs: claimable) == "olmOCR-2 7B")
+    }
 }
