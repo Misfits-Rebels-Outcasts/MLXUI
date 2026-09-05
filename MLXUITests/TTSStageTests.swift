@@ -106,10 +106,10 @@ struct TTSStageTests {
 
     // MARK: - Speak row settings → voice (Python's `voice or first_bare or "af_heart"`)
 
-    @Test func speakBareTokenBecomesVoice() {
+    @Test func speakBareTokenBecomesVoice() throws {
         // The RealExecutor derives a StageConfig from the row settings; the bare token is
         // the Kokoro voice. Assert via the descriptor-driven helper path: Speak + "af_heart".
-        let desc = try! #require(TaskCatalog.get("Speak"))
+        let desc = try #require(TaskCatalog.get("Speak"))
         let row = Row(task: "Speak", model: "Kokoro 82M", settings: "af_heart")
         let executor = RealExecutor(workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory),
                                     flowID: "t",
@@ -117,12 +117,12 @@ struct TTSStageTests {
                                     makeModelStage: { _, _ in TTSStubStage() },
                                     installedModelIDs: [],
                                     catalog: [])
-        let config = executor.stageConfig(for: desc, row: row)
+        let config = try executor.stageConfig(for: desc, row: row)
         #expect(config.voice == "af_heart")
     }
 
-    @Test func speakVoiceSettingBeatsBareToken() {
-        let desc = try! #require(TaskCatalog.get("Speak"))
+    @Test func speakVoiceSettingBeatsBareToken() throws {
+        let desc = try #require(TaskCatalog.get("Speak"))
         let row = Row(task: "Speak", model: "Kokoro 82M", settings: "af_bella; voice=am_adam")
         let executor = RealExecutor(workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory),
                                     flowID: "t",
@@ -130,15 +130,15 @@ struct TTSStageTests {
                                     makeModelStage: { _, _ in TTSStubStage() },
                                     installedModelIDs: [],
                                     catalog: [])
-        let config = executor.stageConfig(for: desc, row: row)
+        let config = try executor.stageConfig(for: desc, row: row)
         #expect(config.voice == "am_adam")
     }
 
     // MARK: - CFM-R14-FIX: Transcribe row settings → language (the ASR repetition-loop fix)
 
-    @Test func transcribeLangSettingBecomesLanguage() {
+    @Test func transcribeLangSettingBecomesLanguage() throws {
         // Python's `lang = s.get("lang")`: `Transcribe Whisper Small; lang=en` pins "en".
-        let desc = try! #require(TaskCatalog.get("Transcribe"))
+        let desc = try #require(TaskCatalog.get("Transcribe"))
         let row = Row(task: "Transcribe", model: "Whisper Small", settings: "lang=en")
         let executor = RealExecutor(workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory),
                                     flowID: "t",
@@ -146,15 +146,15 @@ struct TTSStageTests {
                                     makeModelStage: { _, _ in TTSStubStage() },
                                     installedModelIDs: [],
                                     catalog: [])
-        let config = executor.stageConfig(for: desc, row: row)
+        let config = try executor.stageConfig(for: desc, row: row)
         #expect(config.language == "en")
     }
 
-    @Test func transcribeWithoutLangDefaultsToEnglish() {
+    @Test func transcribeWithoutLangDefaultsToEnglish() throws {
         // The app's MLXAudioSTT has no real auto-detection — `nil` makes a weak model loop
         // ("mother mother mother…"). The standalone run sheet defaults to "en" for the same
         // reason; the flow now matches it instead of handing the engine a nil language.
-        let desc = try! #require(TaskCatalog.get("Transcribe"))
+        let desc = try #require(TaskCatalog.get("Transcribe"))
         let row = Row(task: "Transcribe", model: "Whisper Small", settings: "")
         let executor = RealExecutor(workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory),
                                     flowID: "t",
@@ -162,7 +162,7 @@ struct TTSStageTests {
                                     makeModelStage: { _, _ in TTSStubStage() },
                                     installedModelIDs: [],
                                     catalog: [])
-        let config = executor.stageConfig(for: desc, row: row)
+        let config = try executor.stageConfig(for: desc, row: row)
         #expect(config.language == "en")
     }
 }

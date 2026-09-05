@@ -45,7 +45,7 @@ struct CatFlowR16DiffusionSettingsTests {
         let desc = try #require(TaskCatalog.get("Generate Image"))
         let row = Row(task: "Generate Image", model: "Flux-1.lite-8B",
                       settings: "seed=7; width=1024; height=1024; steps=25")
-        let config = makeExecutor().stageConfig(for: desc, row: row)
+        let config = try makeExecutor().stageConfig(for: desc, row: row)
         #expect(config.seed == 7)
         #expect(config.width == 1024)
         #expect(config.height == 1024)
@@ -57,7 +57,7 @@ struct CatFlowR16DiffusionSettingsTests {
         // carrying `seed=`/`width=` keys must not smuggle them into a config the ASR stage sees.
         let desc = try #require(TaskCatalog.get("Transcribe"))
         let row = Row(task: "Transcribe", model: "Whisper Small", settings: "lang=en; seed=7; width=1024")
-        let config = makeExecutor().stageConfig(for: desc, row: row)
+        let config = try makeExecutor().stageConfig(for: desc, row: row)
         #expect(config.seed == nil)
         #expect(config.width == nil)
         #expect(config.height == nil)
@@ -81,9 +81,9 @@ struct CatFlowR16DiffusionSettingsTests {
         let bounds = try RangeTool.parseBounds("3..6")
         let desc = try #require(TaskCatalog.get("Generate Image"))
         let executor = makeExecutor()
-        let seeds = (bounds.start...bounds.stop).map { item -> UInt64? in
+        let seeds = try (bounds.start...bounds.stop).map { item -> UInt64? in
             let substituted = settings.replacingOccurrences(of: "{item}", with: String(item))
-            return executor.stageConfig(
+            return try executor.stageConfig(
                 for: desc,
                 row: Row(task: "Generate Image", model: generate.model, settings: substituted)
             ).seed
@@ -102,8 +102,8 @@ struct CatFlowR16DiffusionSettingsTests {
         // `MLXRandom.seed` determinism — so the test is not a mock echoing the config back.
         let desc = try #require(TaskCatalog.get("Generate Image"))
         let executor = makeExecutor()
-        let config7 = executor.stageConfig(for: desc, row: Row(task: "Generate Image", model: "Flux-1.lite-8B", settings: "seed=7"))
-        let config8 = executor.stageConfig(for: desc, row: Row(task: "Generate Image", model: "Flux-1.lite-8B", settings: "seed=8"))
+        let config7 = try executor.stageConfig(for: desc, row: Row(task: "Generate Image", model: "Flux-1.lite-8B", settings: "seed=7"))
+        let config8 = try executor.stageConfig(for: desc, row: Row(task: "Generate Image", model: "Flux-1.lite-8B", settings: "seed=8"))
         #expect(config7.seed == 7)
         #expect(config8.seed == 8)
 
