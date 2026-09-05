@@ -81,6 +81,48 @@ struct CatFlowRerankStageConfigTests {
         }
     }
 
+    // MARK: - MoC-FIX-2: a query with an escaped newline is refused, not silently corrupted
+
+    /// `FlowSettings.unquote` processes `\n` inside a quoted value into a real newline
+    /// (`\\n` in the Swift source below is the two characters backslash+n, exactly what a
+    /// `.cat` file's `query="line one\nline two"` contains on disk — driven through the
+    /// real parser, not a pre-made `StageConfig`). `RerankSDK.makeStage`'s stage packs
+    /// `"\(query)\n\(candidate)"` and splits on the first newline, so an embedded newline in
+    /// the query would silently steal the first line of the candidate — refused here
+    /// instead, at the seam, before any `RerankStage` is built.
+    @Test func queryWithAnEscapedNewlineIsRefused() throws {
+        let desc = try rerankDesc()
+        let row = Row(task: "Rerank", model: "Qwen3 Reranker 0.6B",
+                     settings: "query=\"line one\\nline two\"; top_k=3")
+        #expect(throws: FlowError.self) {
+            _ = try makeExecutor().stageConfig(for: desc, row: row, path: "2")
+        }
+        do {
+            _ = try makeExecutor().stageConfig(for: desc, row: row, path: "2")
+            Issue.record("expected throw")
+        } catch let error as FlowError {
+            guard case .invalidSettings(let path, let setting, _) = error else {
+                Issue.record("wrong FlowError case: \(error)")
+                return
+            }
+            #expect(path == "2")
+            #expect(setting == "query")
+        } catch {
+            Issue.record("wrong error type: \(error)")
+        }
+    }
+
+    /// The bare-token fallback carries the same risk if a bare token itself unescapes to a
+    /// newline (a quoted bare value, `"line one\nline two"`, with no `query=` key at all).
+    @Test func bareTokenQueryWithAnEscapedNewlineIsRefused() throws {
+        let desc = try rerankDesc()
+        let row = Row(task: "Rerank", model: "Qwen3 Reranker 0.6B",
+                     settings: "\"line one\\nline two\"")
+        #expect(throws: FlowError.self) {
+            _ = try makeExecutor().stageConfig(for: desc, row: row)
+        }
+    }
+
     @Test func missingQueryErrorNamesWhatIsWrong() {
         // The reference's own wording (RSI/DelegateMoCBacklog.md MoC-3-2): "Rerank needs a
         // query -- e.g. Rerank BGE Reranker; query=\"...\"."

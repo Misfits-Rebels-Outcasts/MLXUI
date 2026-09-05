@@ -599,6 +599,19 @@ nonisolated struct RealExecutor: FlowExecutor {
             guard let query = settings.value(for: "query") ?? settings.firstBare() else {
                 throw FlowError.missingRerankQuery(row: path)
             }
+            // MoC-FIX-2: `query="line one\nline two"` unescapes to a real newline
+            // (`FlowSettings.unquote` processes `\n` inside quoted values — verified this
+            // applies here too, not just in Swift: the Python `_settings.py::_unquote` does
+            // the identical `\\n` → `\n` replacement). `RerankSDK.makeStage`'s stage packs
+            // `"\(query)\n\(candidate)"` and splits on the first newline to recover the two
+            // halves — a query containing one would silently steal the first line of the
+            // first candidate. Refuse it here, at the seam, rather than let it corrupt
+            // scores with no error and no crash.
+            guard !query.contains("\n") else {
+                throw FlowError.invalidSettings(
+                    row: path, setting: "query",
+                    detail: "can't contain a newline — it's packed with the candidate text on one line internally")
+            }
             let topK = settings.value(for: "top_k")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .flatMap(Int.init)
