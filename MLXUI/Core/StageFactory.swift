@@ -64,7 +64,7 @@ enum StageFactory {
         }
 
         switch model.runnerKind {
-        case .llm, .asr, .tts, .embedding, .vision, .ocr, .image, .music, .segmentation, .video, .upscale, .unsupported:
+        case .llm, .asr, .tts, .embedding, .vision, .ocr, .image, .music, .segmentation, .video, .upscale, .rerank, .unsupported:
             throw StageError.unsupportedModel(id: model.id, kind: model.runnerKind)
         }
     }

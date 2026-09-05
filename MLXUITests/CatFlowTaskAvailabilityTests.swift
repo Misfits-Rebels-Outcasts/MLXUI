@@ -253,18 +253,47 @@ struct CatFlowTaskAvailabilityTests {
                       "Extract Structured", "Text to Table",
                       "Transcribe", "Speak", "Describe Image", "OCR", "Embed",
                       "Generate Image", "Generate Video", "Generate Sound",
-                      "Segment"]
+                      "Segment", "Rerank"]
         for name in served {
             #expect(TaskModels.isServedByExecutor(name), "\(name) should be executor-served")
         }
         // NOT served: a catalog model may exist for the kind, but the executor has no path.
         // The latent family and the edit/inpaint rows have no stage accepting what they hand
-        // the executor; Upscale/Estimate Depth/Rerank have no catalog model at all.
+        // the executor; Upscale/Estimate Depth have no served prefix at all. `Rerank` moved to
+        // the served list in MoC-3-1 (RSI/DelegateMoCBacklog.md) — `engines.rerank.` is now
+        // allow-listed, even though no `.rerank` catalog entry exists yet (MoC-4). Served and
+        // "has a runnable candidate" are different questions: `derivedModels(for: "Rerank", …)`
+        // stays `[]` until a model lands, exactly as it did before this entry.
         let unserved = ["Edit Image", "Instruct Edit", "Inpaint",
                         "Init Latent", "Encode Latent", "Decode Latent", "Denoise",
-                        "Upscale", "Estimate Depth", "Animate", "Rerank"]
+                        "Upscale", "Estimate Depth", "Animate"]
         for name in unserved {
             #expect(!TaskModels.isServedByExecutor(name), "\(name) should NOT be executor-served")
         }
+    }
+
+    // MARK: - MoC-3-1: Rerank stays honestly empty until MoC-4 adds a model
+
+    /// `Rerank` now has a `RunnerKind` (`.rerank`) and a served prefix (`engines.rerank.`), but
+    /// no `.rerank` catalog entry exists yet — `derivedModels` must still report `[]` and
+    /// `defaultModel` still `nil`, exactly as before this cycle. This is the CFM-R14-FIX-2
+    /// discipline pinned before it can be broken: availability must never claim more than the
+    /// runtime can actually do.
+    @Test func rerankDerivedPoolStaysEmptyUntilAModelLands() throws {
+        let catalog = try bundledCatalog()
+        let claimable = claimableIDs(catalog: catalog)
+        #expect(TaskModels.derivedModels(for: "Rerank", catalog: catalog, claimableModelIDs: claimable).isEmpty)
+        #expect(TaskModels.defaultModel(forTask: "Rerank", catalog: catalog, claimableModelIDs: claimable) == nil)
+    }
+
+    /// The bundled catalog decodes with the new, deliberately empty `rerank` domain leaf —
+    /// the `browser.json` half of MoC-3-1's done-when.
+    @Test func rerankDomainDecodesEmpty() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("MLXUI/Resources/browser.json")
+        let data = try Data(contentsOf: url)
+        let browserData = try JSONDecoder().decode(BrowserData.self, from: data)
+        let rerank = try #require(browserData.domains.first { $0.id == "rerank" })
+        #expect(rerank.allModels.isEmpty)
     }
 }
