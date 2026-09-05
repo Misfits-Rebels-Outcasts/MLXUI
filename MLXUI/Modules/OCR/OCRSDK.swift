@@ -21,6 +21,7 @@ nonisolated struct OCRSDK: ModelSDK {
 
     func makeStage(for model: ModelEntry, config: StageConfig) throws -> any PipelineStage {
         VLMStage(modelID: model.id,
+                 hfModelID: model.hfModelId,
                  prompt: config.prompt ?? Self.ocrPrompt,
                  maxTokens: max(config.maxTokens, Self.ocrMaxTokens))
     }

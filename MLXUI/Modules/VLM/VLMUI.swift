@@ -13,6 +13,7 @@ struct VLMUI: ModelUI {
         // model id (and display metadata) rather than the pre-built `stage` — mirrors KokoroUI.
         AnyView(ImageQARunView(modelDisplayName: model.displayName,
                                license: model.license,
-                               modelID: model.id))
+                               modelID: model.id,
+                               hfModelID: model.hfModelId))
     }
 }

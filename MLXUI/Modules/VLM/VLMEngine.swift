@@ -21,6 +21,14 @@ enum VLMEngine {
         ModelStore.shared.directory(forModelID: id)
     }
 
+    /// The installed-model directory keyed by HF repo id rather than catalog card id (MoC-6,
+    /// `RSI/DelegateMoCBacklog.md`). Needed when a catalog card's own id diverges from the repo
+    /// its files are actually stored under — today, only the `Qwen3.5-9B Vision` card, which
+    /// shares its download with the separate `Qwen3.5-9B` (`llm`) card (`MoC-5`).
+    nonisolated static func installedModelDirectory(hfModelID: String) -> URL {
+        ModelStore.shared.directory(forHFModelID: hfModelID)
+    }
+
     /// Load the VLM at `modelDir` and answer `prompt` about `image`. Loads per call
     /// (matches `LLMEngine`); instance caching is a later optimization.
     nonisolated static func generate(

@@ -23,11 +23,30 @@ struct ModelStoreRepoKeyingTests {
         #expect(!catalog.isEmpty)
         let store = ModelStore(baseDirectory: FileManager.default.temporaryDirectory)
         for entry in catalog {
+            // MoC-6 introduced the first intentional exception: `Qwen3.5-9B Vision`'s own id
+            // diverges from its hfModelId's repo slug on purpose — it shares the `Qwen3.5-9B`
+            // (`llm`) card's download (MoC-5's install-path sharing). Every entry whose id
+            // still equals its own repo slug must keep resolving identically by card and by
+            // repo; `sharedRepoEntriesResolveToOneDirectory` below covers the exception itself.
+            guard entry.id == ModelStore.repoSlug(for: entry.hfModelId) else { continue }
             let byCard = store.directory(forModelID: entry.id)
             let byRepo = store.directory(forHFModelID: entry.hfModelId)
             #expect(byCard == byRepo,
                     "\(entry.id): card path \(byCard.path) != repo path \(byRepo.path)")
         }
+    }
+
+    /// The MoC-6 exception itself: the vision card's own id resolves to a *different*
+    /// directory than its repo path, but the repo path is exactly the llm sibling's — i.e.
+    /// they genuinely share one directory on disk (R6's reviewer check).
+    @Test func sharedRepoEntriesResolveToOneDirectory() throws {
+        let catalog = try loadCatalog()
+        let vision = try #require(catalog.first { $0.id == "mlx-community--Qwen3.5-9B-MLX-4bit-vision" })
+        let llm = try #require(catalog.first { $0.id == "mlx-community--Qwen3.5-9B-MLX-4bit" })
+        #expect(vision.hfModelId == llm.hfModelId)
+        let store = ModelStore(baseDirectory: FileManager.default.temporaryDirectory)
+        #expect(store.directory(forHFModelID: vision.hfModelId) == store.directory(forHFModelID: llm.hfModelId))
+        #expect(store.directory(forModelID: vision.id) != store.directory(forHFModelID: vision.hfModelId))
     }
 
     @Test func repoSlugReplacesSlashesWithDoubleDash() {
@@ -38,6 +57,8 @@ struct ModelStoreRepoKeyingTests {
         let catalog = try loadCatalog()
         let store = ModelStore(baseDirectory: FileManager.default.temporaryDirectory)
         for entry in catalog {
+            // MoC-6's one intentional exception — see `noPathMovedForAnyShippingCatalogEntry`.
+            guard entry.id == ModelStore.repoSlug(for: entry.hfModelId) else { continue }
             let cardSlug = entry.id
             let repoSlug = ModelStore.repoSlug(for: entry.hfModelId)
             #expect(store.downloadDirectory(forModelID: cardSlug) == store.downloadDirectory(forModelID: repoSlug))

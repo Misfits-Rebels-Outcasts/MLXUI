@@ -1,0 +1,20 @@
+{
+  "id": "mlx-community/Qwen3.5-9B-MLX-4bit",
+  "display": "Qwen3.5 9B Vision",
+  "kind": "local",
+  "engine": "mlx-vlm",
+  "tasks": [
+    "Describe Image"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 5.97,
+    "ram_gb": 8.96
+  },
+  "source": "https://huggingface.co/mlx-community/Qwen3.5-9B-MLX-4bit",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true,
+  "notes": "MLXUI-authored (RSI/DelegateMoCBacklog.md MoC-6-2) -- catflow-mlx has no vision-split manifest for this checkpoint, so this is a second manifest for the same repo id as qwen3.5-9b-4bit.json's, engine/tasks/settings following the shipped mlx-vlm pattern (gemma-3-4b-it-4bit.json, lfm2-vl-1.6b-8bit.json): engine 'mlx-vlm', Describe Image only, no settings. Same download as the Chat & Text entry (MoC-5's install-path sharing) -- installing either installs both."
+}

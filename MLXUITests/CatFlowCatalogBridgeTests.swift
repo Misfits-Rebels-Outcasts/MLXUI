@@ -163,7 +163,7 @@ struct CatFlowCatalogBridgeTests {
             Issue.record("SAM Base should resolve: \(reason)")
             _ = display
         }
-        #expect(CatalogBridge.entries.count == 19)
+        #expect(CatalogBridge.entries.count == 20)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
@@ -269,7 +269,7 @@ struct CatFlowCatalogBridgeTests {
         case .notRunnable(let display, let reason):
             Issue.record("\(display) should resolve: \(reason)")
         }
-        #expect(CatalogBridge.entries.count == 19)
+        #expect(CatalogBridge.entries.count == 20)
     }
 
     // MARK: - MoC-4-4: Qwen3 Reranker 0.6B joins the bridge, the model on MoC-3's seam
@@ -326,5 +326,58 @@ struct CatFlowCatalogBridgeTests {
         #expect(maxTokens.min == 1)
         #expect(maxTokens.max == 32768)
         #expect(maxTokens.defaultValue == .number(2048))
+    }
+
+    // MARK: - MoC-6-2: Qwen3.5 9B's vision half, sharing the text entry's hfModelId
+
+    /// The disambiguation this phase's fix exists for: both bridge entries name the same
+    /// hfModelId, and each must resolve to its own catalog card, not each other's.
+    @Test func qwen35NineBVisionResolvesAsSameButDistinctFromTheTextEntry() throws {
+        let catalog = try loadCatalog()
+        let entry = try #require(CatalogBridge.entry(for: "Qwen3.5 9B Vision"))
+        #expect(entry.pinnedID == "mlx-community/Qwen3.5-9B-MLX-4bit")
+        #expect(entry.candidates == ["mlx-community/Qwen3.5-9B-MLX-4bit"])
+        #expect(entry.equivalence == .same)
+        #expect(entry.manifestFile == "qwen3.5-9b-vision-4bit.json")
+        switch CatalogBridge.resolve("Qwen3.5 9B Vision", catalog: catalog) {
+        case .runnable(let model, let equivalence, let note):
+            #expect(model.hfModelId == "mlx-community/Qwen3.5-9B-MLX-4bit")
+            #expect(model.runnerKind == .vision)
+            #expect(model.id == "mlx-community--Qwen3.5-9B-MLX-4bit-vision")
+            #expect(equivalence == .same)
+            #expect(note == nil)
+        case .notRunnable(let display, let reason):
+            Issue.record("\(display) should resolve: \(reason)")
+        }
+        // The text entry must still resolve to the llm card, not the vision one — this is
+        // the regression the `modelType` disambiguator in `resolve` guards against.
+        switch CatalogBridge.resolve("Qwen3.5 9B", catalog: catalog) {
+        case .runnable(let model, _, _):
+            #expect(model.runnerKind == .llm)
+            #expect(model.id == "mlx-community--Qwen3.5-9B-MLX-4bit")
+        case .notRunnable(let display, let reason):
+            Issue.record("\(display) should resolve: \(reason)")
+        }
+    }
+
+    @Test func qwen35NineBVisionManifestShips() throws {
+        let data = try Data(contentsOf: manifestURL("qwen3.5-9b-vision-4bit.json"))
+        let manifest = try JSONDecoder().decode(CuratedManifest.self, from: data)
+        #expect(manifest.id == "mlx-community/Qwen3.5-9B-MLX-4bit")
+        #expect(manifest.display == "Qwen3.5 9B Vision")
+        #expect(manifest.settings.isEmpty)
+    }
+
+    /// `defaultModel(forTask: "Describe Image")` must stay `LFM2-VL 1.6B` — appending the
+    /// vision entry last must not move the seed (MoC-6-2's done-when).
+    @MainActor
+    @Test func defaultModelForDescribeImageIsUnchangedByTheVisionEntry() throws {
+        let catalog = try loadCatalog()
+        let registry = ModelRegistry()
+        for module in installedModules { module.register(into: registry) }
+        let claimable = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
+        #expect(TaskModels.defaultModel(forTask: "Describe Image", catalog: catalog, claimableModelIDs: claimable) == "LFM2-VL 1.6B")
+        let derived = TaskModels.derivedModels(for: "Describe Image", catalog: catalog, claimableModelIDs: claimable)
+        #expect(derived.contains { $0.id == "mlx-community--Qwen3.5-9B-MLX-4bit-vision" })
     }
 }

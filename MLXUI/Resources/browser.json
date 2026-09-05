@@ -123,7 +123,7 @@
           "contextWindow": 262144,
           "license": "apache-2.0",
           "licenseUrl": "https://huggingface.co/prism-ml/Ternary-Bonsai-27B-mlx-2bit/blob/main/LICENSE.txt",
-          "description": "# Ternary-Bonsai-27B (MLX 2-bit)\n\nA 27B hybrid-attention model (`qwen3_5`): ~75% GatedDeltaNet linear-attention layers and ~25% gated full-attention layers, shipped as a 2-bit \"ternary\" MLX quantization by prism-ml. Runs on Apple Silicon via MLX. This multimodal checkpoint runs text-only here (the MLX Swift runner uses the language tower).",
+          "description": "# Ternary-Bonsai-27B (MLX 2-bit)\n\nA 27B hybrid-attention model (`qwen3_5`): ~75% GatedDeltaNet linear-attention layers and ~25% gated full-attention layers, shipped as a 2-bit \"ternary\" MLX quantization by prism-ml. Runs on Apple Silicon via MLX. This checkpoint runs text-only here because the 2-bit conversion shipped no vision weights at all (its `model.safetensors.index.json` has no `visual.`/`vision_tower` keys) — not because the MLX Swift runner lacks a vision path for `qwen3_5` checkpoints in general (it has one, `MLXVLM/Models/Qwen35.swift`; `Qwen3.5-9B` uses it in its own vision-typed catalog entry).",
           "architecture": "Qwen3_5ForConditionalGeneration",
           "languages": null,
           "lastUpdated": "2026-07-14",
@@ -648,6 +648,53 @@
           ],
           "descriptionSource": "LiquidAI/LFM2-VL-1.6B",
           "summary": "Try LFM • Docs • LEAP • Discord"
+        },
+        {
+          "id": "mlx-community--Qwen3.5-9B-MLX-4bit-vision",
+          "family": "Qwen3.5",
+          "displayName": "Qwen3.5-9B Vision",
+          "paramSize": "9B",
+          "paramCountB": 9.0,
+          "modelType": "vision",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Qwen3.5-9B-MLX-4bit",
+          "ramGB": 8.96,
+          "downloadSizeGB": 5.97,
+          "contextWindow": 262144,
+          "license": "apache-2.0",
+          "licenseUrl": "https://huggingface.co/Qwen/Qwen3.5-9B/blob/main/LICENSE",
+          "description": "This is the **same download** as the `Qwen3.5-9B` entry in Chat & Text (`mlx-community/Qwen3.5-9B-MLX-4bit`) — installing either one shows the other as Installed, with no second download (`RSI/DelegateMoCBacklog.md` MoC-5's install-path sharing). This entry exposes the checkpoint's **vision tower**, live, for `Describe Image` (`MLXVLM`'s `Qwen35` model, `Models/Qwen35.swift`); the Chat & Text entry runs the same download's language tower only. Same weights, two tasks, one file on disk.\n\nLicensed Apache-2.0, inherited from Qwen/Qwen3.5-9B. No independent benchmark exists yet for this family in this app — speed and quality here are unmeasured, not estimated from a number.",
+          "architecture": "Qwen3_5ForConditionalGeneration",
+          "languages": null,
+          "lastUpdated": "2026-03-23",
+          "taskTags": [
+            "image-text-to-text"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": true,
+          "communityDownloads": 26348,
+          "communityLikes": 163,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 8.96,
+              "downloadSizeGB": 5.97,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/Qwen3.5-9B-MLX-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/Qwen3.5-9B-MLX-4bit",
+          "summary": "The vision half of Qwen3.5-9B's shared download — the same mlx-community 4-bit checkpoint as the Chat & Text entry, exposed here for Describe Image with the vision tower live. Installing either entry installs both, once."
         },
         {
           "id": "mlx-community--gemma-3-4b-it-4bit",

@@ -218,6 +218,22 @@ struct ModelRegistryTests {
         #expect(stage.id.hasPrefix("vlm."))
     }
 
+    // MoC-6-2 (RSI/DelegateMoCBacklog.md): the Qwen3.5-9B Vision card resolves through the
+    // registry exactly like any other `.vision` entry, even though its `hfModelId` is shared
+    // with a separate `.llm` card in the real catalog — `VLMSDK.claim`/`makeStage` only look
+    // at `modelType`/`source`, so the sharing is invisible at this layer (it only matters to
+    // `ModelStore`'s directory resolution, covered by `InstallManagerReferenceCountingTests`).
+    @Test func qwen35VisionCardResolvesToVLM() throws {
+        let entry = makeEntry(id: "mlx-community--Qwen3.5-9B-MLX-4bit-vision",
+                               family: "Qwen3.5", modelType: .vision, source: .mlx)
+        let resolved = try #require(fullRegistry().bestModule(for: entry))
+        #expect(resolved.descriptor.id == "vlm")
+        #expect(resolved.sdk.claim(entry) == .exact)
+        let stage = try VLMSDK().makeStage(for: entry, config: .default)
+        #expect(stage.accepts == .image)
+        #expect(stage.produces == .text)
+    }
+
     // MARK: - OCR resolution (OC3)
 
     private func ocrEntry() -> ModelEntry {

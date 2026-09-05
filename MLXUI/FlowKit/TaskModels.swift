@@ -120,7 +120,9 @@ nonisolated enum TaskModels {
         "Speak": ["Kokoro 82M", "Qwen3-TTS 1.7B", "Qwen3-TTS 0.6B"],
         "Rerank": ["BGE Reranker", "Qwen3 Reranker 0.6B"],
         "Text to Table": llmModels,
-        "Describe Image": ["LFM2-VL 1.6B", "Gemma 3 4B"],
+        // MoC-6-2 (RSI/DelegateMoCBacklog.md): appended last, same discipline as MoC-2-4 —
+        // the seed ("LFM2-VL 1.6B") does not move.
+        "Describe Image": ["LFM2-VL 1.6B", "Gemma 3 4B", "Qwen3.5 9B Vision"],
         "OCR": ["olmOCR-2 7B", "dots.ocr"],
         "Generate Image": ["Z-Image Turbo", "FLUX.2 Klein 4B"],
         "Edit Image": ["Z-Image Turbo"],

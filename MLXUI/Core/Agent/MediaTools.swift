@@ -137,9 +137,10 @@ nonisolated struct OCRImageTool: AgentTool {
         guard !raw.isEmpty else { return "Error: missing required 'url' argument." }
         // Prefer a dedicated OCR model; fall back to a general vision model.
         let index = InstalledModelIndex.loadInstalled()
-        guard let modelID = index.best(kind: .ocr) ?? index.best(kind: .vision) else {
+        guard let entry = index.bestEntry(kind: .ocr) ?? index.bestEntry(kind: .vision) else {
             return "Error: no OCR or vision model is installed. Install one from the Browse tab first."
         }
+        let modelID = entry.id
 
         let data: Data
         switch await MediaFetch.fetchData(raw) {
@@ -172,7 +173,7 @@ nonisolated struct OCRImageTool: AgentTool {
                 text = try await VLMEngine.generate(
                     prompt: OCRSDK.ocrPrompt,
                     image: image,
-                    modelDir: VLMEngine.installedModelDirectory(id: modelID),
+                    modelDir: VLMEngine.installedModelDirectory(hfModelID: entry.hfModelId),
                     maxTokens: OCRSDK.ocrMaxTokens)
             }
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)

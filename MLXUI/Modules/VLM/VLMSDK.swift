@@ -17,6 +17,7 @@ nonisolated struct VLMSDK: ModelSDK {
 
     func makeStage(for model: ModelEntry, config: StageConfig) throws -> any PipelineStage {
         VLMStage(modelID: model.id,
+                 hfModelID: model.hfModelId,
                  prompt: config.prompt ?? Self.defaultPrompt,
                  maxTokens: config.maxTokens)
     }
