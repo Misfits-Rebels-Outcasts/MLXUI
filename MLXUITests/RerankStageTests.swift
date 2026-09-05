@@ -79,6 +79,24 @@ struct RerankStageTests {
         #expect(result.items.map(\.value) == ["b", "c"])
     }
 
+    // MoC-FIX-1: a tie-break comparator with no index tie-break can still pass
+    // `tiedScoresKeepInputOrder`/`tiesAmongSomeCandidatesKeepTheirRelativeOrder` above
+    // vacuously (Swift's `sorted(by:)` happens to be stable today) without the *property*
+    // actually being structural. This test forces the distinction: a three-way tie whose
+    // members straddle the `topK` boundary — reordering *within* the tie group changes
+    // which items survive truncation, so this fails if the tie-break is ever removed,
+    // even on a standard library that stops being incidentally stable.
+    @Test func threeWayTieSpanningTopKBoundaryKeepsInputOrderSurvivors() async throws {
+        // b, c, d tie at 0.5; a is highest, e is lowest. topK=3 must keep exactly
+        // [a, b, c] — b and c are the first two tied candidates in input order — and
+        // drop d, never e.g. [a, c, d] or [a, d, b].
+        let scores: [String: Double] = ["a": 0.9, "b": 0.5, "c": 0.5, "d": 0.5, "e": 0.1]
+        let s = stage(topK: 3) { _, candidate in scores[candidate] ?? 0 }
+        let input = Asset(items: ["a", "b", "c", "d", "e"].map(item))
+        let result = try await s.run(input) { _ in }
+        #expect(result.items.map(\.value) == ["a", "b", "c"])
+    }
+
     @Test func topKLargerThanCandidateCountKeepsEverything() async throws {
         let s = stage(topK: 10) { _, _ in 0.5 }
         let input = Asset(items: ["a", "b"].map(item))
