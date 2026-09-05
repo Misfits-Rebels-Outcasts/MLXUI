@@ -40,9 +40,13 @@ nonisolated struct RerankSDK: ModelSDK {
     }
 
     /// The seam `RealExecutor.runModel`'s `engines.rerank.` branch relies on (MoC-3-3): the
-    /// input is `"\(query)\n\(candidate)"`, split on the **first** newline only — a query
-    /// never contains one (it comes from a single-line `.cat` row's settings), while a
-    /// candidate's own internal newlines survive intact in the second half.
+    /// input is `"\(query)\n\(candidate)"`, split on the **first** newline only, so a
+    /// candidate's own internal newlines survive intact in the second half. This is safe
+    /// only because `RealExecutor.stageConfig`'s `engines.rerank.` branch refuses a query
+    /// containing a newline before a `RerankStage` is ever built (MoC-FIX-2) — a `.cat`
+    /// row's settings string is single-line in the *source file*, but `FlowSettings`
+    /// unescapes a literal `\n` inside a quoted value, so "a query never contains one" is
+    /// not actually guaranteed by the parser and must not be assumed here.
     func makeStage(for model: ModelEntry, config: StageConfig) throws -> any PipelineStage {
         let dir = RerankEngine.modelDirectory(for: model.id)
         return RerankScoringStage(id: model.id, name: model.displayName) { combined in

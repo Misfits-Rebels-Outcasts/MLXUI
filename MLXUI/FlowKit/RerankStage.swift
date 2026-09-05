@@ -54,9 +54,16 @@ nonisolated struct RerankStage: AssetStage {
             progress(Double(scores.count) / Double(max(candidates.count, 1)))
         }
 
-        // `Array.sorted(by:)` is a stable sort — ties keep their input order, matching
-        // `np.argsort(-scores, kind="stable")`.
-        let order = candidates.indices.sorted { scores[$0] > scores[$1] }
+        // `Array.sorted(by:)` IS documented to be stable — Apple's own reference for
+        // `Sequence.sorted(by:)` states outright: "The sorting algorithm is guaranteed to
+        // be stable." (verified against developer.apple.com during MoC-FIX-1, in response
+        // to a review claiming otherwise — see that task's journal entry). The explicit
+        // index tie-break below is therefore belt-and-suspenders, not a correctness fix:
+        // it makes "ties keep input order" self-evident from this code alone, without
+        // requiring a reader to know the stdlib's documented guarantee, and costs nothing.
+        let order = candidates.indices.sorted {
+            scores[$0] != scores[$1] ? scores[$0] > scores[$1] : $0 < $1
+        }
         let truncated = topK.map { Array(order.prefix($0)) } ?? order
         return Asset(items: truncated.map { Item(kind: .text, value: candidates[$0], path: nil, sourceText: nil) })
     }
