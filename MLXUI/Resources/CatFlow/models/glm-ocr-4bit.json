@@ -1,0 +1,20 @@
+{
+  "id": "mlx-community/GLM-OCR-4bit",
+  "display": "GLM-OCR",
+  "kind": "local",
+  "engine": "mlx-vlm",
+  "tasks": [
+    "OCR"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 1.25,
+    "ram_gb": 1.87
+  },
+  "source": "https://huggingface.co/mlx-community/GLM-OCR-4bit",
+  "license": "MIT",
+  "manifest_version": 1,
+  "pinned": true,
+  "notes": "MLXUI-authored (RSI/DelegateMoCBacklog.md MoC-1-4) -- catflow-mlx has no GLM-OCR manifest to port, so this was written from dots-ocr-4bit.json's shape (the honest template: both real OCR curated manifests in catflow-mlx use engine 'mlx-vlm', confirmed against src/catflow/catalog/registry.py -- 'mlx-ocr' does not exist as an engine there, despite RSI/DelegateMoCBacklog.md MoC-1-4's literal text naming it). resources.ram_gb is browser.json's ramGB (the 1.5x-heuristic gate figure), not a Python-measured number -- no such measurement exists for this model."
+}
