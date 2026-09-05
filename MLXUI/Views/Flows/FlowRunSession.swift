@@ -371,12 +371,13 @@ final class FlowRunSession {
 /// a time). `InstallManager` isn't `@Observable`, so we poll its `isInstalled` marker rather
 /// than observing `modelStates`.
 enum InstallPoller {
-    /// Await the `.installed` marker for `modelID`, polling every 0.5 s. Returns `false` on
-    /// a ~10-minute timeout or cancellation.
-    static func awaitInstalled(modelID: String, installManager: InstallManager) async -> Bool {
+    /// Await the `.installed` marker for `model`, polling every 0.5 s. Returns `false` on
+    /// a ~10-minute timeout or cancellation. MoC-5-FIX-1: takes the whole `ModelEntry` so
+    /// `isInstalled` can resolve the marker by repo.
+    static func awaitInstalled(model: ModelEntry, installManager: InstallManager) async -> Bool {
         var attempts = 0
         while !Task.isCancelled {
-            if installManager.isInstalled(modelID) { return true }
+            if installManager.isInstalled(model) { return true }
             attempts += 1
             if attempts > 1200 { return false }   // ~10 min
             try? await Task.sleep(for: .milliseconds(500))

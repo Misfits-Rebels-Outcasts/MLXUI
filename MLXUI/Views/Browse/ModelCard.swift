@@ -149,7 +149,7 @@ struct ModelCard: View {
             case .verifying:
                 Text("Verifying...").font(.caption2).foregroundStyle(.secondary)
             default:
-                if appState.installedModelIDs.contains(model.id) || appState.installManager.isInstalled(model.id) {
+                if appState.installedModelIDs.contains(model.id) || appState.installManager.isInstalled(model) {
                     Label("Installed", systemImage: "checkmark.circle.fill")
                         .font(.caption).foregroundStyle(.green)
                         .frame(maxWidth: .infinity).padding(.vertical, 5)

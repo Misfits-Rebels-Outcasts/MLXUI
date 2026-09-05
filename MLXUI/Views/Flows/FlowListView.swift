@@ -726,7 +726,7 @@ struct FlowListView: View {
         var succeeded = true
         for model in models {
             appState.installModel(model)
-            let installed = await InstallPoller.awaitInstalled(modelID: model.id,
+            let installed = await InstallPoller.awaitInstalled(model: model,
                                                                installManager: installManager)
             guard installed else { succeeded = false; break }
         }

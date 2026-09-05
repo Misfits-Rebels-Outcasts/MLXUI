@@ -11,7 +11,7 @@ import Foundation
 /// on-disk registry's shape or the `models/{id}/` layout for an existing install to migrate
 /// *away from* — the registry's `InstalledModel`/`InstalledModels` `Codable` shape is
 /// unchanged, and `AppState.loadInstalledModels()` only ever extracts the registry's *keys*
-/// before handing them to `InstallManager.loadInstalled(modelIDs:)`, which never reads the
+/// before handing them to `InstallManager.loadInstalled(modelIDs:catalog:)`, which never reads the
 /// registry file itself. So the done-when's three properties (lands every model still
 /// installed, a second run is a no-op, a genuinely stale entry is still dropped) are
 /// properties `loadInstalled` already had before this arc — this task pins them with a real
@@ -73,7 +73,7 @@ struct InstallManagerLaunchReconciliationTests {
         try FileManager.default.createDirectory(at: store.directory(forModelID: kept), withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: store.installedMarker(forModelID: kept).path, contents: nil)
 
-        let verified = manager.loadInstalled(modelIDs: Set(fixture.models.keys))
+        let verified = manager.loadInstalled(modelIDs: Set(fixture.models.keys), catalog: [])
         #expect(verified == [kept])
     }
 
@@ -89,8 +89,8 @@ struct InstallManagerLaunchReconciliationTests {
         FileManager.default.createFile(atPath: store.installedMarker(forModelID: kept).path, contents: nil)
 
         let ids: Set<String> = [kept, "mlx-community--Stale-Model"]
-        let first = manager.loadInstalled(modelIDs: ids)
-        let second = manager.loadInstalled(modelIDs: ids)
+        let first = manager.loadInstalled(modelIDs: ids, catalog: [])
+        let second = manager.loadInstalled(modelIDs: ids, catalog: [])
         #expect(first == second)
         #expect(first == [kept])
     }
@@ -109,7 +109,7 @@ struct InstallManagerLaunchReconciliationTests {
         }
         let fixture = installedModelsFixture(ids: ids)
 
-        let verified = manager.loadInstalled(modelIDs: Set(fixture.models.keys))
+        let verified = manager.loadInstalled(modelIDs: Set(fixture.models.keys), catalog: [])
         #expect(verified == Set(ids))
     }
 }

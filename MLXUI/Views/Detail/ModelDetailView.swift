@@ -203,7 +203,7 @@ struct ModelDetailView: View {
             case .verifying:
                 Text("Verifying...").font(.caption).foregroundStyle(.secondary)
             default:
-                if appState.installedModelIDs.contains(model.id) || appState.installManager.isInstalled(model.id) {
+                if appState.installedModelIDs.contains(model.id) || appState.installManager.isInstalled(model) {
                     HStack(spacing: 12) {
                         Button { appState.runModel(model) } label: {
                             Label("Run", systemImage: "play.fill").frame(minWidth: 100)

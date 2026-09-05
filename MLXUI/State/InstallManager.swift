@@ -159,15 +159,33 @@ final class InstallManager {
         return false
     }
 
-    func isInstalled(_ modelId: String) -> Bool {
-        if case .installed = modelStates[modelId] { return true }
-        return FileManager.default.fileExists(atPath: store.installedMarker(forModelID: modelId).path)
+    /// MoC-5-FIX-1 (`RSI/DelegateMoCBacklog.md`): the `.installed` marker is *written*
+    /// repo-keyed (`downloadModel` → `installedMarker(forHFModelID:)`), so it must be *read*
+    /// the same way. `isInstalled` therefore takes the whole `ModelEntry` — for a card whose
+    /// id equals its repo slug (38 of 39 shipping entries) this is byte-identical to the old
+    /// `forModelID:` lookup; for MoC-6's `Qwen3.5 9B Vision`, whose id deliberately diverges
+    /// from the repo slug it shares with the `llm` card, it is the difference between the
+    /// card reading "Installed" and it offering a 6 GB re-download of files already on disk.
+    func isInstalled(_ model: ModelEntry) -> Bool {
+        if case .installed = modelStates[model.id] { return true }
+        return FileManager.default.fileExists(
+            atPath: store.installedMarker(forHFModelID: model.hfModelId).path)
     }
 
-    func loadInstalled(modelIDs: Set<String>) -> Set<String> {
+    /// MoC-5-FIX-1: resolve each registry id to its HF repo via `catalog` before checking the
+    /// marker, matching where `downloadModel` wrote it. `catalog` can be empty — at launch
+    /// this runs from `AppState.init()` before `browser.json` is decoded, and
+    /// `AppState.loadBrowserData()` re-runs the reconciliation once the catalog exists. An id
+    /// absent from the catalog (pulled from `browser.json` in a later release, still on disk)
+    /// falls back to the card-keyed path, which is also its repo path since a single-card
+    /// entry always has `id == repoSlug(hfModelId)`.
+    func loadInstalled(modelIDs: Set<String>, catalog: [ModelEntry]) -> Set<String> {
+        let hfModelIDByCardID = Dictionary(
+            catalog.map { ($0.id, $0.hfModelId) }, uniquingKeysWith: { first, _ in first })
         var installed = Set<String>()
         for id in modelIDs {
-            let marker = store.installedMarker(forModelID: id)
+            let marker = hfModelIDByCardID[id].map { store.installedMarker(forHFModelID: $0) }
+                ?? store.installedMarker(forModelID: id)
             if FileManager.default.fileExists(atPath: marker.path) {
                 installed.insert(id)
                 modelStates[id] = .installed
@@ -433,25 +451,31 @@ final class InstallManager {
     // MARK: - Installed Registry
 
     func saveRegistry(installedIDs: Set<String>, browserData: BrowserData?) {
+        let catalog = browserData?.domains.flatMap { $0.allModels } ?? []
+        let entryByID = Dictionary(catalog.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var models: [String: InstalledModel] = [:]
         var found = 0
         for id in installedIDs {
-            let marker = store.installedMarker(forModelID: id)
+            // MoC-5-FIX-1: the marker, the model directory and the recorded `path` all resolve
+            // by repo — the slug the files were actually written under. `id` itself for a card
+            // not in the catalog (which is also its own repo path).
+            let repoID = entryByID[id].map { ModelStore.repoSlug(for: $0.hfModelId) } ?? id
+            let marker = store.installedMarker(forModelID: repoID)
             guard FileManager.default.fileExists(atPath: marker.path) else {
                 print("[Registry] Marker not found for \(id) at \(marker.path)")
                 continue
             }
             found += 1
-            let modelDir = store.directory(forModelID: id)
+            let modelDir = store.directory(forModelID: repoID)
             let totalSize = (try? FileManager.default.contentsOfDirectory(at: modelDir, includingPropertiesForKeys: [.fileSizeKey], options: .skipsHiddenFiles))?
                 .compactMap { try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize }
                 .reduce(0, +) ?? 0
 
-            let entry = browserData?.domains.flatMap { $0.allModels }.first(where: { $0.id == id })
+            let entry = entryByID[id]
             models[id] = InstalledModel(
                 installedAt: ISO8601DateFormatter().string(from: Date()),
                 variant: entry?.variants?.first?.hfModelId ?? entry?.hfModelId ?? id,
-                path: "models/\(id)",
+                path: "models/\(repoID)",
                 sizeBytes: totalSize
             )
         }

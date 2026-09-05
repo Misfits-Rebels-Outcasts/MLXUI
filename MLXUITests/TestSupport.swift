@@ -17,7 +17,11 @@ func makeEntry(
     speedTokensPerSec: Double? = nil,
     speedEstimated: Bool? = nil,
     communityDownloads: Int? = nil,
-    variants: [ModelVariant]? = nil
+    variants: [ModelVariant]? = nil,
+    hfRepo: String = "mlx-community/Test",
+    // Defaults to the shared fixture repo so existing callers keep their "two cards, one
+    // repo" behaviour; MoC-5-FIX tests pass a distinct value to exercise repo-keyed paths.
+    hfModelId: String = "mlx-community/Test-4bit"
 ) -> ModelEntry {
     ModelEntry(
         id: id,
@@ -30,8 +34,8 @@ func makeEntry(
         format: "mlx",
         platforms: ["macos"],
         minMacOSVersion: nil,
-        hfRepo: "mlx-community/Test",
-        hfModelId: "mlx-community/Test-4bit",
+        hfRepo: hfRepo,
+        hfModelId: hfModelId,
         ramGB: ramGB,
         downloadSizeGB: downloadSizeGB,
         contextWindow: 4096,

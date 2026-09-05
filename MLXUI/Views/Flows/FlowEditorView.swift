@@ -700,7 +700,7 @@ struct FlowEditorView: View {
         Task {
             for model in models {
                 appState.installModel(model)
-                _ = await InstallPoller.awaitInstalled(modelID: model.id,
+                _ = await InstallPoller.awaitInstalled(model: model,
                                                        installManager: appState.installManager)
             }
             session.isInstalling = false

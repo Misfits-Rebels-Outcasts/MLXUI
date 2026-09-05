@@ -72,6 +72,13 @@ struct ModelStoreRepoKeyingTests {
     /// itself — a marker written where `ModelStore` says the model lives is what
     /// `isInstalled`/`loadInstalled` actually check, using the injectable `store` (MoC-5-1),
     /// not the real `Application Support/AI Browser/`.
+    ///
+    /// **MoC-5-FIX-1: this test cannot catch the card-keyed-read-path defect.** It uses a
+    /// card whose `id` equals its own repo slug (`hfModelId` = `mlx-community/Test-Model-4bit`
+    /// → slug `mlx-community--Test-Model-4bit` = `id`), so the card-keyed and repo-keyed
+    /// marker paths coincide and it passes whichever way the read path resolves. The
+    /// divergent case — two cards, one repo, one `id` ≠ its repo slug — is covered by
+    /// `InstallManagerRepoReadPathTests`.
     @Test func installManagerFindsAMarkerWrittenAtTheModelStorePath() throws {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("moc5-\(UUID().uuidString)", isDirectory: true)
@@ -79,14 +86,16 @@ struct ModelStoreRepoKeyingTests {
         let store = ModelStore(baseDirectory: tempDir)
         let manager = InstallManager(store: store)
 
-        let cardID = "mlx-community--Test-Model-4bit"
-        let modelDir = store.directory(forModelID: cardID)
+        let entry = makeEntry(id: "mlx-community--Test-Model-4bit",
+                              hfModelId: "mlx-community/Test-Model-4bit")
+        let modelDir = store.directory(forHFModelID: entry.hfModelId)
         try FileManager.default.createDirectory(at: modelDir, withIntermediateDirectories: true)
-        FileManager.default.createFile(atPath: store.installedMarker(forModelID: cardID).path, contents: nil)
+        FileManager.default.createFile(
+            atPath: store.installedMarker(forHFModelID: entry.hfModelId).path, contents: nil)
 
-        #expect(manager.isInstalled(cardID))
-        let verified = manager.loadInstalled(modelIDs: [cardID])
-        #expect(verified.contains(cardID))
+        #expect(manager.isInstalled(entry))
+        let verified = manager.loadInstalled(modelIDs: [entry.id], catalog: [entry])
+        #expect(verified.contains(entry.id))
     }
 
     @Test func installManagerReportsNotInstalledWhenMarkerMissing() throws {
@@ -96,6 +105,7 @@ struct ModelStoreRepoKeyingTests {
         let store = ModelStore(baseDirectory: tempDir)
         let manager = InstallManager(store: store)
 
-        #expect(!manager.isInstalled("mlx-community--Never-Installed-4bit"))
+        #expect(!manager.isInstalled(makeEntry(id: "mlx-community--Never-Installed-4bit",
+                                               hfModelId: "mlx-community/Never-Installed-4bit")))
     }
 }

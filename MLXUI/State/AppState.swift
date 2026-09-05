@@ -383,6 +383,12 @@ final class AppState {
             let decoder = JSONDecoder()
             browserData = try decoder.decode(BrowserData.self, from: data)
             recomputeClaimableModelIDs()
+            // MoC-5-FIX-1: `loadInstalledModels()` first ran in `init()` before the catalog
+            // existed, so any card whose on-disk directory is repo-keyed away from its own id
+            // (`Qwen3.5 9B Vision`, sharing the `Qwen3.5 9B` download) was checked at the
+            // wrong path and dropped. Re-run now that the catalog can map id → repo; a
+            // second pass is a no-op for every card that was already resolved (MoC-5-3).
+            loadInstalledModels()
             loadFilters()
         } catch let DecodingError.keyNotFound(key, context) {
             let path = context.codingPath.map { $0.stringValue }.joined(separator: " → ")
@@ -428,7 +434,12 @@ final class AppState {
         installedModels = try? JSONDecoder().decode(InstalledModels.self, from: data)
         if let models = installedModels?.models {
             print("[AppState] Loaded \(models.count) models from registry: \(models.keys)")
-            installedModelIDs = installManager.loadInstalled(modelIDs: Set(models.keys))
+            // MoC-5-FIX-1: at launch this runs from `init()` before `browserData` is decoded,
+            // so `catalog` is empty and every id resolves card-keyed (correct for the 38
+            // single-card entries). `loadBrowserData()` re-runs this once the catalog exists,
+            // which is when a shared-repo card (`Qwen3.5 9B Vision`) gets resolved by repo.
+            let catalog = browserData?.domains.flatMap { $0.allModels } ?? []
+            installedModelIDs = installManager.loadInstalled(modelIDs: Set(models.keys), catalog: catalog)
             print("[AppState] Verified \(installedModelIDs.count) still on disk")
         }
     }
