@@ -163,7 +163,7 @@ struct CatFlowCatalogBridgeTests {
             Issue.record("SAM Base should resolve: \(reason)")
             _ = display
         }
-        #expect(CatalogBridge.entries.count == 17)
+        #expect(CatalogBridge.entries.count == 18)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
@@ -249,5 +249,41 @@ struct CatFlowCatalogBridgeTests {
         #expect(speed.min == 0.5)
         #expect(speed.max == 2.0)
         #expect(speed.defaultValue == .number(1.0))
+    }
+
+    // MARK: - MoC-2-4: Qwen3.5 9B joins the bridge, llmModels' last slot
+
+    @Test func qwen35NineBResolvesAsSame() throws {
+        let catalog = try loadCatalog()
+        let entry = try #require(CatalogBridge.entry(for: "Qwen3.5 9B"))
+        #expect(entry.pinnedID == "mlx-community/Qwen3.5-9B-MLX-4bit")
+        #expect(entry.candidates == ["mlx-community/Qwen3.5-9B-MLX-4bit"])
+        #expect(entry.equivalence == .same)
+        #expect(entry.manifestFile == "qwen3.5-9b-4bit.json")
+        switch CatalogBridge.resolve("Qwen3.5 9B", catalog: catalog) {
+        case .runnable(let model, let equivalence, let note):
+            #expect(model.hfModelId == "mlx-community/Qwen3.5-9B-MLX-4bit")
+            #expect(model.runnerKind == .llm)
+            #expect(equivalence == .same)
+            #expect(note == nil)
+        case .notRunnable(let display, let reason):
+            Issue.record("\(display) should resolve: \(reason)")
+        }
+        #expect(CatalogBridge.entries.count == 18)
+    }
+
+    @Test func qwen35NineBManifestShips() throws {
+        let data = try Data(contentsOf: manifestURL("qwen3.5-9b-4bit.json"))
+        let manifest = try JSONDecoder().decode(CuratedManifest.self, from: data)
+        #expect(manifest.id == "mlx-community/Qwen3.5-9B-MLX-4bit")
+        #expect(manifest.display == "Qwen3.5 9B")
+        let temperature = try #require(manifest.settings["temperature"])
+        #expect(temperature.min == 0.0)
+        #expect(temperature.max == 2.0)
+        #expect(temperature.defaultValue == .number(0.6))
+        let maxTokens = try #require(manifest.settings["max_tokens"])
+        #expect(maxTokens.min == 1)
+        #expect(maxTokens.max == 32768)
+        #expect(maxTokens.defaultValue == .number(2048))
     }
 }

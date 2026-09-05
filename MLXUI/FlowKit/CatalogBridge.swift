@@ -55,7 +55,7 @@ nonisolated enum CatalogBridgeResolution: Sendable, Equatable {
 /// the curated manifest (`Resources/CatFlow/models/`); only the *weights* are substituted.
 nonisolated enum CatalogBridge {
 
-    /// The seventeen display names the bridge runs. **`SAM Base`** joined 2026-08-27 (CFM-R15-1):
+    /// The eighteen display names the bridge runs. **`SAM Base`** joined 2026-08-27 (CFM-R15-1):
     /// hazard H2 / `CFM-R13-6` was **ruled option (1)** — a headless default — and the bridge
     /// maps the reference's own `SAM Base` id onto the one installable segmentation entry,
     /// `sam3-4bit`, as a `.substitute` so the substitution is shown on the row, never hidden.
@@ -148,8 +148,9 @@ nonisolated enum CatalogBridge {
             manifestFile: "dots-ocr-4bit.json"),
         // MoC-1-4 (RSI/DelegateMoCBacklog.md) — GLM-OCR. No reference manifest exists in
         // catflow-mlx, so `glm-ocr-4bit.json` is MLXUI-authored (see its own "notes"). Not
-        // added to `taskModels["OCR"]` — Decision C is unruled, so it stays picker-reachable
-        // but never the default seed (CFM-R14-2: pools order, never filter).
+        // added to `taskModels["OCR"]` — Decision C was RULED 2026-09-05: do not promote.
+        // Stays picker-reachable but never the default seed (CFM-R14-2: pools order, never
+        // filter).
         BridgeEntry(
             display: "GLM-OCR",
             pinnedID: "mlx-community/GLM-OCR-4bit",
@@ -190,6 +191,17 @@ nonisolated enum CatalogBridge {
             candidates: ["mlx-community/sam3-4bit"],
             equivalence: .substitute,
             manifestFile: "sam-base.json"),
+        // MoC-2-4 (RSI/DelegateMoCBacklog.md) — Qwen3.5 9B, the llm-typed (text-tower) entry
+        // only (Decision A). No reference manifest exists in catflow-mlx, so
+        // `qwen3.5-9b-4bit.json` is MLXUI-authored from `qwen3-8b-4bit.json`'s shape (see its
+        // own "notes"). Appended to `taskModels["llmModels"]` last, per Decision D as ruled —
+        // reachable from every text row's Model menu, never the default seed.
+        BridgeEntry(
+            display: "Qwen3.5 9B",
+            pinnedID: "mlx-community/Qwen3.5-9B-MLX-4bit",
+            candidates: ["mlx-community/Qwen3.5-9B-MLX-4bit"],
+            equivalence: .same,
+            manifestFile: "qwen3.5-9b-4bit.json"),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {

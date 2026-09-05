@@ -132,8 +132,15 @@ nonisolated enum TaskModels {
         "Denoise": ["Z-Image Turbo"],
     ]
 
+    // MoC-2-4 (RSI/DelegateMoCBacklog.md): "Qwen3.5 9B" appended last, per Decision D as ruled
+    // 2026-09-05 — reachable from every text row's Model menu, but `defaultModel(forTask:)`
+    // walks this array in order and returns the first name that resolves, so appending (not
+    // prepending) keeps today's seed ("Ministral 3B") unmoved. Do not reorder this array
+    // without re-reading that ruling — moving a name toward the front changes what fourteen
+    // task rows and three gallery flows actually run.
     private static let llmModels = ["Ministral 3B", "Llama 3.1 8B", "Qwen3 8B",
-                                    "Qwen2.5 14B", "Ternary-Bonsai 4B", "Ternary-Bonsai 8B"]
+                                    "Qwen2.5 14B", "Ternary-Bonsai 4B", "Ternary-Bonsai 8B",
+                                    "Qwen3.5 9B"]
 
     /// A task's model pool (display names) — preference ordering for the seed, nothing more.
     static func models(forTask task: String) -> [String] {
