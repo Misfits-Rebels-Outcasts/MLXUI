@@ -55,7 +55,7 @@ nonisolated enum CatalogBridgeResolution: Sendable, Equatable {
 /// the curated manifest (`Resources/CatFlow/models/`); only the *weights* are substituted.
 nonisolated enum CatalogBridge {
 
-    /// The eighteen display names the bridge runs. **`SAM Base`** joined 2026-08-27 (CFM-R15-1):
+    /// The nineteen display names the bridge runs. **`SAM Base`** joined 2026-08-27 (CFM-R15-1):
     /// hazard H2 / `CFM-R13-6` was **ruled option (1)** — a headless default — and the bridge
     /// maps the reference's own `SAM Base` id onto the one installable segmentation entry,
     /// `sam3-4bit`, as a `.substitute` so the substitution is shown on the row, never hidden.
@@ -202,6 +202,19 @@ nonisolated enum CatalogBridge {
             candidates: ["mlx-community/Qwen3.5-9B-MLX-4bit"],
             equivalence: .same,
             manifestFile: "qwen3.5-9b-4bit.json"),
+        // MoC-4-4 (RSI/DelegateMoCBacklog.md) — Qwen3 Reranker 0.6B, the model on MoC-3's
+        // seam. "Qwen3 Reranker 0.6B" is already the pool string in
+        // `taskModels["Rerank"]` — used exactly, no pool edit (Decision D doesn't apply to
+        // this phase). The manifest could not be copied verbatim this session (the live
+        // catflow-mlx repo wasn't reachable — see the manifest's own "notes" and the
+        // MoC-4-4 journal); reconstructed from the backlog's explicit field-by-field
+        // citations instead.
+        BridgeEntry(
+            display: "Qwen3 Reranker 0.6B",
+            pinnedID: "mlx-community/Qwen3-Reranker-0.6B-4bit",
+            candidates: ["mlx-community/Qwen3-Reranker-0.6B-4bit"],
+            equivalence: .same,
+            manifestFile: "qwen3-reranker-0.6b-4bit.json"),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {
