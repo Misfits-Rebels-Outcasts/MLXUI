@@ -63,7 +63,7 @@ struct CatFlowChatModuleTests {
     /// guard for appending `ChatModule.self` to `installedModules` (it must stay last).
     @Test func catalogResolutionUnchangedByChatModuleAppend() throws {
         let entries = try loadBundledCatalogEntries()
-        #expect(entries.count == 36, "bundled catalog drifted: \(entries.count) entries")
+        #expect(entries.count == 37, "bundled catalog drifted: \(entries.count) entries")
 
         let withChat = registry(includingChat: true)
         let withoutChat = registry(includingChat: false)
@@ -83,8 +83,8 @@ struct CatFlowChatModuleTests {
             }
             checked += 1
         }
-        #expect(checked == 36)
-        #expect(llmChecked == 9)
+        #expect(checked == 37)
+        #expect(llmChecked == 10)
     }
 
     // MARK: - Helpers
