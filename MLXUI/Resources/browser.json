@@ -945,6 +945,35 @@
           ],
           "descriptionSource": "allenai/olmOCR-2-7B-1025",
           "summary": "Full BF16 version of olmOCR-2-7B-1025-FP8."
+        },
+        {
+          "id": "mlx-community--GLM-OCR-4bit",
+          "family": "GLM",
+          "displayName": "GLM-OCR",
+          "paramSize": "0.5B",
+          "paramCountB": 0.5,
+          "modelType": "ocr",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/GLM-OCR-4bit",
+          "ramGB": 1.87,
+          "downloadSizeGB": 1.25,
+          "contextWindow": null,
+          "license": "mit",
+          "licenseUrl": null,
+          "architecture": "GlmOcrForConditionalGeneration",
+          "taskTags": [
+            "image-text-to-text"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": true
         }
       ]
     },
