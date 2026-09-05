@@ -109,7 +109,7 @@ struct ModelCard: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Button {
-                        appState.cancelInstall(model.id)
+                        appState.cancelInstall(model)
                     } label: {
                         Text("Cancel")
                             .font(.caption2)

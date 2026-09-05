@@ -85,20 +85,38 @@ final class InstallManager {
         return Double(free ?? 0) / 1_000_000_000.0
     }
 
-    func cancel(_ modelId: String) {
+    func cancel(_ model: ModelEntry) {
+        let modelId = model.id
         downloadTasks[modelId]?.cancel()
         downloadTasks[modelId] = nil
         activeTasks[modelId]?.forEach { $0.cancel() }
         activeTasks[modelId] = nil
         modelStates[modelId] = .idle
-        let downloadDir = store.downloadDirectory(forModelID: modelId)
+        // MoC-5-2: the download's scratch directory is repo-keyed (see `downloadModel`),
+        // matching where it was actually written.
+        let downloadDir = store.downloadDirectory(forHFModelID: model.hfModelId)
         try? FileManager.default.removeItem(at: downloadDir)
     }
 
-    func uninstall(_ modelId: String) {
-        let modelDir = store.directory(forModelID: modelId)
+    /// MoC-5-2: reference-counted uninstall. `catalog` + `installedModelIDs` (both readily
+    /// available at every real call site — `AppState` always has the live catalog and its
+    /// own installed-ids set) are what let this be answered from the catalog alone, per the
+    /// backlog's own bar: deleting the repo directory because *this* card was removed would
+    /// break every other still-installed card naming the same repo.
+    func uninstall(_ model: ModelEntry, catalog: [ModelEntry], installedModelIDs: Set<String>) {
+        modelStates[model.id] = .idle
+        let repo = ModelStore.repoSlug(for: model.hfModelId)
+        let anotherInstalledCardSharesThisRepo = catalog.contains { other in
+            other.id != model.id
+                && installedModelIDs.contains(other.id)
+                && ModelStore.repoSlug(for: other.hfModelId) == repo
+        }
+        guard !anotherInstalledCardSharesThisRepo else {
+            print("[Install] Uninstall \(model.id): another installed card shares \(repo) — directory kept")
+            return
+        }
+        let modelDir = store.directory(forHFModelID: model.hfModelId)
         try? FileManager.default.removeItem(at: modelDir)
-        modelStates[modelId] = .idle
     }
 
     func isError(_ modelId: String) -> Bool {
@@ -166,8 +184,9 @@ final class InstallManager {
                 modelStates[modelId] = .downloading(progress: 0, downloaded: 0, total: 1)
             }
 
-            // 2. Create download directory
-            let downloadDir = store.downloadDirectory(forModelID: modelId)
+            // 2. Create download directory. MoC-5-2: repo-keyed (not card-keyed) so two
+            // cards naming the same repo (MoC-6) land in the same place.
+            let downloadDir = store.downloadDirectory(forHFModelID: hfModelId)
             if FileManager.default.fileExists(atPath: downloadDir.path) {
                 try FileManager.default.removeItem(at: downloadDir)
             }
@@ -263,14 +282,16 @@ final class InstallManager {
                 return
             }
 
-            // 5. Atomic move
-            let modelDir = store.directory(forModelID: modelId)
+            // 5. Atomic move. MoC-5-2: repo-keyed final directory and marker — this is the
+            // one place a model's actual weights land, so it must match `isInstalled`/
+            // `uninstall`'s repo-path resolution.
+            let modelDir = store.directory(forHFModelID: hfModelId)
             if FileManager.default.fileExists(atPath: modelDir.path) {
                 try FileManager.default.removeItem(at: modelDir)
             }
             try FileManager.default.copyItem(at: downloadDir, to: modelDir)
             try FileManager.default.removeItem(at: downloadDir)
-            FileManager.default.createFile(atPath: store.installedMarker(forModelID: modelId).path, contents: nil)
+            FileManager.default.createFile(atPath: store.installedMarker(forHFModelID: hfModelId).path, contents: nil)
 
             print("[Install] Success: \(model.displayName)")
             await MainActor.run {

@@ -127,10 +127,20 @@ nonisolated struct ModelStore: Sendable {
         downloadsDirectory.appendingPathComponent(id, isDirectory: true)
     }
 
+    /// MoC-5-2: the repo-keyed counterpart of `downloadDirectory(forModelID:)`.
+    func downloadDirectory(forHFModelID hfModelId: String) -> URL {
+        downloadDirectory(forModelID: Self.repoSlug(for: hfModelId))
+    }
+
     /// The `.installed` marker — the atomic "install succeeded" signal the launch
     /// reconciliation checks the registry against.
     func installedMarker(forModelID id: String) -> URL {
         directory(forModelID: id).appendingPathComponent(".installed")
+    }
+
+    /// MoC-5-2: the repo-keyed counterpart of `installedMarker(forModelID:)`.
+    func installedMarker(forHFModelID hfModelId: String) -> URL {
+        directory(forHFModelID: hfModelId).appendingPathComponent(".installed")
     }
 
     /// A loose file directly under the base directory (demo output and similar).

@@ -444,13 +444,17 @@ final class AppState {
         }
     }
 
-    func cancelInstall(_ modelId: String) {
-        installManager.cancel(modelId)
+    func cancelInstall(_ model: ModelEntry) {
+        installManager.cancel(model)
     }
 
-    func uninstallModel(_ modelId: String) {
-        installManager.uninstall(modelId)
-        installedModelIDs.remove(modelId)
+    /// MoC-5-2: reference-counted — `installManager.uninstall` derives whether another
+    /// installed card shares this model's HF repo from the live catalog + the current
+    /// installed-ids set, both already at hand here.
+    func uninstallModel(_ model: ModelEntry) {
+        let catalog = browserData?.domains.flatMap { $0.allModels } ?? []
+        installManager.uninstall(model, catalog: catalog, installedModelIDs: installedModelIDs)
+        installedModelIDs.remove(model.id)
         saveInstalledModels()
     }
 
