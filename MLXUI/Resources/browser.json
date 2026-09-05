@@ -966,14 +966,41 @@
           "contextWindow": null,
           "license": "mit",
           "licenseUrl": null,
+          "description": "GLM-OCR: a 0.5 B OCR-specialised vision-language model for complex document understanding, built on the GLM-V encoder–decoder architecture. It pairs a CogViT visual encoder with a lightweight cross-modal connector (efficient token downsampling) and a GLM-0.5B language decoder, trained with Multi-Token Prediction (MTP) loss and full-task reinforcement learning. A two-stage pipeline (PP-DocLayout-V3 layout analysis, then parallel recognition) targets robust performance on complex tables, code-heavy documents, seals, and other real-world layouts, and its own reported benchmarks put it at the top of OmniDocBench V1.5 among compact OCR VLMs — not independently verified here (see the RSI smoke checklist). Licensed MIT.\n\nThis is the mlx-community MLX-4bit conversion (mlx-vlm); the app runs it through the shared OCRModule → VLMStage path (no Apple Vision).",
           "architecture": "GlmOcrForConditionalGeneration",
+          "languages": [
+            "zh",
+            "en",
+            "fr",
+            "es",
+            "ru",
+            "de",
+            "ja",
+            "ko"
+          ],
+          "lastUpdated": "2026-02-03",
           "taskTags": [
             "image-text-to-text"
           ],
           "benchmarks": null,
           "speedTokensPerSec": null,
           "speedHardware": null,
-          "speedEstimated": true
+          "speedEstimated": true,
+          "communityDownloads": 548,
+          "communityLikes": 4,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 1.87,
+              "downloadSizeGB": 1.25,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/GLM-OCR-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "zai-org/GLM-OCR",
+          "summary": "GLM-OCR: a 0.5B OCR-specialised VLM for complex document understanding (MIT)"
         }
       ]
     },
