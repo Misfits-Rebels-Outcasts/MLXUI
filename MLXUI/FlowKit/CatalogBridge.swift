@@ -205,10 +205,9 @@ nonisolated enum CatalogBridge {
         // MoC-4-4 (RSI/DelegateMoCBacklog.md) — Qwen3 Reranker 0.6B, the model on MoC-3's
         // seam. "Qwen3 Reranker 0.6B" is already the pool string in
         // `taskModels["Rerank"]` — used exactly, no pool edit (Decision D doesn't apply to
-        // this phase). The manifest could not be copied verbatim this session (the live
-        // catflow-mlx repo wasn't reachable — see the manifest's own "notes" and the
-        // MoC-4-4 journal); reconstructed from the backlog's explicit field-by-field
-        // citations instead.
+        // this phase). The manifest is a byte-identical copy of
+        // `catflow-mlx/models/curated/qwen3-reranker-0.6b-4bit.json` (MoC-FIX-3 corrected an
+        // earlier reconstruction made under the mistaken belief that repo wasn't reachable).
         BridgeEntry(
             display: "Qwen3 Reranker 0.6B",
             pinnedID: "mlx-community/Qwen3-Reranker-0.6B-4bit",

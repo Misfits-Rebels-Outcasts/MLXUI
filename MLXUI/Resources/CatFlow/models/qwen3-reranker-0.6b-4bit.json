@@ -13,8 +13,8 @@
     "ram_gb": 0.4
   },
   "source": "https://huggingface.co/mlx-community/Qwen3-Reranker-0.6B-4bit",
+  "checksum": "sha256:1156952dbaedf2084ee41d66fcabf3c09c9561b8d3db4f46f528c079f117d085",
   "license": "Apache-2.0",
   "manifest_version": 1,
-  "pinned": true,
-  "notes": "Not a verbatim copy -- the live catflow-mlx sibling repo was not reachable on this machine this session (RSI/DelegateMoCBacklog.md MoC-4-4/MoC-3-3's journals note the same limitation), so this reconstructs the fields the backlog explicitly cites from having read the real file: engine 'mlx-rerank-causal' (Decision B, ruled 2026-09-05), settings: {} (query= and top_k= are parsed from the row's settings, not bound through a schema), and resources {disk_gb: 0.35, ram_gb: 0.4} -- deliberately NOT browser.json's ramGB (0.52, the 1.5x-heuristic gate figure); both are correct in their own file per the backlog's own instruction not to reconcile them. No checksum -- CuratedManifest.swift does not decode one, and inventing a hash value would be actively wrong rather than merely incomplete."
+  "pinned": true
 }
