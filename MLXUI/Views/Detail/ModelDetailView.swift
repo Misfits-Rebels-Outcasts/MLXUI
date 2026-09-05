@@ -160,7 +160,7 @@ struct ModelDetailView: View {
                     Text("\(formatBytes(downloaded)) / \(formatBytes(total))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Button("Cancel") { appState.cancelInstall(model.id) }
+                    Button("Cancel") { appState.cancelInstall(model) }
                         .buttonStyle(.plain)
                         .font(.caption)
                         .foregroundStyle(.red)
@@ -172,7 +172,7 @@ struct ModelDetailView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     Button {
-                        appState.uninstallModel(model.id)
+                        appState.uninstallModel(model)
                     } label: {
                         Label("Uninstall", systemImage: "trash").frame(minWidth: 100)
                     }
@@ -209,7 +209,7 @@ struct ModelDetailView: View {
                             Label("Run", systemImage: "play.fill").frame(minWidth: 100)
                         }
                         .buttonStyle(.borderedProminent)
-                        Button { appState.uninstallModel(model.id) } label: {
+                        Button { appState.uninstallModel(model) } label: {
                             Label("Uninstall", systemImage: "trash").frame(minWidth: 100)
                         }
                         .buttonStyle(.bordered)

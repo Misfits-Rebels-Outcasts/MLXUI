@@ -52,7 +52,9 @@ struct SidebarView: View {
                         .buttonStyle(.plain)
                         .contextMenu {
                             Button {
-                                appState.uninstallModel(id)
+                                if let model = installedModel(for: id) {
+                                    appState.uninstallModel(model)
+                                }
                             } label: {
                                 Label("Uninstall", systemImage: "trash")
                             }

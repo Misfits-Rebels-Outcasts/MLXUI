@@ -22,18 +22,30 @@ enum InstallState: Equatable {
 
 @Observable
 final class InstallManager {
+    /// MoC-5-1: injectable so tests can point storage at a temp directory rather than the
+    /// real `Application Support/AI Browser/`. `ModelStore` stays the one place per-model
+    /// paths are built — every path below routes through it, never hand-rolled here.
+    private let store: ModelStore
     private let modelsDir: URL
     private let downloadsDir: URL
     private let installedURL: URL
     private let session: URLSession
-    private var activeTasks: [String: [URLSessionDownloadTask]] = [:]
-    private var downloadTasks: [String: Task<Void, Never>] = [:]
+    /// MoC-5-4: download tracking is keyed by **repo** slug, not card id — one physical
+    /// download per repo, however many cards are watching it. `modelStates` (below) stays
+    /// card-keyed for the UI; `setState(_:forRepo:)` fans a repo-level update out to every
+    /// card in `cardIDsByRepo[repo]`.
+    private var downloadTasksByRepo: [String: Task<Void, Never>] = [:]
+    /// Every catalog card id currently interested in a repo — refreshed on each `install`
+    /// call. Lets one download's progress reach every card naming the same repo, and lets a
+    /// second `install` for a sibling card join an in-flight download instead of starting a
+    /// duplicate.
+    private var cardIDsByRepo: [String: Set<String>] = [:]
 
     var modelStates: [String: InstallState] = [:]
     var onInstallComplete: ((String) -> Void)?
 
-    init() {
-        let store = ModelStore.shared
+    init(store: ModelStore = .shared) {
+        self.store = store
         modelsDir = store.modelsDirectory
         downloadsDir = store.downloadsDirectory
         installedURL = store.installedRegistryURL
@@ -58,19 +70,35 @@ final class InstallManager {
         guard !modelStates.keys.contains(model.id) || modelStates[model.id] == .idle
                 || isError(model.id) || isNeedsAuth(model.id) else { return }
 
+        let repo = ModelStore.repoSlug(for: model.hfModelId)
+        cardIDsByRepo[repo, default: []].insert(model.id)
+
+        // MoC-5-4: another card is already downloading this repo — join it rather than
+        // starting a duplicate. Mirror whichever state that download is currently in;
+        // every future update for `repo` fans out to every id in `cardIDsByRepo[repo]`,
+        // this one now included.
+        if downloadTasksByRepo[repo] != nil {
+            if let watcherState = cardIDsByRepo[repo]?
+                .first(where: { $0 != model.id })
+                .flatMap({ modelStates[$0] }) {
+                modelStates[model.id] = watcherState
+            }
+            return
+        }
+
         // Pre-flight: refuse to start a download that can't fit on disk, rather than
         // failing partway through after writing gigabytes of temp files.
         if let diskError = DiskSpace.preflightError(
             downloadSizeGB: model.downloadSizeGB,
             availableDiskGB: currentAvailableDiskGB()
         ) {
-            modelStates[model.id] = .error(diskError, canRetry: true)
+            setState(.error(diskError, canRetry: true), forRepo: repo)
             return
         }
 
-        modelStates[model.id] = .resolving
-        let task = Task { await downloadModel(model, onComplete: onComplete) }
-        downloadTasks[model.id] = task
+        setState(.resolving, forRepo: repo)
+        let task = Task { await downloadModel(model, repo: repo, onComplete: onComplete) }
+        downloadTasksByRepo[repo] = task
     }
 
     /// Free space (GB) on the volume that holds the models directory. Measured fresh at
@@ -81,20 +109,44 @@ final class InstallManager {
         return Double(free ?? 0) / 1_000_000_000.0
     }
 
-    func cancel(_ modelId: String) {
-        downloadTasks[modelId]?.cancel()
-        downloadTasks[modelId] = nil
-        activeTasks[modelId]?.forEach { $0.cancel() }
-        activeTasks[modelId] = nil
-        modelStates[modelId] = .idle
-        let downloadDir = downloadsDir.appendingPathComponent(modelId)
+    /// MoC-5-4: writes `state` into every card currently watching `repo` — one download's
+    /// progress reaching every card that shares it.
+    private func setState(_ state: InstallState, forRepo repo: String) {
+        for cardID in cardIDsByRepo[repo] ?? [] {
+            modelStates[cardID] = state
+        }
+    }
+
+    func cancel(_ model: ModelEntry) {
+        let repo = ModelStore.repoSlug(for: model.hfModelId)
+        downloadTasksByRepo[repo]?.cancel()
+        downloadTasksByRepo[repo] = nil
+        setState(.idle, forRepo: repo)
+        // MoC-5-2: the download's scratch directory is repo-keyed (see `downloadModel`),
+        // matching where it was actually written.
+        let downloadDir = store.downloadDirectory(forHFModelID: model.hfModelId)
         try? FileManager.default.removeItem(at: downloadDir)
     }
 
-    func uninstall(_ modelId: String) {
-        let modelDir = modelsDir.appendingPathComponent(modelId)
+    /// MoC-5-2: reference-counted uninstall. `catalog` + `installedModelIDs` (both readily
+    /// available at every real call site — `AppState` always has the live catalog and its
+    /// own installed-ids set) are what let this be answered from the catalog alone, per the
+    /// backlog's own bar: deleting the repo directory because *this* card was removed would
+    /// break every other still-installed card naming the same repo.
+    func uninstall(_ model: ModelEntry, catalog: [ModelEntry], installedModelIDs: Set<String>) {
+        modelStates[model.id] = .idle
+        let repo = ModelStore.repoSlug(for: model.hfModelId)
+        let anotherInstalledCardSharesThisRepo = catalog.contains { other in
+            other.id != model.id
+                && installedModelIDs.contains(other.id)
+                && ModelStore.repoSlug(for: other.hfModelId) == repo
+        }
+        guard !anotherInstalledCardSharesThisRepo else {
+            print("[Install] Uninstall \(model.id): another installed card shares \(repo) — directory kept")
+            return
+        }
+        let modelDir = store.directory(forHFModelID: model.hfModelId)
         try? FileManager.default.removeItem(at: modelDir)
-        modelStates[modelId] = .idle
     }
 
     func isError(_ modelId: String) -> Bool {
@@ -109,13 +161,13 @@ final class InstallManager {
 
     func isInstalled(_ modelId: String) -> Bool {
         if case .installed = modelStates[modelId] { return true }
-        return FileManager.default.fileExists(atPath: modelsDir.appendingPathComponent(modelId).appendingPathComponent(".installed").path)
+        return FileManager.default.fileExists(atPath: store.installedMarker(forModelID: modelId).path)
     }
 
     func loadInstalled(modelIDs: Set<String>) -> Set<String> {
         var installed = Set<String>()
         for id in modelIDs {
-            let marker = modelsDir.appendingPathComponent(id).appendingPathComponent(".installed")
+            let marker = store.installedMarker(forModelID: id)
             if FileManager.default.fileExists(atPath: marker.path) {
                 installed.insert(id)
                 modelStates[id] = .installed
@@ -129,7 +181,10 @@ final class InstallManager {
 
     // MARK: - Download Logic
 
-    private func downloadModel(_ model: ModelEntry, onComplete: @escaping (String) -> Void) async {
+    /// `repo` is the slug `install` already computed — threaded through rather than
+    /// recomputed, and used for every `modelStates` update (`setState(_:forRepo:)`) so a
+    /// download started by one card reaches every card watching the same repo (MoC-5-4).
+    private func downloadModel(_ model: ModelEntry, repo: String, onComplete: @escaping (String) -> Void) async {
         let modelId = model.id
         let hfModelId = model.hfModelId
         let variant = model.variants?.first?.hfModelId ?? hfModelId
@@ -141,7 +196,8 @@ final class InstallManager {
             let files = try await resolveFiles(for: variant)
             guard !files.isEmpty else {
                 await MainActor.run {
-                    modelStates[modelId] = .error("No downloadable files found", canRetry: false)
+                    setState(.error("No downloadable files found", canRetry: false), forRepo: repo)
+                    downloadTasksByRepo[repo] = nil
                 }
                 return
             }
@@ -159,11 +215,12 @@ final class InstallManager {
             print("[Install] Resolved \(files.count) files" + (companion.map { " + \($0)" } ?? ""))
 
             await MainActor.run {
-                modelStates[modelId] = .downloading(progress: 0, downloaded: 0, total: 1)
+                setState(.downloading(progress: 0, downloaded: 0, total: 1), forRepo: repo)
             }
 
-            // 2. Create download directory
-            let downloadDir = downloadsDir.appendingPathComponent(modelId)
+            // 2. Create download directory. MoC-5-2: repo-keyed (not card-keyed) so two
+            // cards naming the same repo (MoC-6) land in the same place.
+            let downloadDir = store.downloadDirectory(forHFModelID: hfModelId)
             if FileManager.default.fileExists(atPath: downloadDir.path) {
                 try FileManager.default.removeItem(at: downloadDir)
             }
@@ -193,7 +250,8 @@ final class InstallManager {
                 let localName = entry.subdir + file.filename
                 guard let downloadURL = buildDownloadURL(model: entry.repo, filename: file.filename) else {
                     await MainActor.run {
-                        modelStates[modelId] = .error("Invalid URL for \(file.filename)", canRetry: false)
+                        setState(.error("Invalid URL for \(file.filename)", canRetry: false), forRepo: repo)
+                        downloadTasksByRepo[repo] = nil
                     }
                     return
                 }
@@ -211,11 +269,11 @@ final class InstallManager {
                         let total = totalExpectedSoFar + max(fileBytesExpected, totalExpected) + remainingCatalogSize
                         let downloaded = downloadedSoFar + bytesWritten
                         Task { @MainActor in
-                            self.modelStates[modelId] = .downloading(
+                            self.setState(.downloading(
                                 progress: DownloadProgress.fraction(downloaded: downloaded, total: total),
                                 downloaded: downloaded,
                                 total: max(total, 1)
-                            )
+                            ), forRepo: repo)
                         }
                     }
                     // Get actual file size from response if API didn't provide it
@@ -244,47 +302,60 @@ final class InstallManager {
                     let msg = error.localizedDescription
                     print("[Install] Download failed: \(msg)")
                     await MainActor.run {
-                        modelStates[modelId] = .error(msg, canRetry: true)
+                        setState(.error(msg, canRetry: true), forRepo: repo)
+                        downloadTasksByRepo[repo] = nil
                     }
                     return
                 }
             }
 
             // 4. Verify
-            await MainActor.run { modelStates[modelId] = .verifying }
+            await MainActor.run { setState(.verifying, forRepo: repo) }
             guard verifyFiles(tempFiles) else {
                 await MainActor.run {
-                    modelStates[modelId] = .error("File verification failed", canRetry: true)
+                    setState(.error("File verification failed", canRetry: true), forRepo: repo)
+                    downloadTasksByRepo[repo] = nil
                 }
                 return
             }
 
-            // 5. Atomic move
-            let modelDir = modelsDir.appendingPathComponent(modelId)
+            // 5. Atomic move. MoC-5-2: repo-keyed final directory and marker — this is the
+            // one place a model's actual weights land, so it must match `isInstalled`/
+            // `uninstall`'s repo-path resolution.
+            let modelDir = store.directory(forHFModelID: hfModelId)
             if FileManager.default.fileExists(atPath: modelDir.path) {
                 try FileManager.default.removeItem(at: modelDir)
             }
             try FileManager.default.copyItem(at: downloadDir, to: modelDir)
             try FileManager.default.removeItem(at: downloadDir)
-            FileManager.default.createFile(atPath: modelDir.appendingPathComponent(".installed").path, contents: nil)
+            FileManager.default.createFile(atPath: store.installedMarker(forHFModelID: hfModelId).path, contents: nil)
 
             print("[Install] Success: \(model.displayName)")
             await MainActor.run {
-                modelStates[modelId] = .installed
-                onComplete(modelId)
+                setState(.installed, forRepo: repo)
+                downloadTasksByRepo[repo] = nil
+                // MoC-5-4: one `onComplete` closure exists per repo-download (the
+                // originating `install` call's) — invoke it once per card watching this
+                // repo, so every sibling's `AppState.installedModelIDs` picks it up, not
+                // only the card that happened to start the download.
+                for cardID in cardIDsByRepo[repo] ?? [modelId] {
+                    onComplete(cardID)
+                }
             }
 
         } catch InstallError.needsAuth {
             print("[Install] Gated model — needs HF token: \(modelId)")
             await MainActor.run {
-                modelStates[modelId] = .needsAuth(
-                    "This model is gated. Add a HuggingFace token in Settings, then retry.")
+                setState(.needsAuth(
+                    "This model is gated. Add a HuggingFace token in Settings, then retry."), forRepo: repo)
+                downloadTasksByRepo[repo] = nil
             }
         } catch {
             if Task.isCancelled { return }
             print("[Install] Error: \(error.localizedDescription)")
             await MainActor.run {
-                modelStates[modelId] = .error(error.localizedDescription, canRetry: true)
+                setState(.error(error.localizedDescription, canRetry: true), forRepo: repo)
+                downloadTasksByRepo[repo] = nil
             }
         }
     }
@@ -365,13 +436,13 @@ final class InstallManager {
         var models: [String: InstalledModel] = [:]
         var found = 0
         for id in installedIDs {
-            let marker = modelsDir.appendingPathComponent(id).appendingPathComponent(".installed")
+            let marker = store.installedMarker(forModelID: id)
             guard FileManager.default.fileExists(atPath: marker.path) else {
                 print("[Registry] Marker not found for \(id) at \(marker.path)")
                 continue
             }
             found += 1
-            let modelDir = modelsDir.appendingPathComponent(id)
+            let modelDir = store.directory(forModelID: id)
             let totalSize = (try? FileManager.default.contentsOfDirectory(at: modelDir, includingPropertiesForKeys: [.fileSizeKey], options: .skipsHiddenFiles))?
                 .compactMap { try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize }
                 .reduce(0, +) ?? 0

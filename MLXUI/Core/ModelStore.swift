@@ -102,15 +102,45 @@ nonisolated struct ModelStore: Sendable {
         modelsDirectory.appendingPathComponent(id, isDirectory: true)
     }
 
+    /// MoC-5-1 (`RSI/DelegateMoCBacklog.md`): the directory a repo's files live in, keyed by
+    /// the HF repo itself rather than by whichever catalog card asked for it — two cards
+    /// naming the same repo (the future MoC-6 case: a `.cat` display resolves through
+    /// `CatalogBridge` to one `hfModelId`, and `RunnerKind` decides which tower of it runs)
+    /// resolve to the same directory. Every shipping catalog entry already has `id ==
+    /// repoSlug(hfModelId)` (verified for all 38, `ModelStoreRepoKeyingTests`), so this
+    /// produces byte-identical paths to `directory(forModelID:)` for every model today —
+    /// the repo-keying only matters once two entries actually share an `hfModelId`.
+    func directory(forHFModelID hfModelId: String) -> URL {
+        directory(forModelID: Self.repoSlug(for: hfModelId))
+    }
+
+    /// `hfModelId` with `/` → `--` (e.g. `mlx-community/Qwen3-4B-4bit` →
+    /// `mlx-community--Qwen3-4B-4bit`). The one place this transform is computed — do not
+    /// reintroduce it elsewhere (`CLAUDE.md`: `ModelStore` is the one place these paths are
+    /// built).
+    static func repoSlug(for hfModelId: String) -> String {
+        hfModelId.replacingOccurrences(of: "/", with: "--")
+    }
+
     /// Scratch directory a download writes into before the atomic move.
     func downloadDirectory(forModelID id: String) -> URL {
         downloadsDirectory.appendingPathComponent(id, isDirectory: true)
+    }
+
+    /// MoC-5-2: the repo-keyed counterpart of `downloadDirectory(forModelID:)`.
+    func downloadDirectory(forHFModelID hfModelId: String) -> URL {
+        downloadDirectory(forModelID: Self.repoSlug(for: hfModelId))
     }
 
     /// The `.installed` marker — the atomic "install succeeded" signal the launch
     /// reconciliation checks the registry against.
     func installedMarker(forModelID id: String) -> URL {
         directory(forModelID: id).appendingPathComponent(".installed")
+    }
+
+    /// MoC-5-2: the repo-keyed counterpart of `installedMarker(forModelID:)`.
+    func installedMarker(forHFModelID hfModelId: String) -> URL {
+        directory(forHFModelID: hfModelId).appendingPathComponent(".installed")
     }
 
     /// A loose file directly under the base directory (demo output and similar).
