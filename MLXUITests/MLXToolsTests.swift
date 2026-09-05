@@ -11,7 +11,7 @@ struct MLXToolsTests {
     // MARK: InstalledModelIndex (model resolution)
 
     private func entry(_ id: String, _ kind: RunnerKind, _ ram: Double) -> InstalledModelIndex.Entry {
-        .init(id: id, kind: kind, ramGB: ram)
+        .init(id: id, hfModelId: id, kind: kind, ramGB: ram)
     }
 
     @Test func indexPicksSmallestInstalledOfKind() {

@@ -13,6 +13,7 @@ struct ImageQARunView: View {
     let modelDisplayName: String
     let license: String?
     let modelID: String
+    let hfModelID: String
 
     @State private var model = ImageQARunModel()
     @State private var image: CGImage?
@@ -144,6 +145,7 @@ struct ImageQARunView: View {
         guard let image else { return }
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let stage = VLMStage(modelID: modelID,
+                             hfModelID: hfModelID,
                              prompt: trimmed.isEmpty ? VLMSDK.defaultPrompt : trimmed)
         model.start(image: image, stage: stage)
     }

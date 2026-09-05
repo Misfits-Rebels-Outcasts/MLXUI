@@ -30,14 +30,20 @@ nonisolated struct BridgeEntry: Sendable, Equatable {
     /// The curated-manifest filename (under `Resources/CatFlow/models/`) whose settings
     /// (enums, ranges, defaults) govern this display name.
     let manifestFile: String
+    /// Disambiguates a candidate hfModelId that names more than one catalog card — MoC-6's
+    /// `Qwen3.5-9B` (`llm`) / `Qwen3.5-9B Vision` (`vision`) share one download, so matching by
+    /// hfModelId alone in `resolve` is no longer unique. `nil` for every other row, where the
+    /// `id == hfModelId`-slug invariant still holds and hfModelId matching is unambiguous.
+    let modelType: ModelType?
 
     init(display: String, pinnedID: String, candidates: [String],
-         equivalence: Equivalence, manifestFile: String) {
+         equivalence: Equivalence, manifestFile: String, modelType: ModelType? = nil) {
         self.display = display
         self.pinnedID = pinnedID
         self.candidates = candidates
         self.equivalence = equivalence
         self.manifestFile = manifestFile
+        self.modelType = modelType
     }
 }
 
@@ -196,12 +202,15 @@ nonisolated enum CatalogBridge {
         // `qwen3.5-9b-4bit.json` is MLXUI-authored from `qwen3-8b-4bit.json`'s shape (see its
         // own "notes"). Appended to `taskModels["llmModels"]` last, per Decision D as ruled —
         // reachable from every text row's Model menu, never the default seed.
+        // `modelType: .llm` disambiguates from MoC-6's `Qwen3.5-9B Vision` card, which shares
+        // this same hfModelId (one download between the two).
         BridgeEntry(
             display: "Qwen3.5 9B",
             pinnedID: "mlx-community/Qwen3.5-9B-MLX-4bit",
             candidates: ["mlx-community/Qwen3.5-9B-MLX-4bit"],
             equivalence: .same,
-            manifestFile: "qwen3.5-9b-4bit.json"),
+            manifestFile: "qwen3.5-9b-4bit.json",
+            modelType: .llm),
         // MoC-4-4 (RSI/DelegateMoCBacklog.md) — Qwen3 Reranker 0.6B, the model on MoC-3's
         // seam. "Qwen3 Reranker 0.6B" is already the pool string in
         // `taskModels["Rerank"]` — used exactly, no pool edit (Decision D doesn't apply to
@@ -214,6 +223,18 @@ nonisolated enum CatalogBridge {
             candidates: ["mlx-community/Qwen3-Reranker-0.6B-4bit"],
             equivalence: .same,
             manifestFile: "qwen3-reranker-0.6b-4bit.json"),
+        // MoC-6-2 (RSI/DelegateMoCBacklog.md) — Qwen3.5 9B's vision half, on top of MoC-5's
+        // shared install path. Same hfModelId as "Qwen3.5 9B" above; `modelType: .vision`
+        // is what keeps the two displays from resolving to each other. No reference manifest
+        // (MLXUI-authored, see qwen3.5-9b-vision-4bit.json's own notes). Appended to
+        // `taskModels["Describe Image"]` last — the seed ("LFM2-VL 1.6B") does not move.
+        BridgeEntry(
+            display: "Qwen3.5 9B Vision",
+            pinnedID: "mlx-community/Qwen3.5-9B-MLX-4bit",
+            candidates: ["mlx-community/Qwen3.5-9B-MLX-4bit"],
+            equivalence: .same,
+            manifestFile: "qwen3.5-9b-vision-4bit.json",
+            modelType: .vision),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {
@@ -241,7 +262,9 @@ nonisolated enum CatalogBridge {
     static func resolve(_ display: String, catalog: [ModelEntry]) -> CatalogBridgeResolution {
         if let entry = entry(for: display) {
             for candidate in entry.candidates {
-                if let model = catalog.first(where: { $0.hfModelId == candidate }) {
+                if let model = catalog.first(where: {
+                    $0.hfModelId == candidate && (entry.modelType == nil || $0.modelType == entry.modelType)
+                }) {
                     let note = entry.equivalence.note(display: display, substitutedID: candidate)
                     return .runnable(model, equivalence: entry.equivalence, note: note)
                 }

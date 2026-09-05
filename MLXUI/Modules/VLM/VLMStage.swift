@@ -46,8 +46,15 @@ nonisolated struct VLMStage: PipelineStage {
 
 extension VLMStage {
     /// Stage backed by the real MLX VLM engine, loading the installed model directory.
-    init(modelID: String, prompt: String, maxTokens: Int = 512) {
-        let dir = VLMEngine.installedModelDirectory(id: modelID)
+    /// `modelID` names the stage's own identity (the catalog card, e.g. for cache/UI
+    /// purposes) — `hfModelID` is what actually resolves the on-disk directory (MoC-6,
+    /// `RSI/DelegateMoCBacklog.md`). These differ exactly once: the `Qwen3.5-9B Vision`
+    /// catalog card shares its `hfModelId` with the separate `Qwen3.5-9B` (`llm`) card, one
+    /// download between them (`MoC-5`) — for every other model today `modelID`'s own
+    /// repo-slug already equals `hfModelID`'s, so this resolves to the identical path it
+    /// always has.
+    init(modelID: String, hfModelID: String, prompt: String, maxTokens: Int = 512) {
+        let dir = VLMEngine.installedModelDirectory(hfModelID: hfModelID)
         self.init(id: "vlm.\(modelID)", name: "VLM (\(modelID))", prompt: prompt) { image, prompt in
             try await VLMEngine.generate(prompt: prompt, image: image, modelDir: dir, maxTokens: maxTokens)
         }

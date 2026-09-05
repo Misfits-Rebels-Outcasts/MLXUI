@@ -26,6 +26,7 @@ import MLXLMCommon
 nonisolated struct InstalledModelIndex: Sendable {
     struct Entry: Sendable, Equatable {
         let id: String
+        let hfModelId: String
         let kind: RunnerKind
         let ramGB: Double
     }
@@ -35,7 +36,14 @@ nonisolated struct InstalledModelIndex: Sendable {
 
     /// The smallest installed model (by RAM) of the given kind — a fast, deterministic default.
     func best(kind: RunnerKind) -> String? {
-        entries.filter { $0.kind == kind }.min { $0.ramGB < $1.ramGB }?.id
+        bestEntry(kind: kind)?.id
+    }
+
+    /// Same selection as `best(kind:)`, but keeping `hfModelId` alongside — needed by callers
+    /// that resolve the on-disk directory by repo rather than by card id (MoC-6: the one card
+    /// today where those differ is `Qwen3.5-9B Vision`, sharing its download with `Qwen3.5-9B`).
+    func bestEntry(kind: RunnerKind) -> Entry? {
+        entries.filter { $0.kind == kind }.min { $0.ramGB < $1.ramGB }
     }
 
     /// Pure builder — keeps only installed ids. Testable without touching disk.
@@ -57,7 +65,8 @@ nonisolated struct InstalledModelIndex: Sendable {
               let catalog = try? JSONDecoder().decode(CatalogDTO.self, from: data)
         else { return [] }
         return catalog.domains.flatMap(\.all).map {
-            Entry(id: $0.id, kind: Self.kind(modelType: $0.modelType, family: $0.family), ramGB: $0.ramGB)
+            Entry(id: $0.id, hfModelId: $0.hfModelId,
+                  kind: Self.kind(modelType: $0.modelType, family: $0.family), ramGB: $0.ramGB)
         }
     }
 
@@ -70,6 +79,7 @@ nonisolated struct InstalledModelIndex: Sendable {
         }
         struct Model: Decodable {
             let id: String
+            let hfModelId: String
             let family: String
             let modelType: String
             let ramGB: Double
