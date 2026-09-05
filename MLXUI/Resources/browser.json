@@ -2065,7 +2065,55 @@
       "name": "Rerank",
       "sfSymbol": "arrow.up.arrow.down.square.fill",
       "children": null,
-      "models": []
+      "models": [
+        {
+          "id": "mlx-community--Qwen3-Reranker-0.6B-4bit",
+          "family": "Qwen3-Reranker",
+          "displayName": "Qwen3-Reranker-0.6B",
+          "paramSize": "0.6B",
+          "paramCountB": 0.6,
+          "modelType": "rerank",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Qwen3-Reranker-0.6B-4bit",
+          "ramGB": 0.52,
+          "downloadSizeGB": 0.35,
+          "contextWindow": 40960,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": "Qwen3-Reranker-0.6B is a 0.6B causal-LM cross-encoder reranker (Qwen/Qwen3-Reranker-0.6B), converted to MLX 4-bit by mlx-community. Unlike a classification-head reranker (e.g. BGE), it scores a (query, document) pair by asking the model a yes/no relevance question and reading `softmax([logit(\"no\"), logit(\"yes\")])[1]` at the last prompt position — the model's own `chat_template.jinja` packages exactly this recipe (`<Instruct>`/`<Query>`/`<Document>` roles, an empty `<think>` block forcing a direct answer over the checkpoint's own reasoning capability). Scored one candidate per forward pass, never batched, so the last-token read stays correct for every candidate length.\n\nLicensed Apache-2.0.",
+          "architecture": "Qwen3ForCausalLM",
+          "languages": null,
+          "lastUpdated": "2026-06-06",
+          "taskTags": [
+            "text-ranking"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": true,
+          "communityDownloads": 1257,
+          "communityLikes": 2,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 0.52,
+              "downloadSizeGB": 0.35,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/Qwen3-Reranker-0.6B-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/Qwen3-Reranker-0.6B-4bit",
+          "summary": "A 0.6B causal-LM reranker (Qwen3-Reranker) scored by a yes/no relevance question rather than a classification head; MLX 4-bit conversion, one forward pass per candidate."
+        }
+      ]
     },
     {
       "id": "imagegen",
