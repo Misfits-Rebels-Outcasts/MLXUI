@@ -272,28 +272,34 @@ struct CatFlowTaskAvailabilityTests {
         }
     }
 
-    // MARK: - MoC-3-1: Rerank stays honestly empty until MoC-4 adds a model
+    // MARK: - MoC-4: Rerank stopped being honestly empty once MoC-4-1/4-3 landed
 
-    /// `Rerank` now has a `RunnerKind` (`.rerank`) and a served prefix (`engines.rerank.`), but
-    /// no `.rerank` catalog entry exists yet — `derivedModels` must still report `[]` and
-    /// `defaultModel` still `nil`, exactly as before this cycle. This is the CFM-R14-FIX-2
-    /// discipline pinned before it can be broken: availability must never claim more than the
-    /// runtime can actually do.
-    @Test func rerankDerivedPoolStaysEmptyUntilAModelLands() throws {
+    /// Updated from MoC-3-1's "stays empty until MoC-4" version now that MoC-4-1 (catalog
+    /// entry) and MoC-4-3 (`RerankSDK`, claims it) have both landed — the CFM-R14-FIX-2
+    /// discipline this guards is now "the derived pool matches what the runtime can
+    /// actually do," not "empty." `defaultModel` returns the catalog's own `displayName`
+    /// (`"Qwen3-Reranker-0.6B"`, hyphenated) rather than the pool's spaced name
+    /// (`"Qwen3 Reranker 0.6B"`) because no `CatalogBridge` entry exists yet to connect
+    /// them — that's MoC-4-4's `defaultModel(forTask: "Rerank")` done-when clause, not this
+    /// one's; this test will need updating again when that entry lands.
+    @Test func rerankDerivedPoolNowContainsTheLandedModel() throws {
         let catalog = try bundledCatalog()
         let claimable = claimableIDs(catalog: catalog)
-        #expect(TaskModels.derivedModels(for: "Rerank", catalog: catalog, claimableModelIDs: claimable).isEmpty)
-        #expect(TaskModels.defaultModel(forTask: "Rerank", catalog: catalog, claimableModelIDs: claimable) == nil)
+        let derived = TaskModels.derivedModels(for: "Rerank", catalog: catalog, claimableModelIDs: claimable)
+        #expect(derived.count == 1)
+        #expect(derived.first?.hfModelId == "mlx-community/Qwen3-Reranker-0.6B-4bit")
+        #expect(TaskModels.defaultModel(forTask: "Rerank", catalog: catalog, claimableModelIDs: claimable) == "Qwen3-Reranker-0.6B")
     }
 
-    /// The bundled catalog decodes with the new, deliberately empty `rerank` domain leaf —
-    /// the `browser.json` half of MoC-3-1's done-when.
-    @Test func rerankDomainDecodesEmpty() throws {
+    /// The bundled catalog decodes with the `rerank` domain leaf now carrying the
+    /// Qwen3-Reranker entry MoC-4-1 added (the leaf itself was created empty in MoC-3-1).
+    @Test func rerankDomainDecodesTheLandedModel() throws {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("MLXUI/Resources/browser.json")
         let data = try Data(contentsOf: url)
         let browserData = try JSONDecoder().decode(BrowserData.self, from: data)
         let rerank = try #require(browserData.domains.first { $0.id == "rerank" })
-        #expect(rerank.allModels.isEmpty)
+        #expect(rerank.allModels.count == 1)
+        #expect(rerank.allModels.first?.hfModelId == "mlx-community/Qwen3-Reranker-0.6B-4bit")
     }
 }

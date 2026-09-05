@@ -431,9 +431,12 @@ final class ModelRunner {
         case .upscale:
             showUnsupported("Image upscaling", model)
         case .rerank:
-            // Rerank is a headless flow task (scores a list against a query) with no
-            // chat-style surface — MoC-4-3 (RSI/DelegateMoCBacklog.md) says so explicitly.
-            // This standalone Run entry point never gets a dedicated UI for it.
+            // Dead once RerankSDK is registered (MoC-4-3, RSI/DelegateMoCBacklog.md):
+            // AppState.runModel(_:) checks the registry before ever calling here, and
+            // RerankSDK claims every .rerank model — so this case only fires if this
+            // legacy entry point is ever called directly, bypassing the registry check.
+            // RerankUI.makeRunView is what a user actually sees (an explanation that
+            // Rerank is a headless flow task, not a chat-style surface).
             showUnsupported("Rerank", model)
         }
     }
