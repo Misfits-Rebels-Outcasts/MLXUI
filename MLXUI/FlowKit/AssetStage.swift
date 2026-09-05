@@ -206,6 +206,7 @@ nonisolated enum FlowError: Error, CustomStringConvertible, Equatable {
     case unsupportedTask(row: String, task: String)
     case invalidSettings(row: String, setting: String, detail: String)
     case budgetExceeded(row: String, visitsLeq: Int)
+    case missingRerankQuery(row: String)
 
     var description: String {
         switch self {
@@ -237,6 +238,8 @@ nonisolated enum FlowError: Error, CustomStringConvertible, Equatable {
             return "\(row)'s \(setting) setting is malformed — \(detail), then run again."
         case .budgetExceeded(let row, let visitsLeq):
             return "Row \(row) hit its budget of \(visitsLeq) visits with `on_budget=fail` — no forced edge to take."
+        case .missingRerankQuery(let row):
+            return "\(row) needs a query — e.g. Rerank BGE Reranker; query=\"...\"."
         }
     }
 }

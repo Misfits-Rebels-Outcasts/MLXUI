@@ -430,6 +430,11 @@ final class ModelRunner {
             showUnsupported("Image segmentation", model)
         case .upscale:
             showUnsupported("Image upscaling", model)
+        case .rerank:
+            // Rerank is a headless flow task (scores a list against a query) with no
+            // chat-style surface — MoC-4-3 (RSI/DelegateMoCBacklog.md) says so explicitly.
+            // This standalone Run entry point never gets a dedicated UI for it.
+            showUnsupported("Rerank", model)
         }
     }
 

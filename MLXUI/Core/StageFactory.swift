@@ -14,6 +14,8 @@ nonisolated struct StageConfig: Sendable, Hashable {
     var width: Int?            // diffusion — requested output width (CFM-R16-1)
     var height: Int?           // diffusion — requested output height (CFM-R16-1)
     var steps: Int?            // diffusion — requested denoise steps (CFM-R16-1)
+    var query: String?         // rerank — the query every candidate is scored against (MoC-3-2)
+    var topK: Int?             // rerank — truncate the sorted result to this many (MoC-3-2)
 
     init(
         voice: String? = nil,
@@ -25,7 +27,9 @@ nonisolated struct StageConfig: Sendable, Hashable {
         seed: UInt64? = nil,
         width: Int? = nil,
         height: Int? = nil,
-        steps: Int? = nil
+        steps: Int? = nil,
+        query: String? = nil,
+        topK: Int? = nil
     ) {
         self.voice = voice
         self.speed = speed
@@ -37,6 +41,8 @@ nonisolated struct StageConfig: Sendable, Hashable {
         self.width = width
         self.height = height
         self.steps = steps
+        self.query = query
+        self.topK = topK
     }
 
     static let `default` = StageConfig()
@@ -64,7 +70,7 @@ enum StageFactory {
         }
 
         switch model.runnerKind {
-        case .llm, .asr, .tts, .embedding, .vision, .ocr, .image, .music, .segmentation, .video, .upscale, .unsupported:
+        case .llm, .asr, .tts, .embedding, .vision, .ocr, .image, .music, .segmentation, .video, .upscale, .rerank, .unsupported:
             throw StageError.unsupportedModel(id: model.id, kind: model.runnerKind)
         }
     }

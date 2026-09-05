@@ -45,7 +45,8 @@
       "name": "Infrastructure",
       "sfSymbol": "gearshape.2.fill",
       "domainIds": [
-        "embedding"
+        "embedding",
+        "rerank"
       ]
     }
   ],
@@ -77,6 +78,10 @@
     "embedding": {
       "icon": "square.grid.3x3",
       "description": "Embeddings"
+    },
+    "rerank": {
+      "icon": "arrow.up.arrow.down.square",
+      "description": "Rerank"
     },
     "imagegen": {
       "icon": "photo.artframe",
@@ -2054,6 +2059,13 @@
           "summary": "BGE-M3 is a versatile embedding model capable of:"
         }
       ]
+    },
+    {
+      "id": "rerank",
+      "name": "Rerank",
+      "sfSymbol": "arrow.up.arrow.down.square.fill",
+      "children": null,
+      "models": []
     },
     {
       "id": "imagegen",

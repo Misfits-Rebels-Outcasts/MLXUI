@@ -374,6 +374,36 @@ nonisolated struct RealExecutor: FlowExecutor {
             return try persist(result, rowLabel: "\(path)")
         }
 
+        // Rerank: list-shaped ([text] + query → [text], reordered), never a
+        // `SingleMediaStage` — that adapter requires exactly one item and must not be
+        // widened (MoC-3-3, RSI/DelegateMoCBacklog.md). `stageConfig` already refused a
+        // missing query with a named error; `config.query` is guaranteed here.
+        if desc.refName.hasPrefix("engines.rerank.") {
+            guard let input = inputs.first else {
+                throw FlowError.badInputCardinality(row: "\(path)", expected: "a list of text items", got: 0)
+            }
+            let config = try stageConfig(for: desc, row: row, path: "\(path)")
+            guard let query = config.query else {
+                throw FlowError.missingRerankQuery(row: "\(path)")
+            }
+            let stage = try await makeModelStage(modelEntry, config)
+            // The seam MoC-4's RerankSDK conforms to: its `PipelineStage` is `.text → .text`,
+            // called once per candidate (never batched — right-padding a batch corrupts the
+            // last-token read for every candidate shorter than the longest), with the query
+            // and candidate joined by a newline; the returned text parses as the score.
+            let scorer: @Sendable (String, String) async throws -> Double = { query, candidate in
+                let result = try await stage.run(.text("\(query)\n\(candidate)")) { _ in }
+                guard case .text(let scoreText) = result,
+                      let score = Double(scoreText.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                    throw FlowError.stageFailure(row: "\(path)", message: "the rerank model returned a non-numeric score")
+                }
+                return score
+            }
+            let rerank = RerankStage(id: modelEntry.id, name: display(row), rowLabel: "\(path)",
+                                     query: query, topK: config.topK, scorer: scorer)
+            return try await rerank.run(input) { _ in }
+        }
+
         // Plain model: wrap the registry stage in SingleMediaStage (unwraps one Item,
         // runs, persists heavy outputs file-backed). A row with no upstream input falls
         // back to the settings' first bare token as the text prompt for the prompt-driven
@@ -390,7 +420,8 @@ nonisolated struct RealExecutor: FlowExecutor {
         } else {
             throw FlowError.badInputCardinality(row: "\(path)", expected: "an input", got: 0)
         }
-        let stage = try await makeModelStage(modelEntry, stageConfig(for: desc, row: row))
+        let config = try stageConfig(for: desc, row: row, path: "\(path)")
+        let stage = try await makeModelStage(modelEntry, config)
         let adapter = SingleMediaStage(id: modelEntry.id, name: display(row),
                                        inner: stage, rowLabel: "\(path)",
                                        blobDirectory: blobDirectory)
@@ -538,7 +569,7 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// reaches here, so `seed` is a concrete number when the row is stochastic — the stage
     /// sees exactly what the row settled on, never the `seed=auto`/`{item}` token.
     /// Internal (not `private`) so the settings→voice/language/seed mapping is unit-testable.
-    func stageConfig(for desc: TaskDescriptor, row: Row) -> StageConfig {
+    func stageConfig(for desc: TaskDescriptor, row: Row, path: String = "?") throws -> StageConfig {
         let settings = FlowSettings(row.settings)
         if desc.refName == "engines.tts.speak" {
             let voice = settings.value(for: "voice") ?? settings.firstBare()
@@ -559,6 +590,19 @@ nonisolated struct RealExecutor: FlowExecutor {
                 height: number("height").flatMap(Int.init),
                 steps: number("steps").flatMap(Int.init)
             )
+        }
+        if desc.refName.hasPrefix("engines.rerank.") {
+            // `query=` first, else the settings' first bare token — the same fallback
+            // `firstBare()` already gives the diffusion prompt above. A row with neither
+            // must fail loudly: MoC-3-2 (RSI/DelegateMoCBacklog.md), the CFM-R16-1 lesson
+            // applied here — a wrong output nobody notices is worse than an error.
+            guard let query = settings.value(for: "query") ?? settings.firstBare() else {
+                throw FlowError.missingRerankQuery(row: path)
+            }
+            let topK = settings.value(for: "top_k")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .flatMap(Int.init)
+            return StageConfig(query: query, topK: topK)
         }
         return .default
     }

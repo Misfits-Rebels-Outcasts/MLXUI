@@ -400,6 +400,7 @@ nonisolated struct FlowRunner {
         case .modelNotRunnable(let row, _, _): return row
         case .unsupportedTask(let row, _): return row
         case .invalidSettings(let row, _, _): return row
+        case .missingRerankQuery(let row): return row
         }
     }
 

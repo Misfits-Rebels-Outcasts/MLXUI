@@ -18,8 +18,11 @@ import Foundation
 nonisolated enum TaskModels {
     /// The capability declaration — a model task names the `RunnerKind` it needs. This is
     /// what replaced the display-name pools as the *filter*. Tasks with no entry here (e.g.
-    /// `Upscale`, `Rerank`, `Estimate Depth`) have no runner kind and therefore no candidates
-    /// — honest "no model in this build", whatever the display-name pool used to claim.
+    /// `Upscale`, `Estimate Depth`) have no runner kind and therefore no candidates — honest
+    /// "no model in this build", whatever the display-name pool used to claim. `Rerank` joined
+    /// 2026-09-05 (MoC-3-1, `RSI/DelegateMoCBacklog.md`) — it stays honestly empty until MoC-4
+    /// adds the first `.rerank` catalog entry; no catalog entry means `derivedModels` still
+    /// returns `[]` for it, exactly as before this entry existed.
     private static let taskKinds: [String: RunnerKind] = [
         "Transcribe": .asr,
         "Embed": .embedding,
@@ -51,6 +54,7 @@ nonisolated enum TaskModels {
         "Animate": .video,
         "Generate Sound": .music,
         "Segment": .segmentation,
+        "Rerank": .rerank,
     ]
 
     /// Optional family constraints — filled only where a task genuinely needs one (a `.cat`
@@ -76,6 +80,7 @@ nonisolated enum TaskModels {
         "engines.diffusion.generate_video",   // text → video
         "engines.diffusion.generate_sound",   // text → music
         "engines.diffusion.segment",          // Segment (image → binary mask) — CFM-R15-1
+        "engines.rerank.",       // Rerank ([text] + query → [text], reordered) — MoC-3-1
     ]
 
     /// Whether `RealExecutor` genuinely serves `task` (CFM-R14-FIX-2). A **frame-backed** task
