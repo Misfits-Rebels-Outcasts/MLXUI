@@ -35,7 +35,7 @@ struct FlowInspectorPane<Properties: View>: View {
     private let properties: () -> Properties
 
     @State private var tab: Tab
-    @State private var player: AVAudioPlayer?
+    @State private var audio = InspectorAudioController()
 
     init(output: Asset?, rowTitle: String, substitutionNote: String?,
          savedFile: URL? = nil, savedKind: Kind? = nil,
@@ -65,6 +65,17 @@ struct FlowInspectorPane<Properties: View>: View {
         .padding(14)
         .frame(minWidth: 260, maxWidth: 320, maxHeight: .infinity, alignment: .topLeading)
         .background(.quaternary.opacity(0.18))
+        // Stop playback when the inspected row changes (or a re-run swaps the output) and
+        // when the pane goes away, so the Play/Stop button never lies about a stale player.
+        .onChange(of: displayedAudioPath) { audio.stop() }
+        .onDisappear { audio.stop() }
+    }
+
+    /// The audio file the Output tab is currently showing a Play button for, if any.
+    private var displayedAudioPath: URL? {
+        if let savedFile, savedKind == .audio { return savedFile }
+        if let item = output?.items.first, item.kind == .audio { return item.path }
+        return nil
     }
 
     // MARK: - Tabs
@@ -208,8 +219,10 @@ struct FlowInspectorPane<Properties: View>: View {
                     .foregroundStyle(.secondary)
                 Text("Audio").font(.subheadline.bold())
                 Spacer()
-                Button { play(item) } label: {
-                    Label("Play", systemImage: "play.fill")
+                Button { audio.toggle(item.path) } label: {
+                    let playing = audio.isPlaying(item.path)
+                    Label(playing ? "Stop" : "Play",
+                          systemImage: playing ? "stop.fill" : "play.fill")
                 }
                 .disabled(item.path == nil)
             }
@@ -281,18 +294,55 @@ struct FlowInspectorPane<Properties: View>: View {
             .padding(8)
     }
 
-    // MARK: - Audio playback (the same AVAudioPlayer-on-WAVData the run views use)
+}
 
-    private func play(_ item: Item) {
-        guard let path = item.path else { return }
+/// Plays one audio file at a time for the Output tab, with a Play/Stop toggle that flips
+/// back to "Play" the moment playback ends. One instance per `FlowInspectorPane`; the pane
+/// stops it when the inspected row changes or the pane disappears. Same
+/// `AVAudioPlayer`-on-WAV-data path the run views use; mirrors `MusicGenRunModel`'s
+/// `AVAudioPlayerDelegate` reset.
+@MainActor
+@Observable
+final class InspectorAudioController: NSObject, AVAudioPlayerDelegate {
+    /// The file currently playing, or nil. Drives the button's Play/Stop label.
+    private(set) var playingPath: URL?
+    private var player: AVAudioPlayer?
+
+    /// True when `path` is the file playing right now.
+    func isPlaying(_ path: URL?) -> Bool {
+        path != nil && playingPath == path
+    }
+
+    /// Stop if `path` is already playing, otherwise start it (replacing whatever was playing).
+    func toggle(_ path: URL?) {
+        guard let path else { return }
+        if playingPath == path {
+            stop()
+            return
+        }
+        stop()
         do {
             let buffer = try AudioFileReader.read(path)
-            let data = AudioWriter.wavData(buffer)
-            let newPlayer = try AVAudioPlayer(data: data)
-            self.player = newPlayer        // retain so it isn't deallocated mid-play
+            let newPlayer = try AVAudioPlayer(data: AudioWriter.wavData(buffer))
+            newPlayer.delegate = self       // reset the toggle when playback completes
+            self.player = newPlayer          // retain so it isn't deallocated mid-play
             newPlayer.play()
+            self.playingPath = path
         } catch {
             // No error surface in the pane — silence is fine for an inspect pane.
         }
+    }
+
+    func stop() {
+        player?.stop()
+        player = nil
+        playingPath = nil
+    }
+
+    // MARK: - AVAudioPlayerDelegate
+
+    /// Playback reached the end — flip the button back to "Play".
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        stop()
     }
 }
