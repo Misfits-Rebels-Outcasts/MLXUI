@@ -1,4 +1,4 @@
-catflow 0.8
+mlxflow 0.8
 params: top_k = 5
 1. Embed                BGE-M3
 2. Read Index           kb.index

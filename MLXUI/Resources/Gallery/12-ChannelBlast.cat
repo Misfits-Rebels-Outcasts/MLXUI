@@ -1,4 +1,4 @@
-catflow 0.8
+mlxflow 0.8
 1. Read Text         launch-notes.txt
 2. <parallel channels>   text -> [text, text, text]
      1. Draft   (input:1)   Qwen3 8B; "LinkedIn post, professional, 150 words

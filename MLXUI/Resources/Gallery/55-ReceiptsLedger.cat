@@ -1,4 +1,4 @@
-catflow 0.8; events
+mlxflow 0.8; events
 1. On File                    receipts/; pattern=*.jpg; settle=10s
 2. Read Image
 3. Read Context               ledger.ctx

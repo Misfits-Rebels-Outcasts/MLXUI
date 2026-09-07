@@ -1,4 +1,4 @@
-catflow 0.8
+mlxflow 0.8
 1. Read Audio         memo.m4a
 2. Transcribe         Whisper Large v3; lang=en
 3. Summarize          Qwen3 8B; "TL;DR in 3 bullets"

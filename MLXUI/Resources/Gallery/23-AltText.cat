@@ -1,4 +1,4 @@
-catflow 0.8
+mlxflow 0.8
 1. Read Images   site-images/
 2. <each alt_one; on_error=skip>   [image] -> [text]
      1. Describe Image   (input:1)   LFM2-VL 1.6B; "One-sentence alt text:

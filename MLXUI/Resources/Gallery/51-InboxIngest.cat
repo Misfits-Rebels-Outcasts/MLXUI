@@ -1,4 +1,4 @@
-catflow 0.8; events
+mlxflow 0.8; events
 1. On File               inbox/; pattern=*.pdf; settle=30s
 2. Read Files            inbox/; pattern=*.pdf
 3. <each read_one; on_error=skip>   [file] -> [text]

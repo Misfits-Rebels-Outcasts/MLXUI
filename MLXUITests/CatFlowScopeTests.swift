@@ -30,9 +30,11 @@ struct CatFlowScopeTests {
     @Test func plainScopeRunSeedMatchesStoredGolden() {
         // Stored, not re-derived: int.from_bytes(SHA-256(cat text)[:4], "big") of the
         // bundled `.cat` files — the number the pre-R17 `cachingContext` fed
-        // `CachingExecutor` through `GalleryLoader.rawCatText(flowID:)`.
-        #expect(FlowScope.plain("01-SpokenSummary").runSeed == 2_999_492_883)
-        #expect(FlowScope.plain("16-IngestFolder").runSeed == 3_205_850_175)
+        // `CachingExecutor` through `GalleryLoader.rawCatText(flowID:)`. CFM-R18-4 flipped
+        // line one `catflow 0.8` -> `mlxflow 0.8`, so the hash of every bundled flow's
+        // text moved with it; these are the re-derived values for the `mlxflow`-headed files.
+        #expect(FlowScope.plain("01-SpokenSummary").runSeed == 3_161_680_488)
+        #expect(FlowScope.plain("16-IngestFolder").runSeed == 2_432_159_665)
     }
 
     @Test func plainScopeUnknownFlowKeepsZeroFallback() {

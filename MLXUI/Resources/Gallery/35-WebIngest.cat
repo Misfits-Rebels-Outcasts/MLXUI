@@ -1,4 +1,4 @@
-catflow 0.8; network
+mlxflow 0.8; network
 1. Read Text             urls.txt
 2. Split                 by=lines
 3. <each fetch_one; on_error=skip>   [text] -> [text]

@@ -1,4 +1,4 @@
-catflow 0.8; events
+mlxflow 0.8; events
 1. On Flow              IndexSelfTest.cat; status=failed; max_runs=4/day
 2. Draft                Ministral 3B; "Short alert: the index self-test
                         failed; findings below"

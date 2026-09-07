@@ -1,4 +1,4 @@
-catflow 0.8
+mlxflow 0.8
 1. Read Text         announcement.md
 2. <parallel three_locales>   text -> [text, text, text]
      1. Translate   (input:1)   Llama 3.1 8B; to=German

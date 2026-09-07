@@ -26,7 +26,7 @@ struct CatFlowListViewTests {
         let (lines, ranges, _) = CatSerializer.serializeLines(doc)
         // The serializer emits the version header as lines[0]; the view slices per row, so
         // assert on the row ranges' slices — the thing the view actually renders (FIX-1).
-        #expect(lines.first == "catflow 0.8")
+        #expect(lines.first == "mlxflow 0.8")   // CFM-R18-4: bundled flows are `mlxflow`-headed
         let rowSlices = doc.rows.compactMap { ranges[$0.id].map { Array(lines[$0]) } }
         #expect(rowSlices == [
             ["1. Read Audio         memo.m4a"],

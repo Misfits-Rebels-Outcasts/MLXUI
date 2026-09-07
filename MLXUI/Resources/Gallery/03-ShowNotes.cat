@@ -1,4 +1,4 @@
-catflow 0.8
+mlxflow 0.8
 1. Read Audio           episode.mp3
 2. Transcribe           Whisper Large v3; timestamps=true
 3. <parallel notes>   text -> [text, text, text]

@@ -1,4 +1,4 @@
-catflow 0.8
+mlxflow 0.8
 1. Read Text   prompts.txt
 2. Split       by=lines   text -> [text]
 3. <each compare_one>   [text] -> [text]

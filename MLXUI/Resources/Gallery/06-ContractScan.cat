@@ -1,4 +1,4 @@
-catflow 0.8
+mlxflow 0.8
 1. Read PDF            contract.pdf; layout=markdown
 2. Split               by=headings   text -> [text]
 3. <each scan_section; on_error=skip>   [text] -> [text]

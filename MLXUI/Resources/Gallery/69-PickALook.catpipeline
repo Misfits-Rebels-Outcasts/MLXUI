@@ -1,4 +1,4 @@
-catpipeline 0.8
+mlxpipeline 0.8
   pipeline Pick A Look
   gives:   image
 params: quality = balanced

@@ -1,4 +1,4 @@
-catflow 0.8
+mlxflow 0.8
 1. Read Text           post.md
 2. <parallel meta>   text -> [text, text, text]
      1. Title                (input:1)   Ministral 3B; "SEO headline"

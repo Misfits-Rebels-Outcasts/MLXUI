@@ -1,4 +1,4 @@
-catflow 0.8
+mlxflow 0.8
 1. Read Files   memos/; pattern=*.m4a
 2. <each transcribe_one; on_error=skip>   [file] -> [text]
      1. Read Audio   (input:1)

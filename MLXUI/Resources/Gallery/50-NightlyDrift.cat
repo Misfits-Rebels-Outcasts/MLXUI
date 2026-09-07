@@ -1,4 +1,4 @@
-catflow 0.8
+mlxflow 0.8
 1. Read Context   eval-history.ctx
 2. <list nightly_suite; ctx+>   # entry 47, as a block
      1. Read Text   cases.txt   # one prompt per line

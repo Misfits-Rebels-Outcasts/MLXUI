@@ -1,4 +1,4 @@
-catflow 0.8; code
+mlxflow 0.8; code
 1. Read Files               invoices/; pattern=*.txt
 2. Parse Invoices   (1)
 3. Query Table              sort=amount; direction=desc

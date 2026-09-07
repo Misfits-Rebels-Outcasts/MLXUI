@@ -1,4 +1,4 @@
-catflow 0.8; offdevice
+mlxflow 0.8; offdevice
 1. Read Index           library.index
 2. Embed                BGE-M3; "Summarize our indemnification obligations"
 3. Retrieve     (1,2)   top_k=5

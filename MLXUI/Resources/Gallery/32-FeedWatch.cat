@@ -1,4 +1,4 @@
-catflow 0.8; network
+mlxflow 0.8; network
 1. Fetch Feed   url=https://blog.python.org/feeds/posts/default?alt=rss
 2. Filter       contains="release"
 3. <each summarize_item; on_error=skip>

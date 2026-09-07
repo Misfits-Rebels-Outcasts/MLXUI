@@ -1,4 +1,4 @@
-catflow 0.8
+mlxflow 0.8
 1. Read Audio            meeting.m4a
 2. Transcribe            Whisper Large v3
 3. Draft                 Ministral 3B; "List attendee names, one per line"

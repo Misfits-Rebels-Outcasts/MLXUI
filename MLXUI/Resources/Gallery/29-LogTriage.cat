@@ -1,4 +1,4 @@
-catflow 0.8
+mlxflow 0.8
 1. Read Text           app.log
 2. Split               by=lines
 3. Filter              regex="ERROR|FATAL"

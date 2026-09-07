@@ -1,4 +1,4 @@
-catflow 0.8; events; network
+mlxflow 0.8; events; network
 1. On Schedule           every=day; at=06:30; max_runs=2/day
 2. Read Text             topics.txt   # one query per line
 3. Split                 by=lines
