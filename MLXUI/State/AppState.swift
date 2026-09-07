@@ -27,14 +27,15 @@ final class AppState {
     /// When `true`, `galleryEntries` is empty. Mirrors `hideFlows`.
     static let hideAutomate = false
 
-    /// Set to `true` to hide the "My Workflows" shelf (the user's own saved flows and the
-    /// New Flow badge) on the Automate → AI Workflows page. The two bundled shelves —
-    /// Basic Gallery and Advance Gallery — still render.
-    static let hideMyWorkflows = true
+    /// Set to `true` to **disable** the "My Workflows" shelf on the Automate → AI Workflows
+    /// page: the section still renders, but every control in it is non-interactive —
+    /// Import Flow, the New Flow badge, and each saved flow's open/export/remove. The two
+    /// bundled shelves — Basic Gallery and Advance Gallery — are unaffected.
+    static let disableMyWorkflows = true
 
     /// Set to `true` to hide the "My Workspace" shelf (the New Workspace badge and every
     /// workspace, bundled or saved) on the Automate → AI Workflows page. Flip to `false`
-    /// to show the section. Mirrors `hideMyWorkflows`.
+    /// to show the section.
     static let hideMyWorkspace = true
 
     /// Set to `true` to hide the "Rerank" domain (and its one model, Qwen3-Reranker-0.6B)

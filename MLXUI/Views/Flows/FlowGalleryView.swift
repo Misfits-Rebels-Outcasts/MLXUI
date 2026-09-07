@@ -19,10 +19,10 @@ struct FlowGalleryView: View {
             VStack(alignment: .leading, spacing: 20) {
                 header
                 // CFM-R12-1: the user's own saved flows. The New Flow badge lives here too —
-                // it is a user action, not a bundled flow.
-                if !AppState.hideMyWorkflows {
-                    myWorkflowsSection
-                }
+                // it is a user action, not a bundled flow. `disableMyWorkflows` keeps the
+                // section visible but makes every control in it non-interactive.
+                myWorkflowsSection
+                    .disabled(AppState.disableMyWorkflows)
                 if !AppState.hideMyWorkspace {
                     myWorkspaceSection
                 }
