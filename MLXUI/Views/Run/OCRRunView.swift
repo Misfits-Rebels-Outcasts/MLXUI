@@ -77,6 +77,7 @@ struct OCRRunView: View {
             .onDrop(of: [.image], isTargeted: $isTargeted) { providers in loadDropped(providers) }
             HStack {
                 Button("Choose Image…") { showImporter = true }
+                Button("Use Sample Image") { loadSample() }
                 Text(imageName ?? "No image selected")
                     .font(.callout).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
             }
@@ -144,6 +145,30 @@ struct OCRRunView: View {
                 imageName = url.lastPathComponent
             } else {
                 model.errorText = "Could not read image."
+            }
+        }
+    }
+
+    /// A document image bundled with the app (`Resources/Samples/PersonalBudget.png`) for
+    /// repeated OCR testing — works in both editions since it ships inside the app bundle.
+    private static let sampleResource = "PersonalBudget"
+
+    /// Load the bundled sample image (bytes read + forced decode, like the drop path).
+    private func loadSample() {
+        guard let url = Bundle.main.url(forResource: Self.sampleResource, withExtension: "png") else {
+            model.errorText = "Sample image \(Self.sampleResource).png is missing from the app bundle."
+            return
+        }
+        Task {
+            let cg = await Task.detached(priority: .userInitiated) { () -> CGImage? in
+                guard let data = try? Data(contentsOf: url) else { return nil }
+                return ImageLoader.decodedCGImage(from: data)
+            }.value
+            if let cg {
+                image = cg
+                imageName = url.lastPathComponent
+            } else {
+                model.errorText = "Could not read the bundled sample image."
             }
         }
     }

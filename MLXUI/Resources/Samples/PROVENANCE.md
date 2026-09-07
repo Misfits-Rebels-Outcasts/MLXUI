@@ -16,3 +16,4 @@ copyrighted works.
 | `sample-pdf.pdf` | Generated from text via `cupsfilter` — a one-page document with real selectable text (no fonts, no scans). |
 | `sample-data.csv` | Written fresh for this feature. |
 | `sample-data.json` | Written fresh for this feature. |
+| `PersonalBudget.png` | Owner-supplied screenshot of a personal budget table (1308×646), used as the "Use Sample Image" default in the OCR Run UI (`OCRRunView`). Not a Read-row seed. |
