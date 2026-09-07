@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Export options for the Direct (non-sandboxed) edition.
+	     Usage: dual-distribution.md §7 —
+	       xcodebuild -project MLXUI.xcodeproj -scheme MLXUI-Direct \
+	         -configuration Release -archivePath build/Direct.xcarchive archive
+	       xcodebuild -exportArchive -archivePath build/Direct.xcarchive \
+	         -exportOptionsPlist Config/ExportOptions-Direct.plist -exportPath build/export
+	     The archive itself is signed Apple Development (automatic); this export
+	     step re-signs with "Developer ID Application" for notarization. -->
+	<key>method</key>
+	<string>developer-id</string>
+	<key>teamID</key>
+	<string>B93L2R82PL</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>destination</key>
+	<string>export</string>
+</dict>
+</plist>

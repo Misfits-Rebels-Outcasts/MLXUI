@@ -7,18 +7,27 @@
 
 PRODUCT_NAME = MLXUI Pro
 PRODUCT_BUNDLE_IDENTIFIER = net.connectcode.mlxui-pro
-ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon-Direct
+// TODO(dual-distribution.md §5): ship a distinct "AppIcon-Direct" set so the two
+// editions don't have identical Dock icons when installed side by side. Until that
+// art exists, both editions use the one "AppIcon" set in MLXUI/Assets.xcassets —
+// naming a missing set here just fails the asset-catalog compile.
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
 
 // ── No sandbox; Hardened Runtime only (required for notarization) ──
 ENABLE_APP_SANDBOX = NO
 CODE_SIGN_ENTITLEMENTS = MLXUI/MLXUI-Direct.entitlements
 
 // ── Signing ──
-// Release only: automatic signing otherwise picks the Mac App Distribution cert
-// when archiving, which cannot be notarized. Scoped to Release so day-to-day
-// Debug builds still sign with Apple Development and don't require a Developer
-// ID certificate to be present.
-CODE_SIGN_IDENTITY[config=Release] = Developer ID Application
+// Signing stays fully automatic (Apple Development) for every plain build and
+// archive of this target. The Developer ID Application identity is applied
+// afterwards by `xcodebuild -exportArchive` with Config/ExportOptions-Direct.plist
+// (method = developer-id, signingStyle = automatic) — see dual-distribution.md §7.
+//
+// Do NOT pin `CODE_SIGN_IDENTITY = Developer ID Application` here: with
+// CODE_SIGN_STYLE = Automatic (Shared.xcconfig) that produces Xcode's
+// "conflicting provisioning settings" error, because automatic signing only
+// provisions Apple Development for a non-export build. The export step is where
+// the distribution identity belongs.
 
 // ── Feature flags ──
 // DIRECT_BUILD compiles in ProcessShell + the shell/file agent tools. The
