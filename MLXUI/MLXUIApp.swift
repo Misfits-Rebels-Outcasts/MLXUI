@@ -13,6 +13,7 @@ struct MLXUIApp: App {
 
     
     @State private var appState = AppState()
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some Scene {
         WindowGroup {
@@ -23,7 +24,7 @@ struct MLXUIApp: App {
                     ProgressView("Loading catalog…")
                         .onAppear { appState.loadBrowserData() }
                 } else {
-                    NavigationSplitView {
+                    NavigationSplitView(columnVisibility: $columnVisibility) {
                         SidebarView()
                     } detail: {
                         NavigationStack {
@@ -177,7 +178,7 @@ struct MLXUIApp: App {
             }
             CommandGroup(replacing: .help) {
                 Link("AI Browser Help", destination: URL(string: "https://connectcode.net/mlxui_local_llm_ai_browser.html")!)
-                Link("mlx-workflow", destination: URL(string: "https://www.connectcode.net/mlx-workflow.html")!)
+                Link("AI Workflows (mlx-workflow)", destination: URL(string: "https://www.connectcode.net/mlx-workflow.html")!)
                 /*
                 Link("Help build MLXUI", destination: URL(string: "https://www.connectcode.net/mlxui_local_llm_ai_browser.html")!)
                  */
