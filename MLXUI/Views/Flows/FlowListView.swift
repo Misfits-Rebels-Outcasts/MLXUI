@@ -88,6 +88,14 @@ struct FlowListView: View {
             }
         }
         .navigationTitle(display?.title ?? flowID)
+        // `load()` runs only from the loading placeholder's `.onAppear`, which never
+        // fires again when the editor is popped off the navigation stack. Returning
+        // from an edit of *this* flow (a rename, or any row change) would otherwise
+        // leave the page showing the pre-edit title, serialized rows and refusal.
+        .onChange(of: appState.editingFlow) { old, new in
+            guard new == nil, old?.flowID == flowID else { return }
+            reload()
+        }
         .sheet(isPresented: $session.showInstallSheet) {
             if let result = session.preflight {
                 installSheet(result)
@@ -775,6 +783,15 @@ struct FlowListView: View {
         if let userEntry { return FlowDisplay(title: userEntry.title,
                                               description: nil) }
         return nil
+    }
+
+    /// Re-read the flow from disk after the editor closes — its title, rows or
+    /// runnability may have changed. Clears the transient error/refusal state a
+    /// previous load left so a now-fixed flow isn't stuck on a stale sentence.
+    private func reload() {
+        loadError = nil
+        notRunnableReason = nil
+        load()
     }
 
     private func load() {
