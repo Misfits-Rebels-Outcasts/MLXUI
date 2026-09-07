@@ -30,12 +30,27 @@ final class AppState {
     /// Set to `true` to hide the "My Workflows" shelf (the user's own saved flows and the
     /// New Flow badge) on the Automate → AI Workflows page. The two bundled shelves —
     /// Basic Gallery and Advance Gallery — still render.
-    static let hideMyWorkflows = false
+    static let hideMyWorkflows = true
+
+    /// Set to `true` to hide the "My Workspace" shelf (the New Workspace badge and every
+    /// workspace, bundled or saved) on the Automate → AI Workflows page. Flip to `false`
+    /// to show the section. Mirrors `hideMyWorkflows`.
+    static let hideMyWorkspace = true
+
+    /// Set to `true` to hide the "Rerank" domain (and its one model, Qwen3-Reranker-0.6B)
+    /// from Browse → Infrastructure. The Infrastructure section itself still renders while
+    /// Embeddings has models. Mirrors `hideVideoGeneration`.
+    static let hideQwenReranker = true
+
+    /// Set to `true` to hide the "Qwen3.5-9B" model badge from Browse → Chat & Text. Only
+    /// the text (`llm`) card is hidden — "Qwen3.5-9B Vision" under Vision is a separate
+    /// entry and is unaffected. Mirrors `hideVideoGeneration`.
+    static let hideQwen359B = true
 
     /// Set to `true` to hide the "Advance Gallery" shelf (every bundled flow that isn't
     /// basic) on the Automate → AI Workflows page. My Workflows and Basic Gallery still
     /// render.
-    static let hideAdvanceGallery = false
+    static let hideAdvanceGallery = true
 
     /// Hide individual gallery flows (badges) by gallery number. Numbers are the
     /// `_metadata.json` `number` field (1–71 today), stable across renames. Basic Gallery's
@@ -271,7 +286,7 @@ final class AppState {
     }
 
     /// Domain ids for a browse section, minus domains hidden by `hideVideoGeneration` /
-    /// `hideImageSegmentation` / `hideSeedVR2`.
+    /// `hideImageSegmentation` / `hideSeedVR2` / `hideQwenReranker`.
     private func domainIDsForSection(_ sectionID: String) -> [String] {
         guard let data = browserData else { return [] }
         let ids = data.sidebarSections.first(where: { $0.id == sectionID })?.domainIds ?? []
@@ -279,6 +294,7 @@ final class AppState {
             !(Self.hideVideoGeneration && $0 == "videogen")
                 && !(Self.hideImageSegmentation && $0 == "segmentation")
                 && !(Self.hideSeedVR2 && $0 == "upscale")
+                && !(Self.hideQwenReranker && $0 == "rerank")
         }
     }
 
@@ -315,6 +331,9 @@ final class AppState {
             let domainIds = domainIDsForSection(sectionID)
             for domain in data.domains where domainIds.contains(domain.id) {
                 models.append(contentsOf: domain.allModels)
+            }
+            if Self.hideQwen359B {
+                models.removeAll { $0.id == "mlx-community--Qwen3.5-9B-MLX-4bit" }
             }
         }
         if let source = filterSource {

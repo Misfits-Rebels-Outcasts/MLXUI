@@ -23,6 +23,9 @@ struct FlowGalleryView: View {
                 if !AppState.hideMyWorkflows {
                     myWorkflowsSection
                 }
+                if !AppState.hideMyWorkspace {
+                    myWorkspaceSection
+                }
                 basicGallerySection
                 if !AppState.hideAdvanceGallery {
                     advanceGallerySection
@@ -99,12 +102,36 @@ struct FlowGalleryView: View {
                     Label("Import Flow", systemImage: "square.and.arrow.down")
                 }
                 .help("Copy a flow folder (.cat plus its audio, text, etc.) into My Workflows")
+            }
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
+                newFlowBadge
+                ForEach(appState.userFlowEntries) { entry in
+                    userFlowBadge(entry)
+                }
+            }
+            if appState.userFlowEntries.isEmpty {
+                Text("Flows you save — or duplicate from the gallery — appear here. Start with New Flow, or Import one.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    // MARK: - My Workspace — the New Workspace badge and every workspace (bundled or saved).
+    // Split out of My Workflows so it can be shown or hidden on its own (`hideMyWorkspace`).
+
+    private var myWorkspaceSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text("My Workspace")
+                    .font(.title3.weight(.semibold))
+                Spacer()
                 Button {
                     importWorkspace()
                 } label: {
                     Label("Import Workspace", systemImage: "square.and.arrow.down.on.square")
                 }
-                .help("Copy a workspace folder (its .cat files plus shared docs/index) into My Workflows")
+                .help("Copy a workspace folder (its .cat files plus shared docs/index) into My Workspace")
                 // CFM-R17-FIX-1: only shown once the user has removed a bundled workspace —
                 // brings the shipped originals back.
                 if !appState.removedBundledWorkspaceIDs.isEmpty {
@@ -117,17 +144,13 @@ struct FlowGalleryView: View {
                 }
             }
             LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
-                newFlowBadge
                 newWorkspaceBadge
                 ForEach(appState.workspaceEntries) { workspace in
                     workspaceBadge(workspace)
                 }
-                ForEach(appState.userFlowEntries) { entry in
-                    userFlowBadge(entry)
-                }
             }
-            if appState.userFlowEntries.isEmpty && appState.workspaceEntries.isEmpty {
-                Text("Flows you save — or duplicate from the gallery — appear here. Start with New Flow, or Import one. A Workspace holds several flows that share a folder.")
+            if appState.workspaceEntries.isEmpty {
+                Text("A Workspace holds several flows that share one folder — a builder and a querier, an index they both use. Start with New Workspace, or Import one.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

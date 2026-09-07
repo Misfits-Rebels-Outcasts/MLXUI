@@ -177,6 +177,7 @@ struct MLXUIApp: App {
             }
             CommandGroup(replacing: .help) {
                 Link("AI Browser Help", destination: URL(string: "https://connectcode.net/mlxui_local_llm_ai_browser.html")!)
+                Link("mlx-workflow", destination: URL(string: "https://www.connectcode.net/mlx-workflow.html")!)
                 /*
                 Link("Help build MLXUI", destination: URL(string: "https://www.connectcode.net/mlxui_local_llm_ai_browser.html")!)
                  */
