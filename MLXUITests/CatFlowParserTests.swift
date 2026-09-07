@@ -115,7 +115,7 @@ struct CatFlowParserTests {
             Issue.record("expected E101")
         } catch let err as CatParserError {
             let msg = String(describing: err)
-            #expect(msg == "⚠ This flow says `catflow 0.4`. This runtime speaks 0.8 only, and there is no converter. Nothing was run.")
+            #expect(msg == "⚠ This flow says `mlxflow 0.4`. This runtime speaks 0.8 only, and there is no converter. Nothing was run.")
         }
     }
 
@@ -164,7 +164,7 @@ struct CatFlowParserTests {
                 #expect(row == c.row, "\(c.name): row")
                 #expect(section == c.section, "\(c.name): section")
                 let subject = row.map { "Row \($0)" } ?? section.map { "The \($0): section" } ?? "Line \(line)"
-                #expect(String(describing: err) == "⚠ \(subject) uses `\(c.char)`, which CAT Flow 0.8 replaced with `\(c.ascii)`. Run `catflow fmt --upgrade` to convert this file. Nothing was run.", "\(c.name): message")
+                #expect(String(describing: err) == "⚠ \(subject) uses `\(c.char)`, which mlx-workflow 0.8 replaced with `\(c.ascii)`. Run `mlxflow fmt --upgrade` to convert this file. Nothing was run.", "\(c.name): message")
                 checked += 1
             }
         }
@@ -202,11 +202,10 @@ struct CatFlowParserTests {
         #expect(doc.rows.count == 1)
     }
 
-    /// A pre-0.8 version under the `mlxflow` spelling still raises E101, and the error's
-    /// `token` — the piece a caller can render or log — quotes exactly what was written
-    /// (`"mlxflow 0.7"`), not a hardcoded `catflow`. The rendered `.description` still says
-    /// `catflow` until `CFM-R18-2` rebrands the template; this test pins the structured
-    /// data, not the (soon to change) rendered string.
+    /// A pre-0.8 version under the `mlxflow` spelling still raises E101, its `token` quotes
+    /// exactly what was written (`"mlxflow 0.7"`), and — since `CFM-R18-2` rebranded the E101
+    /// template — the rendered `.description` now says `mlxflow` too (the E101 wording is a
+    /// fixed `mlxflow {version}`, not an echo of the written keyword, matching the reference).
     @Test func mlxflowInvalidVersionQuotesTheWrittenToken() throws {
         do {
             _ = try CatParser.parse("mlxflow 0.7\n1. Read Audio  talk.m4a\n")
@@ -219,6 +218,7 @@ struct CatFlowParserTests {
             #expect(token == "mlxflow 0.7")
             #expect(version == "0.7")
             #expect(line == 1)
+            #expect(String(describing: err) == "⚠ This flow says `mlxflow 0.7`. This runtime speaks 0.8 only, and there is no converter. Nothing was run.")
         }
     }
 

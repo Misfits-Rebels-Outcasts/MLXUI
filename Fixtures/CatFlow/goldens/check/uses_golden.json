@@ -22,7 +22,7 @@
   {
     "row": "6",
     "code": "E116",
-    "message": "Row 6 uses `invalid.cat`, but that file doesn't validate on its own: row 1: \"Frobnicate\" isn't a recognized task -- check spelling against `catflow tasks`.. Fix it there — every used flow is also an ordinary flow, so opening and checking it works normally."
+    "message": "Row 6 uses `invalid.cat`, but that file doesn't validate on its own: row 1: \"Frobnicate\" isn't a recognized task -- check spelling against `mlxflow tasks`.. Fix it there — every used flow is also an ordinary flow, so opening and checking it works normally."
   },
   {
     "row": "7",

@@ -1007,7 +1007,7 @@ extension FlowValidator {
                     issues.append(FlowIssue(
                         row: path,
                         code: redirect != nil ? "refused-task" : "unknown-task",
-                        message: redirect ?? "\"\(task)\" isn't a recognized task -- check spelling against `catflow tasks`."
+                        message: redirect ?? "\"\(task)\" isn't a recognized task -- check spelling against `mlxflow tasks`."
                     ))
                     resolved[position] = nil
                     continue

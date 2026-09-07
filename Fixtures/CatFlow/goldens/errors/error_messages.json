@@ -1,13 +1,13 @@
 {
   "NeedsVersionError": {
-    "with_line": "⚠ this flow needs CAT Flow 0.4 — it uses `{token}` (line {line}). Update the header to `catflow 0.4` or remove the unsupported syntax.",
-    "without_line": "⚠ this flow needs CAT Flow 0.4 — it uses `{token}`. Update the header to `catflow 0.4` or remove the unsupported syntax."
+    "with_line": "⚠ this flow needs mlx-workflow 0.4 — it uses `{token}` (line {line}). Update the header to `mlxflow 0.4` or remove the unsupported syntax.",
+    "without_line": "⚠ this flow needs mlx-workflow 0.4 — it uses `{token}`. Update the header to `mlxflow 0.4` or remove the unsupported syntax."
   },
   "ParseError": {
     "with_line": "⚠ row {line}: {message}",
     "without_line": "⚠ {message}"
   },
   "PreV08CharacterError": {
-    "template": "⚠ {subject} uses `{char}`, which CAT Flow 0.8 replaced with `{ascii}`. Run `catflow fmt --upgrade` to convert this file. Nothing was run."
+    "template": "⚠ {subject} uses `{char}`, which mlx-workflow 0.8 replaced with `{ascii}`. Run `mlxflow fmt --upgrade` to convert this file. Nothing was run."
   }
 }

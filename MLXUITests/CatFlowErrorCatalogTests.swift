@@ -57,7 +57,7 @@ struct CatFlowErrorCatalogTests {
 
     @Test func e101V08UnknownVersion() throws {
         let msg = try ErrorCatalog.fill(code: "E101", values: ["version": "0.4"], isV08: true)
-        #expect(msg == "This flow says `catflow 0.4`. This runtime speaks 0.8 only, and there is no converter. Nothing was run.")
+        #expect(msg == "This flow says `mlxflow 0.4`. This runtime speaks 0.8 only, and there is no converter. Nothing was run.")
     }
 
     @Test func e105V08UnparseableRow() throws {
@@ -75,7 +75,7 @@ struct CatFlowErrorCatalogTests {
             values: ["subject": "Row 3", "char": "·", "ascii": ";"],
             isV08: true
         )
-        #expect(msg == "Row 3 uses `·`, which CAT Flow 0.8 replaced with `;`. Run `catflow fmt --upgrade` to convert this file. Nothing was run.")
+        #expect(msg == "Row 3 uses `·`, which mlx-workflow 0.8 replaced with `;`. Run `mlxflow fmt --upgrade` to convert this file. Nothing was run.")
     }
 
     // MARK: - E701's SPEC-Q50 optional clause

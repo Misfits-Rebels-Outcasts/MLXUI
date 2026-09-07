@@ -611,7 +611,7 @@
   "values": {
    "version": "‹version›"
   },
-  "expected": "This flow says `catflow ‹version›`. This runtime speaks 0.8 only, and there is no converter. Nothing was run."
+  "expected": "This flow says `mlxflow ‹version›`. This runtime speaks 0.8 only, and there is no converter. Nothing was run."
  },
  {
   "code": "E102",
@@ -673,7 +673,7 @@
    "char": "‹char›",
    "ascii": "‹ascii›"
   },
-  "expected": "‹subject› uses `‹char›`, which CAT Flow 0.8 replaced with `‹ascii›`. Run `catflow fmt --upgrade` to convert this file. Nothing was run."
+  "expected": "‹subject› uses `‹char›`, which mlx-workflow 0.8 replaced with `‹ascii›`. Run `mlxflow fmt --upgrade` to convert this file. Nothing was run."
  },
  {
   "code": "E109",
@@ -1448,7 +1448,7 @@
    "paths": "‹paths›",
    "run": "‹run›"
   },
-  "expected": "Row ‹n› changed ‹k› file(s) in `‹workdir›`: ‹paths›. Undo with `catflow undo ‹run› ‹n›`."
+  "expected": "Row ‹n› changed ‹k› file(s) in `‹workdir›`: ‹paths›. Undo with `mlxflow undo ‹run› ‹n›`."
  },
  {
   "code": "F010",
@@ -1527,7 +1527,7 @@
    "dir": "‹dir›",
    "run": "‹run›"
   },
-  "expected": "Row ‹n› tried to ‹read|write|delete› `‹path›`, which is outside its `workdir=‹dir›`. The run stopped and nothing at that path was touched. Everything row ‹n› changed before this can be undone with `catflow undo ‹run› ‹n›`."
+  "expected": "Row ‹n› tried to ‹read|write|delete› `‹path›`, which is outside its `workdir=‹dir›`. The run stopped and nothing at that path was touched. Everything row ‹n› changed before this can be undone with `mlxflow undo ‹run› ‹n›`."
  },
  {
   "code": "R907",
@@ -1539,7 +1539,7 @@
    "N": "‹N›",
    "run": "‹run›"
   },
-  "expected": "Row ‹n›'s action failed: ‹detail›. The agent had ‹k› of ‹N› actions left. Everything it changed can be undone with `catflow undo ‹run› ‹n›`."
+  "expected": "Row ‹n›'s action failed: ‹detail›. The agent had ‹k› of ‹N› actions left. Everything it changed can be undone with `mlxflow undo ‹run› ‹n›`."
  },
  {
   "code": "R908",

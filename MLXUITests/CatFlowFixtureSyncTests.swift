@@ -19,7 +19,7 @@ struct CatFlowFixtureSyncTests {
 
     /// The catflow-mlx commit the fixtures were synced from. Bump only after reviewing
     /// a re-synced corpus. Source: `git -C catflow-mlx rev-parse HEAD` at sync time.
-    private static let pinnedSourceSHA = "69159d4849415ce4ec647e93a2ed531a145dac57"
+    private static let pinnedSourceSHA = "0936eaa1c129977d0081c82b8a0de4bbf8f26580"
 
     // MARK: - Fixtures dir (repo-relative, mirroring the other CatFlow tests)
 
@@ -89,6 +89,37 @@ struct CatFlowFixtureSyncTests {
         }
         #expect(discovered.isEmpty,
                 "unexpected top-level files in the fixtures dir — the sync script owns it: \(discovered.joined(separator: ", "))")
+    }
+
+    // MARK: - MLXUI-generated fixtures the sync deliberately does not track
+
+    /// Subtrees under `Fixtures/CatFlow/` that have **no upstream source** — added in
+    /// `3c346a2`, regenerated from the Python by other means, and covered by their own
+    /// suites. `sync-catflow-fixtures.sh` skips them when building `manifest.json`, so a
+    /// re-sync doesn't reclassify ~150 local files as "synced from catflow-mlx". Keep this
+    /// list identical to `UNMANAGED_PREFIXES` / `UNMANAGED_EXACT` in the script.
+    /// See `RSI/DelegateMergeBacklog.md` Phase R18.
+    private static let unmanagedPrefixes = ["gallery/", "goldens/canonicalize/", "traces/", "tools/", "validator/"]
+    private static let unmanagedExact = ["goldens/check/uses_golden.json", "nonascii_canonical.cat"]
+
+    @Test func unmanagedFixturesExistButAreNotInTheManifest() throws {
+        let manifest = try loadManifest()
+        for prefix in Self.unmanagedPrefixes {
+            let dir = fixturesDir.appendingPathComponent(String(prefix.dropLast()))
+            let files = (try? FileManager.default.subpathsOfDirectory(atPath: dir.path)) ?? []
+            let regular = files.filter { !$0.hasSuffix("/") && !$0.contains(".DS_Store") }
+            #expect(!regular.isEmpty, "\(prefix) is an MLXUI-local fixture tree but is empty or gone")
+            for rel in manifest.files.keys {
+                #expect(!rel.hasPrefix(prefix),
+                        "\(rel) is under the unmanaged prefix \(prefix) but the manifest tracks it — the sync script's skip-list drifted")
+            }
+        }
+        for exact in Self.unmanagedExact {
+            #expect(FileManager.default.fileExists(atPath: fixturesDir.appendingPathComponent(exact).path),
+                    "\(exact) is a named MLXUI-local fixture but is missing")
+            #expect(manifest.files[exact] == nil,
+                    "\(exact) is meant to be unmanaged but the manifest tracks it")
+        }
     }
 
     // MARK: - Corpus shape

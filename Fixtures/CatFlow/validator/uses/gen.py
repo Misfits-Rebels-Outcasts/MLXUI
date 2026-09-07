@@ -3,7 +3,7 @@
 
 The fixture exercises all four `uses:` codes in one file (E114 escape/absolute,
 E116 no-such-file / parse-error / child-invalid, E117 inherited capability,
-E115 two-file cycle). The golden is produced by running `catflow check --json`
+E115 two-file cycle). The golden is produced by running `mlxflow check --json`
 against the Python — never by transcribing what the Swift emits.
 
 Run from anywhere: the sibling `catflow-mlx` checkout is located via this
@@ -77,7 +77,7 @@ def main() -> int:
 
     root = FIXTURE_DIR / "root.cat"
     result = subprocess.run(
-        ["uv", "run", "catflow", "check", str(root), "--json"],
+        ["uv", "run", "mlxflow", "check", str(root), "--json"],
         cwd=CATFLOW_MLX, capture_output=True, text=True,
     )
     if result.returncode not in (0, 1):  # 0 = clean, 1 = invalid (both have --json payloads)
