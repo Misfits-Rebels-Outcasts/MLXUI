@@ -127,7 +127,7 @@ struct FlowListView: View {
             HStack(spacing: 10) {
                 Label(display.title, systemImage: "flowchart")
                     .font(.title2.weight(.semibold))
-                Text("catflow 0.8")
+                Text("\(doc.headerKeyword) \(doc.version)")
                     .font(.caption.monospaced())
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -451,7 +451,7 @@ struct FlowListView: View {
         HStack(spacing: 12) {
             Text(display.title)
                 .font(.title2.weight(.semibold))
-            Text("catflow \(doc.version)")
+            Text("\(doc.headerKeyword) \(doc.version)")
                 .font(.caption.monospaced())
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)

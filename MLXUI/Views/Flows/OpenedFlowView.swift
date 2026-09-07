@@ -32,7 +32,7 @@ struct OpenedFlowView: View {
             HStack(spacing: 10) {
                 Label(opened.displayName, systemImage: "doc.plaintext")
                     .font(.title2.weight(.semibold))
-                Text(opened.parsed.version.isEmpty ? "headerless" : "catflow \(opened.parsed.version)")
+                Text(opened.parsed.version.isEmpty ? "headerless" : "\(opened.parsed.headerKeyword) \(opened.parsed.version)")
                     .font(.caption.monospaced())
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)

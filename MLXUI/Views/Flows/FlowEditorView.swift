@@ -149,7 +149,9 @@ struct FlowEditorView: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 200)
             }
-            Text("catflow 0.8")
+            // CFM-R18-5: the family the document carries, not a literal — a fresh flow is
+            // `mlxflow`, an opened `.catpipeline` keeps `mlxpipeline`/`catpipeline`.
+            Text("\(model.document.headerKeyword) \(model.document.version)")
                 .font(.caption.monospaced())
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)

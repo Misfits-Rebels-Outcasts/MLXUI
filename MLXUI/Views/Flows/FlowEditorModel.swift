@@ -80,7 +80,7 @@ final class FlowEditorModel {
         self.name = name
         self.flowID = flowID
         self.workspace = workspace
-        self.document = document ?? FlowDocument(version: "0.8", rows: [])
+        self.document = document ?? FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [])
         self.sampleSourceDir = sampleSourceDir
         self.savedText = savedText
         // Opening an existing flow selects its first row so the inspector pane is up and
@@ -848,7 +848,7 @@ final class FlowEditorModel {
         savedURL = nil
         savedText = nil
         saveError = nil
-        document = FlowDocument(version: "0.8", rows: [])
+        document = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [])
     }
 
     // MARK: - Run

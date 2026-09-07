@@ -237,7 +237,7 @@ struct FlowGalleryView: View {
         let ws = FlowWorkspace(root: ModelStore.shared.workspacesDirectory)
         let id = "Workspace-\(UUID().uuidString.prefix(8))"
         let dir = ws.directory(for: id)
-        let starter = "catflow 0.8\n1. Read Text   notes.txt\n2. Save Text   out.md\n"
+        let starter = "mlxflow 0.8\n1. Read Text   notes.txt\n2. Save Text   out.md\n"
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             try starter.write(to: dir.appendingPathComponent("Flow.cat"), atomically: true, encoding: .utf8)
