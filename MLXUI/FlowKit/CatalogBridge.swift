@@ -328,6 +328,24 @@ nonisolated struct SettingSpec: Codable, Sendable, Equatable {
     }
 }
 
+/// The consumed slice of a manifest's `capabilities` block. Only `rejected_settings` —
+/// the `{setting: reason}` map `core/validator.py:2941` turns into a reasoned **E708**
+/// naming the model — is read here (SPEC-Q212, owner 2026-09-08, OCP-3-4). The block's
+/// free-form keys (`variant`, `supports_guidance`, `latent_space`, …) are ignored, the
+/// same way `CuratedManifest` ignores the rest of the file.
+///
+/// No producer consumes this yet — `FlowValidator` performs no manifest settings
+/// resolution and MLXUI emits no E708 anywhere. `VAL-1` (`RSI/backlog.md`) is the item
+/// that ports the check; this decode is its prerequisite, split out per SPEC-Q212's
+/// "its own item" ruling.
+nonisolated struct ManifestCapabilities: Codable, Sendable, Equatable {
+    var rejectedSettings: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case rejectedSettings = "rejected_settings"
+    }
+}
+
 /// A manifest resource footprint (`resources`).
 nonisolated struct ManifestResources: Codable, Sendable, Equatable {
     var diskGB: Double?
@@ -347,16 +365,19 @@ nonisolated struct CuratedManifest: Codable, Sendable, Equatable {
     var id: String
     var display: String
     var settings: [String: SettingSpec]
+    var capabilities: ManifestCapabilities?
     var resources: ManifestResources?
 
     enum CodingKeys: String, CodingKey {
-        case id, display, settings, resources
+        case id, display, settings, capabilities, resources
     }
 
-    init(id: String, display: String, settings: [String: SettingSpec], resources: ManifestResources?) {
+    init(id: String, display: String, settings: [String: SettingSpec],
+         capabilities: ManifestCapabilities? = nil, resources: ManifestResources?) {
         self.id = id
         self.display = display
         self.settings = settings
+        self.capabilities = capabilities
         self.resources = resources
     }
 

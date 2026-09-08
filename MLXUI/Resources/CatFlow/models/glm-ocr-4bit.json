@@ -6,7 +6,12 @@
   "tasks": [
     "OCR"
   ],
-  "settings": {},
+  "settings": {
+    "prompt": {
+      "type": "string",
+      "positional_ok": true
+    }
+  },
   "capabilities": {},
   "resources": {
     "disk_gb": 1.25,

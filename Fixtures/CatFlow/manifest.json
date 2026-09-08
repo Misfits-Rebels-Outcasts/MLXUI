@@ -145,7 +145,7 @@
     "registry/cohere-rerank-multilingual-v3.0.json": "e6fda0f1387a102dab75f40670b087f9e474c584fd46e2018783467199a5de04",
     "registry/deepseek-v4-flash.json": "21115a75de60ca219bbbed879fb51a7eb97f4802ac99155473f02e9a7b55f72c",
     "registry/depth-pro.json": "591b12017f499a41f11408711c8a93d75a5ade1b23b32016524499f46215319b",
-    "registry/dots-ocr-4bit.json": "e17fc6bc4f979d05c97b8e4e5b8a63953517627402eee992dbba92e30856ec4b",
+    "registry/dots-ocr-4bit.json": "133d2701d4fc21dea8e5020d2e4a983845333e0d640538506bc14e82a945d3ff",
     "registry/flux1-fill.json": "1f55c8ec474cc7041adb8d37745dfc448e0a0f0dc7c595495a790f1c5b37766f",
     "registry/flux1-kontext.json": "943c7299ff91be8d20fb7f857583de88154177552a692bc5a77fef6238f9bee8",
     "registry/flux2-klein-4b-4bit.json": "68a48d479f69fe60799c0ac3158a24e7d589bd17b506c537f62fa16aa922135b",
@@ -161,7 +161,7 @@
     "registry/ministral-3b-4bit.json": "1873a58c191c2fc67426f9f42ef3f3b6c4188790866f5b29c351239575015bc5",
     "registry/modernbert-embed.json": "2614fcb8b5d1f814568d5f252e04613854b861711c9b9d395d41fa9c85efed32",
     "registry/musicgen-small.json": "c8a00cc5b63aab364ca20963c0b6ee27a1adf7dfc4dc9857ac3925634a4fc75c",
-    "registry/olmocr-2-7b-1025-4bit.json": "f3f2b9f085e298a1a4fbdf87dd073bb374f470f28f03a21df3179cb3a05d4479",
+    "registry/olmocr-2-7b-1025-4bit.json": "ff30e707cfc71bdb5bdd4bff7ca490b5e6fac5690b5920dce136127860f20ff3",
     "registry/openrouter-llama-3.3-70b-versatile.json": "110b336079f72bbf87193c597d24e0478f15d9127cc4192b89b8f9ec61b38f25",
     "registry/qwen2.5-14b-4bit.json": "f1b9019991b44687ce3d8628e8d29449f544c7dbfd275ebfa817ffff6c81c16d",
     "registry/qwen3-8b-4bit.json": "2be955b85de79d66e1cd797f425257397d1e51ac4e160ec23dc78110199f1d4b",
@@ -184,5 +184,5 @@
     "registry/z-image-turbo.json": "55b8360285e65b689b68027c65bd397db34b60599912463a22fdbe7caba95172"
   },
   "source_repo": "catflow-mlx",
-  "source_sha": "0936eaa1c129977d0081c82b8a0de4bbf8f26580"
+  "source_sha": "9f682aed944a2c728388cad3e27a2174b209e304"
 }

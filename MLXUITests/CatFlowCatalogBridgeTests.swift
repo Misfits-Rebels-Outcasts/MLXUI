@@ -251,6 +251,55 @@ struct CatFlowCatalogBridgeTests {
         #expect(speed.defaultValue == .number(1.0))
     }
 
+    // MARK: - OCP-3-2 / OCP-3-4: OCR prompt capabilities declared in the manifest
+    //
+    // SPEC-Q212 (owner, 2026-09-08): a model's prompt support is a manifest fact, not a
+    // Swift-side table. The free-text OCR models declare `prompt` as a `string` setting
+    // that binds positionally; `CuratedManifest` learns to decode `capabilities` so a
+    // future `rejected_settings` (DeepSeek-OCR, deferred) is visible in Swift.
+
+    @Test(arguments: ["glm-ocr-4bit.json", "olmocr-2-7b-1025-4bit.json", "dots-ocr-4bit.json"])
+    func freeTextOCRManifestsDeclarePromptAsAPositionalString(_ file: String) throws {
+        let data = try Data(contentsOf: manifestURL(file))
+        let manifest = try JSONDecoder().decode(CuratedManifest.self, from: data)
+        let prompt = try #require(manifest.settings["prompt"], "\(file) must declare `prompt`")
+        #expect(prompt.type == "string")
+        #expect(prompt.positionalOK == true)
+        #expect(prompt.values == nil)          // free text, not an enum
+    }
+
+    /// The two models catflow-mlx also carries must stay byte-identical to the synced
+    /// fixture copy — the `Resources/` manifest and `Fixtures/CatFlow/registry/` are the
+    /// same file from two dirs, and OCP-3-2 edited both.
+    @Test(arguments: ["olmocr-2-7b-1025-4bit.json", "dots-ocr-4bit.json"])
+    func mirroredOCRManifestsMatchTheSyncedFixture(_ file: String) throws {
+        let resource = try Data(contentsOf: manifestURL(file))
+        let fixture = try Data(contentsOf: repoRoot
+            .appendingPathComponent("Fixtures/CatFlow/registry").appendingPathComponent(file))
+        #expect(resource == fixture)
+    }
+
+    /// OCP-3-4: `capabilities` now reaches Swift. No shipped manifest declares
+    /// `rejected_settings` yet (DeepSeek-OCR is deferred), so this pins the decode shape
+    /// directly — the prerequisite `VAL-1` builds its E708 producer on.
+    @Test func curatedManifestDecodesRejectedSettingsCapability() throws {
+        let json = """
+        {"id": "x/y", "display": "Y", "settings": {},
+         "capabilities": {"variant": "z", "rejected_settings": {"prompt": "the OCR instruction is fixed in the engine"}}}
+        """
+        let manifest = try JSONDecoder().decode(CuratedManifest.self, from: Data(json.utf8))
+        #expect(manifest.capabilities?.rejectedSettings?["prompt"]
+                == "the OCR instruction is fixed in the engine")
+    }
+
+    /// An empty `capabilities: {}` (every shipped OCR manifest today) decodes to a
+    /// non-nil block with no rejected settings, never an error.
+    @Test func curatedManifestDecodesEmptyCapabilities() throws {
+        let data = try Data(contentsOf: manifestURL("glm-ocr-4bit.json"))
+        let manifest = try JSONDecoder().decode(CuratedManifest.self, from: data)
+        #expect(manifest.capabilities?.rejectedSettings == nil)
+    }
+
     // MARK: - MoC-2-4: Qwen3.5 9B joins the bridge, llmModels' last slot
 
     @Test func qwen35NineBResolvesAsSame() throws {
