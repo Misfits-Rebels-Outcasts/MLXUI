@@ -498,6 +498,14 @@
    "category": "Basic",
    "description": "One step past Transcribe Audio: the same transcript, boiled down to a three-word takeaway and saved alongside it.",
    "tier": "basic"
+  },
+  {
+   "number": 72,
+   "title": "Table From Image",
+   "filename": "3-ExtractTableFromImage.cat",
+   "category": "Basic",
+   "description": "Point PaddleOCR-VL at a screenshot of a table and get the grid back as markup — the model's table mode, saved to a file.",
+   "tier": "basic"
   }
  ]
 }

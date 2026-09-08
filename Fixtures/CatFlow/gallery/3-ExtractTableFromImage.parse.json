@@ -1,0 +1,35 @@
+{
+ "rows": [
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "budget.png",
+   "task": "Read Image"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": "PaddleOCR-VL-1.5",
+   "refs": [],
+   "settings": "\"table\"",
+   "task": "OCR"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "table.md",
+   "task": "Save Text"
+  }
+ ],
+ "version": "0.8"
+}

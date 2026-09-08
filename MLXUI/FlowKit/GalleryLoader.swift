@@ -275,6 +275,8 @@ nonisolated enum GalleryLoader {
             return [("canond.wav", "canond.wav")]
         case "2-SummaryFromAudio":
             return [("2-SummaryFromAudio-canond.wav", "canond.wav")]
+        case "3-ExtractTableFromImage":
+            return [("3-ExtractTableFromImage-budget.png", "budget.png")]
         default:
             return []
         }
