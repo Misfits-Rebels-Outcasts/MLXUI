@@ -163,7 +163,7 @@ struct CatFlowCatalogBridgeTests {
             Issue.record("SAM Base should resolve: \(reason)")
             _ = display
         }
-        #expect(CatalogBridge.entries.count == 20)
+        #expect(CatalogBridge.entries.count == 21)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
@@ -300,6 +300,58 @@ struct CatFlowCatalogBridgeTests {
         #expect(manifest.capabilities?.rejectedSettings == nil)
     }
 
+    // MARK: - OCP-3-1 prerequisite / AM-W: PaddleOCR-VL joins the bridge
+    //
+    // The model already installs, runs (OCP-0) and derives into the OCR pool; it lacked a
+    // bridge row, so `CuratedManifest.load` had nowhere to hang a settings manifest. The
+    // entry's `display` is exactly `browser.json`'s `displayName`, so resolution is
+    // byte-identical to the R14-FIX-1 no-bridge fallback it replaces (journal `2026-235`).
+
+    @Test func paddleOCRVLResolvesAsSame() throws {
+        let catalog = try loadCatalog()
+        let entry = try #require(CatalogBridge.entry(for: "PaddleOCR-VL-1.5"))
+        #expect(entry.pinnedID == "mlx-community/PaddleOCR-VL-1.5-4bit")
+        #expect(entry.candidates == ["mlx-community/PaddleOCR-VL-1.5-4bit"])
+        #expect(entry.equivalence == .same)
+        #expect(entry.manifestFile == "paddleocr-vl-1.5-4bit.json")
+        switch CatalogBridge.resolve("PaddleOCR-VL-1.5", catalog: catalog) {
+        case .runnable(let model, let equivalence, let note):
+            #expect(model.hfModelId == "mlx-community/PaddleOCR-VL-1.5-4bit")
+            #expect(model.runnerKind == .ocr)
+            #expect(equivalence == .same)
+            #expect(note == nil)          // .same is silent — no substitution on the row
+        case .notRunnable(let display, let reason):
+            Issue.record("\(display) should resolve: \(reason)")
+        }
+    }
+
+    /// BasicGallery flow 3 (`3-ExtractTableFromImage.cat`, gallery number 72) writes the bare
+    /// name `PaddleOCR-VL-1.5`. Adding the bridge row moves resolution off the fallback and
+    /// through `entry(for:)` — it must still land on the same installable model, or a shipped
+    /// gallery flow flips to `.notRunnable`. (`CatFlowNotRunnableTests.flowsThatRunStayRunnable`
+    /// covers the whole-flow verdict; this pins the bridge hop the flow's OCR row takes.)
+    @Test func galleryFlow72OCRRowResolvesThroughTheBridge() throws {
+        let catalog = try loadCatalog()
+        let viaBridge = CatalogBridge.resolve("PaddleOCR-VL-1.5", catalog: catalog)
+        let viaCatalog = catalog.first { $0.displayName == "PaddleOCR-VL-1.5" }
+        guard case .runnable(let model, _, _) = viaBridge else {
+            Issue.record("PaddleOCR-VL-1.5 must resolve for gallery flow 72")
+            return
+        }
+        #expect(model.id == viaCatalog?.id)   // same card the fallback used to reach
+    }
+
+    @Test func paddleOCRVLManifestShips() throws {
+        let data = try Data(contentsOf: manifestURL("paddleocr-vl-1.5-4bit.json"))
+        let manifest = try JSONDecoder().decode(CuratedManifest.self, from: data)
+        #expect(manifest.id == "mlx-community/PaddleOCR-VL-1.5-4bit")
+        #expect(manifest.display == "PaddleOCR-VL-1.5")
+        // OCP-3-1 (the mode enum) is deferred — the manifest ships as a settings-authority
+        // skeleton so the bridge row has something to load. No settings, no rejected settings.
+        #expect(manifest.settings.isEmpty)
+        #expect(manifest.capabilities?.rejectedSettings == nil)
+    }
+
     // MARK: - MoC-2-4: Qwen3.5 9B joins the bridge, llmModels' last slot
 
     @Test func qwen35NineBResolvesAsSame() throws {
@@ -318,7 +370,7 @@ struct CatFlowCatalogBridgeTests {
         case .notRunnable(let display, let reason):
             Issue.record("\(display) should resolve: \(reason)")
         }
-        #expect(CatalogBridge.entries.count == 20)
+        #expect(CatalogBridge.entries.count == 21)
     }
 
     // MARK: - MoC-4-4: Qwen3 Reranker 0.6B joins the bridge, the model on MoC-3's seam

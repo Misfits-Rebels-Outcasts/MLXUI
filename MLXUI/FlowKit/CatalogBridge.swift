@@ -61,7 +61,7 @@ nonisolated enum CatalogBridgeResolution: Sendable, Equatable {
 /// the curated manifest (`Resources/CatFlow/models/`); only the *weights* are substituted.
 nonisolated enum CatalogBridge {
 
-    /// The nineteen display names the bridge runs. **`SAM Base`** joined 2026-08-27 (CFM-R15-1):
+    /// The twenty-one display names the bridge runs. **`SAM Base`** joined 2026-08-27 (CFM-R15-1):
     /// hazard H2 / `CFM-R13-6` was **ruled option (1)** — a headless default — and the bridge
     /// maps the reference's own `SAM Base` id onto the one installable segmentation entry,
     /// `sam3-4bit`, as a `.substitute` so the substitution is shown on the row, never hidden.
@@ -163,6 +163,23 @@ nonisolated enum CatalogBridge {
             candidates: ["mlx-community/GLM-OCR-4bit"],
             equivalence: .same,
             manifestFile: "glm-ocr-4bit.json"),
+        // OCP-3-1 prerequisite / AM-W (RSI/DelegateOCRPromptBacklog.md §5, journal
+        // `2026-235`) — PaddleOCR-VL. Installs and runs from Browse (OCP-0) and is already
+        // in the derived OCR pool, but had no bridge row, so `CuratedManifest.load` — keyed
+        // on `manifestFile` — had nowhere to hang a settings manifest. `display` is exactly
+        // `browser.json`'s `displayName` ("PaddleOCR-VL-1.5"), the name BasicGallery flow 3
+        // (gallery number 72) already writes, so `resolve` returns the identical `ModelEntry`
+        // it did through the R14-FIX-1 no-bridge fallback — only now a manifest can govern
+        // the row. No reference manifest exists: catflow-mlx evaluated PaddleOCR-VL during
+        // SPEC-Q131 curation and rejected it, so `paddleocr-vl-1.5-4bit.json` is
+        // MLXUI-authored (see its own "notes"), like `glm-ocr-4bit.json`. Not added to
+        // `taskModels["OCR"]` — same as GLM-OCR: picker-reachable, never the default seed.
+        BridgeEntry(
+            display: "PaddleOCR-VL-1.5",
+            pinnedID: "mlx-community/PaddleOCR-VL-1.5-4bit",
+            candidates: ["mlx-community/PaddleOCR-VL-1.5-4bit"],
+            equivalence: .same,
+            manifestFile: "paddleocr-vl-1.5-4bit.json"),
         // CFM-R13-12 — Describe Image.
         BridgeEntry(
             display: "LFM2-VL 1.6B",

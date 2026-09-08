@@ -1,0 +1,20 @@
+{
+  "id": "mlx-community/PaddleOCR-VL-1.5-4bit",
+  "display": "PaddleOCR-VL-1.5",
+  "kind": "local",
+  "engine": "mlx-vlm",
+  "tasks": [
+    "OCR"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 0.14,
+    "ram_gb": 0.22
+  },
+  "source": "https://huggingface.co/mlx-community/PaddleOCR-VL-1.5-4bit",
+  "license": "apache-2.0",
+  "manifest_version": 1,
+  "pinned": true,
+  "notes": "MLXUI-authored (RSI/DelegateOCRPromptBacklog.md OCP-3-1 prerequisite / AM-W, journal 2026-235). catflow-mlx has no PaddleOCR-VL manifest to port -- the model was evaluated during SPEC-Q131 curation and rejected there (loads but emits internal weight-parameter names under that project's pinned mlx_vlm), so this file is authored here the same way glm-ocr-4bit.json is. `engine` is `mlx-vlm` for parity with the other OCR manifests; MLXUI actually runs PaddleOCR-VL through the vendored PaddleOCRVL pipeline (SUP-1), not MLXVLM. `settings` is empty pending OCP-3-1, which adds the `mode` enum (ocr/table/formula/chart, positional) that PaddleOCR-VL's `promptSupport` already declares in Swift (journal 2026-229); OCP-3-5 then derives `PromptSupport.modes` from this file instead of the hardcoded list. resources.{disk_gb,ram_gb} are browser.json's downloadSizeGB / ramGB (the 1.5x-heuristic gate figures), not Python-measured numbers."
+}
