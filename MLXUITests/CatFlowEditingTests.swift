@@ -561,6 +561,37 @@ struct CatFlowEditingTests {
         #expect(model.isDirty == true)
     }
 
+    @Test func renamingLeavesExactlyOneFlowFile() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-rename-\(UUID().uuidString)")
+        let model = try editor(name: "Untitled Flow",
+                               rows: [row("Read Image", settings: "budget.png")],
+                               workspaceRoot: root)
+        try model.save()
+        let dir = model.savedURL!.deletingLastPathComponent()
+        func flowFiles() throws -> [String] {
+            try FileManager.default.contentsOfDirectory(atPath: dir.path)
+                .filter { $0.hasSuffix(".cat") || $0.hasSuffix(".catpipeline") }.sorted()
+        }
+        #expect(try flowFiles() == ["Untitled Flow.cat"])
+
+        // A rename in the same session (the tracked `savedURL` path) …
+        model.name = "Extract table data from image"
+        try model.save()
+        #expect(try flowFiles() == ["Extract table data from image.cat"])
+
+        // … and a rename after the editor was closed and reopened (fresh model, no
+        // `savedURL`) still ends with one file, not two.
+        let reopened = FlowEditorModel(name: "Extract table data from image",
+                                       flowID: model.flowID,
+                                       document: model.document,
+                                       workspace: FlowWorkspace(root: root),
+                                       savedText: model.savedText)
+        reopened.name = "EXTRACT TABLE DATA FROM IMAGE"
+        try reopened.save()
+        #expect(try flowFiles() == ["EXTRACT TABLE DATA FROM IMAGE.cat"])
+    }
+
     @Test func saveRefusesWhileAReferenceIsBroken() throws {
         let r1 = row("Read Audio", settings: "memo.m4a")
         let r2 = row("Transcribe", model: "Whisper Large v3")

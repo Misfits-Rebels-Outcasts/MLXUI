@@ -34,12 +34,21 @@ struct FlowGalleryView: View {
             .padding(20)
         }
         .navigationTitle("AI Workflows")
-        // A save or Duplicate & Edit adds a folder while the editor was open; refresh on
-        // every appearance so the shelf is never stale.
+        // A save or Duplicate & Edit adds/renames a folder while the editor was open; refresh
+        // on every appearance so the shelf is never stale.
         .onAppear {
             appState.reloadUserFlows()
             appState.reloadWorkspaces()
             appState.refreshGalleryBlocked()
+        }
+        // `.onAppear` does not re-fire when the editor is popped off the navigation stack, so
+        // a flow just created or renamed in it wouldn't show on the shelf until the page was
+        // left and re-entered. Refresh when the editor closes.
+        .onChange(of: appState.editingFlow) { _, new in
+            if new == nil {
+                appState.reloadUserFlows()
+                appState.reloadWorkspaces()
+            }
         }
         .confirmationDialog("Remove this flow?", isPresented: Binding(
             get: { flowPendingRemoval != nil },

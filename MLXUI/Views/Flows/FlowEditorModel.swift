@@ -787,13 +787,27 @@ final class FlowEditorModel {
         let dir = workspace.directory(for: flowID)
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent("\(Self.sanitizedFileName(name)).\(Self.fileExtension(for: document.fileKind))")
-        try catText.write(to: url, atomically: true, encoding: .utf8)
-        // A rename (or a `.cat` ↔ `.catpipeline` kind change) writes a *new* file. Drop the
-        // previously-saved one, or the folder holds two `.cat` files and the shelf — which
-        // takes the first it finds — would keep showing the old name.
-        if let previous = savedURL, previous != url, fm.fileExists(atPath: previous.path) {
-            try? fm.removeItem(at: previous)
+
+        // Clear stale flow files *before* writing. A rename, a `.cat` ↔ `.catpipeline` kind
+        // change, or a reopened editor (which starts with `savedURL == nil`, so the old file
+        // isn't tracked) all leave the previous file behind, and `UserFlowStore.scan` shows
+        // whichever the filesystem lists first. A case-only rename is worse: `write(to:)`
+        // reuses the existing directory entry on a case-insensitive volume, so the old casing
+        // sticks unless the file is removed first. Comparisons are by name — `contentsOf
+        // Directory` can hand back `/private/var/…` where `url` is `/var/…`.
+        let isSharedWorkspaceFolder = workspace.root == ModelStore.shared.workspacesDirectory
+        let siblings = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        for f in siblings where f.pathExtension == "cat" || f.pathExtension == "catpipeline" {
+            let name = f.lastPathComponent
+            guard name != url.lastPathComponent else { continue }        // never the exact target
+            let caseOnlyDuplicate = name.compare(url.lastPathComponent, options: .caseInsensitive) == .orderedSame
+            let trackedPrevious = savedURL.map { name == $0.lastPathComponent } ?? false
+            if !isSharedWorkspaceFolder || caseOnlyDuplicate || trackedPrevious {
+                try? fm.removeItem(at: f)
+            }
         }
+
+        try catText.write(to: url, atomically: true, encoding: .utf8)
         savedURL = url
         savedText = catText
         saveError = nil
