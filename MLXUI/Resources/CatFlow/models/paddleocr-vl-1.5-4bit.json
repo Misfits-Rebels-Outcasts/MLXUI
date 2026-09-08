@@ -2,11 +2,23 @@
   "id": "mlx-community/PaddleOCR-VL-1.5-4bit",
   "display": "PaddleOCR-VL-1.5",
   "kind": "local",
-  "engine": "mlx-vlm",
+  "engine": "paddleocr-vl",
   "tasks": [
     "OCR"
   ],
-  "settings": {},
+  "settings": {
+    "mode": {
+      "type": "enum",
+      "values": [
+        "ocr",
+        "table",
+        "formula",
+        "chart"
+      ],
+      "default": "ocr",
+      "positional_ok": true
+    }
+  },
   "capabilities": {},
   "resources": {
     "disk_gb": 0.14,
@@ -16,5 +28,5 @@
   "license": "apache-2.0",
   "manifest_version": 1,
   "pinned": true,
-  "notes": "MLXUI-authored (RSI/DelegateOCRPromptBacklog.md OCP-3-1 prerequisite / AM-W, journal 2026-235). catflow-mlx has no PaddleOCR-VL manifest to port -- the model was evaluated during SPEC-Q131 curation and rejected there (loads but emits internal weight-parameter names under that project's pinned mlx_vlm), so this file is authored here the same way glm-ocr-4bit.json is. `engine` is `mlx-vlm` for parity with the other OCR manifests; MLXUI actually runs PaddleOCR-VL through the vendored PaddleOCRVL pipeline (SUP-1), not MLXVLM. `settings` is empty pending OCP-3-1, which adds the `mode` enum (ocr/table/formula/chart, positional) that PaddleOCR-VL's `promptSupport` already declares in Swift (journal 2026-229); OCP-3-5 then derives `PromptSupport.modes` from this file instead of the hardcoded list. resources.{disk_gb,ram_gb} are browser.json's downloadSizeGB / ramGB (the 1.5x-heuristic gate figures), not Python-measured numbers."
+  "notes": "MLXUI-authored (RSI/DelegateOCRPromptBacklog.md OCP-3-1 / AM-W, journals 2026-235 and 2026-236). catflow-mlx has no PaddleOCR-VL manifest to port -- the model was evaluated during SPEC-Q131 curation and rejected there (loads but emits internal weight-parameter names under that project's pinned mlx_vlm), so this file is authored here the same way glm-ocr-4bit.json is. `engine` is `paddleocr-vl`, not `mlx-vlm`: MLXUI runs PaddleOCR-VL through the vendored PaddleOCRVL pipeline (SUP-1, PaddleOCRStage/PaddleOCREngine), not MLXVLM, because MLXVLM's type registry has no `paddleocr_vl` architecture; `engine` is a dispatch key so it must name what actually runs. `settings.mode` (OCP-3-1) declares PaddleOCR-VL's four recognition modes as a positional enum -- the same set PaddleOCRSDK.promptSupport carries in Swift (journal 2026-229), pinned equal by paddleOCRVLManifestModeEnumMatchesTheSDK. OCP-3-5 (deriving PromptSupport.modes from this file instead of the hardcoded list) is deferred to land with VAL-1: a manifest-derived promptSupport has no consumer until MLXUI enforces manifest settings, and catflow-mlx will never carry a PaddleOCR-VL manifest to share the derivation with. resources.{disk_gb,ram_gb} are browser.json's downloadSizeGB / ramGB (the 1.5x-heuristic gate figures), not Python-measured numbers."
 }

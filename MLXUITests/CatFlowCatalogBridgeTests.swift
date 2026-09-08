@@ -346,10 +346,31 @@ struct CatFlowCatalogBridgeTests {
         let manifest = try JSONDecoder().decode(CuratedManifest.self, from: data)
         #expect(manifest.id == "mlx-community/PaddleOCR-VL-1.5-4bit")
         #expect(manifest.display == "PaddleOCR-VL-1.5")
-        // OCP-3-1 (the mode enum) is deferred — the manifest ships as a settings-authority
-        // skeleton so the bridge row has something to load. No settings, no rejected settings.
-        #expect(manifest.settings.isEmpty)
         #expect(manifest.capabilities?.rejectedSettings == nil)
+        // OCP-3-1: the `mode` enum is the one declared setting.
+        let mode = try #require(manifest.settings["mode"], "OCP-3-1: the manifest must declare `mode`")
+        #expect(mode.type == "enum")
+        #expect(mode.values == ["ocr", "table", "formula", "chart"])
+        #expect(mode.defaultValue == .string("ocr"))
+        #expect(mode.positionalOK == true)
+    }
+
+    /// OCP-3-1 drift guard. `PaddleOCRSDK.promptSupport` still carries the mode list as a
+    /// hardcoded Swift array (the vendored `PaddleOCRTask` names, kept out of the manifest so
+    /// the `PaddleOCRVL` import stays inside `PaddleOCREngine`). The manifest now declares the
+    /// same set. OCP-3-5 will make the manifest the single source; until then, an edit to one
+    /// and not the other must fail here.
+    @Test func paddleOCRVLManifestModeEnumMatchesTheSDK() throws {
+        let data = try Data(contentsOf: manifestURL("paddleocr-vl-1.5-4bit.json"))
+        let manifest = try JSONDecoder().decode(CuratedManifest.self, from: data)
+        let mode = try #require(manifest.settings["mode"])
+        let declaredValues = try #require(mode.values)
+        guard case .modes(let sdkValues, let sdkDefault) = PaddleOCRSDK().promptSupport else {
+            Issue.record("PaddleOCRSDK.promptSupport should be .modes")
+            return
+        }
+        #expect(declaredValues == sdkValues)
+        #expect(mode.defaultValue == .string(sdkDefault))
     }
 
     // MARK: - MoC-2-4: Qwen3.5 9B joins the bridge, llmModels' last slot
