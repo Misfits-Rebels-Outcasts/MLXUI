@@ -300,6 +300,42 @@ struct ModelRegistryTests {
         #expect(stage.id.hasPrefix("paddleocr."))
     }
 
+    // MARK: - PaddleOCR-VL recognition modes (OCP-0)
+
+    @Test func paddleOCRDeclaresModePromptSupport() {
+        #expect(PaddleOCRSDK().promptSupport
+            == .modes(values: ["ocr", "table", "formula", "chart"], default: "ocr"))
+    }
+
+    @Test func genericOCRDeclaresNoPromptSupport() {
+        // Only PaddleOCR-VL opts in this phase; the free-text SDKs stay `.none`.
+        #expect(OCRSDK().promptSupport == PromptSupport.none)
+        #expect(DotsOCRSDK().promptSupport == PromptSupport.none)
+        #expect(DeepSeekOCRSDK().promptSupport == PromptSupport.none)
+    }
+
+    @Test func paddleOCRMakeStageAcceptsAKnownMode() throws {
+        let stage = try PaddleOCRSDK().makeStage(
+            for: paddleOCREntry(), config: StageConfig(prompt: "table"))
+        #expect(stage.accepts == .image)
+        #expect(stage.produces == .text)
+    }
+
+    @Test func paddleOCRMakeStageRejectsAnUnknownMode() {
+        // A wrong value must fail loudly, not fall through to `.ocr` (CFM-R16-1 / MoC-3-2).
+        #expect(throws: StageError.self) {
+            try PaddleOCRSDK().makeStage(
+                for: paddleOCREntry(), config: StageConfig(prompt: "as CSV"))
+        }
+    }
+
+    @Test func paddleOCRMakeStageIgnoresAnEmptyMode() throws {
+        // Empty string ⇒ default `.ocr`, same as `nil`.
+        let stage = try PaddleOCRSDK().makeStage(
+            for: paddleOCREntry(), config: StageConfig(prompt: ""))
+        #expect(stage.produces == .text)
+    }
+
     // MARK: - dots.ocr resolution (SUP-3, slice 1)
 
     private func dotsOCREntry() -> ModelEntry {

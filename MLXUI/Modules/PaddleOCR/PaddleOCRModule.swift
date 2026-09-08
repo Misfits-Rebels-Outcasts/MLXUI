@@ -23,6 +23,9 @@ enum PaddleOCRModule: ModelModule {
     )
 
     static func register(into registry: ModelRegistry) {
-        registry.add(sdk: PaddleOCRSDK(), ui: OCRUI(), descriptor: descriptor)
+        // OCP-0: the UI needs the same SDK instance so `OCRRunView` can read its
+        // `.modes` `promptSupport` and rebuild the stage for the chosen mode.
+        let sdk = PaddleOCRSDK()
+        registry.add(sdk: sdk, ui: OCRUI(sdk: sdk), descriptor: descriptor)
     }
 }

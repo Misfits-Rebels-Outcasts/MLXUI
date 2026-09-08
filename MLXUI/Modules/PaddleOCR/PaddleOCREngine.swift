@@ -18,17 +18,24 @@ enum PaddleOCREngine {
     /// Load the PaddleOCR-VL model at `modelDir` and transcribe `image`. Loads per call
     /// (matches `VLMEngine`/`LLMEngine`); instance caching is a later optimization. `.dynamic`
     /// mode enables NaViT-style tiling — best for full-page documents.
+    ///
+    /// `mode` selects the vendored `PaddleOCRTask` (OCP-0): `"table"` → OTSL grid, `"formula"`
+    /// → LaTeX, `"chart"` → chart markup, `nil`/`"ocr"`/unrecognized → plain-text `.ocr`.
+    /// `PaddleOCRSDK.makeStage` has already rejected any value outside `PaddleOCRSDK.modes`,
+    /// so the `?? .ocr` fallback here is defensive only.
     nonisolated static func generate(
         image: CGImage,
         modelDir: URL,
-        maxTokens: Int
+        maxTokens: Int,
+        mode: String? = nil
     ) async throws -> String {
         guard FileManager.default.fileExists(atPath: modelDir.path) else {
             throw StageError.modelNotInstalled(id: modelDir.lastPathComponent)
         }
+        let task = mode.flatMap(PaddleOCRTask.init(rawValue:)) ?? .ocr
         do {
             let pipeline = try await PaddleOCRVLPipeline(modelURL: modelDir, mode: .dynamic)
-            return pipeline.recognize(image: CIImage(cgImage: image), task: .ocr, maxTokens: maxTokens)
+            return pipeline.recognize(image: CIImage(cgImage: image), task: task, maxTokens: maxTokens)
         } catch let error as StageError {
             throw error
         } catch {

@@ -12,6 +12,19 @@ enum ClaimScore: Int, Comparable, Sendable {
     }
 }
 
+/// How an SDK's stage varies with `StageConfig.prompt` (OCP-0, `RSI/DelegateOCRPromptBacklog.md`).
+/// `.none` ⇒ the stage ignores the field, so no UI may collect one. `.freeText` carries the
+/// SDK's own default so a text box can be prefilled. `.modes` values are the vocabulary the
+/// SDK itself understands — the adapter translates, the caller never learns the model's own
+/// wording. `StageConfig.prompt` stays the single carrier for every shape (the SPEC-Q131
+/// "rows say what, the adapter's translation is its own business" doctrine); there is no
+/// parallel `mode` field.
+enum PromptSupport: Sendable, Equatable {
+    case none
+    case freeText(default: String)
+    case modes(values: [String], default: String)
+}
+
 /// The runnable half of a model module: decides whether it handles a model and, if so,
 /// turns it into a `PipelineStage`. `nonisolated` + `Sendable` so a resolved stage can be
 /// built off the main actor and captured in a run `Task`.
@@ -25,6 +38,13 @@ protocol ModelSDK: Sendable {
     func claim(_ model: ModelEntry) -> ClaimScore
     /// Build a runnable stage for `model`. Throws `StageError` when it can't run.
     func makeStage(for model: ModelEntry, config: StageConfig) throws -> any PipelineStage
+    /// How this SDK's stage varies with `StageConfig.prompt`. Defaults to `.none`.
+    var promptSupport: PromptSupport { get }
+}
+
+extension ModelSDK {
+    /// Most SDKs take no per-run prompt (or their prompt is frozen); they opt in explicitly.
+    var promptSupport: PromptSupport { .none }
 }
 
 /// The UI half of a model module: produces the SwiftUI run surface for a resolved model +

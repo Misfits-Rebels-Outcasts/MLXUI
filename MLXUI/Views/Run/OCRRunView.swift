@@ -5,26 +5,37 @@ import UniformTypeIdentifiers
 
 /// Reusable run surface for any image→text (OCR) stage. The model module supplies the
 /// concrete `stage`; this view drops/picks an image, runs the stage, and shows the
-/// extracted text (monospaced, copyable). Like `ASRRunView` it takes a pre-built stage
-/// (OCR has no per-run prompt). `plan-nonchat-aiui.md` OC2.
+/// extracted text (monospaced, copyable). Most OCR models take a pre-built stage (their
+/// prompt is frozen). When `promptSupport` is `.modes` (OCP-0: PaddleOCR-VL), a mode
+/// picker appears and `rebuildStage` produces a fresh stage for the chosen mode per run,
+/// the way `ImageQARunView.run()` rebuilds `VLMStage`. `plan-nonchat-aiui.md` OC2.
 struct OCRRunView: View {
     @Environment(\.dismiss) private var dismiss
 
     let modelDisplayName: String
     let license: String?
     let stage: any PipelineStage
+    /// How this model's stage varies with a per-run prompt. `.none` ⇒ this view is
+    /// byte-for-byte its pre-OCP-0 self and `stage` runs unchanged.
+    var promptSupport: PromptSupport = .none
+    /// Rebuilds the stage for a chosen mode string; supplied only when `promptSupport`
+    /// is not `.none`. `nil`, or a `nil` return, falls back to `stage`.
+    var rebuildStage: ((String) -> (any PipelineStage)?)? = nil
 
     @State private var model = OCRRunModel()
     @State private var image: CGImage?
     @State private var imageName: String?
     @State private var isTargeted = false
     @State private var showImporter = false
+    /// Selected recognition mode for a `.modes` model; seeded from the default on appear.
+    @State private var mode = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
             Divider()
             imageWell
+            modePicker
             Text(license ?? "License: see model page")
                 .font(.caption).foregroundStyle(.secondary)
             if model.isRunning { runningRow }
@@ -38,6 +49,9 @@ struct OCRRunView: View {
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.image],
                       allowsMultipleSelection: false) { result in
             if case let .success(urls) = result, let url = urls.first { load(url) }
+        }
+        .onAppear {
+            if case let .modes(_, defaultValue) = promptSupport, mode.isEmpty { mode = defaultValue }
         }
     }
 
@@ -81,6 +95,33 @@ struct OCRRunView: View {
                 Text(imageName ?? "No image selected")
                     .font(.callout).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
             }
+        }
+    }
+
+    /// Recognition-mode picker — shown only for a `.modes` model (OCP-0: PaddleOCR-VL).
+    /// `.none` models render nothing here, keeping their surface unchanged.
+    @ViewBuilder private var modePicker: some View {
+        if case let .modes(values, _) = promptSupport {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Mode").font(.subheadline.bold())
+                Picker("Mode", selection: $mode) {
+                    ForEach(values, id: \.self) { Text(Self.modeLabel($0)).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .disabled(model.isRunning)
+            }
+        }
+    }
+
+    /// Friendly label for a PaddleOCR-VL mode id.
+    private static func modeLabel(_ id: String) -> String {
+        switch id {
+        case "ocr": return "Text"
+        case "table": return "Table"
+        case "formula": return "Formula"
+        case "chart": return "Chart"
+        default: return id.capitalized
         }
     }
 
@@ -130,7 +171,16 @@ struct OCRRunView: View {
 
     private func run() {
         guard let image else { return }
-        model.start(image: image, stage: stage)
+        model.start(image: image, stage: effectiveStage)
+    }
+
+    /// The pre-built `stage` for `.none` models and for a `.modes` model still on its default
+    /// mode (so that surface stays byte-for-byte its pre-OCP-0 self); otherwise a fresh stage
+    /// for the selected mode, falling back to `stage` if the rebuild returns nil.
+    private var effectiveStage: any PipelineStage {
+        guard case let .modes(_, defaultValue) = promptSupport,
+              let rebuildStage, !mode.isEmpty, mode != defaultValue else { return stage }
+        return rebuildStage(mode) ?? stage
     }
 
     /// Load a picked file URL into a fully-decoded, memory-resident `CGImage` (sandbox-safe:

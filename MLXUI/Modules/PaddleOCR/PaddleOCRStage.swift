@@ -3,9 +3,10 @@ import CoreGraphics
 
 /// `image → text` stage backed by the vendored PaddleOCR-VL pipeline (via `PaddleOCREngine`).
 /// Mirrors `VLMStage`: the generator is injectable so the stage's contract is unit-testable
-/// without a model (the same seam `ASRStage`/`LLMStage`/`VLMStage` use). PaddleOCR has no
-/// per-run prompt — the transcription task is fixed in the engine — so it satisfies
-/// `PipelineStage.run(_:)`'s single-`Media` contract directly.
+/// without a model (the same seam `ASRStage`/`LLMStage`/`VLMStage` use). The per-run knob is
+/// a **recognition mode** (`ocr` / `table` / `formula` / `chart`), not a free-text prompt —
+/// `PaddleOCRSDK.promptSupport` is `.modes` and the run surface offers a picker (OCP-0). The
+/// mode is threaded as a raw string so this file needs no `PaddleOCRVL` import.
 nonisolated struct PaddleOCRStage: PipelineStage {
     let id: String
     let name: String
@@ -42,10 +43,13 @@ nonisolated struct PaddleOCRStage: PipelineStage {
 
 extension PaddleOCRStage {
     /// Stage backed by the real PaddleOCR-VL engine, loading the installed model directory.
-    init(modelID: String, maxTokens: Int = 2048) {
+    /// `mode` is one of `PaddleOCRSDK.modes` (`nil` ⇒ `.ocr`); `PaddleOCREngine` maps it to
+    /// the vendored `PaddleOCRTask`.
+    init(modelID: String, maxTokens: Int = 2048, mode: String? = nil) {
         let dir = PaddleOCREngine.installedModelDirectory(id: modelID)
-        self.init(id: "paddleocr.\(modelID)", name: "PaddleOCR-VL (\(modelID))") { image in
-            try await PaddleOCREngine.generate(image: image, modelDir: dir, maxTokens: maxTokens)
+        let suffix = mode.map { ", \($0)" } ?? ""
+        self.init(id: "paddleocr.\(modelID)", name: "PaddleOCR-VL (\(modelID)\(suffix))") { image in
+            try await PaddleOCREngine.generate(image: image, modelDir: dir, maxTokens: maxTokens, mode: mode)
         }
     }
 }
