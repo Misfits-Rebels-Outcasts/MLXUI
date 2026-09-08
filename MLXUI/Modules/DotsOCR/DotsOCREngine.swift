@@ -36,15 +36,20 @@ enum DotsOCREngine {
                     input: UserInput(chat: [
                         .user(Self.ocrPrompt, images: [.ciImage(CIImage(cgImage: bounded))])
                     ]))
-                let stream = try MLXLMCommon.generate(
+                // OCP-FIX-1-2 (journal `2026-230`): consume raw token ids so the output never
+                // passes through mlx-swift-lm's `ToolCallProcessor`, which drops text before a
+                // `<` that partially matches `<tool_call>` (GLM-OCR's `</td><td>` → `</td<td>`;
+                // latent for dots.ocr, which emits markdown/plain text). OCR emits no tool
+                // calls. Mirrors `VLMEngine`.
+                let stream = try MLXLMCommon.generateTokens(
                     input: input,
                     parameters: GenerateParameters(maxTokens: maxTokens),
                     context: context)
-                var output = ""
+                var tokenIds: [Int] = []
                 for await generation in stream {
-                    if case .chunk(let text) = generation { output += text }
+                    if case .token(let id) = generation { tokenIds.append(id) }
                 }
-                return output
+                return context.tokenizer.decode(tokenIds: tokenIds)
             }
         } catch let error as StageError {
             throw error

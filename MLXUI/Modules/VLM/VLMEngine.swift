@@ -58,15 +58,22 @@ enum VLMEngine {
                     input: UserInput(chat: [
                         .user(prompt, images: [.ciImage(CIImage(cgImage: bounded))])
                     ]))
-                let stream = try MLXLMCommon.generate(
+                // OCP-FIX-1-2 (`RSI/DelegateOCRPromptBacklog.md` §2, journal `2026-230`):
+                // consume **raw token ids**, not `.chunk` text. The decoded-text path routes
+                // every chunk through mlx-swift-lm's `ToolCallProcessor`, which drops the text
+                // before a `<` whenever the `<…` tail partially matches `<tool_call>` — so
+                // GLM-OCR's `</td><td>` arrives as `</td<td>`. OCR/VQA never emit tool calls,
+                // so we skip that scanner entirely and detokenize the full id stream once
+                // (also strictly more correct than streaming reconstruction).
+                let stream = try MLXLMCommon.generateTokens(
                     input: input,
                     parameters: GenerateParameters(maxTokens: maxTokens),
                     context: context)
-                var output = ""
+                var tokenIds: [Int] = []
                 for await generation in stream {
-                    if case .chunk(let text) = generation { output += text }
+                    if case .token(let id) = generation { tokenIds.append(id) }
                 }
-                return output
+                return context.tokenizer.decode(tokenIds: tokenIds)
             }
         } catch let error as StageError {
             throw error

@@ -39,22 +39,25 @@ enum DeepSeekOCREngine {
                 // Deterministic OCR decoding (temperature 0). No repetition penalty: it's a blunt tool
                 // here — it damaged the legitimately-repeated lines while barely denting the page loop,
                 // whose real cause is EOS not stopping generation (handled below).
-                let stream = try MLXLMCommon.generate(
+                // OCP-FIX-1-2 (journal `2026-230`): consume raw token ids, not `.chunk` text.
+                // The decoded-text path routes every chunk through mlx-swift-lm's
+                // `ToolCallProcessor`, which drops text before a `<` that partially matches
+                // `<tool_call>` (visible on GLM-OCR's HTML; latent here). DeepSeek-OCR emits no
+                // tool calls. Stopping on the EOS **id** is also cleaner than the old
+                // string-match on the decoded `<｜end▁of▁sentence｜>` form.
+                let stream = try MLXLMCommon.generateTokens(
                     input: input,
                     parameters: GenerateParameters(maxTokens: maxTokens, temperature: 0),
                     context: context)
-                var output = ""
-                // Stop on the checkpoint's EOS text form (see `eosTokenId`), else the model
-                // re-reads the page until `maxTokens`.
-                outerLoop: for await generation in stream {
-                    switch generation {
-                    case .chunk(let text):
-                        output += text
-                        if output.contains("<｜end▁of▁sentence｜>") { break outerLoop }
-                    case .info, .toolCall: break
-                    }
+                var tokenIds: [Int] = []
+                for await generation in stream {
+                    guard case .token(let id) = generation else { continue }
+                    // The checkpoint's EOS (`eosTokenId`) — the framework's stop set can miss
+                    // it, and then the model re-reads the page until `maxTokens`.
+                    if id == Self.eosTokenId { break }
+                    tokenIds.append(id)
                 }
-                return output
+                return context.tokenizer.decode(tokenIds: tokenIds)
                     .replacingOccurrences(of: "<｜end▁of▁sentence｜>", with: "")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
             }
