@@ -187,13 +187,13 @@ struct CatFlowUserFlowStoreTests {
     }
 
     private let validCat = """
-    catflow 0.8
+    mlxflow 0.8
     1. Read Text   memo.txt
     2. Save Text   out.md
     """
 
     private let validPipeline = """
-    catpipeline 0.8
+    mlxpipeline 0.8
     1. Generate Image   Z-Image Turbo; "a tree"
     2. Save Image       tree.png
     """

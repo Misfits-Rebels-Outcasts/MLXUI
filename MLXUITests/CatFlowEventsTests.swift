@@ -14,7 +14,7 @@ struct CatFlowEventsTests {
     // MARK: - canRun
 
     @Test func triggerFlowsAreRunnable() throws {
-        let doc = try parse("catflow 0.8; events\n1. On File   inbox/; pattern=*.pdf\n2. Save Text   out.md")
+        let doc = try parse("mlxflow 0.8; events\n1. On File   inbox/; pattern=*.pdf\n2. Save Text   out.md")
         #expect(FlowRunner.canRun(doc) == .runnable)
     }
 
@@ -28,7 +28,7 @@ struct CatFlowEventsTests {
     // MARK: - Arming
 
     @Test func armingAnOnFileFlowStartsTheWatcher() throws {
-        let doc = try parse("catflow 0.8; events\n1. On File   inbox/; pattern=*.pdf\n2. Save Text   out.md")
+        let doc = try parse("mlxflow 0.8; events\n1. On File   inbox/; pattern=*.pdf\n2. Save Text   out.md")
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("catflow-events-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -44,7 +44,7 @@ struct CatFlowEventsTests {
     }
 
     @Test func armingAnOnScheduleFlowUsesTheFriendlyWording() throws {
-        let doc = try parse("catflow 0.8; events\n1. On Schedule   every=day; at=06:30\n2. Save Text   out.md")
+        let doc = try parse("mlxflow 0.8; events\n1. On Schedule   every=day; at=06:30\n2. Save Text   out.md")
         let arm = FlowArmSession()
         arm.arm(flowID: "t", doc: doc,
                 workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory)) { _ in }
@@ -55,7 +55,7 @@ struct CatFlowEventsTests {
     }
 
     @Test func armingAnOnFlowFlowUsesTheNamedFlow() throws {
-        let doc = try parse("catflow 0.8; events\n1. On Flow   OtherFlow.cat\n2. Save Text   out.md")
+        let doc = try parse("mlxflow 0.8; events\n1. On Flow   OtherFlow.cat\n2. Save Text   out.md")
         let arm = FlowArmSession()
         arm.arm(flowID: "t", doc: doc,
                 workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory)) { _ in }
@@ -69,7 +69,7 @@ struct CatFlowEventsTests {
     }
 
     @Test func aNonTriggerFlowDoesNotArm() throws {
-        let doc = try parse("catflow 0.8\n1. Read Text   memo.txt\n2. Save Text   out.md")
+        let doc = try parse("mlxflow 0.8\n1. Read Text   memo.txt\n2. Save Text   out.md")
         let arm = FlowArmSession()
         arm.arm(flowID: "t", doc: doc,
                 workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory)) { _ in }
@@ -80,7 +80,7 @@ struct CatFlowEventsTests {
     // MARK: - CFM-R10-FIX-1: arming a door-carrying trigger flow refuses (§14.4)
 
     @Test func armingRefusesATriggerFlowCarryingImprovise() throws {
-        let doc = try parse("catflow 0.8; events\n1. On File   inbox/\n2. Improvise   \"fix the headers\"")
+        let doc = try parse("mlxflow 0.8; events\n1. On File   inbox/\n2. Improvise   \"fix the headers\"")
         let arm = FlowArmSession()
         arm.inspect(doc: doc)
         #expect(arm.isTriggerFlow)
@@ -95,7 +95,7 @@ struct CatFlowEventsTests {
     }
 
     @Test func armingRefusesATriggerFlowCarryingTransforms() throws {
-        var doc = try parse("catflow 0.8; events\n1. On File   inbox/\n2. CustomTool")
+        var doc = try parse("mlxflow 0.8; events\n1. On File   inbox/\n2. CustomTool")
         doc.transforms = ["CustomTool": TransformDef(name: "CustomTool", signature: nil, run: "echo hi",
                                                      timeout: nil, workdir: nil, params: [])]
         let arm = FlowArmSession()
@@ -106,7 +106,7 @@ struct CatFlowEventsTests {
     }
 
     @Test func armingRefusesATriggerFlowWithTheImproviseHeaderFlag() throws {
-        var doc = try parse("catflow 0.8; events; improvise\n1. On Schedule   at=06:30\n2. Save Text   out.md")
+        var doc = try parse("mlxflow 0.8; events; improvise\n1. On Schedule   at=06:30\n2. Save Text   out.md")
         doc.flags = [.events, .improvise]
         let arm = FlowArmSession()
         let fired = arm.arm(flowID: "t", doc: doc,
@@ -131,8 +131,8 @@ struct CatFlowEventsTests {
     }
 
     @Test func armingRefusesATriggerFlowWhoseUsedFlowHasAnImproviseRow() throws {
-        let watch = "catflow 0.8; events\n1. On Schedule   at=06:30\n2. Helper\n\nuses:\n  Helper = ./Helper.cat\n"
-        let helper = "catflow 0.8\n1. Improvise   \"fix the headers\"\n"
+        let watch = "mlxflow 0.8; events\n1. On Schedule   at=06:30\n2. Helper\n\nuses:\n  Helper = ./Helper.cat\n"
+        let helper = "mlxflow 0.8\n1. Improvise   \"fix the headers\"\n"
         let (ws, id, base) = try armWorkspace(files: [("Watch.cat", watch), ("Helper.cat", helper)])
         defer { try? FileManager.default.removeItem(at: base) }
         let doc = try parse(watch)
@@ -150,8 +150,8 @@ struct CatFlowEventsTests {
     }
 
     @Test func armingRefusesATriggerFlowWhoseUsedFlowDeclaresTheImproviseFlag() throws {
-        let watch = "catflow 0.8; events\n1. On File   inbox/\n2. Helper\n\nuses:\n  Helper = ./Helper.cat\n"
-        let helper = "catflow 0.8; improvise\n1. Read Text   lib.txt\n"
+        let watch = "mlxflow 0.8; events\n1. On File   inbox/\n2. Helper\n\nuses:\n  Helper = ./Helper.cat\n"
+        let helper = "mlxflow 0.8; improvise\n1. Read Text   lib.txt\n"
         let (ws, id, base) = try armWorkspace(files: [("Watch.cat", watch), ("Helper.cat", helper)])
         defer { try? FileManager.default.removeItem(at: base) }
         let doc = try parse(watch)
@@ -181,7 +181,7 @@ struct CatFlowEventsTests {
     @Test func runnerRefusesADoorFlowBeforeStarting() async throws {
         // In the App Store tier, a `transforms:` flow is refused by canRun — `FlowRunner.run`
         // must surface that as a `.failed`, never start the run.
-        var doc = try parse("catflow 0.8\n1. CustomTool\n2. Save Text   out.md")
+        var doc = try parse("mlxflow 0.8\n1. CustomTool\n2. Save Text   out.md")
         doc.transforms = ["CustomTool": TransformDef(name: "CustomTool", signature: nil, run: "echo hi",
                                                      timeout: nil, workdir: nil, params: [])]
         let base = FileManager.default.temporaryDirectory
@@ -200,7 +200,7 @@ struct CatFlowEventsTests {
     // MARK: - The interpreter runs a trigger with an occurrence
 
     @Test func onFileRowPassesTheOccurrenceThrough() async throws {
-        let doc = try parse("catflow 0.8; events\n1. On File   inbox/\n2. Save Text   out.md")
+        let doc = try parse("mlxflow 0.8; events\n1. On File   inbox/\n2. Save Text   out.md")
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("catflow-events-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)

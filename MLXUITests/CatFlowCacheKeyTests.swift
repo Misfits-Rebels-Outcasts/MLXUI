@@ -163,10 +163,10 @@ struct CatFlowCacheKeyTests {
     }
 
     @Test func runSeedIsDeterministicFromFlowText() {
-        let a = FlowSeed.runSeed(for: "catflow 0.8\n1. Read Audio memo.m4a\n")
-        let b = FlowSeed.runSeed(for: "catflow 0.8\n1. Read Audio memo.m4a\n")
+        let a = FlowSeed.runSeed(for: "mlxflow 0.8\n1. Read Audio memo.m4a\n")
+        let b = FlowSeed.runSeed(for: "mlxflow 0.8\n1. Read Audio memo.m4a\n")
         #expect(a == b)
-        let c = FlowSeed.runSeed(for: "catflow 0.8\n1. Read Audio other.m4a\n")
+        let c = FlowSeed.runSeed(for: "mlxflow 0.8\n1. Read Audio other.m4a\n")
         #expect(a != c)
     }
 }

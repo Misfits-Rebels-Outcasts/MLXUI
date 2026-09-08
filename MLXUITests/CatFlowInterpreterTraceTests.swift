@@ -3,7 +3,7 @@ import Foundation
 @testable import MLXUI
 
 /// Covers CFM-R7-1: `FlowInterpreter` reproduces the Python's run traces byte-for-byte. The
-/// conformance corpus's `trace.events` (22 `catflow 0.4` flows) are the ground truth — the
+/// conformance corpus's `trace.events` (22 `mlxflow 0.4` flows) are the ground truth — the
 /// same traces `catflow-mlx/tests/test_conformance.py::test_conformance_trace_case` asserts
 /// the Python interpreter produces.
 struct CatFlowInterpreterTraceTests {

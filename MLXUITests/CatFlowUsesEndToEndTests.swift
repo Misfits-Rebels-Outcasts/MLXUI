@@ -26,7 +26,7 @@ struct CatFlowUsesEndToEndTests {
     }
 
     private let askYourDocs = """
-    catflow 0.8
+    mlxflow 0.8
     1. Read Text   question.txt
     2. RagQuery    top_k=5
     3. Save Text   answer.md
@@ -36,7 +36,7 @@ struct CatFlowUsesEndToEndTests {
     """
 
     private let ragQuery = """
-    catflow 0.8
+    mlxflow 0.8
     params: top_k = 5
     1. Embed                BGE-M3
     2. Read Index           kb.index
@@ -132,7 +132,7 @@ struct CatFlowUsesEndToEndTests {
     }
 
     @Test func canRunRefusesAUsedFlowWithAnUnknownRow() throws {
-        let badUsed = "catflow 0.8\n1. Frobnicate   x.txt\n"
+        let badUsed = "mlxflow 0.8\n1. Frobnicate   x.txt\n"
         let (ws, id, base) = try makeWorkspace(files: [
             ("AskYourDocs.cat", askYourDocs), ("RagQuery.cat", badUsed),
         ])
@@ -152,7 +152,7 @@ struct CatFlowUsesEndToEndTests {
         // The flow has a `uses:` section, but row 3 names something not in it — E113's own
         // wording tells the user to add `Retriever = ./Retriever.cat` to `uses:`.
         let strayName = """
-        catflow 0.8
+        mlxflow 0.8
         1. Read Text   q.txt
         2. RagQuery
         3. Retriever
@@ -168,7 +168,7 @@ struct CatFlowUsesEndToEndTests {
 
     @Test func e114FiresForAPathOutsideTheWorkspace() throws {
         let escaping = """
-        catflow 0.8
+        mlxflow 0.8
         1. RagQuery
         uses:
           RagQuery = ../evil.cat
@@ -182,8 +182,8 @@ struct CatFlowUsesEndToEndTests {
     }
 
     @Test func e115FiresForACycle() throws {
-        let aCat = "catflow 0.8\n1. B\nuses:\n  B = ./B.cat\n"
-        let bCat = "catflow 0.8\n1. A\nuses:\n  A = ./A.cat\n"
+        let aCat = "mlxflow 0.8\n1. B\nuses:\n  B = ./B.cat\n"
+        let bCat = "mlxflow 0.8\n1. A\nuses:\n  A = ./A.cat\n"
         let (ws, id, base) = try makeWorkspace(files: [("A.cat", aCat), ("B.cat", bCat)])
         defer { try? FileManager.default.removeItem(at: base) }
         let parsed = try CatParser.parseForValidation(aCat)
@@ -196,7 +196,7 @@ struct CatFlowUsesEndToEndTests {
 
     @Test func e117RefusesInAppStoreWhenTheUsedFlowImprovises() throws {
         // The *used* flow declares `improvise`; the caller's header doesn't.
-        let usedImprovises = "catflow 0.8; improvise\n1. Read Text   lib.txt\n"
+        let usedImprovises = "mlxflow 0.8; improvise\n1. Read Text   lib.txt\n"
         let (ws, id, base) = try makeWorkspace(files: [
             ("AskYourDocs.cat", askYourDocs), ("RagQuery.cat", usedImprovises),
         ])
@@ -213,7 +213,7 @@ struct CatFlowUsesEndToEndTests {
     }
 
     @Test func e117RefusalHaltsTheRunnerBeforeAnyRow() async throws {
-        let usedImprovises = "catflow 0.8; improvise\n1. Read Text   lib.txt\n"
+        let usedImprovises = "mlxflow 0.8; improvise\n1. Read Text   lib.txt\n"
         let (ws, id, base) = try makeWorkspace(files: [
             ("AskYourDocs.cat", askYourDocs), ("RagQuery.cat", usedImprovises),
         ])
@@ -243,14 +243,14 @@ struct CatFlowUsesEndToEndTests {
 
     private var usedImproviseUndeclared: String {
         // No `; improvise` — the row is undeclared.
-        "catflow 0.8\n1. Improvise   \"rewrite the file\"\n"
+        "mlxflow 0.8\n1. Improvise   \"rewrite the file\"\n"
     }
 
     /// The caller flow: a `Save Text` **before** the `uses:` call, so a mid-run refusal would
     /// already have written a real file by the time it fires.
     private var callerWithSaveBeforeUses: String {
         """
-        catflow 0.8
+        mlxflow 0.8
         1. Read Text   q.txt
         2. Save Text   out.md
         3. Helper
@@ -321,10 +321,10 @@ struct CatFlowUsesEndToEndTests {
     @Test func appStoreCanRunRefusesAnUnportedNetTaskReachedThroughUses() throws {
         // done-when: the `.net` refusal recurses too. `Web Search` has no provider → unported.
         #expect(CapabilityGate.isAppStoreBuild)
-        let caller = "catflow 0.8\n1. Helper\n\nuses:\n  Helper = ./Helper.cat\n"
+        let caller = "mlxflow 0.8\n1. Helper\n\nuses:\n  Helper = ./Helper.cat\n"
         let (ws, id, base) = try makeWorkspace(files: [
             ("Caller.cat", caller),
-            ("Helper.cat", "catflow 0.8\n1. Web Search   \"latest news\"\n"),
+            ("Helper.cat", "mlxflow 0.8\n1. Web Search   \"latest news\"\n"),
         ])
         defer { try? FileManager.default.removeItem(at: base) }
         let doc = try CatParser.parse(caller)
@@ -343,7 +343,7 @@ struct CatFlowUsesEndToEndTests {
     // MARK: - CFM-R17-FIX-10 — a used flow's own `transforms:` is unsupported
 
     private var callerOfHelper: String {
-        "catflow 0.8\n1. Helper\n\nuses:\n  Helper = ./Helper.cat\n"
+        "mlxflow 0.8\n1. Helper\n\nuses:\n  Helper = ./Helper.cat\n"
     }
 
     /// `RealExecutor.transforms` is built once from the *caller's* `doc.transforms`
@@ -354,7 +354,7 @@ struct CatFlowUsesEndToEndTests {
     @Test func aUsedFlowCallingItsOwnTransformIsRefusedWithTheRealReason() throws {
         let (ws, id, base) = try makeWorkspace(files: [
             ("Caller.cat", callerOfHelper),
-            ("Helper.cat", "catflow 0.8\n1. Tidy\n\ntransforms:\n  Tidy  text -> text\n    run: script.sh\n"),
+            ("Helper.cat", "mlxflow 0.8\n1. Tidy\n\ntransforms:\n  Tidy  text -> text\n    run: script.sh\n"),
         ])
         defer { try? FileManager.default.removeItem(at: base) }
         let doc = try CatParser.parse(callerOfHelper)
@@ -378,7 +378,7 @@ struct CatFlowUsesEndToEndTests {
     @Test func aUsedFlowThatDeclaresButNeverCallsATransformStillRuns() throws {
         let (ws, id, base) = try makeWorkspace(files: [
             ("Caller.cat", callerOfHelper),
-            ("Helper.cat", "catflow 0.8\n1. Read Text   a.txt\n2. Save Text   b.md\n\ntransforms:\n  Tidy  text -> text\n    run: script.sh\n"),
+            ("Helper.cat", "mlxflow 0.8\n1. Read Text   a.txt\n2. Save Text   b.md\n\ntransforms:\n  Tidy  text -> text\n    run: script.sh\n"),
         ])
         defer { try? FileManager.default.removeItem(at: base) }
         let doc = try CatParser.parse(callerOfHelper)
@@ -475,7 +475,7 @@ struct CatFlowUsesEndToEndTests {
         let ws = FlowWorkspace(root: base.appendingPathComponent("workspaces"))
         try BundledWorkspaces.prepare(meta, workspace: ws)
         let ask = ws.directory(for: "uses_example").appendingPathComponent("AskYourDocs.cat")
-        try "catflow 0.8\n1. Read Text edited.txt\n".write(to: ask, atomically: true, encoding: .utf8)
+        try "mlxflow 0.8\n1. Read Text edited.txt\n".write(to: ask, atomically: true, encoding: .utf8)
         try BundledWorkspaces.prepare(meta, workspace: ws)   // second call
         #expect(try String(contentsOf: ask, encoding: .utf8).contains("edited.txt"))
     }

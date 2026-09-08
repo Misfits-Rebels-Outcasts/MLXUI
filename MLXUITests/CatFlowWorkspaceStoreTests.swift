@@ -28,7 +28,7 @@ struct CatFlowWorkspaceStoreTests {
     private func teardown(_ base: URL) { try? FileManager.default.removeItem(at: base) }
 
     private let validCat = """
-    catflow 0.8
+    mlxflow 0.8
     1. Read Text   memo.txt
     2. Save Text   out.md
     """

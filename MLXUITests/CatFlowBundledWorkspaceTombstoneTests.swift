@@ -101,7 +101,7 @@ struct CatFlowBundledWorkspaceTombstoneTests {
         defer { try? FileManager.default.removeItem(at: base) }
         let dir = ws.root.appendingPathComponent("my-notes", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try "catflow 0.8\n1. Read Text memo.txt\n2. Save Text out.md\n"
+        try "mlxflow 0.8\n1. Read Text memo.txt\n2. Save Text out.md\n"
             .write(to: dir.appendingPathComponent("Notes.cat"), atomically: true, encoding: .utf8)
 
         let w = try #require(WorkspaceStore.scan(workspace: ws).first)

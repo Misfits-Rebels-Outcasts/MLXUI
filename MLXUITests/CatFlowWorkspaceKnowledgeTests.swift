@@ -23,7 +23,7 @@ struct CatFlowWorkspaceKnowledgeTests {
     // MARK: - Classification
 
     @Test func lastRowStoreIndexBuilds() throws {
-        let d = try doc("catflow 0.8\n1. Read Files   docs/\n2. Embed   BGE-M3\n6. Store Index   (1,2)   library.index\n")
+        let d = try doc("mlxflow 0.8\n1. Read Files   docs/\n2. Embed   BGE-M3\n6. Store Index   (1,2)   library.index\n")
         #expect(WorkspaceKnowledge.role(of: d) == WorkspaceKnowledge.FlowIndexUse(builds: ["library.index"]))
     }
 
@@ -31,14 +31,14 @@ struct CatFlowWorkspaceKnowledgeTests {
         // CFM-R17-FIX-11(a) (owner-ruled 2026-09-04): position-free. Before, this was `.plain`
         // because the `Store Index` wasn't the flow's *last* row — whether it counted depended
         // on the unrelated `Save Text` after it.
-        let d = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n3. Save Text   done.md\n")
+        let d = try doc("mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n3. Save Text   done.md\n")
         #expect(WorkspaceKnowledge.role(of: d) == WorkspaceKnowledge.FlowIndexUse(builds: ["library.index"]))
     }
 
     @Test func aFlowEndingInTwoStoreIndexRowsBuildsBoth() throws {
         // CFM-R17-FIX-9(b): the builder side collects every `Store Index` name, not just one —
         // symmetric with the querier side.
-        let d = try doc("catflow 0.8\n1. Read Files   docs/\n2. Embed   BGE-M3\n3. Store Index   (1,2)   name=hr.index\n4. Store Index   (1,2)   name=eng.index\n")
+        let d = try doc("mlxflow 0.8\n1. Read Files   docs/\n2. Embed   BGE-M3\n3. Store Index   (1,2)   name=hr.index\n4. Store Index   (1,2)   name=eng.index\n")
         #expect(WorkspaceKnowledge.role(of: d) == WorkspaceKnowledge.FlowIndexUse(builds: ["hr.index", "eng.index"]))
     }
 
@@ -48,7 +48,7 @@ struct CatFlowWorkspaceKnowledgeTests {
         // earlier `Read Index`/`Retrieve` rows checked. Now independent: a self-contained
         // "ingest, then ask" flow (single-file RAG) is a real, expressible shape.
         let d = try doc("""
-        catflow 0.8
+        mlxflow 0.8
         1. Read Index   library.index
         2. Retrieve     (1,1)
         3. Embed        BGE-M3
@@ -60,9 +60,9 @@ struct CatFlowWorkspaceKnowledgeTests {
 
     @Test func aBuilderOfTwoIndexesPlusTwoQueriersProducesTwoCards() throws {
         let c = try cards([
-            ("BuildBoth.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   name=hr.index\n3. Store Index   (1,1)   name=eng.index\n"),
-            ("AskHR.cat", "catflow 0.8\n1. Read Index   hr.index\n2. Retrieve   (1,1)\n"),
-            ("AskEng.cat", "catflow 0.8\n1. Read Index   eng.index\n2. Retrieve   (1,1)\n"),
+            ("BuildBoth.cat", "mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   name=hr.index\n3. Store Index   (1,1)   name=eng.index\n"),
+            ("AskHR.cat", "mlxflow 0.8\n1. Read Index   hr.index\n2. Retrieve   (1,1)\n"),
+            ("AskEng.cat", "mlxflow 0.8\n1. Read Index   eng.index\n2. Retrieve   (1,1)\n"),
         ])
         #expect(c.map(\.indexName) == ["eng.index", "hr.index"])
         #expect(c.allSatisfy { $0.builder == .one("BuildBoth.cat") })
@@ -70,12 +70,12 @@ struct CatFlowWorkspaceKnowledgeTests {
     }
 
     @Test func readIndexPlusRetrieveQueries() throws {
-        let d = try doc("catflow 0.8\n1. Read Index   library.index\n2. Embed   BGE-M3\n3. Retrieve   (1,2)\n4. Answer   Qwen3 8B\n")
+        let d = try doc("mlxflow 0.8\n1. Read Index   library.index\n2. Embed   BGE-M3\n3. Retrieve   (1,2)\n4. Answer   Qwen3 8B\n")
         #expect(WorkspaceKnowledge.role(of: d) == WorkspaceKnowledge.FlowIndexUse(queries: ["library.index"]))
     }
 
     @Test func readIndexPlusKeywordSearchQueries() throws {
-        let d = try doc("catflow 0.8\n1. Read Index   kb.index\n2. Keyword Search   (1,1)\n")
+        let d = try doc("mlxflow 0.8\n1. Read Index   kb.index\n2. Keyword Search   (1,1)\n")
         #expect(WorkspaceKnowledge.role(of: d) == WorkspaceKnowledge.FlowIndexUse(queries: ["kb.index"]))
     }
 
@@ -96,7 +96,7 @@ struct CatFlowWorkspaceKnowledgeTests {
 
     @Test func repeatedReadIndexNameIsListedOnce() throws {
         let d = try doc("""
-        catflow 0.8
+        mlxflow 0.8
         1. Read Index   kb.index
         2. Read Index   kb.index
         3. Retrieve   (1,1)
@@ -107,7 +107,7 @@ struct CatFlowWorkspaceKnowledgeTests {
     @Test func storeIndexEndingATrailingListStillBuilds() throws {
         // The asymmetry FIX-4 names: the last row is `Store Index`, one level down.
         let d = try doc("""
-        catflow 0.8
+        mlxflow 0.8
         1. Read Files   docs/
         2. <list finish>
              1. Embed         BGE-M3
@@ -120,7 +120,7 @@ struct CatFlowWorkspaceKnowledgeTests {
         // Position-free (CFM-R17-FIX-11(a)) — the same reclassification as
         // `storeIndexAnywhereBuildsRegardlessOfLaterRows`, one level down inside a block.
         let d = try doc("""
-        catflow 0.8
+        mlxflow 0.8
         1. <list build>
              1. Embed         BGE-M3
              2. Store Index   library.index
@@ -136,8 +136,8 @@ struct CatFlowWorkspaceKnowledgeTests {
         // and `./library.index` normalises to `library.index` for the pairing (CFM-R17-FIX-5;
         // FIX-9(a) took the `row.model` fallback back out, so a *bare* `./x` no longer pairs).
         let c = try cards([
-            ("Build.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   name=library.index\n"),
-            ("Ask.cat", "catflow 0.8\n1. Read Index   path=./library.index\n2. Retrieve   (1,1)\n"),
+            ("Build.cat", "mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   name=library.index\n"),
+            ("Ask.cat", "mlxflow 0.8\n1. Read Index   path=./library.index\n2. Retrieve   (1,1)\n"),
         ])
         #expect(c.count == 1)
         #expect(c.first?.indexName == "library.index")
@@ -150,13 +150,13 @@ struct CatFlowWorkspaceKnowledgeTests {
         // parks the name in `row.model`, where neither the tools nor the Python read it. The
         // classifier must not offer a card whose Build/Ask would always throw; the rows stay
         // unclassified.
-        let builder = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   indexes/kb.index\n")
-        let querier = try doc("catflow 0.8\n1. Read Index   ./kb.index\n2. Retrieve   (1,1)\n")
+        let builder = try doc("mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   indexes/kb.index\n")
+        let querier = try doc("mlxflow 0.8\n1. Read Index   ./kb.index\n2. Retrieve   (1,1)\n")
         #expect(WorkspaceKnowledge.role(of: builder).isPlain)
         #expect(WorkspaceKnowledge.role(of: querier).isPlain)
         #expect(try cards([
-            ("Build.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   indexes/kb.index\n"),
-            ("Ask.cat", "catflow 0.8\n1. Read Index   ./kb.index\n2. Retrieve   (1,1)\n"),
+            ("Build.cat", "mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   indexes/kb.index\n"),
+            ("Ask.cat", "mlxflow 0.8\n1. Read Index   ./kb.index\n2. Retrieve   (1,1)\n"),
         ]).isEmpty)
     }
 
@@ -167,9 +167,9 @@ struct CatFlowWorkspaceKnowledgeTests {
         // — the latter pair made the `note.contains("Ingest.cat")` conjunct vacuous, since
         // "InboxIngest.cat" contains "Ingest.cat" as a substring.
         let c = try #require(try cards([
-            ("Nightly.cat", "catflow 0.8\n1. Read Files   docs/\n2. Embed   BGE-M3\n3. Store Index   (1,2)   library.index\n"),
-            ("InboxIngest.cat", "catflow 0.8\n1. On File   inbox/\n2. Embed   BGE-M3\n3. Store Index   (1,2)   library.index\n"),
-            ("Ask.cat", "catflow 0.8\n1. Read Index   library.index\n2. Retrieve   (1,1)\n"),
+            ("Nightly.cat", "mlxflow 0.8\n1. Read Files   docs/\n2. Embed   BGE-M3\n3. Store Index   (1,2)   library.index\n"),
+            ("InboxIngest.cat", "mlxflow 0.8\n1. On File   inbox/\n2. Embed   BGE-M3\n3. Store Index   (1,2)   library.index\n"),
+            ("Ask.cat", "mlxflow 0.8\n1. Read Index   library.index\n2. Retrieve   (1,1)\n"),
         ]).first)
         #expect(c.indexName == "library.index")
         #expect(c.buildFile == nil)              // ambiguous — no Build button
@@ -188,9 +188,9 @@ struct CatFlowWorkspaceKnowledgeTests {
         // pair made `note.contains("Ask")` vacuous (satisfied by the filenames regardless of
         // the sentence); only `!note.contains("Build")` carried information.
         let c = try #require(try cards([
-            ("Build.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   kb.index\n"),
-            ("QueryA.cat", "catflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n"),
-            ("QueryB.cat", "catflow 0.8\n1. Read Index   kb.index\n2. Keyword Search   (1,1)\n"),
+            ("Build.cat", "mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   kb.index\n"),
+            ("QueryA.cat", "mlxflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n"),
+            ("QueryB.cat", "mlxflow 0.8\n1. Read Index   kb.index\n2. Keyword Search   (1,1)\n"),
         ]).first)
         #expect(c.buildFile == "Build.cat")      // unambiguous — Build works
         #expect(c.askFile == nil)                // ambiguous — no Ask button
@@ -202,10 +202,10 @@ struct CatFlowWorkspaceKnowledgeTests {
 
     @Test func bothSidesAmbiguousIsACardWithNoButtonsAndTwoNotes() throws {
         let c = try #require(try cards([
-            ("B1.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   kb.index\n"),
-            ("B2.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   kb.index\n"),
-            ("Q1.cat", "catflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n"),
-            ("Q2.cat", "catflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n"),
+            ("B1.cat", "mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   kb.index\n"),
+            ("B2.cat", "mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   kb.index\n"),
+            ("Q1.cat", "mlxflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n"),
+            ("Q2.cat", "mlxflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n"),
         ]).first)
         #expect(c.buildFile == nil)
         #expect(c.askFile == nil)
@@ -219,8 +219,8 @@ struct CatFlowWorkspaceKnowledgeTests {
         let two = try String(contentsOf: galleryURL("20-TwoIndexAnalyst"), encoding: .utf8)
         let c = try cards([
             ("Analyst.cat", two),
-            ("BuildHR.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   hr.index\n"),
-            ("BuildEng.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   eng.index\n"),
+            ("BuildHR.cat", "mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   hr.index\n"),
+            ("BuildEng.cat", "mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   eng.index\n"),
         ])
         #expect(c.map(\.indexName) == ["eng.index", "hr.index"])
         #expect(c.allSatisfy { $0.querier == .one("Analyst.cat") })
@@ -229,12 +229,12 @@ struct CatFlowWorkspaceKnowledgeTests {
     }
 
     @Test func readIndexAloneIsPlain() throws {
-        let d = try doc("catflow 0.8\n1. Read Index   kb.index\n2. Save Text   x.md\n")
+        let d = try doc("mlxflow 0.8\n1. Read Index   kb.index\n2. Save Text   x.md\n")
         #expect(WorkspaceKnowledge.role(of: d).isPlain)
     }
 
     @Test func explicitNameSettingWins() throws {
-        let d = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   name=hr.index\n")
+        let d = try doc("mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   name=hr.index\n")
         #expect(WorkspaceKnowledge.role(of: d) == WorkspaceKnowledge.FlowIndexUse(builds: ["hr.index"]))
     }
 
@@ -262,8 +262,8 @@ struct CatFlowWorkspaceKnowledgeTests {
         // this workspace is `uses_example`'s exact shape (a prebuilt `kb.index`, nothing here
         // builds it). Whether the *view* renders it is `isCardWorthRendering`'s call, below.
         let c = try #require(try cards([
-            ("A.cat", "catflow 0.8\n1. Read Text   a.txt\n2. Save Text   b.md\n"),
-            ("B.cat", "catflow 0.8\n1. Read Index   only.index\n2. Retrieve   (1,1)\n"),
+            ("A.cat", "mlxflow 0.8\n1. Read Text   a.txt\n2. Save Text   b.md\n"),
+            ("B.cat", "mlxflow 0.8\n1. Read Index   only.index\n2. Retrieve   (1,1)\n"),
         ]).first)
         #expect(c.indexName == "only.index")
         #expect(c.builder == .none)
@@ -273,8 +273,8 @@ struct CatFlowWorkspaceKnowledgeTests {
 
     @Test func twoBuildersButNoQuerierProducesAOneSidedCard() throws {
         let c = try #require(try cards([
-            ("A.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   x.index\n"),
-            ("B.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   x.index\n"),
+            ("A.cat", "mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   x.index\n"),
+            ("B.cat", "mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   x.index\n"),
         ]).first)
         #expect(c.indexName == "x.index")
         #expect(c.querier == .none)
@@ -285,8 +285,8 @@ struct CatFlowWorkspaceKnowledgeTests {
 
     @Test func differentIndexNamesProduceTwoOneSidedCards() throws {
         let c = try cards([
-            ("Build.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   hr.index\n"),
-            ("Ask.cat", "catflow 0.8\n1. Read Index   eng.index\n2. Retrieve   (1,1)\n"),
+            ("Build.cat", "mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   hr.index\n"),
+            ("Ask.cat", "mlxflow 0.8\n1. Read Index   eng.index\n2. Retrieve   (1,1)\n"),
         ])
         #expect(c.map(\.indexName) == ["eng.index", "hr.index"])
         let engCard = try #require(c.first { $0.indexName == "eng.index" })
@@ -299,7 +299,7 @@ struct CatFlowWorkspaceKnowledgeTests {
 
     @Test func aCardWithABuilderIsWorthRenderingRegardlessOfDisk() throws {
         let c = try #require(try cards([
-            ("Ingest.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   kb.index\n"),
+            ("Ingest.cat", "mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   kb.index\n"),
         ]).first)
         #expect(WorkspaceKnowledge.isCardWorthRendering(c, indexExists: false))
         #expect(WorkspaceKnowledge.isCardWorthRendering(c, indexExists: true))
@@ -310,7 +310,7 @@ struct CatFlowWorkspaceKnowledgeTests {
         // builds. Not worth a card until the index actually exists — otherwise it's a dead
         // end (a card reading "not built yet" with no Build button).
         let c = try #require(try cards([
-            ("RagQuery.cat", "catflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n"),
+            ("RagQuery.cat", "mlxflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n"),
         ]).first)
         #expect(c.builder == .none)
         #expect(!WorkspaceKnowledge.isCardWorthRendering(c, indexExists: false),
@@ -332,9 +332,9 @@ struct CatFlowWorkspaceKnowledgeTests {
     @Test func aCallerInheritsItsCalleesIndexUse() throws {
         // uses_example-shaped: AskYourDocs.cat calls RagQuery.cat, and RagQuery.cat's own
         // Read Index + Retrieve is what makes AskYourDocs a querier — it has neither itself.
-        let caller = try doc("catflow 0.8\n1. RagQuery\n\nuses:\n  RagQuery = ./RagQuery.cat\n")
+        let caller = try doc("mlxflow 0.8\n1. RagQuery\n\nuses:\n  RagQuery = ./RagQuery.cat\n")
         let ragQuery = try usedFlow("""
-        catflow 0.8
+        mlxflow 0.8
         1. Embed       BGE-M3
         2. Read Index  kb.index
         3. Retrieve    (2,1)
@@ -350,9 +350,9 @@ struct CatFlowWorkspaceKnowledgeTests {
 
     @Test func inheritanceRecursesThroughNestedUsesChains() throws {
         // A uses B uses C; C is where the Read Index + Retrieve actually live.
-        let c = try usedFlow("catflow 0.8\n1. Read Index   deep.index\n2. Retrieve   (1,1)\n")
-        let b = try usedFlow("catflow 0.8\n1. C\n\nuses:\n  C = ./C.cat\n", nested: ["C": c])
-        let a = try doc("catflow 0.8\n1. B\n\nuses:\n  B = ./B.cat\n")
+        let c = try usedFlow("mlxflow 0.8\n1. Read Index   deep.index\n2. Retrieve   (1,1)\n")
+        let b = try usedFlow("mlxflow 0.8\n1. C\n\nuses:\n  C = ./C.cat\n", nested: ["C": c])
+        let a = try doc("mlxflow 0.8\n1. B\n\nuses:\n  B = ./B.cat\n")
         #expect(WorkspaceKnowledge.role(of: a, usesGraph: ["B": b])
             == WorkspaceKnowledge.FlowIndexUse(queries: ["deep.index"], inheritedFrom: ["deep.index": "B"]))
     }
@@ -362,14 +362,14 @@ struct CatFlowWorkspaceKnowledgeTests {
         // (it's a library component, not a candidate) — only its resolved graph is passed,
         // attributed to the caller. One card, one unambiguous Ask, no coin-flip with the callee.
         let ragQuery = try usedFlow("""
-        catflow 0.8
+        mlxflow 0.8
         1. Embed       BGE-M3
         2. Read Index  kb.index
         3. Retrieve    (2,1)
         4. Answer      Qwen3 8B
         """)
         let c = WorkspaceKnowledge.classify(
-            flows: [("AskYourDocs.cat", try doc("catflow 0.8\n1. RagQuery\n\nuses:\n  RagQuery = ./RagQuery.cat\n"))],
+            flows: [("AskYourDocs.cat", try doc("mlxflow 0.8\n1. RagQuery\n\nuses:\n  RagQuery = ./RagQuery.cat\n"))],
             usesGraphs: ["AskYourDocs.cat": ["RagQuery": ragQuery]])
         #expect(c.count == 1)
         #expect(c.first?.indexName == "kb.index")
@@ -416,11 +416,11 @@ struct CatFlowWorkspaceKnowledgeTests {
     @Test func classifyWorkspaceLeavesAnUnrelatedThirdFlowAsACandidate() throws {
         // Only the actual uses: target is excluded — a third flow with no relation to the
         // caller/callee pair stays a normal candidate, on either side.
-        let caller = try doc("catflow 0.8\n1. RagQuery\n\nuses:\n  RagQuery = ./RagQuery.cat\n")
-        let calleeText = "catflow 0.8\n1. Embed   BGE-M3\n2. Read Index   kb.index\n3. Retrieve   (2,1)\n"
+        let caller = try doc("mlxflow 0.8\n1. RagQuery\n\nuses:\n  RagQuery = ./RagQuery.cat\n")
+        let calleeText = "mlxflow 0.8\n1. Embed   BGE-M3\n2. Read Index   kb.index\n3. Retrieve   (2,1)\n"
         let callee = try doc(calleeText)
         let calleeUsed = try usedFlow(calleeText)
-        let other = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   other.index\n")
+        let other = try doc("mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   other.index\n")
         let callerURL = URL(fileURLWithPath: "/ws/AskYourDocs.cat")
         let calleeURL = URL(fileURLWithPath: "/ws/RagQuery.cat")
         let otherURL = URL(fileURLWithPath: "/ws/Other.cat")
@@ -443,8 +443,8 @@ struct CatFlowWorkspaceKnowledgeTests {
     }
 
     @Test func classifyWorkspaceWithNoUsesAnywhereNeverCallsTheResolvers() throws {
-        let build = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   kb.index\n")
-        let ask = try doc("catflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n")
+        let build = try doc("mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   (1,1)   kb.index\n")
+        let ask = try doc("mlxflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n")
         var resolverCalls = 0
         let cards = WorkspaceKnowledge.classifyWorkspace(
             flows: [
@@ -463,9 +463,9 @@ struct CatFlowWorkspaceKnowledgeTests {
         // CFM-R17-FIX-12(a): `Nightly.cat` declares `uses: Ingest = ./Ingest.cat` but no row
         // calls it (mid-edit, commented out). `Ingest.cat` still builds `library.index` on its
         // own rows and must keep its card — a declaration alone no longer costs it candidacy.
-        let nightly = try doc("catflow 0.8\n1. Save Text   noop.md\n\nuses:\n  Ingest = ./Ingest.cat\n")
-        let ingest = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n")
-        let ask = try doc("catflow 0.8\n1. Read Index   library.index\n2. Retrieve   (1,1)\n")
+        let nightly = try doc("mlxflow 0.8\n1. Save Text   noop.md\n\nuses:\n  Ingest = ./Ingest.cat\n")
+        let ingest = try doc("mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n")
+        let ask = try doc("mlxflow 0.8\n1. Read Index   library.index\n2. Retrieve   (1,1)\n")
         let ingestURL = URL(fileURLWithPath: "/ws/Ingest.cat")
 
         let cards = WorkspaceKnowledge.classifyWorkspace(
@@ -488,7 +488,7 @@ struct CatFlowWorkspaceKnowledgeTests {
         // `1. Ingest` to the `definitions:` composite first and never reaches the `uses:` entry
         // (`FlowInterpreter`'s scope-expansion switch). `Ingest.cat` must not lose its card.
         let caller = try doc("""
-        catflow 0.8
+        mlxflow 0.8
         1. Ingest
 
         definitions:
@@ -498,7 +498,7 @@ struct CatFlowWorkspaceKnowledgeTests {
         uses:
           Ingest = ./Ingest.cat
         """)
-        let ingest = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n")
+        let ingest = try doc("mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n")
         let ingestURL = URL(fileURLWithPath: "/ws/Ingest.cat")
 
         let cards = WorkspaceKnowledge.classifyWorkspace(
@@ -518,7 +518,7 @@ struct CatFlowWorkspaceKnowledgeTests {
         // `RagQuery.cat`'s Read Index/Retrieve, but `definitions: RagQuery` intercepts the row
         // first, so nothing is ever actually reached — `role` must not inherit from it.
         let caller = try doc("""
-        catflow 0.8
+        mlxflow 0.8
         1. RagQuery
 
         definitions:
@@ -528,7 +528,7 @@ struct CatFlowWorkspaceKnowledgeTests {
         uses:
           RagQuery = ./RagQuery.cat
         """)
-        let ragQuery = try usedFlow("catflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n")
+        let ragQuery = try usedFlow("mlxflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n")
         #expect(WorkspaceKnowledge.role(of: caller, usesGraph: ["RagQuery": ragQuery]).isPlain)
     }
 
@@ -537,7 +537,7 @@ struct CatFlowWorkspaceKnowledgeTests {
         // `UsesResolver` drops a self-referencing entry outright (E115, the candidate is
         // already on the stack), so it's never in the resolved graph — `graph["A"] == nil`,
         // which the "called and resolved" rule reads as "never survived," not excluded.
-        let a = try doc("catflow 0.8\n1. A\n\nuses:\n  A = ./A.cat\n")
+        let a = try doc("mlxflow 0.8\n1. A\n\nuses:\n  A = ./A.cat\n")
         let aURL = URL(fileURLWithPath: "/ws/A.cat")
         let cards = WorkspaceKnowledge.classifyWorkspace(
             flows: [("A.cat", a, aURL)],
@@ -561,8 +561,8 @@ struct CatFlowWorkspaceKnowledgeTests {
         let dir = root.appendingPathComponent("cycle", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: base) }
-        let aText = "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n3. B\n\nuses:\n  B = ./B.cat\n"
-        let bText = "catflow 0.8\n1. Read Index   library.index\n2. Retrieve   (1,1)\n3. A\n\nuses:\n  A = ./A.cat\n"
+        let aText = "mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n3. B\n\nuses:\n  B = ./B.cat\n"
+        let bText = "mlxflow 0.8\n1. Read Index   library.index\n2. Retrieve   (1,1)\n3. A\n\nuses:\n  A = ./A.cat\n"
         let aURL = dir.appendingPathComponent("A.cat")
         let bURL = dir.appendingPathComponent("B.cat")
         try aText.write(to: aURL, atomically: true, encoding: .utf8)
@@ -589,12 +589,12 @@ struct CatFlowWorkspaceKnowledgeTests {
         // input (empty settings on row 1) and call each other. Neither can verify the other as
         // a real entry point, so both stay excluded — arguably correct, not just unresolved:
         // nothing in this pair can actually be kicked off without a caller from outside it.
-        let a = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n3. B\n\nuses:\n  B = ./B.cat\n")
-        let b = try doc("catflow 0.8\n1. Embed   BGE-M3\n2. Read Index   library.index\n3. Retrieve   (1,2)\n4. A\n\nuses:\n  A = ./A.cat\n")
+        let a = try doc("mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n3. B\n\nuses:\n  B = ./B.cat\n")
+        let b = try doc("mlxflow 0.8\n1. Embed   BGE-M3\n2. Read Index   library.index\n3. Retrieve   (1,2)\n4. A\n\nuses:\n  A = ./A.cat\n")
         let aURL = URL(fileURLWithPath: "/ws/A.cat")
         let bURL = URL(fileURLWithPath: "/ws/B.cat")
-        let aUsed = try usedFlow("catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n")
-        let bUsed = try usedFlow("catflow 0.8\n1. Embed   BGE-M3\n2. Read Index   library.index\n3. Retrieve   (1,2)\n")
+        let aUsed = try usedFlow("mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   library.index\n")
+        let bUsed = try usedFlow("mlxflow 0.8\n1. Embed   BGE-M3\n2. Read Index   library.index\n3. Retrieve   (1,2)\n")
 
         let cards = WorkspaceKnowledge.classifyWorkspace(
             flows: [("A.cat", a, aURL), ("B.cat", b, bURL)],
@@ -607,11 +607,11 @@ struct CatFlowWorkspaceKnowledgeTests {
     // MARK: - CFM-R17-FIX-12(b): only a callee that cannot stand alone is excluded
 
     @Test func canStandAloneChecksRowOneForItsOwnValue() throws {
-        #expect(!WorkspaceKnowledge.canStandAlone(try doc("catflow 0.8\n1. Embed   BGE-M3\n")))
+        #expect(!WorkspaceKnowledge.canStandAlone(try doc("mlxflow 0.8\n1. Embed   BGE-M3\n")))
         #expect(WorkspaceKnowledge.canStandAlone(
-            try doc("catflow 0.8\n1. Embed   BGE-M3; \"literal text\"\n")))
-        #expect(WorkspaceKnowledge.canStandAlone(try doc("catflow 0.8\n1. Read Index   kb.index\n")))
-        #expect(WorkspaceKnowledge.canStandAlone(try doc("catflow 0.8; events\n1. On File   inbox/\n")))
+            try doc("mlxflow 0.8\n1. Embed   BGE-M3; \"literal text\"\n")))
+        #expect(WorkspaceKnowledge.canStandAlone(try doc("mlxflow 0.8\n1. Read Index   kb.index\n")))
+        #expect(WorkspaceKnowledge.canStandAlone(try doc("mlxflow 0.8; events\n1. On File   inbox/\n")))
         #expect(!WorkspaceKnowledge.canStandAlone(FlowDocument(version: "0.8", rows: [])))
     }
 
@@ -635,10 +635,10 @@ struct CatFlowWorkspaceKnowledgeTests {
         // directly, `BatchReport.cat` by inheritance through the very call that would have
         // excluded it) — an honest ambiguity naming two real entry points, not
         // `BatchReport.cat` silently winning Ask with no `Human Input` row.
-        let ragFlowText = "catflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n3. Embed   BGE-M3\n4. Store Index   kb.index\n"
+        let ragFlowText = "mlxflow 0.8\n1. Read Index   kb.index\n2. Retrieve   (1,1)\n3. Embed   BGE-M3\n4. Store Index   kb.index\n"
         let ragFlow = try doc(ragFlowText)
         let ragFlowUsed = try usedFlow(ragFlowText)
-        let batchReport = try doc("catflow 0.8\n1. RagFlow\n\nuses:\n  RagFlow = ./RagFlow.cat\n")
+        let batchReport = try doc("mlxflow 0.8\n1. RagFlow\n\nuses:\n  RagFlow = ./RagFlow.cat\n")
         let ragFlowURL = URL(fileURLWithPath: "/ws/RagFlow.cat")
         let batchURL = URL(fileURLWithPath: "/ws/BatchReport.cat")
         #expect(WorkspaceKnowledge.canStandAlone(ragFlow))
@@ -667,11 +667,11 @@ struct CatFlowWorkspaceKnowledgeTests {
     @Test func classifyWorkspaceStillExcludesACalleeThatCannotStandAlone() throws {
         // Regression guard: RagQuery.cat's shape (row 1 `Embed BGE-M3`, no inline value) still
         // gets excluded — -12(b) narrows the rule further, it doesn't remove it.
-        let ragQueryText = "catflow 0.8\n1. Embed   BGE-M3\n2. Read Index   kb.index\n3. Retrieve   (1,2)\n"
+        let ragQueryText = "mlxflow 0.8\n1. Embed   BGE-M3\n2. Read Index   kb.index\n3. Retrieve   (1,2)\n"
         let ragQuery = try doc(ragQueryText)
         #expect(!WorkspaceKnowledge.canStandAlone(ragQuery))
         let ragQueryUsed = try usedFlow(ragQueryText)
-        let caller = try doc("catflow 0.8\n1. RagQuery\n\nuses:\n  RagQuery = ./RagQuery.cat\n")
+        let caller = try doc("mlxflow 0.8\n1. RagQuery\n\nuses:\n  RagQuery = ./RagQuery.cat\n")
         let callerURL = URL(fileURLWithPath: "/ws/AskYourDocs.cat")
         let ragQueryURL = URL(fileURLWithPath: "/ws/RagQuery.cat")
 
@@ -695,12 +695,12 @@ struct CatFlowWorkspaceKnowledgeTests {
         // BGE-M3`, no inline value) can't stand alone, so it's excluded — both callers inherit
         // its query of `kb.index` and collide. The old note said "rename one of these files";
         // neither `X.cat` nor `Z.cat` mentions `kb.index` at all — the name lives in `Y.cat`.
-        let yText = "catflow 0.8\n1. Embed   BGE-M3\n2. Read Index   kb.index\n3. Retrieve   (1,2)\n"
+        let yText = "mlxflow 0.8\n1. Embed   BGE-M3\n2. Read Index   kb.index\n3. Retrieve   (1,2)\n"
         let y = try doc(yText)
         let yUsed = try usedFlow(yText)
         #expect(!WorkspaceKnowledge.canStandAlone(y))
-        let x = try doc("catflow 0.8\n1. Y\n\nuses:\n  Y = ./Y.cat\n")
-        let z = try doc("catflow 0.8\n1. Y\n\nuses:\n  Y = ./Y.cat\n")
+        let x = try doc("mlxflow 0.8\n1. Y\n\nuses:\n  Y = ./Y.cat\n")
+        let z = try doc("mlxflow 0.8\n1. Y\n\nuses:\n  Y = ./Y.cat\n")
         let xURL = URL(fileURLWithPath: "/ws/X.cat")
         let zURL = URL(fileURLWithPath: "/ws/Z.cat")
         let yURL = URL(fileURLWithPath: "/ws/Y.cat")
@@ -730,9 +730,9 @@ struct CatFlowWorkspaceKnowledgeTests {
         // A direct collision (both files register the name in their own rows, no uses:
         // involved) keeps the general "rename one" advice — it's still correct there.
         let c = try #require(try cards([
-            ("A.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   x.index\n"),
-            ("B.cat", "catflow 0.8\n1. Embed   BGE-M3\n2. Store Index   x.index\n"),
-            ("Ask.cat", "catflow 0.8\n1. Read Index   x.index\n2. Retrieve   (1,1)\n"),
+            ("A.cat", "mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   x.index\n"),
+            ("B.cat", "mlxflow 0.8\n1. Embed   BGE-M3\n2. Store Index   x.index\n"),
+            ("Ask.cat", "mlxflow 0.8\n1. Read Index   x.index\n2. Retrieve   (1,1)\n"),
         ]).first)
         let note = try #require(c.ambiguityNote)
         #expect(note.contains("Rename one so this index"))

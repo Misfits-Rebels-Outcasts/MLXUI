@@ -49,9 +49,9 @@ struct CatFlowScopeTests {
             .appendingPathComponent("ws-\(UUID().uuidString)", isDirectory: true)
         let ws = FlowWorkspace(root: root)
         let ask = FlowScope(identity: "AskYourDocs", workspace: ws, locationID: "docs",
-                            flowText: "catflow 0.8\n1. Read Index library.index\n")
+                            flowText: "mlxflow 0.8\n1. Read Index library.index\n")
         let index = FlowScope(identity: "IngestFolder", workspace: ws, locationID: "docs",
-                              flowText: "catflow 0.8\n6. Store Index library.index\n")
+                              flowText: "mlxflow 0.8\n6. Store Index library.index\n")
         // Identity stays each flow's own id …
         #expect(ask.identity == "AskYourDocs")
         #expect(index.identity == "IngestFolder")
@@ -62,14 +62,15 @@ struct CatFlowScopeTests {
     }
 
     @Test func workspaceScopeSeedComesFromItsOwnText() {
-        let text = "catflow 0.8\n1. Read Audio other.m4a\n"
+        let text = "mlxflow 0.8\n1. Read Audio other.m4a\n"
         let scope = FlowScope(identity: "w", workspace: FlowWorkspace(root: URL(fileURLWithPath: "/tmp")),
                               locationID: "shared", flowText: text)
         // Stored, not re-derived: int.from_bytes(SHA-256(text)[:4], "big") of the string above.
         // A workspace scope seeds from the text it is handed, never from a bundled-file lookup
         // keyed on `identity` — `identity` is "w", which has no bundled `.cat`, so an identity
         // lookup would give the `?? 0` fallback the second expectation rules out.
-        #expect(scope.runSeed == 3_747_261_887)
+        // (CFM-R18-6 flipped this fixture's header `catflow`->`mlxflow`; value re-derived.)
+        #expect(scope.runSeed == 2_057_526_426)
         #expect(scope.runSeed != 0)
     }
 
@@ -85,9 +86,9 @@ struct CatFlowScopeTests {
         let dir = root.appendingPathComponent("kb", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: base) }
-        let caller = "catflow 0.8\n1. Helper\n\nuses:\n  Helper = ./Helper.cat\n"
+        let caller = "mlxflow 0.8\n1. Helper\n\nuses:\n  Helper = ./Helper.cat\n"
         try caller.write(to: dir.appendingPathComponent("Caller.cat"), atomically: true, encoding: .utf8)
-        try "catflow 0.8\n1. Read Text a.txt\n2. Save Text b.md\n"
+        try "mlxflow 0.8\n1. Read Text a.txt\n2. Save Text b.md\n"
             .write(to: dir.appendingPathComponent("Helper.cat"), atomically: true, encoding: .utf8)
         let ws = FlowWorkspace(root: root)
         let doc = try CatParser.parse(caller)

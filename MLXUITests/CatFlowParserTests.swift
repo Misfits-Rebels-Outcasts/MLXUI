@@ -102,16 +102,16 @@ struct CatFlowParserTests {
 
     @Test func nonV08HeadersRaiseE101() {
         #expect(throws: CatParserError.self) {
-            _ = try CatParser.parse("catflow 0.4\n1. Read Audio  talk.m4a\n")
+            _ = try CatParser.parse("mlxflow 0.4\n1. Read Audio  talk.m4a\n")
         }
         #expect(throws: CatParserError.self) {
-            _ = try CatParser.parse("catflow 0.9\n1. Read Audio  talk.m4a\n")
+            _ = try CatParser.parse("mlxflow 0.9\n1. Read Audio  talk.m4a\n")
         }
     }
 
     @Test func e101MessageQuotesTheVersion() throws {
         do {
-            _ = try CatParser.parse("catflow 0.4\n1. Read Audio  talk.m4a\n")
+            _ = try CatParser.parse("mlxflow 0.4\n1. Read Audio  talk.m4a\n")
             Issue.record("expected E101")
         } catch let err as CatParserError {
             let msg = String(describing: err)
@@ -123,7 +123,7 @@ struct CatFlowParserTests {
 
     @Test func unknownHeaderFlagRaisesE102() throws {
         do {
-            _ = try CatParser.parse("catflow 0.8 · nope\n1. Read Audio  talk.m4a\n")
+            _ = try CatParser.parse("mlxflow 0.8 · nope\n1. Read Audio  talk.m4a\n")
             Issue.record("expected E102")
         } catch let err as CatParserError {
             // E102's v0.8 catalog always renders the `; ` separator, even for a `·` header.
@@ -173,11 +173,12 @@ struct CatFlowParserTests {
 
     // MARK: - CFM-R18-1: `mlxflow`/`mlxpipeline` header aliases (SPEC-Q — `mlxflow 0.8`,
     // the header keyword the reference already writes; `parser.py:219/230`'s four-spelling
-    // alias + `:346`'s normalization to the two-value internal vocabulary). This is the
-    // whole owned alias regression once `CFM-R18-6` flips every other `catflow 0.8`
-    // literal in this test corpus to `mlxflow 0.8` — do not delete these as "redundant"
-    // with the fixture corpus; the 30 old-spelling conformance inputs are regenerated
-    // from upstream and are not ours to keep.
+    // alias + `:346`'s normalization to the two-value internal vocabulary). CFM-R18-6 has
+    // flipped every other header literal in `MLXUITests/` to `mlxflow`, so this block — plus
+    // `fmtOfACatflowHeadedFileStillEmitsCatflow` below — is now the *whole* owned regression
+    // that a pre-rename `catflow 0.8` file still parses. Do not delete it as "redundant" with
+    // the fixture corpus; the 30 old-spelling conformance inputs are regenerated from
+    // upstream and are not ours to keep.
 
     @Test(arguments: ["catflow", "mlxflow"])
     func flowFamilyAliasesParseIdenticalDocuments(_ keyword: String) throws {
@@ -252,7 +253,9 @@ struct CatFlowParserTests {
     /// The regression this whole item exists to catch: `fmt` of a `catflow`-headed file
     /// must still emit `catflow` — `fmt.py:215-216` preserves the source family, it does
     /// not canonicalize to whatever the reference's own default is. Mirrors the fact that
-    /// all eight `tests/goldens/fmt/*.fmt.cat` still say `catflow 0.8`.
+    /// all eight `tests/goldens/fmt/*.fmt.cat` still say `catflow 0.8`. CFM-R18-6 flipped
+    /// every other header literal in this file to `mlxflow`; these three `catflow` uses are
+    /// load-bearing — do not "tidy" them.
     @Test func fmtOfACatflowHeadedFileStillEmitsCatflow() throws {
         let doc = try CatParser.parse("catflow 0.8\n1. Read Audio  talk.m4a\n")
         let out = CatSerializer.serialize(doc)
@@ -270,7 +273,7 @@ struct CatFlowParserTests {
 
     @Test func nonRowLineRaisesE105() throws {
         do {
-            _ = try CatParser.parse("catflow 0.8\nblah\n")
+            _ = try CatParser.parse("mlxflow 0.8\nblah\n")
             Issue.record("expected E105")
         } catch let err as CatParserError {
             #expect(String(describing: err).hasPrefix("⚠ Row 2 couldn't be read from \"blah…\". A row is: `N. Task  (refs)  model; settings`."))
@@ -279,7 +282,7 @@ struct CatFlowParserTests {
 
     @Test func unclosedQuoteRaisesE106() throws {
         do {
-            _ = try CatParser.parse("catflow 0.8\n1. Summarize  Qwen3 8B; \"never closed\n")
+            _ = try CatParser.parse("mlxflow 0.8\n1. Summarize  Qwen3 8B; \"never closed\n")
             Issue.record("expected E106")
         } catch let err as CatParserError {
             #expect(String(describing: err) == "⚠ Row 2's quoted text opens with `\"` but never closes. If the text should contain a quote, write `\\\"`.")
@@ -288,7 +291,7 @@ struct CatFlowParserTests {
 
     @Test func duplicatePositionRaisesE107() throws {
         do {
-            _ = try CatParser.parse("catflow 0.8\n1. Read Audio  a\n1. Read Text  b\n")
+            _ = try CatParser.parse("mlxflow 0.8\n1. Read Audio  a\n1. Read Text  b\n")
             Issue.record("expected E107")
         } catch let err as CatParserError {
             #expect(String(describing: err) == "⚠ Two rows are numbered 1 in the same scope. Positions must be sequential — running fmt will renumber and re-aim references.")

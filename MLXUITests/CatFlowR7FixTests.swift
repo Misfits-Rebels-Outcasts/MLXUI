@@ -32,7 +32,7 @@ struct CatFlowR7FixTests {
         // The Gate self-loops on `yes` and caps at 2 visits with on_budget=fail — the third
         // visit must raise, not proceed normally or spin to maxSteps.
         let text = """
-        catflow 0.8
+        mlxflow 0.8
         1. Template    "go"
         2. Gate   (1)  "loop?" ; tags: yes, no ; max_visits=2 ; on_budget=fail
            -> { yes: 2 | no: 3 }
@@ -57,7 +57,7 @@ struct CatFlowR7FixTests {
         // `Foo` is not a catalog task, so every item fails; on_error=skip absorbs each as an
         // F003 flag and the run continues (the mock's Split yields 3 items).
         let text = """
-        catflow 0.8
+        mlxflow 0.8
         1. Template    "a; b"
         2. Split   (1)  by=lines
         3. <each try_em>   (2) ; on_error=skip
@@ -82,7 +82,7 @@ struct CatFlowR7FixTests {
         // Chain A (child 1.1) appends via `; ctx+`; chain B's `· ctx` (child 1.2) must read
         // an empty journal, not A's entry.
         let text = """
-        catflow 0.8
+        mlxflow 0.8
         1. <parallel two>
             1. Draft    "a" ; ctx+
 
@@ -104,7 +104,7 @@ struct CatFlowR7FixTests {
     /// loaded entries.
     @Test func readContextHydratesJournal() async throws {
         let text = """
-        catflow 0.8
+        mlxflow 0.8
         1. Read Context   journal.json
         2. Draft   "hi" ; ctx
         """
@@ -154,16 +154,17 @@ struct CatFlowR7FixTests {
         let withUsed = try CacheKey.cacheKey(task: "Draft", model: "mlx-community/Qwen3-8B-4bit",
                                              settings: "greeting=Hello", inputs: [input], realism: "mock",
                                              frameVersion: draftFrame,
-                                             usedFlowContent: "catflow 0.8\n1. Template ...")
-        #expect(withUsed == "07971abfde46bca043febf14baf18797b237565da8951f9653502438b5845916")
+                                             usedFlowContent: "mlxflow 0.8\n1. Template ...")
+        // CFM-R18-6: `usedFlowContent` header flipped `catflow`->`mlxflow`; re-pinned against Python.
+        #expect(withUsed == "19814663190d3fd171ad24bf454c2f92c84c2ea5784973e314305cef4fcc6ba3")
 
         let allThree = try CacheKey.cacheKey(task: "Think", model: "mlx-community/Qwen3-8B-4bit",
                                              settings: "tools: search, final", inputs: [input], realism: "mock",
                                              frameVersion: thinkFrame,
                                              contextVersion: CacheKey.journalVersion(context),
                                              transcriptVersion: CacheKey.transcriptVersion(transcript),
-                                             usedFlowContent: "catflow 0.8\n1. Template ...")
-        #expect(allThree == "49783330c929955fe59ce3e4a7d4c417516f70207ae917a8a3a542f0d060da79")
+                                             usedFlowContent: "mlxflow 0.8\n1. Template ...")
+        #expect(allThree == "8b7f0c5e502bfaf9fd93cb9a25f10f2a0d89cf250ac919da0e3c29344a07e80b")
 
         // The version helpers themselves match Python (`journal_version`/`transcript_version`).
         #expect(CacheKey.journalVersion(context) == "2:7daf46283e728811bd2e92a760f348c1f9ea9b8e7a75d385ec804aaae21cd0ac")
@@ -174,7 +175,7 @@ struct CatFlowR7FixTests {
     /// against the used flow's `definitions`, never the caller's.
     @Test func usesRunsUnderItsOwnScope() async throws {
         let libText = """
-        catflow 0.8
+        mlxflow 0.8
         1. Greet   "hello"
 
         definitions:
@@ -187,7 +188,7 @@ struct CatFlowR7FixTests {
                                             definitions: libDoc.definitions, presets: libDoc.presets,
                                             nested: [:], sourceText: libText)
         let caller = """
-        catflow 0.8
+        mlxflow 0.8
         1. LibFlow
         2. Save Text   out.txt
         """

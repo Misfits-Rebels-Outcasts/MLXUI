@@ -22,14 +22,14 @@ struct CatFlowWorkspaceViewTests {
         return (base, FlowWorkspace(root: root))
     }
 
-    private let validCat = "catflow 0.8\n1. Read Text   memo.txt\n2. Save Text   out.md\n"
+    private let validCat = "mlxflow 0.8\n1. Read Text   memo.txt\n2. Save Text   out.md\n"
 
     // MARK: - WorkspaceRef → FlowScope
 
     @Test func workspaceRefBuildsAWorkspaceRootedScope() {
         let ref = WorkspaceRef(workspaceID: "docs", flowFile: "AskYourDocs.cat")
         #expect(ref.flowStem == "AskYourDocs")
-        let scope = ref.scope(text: "catflow 0.8\n")
+        let scope = ref.scope(text: "mlxflow 0.8\n")
         #expect(scope.identity == "AskYourDocs")          // run seed / On Flow / records
         #expect(scope.locationID == "docs")               // where paths resolve
         #expect(scope.directory == ModelStore.shared.workspacesDirectory
@@ -41,8 +41,8 @@ struct CatFlowWorkspaceViewTests {
 
     @Test func twoWorkspaceFlowsResolveTheSameRelativePathToTheSameFile() throws {
         let (base, _) = try makeWorkspace(id: "kb", files: [
-            ("Build.cat", "catflow 0.8\n1. Read Files   docs/\n6. Store Index   library.index\n"),
-            ("Ask.cat", "catflow 0.8\n1. Read Index   library.index\n2. Embed   BGE-M3\n"),
+            ("Build.cat", "mlxflow 0.8\n1. Read Files   docs/\n6. Store Index   library.index\n"),
+            ("Ask.cat", "mlxflow 0.8\n1. Read Index   library.index\n2. Embed   BGE-M3\n"),
         ])
         defer { try? FileManager.default.removeItem(at: base) }
 
@@ -60,8 +60,8 @@ struct CatFlowWorkspaceViewTests {
     // MARK: - A workspace flow runs through the same session the gallery uses
 
     @Test func aWorkspaceFlowRunsThroughFlowRunSession() async throws {
-        let askText = "catflow 0.8\n1. Read Text   question.txt\n2. RagQuery\n3. Save Text   answer.md\n\nuses:\n  RagQuery = ./RagQuery.cat\n"
-        let ragText = "catflow 0.8\n1. Embed   BGE-M3\n2. Read Index   kb.index\n3. Retrieve   (2,1)\n4. Answer   Qwen3 8B\n"
+        let askText = "mlxflow 0.8\n1. Read Text   question.txt\n2. RagQuery\n3. Save Text   answer.md\n\nuses:\n  RagQuery = ./RagQuery.cat\n"
+        let ragText = "mlxflow 0.8\n1. Embed   BGE-M3\n2. Read Index   kb.index\n3. Retrieve   (2,1)\n4. Answer   Qwen3 8B\n"
         let (base, ws) = try makeWorkspace(id: "rag", files: [
             ("AskYourDocs.cat", askText), ("RagQuery.cat", ragText),
         ])

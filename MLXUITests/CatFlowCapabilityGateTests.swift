@@ -32,7 +32,7 @@ struct CatFlowCapabilityGateTests {
     // MARK: - canRun refuses a flagged flow under the store build
 
     @Test func canRunRefusesCodeFlag() throws {
-        let doc = try CatParser.parseForValidation("catflow 0.8; code\n1. Read Text  a.txt\n").flowDocument
+        let doc = try CatParser.parseForValidation("mlxflow 0.8; code\n1. Read Text  a.txt\n").flowDocument
         let runnability = FlowRunner.canRun(try #require(doc))
         guard case .notRunnable(let reason) = runnability else {
             Issue.record("expected refusal")
@@ -42,7 +42,7 @@ struct CatFlowCapabilityGateTests {
     }
 
     @Test func canRunRefusesImproviseFlag() throws {
-        let doc = try CatParser.parseForValidation("catflow 0.8; improvise\n1. Read Text  a.txt\n").flowDocument
+        let doc = try CatParser.parseForValidation("mlxflow 0.8; improvise\n1. Read Text  a.txt\n").flowDocument
         let runnability = FlowRunner.canRun(try #require(doc))
         guard case .notRunnable(let reason) = runnability else {
             Issue.record("expected refusal")
@@ -53,7 +53,7 @@ struct CatFlowCapabilityGateTests {
 
     @Test func canRunAcceptsOrdinaryFlags() throws {
         // `network`/`events` are not refused — only `code`/`improvise` are.
-        let doc = try CatParser.parseForValidation("catflow 0.8; network\n1. Read Text  a.txt\n2. Save Text  out.txt\n").flowDocument
+        let doc = try CatParser.parseForValidation("mlxflow 0.8; network\n1. Read Text  a.txt\n2. Save Text  out.txt\n").flowDocument
         let runnability = FlowRunner.canRun(try #require(doc))
         if case .notRunnable(let reason) = runnability {
             #expect(!reason.contains("App Store builds refuse"),
@@ -63,7 +63,7 @@ struct CatFlowCapabilityGateTests {
 
     @Test func flagsParseAndValidateRegardlessOfTheDoor() throws {
         // The door is run-time only — a `code` flow still parses and validates.
-        let parsed = try CatParser.parseForValidation("catflow 0.8; code\n1. Read Text  a.txt\n")
+        let parsed = try CatParser.parseForValidation("mlxflow 0.8; code\n1. Read Text  a.txt\n")
         #expect(parsed.flags.contains("code"))
         #expect(parsed.flowDocument?.flags.contains(.code) == true)
     }

@@ -24,7 +24,7 @@ struct CatFlowHumanRowsTests {
     }
 
     private let humanFlow = """
-    catflow 0.8
+    mlxflow 0.8
     1. Read Text    memo.txt
     2. Ask Human    (1)  "Send this reply?" ; wait=forever ; tags: approve, edit
        -> { approve: 3 | edit: 3 }
@@ -76,7 +76,7 @@ struct CatFlowHumanRowsTests {
     // MARK: - Timeout rows park and fall back (CFM-R10-Human timeout)
 
     private let timeoutFlow = """
-    catflow 0.8
+    mlxflow 0.8
     1. Read Text    memo.txt
     2. Ask Human    (1)  "Send this reply?" ; timeout=2h; default=edit
        -> { edit: 3 }
@@ -198,7 +198,7 @@ struct CatFlowHumanRowsTests {
     @Test func sessionFallbackTimeoutRunsToTheDefault() async throws {
         // A one-second timeout so the deadline is reachable, not a claim about the clock.
         let doc = try parse("""
-        catflow 0.8
+        mlxflow 0.8
         1. Read Text    memo.txt
         2. Ask Human    (1)  "Send this reply?" ; timeout=1s; default=edit
            -> { edit: 3 }

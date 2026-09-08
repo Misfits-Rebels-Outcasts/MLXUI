@@ -18,7 +18,9 @@ struct CatFlowEditingTests {
         let root = workspaceRoot ?? FileManager.default.temporaryDirectory
             .appendingPathComponent("catflow-editor-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let doc = FlowDocument(version: "0.8", rows: rows)
+        // A flow started in the editor is `mlxflow`-headed (CFM-R18-5), same as
+        // `FlowEditorModel`'s own nil-document fallback.
+        let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: rows)
         return FlowEditorModel(name: name, document: doc,
                                workspace: FlowWorkspace(root: root))
     }
@@ -552,7 +554,7 @@ struct CatFlowEditingTests {
         let url = try #require(model.savedURL)
         #expect(url.lastPathComponent == "My Flow.cat")
         let text = try String(contentsOf: url, encoding: .utf8)
-        #expect(text.contains("catflow 0.8"))
+        #expect(text.contains("mlxflow 0.8"))
         #expect(text.contains("1. Read Text"))
         #expect(model.isDirty == false)
         model.add(task: "Summarize")
@@ -679,7 +681,7 @@ struct CatFlowEditingTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let source = """
-        catflow 0.8
+        mlxflow 0.8
         1. Read Text   memo.txt
         2. Summarize   Qwen3 8B
         3. Save Text   out.md
