@@ -111,10 +111,20 @@ import MLXLMCommon
         return (0 ..< max(0, c.count - 1)).reduce(0) { $0 + (c[$1] == ">" && c[$1 + 1] == "<" ? 1 : 0) }
     }
 
+    /// Whether the tokenizer-loading goldens run. `HFTokenizerLoader().load()` reads a large
+    /// `tokenizer.json` and builds a Jinja template; on a loaded machine that is tens of
+    /// seconds, and it has been seen to stall the whole serial suite. So it is **opt-in** —
+    /// set `MLXUI_TOKENIZER_GOLDENS=1` (the owner does this for a real sign-off run). The
+    /// hermetic `ToolCallProcessorUpstreamBehavior` tests carry the everyday proof.
+    static var tokenizerGoldensEnabled: Bool {
+        ProcessInfo.processInfo.environment["MLXUI_TOKENIZER_GOLDENS"] != nil
+    }
+
     /// Sample HTML with many adjacent-tag boundaries (`><`), the shape GLM-OCR emits for a
     /// table. The new engine path detokenizes the whole id stream at once; the old path
     /// replayed it through `NaiveStreamingDetokenizer` + `ToolCallProcessor`.
-    @Test func newEnginePathRoundTripsMarkupThatTheOldPathCorrupted() async throws {
+    @Test(.enabled(if: OCRDetokenizationIsLossless.tokenizerGoldensEnabled))
+    func newEnginePathRoundTripsMarkupThatTheOldPathCorrupted() async throws {
         guard let dir = Self.installedGLMOCRDir() else { return }   // not installed here
 
         let tokenizer = try await HFTokenizerLoader().load(from: dir)

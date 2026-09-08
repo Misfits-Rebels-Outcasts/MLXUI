@@ -28,15 +28,21 @@ enum LLMEngine {
             let container = try await LLMModelFactory.shared.loadContainer(from: modelDir, using: loader)
             return try await container.perform { context in
                 let input = try await context.processor.prepare(input: UserInput(prompt: prompt))
-                let stream = try MLXLMCommon.generate(
+                // TCP-1 (`RSI/backlog.md`, journal `2026-230`): consume **raw token ids**, not
+                // `.chunk` text. The decoded-text path runs every chunk through mlx-swift-lm's
+                // `ToolCallProcessor`, which drops the text before a `<` whenever the `<…` tail
+                // partially matches `<tool_call>` — so a reply containing `<div><span>` loses
+                // the `>` between them. `LLMStage` (flow rows) never emits tool calls; skip
+                // that scanner and detokenize the whole id stream once.
+                let stream = try MLXLMCommon.generateTokens(
                     input: input,
                     parameters: GenerateParameters(maxTokens: maxTokens, temperature: temperature),
                     context: context)
-                var output = ""
+                var tokenIds: [Int] = []
                 for await generation in stream {
-                    if case .chunk(let text) = generation { output += text }
+                    if case .token(let id) = generation { tokenIds.append(id) }
                 }
-                return output
+                return context.tokenizer.decode(tokenIds: tokenIds)
             }
         } catch let error as StageError {
             throw error

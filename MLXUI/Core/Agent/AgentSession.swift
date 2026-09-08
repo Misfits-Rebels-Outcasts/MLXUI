@@ -58,8 +58,17 @@ nonisolated final class AgentSession {
         self.onEvent = onEvent
     }
 
+    /// TCP-1 (`RSI/backlog.md`, journal `2026-230`): whether a turn goes through the
+    /// tool-call scanner path. `ChatSession`'s generate path *always* runs mlx-swift-lm's
+    /// `ToolCallProcessor`, which drops the text before a `<` that partially matches
+    /// `<tool_call>` — so any reply containing HTML / XML / SVG / JSX loses `>` characters.
+    /// A turn with no tools armed has no reason to pay that, so it takes a raw token stream.
+    static func usesRawTextPath(_ registry: ToolRegistry) -> Bool { registry.isEmpty }
+
     /// Stream a response, running the tool loop as the model requests tools.
     func streamResponse(to prompt: String) -> AsyncThrowingStream<String, Error> {
+        guard !Self.usesRawTextPath(registry) else { return rawStreamResponse(to: prompt) }
+
         let registry = registry
         let approve = approve
         let onEvent = onEvent
@@ -71,22 +80,72 @@ nonisolated final class AgentSession {
             return result.modelResult
         }
         // ChatSession's history initializer rehydrates prior turns for persistent
-        // conversations; the plain initializer starts fresh.
+        // conversations; the plain initializer starts fresh. Tools are armed here (the raw
+        // path handled the empty case above), so `tools:` is always non-nil.
         let session = history.isEmpty
             ? ChatSession(
                 model,
                 instructions: instructions,
                 generateParameters: parameters,
-                tools: registry.isEmpty ? nil : registry.toolSpecs,
+                tools: registry.toolSpecs,
                 toolDispatch: dispatch)
             : ChatSession(
                 model,
                 instructions: instructions,
                 history: history,
                 generateParameters: parameters,
-                tools: registry.isEmpty ? nil : registry.toolSpecs,
+                tools: registry.toolSpecs,
                 toolDispatch: dispatch)
         return session.streamResponse(to: prompt)
+    }
+
+    /// A plain chat turn, streamed straight from the token iterator with **no tool-call
+    /// scanner in the path** (TCP-1). Mirrors `ChatSession`'s message assembly (system +
+    /// history + user) but drives `MLXLMCommon.generateTokens` and decodes with
+    /// `NaiveStreamingDetokenizer` alone — the detokenizer is lossless; only `ToolCallProcessor`
+    /// layered on top of it drops the `>`. The chat sheet's history is always text-only
+    /// (`Conversation.chatHistory`), so it flattens to Sendable `(role, content)` pairs.
+    private func rawStreamResponse(to prompt: String) -> AsyncThrowingStream<String, Error> {
+        let (stream, continuation) = AsyncThrowingStream<String, Error>.makeStream()
+        let model = model
+        let parameters = parameters
+        let systemText = instructions
+        let priorTurns: [(role: Chat.Message.Role, content: String)] =
+            history.map { ($0.role, $0.content) }
+
+        let task = Task {
+            do {
+                try await model.perform { context in
+                    var messages: [Chat.Message] = []
+                    if let systemText { messages.append(.system(systemText)) }
+                    for turn in priorTurns {
+                        messages.append(Chat.Message(role: turn.role, content: turn.content))
+                    }
+                    messages.append(.user(prompt))
+
+                    let input = try await context.processor.prepare(
+                        input: UserInput(chat: messages))
+                    let (tokens, genTask) = try MLXLMCommon.generateTokensTask(
+                        input: input, parameters: parameters, context: context)
+
+                    var detokenizer = NaiveStreamingDetokenizer(tokenizer: context.tokenizer)
+                    for await item in tokens {
+                        guard case .token(let id) = item else { continue }
+                        detokenizer.append(token: id)
+                        if let piece = detokenizer.next(), !piece.isEmpty {
+                            if case .terminated = continuation.yield(piece) { break }
+                        }
+                    }
+                    // The generation task can run briefly past an early break (KVCache in use).
+                    await genTask.value
+                }
+                continuation.finish()
+            } catch {
+                continuation.finish(throwing: error)
+            }
+        }
+        continuation.onTermination = { _ in task.cancel() }
+        return stream
     }
 
     /// Resolve + run one tool call: unknown → error; over budget → error; approval-gated →
