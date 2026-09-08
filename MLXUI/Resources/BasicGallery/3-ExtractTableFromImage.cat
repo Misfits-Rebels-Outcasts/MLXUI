@@ -1,4 +1,4 @@
 mlxflow 0.8
 1. Read Image   budget.png
 2. OCR          PaddleOCR-VL-1.5; "table"
-3. Save Text    table.md
+3. Save Text    table.otsl

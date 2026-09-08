@@ -504,7 +504,7 @@
    "title": "Table From Image",
    "filename": "3-ExtractTableFromImage.cat",
    "category": "Basic",
-   "description": "Point PaddleOCR-VL at a screenshot of a table and get the grid back as markup — the model's table mode, saved to a file.",
+   "description": "Point PaddleOCR-VL at a screenshot of a table and get the grid back as OTSL table markup — the model's table mode, saved to table.otsl.",
    "tier": "basic"
   }
  ]
