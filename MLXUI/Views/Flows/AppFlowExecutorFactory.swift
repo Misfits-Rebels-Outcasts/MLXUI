@@ -33,10 +33,19 @@ import Foundation
                 }
             }
         }
+        // OCP-2-3: the row's model's `promptSupport`, resolved on the main actor — the flow
+        // boundary's `.modes` sanitize reads it before building the stage.
+        let promptSupport: @Sendable (ModelEntry) async -> PromptSupport = { model in
+            await MainActor.run {
+                appState.registry.bestModule(for: model)?.sdk.promptSupport ?? .none
+            }
+        }
 
         var executor = RealExecutor(workspace: scope.workspace, flowID: scope.locationID,
                                     blobDirectory: blobDir,
-                                    makeModelStage: makeStage, installedModelIDs: installed,
+                                    makeModelStage: makeStage,
+                                    promptSupport: promptSupport,
+                                    installedModelIDs: installed,
                                     catalog: catalog)
         executor.transforms = transforms
         return executor

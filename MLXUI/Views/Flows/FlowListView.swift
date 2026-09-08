@@ -232,6 +232,7 @@ struct FlowListView: View {
                                              totalRAMGB: appState.systemInfo.totalRAMGB,
                                              installedModelIDs: appState.installedModelIDs,
                                              claimableModelIDs: appState.claimableModelIDs,
+                                             resolvePromptSupport: { appState.registry.bestModule(for: $0)?.sdk.promptSupport ?? .none },
                                              editable: false,
                                              isFrozen: source == .gallery)
                     }

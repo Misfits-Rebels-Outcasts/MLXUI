@@ -26,6 +26,11 @@ struct FlowRowInspectorView: View {
     var installedModelIDs: Set<String> = []
     /// CFM-R14-2 — catalog ids the registry can claim; the Model menu's derived pool filter.
     var claimableModelIDs: Set<String> = []
+    /// OCP-2-2 — how the row's named model's stage varies with a per-run prompt. **Unlike the
+    /// Run UI** (`2026-229`), the inspector has registry access, so `FlowEditorView` passes a
+    /// resolver that goes `ModelEntry → SDK → promptSupport`. Default `.none` keeps the
+    /// read-only / preview call sites and previews working without a registry.
+    var resolvePromptSupport: @MainActor (ModelEntry) -> PromptSupport = { _ in .none }
     /// Whether the row's details are editable. The flow editor edits in place; the read-only
     /// flow list passes `false`, so the properties tab is browsable but never mutable.
     var editable: Bool = true
@@ -55,8 +60,21 @@ struct FlowRowInspectorView: View {
                         if let task = row.task, isModelClass(task) {
                             modelPicker(task, row: row)
                         }
-                        if let task = row.task, isInstructionTask(task) {
-                            instructionBox(task, row: row)
+                        if let warning = strandedPromptWarning(row) {
+                            Label(warning, systemImage: "exclamationmark.triangle")
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        if let task = row.task {
+                            switch promptControl(task: task, row: row) {
+                            case .instructionBox:
+                                instructionBox(task, row: row)
+                            case .modePicker(let values, let defaultValue):
+                                modePicker(row: row, values: values, defaultValue: defaultValue)
+                            case .none:
+                                EmptyView()
+                            }
                         }
                         // CFM — a `Save *` row's filename is its path token; let the user
                         // type it (or a subfolder) instead of hunting in the file list.
@@ -588,12 +606,96 @@ struct FlowRowInspectorView: View {
         TaskCatalog.get(task)?.taskClass == .model
     }
 
-    /// FIX-6: the instruction box appears only where a quoted instruction is meaningful —
-    /// frame-backed tasks (the quoted settings IS the instruction). It reads and writes the
-    /// **same** token: the first quoted span.
-    private func isInstructionTask(_ task: String) -> Bool {
-        guard let desc = TaskCatalog.get(task) else { return false }
-        return desc.refName.hasPrefix("frames/")
+    /// OCP-2-2 — which per-run prompt control (if any) this row gets.
+    enum PromptControl: Equatable { case instructionBox, modePicker(values: [String], defaultValue: String), none }
+
+    /// A frame-backed row keeps its instruction box (FIX-6). `engines.vlm.describe_image`
+    /// now gets one too — a prompt is its whole point, and OCP-2-1 makes it reach the model.
+    /// An `engines.vlm.ocr` row is driven by its **named model's** `promptSupport`:
+    /// `.freeText` → the instruction box, `.modes` → a picker, `.none` → nothing. Keyed on
+    /// the capability, never on a model name (`CatalogBridge` is the one table where names
+    /// live).
+    private func promptControl(task: String, row: Row) -> PromptControl {
+        guard let desc = TaskCatalog.get(task) else { return .none }
+        if desc.refName.hasPrefix("frames/") { return .instructionBox }
+        if desc.refName == "engines.vlm.describe_image" { return .instructionBox }
+        if desc.refName == "engines.vlm.ocr" {
+            switch modelPromptSupport(for: row) {
+            case .freeText: return .instructionBox
+            case .modes(let values, let def): return .modePicker(values: values, defaultValue: def)
+            case .none: return .none
+            }
+        }
+        return .none
+    }
+
+    /// The `promptSupport` of the row's named model (`.none` when it names nothing, or nothing
+    /// runnable). Resolved via `CatalogBridge` → the injected registry resolver.
+    private func modelPromptSupport(for row: Row) -> PromptSupport {
+        guard let display = row.model,
+              case let .runnable(model, _, _) = CatalogBridge.resolve(display, catalog: catalog)
+        else { return .none }
+        return resolvePromptSupport(model)
+    }
+
+    /// OCP-2-2 — recognition-mode picker for a `.modes` OCR model (PaddleOCR-VL). Writes the
+    /// mode as the row's first quoted token (`OCR PaddleOCR-VL; "table"`), the same token the
+    /// runtime reads via `firstBare()`; the default mode writes **nothing** so `firstBare()`
+    /// is nil and the SDK's own default applies.
+    private func modePicker(row: Row, values: [String], defaultValue: String) -> some View {
+        let current = FlowSettings(row.settings).firstBare() ?? defaultValue
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("Recognition mode")
+                .font(.subheadline.weight(.semibold))
+            Picker("", selection: Binding(
+                get: { values.contains(current) ? current : defaultValue },
+                set: { model.setInstruction($0 == defaultValue ? nil : $0, for: rowID) }
+            )) {
+                ForEach(values, id: \.self) { Text(Self.modeLabel($0)).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+        }
+    }
+
+    private static func modeLabel(_ id: String) -> String {
+        switch id {
+        case "ocr": return "Text"
+        case "table": return "Table"
+        case "formula": return "Formula"
+        case "chart": return "Chart"
+        default: return id.capitalized
+        }
+    }
+
+    /// OCP-2-3 (RULED: validator warns, runtime ignores). The row carries a prompt token its
+    /// named model cannot consume — a `.none` model that ignores it, or a `.modes` value
+    /// outside the model's set. The flow still runs (the runtime drops the value); this is
+    /// the warning that makes the hidden field honest. Surfaced like the `CatalogBridge`
+    /// substitution note.
+    private func strandedPromptWarning(_ row: Row) -> String? {
+        guard let task = row.task, let desc = TaskCatalog.get(task),
+              desc.refName == "engines.vlm.ocr",
+              let token = FlowSettings(row.settings).firstBare(), !token.isEmpty,
+              let display = row.model
+        else { return nil }
+        return Self.strandedPromptMessage(token: token, display: display,
+                                          support: modelPromptSupport(for: row))
+    }
+
+    /// The pure decision behind `strandedPromptWarning` — `nil` when the token is fine for the
+    /// model, else the sentence. `nonisolated static` so it is unit-testable without a View.
+    nonisolated static func strandedPromptMessage(token: String, display: String,
+                                                  support: PromptSupport) -> String? {
+        switch support {
+        case .freeText:
+            return nil
+        case .none:
+            return "\(display) transcribes with a fixed prompt — \"\(token)\" won't reach it. Remove it, or pick a model that takes an instruction."
+        case .modes(let values, _):
+            guard !values.contains(token) else { return nil }
+            return "\"\(token)\" isn't a recognition mode \(display) understands (\(values.joined(separator: ", "))) — this row will run in the default mode."
+        }
     }
 
     private func isDecider(_ row: Row) -> Bool {

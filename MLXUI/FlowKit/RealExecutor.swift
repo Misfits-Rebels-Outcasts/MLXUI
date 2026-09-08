@@ -18,6 +18,10 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// Builds a `PipelineStage` for an installed model. Captures the app's `ModelRegistry`
     /// (constructed on the main actor); the closure hops to the main actor itself.
     let makeModelStage: @Sendable (ModelEntry, StageConfig) async throws -> any PipelineStage
+    /// OCP-2-3: how the row's named model's stage varies with `StageConfig.prompt` — resolved
+    /// through the app registry (`AppFlowExecutorFactory`), injected as a closure so FlowKit
+    /// stays module-free. `.none` default keeps mock executors / `stageConfig` tests working.
+    var promptSupport: @Sendable (ModelEntry) async -> PromptSupport = { _ in .none }
     /// Installed catalog ids, so a not-installed model refuses with the right sentence.
     let installedModelIDs: Set<String>
     /// The flat `browser.json` entries, for `CatalogBridge.resolve`.
@@ -420,7 +424,8 @@ nonisolated struct RealExecutor: FlowExecutor {
         } else {
             throw FlowError.badInputCardinality(row: "\(path)", expected: "an input", got: 0)
         }
-        let config = try stageConfig(for: desc, row: row, path: "\(path)")
+        let config = try await sanitizedPrompt(
+            stageConfig(for: desc, row: row, path: "\(path)"), for: modelEntry)
         let stage = try await makeModelStage(modelEntry, config)
         let adapter = SingleMediaStage(id: modelEntry.id, name: display(row),
                                        inner: stage, rowLabel: "\(path)",
@@ -617,7 +622,37 @@ nonisolated struct RealExecutor: FlowExecutor {
                 .flatMap(Int.init)
             return StageConfig(query: query, topK: topK)
         }
+        if desc.refName.hasPrefix("engines.vlm.") {
+            // OCP-2-1 (`RSI/DelegateOCRPromptBacklog.md` §4), ported from
+            // `catflow-mlx/src/catflow/engines/vlm.py:68-100`: `describe_image` uses
+            // `s.first_bare() or "Describe this image."` and model-routed `ocr` uses
+            // `s.first_bare() or "Extract all text from this image, verbatim."`. Passing the
+            // bare token (or `nil`) is the whole fix — a `Describe Image` row's quoted
+            // instruction never reached the model before. `nil` means **the SDK's own
+            // default applies** (`VLMSDK.defaultPrompt` / `OCRSDK.ocrPrompt` / a PaddleOCR-VL
+            // mode) — never a literal here. For a `.modes` model the token is a recognition
+            // mode; `runModel` drops an out-of-set value to `nil` before the stage (OCP-2-3).
+            // `lang=` folding (the Python's ` The text is in {lang}.` suffix on `ocr`) is out
+            // of scope — a known remaining divergence, recorded in journal `2026-233`.
+            return StageConfig(prompt: settings.firstBare())
+        }
         return .default
+    }
+
+    /// OCP-2-3 (RULED 2026-09-08: **validator warns, runtime ignores**). For a `.modes` model
+    /// an out-of-set `prompt` (a recognition mode that isn't one of the model's) is dropped to
+    /// `nil` so the SDK's own default applies. The SDK stays strict — `PaddleOCRSDK.makeStage`
+    /// still throws `StageError.unsupportedSetting`, which the Run UI's picker can never
+    /// trigger — so the leniency lives here, at the flow boundary the ruling is about. A
+    /// `.freeText` / `.none` model's prompt is untouched (a `.none` model ignores it in its
+    /// own `makeStage`; the row inspector warns that it is stranded).
+    func sanitizedPrompt(_ config: StageConfig, for model: ModelEntry) async -> StageConfig {
+        guard case let .modes(values, _) = await promptSupport(model),
+              let prompt = config.prompt, !prompt.isEmpty, !values.contains(prompt)
+        else { return config }
+        var sanitized = config
+        sanitized.prompt = nil
+        return sanitized
     }
 
     private func persist(_ media: Media, rowLabel: String) throws -> Asset {
