@@ -29,7 +29,13 @@ import Foundation
 ///
 /// Placed flat in `FlowKit/` next to `RerankStage.swift` (the backlog names
 /// `FlowKit/Stages/…`, but there is no `Stages/` subdir — the tree keeps stage files flat).
-/// See DA-3a, `RSI/DelegateDeciderBacklog.md`. Also DA-4: SPEC-Q35, SPEC-Q90, SPEC-Q112.
+///
+/// See DA-3a, `RSI/DelegateDeciderBacklog.md`. Cross-references (DA-4,
+/// `catflow-mlx/SPEC_QUESTIONS.md`): **SPEC-Q35** (the schema-mode design + the field-prompt
+/// and normalization wording), **SPEC-Q90** (the two-shape `_more_records_prompt`),
+/// **SPEC-Q112** (`text_to_table` shares this loop as its model fallback — not ported here),
+/// **SPEC-Q21** (the original Phase-2 stub this closes), **SPEC-Q213** (why offering this task
+/// is a Swift-only fix, DA-3b).
 nonisolated enum ExtractStructuredStage {
 
     /// SPEC-Q35: `temp=0` throughout (CLAUDE.md determinism); these are fixed, conservative

@@ -23,6 +23,13 @@ nonisolated enum TaskModels {
     /// 2026-09-05 (MoC-3-1, `RSI/DelegateMoCBacklog.md`) — it stays honestly empty until MoC-4
     /// adds the first `.rerank` catalog entry; no catalog entry means `derivedModels` still
     /// returns `[]` for it, exactly as before this entry existed.
+    ///
+    /// SPEC-Q213 (`catflow-mlx/SPEC_QUESTIONS.md`): this table is a port of the Python's
+    /// `catalog/models.py::TASK_MODELS`, which omits the six deciders and `Extract Structured`.
+    /// There the omission is cosmetic — `models_for_task`'s only consumer is `cli/tasks.py:82`,
+    /// the `mlxflow tasks` listing. Swift promoted the same table into an *availability
+    /// authority* (CFM-R14-2), so the gap became a functional block; DA-1…DA-3b close it here.
+    /// Fixing Swift is not a parity break — the Python's runtime is unaffected either way.
     private static let taskKinds: [String: RunnerKind] = [
         "Transcribe": .asr,
         "Embed": .embedding,
