@@ -278,6 +278,52 @@ struct CatFlowExtractStructuredTests {
         #expect(text.items.first?.kind == .text)
         #expect(text.items.first?.value?.contains("name") == true)
     }
+
+    // MARK: - DA-5: temp=0 is enforced, not just claimed
+
+    /// The reviewer's key check: `StageConfig.temperature` **defaults to 0.7** — a `0` default
+    /// would silently make every chat / summary / decider row greedy — and an explicit value
+    /// sticks and is part of the config's `Hashable` identity (so `EngineCache` treats a
+    /// temp-0 stage as distinct from a temp-0.7 one, per `differentConfigIsADistinctEngine`).
+    @Test func stageConfigTemperatureDefaultsTo07AndIsPartOfIdentity() {
+        #expect(StageConfig().temperature == 0.7)
+        #expect(StageConfig.default.temperature == 0.7)
+        #expect(StageConfig(temperature: 0).temperature == 0)
+        #expect(StageConfig(temperature: 0) != StageConfig(temperature: 0.7))
+        #expect(StageConfig(temperature: 0).hashValue != StageConfig(temperature: 0.7).hashValue)
+    }
+
+    /// DA-5: the `engines.llm.extract_structured` branch must build its stage with
+    /// `temperature: 0` — the Python pins `temp=0.0` on both model calls, and a sampled gate
+    /// makes the loop's termination non-deterministic. Captures the `StageConfig` the branch
+    /// hands `makeModelStage`.
+    @Test func extractStructuredBranchRequestsGreedyDecoding() async throws {
+        let entry = makeEntry(id: "es-temp", modelType: .llm, source: .mlx,
+                              hfModelId: "mlx-community/Test-Extract-Temp-4bit")
+        let seen = ExtractStructuredTestConfigBox()
+        let executor = RealExecutor(
+            workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory
+                .appendingPathComponent("es-temp-\(UUID().uuidString)")),
+            flowID: "da5",
+            blobDirectory: FileManager.default.temporaryDirectory
+                .appendingPathComponent("es-temp-blob-\(UUID().uuidString)"),
+            makeModelStage: { _, config in seen.set(config); return StubExtractStage() },
+            installedModelIDs: [entry.id],
+            catalog: [entry])
+        _ = try await executor.execute(
+            path: "1", row: Row(task: "Extract Structured", model: entry.hfModelId, settings: "name"),
+            inputs: [textAsset("Ada.")], transcript: nil, context: nil, usedFlowContent: nil)
+        let config = try #require(seen.value)
+        #expect(config.temperature == 0)
+        #expect(config.maxTokens == ExtractStructuredStage.maxFieldTokens)   // the 32-token cap is untouched
+    }
+}
+
+private final class ExtractStructuredTestConfigBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _value: StageConfig?
+    func set(_ c: StageConfig) { lock.lock(); defer { lock.unlock() }; _value = c }
+    var value: StageConfig? { lock.lock(); defer { lock.unlock() }; return _value }
 }
 
 /// A stub LLM stage for the executor seam: answers the yes/no gate ("yes" for the first two

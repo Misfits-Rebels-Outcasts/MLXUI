@@ -8,6 +8,7 @@ nonisolated struct StageConfig: Sendable, Hashable {
     var speed: Float           // tts
     var systemPrompt: String?  // llm
     var maxTokens: Int         // llm
+    var temperature: Float     // llm — sampling temperature; 0 = greedy/deterministic (DA-5)
     var language: String?      // asr
     var prompt: String?        // vlm — the question asked about the image
     var seed: UInt64?          // diffusion — the concrete PRNG seed (CFM-R16-1)
@@ -22,6 +23,10 @@ nonisolated struct StageConfig: Sendable, Hashable {
         speed: Float = 1.0,
         systemPrompt: String? = nil,
         maxTokens: Int = 512,
+        // Defaults to `LLMEngine.generate`'s own historical default (DA-5): every existing
+        // call site keeps its current, sampled behaviour — a `0` default here would silently
+        // make every chat / summary / decider row greedy, a product change nobody asked for.
+        temperature: Float = 0.7,
         language: String? = nil,
         prompt: String? = nil,
         seed: UInt64? = nil,
@@ -35,6 +40,7 @@ nonisolated struct StageConfig: Sendable, Hashable {
         self.speed = speed
         self.systemPrompt = systemPrompt
         self.maxTokens = maxTokens
+        self.temperature = temperature
         self.language = language
         self.prompt = prompt
         self.seed = seed

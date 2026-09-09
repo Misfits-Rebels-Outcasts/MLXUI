@@ -38,9 +38,13 @@ import Foundation
 /// is a Swift-only fix, DA-3b).
 nonisolated enum ExtractStructuredStage {
 
-    /// SPEC-Q35: `temp=0` throughout (CLAUDE.md determinism); these are fixed, conservative
-    /// runaway-loop safety bounds, not something a row can override (the whole settings
-    /// string is the schema, so there's no `max_tokens=`/`temp=` room to read out of it).
+    /// Fixed, conservative runaway-loop safety bounds — not something a row can override (the
+    /// whole settings string is the schema, so there's no `max_tokens=`/`temp=` room to read
+    /// out of it). SPEC-Q35's `temp=0` (CLAUDE.md determinism) is enforced **on the executor
+    /// side** (DA-5): `RealExecutor`'s `engines.llm.extract_structured` branch builds this
+    /// task's stage with `StageConfig(temperature: 0)`, which `ChatSDK.makeStage` threads into
+    /// `LLMEngine.generate`. The gate and the field calls both run greedy; a sampled gate
+    /// would make the loop's *termination* non-deterministic, not just its wording.
     static let maxRows = 20            // DEFAULT_MAX_ROWS
     static let maxFieldTokens = 32     // DEFAULT_MAX_FIELD_TOKENS
     static let continueTags = ["yes", "no"]   // _CONTINUE_TAGS

@@ -20,12 +20,18 @@ nonisolated struct ChatSDK: ModelSDK {
     func makeStage(for model: ModelEntry, config: StageConfig) throws -> any PipelineStage {
         let dir = LLMEngine.modelDirectory(for: model.id)
         let maxTokens = config.maxTokens
+        // DA-5: this is the path `AppFlowExecutorFactory` routes flow rows through (the
+        // `LLMStage(model:config:)` convenience init is `SummarizeDemo`-only), and it had the
+        // same omission — `config.temperature` never reached `LLMEngine.generate`, so every
+        // flow-row completion, decider gate included, ran sampled at 0.7.
+        let temperature = config.temperature
         return LLMStage(
             id: model.id,
             name: model.displayName,
             systemPrompt: config.systemPrompt,
             generate: { prompt in
-                try await LLMEngine.generate(prompt: prompt, modelDir: dir, maxTokens: maxTokens)
+                try await LLMEngine.generate(prompt: prompt, modelDir: dir,
+                                             maxTokens: maxTokens, temperature: temperature)
             }
         )
     }

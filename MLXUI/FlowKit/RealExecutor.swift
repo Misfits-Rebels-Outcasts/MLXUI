@@ -371,8 +371,13 @@ nonisolated struct RealExecutor: FlowExecutor {
         // needs only a word, so the shared cap is harmless (a deliberate, noted divergence
         // from the Python, whose `decide` path isn't token-bounded).
         if desc.refName == "engines.llm.extract_structured" {
+            // DA-5: `temperature: 0` — the Python pins `temp=0.0` on both of this task's model
+            // calls (`_mlx_complete_line(..., temp=0.0)`; `decide` is constrained decoding).
+            // A sampled yes/no gate makes the extraction loop's *termination* non-deterministic
+            // — the same receipt can yield a different row count run to run.
             let stage = try await makeModelStage(
-                modelEntry, StageConfig(maxTokens: ExtractStructuredStage.maxFieldTokens))
+                modelEntry, StageConfig(maxTokens: ExtractStructuredStage.maxFieldTokens,
+                                        temperature: 0))
             let gate: @Sendable (String) async throws -> String = { prompt in
                 let (tag, _) = try await Self.fireTag(
                     stage: stage, prompt: prompt,
