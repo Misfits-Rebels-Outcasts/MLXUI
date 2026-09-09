@@ -46,12 +46,17 @@ nonisolated enum TaskModels {
         // (Decide, `engines.llm.decide`). With no entry here `derivedModels` failed on its
         // first guard clause, the pool was `[]`, and `TaskAvailability` reported
         // `.needsNewerSupport` — an empty Model menu and a false "needs a model" warning on the
-        // 21 gallery rows that name these tasks and run fine. `Extract Structured` is
-        // deliberately NOT here: it has no `RealExecutor` path at all (DA-3a ports it, DA-3b
-        // offers it), and adding it is the mistake `offerableModelTasksAreExecutorServed`
-        // warns against.
+        // 21 gallery rows that name these tasks and run fine.
         "Decide": .llm, "Classify": .llm, "Gate": .llm,
         "Score": .llm, "Judge": .llm, "Think": .llm,
+        // DA-3b (RSI/DelegateDeciderBacklog.md): held out of DA-1 until DA-3a's
+        // `ExtractStructuredStage` gave `RealExecutor` a genuine path for it — adding the kind
+        // before the executor served the task is exactly what
+        // `offerableModelTasksAreExecutorServed` warns against. Now that
+        // `engines.llm.extract_structured` runs a real schema-mode extraction, this offers it
+        // to the six business flows (06 ContractScan, 09 InvoiceLedger, 14 FrontmatterBot,
+        // 28 TicketTrends, 30 ReceiptsExpense, 55 ReceiptsLedger).
+        "Extract Structured": .llm,
         "Speak": .tts,
         "Describe Image": .vision,
         "OCR": .ocr,

@@ -199,10 +199,8 @@ struct CatFlowTaskAvailabilityTests {
             "Generate Sound": .available,   // .music — engines.diffusion.generate_sound
             "Segment": .available,          // .segmentation — engines.diffusion.segment (CFM-R15-1)
             "Rerank": .available,           // .rerank — MoC-4
+            "Extract Structured": .available,   // .llm — engines.llm.extract_structured, ported DA-3a, offered DA-3b
 
-            // Served prefix matches, but NO `RealExecutor` path exists. DA-3b is the only item
-            // allowed to flip this to `.available`.
-            "Extract Structured": .needsNewerSupport,
             // `.image` model exists, but `engines.diffusion.edit_image` / `.inpaint` are not on
             // the served allow-list — no stage accepts the tuple these rows hand the executor.
             "Edit Image": .needsNewerSupport, "Instruct Edit": .needsNewerSupport,
@@ -329,11 +327,14 @@ struct CatFlowTaskAvailabilityTests {
                                               claimableModelIDs: claimable).isEmpty,
                     "\(name) must have a non-empty derived pool after DA-1")
         }
-        // The negative DA-1 must preserve: `Extract Structured` has no `RealExecutor` path
-        // (DA-3a ports it, DA-3b offers it), so it stays unavailable. DA-3b is the only item
-        // allowed to flip this assertion.
-        #expect(!available("Extract Structured"),
-                "Extract Structured must stay unavailable until DA-3b")
+        // DA-3b flipped this: `Extract Structured` now has a real `RealExecutor` path
+        // (`ExtractStructuredStage`, DA-3a) *and* its `taskKinds` entry, so it is offered.
+        // Was `#expect(!available(...))` through DA-3a — the assertion the port kept red on
+        // purpose so the offer stayed a separate, revertable commit.
+        #expect(available("Extract Structured"),
+                "Extract Structured must be available after DA-3b")
+        #expect(!TaskModels.derivedModels(for: "Extract Structured", catalog: catalog,
+                                          claimableModelIDs: claimable).isEmpty)
     }
 
     /// CFM-R14-FIX-2 — the executor-served allow-list is the authority: a model task is
