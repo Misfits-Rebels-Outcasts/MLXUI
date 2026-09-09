@@ -39,6 +39,19 @@ nonisolated enum TaskModels {
         "Revise": .llm,
         "Merge": .llm,
         "Text to Table": .llm,
+        // DA-1 (RSI/DelegateDeciderBacklog.md, owner ruling 2026-09-09): the six deciders name
+        // the `RunnerKind` `RealExecutor.runDecider` actually builds — a plain LLM stage
+        // (`makeModelStage(_, .default)`) for every one, whether it renders a runtime-owned
+        // frame (Classify, Gate, Score, Judge, Think) or builds the ask from the asset directly
+        // (Decide, `engines.llm.decide`). With no entry here `derivedModels` failed on its
+        // first guard clause, the pool was `[]`, and `TaskAvailability` reported
+        // `.needsNewerSupport` — an empty Model menu and a false "needs a model" warning on the
+        // 21 gallery rows that name these tasks and run fine. `Extract Structured` is
+        // deliberately NOT here: it has no `RealExecutor` path at all (DA-3a ports it, DA-3b
+        // offers it), and adding it is the mistake `offerableModelTasksAreExecutorServed`
+        // warns against.
+        "Decide": .llm, "Classify": .llm, "Gate": .llm,
+        "Score": .llm, "Judge": .llm, "Think": .llm,
         "Speak": .tts,
         "Describe Image": .vision,
         "OCR": .ocr,

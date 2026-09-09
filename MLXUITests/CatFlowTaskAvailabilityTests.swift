@@ -240,6 +240,42 @@ struct CatFlowTaskAvailabilityTests {
         #expect(available("Transcribe"))
     }
 
+    // MARK: - DA-1: the six deciders join the derived-pool authority
+
+    /// DA-1 (`RSI/DelegateDeciderBacklog.md`, owner ruling 2026-09-09). Until DA-1 the six
+    /// decider tasks had no `TaskModels.taskKinds` entry, so `derivedModels` failed on its
+    /// **first** guard clause (`guard let kind = taskKinds[task]`), the pool was `[]`, and
+    /// every one reported `.needsNewerSupport` — an empty Model menu plus a false yellow
+    /// "needs a model" warning on 21 gallery rows that run fine. Giving them `.llm` (the kind
+    /// `RealExecutor.runDecider` actually builds — a plain LLM stage for all six) makes the
+    /// derived pool the same non-empty pool `Summarize` already has.
+    ///
+    /// This test genuinely fails with the six lines removed from `taskKinds`: verified locally
+    /// by deleting them (all six `available(...)` and all six non-empty-pool expectations went
+    /// red), then restoring them — see journal `2026-238`.
+    @Test func theSixDecidersBecomeAvailableWithDA1() throws {
+        let catalog = try bundledCatalog()
+        let claimable = claimableIDs(catalog: catalog)
+        let available = { (name: String) in
+            TaskAvailability.isAvailable(name, catalog: catalog, claimableModelIDs: claimable)
+        }
+        // Control: a frame-backed `.llm` model task that was already available before DA-1.
+        #expect(available("Summarize"))
+        // The six deciders — Classify/Gate/Score/Judge/Think are `.frame`, Decide is `.engine`
+        // (`engines.llm.decide`). All six resolve to a plain LLM stage in `runDecider`.
+        for name in ["Decide", "Classify", "Gate", "Score", "Judge", "Think"] {
+            #expect(available(name), "\(name) must be available after DA-1")
+            #expect(!TaskModels.derivedModels(for: name, catalog: catalog,
+                                              claimableModelIDs: claimable).isEmpty,
+                    "\(name) must have a non-empty derived pool after DA-1")
+        }
+        // The negative DA-1 must preserve: `Extract Structured` has no `RealExecutor` path
+        // (DA-3a ports it, DA-3b offers it), so it stays unavailable. DA-3b is the only item
+        // allowed to flip this assertion.
+        #expect(!available("Extract Structured"),
+                "Extract Structured must stay unavailable until DA-3b")
+    }
+
     /// CFM-R14-FIX-2 — the executor-served allow-list is the authority: a model task is
     /// offerable only when `RealExecutor` genuinely has a path for it, not merely because a
     /// catalog model exists for its kind. This pins the FIX-2 decision and why, so a future
