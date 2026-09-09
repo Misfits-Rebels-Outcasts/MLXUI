@@ -663,7 +663,12 @@ final class FlowEditorModel {
 
         if r.task != nil, r.blockKind == nil, let desc = TaskCatalog.get(r.task ?? "") {
             if desc.taskClass == .model, !isRunnableModel(r.model, for: r.task ?? "") {
-                return "Row \(path) needs a model — pick one that runs on this Mac."
+                // SPEC-Q214 (DA-6): a model-optional task (`Text to Table`) with **no** model
+                // named is legitimate — its deterministic fast path needs none. Still warn
+                // when a model IS named but doesn't resolve.
+                if !(r.model == nil && TaskModels.isModelOptional(r.task ?? "")) {
+                    return "Row \(path) needs a model — pick one that runs on this Mac."
+                }
             }
             if desc.taskClass != .instant, desc.taskClass != .model {
                 return "Row \(path) is a \(desc.taskClass.rawValue) row, which this version of Flows can't complete."

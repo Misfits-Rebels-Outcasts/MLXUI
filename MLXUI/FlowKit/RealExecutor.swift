@@ -361,36 +361,23 @@ nonisolated struct RealExecutor: FlowExecutor {
     // MARK: - Model rows
 
     private func runModel(_ desc: TaskDescriptor, row: Row, inputs: [Asset], path: String) async throws -> Asset {
+        // Text to Table (DA-6, SPEC-Q112) — must run **before** `resolveModel`: a model-less
+        // row is legitimate (its deterministic fast path inverts CSV a sibling
+        // `Table to Text format=csv` row produced), where `resolveModel(display: nil)` throws.
+        if desc.refName == "engines.llm.text_to_table" {
+            return try await runTextToTable(row: row, inputs: inputs, path: path)
+        }
+
         let modelEntry = try resolveModel(display: row.model, path: path)
 
         // Extract Structured (DA-3a) — its own branch, ahead of the generic tail. A plain
         // LLM stage would return whatever prose the model emits, never a `.table` (backlog
         // §0b). `ExtractStructuredStage` owns the table's structure; the model is only ever
         // asked "another record?" (a yes/no tag via `fireTag`) and one bounded field value
-        // at a time. One stage, `maxTokens` = `DEFAULT_MAX_FIELD_TOKENS` — the yes/no gate
-        // needs only a word, so the shared cap is harmless (a deliberate, noted divergence
-        // from the Python, whose `decide` path isn't token-bounded).
+        // at a time.
         if desc.refName == "engines.llm.extract_structured" {
-            // DA-5: `temperature: 0` — the Python pins `temp=0.0` on both of this task's model
-            // calls (`_mlx_complete_line(..., temp=0.0)`; `decide` is constrained decoding).
-            // A sampled yes/no gate makes the extraction loop's *termination* non-deterministic
-            // — the same receipt can yield a different row count run to run.
-            let stage = try await makeModelStage(
-                modelEntry, StageConfig(maxTokens: ExtractStructuredStage.maxFieldTokens,
-                                        temperature: 0))
-            let gate: @Sendable (String) async throws -> String = { prompt in
-                let (tag, _) = try await Self.fireTag(
-                    stage: stage, prompt: prompt,
-                    tags: ExtractStructuredStage.continueTags, rowLabel: "\(path)")
-                return tag
-            }
-            let field: @Sendable (String) async throws -> String = { prompt in
-                let result = try await stage.run(.text(prompt), progress: { _ in })
-                guard case .text(let text) = result else { return "" }
-                // `_mlx_complete_line`: one line — stop at the model's first newline.
-                return text.split(separator: "\n", maxSplits: 1,
-                                  omittingEmptySubsequences: false).first.map(String.init) ?? text
-            }
+            let stage = try await makeExtractionStage(modelEntry)
+            let (gate, field) = Self.llmExtractionCalls(stage: stage, path: path)
             return try await ExtractStructuredStage.extract(
                 inputs: inputs, settings: row.settings, gate: gate, field: field,
                 in: blobDirectory)
@@ -465,6 +452,54 @@ nonisolated struct RealExecutor: FlowExecutor {
                                        inner: stage, rowLabel: "\(path)",
                                        blobDirectory: blobDirectory)
         return try await adapter.run(media) { _ in }
+    }
+
+    /// Text to Table (DA-6, SPEC-Q112). The asymmetry, verbatim from
+    /// `engines/llm.py::text_to_table`: a row with **no** model tries `parseDelimitedTable`
+    /// and raises only if it genuinely fails; a row that **names** one skips the fast path
+    /// entirely and runs the extraction loop (`ExtractStructuredStage.extractRows`, shared per
+    /// SPEC-Q112). Explicit beats implicit.
+    private func runTextToTable(row: Row, inputs: [Asset], path: String) async throws -> Asset {
+        guard row.model != nil else {
+            return try await TextToTableStage.toTable(
+                inputs: inputs, settings: row.settings, model: nil, in: blobDirectory)
+        }
+        let modelEntry = try resolveModel(display: row.model, path: path)
+        let stage = try await makeExtractionStage(modelEntry)
+        let (gate, field) = Self.llmExtractionCalls(stage: stage, path: path)
+        return try await TextToTableStage.toTable(
+            inputs: inputs, settings: row.settings, model: (gate, field), in: blobDirectory)
+    }
+
+    /// The one LLM stage both `Extract Structured` and a model-named `Text to Table` build:
+    /// `maxTokens` = `DEFAULT_MAX_FIELD_TOKENS` (the yes/no gate needs only a word — a shared
+    /// cap, a noted divergence from the Python whose `decide` path isn't token-bounded), and
+    /// **`temperature: 0`** (DA-5 — the Python pins `temp=0.0` on both calls; a sampled gate
+    /// makes the loop's *termination* non-deterministic).
+    private func makeExtractionStage(_ model: ModelEntry) async throws -> any PipelineStage {
+        try await makeModelStage(
+            model, StageConfig(maxTokens: ExtractStructuredStage.maxFieldTokens, temperature: 0))
+    }
+
+    /// `_extract_rows`'s two model calls, bridged onto a built stage: the yes/no gate
+    /// (`decide(…, tags=("yes","no"))` → `fireTag`) and one bounded line
+    /// (`_mlx_complete_line` → the stage's first output line).
+    private static func llmExtractionCalls(stage: any PipelineStage, path: String)
+        -> (gate: @Sendable (String) async throws -> String,
+            field: @Sendable (String) async throws -> String) {
+        let gate: @Sendable (String) async throws -> String = { prompt in
+            let (tag, _) = try await Self.fireTag(
+                stage: stage, prompt: prompt,
+                tags: ExtractStructuredStage.continueTags, rowLabel: path)
+            return tag
+        }
+        let field: @Sendable (String) async throws -> String = { prompt in
+            let result = try await stage.run(.text(prompt), progress: { _ in })
+            guard case .text(let text) = result else { return "" }
+            return text.split(separator: "\n", maxSplits: 1,
+                              omittingEmptySubsequences: false).first.map(String.init) ?? text
+        }
+        return (gate, field)
     }
 
     private func display(_ row: Row) -> String { row.model ?? "" }

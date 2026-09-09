@@ -163,6 +163,47 @@ nonisolated enum TableTool {
         return Asset(items: [try tableItem(columns: header, rows: rows, in: scratchDir(url))])
     }
 
+    // MARK: - `parse_delimited_table` (SPEC-Q112 — Text to Table's model-free fast path)
+
+    /// Ported verbatim from `catflow-mlx/src/catflow/tools/data.py::parse_delimited_table`
+    /// @ `3600a4a`. `engines/llm.py::text_to_table`'s model-free fast path: every corpus
+    /// occurrence feeds it text a sibling `Table to Text format=csv` row just produced, its
+    /// header matching `expected=` **exactly but order-insensitively** — the inverse of a
+    /// format this module itself writes, needing no model to invert.
+    ///
+    /// Returns `nil` — **never a partial table** — the instant the text isn't a clean single
+    /// table, so `text_to_table` falls back to a real model. A `Join Text`-stitched multi-item
+    /// block repeats each item's own CSV header line, so a data row that exactly echoes the
+    /// header is dropped as a repeat; a ragged row aborts. Cells go through the same `coerce`
+    /// as every other table (SPEC-Q114 currency handling inherited). CSV only — markdown was
+    /// dropped for lack of any corpus evidence this task is fed one.
+    static func parseDelimitedTable(source: String, columns: [String]) -> [Row]? {
+        // Python's `csv.reader` treats `\r\n`, `\r` and `\n` all as row terminators;
+        // `Table to Text format=csv` (this project's own writer) emits `\r\n`. `parseCSV`
+        // walks `[Character]`, where `\r\n` is a *single* grapheme it wouldn't split on, so
+        // normalise line endings first.
+        let normalized = source
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let rawRows = parseCSV(normalized, delimiter: ",").filter { !$0.isEmpty }
+        guard !rawRows.isEmpty else { return nil }
+        let header = rawRows[0].map { $0.trimmingCharacters(in: .whitespaces) }
+        guard header.count == columns.count, Set(header) == Set(columns) else { return nil }
+        var order: [Int] = []
+        for col in columns {
+            guard let idx = header.firstIndex(of: col) else { return nil }
+            order.append(idx)
+        }
+        var rows: [Row] = []
+        for raw in rawRows.dropFirst() {
+            let cells = raw.map { $0.trimmingCharacters(in: .whitespaces) }
+            if cells == header { continue }               // a repeated per-item header line
+            guard cells.count == header.count else { return nil }   // ragged → let a model try
+            rows.append(order.map { coerce(cells[$0]) as Any? })
+        }
+        return rows
+    }
+
     // MARK: - Read JSON
 
     static func readJSON(settings: String?, from url: URL) throws -> Asset {

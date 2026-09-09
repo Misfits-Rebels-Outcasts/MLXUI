@@ -87,6 +87,25 @@ nonisolated enum TaskModels {
     /// today already is one, so the table stays empty until a case names itself).
     private static let taskFamilies: [String: String] = [:]
 
+    /// **SPEC-Q214** (`catflow-mlx/SPEC_QUESTIONS.md`) — a `.model`-class task that runs
+    /// **without** a model when none is named. `Text to Table`'s deterministic fast path
+    /// (`TableTool.parseDelimitedTable`, DA-6) inverts CSV a sibling `Table to Text` row
+    /// produced, needing no model — every corpus occurrence names none. The task-level verdict
+    /// stays `.available` (the fast path IS a runner), but the editor's row-level
+    /// "needs a model" warning must not fire on a model-less row of one of these.
+    ///
+    /// A Swift-only allow-list for a Swift-only concern — the Python's `TaskDescriptor` has no
+    /// such field and the reference has no availability notion at all, exactly like
+    /// `servedRefNamePrefixes`. **Implementer's call, pending owner confirmation** (DA-6): the
+    /// backlog offered a `TaskDescriptor.modelOptional` field as the alternative, which would
+    /// invent catalog semantics; this set is the conservative reading.
+    private static let modelOptionalTasks: Set<String> = ["Text to Table"]
+
+    /// Whether `task` runs without a model when a row names none (SPEC-Q214).
+    static func isModelOptional(_ task: String) -> Bool {
+        modelOptionalTasks.contains(task)
+    }
+
     /// CFM-R14-FIX-2 — the refName prefixes `RealExecutor` genuinely serves. Availability must
     /// depend on **the executor having a path for the task**, not only on a model existing for
     /// its kind. A `.image`-kind model exists for `Edit Image`/`Inpaint`/the latent family, but
