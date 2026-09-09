@@ -152,27 +152,87 @@ struct CatFlowTaskAvailabilityTests {
         #expect(TaskAvailability.state(for: improvise, isAppStore: false, catalog: emptyCatalog, claimableModelIDs: emptyClaim) == .available)
     }
 
-    @Test @MainActor func everyUnavailableTaskGetsAPickerMarker() throws {
-        // The marker set and the availability state agree by construction. Model tasks need
-        // the real catalog + claim table (CFM-R14-FIX-3); instant/net verdicts ignore them.
+    // MARK: - DA-2: the named-list verdict table (replaces the tautological marker test)
+
+    /// DA-2 (`RSI/DelegateDeciderBacklog.md`) — replaces `everyUnavailableTaskGetsAPickerMarker`,
+    /// which the R-FIX outcome flagged by name. That test compared `marker(for:) != nil`
+    /// against `state(for:) != .available`, but `marker` is a plain `switch` over `state`, so
+    /// the two agree **by construction** and it could never fail. DA-1's own journal (2026-238)
+    /// records it passing *both* with and without the six decider lines in `taskKinds` — the
+    /// tautology proving itself.
+    ///
+    /// This version pins a **named list**: every `.model`-class task in `TaskCatalog`, each with
+    /// the verdict it must produce against the bundled catalog + the real registry-claim table,
+    /// spelled out as data. Consequences:
+    ///  - a new `.model` task added to `TaskCatalog` without a `taskKinds` entry (or without a
+    ///    line here) fails the `Set` check, instead of silently shipping a "needs newer support"
+    ///    marker nobody vetted;
+    ///  - removing any of DA-1's six deciders from `taskKinds` flips its pinned `.available` and
+    ///    fails the per-task check.
+    /// `unportedInstant == []` is carried over from the retired test — that one is real (every
+    /// instant tool has a `RealExecutor.runInstant` case), not tautological.
+    @Test @MainActor func everyModelTaskMatchesItsPinnedVerdict() throws {
         let catalog = try bundledCatalog()
         let claimable = claimableIDs(catalog: catalog)
-        let expectedUnavailable = TaskCatalog.allTasks().filter {
-            TaskAvailability.marker(for: $0, catalog: catalog, claimableModelIDs: claimable) != nil
+
+        // name → the verdict `TaskAvailability` must return. `.available` ⟺ the derived pool is
+        // non-empty: a claimable, kind-correct catalog model exists AND `RealExecutor` serves
+        // the task. `.needsNewerSupport` ⟺ it does not — the inline note says which clause fails.
+        let expected: [String: TaskAvailability.State] = [
+            // Plain + framed LLM tasks — the shared `.llm` pool.
+            "Generate": .available, "Summarize": .available, "Translate": .available,
+            "Answer": .available, "Rewrite": .available, "Draft": .available,
+            "Ask": .available, "Title": .available, "Critique": .available,
+            "Verify": .available, "Revise": .available, "Merge": .available,
+            "Text to Table": .available,
+            // The six deciders — DA-1. `.llm`; frame-backed except `Decide` (engines.llm.decide).
+            "Decide": .available, "Classify": .available, "Gate": .available,
+            "Score": .available, "Judge": .available, "Think": .available,
+            // Other served engines with a claimable model in the bundled catalog.
+            "Transcribe": .available,       // .asr
+            "Speak": .available,            // .tts
+            "Describe Image": .available,   // .vision
+            "OCR": .available,              // .ocr
+            "Embed": .available,            // .embedding
+            "Generate Image": .available,   // .image — engines.diffusion.generate_image (served exactly)
+            "Generate Video": .available,   // .video — engines.diffusion.generate_video
+            "Generate Sound": .available,   // .music — engines.diffusion.generate_sound
+            "Segment": .available,          // .segmentation — engines.diffusion.segment (CFM-R15-1)
+            "Rerank": .available,           // .rerank — MoC-4
+
+            // Served prefix matches, but NO `RealExecutor` path exists. DA-3b is the only item
+            // allowed to flip this to `.available`.
+            "Extract Structured": .needsNewerSupport,
+            // `.image` model exists, but `engines.diffusion.edit_image` / `.inpaint` are not on
+            // the served allow-list — no stage accepts the tuple these rows hand the executor.
+            "Edit Image": .needsNewerSupport, "Instruct Edit": .needsNewerSupport,
+            "Inpaint": .needsNewerSupport,
+            // The latent family — `.image` kind in `taskKinds`, but not executor-served.
+            "Init Latent": .needsNewerSupport, "Encode Latent": .needsNewerSupport,
+            "Decode Latent": .needsNewerSupport, "Denoise": .needsNewerSupport,
+            // In `taskKinds` (.video) but `engines.diffusion.animate` has no served prefix.
+            "Animate": .needsNewerSupport,
+            // No `taskKinds` entry and no served prefix.
+            "Upscale": .needsNewerSupport, "Estimate Depth": .needsNewerSupport,
+            "Load Checkpoint": .needsNewerSupport, "Blend": .needsNewerSupport,
+            "Bake LoRA": .needsNewerSupport, "Pin Model": .needsNewerSupport,
+        ]
+
+        let modelTasks = Set(TaskCatalog.allTasks()
+            .filter { $0.taskClass == .model }.map(\.name))
+        let drift = modelTasks.symmetricDifference(Set(expected.keys)).sorted()
+        #expect(modelTasks == Set(expected.keys),
+                "model-task drift — add the new task to `expected` with its verdict: \(drift)")
+
+        for task in modelTasks.sorted() {
+            guard let want = expected[task], let desc = TaskCatalog.get(task) else { continue }
+            let got = TaskAvailability.state(for: desc, catalog: catalog,
+                                            claimableModelIDs: claimable)
+            #expect(got == want, "\(task): pinned \(want) but got \(got)")
         }
-        let computedUnavailable = TaskCatalog.allTasks().filter { task in
-            switch TaskAvailability.state(for: task, catalog: catalog, claimableModelIDs: claimable) {
-            case .available: return false
-            case .needsNewerSupport, .refusedByChannel: return true
-            }
-        }
-        #expect(expectedUnavailable.map(\.name).sorted() == computedUnavailable.map(\.name).sorted())
-        // Every one is labeled, and every available one is not.
-        for task in TaskCatalog.allTasks() {
-            #expect((TaskAvailability.marker(for: task, catalog: catalog, claimableModelIDs: claimable) != nil)
-                    != TaskAvailability.isAvailable(task.name, catalog: catalog, claimableModelIDs: claimable))
-        }
-        // Every instant tool is ported since R13-3 (Join Video was the last).
+
+        // Carried over from the retired test — real, not tautological: every instant tool in
+        // the catalog has a `RealExecutor.runInstant` case (Join Video was the last, R13-3).
         let unportedInstant = TaskCatalog.entries.filter {
             $0.taskClass == .instant && !TaskAvailability.supportedInstantTools.contains($0.name)
         }.map(\.name)
