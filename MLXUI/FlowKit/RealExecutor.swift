@@ -362,6 +362,35 @@ nonisolated struct RealExecutor: FlowExecutor {
 
     private func runModel(_ desc: TaskDescriptor, row: Row, inputs: [Asset], path: String) async throws -> Asset {
         let modelEntry = try resolveModel(display: row.model, path: path)
+
+        // Extract Structured (DA-3a) — its own branch, ahead of the generic tail. A plain
+        // LLM stage would return whatever prose the model emits, never a `.table` (backlog
+        // §0b). `ExtractStructuredStage` owns the table's structure; the model is only ever
+        // asked "another record?" (a yes/no tag via `fireTag`) and one bounded field value
+        // at a time. One stage, `maxTokens` = `DEFAULT_MAX_FIELD_TOKENS` — the yes/no gate
+        // needs only a word, so the shared cap is harmless (a deliberate, noted divergence
+        // from the Python, whose `decide` path isn't token-bounded).
+        if desc.refName == "engines.llm.extract_structured" {
+            let stage = try await makeModelStage(
+                modelEntry, StageConfig(maxTokens: ExtractStructuredStage.maxFieldTokens))
+            let gate: @Sendable (String) async throws -> String = { prompt in
+                let (tag, _) = try await Self.fireTag(
+                    stage: stage, prompt: prompt,
+                    tags: ExtractStructuredStage.continueTags, rowLabel: "\(path)")
+                return tag
+            }
+            let field: @Sendable (String) async throws -> String = { prompt in
+                let result = try await stage.run(.text(prompt), progress: { _ in })
+                guard case .text(let text) = result else { return "" }
+                // `_mlx_complete_line`: one line — stop at the model's first newline.
+                return text.split(separator: "\n", maxSplits: 1,
+                                  omittingEmptySubsequences: false).first.map(String.init) ?? text
+            }
+            return try await ExtractStructuredStage.extract(
+                inputs: inputs, settings: row.settings, gate: gate, field: field,
+                in: blobDirectory)
+        }
+
         // Frame-backed: render the frame into a prompt, then run the LLM stage on it. The
         // full reference bundle feeds the renderer (B1) — `Rewrite (1,2)` sees both refs.
         if desc.refKind == .frame {
@@ -513,7 +542,7 @@ nonisolated struct RealExecutor: FlowExecutor {
         }
 
         let stage = try await makeModelStage(modelEntry, .default)
-        let (tag, rawReply) = try await fireTag(stage: stage, prompt: basePrompt, tags: tags, rowLabel: path)
+        let (tag, rawReply) = try await Self.fireTag(stage: stage, prompt: basePrompt, tags: tags, rowLabel: path)
         tagBox.tag = tag
 
         // The payload follows Spec §7.4: Judge delivers the winning candidate (R2); Think
@@ -534,8 +563,12 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// F004: run the prompt, strict-parse the tag (whole-word, case-insensitive, longest
     /// first); one retry with a stricter ask; then raise rather than guess. Returns the
     /// fired tag and the raw reply (Think's R3 payload).
-    private func fireTag(stage: any PipelineStage, prompt: String, tags: [String],
-                         rowLabel: String) async throws -> (String, String) {
+    ///
+    /// `static` (DA-3a): the body reads only its arguments — `ExtractStructuredStage`'s
+    /// yes/no gate reuses it as `decide(…, tags=("yes","no"))` without capturing `self`.
+    /// (`stageConfig` above is likewise non-`private` for the same in-target reuse reason.)
+    static func fireTag(stage: any PipelineStage, prompt: String, tags: [String],
+                        rowLabel: String) async throws -> (String, String) {
         func reply(for ask: String) async throws -> String {
             let result = try await stage.run(.text(ask), progress: { _ in })
             if case .text(let s) = result { return s }
