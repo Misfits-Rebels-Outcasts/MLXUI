@@ -1,7 +1,7 @@
 mlxflow 0.8
 1. Read Images           receipts/
 2. <each read_receipt; on_error=skip>   [image] -> [text]
-     1. OCR                  (input:1)
+     1. OCR                  (input:1)   GLM-OCR
      2. Extract Structured               Qwen3 8B; "merchant, date, total,
                                          category"
      3. Table to Text                    format=csv

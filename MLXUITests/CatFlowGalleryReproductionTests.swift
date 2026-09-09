@@ -86,6 +86,18 @@ struct CatFlowGalleryReproductionTests {
         #expect(checked == files.count)
     }
 
+    /// DA-7 (`RSI/DelegateDeciderBacklog.md`, owner ruling 2026-09-09, **SPEC-Q215**) — a
+    /// deliberate, temporary corpus divergence. `22-ScreenshotHowTo`, `30-ReceiptsExpense` and
+    /// `55-ReceiptsLedger` now name `GLM-OCR` on their previously model-less OCR row (MLXUI's
+    /// OCR is model-routed with no tesseract fallback; the reference's SPEC-Q95 path isn't
+    /// ported). The Python-generated parse trees still record `"model": null` there.
+    /// `catflow-mlx` will be made compatible (the gallery flows **and** an upstream curated
+    /// manifest — GLM-OCR's is MLXUI-authored). **Delete this set** and restore the
+    /// unconditional assert the moment `scripts/sync-catflow-fixtures.sh` re-syncs.
+    private let pendingUpstreamOCRModel: Set<String> = [
+        "22-ScreenshotHowTo", "30-ReceiptsExpense", "55-ReceiptsLedger",
+    ]
+
     /// CFM-FIX-5 / M11: every gallery flow's parse tree matches the Python-generated golden
     /// in `Fixtures/CatFlow/gallery/`, byte-for-byte on the canonical JSON.
     @Test func everyGalleryFlowMatchesPythonParseTree() throws {
@@ -105,6 +117,24 @@ struct CatFlowGalleryReproductionTests {
             }
             let actual = try canonicalJSON(try doc.toParseTreeJSON())
             let expected = try canonicalJSON(try Data(contentsOf: goldenURL))
+
+            if pendingUpstreamOCRModel.contains(id) {
+                // SPEC-Q215: normalise ONLY the OCR row's `model` field, then require a
+                // byte-for-byte match — any *other* drift in these three files still fails.
+                let marker = "\"model\":\"GLM-OCR\""
+                if expected.contains(marker) {
+                    Issue.record("\(id): the Python golden now names the OCR model — fixtures re-synced; DELETE `pendingUpstreamOCRModel` and restore the unconditional assert.")
+                    checked += 1
+                    continue
+                }
+                let hits = actual.components(separatedBy: marker).count - 1
+                #expect(hits == 1, "\(id): expected exactly one OCR row naming `GLM-OCR`, found \(hits) — the row edit or the parser changed.")
+                #expect(actual.replacingOccurrences(of: marker, with: "\"model\":null") == expected,
+                        "\(id): parse tree differs from the Python golden beyond DA-7's OCR-model divergence.")
+                checked += 1
+                continue
+            }
+
             #expect(actual == expected, "\(id): parse tree differs from the Python golden")
             checked += 1
         }

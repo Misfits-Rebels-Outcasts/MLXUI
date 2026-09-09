@@ -153,10 +153,14 @@ nonisolated enum CatalogBridge {
             equivalence: .same,
             manifestFile: "dots-ocr-4bit.json"),
         // MoC-1-4 (RSI/DelegateMoCBacklog.md) — GLM-OCR. No reference manifest exists in
-        // catflow-mlx, so `glm-ocr-4bit.json` is MLXUI-authored (see its own "notes"). Not
-        // added to `taskModels["OCR"]` — Decision C was RULED 2026-09-05: do not promote.
-        // Stays picker-reachable but never the default seed (CFM-R14-2: pools order, never
-        // filter).
+        // catflow-mlx, so `glm-ocr-4bit.json` is MLXUI-authored (see its own "notes").
+        // **DA-7 (RSI/DelegateDeciderBacklog.md, 2026-09-09): promoted.** Decision C's
+        // "do not promote" (2026-09-05) was amended — it is now **first** in
+        // `taskModels["OCR"]` and the default seed for a new OCR row, because the two
+        // incumbents can't be typed as a row model (`splitModelSettings`, DA-8) and GLM-OCR
+        // is the one OCR entry verified on a real receipt scan (smoke 81 / 9b-S2b). The
+        // MLXUI-authored manifest means making `catflow-mlx` compatible is two jobs — the
+        // gallery flows and an upstream curated manifest (SPEC-Q215).
         BridgeEntry(
             display: "GLM-OCR",
             pinnedID: "mlx-community/GLM-OCR-4bit",

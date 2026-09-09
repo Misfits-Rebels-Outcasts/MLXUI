@@ -111,13 +111,12 @@ struct GLMOCRResolutionTests {
         #expect(manifest.display == "GLM-OCR")
     }
 
-    /// Decision C left the `"OCR"` pool untouched — GLM-OCR is selectable but not seeded.
-    /// Pins today's default so a later pool edit (MoC-1-5, if ever ruled) can't move the
-    /// seed silently; this is the exact regression `defaultModel(forTask:)`'s callers
-    /// (fourteen task rows, three gallery flows for OCR specifically) would never notice
-    /// on their own.
+    /// DA-7 (`RSI/DelegateDeciderBacklog.md`) — Decision C **amended**: `GLM-OCR` is now
+    /// first in `taskModels["OCR"]` and the seed for a new OCR row. Pins the promoted default
+    /// so a future pool reorder can't move the seed silently — the exact regression
+    /// `defaultModel(forTask:)`'s callers (task rows + gallery 22/30/55) would never notice.
     @MainActor
-    @Test func ocrDefaultModelIsUnchangedByGLMOCR() throws {
+    @Test func ocrDefaultModelIsGLMOCRAfterDA7() throws {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("MLXUI/Resources/browser.json")
         let catalog = try JSONDecoder().decode(BrowserData.self, from: Data(contentsOf: url))
@@ -125,6 +124,6 @@ struct GLMOCRResolutionTests {
         let registry = ModelRegistry()
         for module in installedModules { module.register(into: registry) }
         let claimable = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
-        #expect(TaskModels.defaultModel(forTask: "OCR", catalog: catalog, claimableModelIDs: claimable) == "olmOCR-2 7B")
+        #expect(TaskModels.defaultModel(forTask: "OCR", catalog: catalog, claimableModelIDs: claimable) == "GLM-OCR")
     }
 }

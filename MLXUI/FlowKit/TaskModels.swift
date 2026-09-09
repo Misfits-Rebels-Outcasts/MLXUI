@@ -167,7 +167,15 @@ nonisolated enum TaskModels {
         // MoC-6-2 (RSI/DelegateMoCBacklog.md): appended last, same discipline as MoC-2-4 —
         // the seed ("LFM2-VL 1.6B") does not move.
         "Describe Image": ["LFM2-VL 1.6B", "Gemma 3 4B", "Qwen3.5 9B Vision"],
-        "OCR": ["olmOCR-2 7B", "dots.ocr"],
+        // DA-7 (RSI/DelegateDeciderBacklog.md) — `GLM-OCR` **promoted to first**, the deliberate
+        // opposite of MoC-2-4's "append last, seed unmoved". Decision C (do not promote, ruled
+        // 2026-09-05) was amended on the evidence its own wording asked for: smoke 9b-S2b's
+        // head-to-head agreement with PaddleOCR, smoke 81 on a real invoice/receipt scan, and
+        // DA-8's finding that the two incumbents (`olmOCR-2 7B` lowercase-leading, `dots.ocr`
+        // dotted-suffix) **cannot be written as a row model in either runtime** —
+        // `splitModelSettings` routes both to settings. `GLM-OCR` parses. `defaultModel(forTask:)`
+        // now seeds it (1.87 GB, MIT) for a new OCR row; gallery 22/30/55 name it explicitly.
+        "OCR": ["GLM-OCR", "olmOCR-2 7B", "dots.ocr"],
         "Generate Image": ["Z-Image Turbo", "FLUX.2 Klein 4B"],
         "Edit Image": ["Z-Image Turbo"],
         "Instruct Edit": ["FLUX.1 Kontext"],

@@ -2,7 +2,7 @@ mlxflow 0.8; events
 1. On File                    receipts/; pattern=*.jpg; settle=10s
 2. Read Image
 3. Read Context               ledger.ctx
-4. OCR                  (2)
+4. OCR                  (2)   GLM-OCR
 5. Extract Structured         Qwen3 8B; "merchant, date, total, category"
 6. Table to Text              format=csv; ctx+
 7. Save Context               ledger.ctx
