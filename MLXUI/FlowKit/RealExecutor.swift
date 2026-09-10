@@ -720,13 +720,14 @@ nonisolated struct RealExecutor: FlowExecutor {
     }
 
     /// SET-1 — apply the row's serving-manifest `engines.llm.*` settings schema to `base`:
-    /// a row's bound `max_tokens=`, else the manifest's declared default, over `StageConfig`'s
-    /// hardcoded fallback (Registry §3, `catflow-mlx` `catalog/registry.py` + `engines/real.py`
-    /// `_resolve_for_run` — RA-04: "a framed row must receive its manifest's sampler defaults").
+    /// a row's bound `max_tokens=` / `temperature=`, else the manifest's declared defaults,
+    /// over `StageConfig`'s hardcoded fallback (Registry §3, `catflow-mlx` `catalog/registry.py`
+    /// + `engines/real.py::_resolve_for_run` — RA-04: "a framed row must receive its manifest's
+    /// sampler defaults").
     ///
-    /// **`max_tokens` only.** `temperature` is held behind an owner decision — honouring a
-    /// manifest's `temperature: 0.3` replaces `StageConfig`'s 0.7 on every row naming that
-    /// model, a visible output change, not a silent-bug fix.
+    /// **Framed generation rows' prose will change:** a manifest's `temperature: 0.3` replaces
+    /// `StageConfig`'s 0.7 on every row naming that model (Qwen3 8B) — less varied, more
+    /// repeatable, aligned with the reference (owner-approved 2026-09-10, journal `2026-251`).
     ///
     /// No model / no manifest / a `settings: {}` manifest → `base` unchanged (SPEC-Q76).
     /// Scope is `engines.llm.*` generation only: the decider gate and Extract Structured /
@@ -743,7 +744,9 @@ nonisolated struct RealExecutor: FlowExecutor {
         if let raw = resolved["max_tokens"], let value = Double(raw), value >= 1 {
             config.maxTokens = Int(value)
         }
-        // SET-1 (held): `resolved["temp"]` is intentionally NOT applied here — owner gate.
+        if let raw = resolved["temp"], let value = Float(raw) {
+            config.temperature = value
+        }
         return config
     }
 

@@ -6,9 +6,9 @@ import Foundation
 /// `key=value` settings against its serving manifest's schema, fills omitted keys from the
 /// declared defaults, and translates via `maps_to`. Ported from
 /// `catflow-mlx/src/catflow/catalog/registry.py` (`resolve_settings` + `translate_settings`)
-/// and `engines/real.py::_resolve_for_run` (RA-04).
-///
-/// **`max_tokens` only this pass** — `temperature` is held behind the owner's word.
+/// and `engines/real.py::_resolve_for_run` (RA-04). `max_tokens` landed first; `temperature`
+/// followed (owner-approved 2026-09-10) — a framed row's prose is now less varied, aligned
+/// with the reference.
 struct CatFlowSettingsResolutionTests {
 
     private func manifest(_ file: String) throws -> CuratedManifest {
@@ -70,17 +70,18 @@ struct CatFlowSettingsResolutionTests {
             catalog: [])
     }
 
-    @Test func rowMaxTokensReachesTheConfig() throws {
+    @Test func aRowSettingReachesTheConfig() throws {
         let config = try executor().llmRunConfig(.default, model: "Qwen3 8B",
-                                                 rowSettings: "max_tokens=100", path: "1")
+                                                 rowSettings: "max_tokens=100; temperature=0.9", path: "1")
         #expect(config.maxTokens == 100)
-        #expect(config.temperature == 0.7, "temperature is held — StageConfig's default, not the manifest's 0.3")
+        #expect(config.temperature == 0.9)
     }
 
-    @Test func noRowSettingGetsTheManifestDefaultNotStageConfigFallback() throws {
+    @Test func noRowSettingGetsTheManifestDefaultsNotStageConfigFallbacks() throws {
         let config = try executor().llmRunConfig(.default, model: "Qwen3 8B",
                                                  rowSettings: nil, path: "1")
-        #expect(config.maxTokens == 2048)   // the manifest default, not StageConfig's 512
+        #expect(config.maxTokens == 2048)      // the manifest default, not StageConfig's 512
+        #expect(config.temperature == 0.3)     // the manifest default, not StageConfig's 0.7
     }
 
     @Test func anEmptySchemaModelIsUnchanged() throws {
