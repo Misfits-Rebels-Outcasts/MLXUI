@@ -470,9 +470,29 @@ struct FlowRowInspectorView: View {
         // the app container would make them navigate out every time, so leave the panel where
         // AppKit puts it.
         if let row, FlowSettings(row.settings).pathValue() != nil {
-            panel.directoryURL = model.workspace.directory(for: model.flowID)
+            let target = model.workspace.directory(for: model.flowID)
+            panel.directoryURL = target
+            // FILE-1-FIX-1 (diagnostic, remove once resolved): the branch fires but the owner
+            // still sees the panel open at Desktop. Log that it was taken, the URL we asked
+            // for, and — after the panel closes — where it actually landed. Leading suspicion
+            // is that a sandboxed NSOpenPanel won't honour a directoryURL inside
+            // ~/Library/Containers/. See journal 2026-252 / backlog FILE-1-FIX-1.
+            #if DEBUG
+            print("[FILE-1-FIX-1] branch taken — directoryURL set to:", target.path,
+                  "| exists:", FileManager.default.fileExists(atPath: target.path))
+            #endif
         }
-        guard panel.runModal() == .OK, let chosen = panel.url else { return }
+        guard panel.runModal() == .OK, let chosen = panel.url else {
+            #if DEBUG
+            print("[FILE-1-FIX-1] panel cancelled — last directory:",
+                  panel.directoryURL?.path ?? "nil")
+            #endif
+            return
+        }
+        #if DEBUG
+        print("[FILE-1-FIX-1] panel OK — chosen:", chosen.path,
+              "| panel.directoryURL:", panel.directoryURL?.path ?? "nil")
+        #endif
         copyInAndSetPath(chosen)
     }
 
