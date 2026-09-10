@@ -178,6 +178,23 @@ struct FlowListView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
             }
+            // DA-10-FIX-1: an `<each on_error=skip>` that dropped rows — surfaced up here so the
+            // reason isn't only an inline caption under the (indented) block-child row.
+            if let skip = session.skipSummary {
+                HStack(alignment: .top, spacing: 8) {
+                    Label(skip, systemImage: "exclamationmark.triangle")
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    copyButton(skip)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.orange.opacity(0.09), in: RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
             HStack(spacing: 0) {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -221,6 +238,7 @@ struct FlowListView: View {
                     output: session.selectedRowID.flatMap { session.outputs[$0] },
                     rowTitle: selectedRowTitle(doc),
                     substitutionNote: session.selectedRowID.flatMap { session.substitutionNotes[$0] },
+                    statusNote: session.selectedRowID.flatMap { session.statusNote(for: $0) },
                     savedFile: savedFileURL(in: doc),
                     savedKind: savedFileKind(in: doc),
                     initialTab: .output

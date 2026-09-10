@@ -36,6 +36,58 @@ struct CatFlowRunWiringTests {
         }
     }
 
+    /// DA-10 repro: a body row skipped by `<each on_error=skip>` must, in the session, end at
+    /// `.needsAttention` (△) AND carry the skip reason in `errorSentence`, with `wasSkipped`
+    /// set so the run-log line renders it as a skip. (30-ReceiptsExpense: the owner saw △ but
+    /// no sentence.)
+    @Test func skippedEachChildCarriesItsReasonInTheSession() async throws {
+        let doc = try CatParser.parse("""
+        mlxflow 0.8
+        1. Template   "a; b"
+        2. Split   (1)   by=lines
+        3. <each go; on_error=skip>   (2)
+            1. Summarize   {item}
+        4. Join Text   (3)
+        """)
+        let child = try #require(doc.rows[2].children.first)
+
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-skip-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        let blob = base.appendingPathComponent("blobs")
+        let ctx = FlowRunner.RunContext(
+            flowID: "t",
+            workspace: FlowWorkspace(root: base.appendingPathComponent("flows")),
+            blobDirectory: blob,
+            executor: RowFailingExecutor(failTask: "Summarize",
+                                         inner: MockExecutor(blobDirectory: blob)))
+
+        let session = FlowRunSession()
+        session.prepareInstall(FlowPreflight.Result())
+        session.start(doc: doc, runner: FlowRunner(), context: ctx)
+        let deadline = Date().addingTimeInterval(10)
+        while session.isRunning && Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+
+        #expect(session.status(for: child.id) == .needsAttention)
+        #expect(session.wasSkipped(child.id))
+        let sentence = session.errorSentence(for: child.id)
+        #expect(sentence != nil && !(sentence ?? "").isEmpty,
+                "the skipped child must carry a non-empty reason; got \(String(describing: sentence))")
+        #expect(sentence?.contains("receipts are on fire") == true)
+
+        // DA-10-FIX-1: the reason is reachable without the inline caption — a run summary and
+        // the inspector's status note both carry it.
+        #expect(session.skipSummary?.contains("receipts are on fire") == true)
+        #expect(session.skipSummary?.contains("skipped") == true)
+        let note = session.statusNote(for: child.id)
+        #expect(note?.isSkip == true)
+        #expect(note?.text.contains("receipts are on fire") == true)
+        // A row that simply succeeded has no status note.
+        #expect(session.statusNote(for: doc.rows[0].id) == nil)
+    }
+
     /// CFM-R12-FIX-3: block children get their own status dot — `rowStates` is seeded from
     /// the flattened row set, so a child's `.finished` event records instead of being
     /// silently dropped.
@@ -423,6 +475,24 @@ struct CatFlowRunWiringTests {
         let workspace = FlowWorkspace(root: base.appendingPathComponent("flows"))
         return FlowRunner.RunContext(flowID: "test", workspace: workspace,
                                      blobDirectory: blob, executor: MockExecutor(blobDirectory: blob))
+    }
+}
+
+/// Throws for one named task, delegates everything else to a real mock — so an
+/// `<each on_error=skip>` body can be made to fail deterministically.
+private struct RowFailingExecutor: FlowExecutor {
+    let failTask: String
+    let inner: MockExecutor
+    func execute(path: String, row: Row, inputs: [Asset],
+                 transcript: [FlowInterpreter.TranscriptEntry]?,
+                 context: [(label: String, content: String)]?,
+                 usedFlowContent: String?) async throws -> Asset {
+        if row.task == failTask {
+            throw FlowError.stageFailure(row: path, message: "the receipts are on fire")
+        }
+        return try await inner.execute(path: path, row: row, inputs: inputs,
+                                       transcript: transcript, context: context,
+                                       usedFlowContent: usedFlowContent)
     }
 }
 

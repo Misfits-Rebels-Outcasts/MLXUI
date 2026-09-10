@@ -26,6 +26,10 @@ struct FlowInspectorPane<Properties: View>: View {
     let rowTitle: String
     /// A `CatalogBridge` substitution note (e.g. "running Kokoro 82M as …"), or nil.
     let substitutionNote: String?
+    /// DA-10-FIX-1: the selected row's failure or skip sentence — shown prominently at the top
+    /// of the Output tab, since a skipped/failed row has no output of its own. `isSkip` picks
+    /// the amber "Skipped" framing over the red "Failed" one.
+    var statusNote: (text: String, isSkip: Bool)?
     /// The file a selected `Save *` row wrote (resolved by the caller), so the saved result
     /// is playable/viewable rather than just a status sentence.
     var savedFile: URL?
@@ -38,12 +42,14 @@ struct FlowInspectorPane<Properties: View>: View {
     @State private var audio = InspectorAudioController()
 
     init(output: Asset?, rowTitle: String, substitutionNote: String?,
+         statusNote: (text: String, isSkip: Bool)? = nil,
          savedFile: URL? = nil, savedKind: Kind? = nil,
          initialTab: Tab = .output,
          @ViewBuilder properties: @escaping () -> Properties) {
         self.output = output
         self.rowTitle = rowTitle
         self.substitutionNote = substitutionNote
+        self.statusNote = statusNote
         self.savedFile = savedFile
         self.savedKind = savedKind
         self.properties = properties
@@ -111,6 +117,17 @@ struct FlowInspectorPane<Properties: View>: View {
         VStack(alignment: .leading, spacing: 12) {
             outputHeader
             Divider()
+            if let statusNote {
+                Label(statusNote.text,
+                      systemImage: statusNote.isSkip ? "exclamationmark.triangle" : "xmark.octagon.fill")
+                    .font(.callout)
+                    .foregroundStyle(statusNote.isSkip ? .orange : .red)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background((statusNote.isSkip ? Color.orange : Color.red).opacity(0.09),
+                               in: RoundedRectangle(cornerRadius: 6))
+            }
             if let savedFile, let savedKind {
                 savedContent(for: savedFile, kind: savedKind)
             } else if let output {

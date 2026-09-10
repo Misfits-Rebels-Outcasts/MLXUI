@@ -136,6 +136,33 @@ final class FlowRunSession {
         rowStates[rowID]?.wasSkipped ?? false
     }
 
+    /// DA-10-FIX-1: a one-line run summary of every row an `<each on_error=skip>` dropped, so
+    /// the reason is visible without hunting for the inline caption under the (indented, block-
+    /// child) row. Deduplicated — a per-item `<each>` where every item failed the same way
+    /// reads as one reason, not N. `nil` when nothing was skipped.
+    var skipSummary: String? {
+        let skipped = rowStates.values.filter { $0.wasSkipped }
+        guard !skipped.isEmpty else { return nil }
+        let reasons = skipped.compactMap { $0.errorSentence }.filter { !$0.isEmpty }
+        let unique = Set(reasons).sorted()
+        let noun = skipped.count == 1 ? "step was skipped" : "\(skipped.count) steps were skipped"
+        guard !unique.isEmpty else { return "\(noun) (on_error=skip)." }
+        return "\(noun) (on_error=skip): " + unique.joined(separator: " · ")
+    }
+
+    /// DA-10-FIX-1: the sentence to show in the inspector for a selected row — its skip reason
+    /// (△) or its failure sentence (✗), or nil when the row neither failed nor was skipped.
+    func statusNote(for rowID: UUID) -> (text: String, isSkip: Bool)? {
+        guard let state = rowStates[rowID], let sentence = state.errorSentence, !sentence.isEmpty else {
+            return nil
+        }
+        switch state.status {
+        case .needsAttention: return (sentence, true)
+        case .failed:         return (sentence, false)
+        default:              return nil
+        }
+    }
+
     // MARK: - Start
 
     /// Start a run. When `resume` is true, the run starts at the first gray row (answer
