@@ -394,7 +394,11 @@ nonisolated struct RealExecutor: FlowExecutor {
                 .replacingOccurrences(of: ".frame.txt", with: "")
             let frame = try FrameRenderer.loadFrame(named: frameName)
             let prompt = try FrameRenderer.render(frameText: frame, settings: row.settings, assets: inputs)
-            let stage = try await makeModelStage(modelEntry, .default)
+            // SET-1 / RA-04: a framed generation row (Summarize, Rewrite, Revise, …) receives
+            // its manifest's sampler defaults — before this it always ran at StageConfig's
+            // hardcoded 512 tokens whatever the manifest or a `max_tokens=` row setting said.
+            let config = try llmRunConfig(.default, model: row.model, rowSettings: row.settings, path: "\(path)")
+            let stage = try await makeModelStage(modelEntry, config)
             let result = try await stage.run(.text(prompt), progress: { _ in })
             return try persist(result, rowLabel: "\(path)")
         }
@@ -695,6 +699,9 @@ nonisolated struct RealExecutor: FlowExecutor {
                 .flatMap(Int.init)
             return StageConfig(query: query, topK: topK)
         }
+        if desc.refName == "engines.llm.generate" {
+            return try llmRunConfig(.default, model: row.model, rowSettings: row.settings, path: path)
+        }
         if desc.refName.hasPrefix("engines.vlm.") {
             // OCP-2-1 (`RSI/DelegateOCRPromptBacklog.md` §4), ported from
             // `catflow-mlx/src/catflow/engines/vlm.py:68-100`: `describe_image` uses
@@ -710,6 +717,34 @@ nonisolated struct RealExecutor: FlowExecutor {
             return StageConfig(prompt: settings.firstBare())
         }
         return .default
+    }
+
+    /// SET-1 — apply the row's serving-manifest `engines.llm.*` settings schema to `base`:
+    /// a row's bound `max_tokens=`, else the manifest's declared default, over `StageConfig`'s
+    /// hardcoded fallback (Registry §3, `catflow-mlx` `catalog/registry.py` + `engines/real.py`
+    /// `_resolve_for_run` — RA-04: "a framed row must receive its manifest's sampler defaults").
+    ///
+    /// **`max_tokens` only.** `temperature` is held behind an owner decision — honouring a
+    /// manifest's `temperature: 0.3` replaces `StageConfig`'s 0.7 on every row naming that
+    /// model, a visible output change, not a silent-bug fix.
+    ///
+    /// No model / no manifest / a `settings: {}` manifest → `base` unchanged (SPEC-Q76).
+    /// Scope is `engines.llm.*` generation only: the decider gate and Extract Structured /
+    /// Text to Table keep their task pins (`makeExtractionStage`, `runDecider`), never reached
+    /// from here.
+    func llmRunConfig(_ base: StageConfig, model display: String?, rowSettings: String?,
+                      path: String) throws -> StageConfig {
+        guard let display,
+              let entry = CatalogBridge.entry(for: display),
+              let manifest = CuratedManifest.load(manifestFile: entry.manifestFile),
+              !manifest.settings.isEmpty else { return base }
+        let resolved = try manifest.resolveEngineSettings(rowSettings, rowLabel: path)
+        var config = base
+        if let raw = resolved["max_tokens"], let value = Double(raw), value >= 1 {
+            config.maxTokens = Int(value)
+        }
+        // SET-1 (held): `resolved["temp"]` is intentionally NOT applied here — owner gate.
+        return config
     }
 
     /// OCP-2-3 (RULED 2026-09-08: **validator warns, runtime ignores**). For a `.modes` model

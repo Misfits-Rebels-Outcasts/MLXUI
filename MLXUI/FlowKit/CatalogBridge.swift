@@ -327,6 +327,17 @@ nonisolated enum FlexValue: Codable, Sendable, Equatable {
         case .bool(let b):   try c.encode(b)
         }
     }
+
+    /// The value as the string the settings layer carries — matching the reference's
+    /// `"true"/"false"/str(default)` (`registry.py::resolve_settings`). An integral number
+    /// renders without a `.0` so `Int("2048")` succeeds downstream.
+    var settingString: String {
+        switch self {
+        case .string(let s): return s
+        case .bool(let b):   return b ? "true" : "false"
+        case .number(let n): return n == n.rounded() ? String(Int(n)) : String(n)
+        }
+    }
 }
 
 /// One curated manifest's setting spec — the enums/ranges/defaults the Python's
@@ -342,7 +353,10 @@ nonisolated struct SettingSpec: Codable, Sendable, Equatable {
     var autoOK: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case type, values, min, max, mapsTo
+        case type, values, min, max
+        // SET-1: the JSON key is `maps_to` — before this it decoded from `"mapsTo"` and so was
+        // always nil (nothing consumed it until `resolveEngineSettings`).
+        case mapsTo = "maps_to"
         case defaultValue = "default"
         case positionalOK = "positional_ok"
         case autoOK = "auto_ok"
@@ -411,5 +425,82 @@ nonisolated struct CuratedManifest: Codable, Sendable, Equatable {
                                    withExtension: "json"),
               let data = try? Data(contentsOf: url) else { return nil }
         return try? JSONDecoder().decode(CuratedManifest.self, from: data)
+    }
+
+    /// SET-1 — Registry §3 steps 1-3, ported verbatim from
+    /// `catflow-mlx/src/catflow/catalog/registry.py::resolve_settings` + `translate_settings`:
+    /// bind a row's `key=value` (and one `positional_ok` bare token) against this manifest's
+    /// schema, fill omitted keys from their declared `default`, then rename each to its
+    /// `maps_to` engine kwarg. An empty schema is a pure passthrough — `[:]` (SPEC-Q76).
+    ///
+    /// **Deliberate divergence from the reference (SPEC-Q218):** the reference returns a
+    /// `problems` list for check-time E701/E702/E703 and *silently drops* an unknown or
+    /// out-of-range key at run time. MLXUI has no check-time port yet (`VAL-1`, `RSI/backlog.md`),
+    /// so it **throws** `FlowError.invalidSettings` here — MoC-FIX-2's "refuse at the seam"; a
+    /// wrong sampler nobody notices is the CFM-R16-1 failure mode.
+    func resolveEngineSettings(_ raw: String?, rowLabel: String) throws -> [String: String] {
+        guard !settings.isEmpty else { return [:] }
+        let parsed = FlowSettings(raw)
+        var provided = parsed.orderedPairs
+        if let positionalKey = settings.first(where: { $0.value.positionalOK == true })?.key,
+           !provided.contains(where: { $0.key == positionalKey }),
+           let bare = parsed.firstBare() {
+            provided.append((positionalKey, bare))
+        }
+
+        var resolved: [String: String] = [:]
+        for (key, value) in provided {
+            guard let spec = settings[key] else {
+                throw FlowError.invalidSettings(
+                    row: rowLabel, setting: key,
+                    detail: "\(display) doesn't take a `\(key)` setting (it takes "
+                        + "\(settings.keys.sorted().joined(separator: ", ")))")
+            }
+            try Self.validateSettingValue(key: key, value: value, spec: spec, display: display, rowLabel: rowLabel)
+            resolved[key] = value
+        }
+        for (key, spec) in settings where resolved[key] == nil {
+            guard let fallback = spec.defaultValue?.settingString else { continue }
+            resolved[key] = fallback
+        }
+
+        var translated: [String: String] = [:]
+        for (key, value) in resolved { translated[settings[key]?.mapsTo ?? key] = value }
+        return translated
+    }
+
+    /// The reference's `registry.py::_validate_value` — enum membership (E702) and number
+    /// range (E703). `auto`/`{placeholder}` values defer (the runtime resolves them first).
+    private static func validateSettingValue(key: String, value: String, spec: SettingSpec,
+                                             display: String, rowLabel: String) throws {
+        if spec.autoOK == true, value == "auto" { return }
+        if value.contains("{"), value.contains("}") { return }   // `{item}`/`{index}` — deferred
+        switch spec.type {
+        case "enum":
+            let allowed = spec.values ?? []
+            guard allowed.contains(value) else {
+                throw FlowError.invalidSettings(
+                    row: rowLabel, setting: key,
+                    detail: "\(display) takes \(allowed.joined(separator: " / ")) for `\(key)`, not \"\(value)\"")
+            }
+        case "number":
+            guard let num = Double(value) else {
+                throw FlowError.invalidSettings(
+                    row: rowLabel, setting: key, detail: "`\(key)` needs a number, not \"\(value)\"")
+            }
+            let lo = spec.min, hi = spec.max
+            if (lo.map { num < $0 } ?? false) || (hi.map { num > $0 } ?? false) {
+                let range = "\(lo.map(Self.numString) ?? "any") to \(hi.map(Self.numString) ?? "any")"
+                throw FlowError.invalidSettings(
+                    row: rowLabel, setting: key,
+                    detail: "\(display) needs `\(key)` in the range \(range) — \(value) is outside it")
+            }
+        default:
+            break
+        }
+    }
+
+    private static func numString(_ n: Double) -> String {
+        n == n.rounded() ? String(Int(n)) : String(n)
     }
 }
