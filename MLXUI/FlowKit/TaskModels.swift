@@ -106,6 +106,11 @@ nonisolated enum TaskModels {
         modelOptionalTasks.contains(task)
     }
 
+    /// The model-optional task names, sorted — for the DA-9 cross-site test that pins the
+    /// editor warning, `FlowPreflight` and `RealExecutor` agreeing on a model-less row. A new
+    /// entry here needs a fixture in `CatFlowModelOptionalConsistencyTests` or that test fails.
+    static var modelOptionalTaskNames: [String] { modelOptionalTasks.sorted() }
+
     /// CFM-R14-FIX-2 — the refName prefixes `RealExecutor` genuinely serves. Availability must
     /// depend on **the executor having a path for the task**, not only on a model existing for
     /// its kind. A `.image`-kind model exists for `Edit Image`/`Inpaint`/the latent family, but

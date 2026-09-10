@@ -70,6 +70,11 @@ nonisolated struct FlowPreflight {
                 continue   // instant tools don't need a model
             }
             guard let display = row.model else {
+                // SPEC-Q214 (DA-9): a model-optional task (`Text to Table`) with **no** model
+                // named is legitimate — its deterministic fast path needs none, and the executor
+                // branches ahead of `resolveModel`. Don't block the flow. This is the third site
+                // to learn the rule after the editor warning and the executor (both DA-6).
+                if TaskModels.isModelOptional(row.task ?? "") { continue }
                 result.needs.append(ModelNeed(task: row.task ?? "?", display: "an unnamed model",
                                               model: nil, installed: false, equivalence: nil,
                                               blockingReason: "Row \(row.task ?? "?") has no model named."))
