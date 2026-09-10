@@ -464,33 +464,77 @@ struct FlowRowInspectorView: View {
         if let types = Self.utTypes(for: task) {
             panel.allowedContentTypes = types
         }
+        // FILE-1: when the row already names a file, they're adjusting something already
+        // copied in — open the panel at the flow's own folder. On first setup the row has no
+        // path and the images live wherever the user keeps them (Desktop, …); opening inside
+        // the app container would make them navigate out every time, so leave the panel where
+        // AppKit puts it.
+        if let row, FlowSettings(row.settings).pathValue() != nil {
+            panel.directoryURL = model.workspace.directory(for: model.flowID)
+        }
         guard panel.runModal() == .OK, let chosen = panel.url else { return }
         copyInAndSetPath(chosen)
     }
 
     private func copyInAndSetPath(_ chosen: URL) {
-        let fm = FileManager.default
         let flowDir = model.workspace.directory(for: model.flowID)
         do {
-            try fm.createDirectory(at: flowDir, withIntermediateDirectories: true)
-            if chosen.hasDirectoryPath {
-                let destDir = flowDir.appendingPathComponent(chosen.lastPathComponent)
-                try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
-                for url in try fm.contentsOfDirectory(at: chosen, includingPropertiesForKeys: nil) {
-                    let dest = destDir.appendingPathComponent(url.lastPathComponent)
-                    if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
-                    try fm.copyItem(at: url, to: dest)
-                }
-                model.setPath(chosen.lastPathComponent, for: rowID)
-            } else {
-                let dest = flowDir.appendingPathComponent(chosen.lastPathComponent)
-                if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
-                try fm.copyItem(at: chosen, to: dest)
-                model.setPath(chosen.lastPathComponent, for: rowID)
-            }
+            let stored = try Self.copyIn(chosen, toFlowDir: flowDir)
+            model.setPath(stored, for: rowID)
         } catch {
             model.saveError = "Couldn't copy '\(chosen.lastPathComponent)' into the flow's folder — pick a file you can read."
         }
+    }
+
+    /// Copy `chosen` into `flowDir` (R11-0b — a bare name that survives a zip-and-send) and
+    /// return the path token to store in the row's settings.
+    ///
+    /// **FILE-1:** when `chosen` is *already inside* `flowDir` (the Properties button now opens
+    /// there), copy nothing — the per-item `removeItem` + `copyItem` loop would delete each
+    /// file and then copy the file it just deleted. Store its **flow-relative** path instead:
+    /// slash-separated (`FlowWorkspace.resolve` accepts that and rejects only absolute / `..`),
+    /// with a directory's trailing `/` kept so `CatParser.splitModelSettings` reads
+    /// `receipts/jan/` as a path, not an HF repo id (SPEC-Q96). *(A nested file with no
+    /// extension — `receipts/scan1` — still parses as a model: DA-8's territory, not fixed
+    /// here.)*
+    ///
+    /// `nonisolated static` so the copy/no-copy decision is unit-testable without a View.
+    nonisolated static func copyIn(_ chosen: URL, toFlowDir flowDir: URL) throws -> String {
+        let fm = FileManager.default
+        try fm.createDirectory(at: flowDir, withIntermediateDirectories: true)
+
+        if let relative = relativePath(of: chosen, under: flowDir) {
+            return relative
+        }
+
+        if chosen.hasDirectoryPath {
+            let destDir = flowDir.appendingPathComponent(chosen.lastPathComponent)
+            try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+            for url in try fm.contentsOfDirectory(at: chosen, includingPropertiesForKeys: nil) {
+                let dest = destDir.appendingPathComponent(url.lastPathComponent)
+                if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
+                try fm.copyItem(at: url, to: dest)
+            }
+            return chosen.lastPathComponent
+        }
+        let dest = flowDir.appendingPathComponent(chosen.lastPathComponent)
+        if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
+        try fm.copyItem(at: chosen, to: dest)
+        return chosen.lastPathComponent
+    }
+
+    /// `url`'s slash-separated path relative to `base`, or nil when `url` is not inside it.
+    /// Both sides go through `resolvingSymlinksInPath()` — the app-container path is symlinked
+    /// (`/var` ⇄ `/private/var`), the same reason `FlowWorkspace.resolve` does it. A directory
+    /// keeps its trailing `/`.
+    nonisolated static func relativePath(of url: URL, under base: URL) -> String? {
+        let target = url.resolvingSymlinksInPath().pathComponents
+        let root = base.resolvingSymlinksInPath().pathComponents
+        guard target.count > root.count, Array(target.prefix(root.count)) == root else {
+            return nil
+        }
+        let relative = target.dropFirst(root.count).joined(separator: "/")
+        return url.hasDirectoryPath ? relative + "/" : relative
     }
 
     /// The open panel's allowed types for a task's sample-replaceable file (nil = any).
