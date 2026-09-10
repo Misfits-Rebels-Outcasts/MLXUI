@@ -673,6 +673,13 @@ final class FlowEditorModel {
             if desc.taskClass != .instant, desc.taskClass != .model {
                 return "Row \(path) is a \(desc.taskClass.rawValue) row, which this version of Flows can't complete."
             }
+            // ES-UI-1: `Extract Structured`'s settings string *is* its column list. An empty or
+            // unparseable one fails only at run time (`parseSchema` raises) — flag it here so
+            // clearing the editor's "Columns to extract" field is never a silent break.
+            if desc.refName == "engines.llm.extract_structured",
+               (try? ExtractStructuredStage.parseSchema(r.settings)) == nil {
+                return "Row \(path) needs a column list — e.g. \"merchant, date, total\"."
+            }
         }
 
         if r.refs.isEmpty, let previous = previousRow(before: rowID) {

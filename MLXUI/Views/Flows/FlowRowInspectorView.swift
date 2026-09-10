@@ -72,6 +72,8 @@ struct FlowRowInspectorView: View {
                                 instructionBox(task, row: row)
                             case .modePicker(let values, let defaultValue):
                                 modePicker(row: row, values: values, defaultValue: defaultValue)
+                            case .schemaEditor:
+                                schemaEditor(row: row)
                             case .none:
                                 EmptyView()
                             }
@@ -243,6 +245,30 @@ struct FlowRowInspectorView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - ES-UI-1: Extract Structured column list
+
+    /// The `Extract Structured` schema editor. The row's settings string is a bare quoted
+    /// column list (`"merchant, date, total"`) — the same first-quoted-span `setInstruction`
+    /// reads and writes — so this reuses those helpers with a label that fits a column list.
+    /// Clearing writes an empty settings string; `FlowEditorModel.warning(for:)` then flags the
+    /// row so the failure surfaces in the editor, not only when `parseSchema` raises at run time.
+    private func schemaEditor(row: Row) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Columns to extract")
+                .font(.subheadline.weight(.semibold))
+            let columns = quotedInstruction(row.settings)
+            TextField("merchant, date, total, category", text: Binding(
+                get: { columns ?? "" },
+                set: { model.setInstruction($0.isEmpty ? nil : $0, for: rowID) }
+            ), axis: .vertical)
+            .lineLimit(1...3)
+            .textFieldStyle(.roundedBorder)
+            Text("Comma-separated — one name per field. A column name can't contain a comma.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -607,7 +633,16 @@ struct FlowRowInspectorView: View {
     }
 
     /// OCP-2-2 — which per-run prompt control (if any) this row gets.
-    enum PromptControl: Equatable { case instructionBox, modePicker(values: [String], defaultValue: String), none }
+    enum PromptControl: Equatable {
+        case instructionBox
+        case modePicker(values: [String], defaultValue: String)
+        /// ES-UI-1 — `Extract Structured`'s whole settings string *is* its column list, a bare
+        /// quoted span with no `key=` label, so neither the instruction box nor the generic
+        /// settings section offers it. This is an instruction-box-shaped editor with the right
+        /// label for a column list.
+        case schemaEditor
+        case none
+    }
 
     /// A frame-backed row keeps its instruction box (FIX-6). `engines.vlm.describe_image`
     /// now gets one too — a prompt is its whole point, and OCP-2-1 makes it reach the model.
@@ -619,6 +654,7 @@ struct FlowRowInspectorView: View {
         guard let desc = TaskCatalog.get(task) else { return .none }
         if desc.refName.hasPrefix("frames/") { return .instructionBox }
         if desc.refName == "engines.vlm.describe_image" { return .instructionBox }
+        if desc.refName == "engines.llm.extract_structured" { return .schemaEditor }   // ES-UI-1
         if desc.refName == "engines.vlm.ocr" {
             switch modelPromptSupport(for: row) {
             case .freeText: return .instructionBox

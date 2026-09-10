@@ -78,6 +78,53 @@ struct CatFlowR9Tests {
         #expect(reparsed.rows[0].settings == "lang=de; timestamps=true; \"captions, timestamped\"")
     }
 
+    // MARK: - ES-UI-1: the Extract Structured column list is editable
+
+    /// The schema editor reads and writes the first quoted span — the same helper the
+    /// instruction box uses — and `parseSchema` reads back exactly what was typed.
+    @Test @MainActor func extractStructuredSchemaRoundTripsThroughTheEditor() throws {
+        let src = row("Read Text", settings: "in.txt")
+        let r1 = row("Extract Structured", model: "Qwen3 8B",
+                     settings: "\"merchant, date, total, category\"")
+        let model = try editor([src, r1])
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+
+        model.setInstruction("vendor, invoice_date, amount", for: r1.id)
+        #expect(model.row(withID: r1.id)?.settings == "\"vendor, invoice_date, amount\"")
+        #expect(try ExtractStructuredStage.parseSchema(model.row(withID: r1.id)?.settings)
+                == ["vendor", "invoice_date", "amount"])
+
+        // Save → reparse → the edited column list survives byte-for-byte.
+        try model.save()
+        let reparsed = try CatParser.parse(try String(contentsOf: model.savedURL!, encoding: .utf8))
+        #expect(reparsed.rows[1].settings == "\"vendor, invoice_date, amount\"")
+        #expect(reparsed.rows[1].model == "Qwen3 8B")
+    }
+
+    /// Clearing the field is not a silent break: `parseSchema` refuses the row and the editor
+    /// paints a warning, rather than the row looking fine until it fails at run time.
+    @Test @MainActor func clearingTheExtractStructuredSchemaFlagsTheRow() throws {
+        let src = row("Read Text", settings: "in.txt")
+        let r1 = row("Extract Structured", model: "Ministral 3B", settings: "\"name, date\"")
+        let model = try editor([src, r1])
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+        #expect(model.warning(for: r1.id) == nil)
+
+        model.setInstruction(nil, for: r1.id)
+        #expect(throws: (any Error).self) {
+            try ExtractStructuredStage.parseSchema(model.row(withID: r1.id)?.settings)
+        }
+        #expect(model.warning(for: r1.id)?.contains("column list") == true)
+
+        // Typing a real list clears the warning again.
+        model.setInstruction("name, date", for: r1.id)
+        #expect(model.warning(for: r1.id) == nil)
+    }
+
     // MARK: - CFM-R9-2: the model ops
 
     @Test func modelSettingAndClearing() throws {
