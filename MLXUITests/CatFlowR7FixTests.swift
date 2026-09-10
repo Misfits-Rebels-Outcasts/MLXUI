@@ -76,6 +76,38 @@ struct CatFlowR7FixTests {
         #expect(!events.contains { $0.kind == .rowCompleted && $0.path == "3.1" })
     }
 
+    /// DA-10 (SPEC-Q216): a skipped item must emit a **terminal** `row_skipped` event
+    /// carrying the reason. Before DA-10 the failing row kept its `row_started` with no
+    /// terminator — the UI dot stuck on ● forever and the reason never surfaced on the row.
+    @Test func eachOnErrorSkipEmitsTerminalRowSkippedWithReason() async throws {
+        let text = """
+        mlxflow 0.8
+        1. Template    "a; b"
+        2. Split   (1)  by=lines
+        3. <each try_em>   (2) ; on_error=skip
+            1. Foo      {item}
+        4. Join Text   (3)
+        """
+        let events = try await run(text)
+
+        // One `row_skipped` per failed item, on the body row's path, carrying the reason.
+        let skipped = events.filter { $0.kind == .rowSkipped && $0.path == "3.1" }
+        #expect(skipped.count == 3, "expected one row_skipped per skipped item")
+        #expect(skipped.allSatisfy { !($0.error ?? "").isEmpty }, "row_skipped carries a reason")
+
+        // The seam guarantee: no row inside the block ends the run started-but-not-terminated.
+        let terminal: Set<FlowInterpreter.PathEvent.Kind> = [.rowCompleted, .rowFailed, .rowSkipped]
+        for (i, ev) in events.enumerated() where ev.kind == .rowStarted && ev.path.hasPrefix("3.") {
+            let terminated = events[(i + 1)...].contains { $0.path == ev.path && terminal.contains($0.kind) }
+            #expect(terminated, "row \(ev.path) started at idx \(i) with no terminal event")
+        }
+
+        // Unchanged: F003 still flags, the run still completes, the row never "completes".
+        #expect(events.contains { $0.kind == .flagRaised && $0.code == "F003" })
+        #expect(events.last?.kind == .runCompleted)
+        #expect(!events.contains { $0.kind == .rowCompleted && $0.path == "3.1" })
+    }
+
     /// FIX-7: a `<parallel>` chain's `· ctx` reads its own snapshot — a sibling's `ctx+`
     /// entry never leaks into another chain's context.
     @Test func parallelChainsDoNotShareJournal() async throws {

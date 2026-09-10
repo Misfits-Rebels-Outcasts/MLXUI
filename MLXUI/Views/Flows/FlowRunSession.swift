@@ -12,6 +12,10 @@ final class FlowRunSession {
     struct RowState: Equatable {
         var status: FlowStatus = .notRun
         var errorSentence: String?
+        /// DA-10: this row was dropped by an enclosing `<each on_error=skip>` — `errorSentence`
+        /// then holds the skip reason, not a failure. Renders as △ (not ✗), and the run log
+        /// line is styled as a skip, so "the flow chose to continue" reads distinctly.
+        var wasSkipped = false
     }
 
     private(set) var rowStates: [UUID: RowState] = [:]
@@ -125,6 +129,13 @@ final class FlowRunSession {
         rowStates[rowID]?.errorSentence
     }
 
+    /// DA-10: whether `errorSentence(for:)` on this row is a skip reason (an enclosing
+    /// `<each on_error=skip>` dropped it), not a failure — the run log line renders it
+    /// distinctly.
+    func wasSkipped(_ rowID: UUID) -> Bool {
+        rowStates[rowID]?.wasSkipped ?? false
+    }
+
     // MARK: - Start
 
     /// Start a run. When `resume` is true, the run starts at the first gray row (answer
@@ -152,6 +163,7 @@ final class FlowRunSession {
                 if isDownstream(id, of: startIndex, in: doc) {
                     state.status = .notRun
                     state.errorSentence = nil
+                    state.wasSkipped = false
                     rowStates[id] = state
                     outputs[id] = nil
                 }
@@ -277,6 +289,15 @@ final class FlowRunSession {
             metrics.record(rowID: id)
         case .flagRaised(let id, let message):
             rowStates[id]?.errorSentence = message
+        case .skipped(let id, let reason):
+            // DA-10 (SPEC-Q216): the enclosing `<each on_error=skip>` dropped this row and
+            // the run continues. Leave `.running` behind — it is neither running nor failed —
+            // and surface the reason. Not promoted to `session.errorSentence`: the run is not
+            // failing.
+            rowStates[id]?.status = .needsAttention
+            rowStates[id]?.errorSentence = reason
+            rowStates[id]?.wasSkipped = true
+            metrics.record(rowID: id)
         case .parked(let id, let prompt, let policy, let execPath):
             isRunning = false
             parked = ParkedInfo(rowID: id, prompt: prompt, policy: policy, execPath: execPath,

@@ -198,10 +198,13 @@ struct FlowListView: View {
                                     .background(session.selectedRowID == row.id ? Color.accentColor.opacity(0.12) : Color.clear)
                             }
                             if let sentence = session.errorSentence(for: row.id) {
+                                // DA-10: a skipped row's sentence is a skip reason, not a
+                                // failure — orange "Skipped —", never the red failure style.
+                                let skipped = session.wasSkipped(row.id)
                                 HStack(alignment: .top, spacing: 6) {
-                                    Text(sentence)
+                                    Text(skipped ? "Skipped — \(sentence)" : sentence)
                                         .font(.caption)
-                                        .foregroundStyle(.red)
+                                        .foregroundStyle(skipped ? .orange : .red)
                                         .textSelection(.enabled)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                     copyButton(sentence)

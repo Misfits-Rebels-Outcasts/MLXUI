@@ -19,6 +19,9 @@ nonisolated enum FlowEvent: Sendable {
     case failed(rowID: UUID, FlowError)
     case cacheHit(rowID: UUID)
     case flagRaised(rowID: UUID, message: String)
+    /// DA-10 (SPEC-Q216): an enclosing `<each on_error=skip>` dropped this row. The run
+    /// continues — this is neither `.failed` (the run stops) nor `.started` (still going).
+    case skipped(rowID: UUID, reason: String)
     /// CFM-R10-Human: a `wait=forever` human row parked the run. `execPath` is the
     /// activation key a resumed answer must use (`"3@1"`).
     case parked(rowID: UUID, prompt: String, policy: String, execPath: String)
@@ -427,6 +430,10 @@ nonisolated struct FlowRunner {
             }
         case .flagRaised:
             return rowID(for: event.path, in: pathToID).map { .flagRaised(rowID: $0, message: event.message ?? "") }
+        case .rowSkipped:
+            return rowID(for: event.path, in: pathToID).map {
+                .skipped(rowID: $0, reason: event.error ?? "row skipped")
+            }
         case .runParked:
             return rowID(for: event.path, in: pathToID).map {
                 .parked(rowID: $0, prompt: event.parkPrompt ?? "", policy: event.parkPolicy ?? "",

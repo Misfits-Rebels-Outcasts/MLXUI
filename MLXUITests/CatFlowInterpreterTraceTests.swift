@@ -37,7 +37,7 @@ struct CatFlowInterpreterTraceTests {
             d["path"] = event.path
         case .journalAppended:
             d["path"] = event.path
-        case .runParked, .rowFailed, .cacheHit, .runResumed, .effectStaged:
+        case .runParked, .rowFailed, .rowSkipped, .cacheHit, .runResumed, .effectStaged:
             d["path"] = event.path
         }
         if event.kind == .rowCompleted {
@@ -73,6 +73,11 @@ struct CatFlowInterpreterTraceTests {
         }
         if event.kind == .rowFailed {
             d["error"] = event.error ?? ""
+        }
+        // DA-10 / SPEC-Q216: `row_skipped` carries the drop reason under `reason` (matching
+        // `_ItemFailed(reason)` / F003's `reason=`). No conformance trace exercises it yet.
+        if event.kind == .rowSkipped {
+            d["reason"] = event.error ?? ""
         }
         if event.kind == .effectStaged, let staged = event.staged {
             d["id"] = staged.id

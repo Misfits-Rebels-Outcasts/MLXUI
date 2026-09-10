@@ -26,6 +26,7 @@ nonisolated enum FlowInterpreter {
             case journalAppended = "journal_appended"
             case runParked = "run_parked"
             case rowFailed = "row_failed"
+            case rowSkipped = "row_skipped"
             case cacheHit = "cache_hit"
             case runResumed = "run_resumed"
             case effectStaged = "effect_staged"
@@ -91,6 +92,16 @@ nonisolated enum FlowInterpreter {
             PathEvent(kind: .rowFailed, path: path, output: nil, index: nil, total: nil,
                       durationMS: 0, firedTag: nil, edge: nil, code: nil, message: nil,
                       error: error, staged: nil, transcript: nil, entry: nil, entryIndex: nil,
+                      parkPrompt: nil, parkPolicy: nil, context: nil)
+        }
+        /// SPEC-Q216 (DA-10): a row an enclosing `<each on_error=skip>` chose to drop — the
+        /// block continues, so the row is neither `rowCompleted` nor `rowFailed`. The reason
+        /// travels in `error`. Terminal for its path: a skipped row must never be left in
+        /// `rowStarted`.
+        static func rowSkipped(_ path: String, _ reason: String) -> PathEvent {
+            PathEvent(kind: .rowSkipped, path: path, output: nil, index: nil, total: nil,
+                      durationMS: 0, firedTag: nil, edge: nil, code: nil, message: nil,
+                      error: reason, staged: nil, transcript: nil, entry: nil, entryIndex: nil,
                       parkPrompt: nil, parkPolicy: nil, context: nil)
         }
         static func cacheHit(_ path: String) -> PathEvent {
@@ -611,7 +622,16 @@ nonisolated enum FlowInterpreter {
                                                         context: contextArg,
                                                         usedFlowContent: childUsedContent)
                 } catch {
-                    if onError == "skip" { throw ItemFailed(reason: String(describing: error)) }
+                    if onError == "skip" {
+                        // SPEC-Q216 (DA-10): emit a terminal event for this row before
+                        // unwinding to `_run_each`'s per-item catch — the UI must be able to
+                        // leave `rowStarted` and show *why* the item was dropped, not a dot
+                        // stuck on ●. Reference parity: the Python raises `_ItemFailed` with
+                        // no per-row event; logged as SPEC-Q216 for it to mirror.
+                        let reason = String(describing: error)
+                        events.append(PathEvent.rowSkipped(execPath, reason))
+                        throw ItemFailed(reason: reason)
+                    }
                     events.append(PathEvent.rowFailed(execPath, String(describing: error)))
                     throw StopRun()
                 }
