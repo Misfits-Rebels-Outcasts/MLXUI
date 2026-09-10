@@ -581,26 +581,11 @@ struct FlowListView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            Menu {
-                Button("Clear Cache & Results", systemImage: "trash") {
-                    confirmClearAll()
-                }
-                .disabled(!hasAnythingToClear)
-                // CFM-R10-FIX-6: an Improvise row's workdir can be restored to its pre-run
-                // snapshot (Direct build only — the App Store tier refuses Improvise).
-                if session.hasImprovise(doc) {
-                    Button("Undo Improvise", systemImage: "arrow.uturn.backward") {
-                        do {
-                            let sentence = try session.undoImprovise(
-                                doc: doc,
-                                workspace: flowWorkspace,
-                                flowID: locationID)
-                            cacheClearNotice = sentence
-                        } catch {
-                            cacheClearNotice = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
-                        }
-                    }
-                }
+            // CACHE-Q: the ⋯ menu is shared with `FlowEditorView` (a working My Workflows flow
+            // opens there, not here). FlowListView appends "Remove Flow…" for a user flow.
+            FlowMaintenanceMenu(session: session, doc: doc, workspace: flowWorkspace,
+                                flowID: locationID,
+                                onNotice: { cacheClearNotice = $0 }) {
                 // CFM-R12-1: a user's own flow can be removed from disk — the bundled gallery
                 // flows never can. Disabled mid-run so a deleting folder never breaks a run.
                 if source == .user {
@@ -610,45 +595,17 @@ struct FlowListView: View {
                     }
                     .disabled(session.isRunning)
                 }
-            } label: {
-                Image(systemName: "ellipsis.circle")
             }
-            .menuStyle(.borderlessButton)
-            .help("Clear cached results and reset the run display")
         }
         .padding(16)
-        .confirmationDialog("Clear cached results?", isPresented: $showClearAllConfirm) {
-            Button("Clear Cache & Results", role: .destructive) { clearAll(doc: doc) }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The saved row outputs are deleted and every dot resets to gray. The next Run recomputes everything from scratch — this can take minutes.")
-        }
     }
 
-    @State private var showClearAllConfirm = false
+    /// The Clear Cache & Results / Undo Improvise result sentence. Set by `FlowMaintenanceMenu`
+    /// via `onNotice`; write-only here today, as it always has been (surfacing it is a
+    /// separate follow-on — CACHE-Q journal).
     @State private var cacheClearNotice: String?
     /// CFM-R10-Events: the arming session for trigger flows.
     @State private var armSession = FlowArmSession()
-
-    /// Whether there's anything for Clear Cache & Results to clear (results shown or a store).
-    private var hasAnythingToClear: Bool {
-        session.hasRunResults || FlowCacheStore.shared.entryCount > 0
-    }
-
-    /// The single destructive reset (R11-2 UX): drop the run display *and* the saved
-    /// outputs, so the next Run is a genuinely fresh compute. Warm engines are kept — they
-    /// are a performance optimization, not results.
-    private func clearAll(doc: FlowDocument) {
-        let cleared = session.clearCache()
-        session.clearRun(doc: doc)
-        if let cleared, cleared > 0 {
-            cacheClearNotice = "Cleared \(cleared) cached output\(cleared == 1 ? "" : "s"); dots reset."
-        } else {
-            cacheClearNotice = "Dots reset. The cache was already empty."
-        }
-    }
-
-    private func confirmClearAll() { showClearAllConfirm = true }
 
     // MARK: - Run
 

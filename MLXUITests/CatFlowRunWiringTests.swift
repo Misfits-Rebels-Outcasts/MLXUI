@@ -380,6 +380,20 @@ struct CatFlowRunWiringTests {
         }
     }
 
+    // CACHE-Q: the ⋯ menu is now `FlowMaintenanceMenu`, shared by `FlowListView` and
+    // `FlowEditorView` (a working My Workflows flow opens in the editor, which had no such
+    // control). Its result sentence is the one string both views depend on.
+    @Test func maintenanceMenuClearNoticeReadsForEveryCount() {
+        #expect(FlowMaintenance.clearNotice(clearedCount: nil)
+            == "Dots reset. The cache was already empty.")
+        #expect(FlowMaintenance.clearNotice(clearedCount: 0)
+            == "Dots reset. The cache was already empty.")
+        #expect(FlowMaintenance.clearNotice(clearedCount: 1)
+            == "Cleared 1 cached output; dots reset.")
+        #expect(FlowMaintenance.clearNotice(clearedCount: 4)
+            == "Cleared 4 cached outputs; dots reset.")
+    }
+
     @Test func clearCacheDropsStoredAssets() async throws {
         // Put something into a temp store-backed session, then clear it.
         let base = FileManager.default.temporaryDirectory

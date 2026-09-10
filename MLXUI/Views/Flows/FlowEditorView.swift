@@ -236,6 +236,12 @@ struct FlowEditorView: View {
                 Label("Reveal in Finder", systemImage: "folder")
             }
             .disabled(model.savedURL == nil)
+            // CACHE-Q: the same ⋯ menu the gallery detail carries — a working My Workflows
+            // flow opens here, and DA-5's determinism check / DA-10's skip test need a way to
+            // force a cold re-run of an *unchanged* flow. Editing a row already changes its
+            // cache key, so this is a verification affordance, not a correctness fix.
+            FlowMaintenanceMenu(session: session, doc: model.document,
+                                workspace: model.workspace, flowID: model.flowID)
         }
         .padding(12)
     }
