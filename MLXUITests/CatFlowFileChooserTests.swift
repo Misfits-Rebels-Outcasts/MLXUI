@@ -223,6 +223,50 @@ struct CatFlowFileListTests {
         #expect(FlowRowInspectorView.currentPickStatus(token: "receipts/", entries: entries, flowDir: flowDir) == .missing)
     }
 
+    // MARK: - tokensMatch (owner-reported, 2026-09-11): a bare seeded folder name must not
+    // read as "not in this list" against the same folder's slash-terminated listed token
+
+    @Test func tokensMatchIgnoresATrailingSlashEitherSide() {
+        #expect(FlowRowInspectorView.tokensMatch("sample-images", "sample-images/"))
+        #expect(FlowRowInspectorView.tokensMatch("sample-images/", "sample-images"))
+        #expect(FlowRowInspectorView.tokensMatch("sample-images/", "sample-images/"))
+        #expect(FlowRowInspectorView.tokensMatch("draft.txt", "draft.txt"))
+        #expect(!FlowRowInspectorView.tokensMatch("receipts", "receipts/jan"))
+    }
+
+    @Test func aBareSeededFolderTokenIsRecognizedAsInList() throws {
+        // Reproduces the exact report: a freshly-added `Read Images` row seeds the bare
+        // "sample-images" (no trailing slash, predating FILE-1's convention) while the
+        // in-flow list — built from the real directory — names it "sample-images/". Before
+        // `tokensMatch`, these compared unequal and the current pick was wrongly flagged
+        // "not in this list" alongside the real, unmarked listed entry.
+        let (_, flowDir) = try tempFlowDir()
+        try FileManager.default.createDirectory(at: flowDir.appendingPathComponent("sample-images"),
+                                                 withIntermediateDirectories: true)
+        let entries = FlowRowInspectorView.inFlowEntries(task: "Read Images", flowDir: flowDir, wantsFolder: true)
+
+        #expect(entries.map(\.token) == ["sample-images/"])
+        #expect(FlowRowInspectorView.currentPickStatus(token: "sample-images", entries: entries, flowDir: flowDir) == .inList)
+    }
+
+    // MARK: - canReveal: every real folder row gets "Reveal in Finder" (owner, 2026-09-11)
+
+    @Test func canRevealIsTrueForAnyRealFolderRow() {
+        let listed = FlowRowInspectorView.InFlowEntry(token: "receipts/", isDirectory: true, count: 3)
+        let flaggedButPresent = FlowRowInspectorView.InFlowEntry(token: "receipts/jan/", isDirectory: true,
+                                                                  count: nil, note: "not in this list")
+        #expect(FlowRowInspectorView.canReveal(listed))
+        #expect(FlowRowInspectorView.canReveal(flaggedButPresent))
+    }
+
+    @Test func canRevealIsFalseForAFileOrAMissingFolder() {
+        let file = FlowRowInspectorView.InFlowEntry(token: "draft.txt", isDirectory: false, count: nil)
+        let missing = FlowRowInspectorView.InFlowEntry(token: "receipts/", isDirectory: true,
+                                                        count: nil, note: "missing")
+        #expect(!FlowRowInspectorView.canReveal(file))
+        #expect(!FlowRowInspectorView.canReveal(missing))
+    }
+
     // MARK: - "Create a folder here"
 
     @Test func createFolderMakesAnEmptyDirectoryThatResolvesThroughFlowWorkspace() throws {

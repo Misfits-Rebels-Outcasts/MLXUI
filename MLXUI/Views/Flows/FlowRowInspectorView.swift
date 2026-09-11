@@ -448,6 +448,13 @@ struct FlowRowInspectorView: View {
     /// at least one row) then "Add from my Mac…" then "Create a folder here". A fresh row has
     /// nothing to list, and a blank box reads as broken — that's why the list is *absent*
     /// there rather than empty.
+    ///
+    /// **A `.folder` task drops "Add from my Mac…" entirely** (owner, 2026-09-12): Create a
+    /// folder here + the in-flow list's per-row Reveal in Finder already cover bringing
+    /// content in (create, then drag files into the revealed folder), and the panel's own
+    /// "browse an existing folder in from elsewhere" motion doesn't fit that model as
+    /// cleanly. A `.file` task keeps the panel — there's no folder/create equivalent for a
+    /// single new file, so removing it there would leave no way to add one.
     private func chooseFileButton(task: String) -> some View {
         let wantsFolder = (task == "Read Images" || task == "Read Files")
         let flowDir = model.workspace.directory(for: model.flowID)
@@ -462,18 +469,18 @@ struct FlowRowInspectorView: View {
                 inFlowList(entries: entries, currentToken: currentToken, flowDir: flowDir, task: task)
             }
 
-            Button {
-                chooseFile(task: task)
-            } label: {
-                Label(Self.addFromMacLabel(for: task), systemImage: "folder.badge.plus")
-            }
-            .buttonStyle(.plain)
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
-
             if wantsFolder {
                 createFolderControl(flowDir: flowDir)
+            } else {
+                Button {
+                    chooseFile(task: task)
+                } label: {
+                    Label(Self.addFromMacLabel(for: task), systemImage: "folder.badge.plus")
+                }
+                .buttonStyle(.plain)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
             }
         }
     }
@@ -483,10 +490,15 @@ struct FlowRowInspectorView: View {
     /// or a since-deleted one) — the current token shown anyway, flagged, never silently
     /// dropped. Never rendered with zero rows: with `currentToken` non-nil there is always at
     /// least the current pick to show, in the list or flagged.
+    ///
+    /// Matching is **slash-insensitive** (`Self.tokensMatch`): the `Read Images`/`Read Files`
+    /// sample seed (and any flow written before FILE-2) can carry a bare folder name with no
+    /// trailing `/`, which is the same folder a listed entry names *with* one — comparing the
+    /// raw strings would wrongly flag it as "not in this list" (owner-reported, 2026-09-11).
     private func inFlowList(entries: [FlowRowInspectorView.InFlowEntry], currentToken: String,
                             flowDir: URL, task: String) -> some View {
         var rows = entries
-        let currentIsListed = entries.contains { $0.token == currentToken }
+        let currentIsListed = entries.contains { Self.tokensMatch($0.token, currentToken) }
         if !currentIsListed {
             // Owner ruling, 2026-09-11 (open question 2): a stored path that isn't one of the
             // flat entries — nested from before FILE-2, or since-deleted — is still shown, as
@@ -496,26 +508,14 @@ struct FlowRowInspectorView: View {
             rows.insert(.init(token: currentToken, isDirectory: currentToken.hasSuffix("/"),
                               count: nil, note: note), at: 0)
         }
-        let emptyCurrent = entries.first { $0.token == currentToken && $0.isDirectory && $0.count == 0 }
 
         return VStack(alignment: .leading, spacing: 4) {
             Text("In this flow")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             ForEach(rows, id: \.token) { entry in
-                inFlowRow(entry, isCurrent: entry.token == currentToken, task: task)
-            }
-            if emptyCurrent != nil {
-                HStack(spacing: 6) {
-                    Text("This folder is empty.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button("Reveal in Finder") {
-                        NSWorkspace.shared.activateFileViewerSelecting([flowDir.appendingPathComponent(currentToken)])
-                    }
-                    .buttonStyle(.link)
-                    .font(.caption)
-                }
+                inFlowRow(entry, isCurrent: Self.tokensMatch(entry.token, currentToken),
+                         flowDir: flowDir, task: task)
             }
         }
         .padding(8)
@@ -524,33 +524,61 @@ struct FlowRowInspectorView: View {
 
     /// One row of the "In this flow" list. The current pick is disabled — tapping it again is
     /// a no-op — everything else is a one-tap switch (no confirmation: it's a settings edit
-    /// like any other in this pane, not a destructive one).
+    /// like any other in this pane, not a destructive one). Every **folder** row (owner,
+    /// 2026-09-11) carries its own "Reveal in Finder" — the container is awkward to reach any
+    /// other way, so every folder gets the same escape hatch a freshly-created one does, not
+    /// only the current one when it happens to be empty.
     private func inFlowRow(_ entry: FlowRowInspectorView.InFlowEntry, isCurrent: Bool,
-                           task: String) -> some View {
-        Button {
-            model.setPath(entry.token, for: rowID)
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: isCurrent ? "largecircle.fill.circle" : "circle")
-                    .foregroundStyle(isCurrent ? Color.accentColor : .secondary)
-                Text(entry.token)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer()
-                if let count = entry.count {
-                    Text("\(count) \(Self.countNoun(task: task, count: count))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if let note = entry.note {
-                    Text(note)
-                        .font(.caption)
-                        .foregroundStyle(.orange)
+                           flowDir: URL, task: String) -> some View {
+        HStack(spacing: 6) {
+            Button {
+                model.setPath(entry.token, for: rowID)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: isCurrent ? "largecircle.fill.circle" : "circle")
+                        .foregroundStyle(isCurrent ? Color.accentColor : .secondary)
+                    Text(entry.token)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if let count = entry.count {
+                        Text("\(count) \(Self.countNoun(task: task, count: count))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let note = entry.note {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 }
             }
+            .buttonStyle(.plain)
+            .disabled(isCurrent)
+            Spacer()
+            // A "missing" flagged row names nothing real to reveal; every other folder does.
+            if Self.canReveal(entry) {
+                Button("Reveal in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([flowDir.appendingPathComponent(entry.token)])
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+            }
         }
-        .buttonStyle(.plain)
-        .disabled(isCurrent)
+    }
+
+    /// A directory token compares equal regardless of a trailing `/` — the `Read Images`/
+    /// `Read Files` sample seed predates FILE-1's trailing-slash convention, and any flow
+    /// written before FILE-2 could carry the same bare form. `nonisolated` so it's testable.
+    nonisolated static func tokensMatch(_ a: String, _ b: String) -> Bool {
+        func strip(_ s: String) -> String { s.hasSuffix("/") ? String(s.dropLast()) : s }
+        return strip(a) == strip(b)
+    }
+
+    /// Whether an "In this flow" row gets a "Reveal in Finder" link (owner, 2026-09-11: every
+    /// folder row, not only the current one when it's empty). A `"missing"`-flagged row names
+    /// nothing real on disk to reveal.
+    nonisolated static func canReveal(_ entry: InFlowEntry) -> Bool {
+        entry.isDirectory && entry.note != "missing"
     }
 
     /// "Create a folder here" (owner approved 2026-09-11): an empty subfolder in the flow,
@@ -796,7 +824,7 @@ struct FlowRowInspectorView: View {
 
     nonisolated static func currentPickStatus(token: String, entries: [InFlowEntry],
                                               flowDir: URL) -> CurrentPickStatus {
-        if entries.contains(where: { $0.token == token }) { return .inList }
+        if entries.contains(where: { tokensMatch($0.token, token) }) { return .inList }
         let url = flowDir.appendingPathComponent(token)
         return FileManager.default.fileExists(atPath: url.path) ? .notInList : .missing
     }
