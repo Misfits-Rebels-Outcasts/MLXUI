@@ -100,6 +100,9 @@ struct FlowRowInspectorView: View {
                             saveFilenameField(row)
                         }
                         inputs(row)
+                        if let task = row.task, isHumanClass(task) {
+                            humanWaitPolicySection(task, row: row)
+                        }
                         settingsSection(row)
                         if let task = row.task, hasPathSetting(task) {
                             chooseFileButton(task: task)
@@ -412,6 +415,10 @@ struct FlowRowInspectorView: View {
     /// machine-readable catalog for them, so this is a small curated table).
     nonisolated static func knownSettingKeys(for task: String) -> [String] {
         switch task {
+        // HU-3: lets the generic "Add a setting…" menu repair an imported flow that already
+        // carries `timeout=`/`default=` (or add `wait=forever` by hand), on either edition —
+        // the dedicated picker above is Direct-only, but this fallback text editor isn't.
+        case "Ask Human", "Human Input": return ["wait", "timeout", "default"]
         case "Transcribe": return ["lang", "timestamps"]
         case "Split": return ["by", "chunk_size", "overlap"]
         case "Speak": return ["voice", "lang", "speed"]
@@ -991,6 +998,98 @@ struct FlowRowInspectorView: View {
 
     private func isModelClass(_ task: String) -> Bool {
         TaskCatalog.get(task)?.taskClass == .model
+    }
+
+    private func isHumanClass(_ task: String) -> Bool {
+        TaskCatalog.get(task)?.taskClass == .human
+    }
+
+    // MARK: - HU-2: "If nobody answers"
+
+    /// A human row's waiting policy, above the generic Settings section. The App Store build
+    /// (Ruling 3, 2026-09-11: "Wait-forever only in App Store") gets a single read-only line —
+    /// there is nothing to author, but an imported flow's own `timeout=`/`default=` still
+    /// displays honestly (`FlowEditorModel.waitPolicyDescription`, HU-3). The Direct build gets
+    /// a picker between parking forever and giving up after a duration.
+    private func humanWaitPolicySection(_ task: String, row: Row) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("If nobody answers")
+                .font(.subheadline.weight(.semibold))
+            if CapabilityGate.isAppStoreBuild {
+                Text(FlowEditorModel.waitPolicyDescription(settings: row.settings))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                directHumanWaitPolicyControl(task, row: row)
+            }
+        }
+    }
+
+    /// Direct-build-only: a segmented picker between the two policies, mutually exclusive
+    /// (`FlowEditorModel.setHumanWaitPolicy` clears the other in the same commit). Switching
+    /// to "Give up after…" reveals a duration field and, for `Ask Human`, a **picker over the
+    /// row's declared tags** (never free text — a typed default outside the tag set is exactly
+    /// what E502 exists to catch). `Human Input` doesn't branch, so the spec fixes its default
+    /// to `unchanged` (§10.1) and this shows it as a fixed label, not a field.
+    private func directHumanWaitPolicyControl(_ task: String, row: Row) -> some View {
+        let settings = FlowSettings(row.settings)
+        let isWaitForever = settings.value(for: "wait") == "forever"
+        let tags = row.tags ?? []
+        return VStack(alignment: .leading, spacing: 6) {
+            Picker("", selection: Binding<Bool>(
+                get: { isWaitForever },
+                set: { waitForever in
+                    if waitForever {
+                        model.setHumanWaitPolicy(.waitForever, for: rowID)
+                    } else {
+                        let dflt = (task == "Human Input") ? "unchanged" : (tags.first ?? "")
+                        model.setHumanWaitPolicy(
+                            .giveUpAfter(timeout: settings.value(for: "timeout") ?? "", default: dflt),
+                            for: rowID)
+                    }
+                }
+            )) {
+                Text("Wait until answered").tag(true)
+                Text("Give up after…").tag(false)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            if !isWaitForever {
+                HStack(spacing: 6) {
+                    Text("timeout")
+                        .font(.caption.monospaced())
+                        .frame(width: 90, alignment: .trailing)
+                    TextField("e.g. 10m", text: Binding(
+                        get: { settings.value(for: "timeout") ?? "" },
+                        set: { model.setSetting(key: "timeout", value: $0, for: rowID) }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .font(.caption)
+                }
+                HStack(spacing: 6) {
+                    Text("default")
+                        .font(.caption.monospaced())
+                        .frame(width: 90, alignment: .trailing)
+                    if task == "Human Input" {
+                        Text("unchanged")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Picker("", selection: Binding(
+                            get: { settings.value(for: "default") ?? tags.first ?? "" },
+                            set: { model.setSetting(key: "default", value: $0, for: rowID) }
+                        )) {
+                            ForEach(tags, id: \.self) { tag in
+                                Text(tag).tag(tag)
+                            }
+                        }
+                        .labelsHidden()
+                        .disabled(tags.isEmpty)
+                    }
+                }
+            }
+        }
     }
 
     /// OCP-2-2 — which per-run prompt control (if any) this row gets.

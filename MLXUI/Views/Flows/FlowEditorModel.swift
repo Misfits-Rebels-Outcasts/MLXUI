@@ -222,7 +222,7 @@ final class FlowEditorModel {
     /// gets a bundled sample copied into the flow folder and its settings set to the bare
     /// file name (CFM-R11-0b), so the row runs with no further input.
     func add(task name: String) {
-        let seedValue = seedSample(for: name)
+        let seedValue = seedSample(for: name) ?? Self.defaultSettings(forTask: name)
         commitChange {
             let before = document.rows
             let desc = TaskCatalog.get(name)
@@ -269,7 +269,7 @@ final class FlowEditorModel {
 
     /// Add a child task into a block, below the selected child if one is selected inside.
     func addChild(task name: String, into blockID: UUID) {
-        let seedValue = seedSample(for: name)
+        let seedValue = seedSample(for: name) ?? Self.defaultSettings(forTask: name)
         commitChange {
             let before = document.rows
             let desc = TaskCatalog.get(name)
@@ -280,6 +280,22 @@ final class FlowEditorModel {
             insertChild(newRow, into: blockID, below: selectedRowID)
             selectedRowID = newRow.id
             reaimClauseTargets(before: before, after: document.rows)
+        }
+    }
+
+    /// HU-1 — a freshly added human row would otherwise show **E501** (`FlowValidator
+    /// .checkHumanRows`) the moment it's added, with no field on it yet to fix that from
+    /// (`knownSettingKeys` had no case for either human task until HU-3). `wait=forever` is
+    /// the right seed because the interpreter already treats a GUI run this way
+    /// (`FlowInterpreter.swift:257` parks a `timeout=` row "like `wait=forever`" since a GUI
+    /// has a person in front of it) — seeding it explicitly just makes that assumption
+    /// visible and editable instead of implicit. Kept separate from `seedSample` (which
+    /// exists to copy **sample assets**, not to answer a validator check) and merged with it
+    /// at the call sites, per the backlog's instruction not to overload it.
+    nonisolated static func defaultSettings(forTask task: String) -> String? {
+        switch task {
+        case "Ask Human", "Human Input": return "wait=forever"
+        default: return nil
         }
     }
 
@@ -452,6 +468,48 @@ final class FlowEditorModel {
                 row.settings = FlowSettingsEditor.replace(key: key, value: value, in: row.settings)
             }
         }
+    }
+
+    /// HU-2 — a human row's waiting policy (check 6, E501): either park until answered
+    /// (`wait=forever`) or give up after a duration and proceed as a declared default
+    /// (`timeout=…`, `default=…`). The two are mutually exclusive on the wire, so writing one
+    /// clears the other here, in one `commitChange`, so switching the picker is one undo step.
+    nonisolated enum HumanWaitPolicy: Equatable {
+        case waitForever
+        case giveUpAfter(timeout: String, default: String)
+    }
+
+    func setHumanWaitPolicy(_ policy: HumanWaitPolicy, for rowID: UUID) {
+        commitChange {
+            replaceRow(id: rowID) { row in
+                switch policy {
+                case .waitForever:
+                    row.settings = FlowSettingsEditor.replace(key: "wait", value: "forever", in: row.settings)
+                    row.settings = FlowSettingsEditor.replace(key: "timeout", value: nil, in: row.settings)
+                    row.settings = FlowSettingsEditor.replace(key: "default", value: nil, in: row.settings)
+                case .giveUpAfter(let timeout, let dflt):
+                    row.settings = FlowSettingsEditor.replace(key: "wait", value: nil, in: row.settings)
+                    row.settings = FlowSettingsEditor.replace(key: "timeout", value: timeout, in: row.settings)
+                    row.settings = FlowSettingsEditor.replace(key: "default", value: dflt, in: row.settings)
+                }
+            }
+        }
+    }
+
+    /// HU-2's App Store read-only line, and HU-3's repair-path invariant: this reads what the
+    /// row **actually says**, never assuming `wait=forever` — an imported flow authored on the
+    /// Direct build with `timeout=`/`default=` must keep displaying that policy, not have it
+    /// silently overridden by the fresh-row default (Ruling 3 restricts *authoring* in the App
+    /// Store build, never *reading*).
+    nonisolated static func waitPolicyDescription(settings raw: String?) -> String {
+        let settings = FlowSettings(raw)
+        if let timeout = settings.value(for: "timeout"), let dflt = settings.value(for: "default") {
+            return "Gives up after \(timeout) and proceeds as \"\(dflt)\"."
+        }
+        if settings.value(for: "wait") == "forever" {
+            return "Waits until you answer."
+        }
+        return "No waiting policy is set — add `wait=forever` or `timeout=`/`default=` in Settings below."
     }
 
     /// Set the row's instruction — the quoted "What should it do?" text (answer `a5`).
@@ -670,7 +728,11 @@ final class FlowEditorModel {
                     return "Row \(path) needs a model — pick one that runs on this Mac."
                 }
             }
-            if desc.taskClass != .instant, desc.taskClass != .model {
+            // HU: `.human` used to be in this "can't complete" bucket, but CFM-R10-Human
+            // (47929d1) gave Ask Human/Human Input a real runtime path (park, or resolve to a
+            // declared default on timeout) without this stale check being told — every fresh
+            // human row showed a false "can't complete" warning underneath, on top of E501.
+            if desc.taskClass != .instant, desc.taskClass != .model, desc.taskClass != .human {
                 return "Row \(path) is a \(desc.taskClass.rawValue) row, which this version of Flows can't complete."
             }
             // ES-UI-1: `Extract Structured`'s settings string *is* its column list. An empty or
