@@ -3,7 +3,7 @@ import Observation
 import UniformTypeIdentifiers
 
 @Observable
-final class AppState {
+final class AppState { //appstatecomeback
     // ── Optional domain hiding ──────────────────────────────────────────────────
     /// Set to `true` to hide the "Video Generation" domain (and every model listed
     /// under it, e.g. WAN 2.1) from the catalog UI. Flip back to `false` to restore.
@@ -31,7 +31,7 @@ final class AppState {
     /// page: the section still renders, but every control in it is non-interactive —
     /// Import Flow, the New Flow badge, and each saved flow's open/export/remove. The two
     /// bundled shelves — Basic Gallery and Advance Gallery — are unaffected.
-    static let disableMyWorkflows = false
+    static let disableMyWorkflows = false //cbx
 
     /// Set to `true` to hide the "My Workspace" shelf (the New Workspace badge and every
     /// workspace, bundled or saved) on the Automate → AI Workflows page. Flip to `false`
@@ -46,12 +46,12 @@ final class AppState {
     /// Set to `true` to hide the "Qwen3.5-9B" model badge from Browse → Chat & Text. Only
     /// the text (`llm`) card is hidden — "Qwen3.5-9B Vision" under Vision is a separate
     /// entry and is unaffected. Mirrors `hideVideoGeneration`.
-    static let hideQwen359B = true
+    static let hideQwen359B = false
 
     /// Set to `true` to hide the "Advance Gallery" shelf (every bundled flow that isn't
     /// basic) on the Automate → AI Workflows page. My Workflows and Basic Gallery still
     /// render.
-    static let hideAdvanceGallery = true
+    static let hideAdvanceGallery = false //cbx
 
     /// Hide individual gallery flows (badges) by gallery number. Numbers are the
     /// `_metadata.json` `number` field (1–71 today), stable across renames. Basic Gallery's
