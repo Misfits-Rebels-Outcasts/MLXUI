@@ -207,6 +207,11 @@ nonisolated enum FlowError: Error, CustomStringConvertible, Equatable {
     case invalidSettings(row: String, setting: String, detail: String)
     case budgetExceeded(row: String, visitsLeq: Int)
     case missingRerankQuery(row: String)
+    /// FILE-2 / SPEC-Q219: `Read Images` / `Read Files` resolved a real folder but it held
+    /// nothing matching — an `<each>` over that would silently run zero times and the flow
+    /// would complete green having done nothing. Deliberate divergence from the Python
+    /// reference, which returns an empty list here; see SPEC-Q219.
+    case emptyFolder(row: String, path: String)
 
     var description: String {
         switch self {
@@ -240,6 +245,8 @@ nonisolated enum FlowError: Error, CustomStringConvertible, Equatable {
             return "Row \(row) hit its budget of \(visitsLeq) visits with `on_budget=fail` — no forced edge to take."
         case .missingRerankQuery(let row):
             return "\(row) needs a query — e.g. Rerank BGE Reranker; query=\"...\"."
+        case .emptyFolder(let row, let path):
+            return "\(row) found nothing to read in '\(path)' — add files there, or point the row at a different folder."
         }
     }
 }

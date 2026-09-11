@@ -139,6 +139,13 @@ nonisolated struct ReadImagesTool: AssetStage {
                 return imageExts.contains(url.pathExtension.lowercased())
             }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        // FILE-2 / SPEC-Q219: a folder that resolved fine but yielded nothing must say so — an
+        // enclosing `<each>` over an empty list runs zero times and the flow completes green
+        // having done nothing. Deliberate divergence from `tools/files.py::read_images`, which
+        // returns an empty list here.
+        guard !files.isEmpty else {
+            throw FlowError.emptyFolder(row: "Read Images", path: folder.path)
+        }
         progress(1.0)
         return Asset(items: files.map { Item(kind: .image, value: nil, path: $0, sourceText: nil) })
     }
@@ -182,6 +189,13 @@ nonisolated struct ReadFilesTool: AssetStage {
         }
         let matched = files.filter { GlobMatch.matches($0.lastPathComponent, glob: pattern) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        // FILE-2 / SPEC-Q219: a folder that resolved fine but yielded nothing must say so — an
+        // enclosing `<each>` over an empty list runs zero times and the flow completes green
+        // having done nothing. Deliberate divergence from `tools/files.py::read_files`, which
+        // returns an empty list here.
+        guard !matched.isEmpty else {
+            throw FlowError.emptyFolder(row: "Read Files", path: folder.path)
+        }
         progress(1.0)
         return Asset(items: matched.map { Item(kind: .file, value: nil, path: $0, sourceText: nil) })
     }

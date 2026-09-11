@@ -114,3 +114,157 @@ struct CatFlowFileChooserTests {
         #expect(FlowRowInspectorView.relativePath(of: flowDir, under: flowDir) == nil, "the folder itself is not 'inside'")
     }
 }
+
+/// FILE-2 (`RSI/DelegateDeciderBacklog.md`, Addendum 9) — the in-flow list, "Create a folder
+/// here", and the pieces that keep a stored path honestly represented even when it isn't one
+/// of the flat picks.
+struct CatFlowFileListTests {
+
+    private func tempFlowDir() throws -> (root: URL, flowDir: URL) {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("file2-\(UUID().uuidString)")
+        let flowDir = root.appendingPathComponent("test-flow", isDirectory: true)
+        try FileManager.default.createDirectory(at: flowDir, withIntermediateDirectories: true)
+        return (root, flowDir)
+    }
+
+    private func seed(_ dir: URL, files: [String: String]) throws {
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        for (name, body) in files {
+            try body.write(to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
+        }
+    }
+
+    // MARK: - the list excludes what it should, for both task shapes
+
+    @Test func folderTaskListsOnlyRealSubdirectoriesNotTheCatOrDotfilesOrFiles() throws {
+        let (_, flowDir) = try tempFlowDir()
+        try seed(flowDir, files: ["ReceiptsToExpense.cat": "mlxflow 0.8", "notes.txt": "hi"])
+        try FileManager.default.createDirectory(at: flowDir.appendingPathComponent(".blobs"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: flowDir.appendingPathComponent("used"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: flowDir.appendingPathComponent("receipts"), withIntermediateDirectories: true)
+
+        let entries = FlowRowInspectorView.inFlowEntries(task: "Read Images", flowDir: flowDir, wantsFolder: true)
+
+        #expect(entries.map(\.token) == ["receipts/"], "the .cat, .blobs/, used/ and the plain file are all excluded")
+    }
+
+    @Test func fileTaskListsOnlyMatchingFilesNotFoldersOrTheCat() throws {
+        let (_, flowDir) = try tempFlowDir()
+        try seed(flowDir, files: ["DraftMemo.cat": "mlxflow 0.8", "draft.txt": "hi", "photo.png": "not text"])
+        try FileManager.default.createDirectory(at: flowDir.appendingPathComponent("receipts"), withIntermediateDirectories: true)
+
+        let entries = FlowRowInspectorView.inFlowEntries(task: "Read Text", flowDir: flowDir, wantsFolder: false)
+
+        #expect(entries.map(\.token) == ["draft.txt"], "the .cat, the folder, and the non-text file are all excluded")
+    }
+
+    @Test func aTaskWithNoUTTypeFilterListsEveryRootFile() throws {
+        let (_, flowDir) = try tempFlowDir()
+        try seed(flowDir, files: ["a.bin": "x", "b.dat": "y"])
+
+        let entries = FlowRowInspectorView.inFlowEntries(task: "Read Index", flowDir: flowDir, wantsFolder: false)
+
+        #expect(Set(entries.map(\.token)) == ["a.bin", "b.dat"])
+    }
+
+    // MARK: - picking from the list writes the identical token FILE-1's guard writes
+
+    @Test func theListedTokenMatchesRelativePathForTheSameFile() throws {
+        let (_, flowDir) = try tempFlowDir()
+        try seed(flowDir, files: ["draft.txt": "hi"])
+        let fileURL = flowDir.appendingPathComponent("draft.txt")
+
+        let entries = FlowRowInspectorView.inFlowEntries(task: "Read Text", flowDir: flowDir, wantsFolder: false)
+        let listedToken = try #require(entries.first?.token)
+
+        #expect(listedToken == FlowRowInspectorView.relativePath(of: fileURL, under: flowDir))
+    }
+
+    @Test func theListedFolderTokenMatchesRelativePathAndCopiesNothing() throws {
+        let (_, flowDir) = try tempFlowDir()
+        let receipts = flowDir.appendingPathComponent("receipts", isDirectory: true)
+        try seed(receipts, files: ["a.png": "A"])
+
+        let entries = FlowRowInspectorView.inFlowEntries(task: "Read Images", flowDir: flowDir, wantsFolder: true)
+        let listedToken = try #require(entries.first?.token)
+        #expect(listedToken == FlowRowInspectorView.relativePath(of: receipts, under: flowDir))
+
+        // Picking it goes through the same `copyIn`/relativePath seam the panel path uses —
+        // same-path, so it copies nothing (FILE-1's guard, unaffected).
+        let stored = try FlowRowInspectorView.copyIn(receipts, toFlowDir: flowDir)
+        #expect(stored == listedToken)
+        #expect(try String(contentsOf: receipts.appendingPathComponent("a.png"), encoding: .utf8) == "A")
+    }
+
+    // MARK: - a stored path not in the flat list is flagged, never dropped (owner ruling, 2026-09-11)
+
+    @Test func currentPickStatusIsInListWhenPresent() throws {
+        let (_, flowDir) = try tempFlowDir()
+        try FileManager.default.createDirectory(at: flowDir.appendingPathComponent("receipts"), withIntermediateDirectories: true)
+        let entries = FlowRowInspectorView.inFlowEntries(task: "Read Images", flowDir: flowDir, wantsFolder: true)
+
+        #expect(FlowRowInspectorView.currentPickStatus(token: "receipts/", entries: entries, flowDir: flowDir) == .inList)
+    }
+
+    @Test func currentPickStatusIsNotInListForANestedPathThatStillExists() throws {
+        let (_, flowDir) = try tempFlowDir()
+        try FileManager.default.createDirectory(at: flowDir.appendingPathComponent("receipts/jan"), withIntermediateDirectories: true)
+        // FLAT: `inFlowEntries` never sees `receipts/jan/` — only its parent `receipts/`.
+        let entries = FlowRowInspectorView.inFlowEntries(task: "Read Images", flowDir: flowDir, wantsFolder: true)
+
+        #expect(FlowRowInspectorView.currentPickStatus(token: "receipts/jan/", entries: entries, flowDir: flowDir) == .notInList)
+    }
+
+    @Test func currentPickStatusIsMissingForADeletedPath() throws {
+        let (_, flowDir) = try tempFlowDir()
+        let entries = FlowRowInspectorView.inFlowEntries(task: "Read Images", flowDir: flowDir, wantsFolder: true)
+
+        #expect(FlowRowInspectorView.currentPickStatus(token: "receipts/", entries: entries, flowDir: flowDir) == .missing)
+    }
+
+    // MARK: - "Create a folder here"
+
+    @Test func createFolderMakesAnEmptyDirectoryThatResolvesThroughFlowWorkspace() throws {
+        let (root, flowDir) = try tempFlowDir()
+
+        let token = try FlowRowInspectorView.createFolder(named: "receipts", in: flowDir)
+        #expect(token == "receipts/")
+
+        let ws = FlowWorkspace(root: root)
+        let resolved = try ws.resolve(token, flowID: "test-flow")
+        var isDir: ObjCBool = false
+        #expect(FileManager.default.fileExists(atPath: resolved.path, isDirectory: &isDir))
+        #expect(isDir.boolValue)
+        let contents = try FileManager.default.contentsOfDirectory(atPath: resolved.path)
+        #expect(contents.isEmpty)
+    }
+
+    @Test func createFolderRefusesACollidingName() throws {
+        let (_, flowDir) = try tempFlowDir()
+        _ = try FlowRowInspectorView.createFolder(named: "receipts", in: flowDir)
+
+        do {
+            _ = try FlowRowInspectorView.createFolder(named: "receipts", in: flowDir)
+            Issue.record("expected throw")
+        } catch let error as FlowFolderCreateError {
+            #expect(error == .alreadyExists("receipts"))
+        } catch {
+            Issue.record("wrong error type: \(error)")
+        }
+    }
+
+    @Test func createFolderRefusesAnEmptyOrPathLikeName() throws {
+        let (_, flowDir) = try tempFlowDir()
+        for badName in ["  ", "a/b"] {
+            do {
+                _ = try FlowRowInspectorView.createFolder(named: badName, in: flowDir)
+                Issue.record("expected throw for '\(badName)'")
+            } catch let error as FlowFolderCreateError {
+                #expect(error == .invalidName)
+            } catch {
+                Issue.record("wrong error type: \(error)")
+            }
+        }
+    }
+}

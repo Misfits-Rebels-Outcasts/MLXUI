@@ -1,6 +1,22 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// FILE-2 — "Create a folder here"'s failure modes. Kept separate from `FlowError` (that one
+/// names a *row*; this names a *user action* in the inspector, before any row runs).
+nonisolated enum FlowFolderCreateError: Error, CustomStringConvertible, Equatable {
+    case invalidName
+    case alreadyExists(String)
+
+    var description: String {
+        switch self {
+        case .invalidName:
+            return "Give the folder a name."
+        case .alreadyExists(let name):
+            return "A folder named '\(name)' already exists in this flow."
+        }
+    }
+}
+
 /// CFM-R9 — the row inspector: edit a row's details without touching text. Bound to one
 /// selected row of the flow editor.
 ///
@@ -412,7 +428,7 @@ struct FlowRowInspectorView: View {
         }
     }
 
-    // MARK: - CFM-R11-0b: the file chooser (copy in, never bookmark)
+    // MARK: - FILE-2: the File section (an in-flow list, a panel only for something new)
 
     /// Whether this row's task takes a path (a `Read *`/`Save *` of a file or folder).
     private func hasPathSetting(_ task: String) -> Bool {
@@ -423,39 +439,174 @@ struct FlowRowInspectorView: View {
         }
     }
 
-    private var currentPathLabel: String {
-        guard let row, let path = FlowSettings(row.settings).pathValue() else {
-            return "Choose a file…"
-        }
-        return path
-    }
+    @State private var creatingFolder = false
+    @State private var newFolderName = ""
 
+    /// FILE-2 (owner-ruled 2026-09-11): two states, and the "In this flow" list is never shown
+    /// empty. **Nothing chosen yet** → "Add from my Mac…" (+ "Create a folder here" for a
+    /// `.folder` task). **Something chosen** → the in-flow list (current pick marked, always
+    /// at least one row) then "Add from my Mac…" then "Create a folder here". A fresh row has
+    /// nothing to list, and a blank box reads as broken — that's why the list is *absent*
+    /// there rather than empty.
     private func chooseFileButton(task: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let wantsFolder = (task == "Read Images" || task == "Read Files")
+        let flowDir = model.workspace.directory(for: model.flowID)
+        let currentToken = row.flatMap { FlowSettings($0.settings).pathValue() }
+
+        return VStack(alignment: .leading, spacing: 6) {
             Text("File")
                 .font(.subheadline.weight(.semibold))
+
+            if let currentToken {
+                let entries = Self.inFlowEntries(task: task, flowDir: flowDir, wantsFolder: wantsFolder)
+                inFlowList(entries: entries, currentToken: currentToken, flowDir: flowDir, task: task)
+            }
+
             Button {
                 chooseFile(task: task)
             } label: {
-                HStack {
-                    Text(currentPathLabel)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Image(systemName: "folder")
-                        .foregroundStyle(.secondary)
-                }
-                .padding(8)
-                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
+                Label(Self.addFromMacLabel(for: task), systemImage: "folder.badge.plus")
             }
             .buttonStyle(.plain)
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
+
+            if wantsFolder {
+                createFolderControl(flowDir: flowDir)
+            }
+        }
+    }
+
+    /// The "In this flow" box: one row per flat entry the task accepts, plus — per the
+    /// owner's ruling on a stored path that isn't one of them (a nested path from before FILE-2,
+    /// or a since-deleted one) — the current token shown anyway, flagged, never silently
+    /// dropped. Never rendered with zero rows: with `currentToken` non-nil there is always at
+    /// least the current pick to show, in the list or flagged.
+    private func inFlowList(entries: [FlowRowInspectorView.InFlowEntry], currentToken: String,
+                            flowDir: URL, task: String) -> some View {
+        var rows = entries
+        let currentIsListed = entries.contains { $0.token == currentToken }
+        if !currentIsListed {
+            // Owner ruling, 2026-09-11 (open question 2): a stored path that isn't one of the
+            // flat entries — nested from before FILE-2, or since-deleted — is still shown, as
+            // its own row, flagged, never silently dropped.
+            let status = Self.currentPickStatus(token: currentToken, entries: entries, flowDir: flowDir)
+            let note = (status == .missing) ? "missing" : "not in this list"
+            rows.insert(.init(token: currentToken, isDirectory: currentToken.hasSuffix("/"),
+                              count: nil, note: note), at: 0)
+        }
+        let emptyCurrent = entries.first { $0.token == currentToken && $0.isDirectory && $0.count == 0 }
+
+        return VStack(alignment: .leading, spacing: 4) {
+            Text("In this flow")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            ForEach(rows, id: \.token) { entry in
+                inFlowRow(entry, isCurrent: entry.token == currentToken, task: task)
+            }
+            if emptyCurrent != nil {
+                HStack(spacing: 6) {
+                    Text("This folder is empty.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Reveal in Finder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([flowDir.appendingPathComponent(currentToken)])
+                    }
+                    .buttonStyle(.link)
+                    .font(.caption)
+                }
+            }
+        }
+        .padding(8)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    /// One row of the "In this flow" list. The current pick is disabled — tapping it again is
+    /// a no-op — everything else is a one-tap switch (no confirmation: it's a settings edit
+    /// like any other in this pane, not a destructive one).
+    private func inFlowRow(_ entry: FlowRowInspectorView.InFlowEntry, isCurrent: Bool,
+                           task: String) -> some View {
+        Button {
+            model.setPath(entry.token, for: rowID)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: isCurrent ? "largecircle.fill.circle" : "circle")
+                    .foregroundStyle(isCurrent ? Color.accentColor : .secondary)
+                Text(entry.token)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                if let count = entry.count {
+                    Text("\(count) \(Self.countNoun(task: task, count: count))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let note = entry.note {
+                    Text(note)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(isCurrent)
+    }
+
+    /// "Create a folder here" (owner approved 2026-09-11): an empty subfolder in the flow,
+    /// the row's path set to it with a trailing `/`, and a nudge to Reveal in Finder once it's
+    /// picked (`inFlowList`'s empty-folder hint) — the container is awkward to reach by hand,
+    /// so dragging files in via Finder is the honest way to fill it.
+    private func createFolderControl(flowDir: URL) -> some View {
+        Group {
+            if creatingFolder {
+                HStack(spacing: 6) {
+                    TextField("Folder name", text: $newFolderName)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.caption)
+                        .onSubmit { createFolder(flowDir: flowDir) }
+                    Button("Create") { createFolder(flowDir: flowDir) }
+                        .disabled(newFolderName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button("Cancel") {
+                        creatingFolder = false
+                        newFolderName = ""
+                    }
+                }
+                .font(.caption)
+            } else {
+                Button {
+                    creatingFolder = true
+                } label: {
+                    Label("Create a folder here", systemImage: "folder.badge.plus")
+                }
+                .buttonStyle(.plain)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 6))
+            }
+        }
+    }
+
+    private func createFolder(flowDir: URL) {
+        do {
+            let token = try Self.createFolder(named: newFolderName, in: flowDir)
+            model.setPath(token, for: rowID)
+            creatingFolder = false
+            newFolderName = ""
+        } catch {
+            model.saveError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
         }
     }
 
     /// R11-0b's rule: the chooser **copies in** — it stores a bare filename, never a
     /// security-scoped bookmark or an absolute path, so the flow folder stays a
     /// self-contained thing that runs after a zip-and-send.
+    ///
+    /// **FILE-2:** no `directoryURL` is set. FILE-1-FIX-1 confirmed a sandboxed `NSOpenPanel`
+    /// cannot be pointed inside the app's container — it runs out of process in Powerbox
+    /// (`com.apple.appkit.xpc.openAndSavePanelService`), which has no access to it. This panel
+    /// is now only for bringing in something *new*, so AppKit's own default location (where the
+    /// user's files actually are) is exactly right, unmodified.
     private func chooseFile(task: String) {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
@@ -464,35 +615,7 @@ struct FlowRowInspectorView: View {
         if let types = Self.utTypes(for: task) {
             panel.allowedContentTypes = types
         }
-        // FILE-1: when the row already names a file, they're adjusting something already
-        // copied in — open the panel at the flow's own folder. On first setup the row has no
-        // path and the images live wherever the user keeps them (Desktop, …); opening inside
-        // the app container would make them navigate out every time, so leave the panel where
-        // AppKit puts it.
-        if let row, FlowSettings(row.settings).pathValue() != nil {
-            let target = model.workspace.directory(for: model.flowID)
-            panel.directoryURL = target
-            // FILE-1-FIX-1 (diagnostic, remove once resolved): the branch fires but the owner
-            // still sees the panel open at Desktop. Log that it was taken, the URL we asked
-            // for, and — after the panel closes — where it actually landed. Leading suspicion
-            // is that a sandboxed NSOpenPanel won't honour a directoryURL inside
-            // ~/Library/Containers/. See journal 2026-252 / backlog FILE-1-FIX-1.
-            #if DEBUG
-            print("[FILE-1-FIX-1] branch taken — directoryURL set to:", target.path,
-                  "| exists:", FileManager.default.fileExists(atPath: target.path))
-            #endif
-        }
-        guard panel.runModal() == .OK, let chosen = panel.url else {
-            #if DEBUG
-            print("[FILE-1-FIX-1] panel cancelled — last directory:",
-                  panel.directoryURL?.path ?? "nil")
-            #endif
-            return
-        }
-        #if DEBUG
-        print("[FILE-1-FIX-1] panel OK — chosen:", chosen.path,
-              "| panel.directoryURL:", panel.directoryURL?.path ?? "nil")
-        #endif
+        guard panel.runModal() == .OK, let chosen = panel.url else { return }
         copyInAndSetPath(chosen)
     }
 
@@ -568,6 +691,132 @@ struct FlowRowInspectorView: View {
         case "Read JSON": return [.json]
         default: return nil
         }
+    }
+
+    /// A short button label naming the kind of thing the panel is for, per task.
+    nonisolated static func addFromMacLabel(for task: String) -> String {
+        switch task {
+        case "Read Images": return "Add images from my Mac…"
+        case "Read Files": return "Add files from my Mac…"
+        case "Read Image": return "Add an image from my Mac…"
+        case "Read Audio": return "Add an audio file from my Mac…"
+        case "Read Text": return "Add a text file from my Mac…"
+        case "Read PDF": return "Add a PDF from my Mac…"
+        case "Read CSV": return "Add a CSV file from my Mac…"
+        case "Read JSON": return "Add a JSON file from my Mac…"
+        default: return "Add from my Mac…"
+        }
+    }
+
+    private static func countNoun(task: String, count: Int) -> String {
+        if task == "Read Images" { return count == 1 ? "image" : "images" }
+        return count == 1 ? "file" : "files"
+    }
+
+    // MARK: - FILE-2: the flow-folder list (flat, task-filtered, no macOS involved)
+
+    /// One entry the in-flow list offers: its flow-relative token — the exact one FILE-1's
+    /// guard writes, trailing `/` on a directory — plus a count for directories and, only for
+    /// the synthesized "current but not listed" row, a flagging note.
+    struct InFlowEntry: Equatable {
+        let token: String
+        let isDirectory: Bool
+        let count: Int?
+        var note: String?
+
+        init(token: String, isDirectory: Bool, count: Int?, note: String? = nil) {
+            self.token = token
+            self.isDirectory = isDirectory
+            self.count = count
+            self.note = note
+        }
+    }
+
+    /// Where a row's stored path stands relative to the flat list — resolves the owner's
+    /// ruling that a stored path never goes unshown, even when it isn't one of the flat picks
+    /// (a nested path from before FILE-2, or a folder/file since deleted).
+    enum CurrentPickStatus: Equatable {
+        case inList
+        case notInList
+        case missing
+    }
+
+    /// Names FILE-2 always skips regardless of task: the flow's own `.cat` (a flow folder
+    /// holds exactly one), dotfiles/dirs (`.blobs`, `.trash`, `.improvise`, …), and the
+    /// `uses:` snapshot directory.
+    nonisolated static func isReservedFlowFolderName(_ name: String) -> Bool {
+        name.hasPrefix(".") || name.hasSuffix(".cat") || name == "used"
+    }
+
+    /// FILE-2's in-flow list contents: directories for a `.folder` task (Read Images / Read
+    /// Files), matching files for a `.file` task — **flat**, no recursion into subfolders
+    /// (owner's ruling; `FlowWorkspace.resolve` supports nesting so this can grow later).
+    /// `nonisolated static` so the filter is testable without a View.
+    nonisolated static func inFlowEntries(task: String, flowDir: URL, wantsFolder: Bool) -> [InFlowEntry] {
+        let fm = FileManager.default
+        guard let contents = try? fm.contentsOfDirectory(
+            at: flowDir, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]
+        ) else { return [] }
+        let types = utTypes(for: task)
+        var entries: [InFlowEntry] = []
+        for url in contents {
+            let name = url.lastPathComponent
+            guard !isReservedFlowFolderName(name) else { continue }
+            let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+            if wantsFolder {
+                guard isDir else { continue }
+                entries.append(InFlowEntry(token: name + "/", isDirectory: true,
+                                           count: countMatchingFiles(in: url, task: task)))
+            } else {
+                guard !isDir else { continue }
+                if let types, !matches(url, types) { continue }
+                entries.append(InFlowEntry(token: name, isDirectory: false, count: nil))
+            }
+        }
+        return entries.sorted { $0.token.localizedStandardCompare($1.token) == .orderedAscending }
+    }
+
+    private nonisolated static func matches(_ url: URL, _ types: [UTType]) -> Bool {
+        guard let fileType = UTType(filenameExtension: url.pathExtension) else { return false }
+        return types.contains { fileType.conforms(to: $0) }
+    }
+
+    /// The count shown beside a directory entry — an estimate for display, not the row's own
+    /// matching logic (a `pattern=` setting on the actual row isn't consulted here).
+    private nonisolated static func countMatchingFiles(in folder: URL, task: String) -> Int {
+        let fm = FileManager.default
+        guard let contents = try? fm.contentsOfDirectory(
+            at: folder, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        ) else { return 0 }
+        let files = contents.filter { !$0.hasDirectoryPath }
+        guard task == "Read Images" else { return files.count }
+        let imageExts: Set<String> = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "tiff"]
+        return files.filter { imageExts.contains($0.pathExtension.lowercased()) }.count
+    }
+
+    nonisolated static func currentPickStatus(token: String, entries: [InFlowEntry],
+                                              flowDir: URL) -> CurrentPickStatus {
+        if entries.contains(where: { $0.token == token }) { return .inList }
+        let url = flowDir.appendingPathComponent(token)
+        return FileManager.default.fileExists(atPath: url.path) ? .notInList : .missing
+    }
+
+    /// "Create a folder here": a fresh, empty subfolder in the flow, named by the user.
+    /// `nonisolated static` so name validation + the create-vs-refuse decision are testable
+    /// without a View. Refuses a name that collides, rather than silently disambiguating one.
+    nonisolated static func createFolder(named rawName: String, in flowDir: URL) throws -> String {
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !name.contains("/"), name != ".", name != ".." else {
+            throw FlowFolderCreateError.invalidName
+        }
+        let fm = FileManager.default
+        try fm.createDirectory(at: flowDir, withIntermediateDirectories: true)
+        let dest = flowDir.appendingPathComponent(name, isDirectory: true)
+        guard !fm.fileExists(atPath: dest.path) else {
+            throw FlowFolderCreateError.alreadyExists(name)
+        }
+        try fm.createDirectory(at: dest, withIntermediateDirectories: false)
+        return name + "/"
     }
 
     // MARK: - R9-5 decisions & budget

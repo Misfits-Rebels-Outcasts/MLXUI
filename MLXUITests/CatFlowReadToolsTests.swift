@@ -101,6 +101,48 @@ struct CatFlowReadToolsTests {
         #expect(names == ["a-1.png", "a-2.png"])
     }
 
+    // FILE-2 / SPEC-Q219: a folder that resolves fine but has nothing to read must say so, not
+    // complete silently — an enclosing `<each>` over an empty list would otherwise run zero
+    // times and the flow would finish green having done nothing.
+    @Test func readImagesThrowsOnAnEmptyFolderRatherThanReturningNothing() async throws {
+        let (ws, base) = try makeWorkspace()
+        defer { teardown(base) }
+
+        let flowDir = ws.directory(for: "sample-flow")
+        let folder = flowDir.appendingPathComponent("vacation", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+
+        let tool = ReadImagesTool(workspace: ws, flowID: "sample-flow", settings: "vacation")
+        do {
+            _ = try await tool.run(Asset(items: [])) { _ in }
+            Issue.record("expected throw")
+        } catch let error as FlowError {
+            guard case .emptyFolder(let row, let path) = error else {
+                Issue.record("wrong FlowError case: \(error)")
+                return
+            }
+            #expect(row == "Read Images")
+            #expect(path == folder.path)
+        } catch {
+            Issue.record("wrong error type: \(error)")
+        }
+    }
+
+    @Test func readImagesThrowsWhenNothingMatchesThePattern() async throws {
+        let (ws, base) = try makeWorkspace()
+        defer { teardown(base) }
+
+        let flowDir = ws.directory(for: "sample-flow")
+        let folder = flowDir.appendingPathComponent("vacation", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try writeWAV(named: "b.m4a", in: folder)   // present, but not an image
+
+        let tool = ReadImagesTool(workspace: ws, flowID: "sample-flow", settings: "vacation")
+        await #expect(throws: FlowError.self) {
+            _ = try await tool.run(Asset(items: [])) { _ in }
+        }
+    }
+
     // MARK: - Read Files
 
     @Test func readFilesEnumeratesPattern() async throws {
@@ -171,6 +213,31 @@ struct CatFlowReadToolsTests {
         let out = try await tool.run(Asset(items: [])) { _ in }
         let names = out.items.map { $0.path?.lastPathComponent ?? "?" }
         #expect(names == ["a.txt"])
+    }
+
+    // FILE-2 / SPEC-Q219 — same rule as Read Images: a resolved-but-empty folder throws.
+    @Test func readFilesThrowsOnAnEmptyFolderRatherThanReturningNothing() async throws {
+        let (ws, base) = try makeWorkspace()
+        defer { teardown(base) }
+
+        let flowDir = ws.directory(for: "sample-flow")
+        let folder = flowDir.appendingPathComponent("docs", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+
+        let tool = ReadFilesTool(workspace: ws, flowID: "sample-flow", settings: "docs; pattern=*")
+        do {
+            _ = try await tool.run(Asset(items: [])) { _ in }
+            Issue.record("expected throw")
+        } catch let error as FlowError {
+            guard case .emptyFolder(let row, let path) = error else {
+                Issue.record("wrong FlowError case: \(error)")
+                return
+            }
+            #expect(row == "Read Files")
+            #expect(path == folder.path)
+        } catch {
+            Issue.record("wrong error type: \(error)")
+        }
     }
 
     // MARK: - Read PDF

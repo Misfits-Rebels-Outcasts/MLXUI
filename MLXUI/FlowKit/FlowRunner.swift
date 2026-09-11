@@ -404,6 +404,7 @@ nonisolated struct FlowRunner {
         case .unsupportedTask(let row, _): return row
         case .invalidSettings(let row, _, _): return row
         case .missingRerankQuery(let row): return row
+        case .emptyFolder(let row, _): return row
         }
     }
 

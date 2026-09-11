@@ -47,6 +47,8 @@ nonisolated enum FlowErrorDisplay {
             return "Row \(row) hit its budget of \(visitsLeq) visits with `on_budget=fail` — no forced edge to take."
         case .missingRerankQuery(let row):
             return "Row \(row) needs a query — e.g. Rerank BGE Reranker; query=\"...\"."
+        case .emptyFolder(let row, let path):
+            return "Row \(row) found nothing to read in '\(path)' — add files there, or point the row at a different folder."
         }
     }
 
