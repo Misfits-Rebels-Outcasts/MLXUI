@@ -267,6 +267,34 @@ struct CatFlowFileListTests {
         #expect(!FlowRowInspectorView.canReveal(missing))
     }
 
+    // MARK: - shouldShowInFlowList (owner-reported gap, 2026-09-12): a fresh row can still
+    // pick from what's already in the flow, not only "Create a folder here"
+
+    @Test func showsTheListForAFreshRowWhenRealCandidatesAlreadyExist() throws {
+        let (_, flowDir) = try tempFlowDir()
+        try FileManager.default.createDirectory(at: flowDir.appendingPathComponent("beach"),
+                                                 withIntermediateDirectories: true)
+        let entries = FlowRowInspectorView.inFlowEntries(task: "Read Images", flowDir: flowDir, wantsFolder: true)
+
+        // A second, still-unset Read Images row must see `beach/` in the list — this is the
+        // exact scenario: row 1 already created `beach/`, row 2 is brand new.
+        #expect(FlowRowInspectorView.shouldShowInFlowList(currentToken: nil, entries: entries))
+    }
+
+    @Test func staysAbsentForAGenuinelyFreshRowInAGenuinelyEmptyFlow() throws {
+        let (_, flowDir) = try tempFlowDir()
+        let entries = FlowRowInspectorView.inFlowEntries(task: "Read Images", flowDir: flowDir, wantsFolder: true)
+
+        #expect(!FlowRowInspectorView.shouldShowInFlowList(currentToken: nil, entries: entries))
+    }
+
+    @Test func staysShownForAChosenRowEvenWithNoOtherCandidates() throws {
+        let (_, flowDir) = try tempFlowDir()
+        let entries = FlowRowInspectorView.inFlowEntries(task: "Read Images", flowDir: flowDir, wantsFolder: true)
+
+        #expect(FlowRowInspectorView.shouldShowInFlowList(currentToken: "receipts/", entries: entries))
+    }
+
     // MARK: - "Create a folder here"
 
     @Test func createFolderMakesAnEmptyDirectoryThatResolvesThroughFlowWorkspace() throws {

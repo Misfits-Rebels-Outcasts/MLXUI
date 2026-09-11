@@ -442,12 +442,18 @@ struct FlowRowInspectorView: View {
     @State private var creatingFolder = false
     @State private var newFolderName = ""
 
-    /// FILE-2 (owner-ruled 2026-09-11): two states, and the "In this flow" list is never shown
-    /// empty. **Nothing chosen yet** → "Add from my Mac…" (+ "Create a folder here" for a
-    /// `.folder` task). **Something chosen** → the in-flow list (current pick marked, always
-    /// at least one row) then "Add from my Mac…" then "Create a folder here". A fresh row has
-    /// nothing to list, and a blank box reads as broken — that's why the list is *absent*
-    /// there rather than empty.
+    /// FILE-2 (owner-ruled 2026-09-11, widened 2026-09-12): the "In this flow" list is never
+    /// shown *empty*, but it is no longer gated on "something already chosen" — it shows
+    /// whenever there is something real to offer: a current pick (even a flagged one) **or**
+    /// the flow folder already holding a matching candidate. A genuinely fresh row in a
+    /// genuinely empty flow still shows nothing to list, just "Create a folder here" (+ "Add
+    /// from my Mac…" for a `.file` task).
+    ///
+    /// **Why the widening:** the original two-state design left a real row-2 flow with no way
+    /// to point a *second*, still-unset `Read Images` row at a folder `Read Images` row 1
+    /// already created — "Create a folder here" only makes a *new* one, and there was no list
+    /// to pick the existing one from until the row already had *a* path. Owner-reported
+    /// 2026-09-12; fixed by widening the list's gate rather than adding a separate affordance.
     ///
     /// **A `.folder` task drops "Add from my Mac…" entirely** (owner, 2026-09-12): Create a
     /// folder here + the in-flow list's per-row Reveal in Finder already cover bringing
@@ -459,13 +465,13 @@ struct FlowRowInspectorView: View {
         let wantsFolder = (task == "Read Images" || task == "Read Files")
         let flowDir = model.workspace.directory(for: model.flowID)
         let currentToken = row.flatMap { FlowSettings($0.settings).pathValue() }
+        let entries = Self.inFlowEntries(task: task, flowDir: flowDir, wantsFolder: wantsFolder)
 
         return VStack(alignment: .leading, spacing: 6) {
             Text("File")
                 .font(.subheadline.weight(.semibold))
 
-            if let currentToken {
-                let entries = Self.inFlowEntries(task: task, flowDir: flowDir, wantsFolder: wantsFolder)
+            if Self.shouldShowInFlowList(currentToken: currentToken, entries: entries) {
                 inFlowList(entries: entries, currentToken: currentToken, flowDir: flowDir, task: task)
             }
 
@@ -488,25 +494,29 @@ struct FlowRowInspectorView: View {
     /// The "In this flow" box: one row per flat entry the task accepts, plus — per the
     /// owner's ruling on a stored path that isn't one of them (a nested path from before FILE-2,
     /// or a since-deleted one) — the current token shown anyway, flagged, never silently
-    /// dropped. Never rendered with zero rows: with `currentToken` non-nil there is always at
-    /// least the current pick to show, in the list or flagged.
+    /// dropped. Never rendered with zero rows: the caller only shows it when `currentToken` is
+    /// set (always ≥1 row, in the list or flagged) or `entries` is non-empty (≥1 real
+    /// candidate, none marked current — a fresh row picking its first path from what's already
+    /// there).
     ///
     /// Matching is **slash-insensitive** (`Self.tokensMatch`): the `Read Images`/`Read Files`
     /// sample seed (and any flow written before FILE-2) can carry a bare folder name with no
     /// trailing `/`, which is the same folder a listed entry names *with* one — comparing the
     /// raw strings would wrongly flag it as "not in this list" (owner-reported, 2026-09-11).
-    private func inFlowList(entries: [FlowRowInspectorView.InFlowEntry], currentToken: String,
+    private func inFlowList(entries: [FlowRowInspectorView.InFlowEntry], currentToken: String?,
                             flowDir: URL, task: String) -> some View {
         var rows = entries
-        let currentIsListed = entries.contains { Self.tokensMatch($0.token, currentToken) }
-        if !currentIsListed {
-            // Owner ruling, 2026-09-11 (open question 2): a stored path that isn't one of the
-            // flat entries — nested from before FILE-2, or since-deleted — is still shown, as
-            // its own row, flagged, never silently dropped.
-            let status = Self.currentPickStatus(token: currentToken, entries: entries, flowDir: flowDir)
-            let note = (status == .missing) ? "missing" : "not in this list"
-            rows.insert(.init(token: currentToken, isDirectory: currentToken.hasSuffix("/"),
-                              count: nil, note: note), at: 0)
+        if let currentToken {
+            let currentIsListed = entries.contains { Self.tokensMatch($0.token, currentToken) }
+            if !currentIsListed {
+                // Owner ruling, 2026-09-11 (open question 2): a stored path that isn't one of
+                // the flat entries — nested from before FILE-2, or since-deleted — is still
+                // shown, as its own row, flagged, never silently dropped.
+                let status = Self.currentPickStatus(token: currentToken, entries: entries, flowDir: flowDir)
+                let note = (status == .missing) ? "missing" : "not in this list"
+                rows.insert(.init(token: currentToken, isDirectory: currentToken.hasSuffix("/"),
+                                  count: nil, note: note), at: 0)
+            }
         }
 
         return VStack(alignment: .leading, spacing: 4) {
@@ -514,7 +524,7 @@ struct FlowRowInspectorView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             ForEach(rows, id: \.token) { entry in
-                inFlowRow(entry, isCurrent: Self.tokensMatch(entry.token, currentToken),
+                inFlowRow(entry, isCurrent: currentToken.map { Self.tokensMatch(entry.token, $0) } ?? false,
                          flowDir: flowDir, task: task)
             }
         }
@@ -579,6 +589,16 @@ struct FlowRowInspectorView: View {
     /// nothing real on disk to reveal.
     nonisolated static func canReveal(_ entry: InFlowEntry) -> Bool {
         entry.isDirectory && entry.note != "missing"
+    }
+
+    /// Whether the "In this flow" box renders at all. Widened 2026-09-12 (owner-reported gap):
+    /// a fresh row — no `currentToken` yet — still shows the box when the flow folder already
+    /// holds a real candidate, so a *second* `Read Images` row can pick the folder a first one
+    /// already created instead of only being offered "Create a folder here" (which would make
+    /// a colliding new one). A genuinely fresh row in a genuinely empty flow still shows
+    /// nothing — the box is never rendered with zero rows either way.
+    nonisolated static func shouldShowInFlowList(currentToken: String?, entries: [InFlowEntry]) -> Bool {
+        currentToken != nil || !entries.isEmpty
     }
 
     /// "Create a folder here" (owner approved 2026-09-11): an empty subfolder in the flow,
