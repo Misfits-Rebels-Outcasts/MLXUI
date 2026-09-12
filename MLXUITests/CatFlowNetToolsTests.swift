@@ -87,29 +87,52 @@ struct CatFlowNetToolsTests {
         #expect(TaskAvailability.isAvailable("HTTP Get", catalog: emptyCatalog, claimableModelIDs: emptyClaim))
         #expect(TaskAvailability.isAvailable("Fetch Feed", catalog: emptyCatalog, claimableModelIDs: emptyClaim))
         #expect(TaskAvailability.isAvailable("Download File", catalog: emptyCatalog, claimableModelIDs: emptyClaim))
-        // Web Search stays honestly refused — no provider.
-        #expect(!TaskAvailability.isAvailable("Web Search", catalog: emptyCatalog, claimableModelIDs: emptyClaim))
-        if case .refusedByChannel = TaskAvailability.state(for: TaskCatalog.get("Web Search")!,
-                                                           catalog: emptyCatalog,
-                                                           claimableModelIDs: emptyClaim) {} else {
-            Issue.record("Web Search should be channel-refused")
+    }
+
+    /// Phase WS: `Web Search` is ported (in `RealExecutor`/`supportedNetTools`), but with no
+    /// Tavily/Brave key it's `.needsSetup`, not `.available` and not `.refusedByChannel` (a
+    /// dead end this app could never clear) — distinct states this test pins directly rather
+    /// than folding into the blanket "approved net tools" check above, since Web Search is
+    /// the one net tool whose verdict depends on Keychain state, not just being ported.
+    @Test func webSearchIsNeedsSetupWithNoKeyAndAvailableWithOne() {
+        let account = KeychainHelper.providerAccount("tavily")
+        let braveAccount = KeychainHelper.providerAccount("brave")
+        let originalTavily = KeychainHelper.get(account: account)
+        let originalBrave = KeychainHelper.get(account: braveAccount)
+        KeychainHelper.delete(account: account)
+        KeychainHelper.delete(account: braveAccount)
+        defer {
+            if let originalTavily { KeychainHelper.save(originalTavily, account: account) }
+            if let originalBrave { KeychainHelper.save(originalBrave, account: braveAccount) }
         }
+
+        let emptyCatalog: [ModelEntry] = []
+        let emptyClaim: Set<String> = []
+        let desc = TaskCatalog.get("Web Search")!
+        #expect(!TaskAvailability.isAvailable("Web Search", catalog: emptyCatalog, claimableModelIDs: emptyClaim))
+        guard case .needsSetup(_, let action) = TaskAvailability.state(
+            for: desc, catalog: emptyCatalog, claimableModelIDs: emptyClaim) else {
+            Issue.record("Web Search with no key should be .needsSetup")
+            return
+        }
+        #expect(action == .openSettings(.providers))
+
+        KeychainHelper.save("test-key-\(UUID().uuidString)", account: account)
+        #expect(TaskAvailability.isAvailable("Web Search", catalog: emptyCatalog, claimableModelIDs: emptyClaim))
     }
 
     @Test func feedWatchAndPageDiffAreRunnableNow() throws {
-        // 32-FeedWatch needed Fetch Feed; 33-PageDiff needed Web Fetch.
-        let runnable = ["32-FeedWatch", "33-PageDiff"]
+        // 32-FeedWatch needed Fetch Feed; 33-PageDiff needed Web Fetch; 31-ResearchBrief
+        // needed Web Search — all three are `canRun`-runnable now (Phase WS ports the
+        // task; a missing key is `.needsSetup`, which `canRun` no longer treats as a
+        // dead end — see `webSearchFlowsAreRunnableNowNeedingOnlyAKey` in
+        // `CatFlowNotRunnableTests` for the `FlowPreflight`-inclusive version of this
+        // same check).
+        let runnable = ["32-FeedWatch", "33-PageDiff", "31-ResearchBrief"]
         for fid in runnable {
             let doc = try GalleryLoader.loadDocument(flowID: fid)
-            #expect(FlowRunner.canRun(doc) == .runnable, "\(fid) should be runnable after R12-9")
+            #expect(FlowRunner.canRun(doc) == .runnable, "\(fid) should be runnable")
         }
-        // A flow that needs Web Search stays refused, naming the task.
-        let doc = try GalleryLoader.loadDocument(flowID: "31-ResearchBrief")
-        guard case .notRunnable(let reason) = FlowRunner.canRun(doc) else {
-            Issue.record("31 should stay refused (Web Search unported)")
-            return
-        }
-        #expect(reason.contains("Web Search"))
     }
 
     @Test func noNetworkURLIsRefusedByTheSchemeCheck() async throws {

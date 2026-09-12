@@ -236,8 +236,16 @@ nonisolated struct FlowRunner {
         case .agent where CapabilityGate.isAppStoreBuild:
             return .appStoreDoor(desc.taskClass.rawValue)
         case .instant, .net:
-            return TaskAvailability.isAvailable(task, catalog: [], claimableModelIDs: [])
-                ? nil : .unported
+            // WS-3: `.needsSetup` (a `Web Search` row with no key yet) must not block the
+            // whole flow the way `.unported` does — the same "selectable, refused plainly
+            // at run time" shape a `.needsSetup` model row already gets (MS-1's own trap:
+            // "must stay selectable — a flow may legitimately name a model whose key you
+            // are about to paste in"). Only `.needsNewerSupport`/`.refusedByChannel` are
+            // genuine dead ends `canRun` should refuse structurally.
+            switch TaskAvailability.state(for: desc, catalog: [], claimableModelIDs: []) {
+            case .available, .needsSetup: return nil
+            case .needsNewerSupport, .refusedByChannel: return .unported
+            }
         default:
             return nil   // model / human / trigger / staged, and `.agent` in the Direct build
         }

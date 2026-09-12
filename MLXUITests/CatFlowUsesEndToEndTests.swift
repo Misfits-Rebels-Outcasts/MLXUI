@@ -318,8 +318,15 @@ struct CatFlowUsesEndToEndTests {
         #expect("\(error)".contains("App Store") || "\(error)".contains("Helper"))
     }
 
-    @Test func appStoreCanRunRefusesAnUnportedNetTaskReachedThroughUses() throws {
-        // done-when: the `.net` refusal recurses too. `Web Search` has no provider → unported.
+    /// Phase WS ported `Web Search` (this test's own former example of an unported
+    /// `.net` task) — `TaskAvailability.supportedNetTools` now covers every `.net`-class
+    /// catalog task, so there is no real task left to demonstrate the `.unported`
+    /// recursion-through-`uses:` refusal with (same gap `canRunAllowsWebSearchNowThat
+    /// ItIsPorted` in `CatFlowTaskAvailabilityTests` notes for the non-`uses:` case).
+    /// This now pins the positive fact instead: a used flow calling `Web Search`
+    /// recurses to `.runnable`, not a refusal — needing no key to clear this gate either
+    /// (`.needsSetup` isn't a `canRun`/`uses:` recursion refusal).
+    @Test func appStoreCanRunAcceptsWebSearchReachedThroughUsesNowThatItIsPorted() throws {
         #expect(CapabilityGate.isAppStoreBuild)
         let caller = "mlxflow 0.8\n1. Helper\n\nuses:\n  Helper = ./Helper.cat\n"
         let (ws, id, base) = try makeWorkspace(files: [
@@ -330,12 +337,7 @@ struct CatFlowUsesEndToEndTests {
         let doc = try CatParser.parse(caller)
         let scope = FlowScope(identity: "Caller", workspace: ws, locationID: id, flowText: caller,
                               selfFile: ws.directory(for: id).appendingPathComponent("Caller.cat"))
-        guard case .notRunnable(let reason) = FlowRunner.canRun(doc, scope: scope) else {
-            Issue.record("an unported `.net` task inside a used flow must be refused up front")
-            return
-        }
-        #expect(reason.contains("Web Search"))
-        #expect(reason.contains("doesn't run yet"))
+        #expect(FlowRunner.canRun(doc, scope: scope) == .runnable)
     }
     // (a well-formed `uses:` call still resolving to `.runnable` is covered by
     // `canRunAcceptsAResolvedUsesCall` above — the FIX-2 recursion runs on that path too.)

@@ -119,16 +119,21 @@ struct CatFlowTaskAvailabilityTests {
 
     // MARK: - canRun refuses before the install prompt
 
-    @Test func canRunRefusesAFlowWithAnUnportedNetTool() {
+    /// Phase WS ported the catalog's last unported net tool — `Web Search` was this
+    /// test's own example (`TaskAvailability.supportedNetTools` now lists all five
+    /// `.net`-class tasks, confirmed by `webSearchIsInSupportedNetTools` and its
+    /// siblings in `CatFlowWebSearchTests`), so there is no real catalog task left to
+    /// demonstrate `canRun`'s `.unported` net/instant refusal with. The mechanism itself
+    /// (`FlowRunner.rowClassRefusal`'s `.needsNewerSupport`/`.refusedByChannel` → `nil`
+    /// mapping) is still exercised for `.model` tasks elsewhere in this file; this test
+    /// now pins the positive fact Web Search's porting actually delivers: a flow naming
+    /// it is `canRun`-runnable, with no key required to clear this gate (`.needsSetup`
+    /// isn't a `canRun` refusal — see `FlowRunner.rowClassRefusal`).
+    @Test func canRunAllowsWebSearchNowThatItIsPorted() {
         let doc = FlowDocument(version: "0.8", rows: [
             Row(id: UUID(), task: "Web Search", settings: "query=hi"),
         ])
-        guard case .notRunnable(let reason) = FlowRunner.canRun(doc) else {
-            Issue.record("expected notRunnable")
-            return
-        }
-        #expect(reason.contains("Web Search"))
-        #expect(reason.contains("doesn't run yet"))
+        #expect(FlowRunner.canRun(doc) == .runnable)
     }
 
     @Test func canRunAllowsJoinVideoNowThatItIsPorted() {
@@ -150,16 +155,28 @@ struct CatFlowTaskAvailabilityTests {
 
     // MARK: - The channel states
 
-    @Test func netIsRefusedButStagedNowRuns() {
+    @Test func stagedRowsRun() {
         // Net/staged verdicts are catalog-free (CFM-R14-FIX-3) — explicit empties.
         let emptyCatalog: [ModelEntry] = []
         let emptyClaim: Set<String> = []
-        let web = TaskCatalog.get("Web Search")!
-        if case .refusedByChannel = TaskAvailability.state(for: web, catalog: emptyCatalog, claimableModelIDs: emptyClaim) {} else { Issue.record("net not refused") }
-        #expect(!TaskAvailability.isAvailable("Web Search", catalog: emptyCatalog, claimableModelIDs: emptyClaim))
         // CFM-R12-8: staged rows now queue a visible outbox entry.
         #expect(TaskAvailability.isAvailable("Stage Send", catalog: emptyCatalog, claimableModelIDs: emptyClaim))
         #expect(TaskAvailability.isAvailable("Stage Post", catalog: emptyCatalog, claimableModelIDs: emptyClaim))
+    }
+
+    /// Phase WS: `Web Search`'s own channel state is `.needsSetup` (with no key) or
+    /// `.available` (with one) — never `.refusedByChannel`, which this test used to pin
+    /// as the "net tools can be refused" example (that example moved to
+    /// `CatFlowWebSearchTests.webSearchIsNeedsSetupWithNoKeyAndAvailableWithOne`, which
+    /// also covers the Keychain-cleanup this test never needed while Web Search was
+    /// unconditionally refused).
+    @Test func webSearchIsNeverRefusedByChannel() {
+        let emptyCatalog: [ModelEntry] = []
+        let emptyClaim: Set<String> = []
+        let web = TaskCatalog.get("Web Search")!
+        if case .refusedByChannel = TaskAvailability.state(for: web, catalog: emptyCatalog, claimableModelIDs: emptyClaim) {
+            Issue.record("Web Search should never be .refusedByChannel — it's ported, just possibly .needsSetup")
+        }
     }
 
     @Test func agentIsChannelRefusedOnlyUnderAppStore() {

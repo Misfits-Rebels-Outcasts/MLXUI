@@ -449,6 +449,10 @@ struct FlowRowInspectorView: View {
         case "Speak": return ["voice", "lang", "speed"]
         case "Retrieve": return ["query", "top_k"]
         case "Rerank": return ["query", "top_k"]
+        // WS-1: ported verbatim from `net.py:318-330` so a `.cat` moves between runtimes
+        // unchanged; `provider` is WS-2's own addition (an explicit override of the
+        // Tavily-first selection), not part of the reference's settings surface.
+        case "Web Search": return ["query", "top_k", "site", "recency", "timeout", "provider"]
         case "Filter": return ["by"]
         case "Sort": return ["by", "reverse"]
         case "Dedupe": return ["by"]

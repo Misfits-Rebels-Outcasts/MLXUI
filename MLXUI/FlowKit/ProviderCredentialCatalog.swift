@@ -46,8 +46,40 @@ nonisolated enum ProviderKeyTester {
 
     static func test(providerName: String, key: String) async -> Outcome {
         switch providerName {
+        case "tavily":
+            return await testTavily(key: key)
+        case "brave":
+            return await testBrave(key: key)
         default:
             return .failure("\(providerName) doesn't have a live check wired up yet. The key is saved.")
+        }
+    }
+
+    /// WS-2: the cheapest real Tavily call — one result, no extras. Reports only
+    /// success/failure and, on failure, the HTTP status; never the response body, the
+    /// key, or the query text (`"test"`, a fixed, content-free probe).
+    private static func testTavily(key: String) async -> Outcome {
+        let (url, body) = WebSearchWireFormat.tavilyRequest(query: "test", topK: 1, site: nil, recency: nil)
+        do {
+            let bodyData = try JSONSerialization.data(withJSONObject: body)
+            _ = try await NetTools.request(
+                url.absoluteString, method: "POST",
+                headers: WebSearchWireFormat.tavilyHeaders(apiKey: key), body: bodyData, timeout: 15)
+            return .success
+        } catch {
+            return .failure("Tavily didn't answer with a usable result. Check the key and try again.")
+        }
+    }
+
+    /// WS-2: the cheapest real Brave call — one result. Same reporting discipline as
+    /// `testTavily`.
+    private static func testBrave(key: String) async -> Outcome {
+        let url = WebSearchWireFormat.braveRequestURL(query: "test", topK: 1, site: nil, recency: nil)
+        do {
+            _ = try await NetTools.httpGet(url.absoluteString, headers: ["X-Subscription-Token": key], timeout: 15)
+            return .success
+        } catch {
+            return .failure("Brave didn't answer with a usable result. Check the key and try again.")
         }
     }
 }

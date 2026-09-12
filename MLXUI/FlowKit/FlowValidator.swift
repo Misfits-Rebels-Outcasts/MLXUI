@@ -1840,6 +1840,7 @@ extension FlowValidator {
     /// it fires. // SPEC-Q221 — RM-FIX-1 removes the exemption; the entry that should have
     /// been filed *before* the first cut, not after — see the journal for the full account.
     ///
+    // SPEC-Q225
     /// **The one deliberate strengthening that stands:** the reference's whole function
     /// returns immediately when `registry is None` — harmless in Python, where every real
     /// caller supplies one, but MLXUI's own `checkFlow` is **always** called with
@@ -1859,6 +1860,23 @@ extension FlowValidator {
                                    registry: (any FlowRegistry)?, issues: inout [FlowIssue]) {
         guard !flags.contains("offdevice") else { return }
         for (path, row) in iterFlowRows(rows) {
+            // SPEC-Q223: a `Web Search` row sends the query — local content — to a search
+            // provider's servers, exactly the "local content flowing out" direction Q203
+            // point 1 draws the line around, distinct from `network`'s read-only inbound
+            // scope. Unconditional per row (not gated on a key being present, or on which
+            // provider ends up serving it): the row's task name alone is the static,
+            // checkable-before-the-run fact Q203 point 4 requires — there is no `models:`
+            // binding to resolve a specific provider identity from, the way a model-
+            // provider row has one. `{provider}` names whichever search-credential is
+            // actually configured (Tavily preferred, matching WS-2's own selection order)
+            // so the message is concrete when it can be; a generic phrase otherwise.
+            if row.task == "Web Search" {
+                let provider = WebSearchProvider.resolve(explicit: nil)?.displayName ?? "a search provider"
+                issues.append(FlowIssue(row: path, code: "E120", message: (try? ErrorCatalog.fill(
+                    code: "E120", values: ["n": path, "task": row.task ?? "", "provider": provider,
+                                            "egress": "leaves this building"], isV08: true)) ?? ""))
+                continue
+            }
             guard namesAModel(row), let model = row.model else { continue }
             var provider = model
             var egress = TaskModels.providerEgress(forDisplay: model)

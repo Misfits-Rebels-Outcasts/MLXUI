@@ -1,0 +1,14 @@
+{
+  "id": "tavily/search",
+  "display": "Tavily",
+  "kind": "search",
+  "engine": "tavily-search",
+  "credentials": "tavily",
+  "settings": {},
+  "resources": {
+    "disk_gb": 0,
+    "ram_gb": 0
+  },
+  "manifest_version": 1,
+  "pinned": false
+}

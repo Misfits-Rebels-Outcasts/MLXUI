@@ -247,7 +247,7 @@ nonisolated enum TaskModels {
         return byTask
     }
 
-    // SPEC-Q221
+    // SPEC-Q221, SPEC-Q225
     /// RM-FIX-1 (SPEC-Q221 corrects RM-4b's original `lanProviderDisplayNames` exemption —
     /// see the journal and `catflow-mlx/SPEC_QUESTIONS.md` Q221) — a provider-kind
     /// manifest's declared `egress` (`"lan"` | `"internet"` | `nil`), by display name.
@@ -255,7 +255,7 @@ nonisolated enum TaskModels {
     /// egress (Q203 point 5: "both cases need the same flag"). `egress` only picks E120's
     /// wording ("leaves this machine" for `lan`, "leaves this building" otherwise), exactly
     /// the reference's own `_check_offdevice_flag`. Static, bundle-derived,
-    /// registry-independent for the same reason `systemDisplayNames` is:
+    /// registry-independent for the same reason `systemDisplayNames` is (SPEC-Q225):
     /// `FlowValidator.checkOffdeviceFlag`'s classification must work with no
     /// `FlowRegistry` (`checkFlow`'s only production callers never construct one —
     /// AFM-FOLLOWUP-3, journal `2026-259`), so this cannot depend on anything a real run

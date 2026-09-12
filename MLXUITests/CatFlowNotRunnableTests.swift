@@ -40,14 +40,23 @@ struct CatFlowNotRunnableTests {
     }
 
     @Test func flowsWithRealGapsRefuseByName() throws {
-        // 31/34/53 — Web Search, no provider.
-        let research = try refusal("31-ResearchBrief")
-        #expect(research?.contains("Web Search") == true)
         // 60 — Generate Image has no bridge model.
         #expect(try refusal("60-GenerateProductShot") != nil)
         // 67-69 — .catpipeline model-space flows have no runnable models.
         #expect(try refusal("67-DriveTheLatent") != nil)
         #expect(try refusal("69-PickALook") != nil)
+    }
+
+    /// Phase WS: 31/34/53 (Web Search, no provider) are no longer a `canRun` refusal — a
+    /// missing key is `.needsSetup`, not a channel dead end, so these flows are structurally
+    /// runnable now (`canRun`'s job — "does the runtime have any implementation for this
+    /// task"), same as a `.needsSetup` model row already doesn't block `canRun`/preflight
+    /// either. Pasting a Tavily/Brave key is what makes them actually *complete*; that's a
+    /// Settings step, not a language gap `refusalReason` reports.
+    @Test func webSearchFlowsAreRunnableNowNeedingOnlyAKey() throws {
+        for flowID in ["31-ResearchBrief", "34-TopicMonitor", "53-MorningBriefing"] {
+            #expect(try refusal(flowID) == nil, "\(flowID) should be runnable now that Web Search is ported")
+        }
     }
 
     /// CFM-R15-1 — `63-CutOutSubject` runs now that the owner ruled hazard H2 option (1)

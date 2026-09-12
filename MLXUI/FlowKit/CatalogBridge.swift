@@ -434,9 +434,14 @@ nonisolated struct ManifestResources: Codable, Sendable, Equatable {
 nonisolated struct CuratedManifest: Codable, Sendable, Equatable {
     var id: String
     var display: String
+    // SPEC-Q224
     /// `"local"` (a `browser.json` download) · `"system"` (Phase AFM, e.g. Apple Foundation
-    /// Models) · `"provider"` (Phase RM, a remote API or LAN endpoint). `nil` for a manifest
-    /// written before this field existed in the Swift decode — never assumed `"local"`.
+    /// Models) · `"provider"` (Phase RM, a remote API or LAN endpoint) · `"search"` (Phase
+    /// WS, a `.net`-class tool's key — `tavily.json`/`brave.json` — never a model, so
+    /// `TaskModels.providerModels` and everything model-picker-facing filters explicitly
+    /// on `kind == "provider"` rather than `kind != nil`, and a `"search"` manifest is
+    /// structurally inert there). `nil` for a manifest written before this field existed
+    /// in the Swift decode — never assumed `"local"`.
     var kind: String?
     /// The dispatch string (`"mlx-embed"`, `"anthropic-api"`, `"apple-foundation-models"`, …).
     /// Not yet consumed by any Swift dispatch — RM-2/AFM's own stage names its engine

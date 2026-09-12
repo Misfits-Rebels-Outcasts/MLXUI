@@ -1,0 +1,14 @@
+{
+  "id": "brave/search",
+  "display": "Brave",
+  "kind": "search",
+  "engine": "brave-search",
+  "credentials": "brave",
+  "settings": {},
+  "resources": {
+    "disk_gb": 0,
+    "ram_gb": 0
+  },
+  "manifest_version": 1,
+  "pinned": false
+}

@@ -3,7 +3,10 @@ import Foundation
 // CFM-R12-9 — the networked tools, **approved scope** (owner 2026-08-25): Web Fetch, HTTP
 // Get, Fetch Feed, Download File — GET-only, `URLSession`, no new entitlement (the app
 // already carries `network.client`), a visible timeout and an explicit **redirect cap**.
-// `Web Search` stays unported per the ruling (no provider to name in App Review).
+// `Web Search` stayed unported per that ruling ("no provider to name in App Review") —
+// **superseded by `RSI/DelegateOffMachineBacklog.md` §0 ruling 2, 2026-09-11** ("Tavily"
+// and "Brave", both BYO-key), which names exactly the providers the 2026-08-25 ruling
+// said didn't exist. Phase WS (journal `2026-09-12`) ports it; see `WebSearchTool` below.
 
 nonisolated enum NetTools {
     static let defaultTimeout: TimeInterval = 30
@@ -13,9 +16,22 @@ nonisolated enum NetTools {
 
     /// GET a URL → `(body, contentType)`. A plain-sentence error on failure, a redirect cap
     /// (no unbounded following), a streaming size cap, and **2xx only** (CFM-R12-FIX-10 — a
-    /// 3xx returned by the capped delegate is an error, not content).
+    /// 3xx returned by the capped delegate is an error, not content). A thin wrapper over
+    /// `request(_:method:…)` — WS-2 reuses that shared function for Tavily's `POST`, rather
+    /// than a second HTTP path, per the backlog's own instruction.
     static func httpGet(_ urlString: String, headers: [String: String] = [:],
                         timeout: TimeInterval = defaultTimeout,
+                        maxBytes: Int64 = defaultMaxBytes,
+                        maxRedirects: Int = maxRedirects) async throws -> (Data, String) {
+        try await request(urlString, method: "GET", headers: headers, body: nil,
+                          timeout: timeout, maxBytes: maxBytes, maxRedirects: maxRedirects)
+    }
+
+    /// WS-2: the same redirect-cap / timeout / streaming-size-cap / 2xx-only machinery as
+    /// `httpGet`, generalized to any method + an optional body — Tavily's search endpoint
+    /// is `POST` with a JSON body; everything else about the safety envelope is identical.
+    static func request(_ urlString: String, method: String, headers: [String: String] = [:],
+                        body: Data? = nil, timeout: TimeInterval = defaultTimeout,
                         maxBytes: Int64 = defaultMaxBytes,
                         maxRedirects: Int = maxRedirects) async throws -> (Data, String) {
         guard let url = URL(string: urlString) else {
@@ -26,6 +42,8 @@ nonisolated enum NetTools {
                                          message: "'\(urlString)' isn't http(s) — only those are fetched")
         }
         var request = URLRequest(url: url, timeoutInterval: timeout)
+        request.httpMethod = method
+        request.httpBody = body
         var merged = ["User-Agent": "AI Browser/1.0"]
         for (k, v) in headers { merged[k] = v }
         request.allHTTPHeaderFields = merged
@@ -49,7 +67,7 @@ nonisolated enum NetTools {
                                              message: "\(urlString) followed more than \(maxRedirects) redirects — the fetch stopped")
             }
             throw FlowError.stageFailure(row: "network",
-                                         message: "GET \(urlString) returned HTTP \(http.statusCode)")
+                                         message: "\(method) \(urlString) returned HTTP \(http.statusCode)")
         }
         // Stream, stopping at the cap — a chunked response with no Content-Length must not
         // be buffered to exhaustion (FIX-10).

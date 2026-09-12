@@ -86,8 +86,11 @@ struct CatFlowProviderCredentialTests {
     /// this is the verified answer now, updated rather than loosened, per that journal's
     /// own note that it "will legitimately need updating the day RM or WS lands the first
     /// `credentials`-bearing manifest, which is the entire point."
-    @Test func shippedManifestsNameExactlyRMsThreeKeyedProviders() {
-        #expect(CuratedManifest.installedCredentialNames() == ["anthropic", "deepseek", "openai"])
+    /// RM's three keyed model providers plus WS's two search providers — the count/name
+    /// keeps growing exactly as each phase's own manifests land, never hardcoded here
+    /// beyond the flat "these are what's shipped" fact this test pins.
+    @Test func shippedManifestsNameExactlyTheFiveKeyedProviders() {
+        #expect(CuratedManifest.installedCredentialNames() == ["anthropic", "brave", "deepseek", "openai", "tavily"])
     }
 
     // MARK: - ProviderCredential.readiness
@@ -140,13 +143,21 @@ struct CatFlowProviderCredentialTests {
 
     /// No provider has a live check wired up yet (none exist — RM/WS haven't landed);
     /// the tester says so plainly and never fabricates a success.
-    @Test func testerReportsPlainlyWhenNoLiveCheckExists() async {
-        let outcome = await ProviderKeyTester.test(providerName: "tavily", key: "irrelevant-\(UUID().uuidString)")
+    /// Phase WS registered real Tavily/Brave live checks (`ProviderKeyTester.testTavily`/
+    /// `testBrave`) — a provider name outside that pair is what this test's original
+    /// premise ("no provider has a live check wired up yet") still means; a genuinely
+    /// unknown name (never anthropic/openai/deepseek/tavily/brave) still hits the
+    /// `default` case. This deliberately does **not** call `test(providerName: "tavily",…)`
+    /// — that now makes a real HTTPS request, and "mock by default" means the test suite
+    /// never does that (the same reason no other `NetTools` consumer's real call is
+    /// unit-tested in this codebase either).
+    @Test func testerReportsPlainlyForAProviderWithNoLiveCheckRegistered() async {
+        let outcome = await ProviderKeyTester.test(providerName: "some-other-provider", key: "irrelevant-\(UUID().uuidString)")
         guard case .failure(let message) = outcome else {
-            Issue.record("expected .failure — no tester is registered for any provider yet")
+            Issue.record("expected .failure — no tester is registered for this provider")
             return
         }
-        #expect(message.contains("tavily"))
+        #expect(message.contains("some-other-provider"))
         #expect(!message.isEmpty)
     }
 }

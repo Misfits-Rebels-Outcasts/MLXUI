@@ -165,13 +165,13 @@ nonisolated struct RealExecutor: FlowExecutor {
             // CFM-R12-8: Stage Send / Stage Post queue a visible outbox entry — never send.
             return try await runStaged(row: row, inputs: inputs, path: path)
         case .net:
-            // CFM-R12-9 (approved scope): the four GET tools; Web Search is refused by
-            // `canRun` earlier.
+            // CFM-R12-9 (approved scope) + WS-2: five real tools now — Web Search joined
+            // the four GET-only ones once §0 ruling 2 named its providers.
             return try await runNet(row: row, inputs: inputs, path: path)
         }
     }
 
-    /// CFM-R12-9: dispatch the ported networked tools.
+    /// CFM-R12-9 + WS-2: dispatch the ported networked tools.
     private func runNet(row: Row, inputs: [Asset], path: String) async throws -> Asset {
         switch row.task {
         case "Web Fetch":
@@ -186,6 +186,8 @@ nonisolated struct RealExecutor: FlowExecutor {
         case "Download File":
             return try await DownloadFileTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
                 .run(inputs: inputs)
+        case "Web Search":
+            return try await WebSearchTool(settings: row.settings ?? "").run(inputs: inputs)
         default:
             throw FlowError.unsupportedTask(row: path, task: row.task ?? "?")
         }
