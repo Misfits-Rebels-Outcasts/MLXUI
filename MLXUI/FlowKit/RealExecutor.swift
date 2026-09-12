@@ -123,6 +123,17 @@ nonisolated struct RealExecutor: FlowExecutor {
         case .instant:
             return try await runInstant(desc, row: row, inputs: inputs, path: path)
         case .model:
+            // AFM-2: a row naming the system slot dispatches to Apple Foundation Models
+            // entirely, bypassing `resolveModel`/`makeModelStage` (there is no `ModelEntry`
+            // to resolve) — checked before the MLX dispatch below, which is otherwise
+            // completely untouched.
+            if case .runnable(.system(let systemRef), _, _) = CatalogBridge.resolve(row.model ?? "", catalog: catalog) {
+                if TaskCatalog.deciderTasks[task] != nil {
+                    return try await runAppleFoundationDecider(desc, row: row, inputs: inputs, path: path,
+                                                               transcript: transcript, context: context, ref: systemRef)
+                }
+                return try await runAppleFoundationFrame(desc, row: row, inputs: inputs, path: path, ref: systemRef)
+            }
             // CFM-R9-5: deciders render their own frame and fire a declared tag (F004
             // strict-parse), instead of returning the raw reply as content.
             if TaskCatalog.deciderTasks[task] != nil {
@@ -562,9 +573,39 @@ nonisolated struct RealExecutor: FlowExecutor {
                             context: [(label: String, content: String)]?) async throws -> Asset {
         let modelEntry = try resolveModel(display: row.model, path: path)
         let task = desc.name
+        let (basePrompt, tags) = try Self.deciderPrompt(desc, row: row, inputs: inputs,
+                                                        transcript: transcript, context: context)
+
+        let stage = try await makeModelStage(modelEntry, .default)
+        let (tag, rawReply) = try await Self.fireTag(stage: stage, prompt: basePrompt, tags: tags, rowLabel: path)
+        tagBox.tag = tag
+
+        // The payload follows Spec §7.4: Judge delivers the winning candidate (R2); Think
+        // the model's own tool/final line (R3); the rest pass through (R1).
+        if task == "Judge" {
+            let (_, candidates) = DeciderFrame.splitJudgeBundle(inputs, tags: tags)
+            if let index = tags.firstIndex(of: tag), index < candidates.count {
+                return Asset(items: candidates[index].items)
+            }
+            return inputs.first ?? Asset(items: [])
+        }
+        if task == "Think" {
+            return Asset(items: [Item(kind: .text, value: rawReply, path: nil, sourceText: nil)])
+        }
+        return inputs.first ?? Asset(items: [])
+    }
+
+    /// The decider's prompt + declared tags, extracted from `runDecider` (AFM-2) so
+    /// `runAppleFoundationDecider` builds the identical prompt a real MLX decider would, and
+    /// only the tag-acquisition step differs (F004 strict-parse-retry vs. AFM's guided
+    /// generation). `static` — reads only its arguments, same reasoning as `fireTag`.
+    private static func deciderPrompt(_ desc: TaskDescriptor, row: Row, inputs: [Asset],
+                                      transcript: [FlowInterpreter.TranscriptEntry]?,
+                                      context: [(label: String, content: String)]?) throws -> (prompt: String, tags: [String]) {
+        let task = desc.name
         let settings = row.settings
         let ctxText = context?.map { "\($0.label): \($0.content)" }.joined(separator: "\n")
-        let tags = declaredTags(row)
+        let tags = Self.declaredTags(row)
 
         let basePrompt: String
         if desc.refName.hasPrefix("frames/") {
@@ -591,13 +632,81 @@ nonisolated struct RealExecutor: FlowExecutor {
             let text = DeciderFrame.flatTexts(inputs).joined(separator: "\n")
             basePrompt = text.isEmpty ? settings ?? "" : text
         }
+        return (basePrompt, tags)
+    }
 
-        let stage = try await makeModelStage(modelEntry, .default)
-        let (tag, rawReply) = try await Self.fireTag(stage: stage, prompt: basePrompt, tags: tags, rowLabel: path)
+    // MARK: - AFM-2: Apple Foundation Models dispatch
+
+    /// A frame-backed, non-decider row (Summarize, Rewrite, Translate, …) run against Apple
+    /// Foundation Models instead of an MLX stage. Renders the identical frame `runModel`
+    /// would (same `FrameRenderer` call), then hands the rendered prompt to the AFM executor
+    /// with no system instructions — the frame's own text already carries the whole ask, same
+    /// as the MLX path.
+    private func runAppleFoundationFrame(_ desc: TaskDescriptor, row: Row, inputs: [Asset],
+                                         path: String, ref: SystemModelRef) async throws -> Asset {
+        guard case .ready = ref.readiness else {
+            throw FlowError.stageFailure(row: path, message: Self.appleFoundationUnreadyMessage(ref))
+        }
+        guard let executor = AppleFoundationAvailability.makeExecutor() else {
+            throw FlowError.stageFailure(row: path,
+                                         message: "Apple Intelligence isn't available on this Mac right now.")
+        }
+        guard desc.refKind == .frame else {
+            // AFM-2's curated task list is frame-backed text tasks plus the deciders above;
+            // anything else naming the system slot is a manifest/task mismatch, not a row
+            // the user can fix by editing settings.
+            throw FlowError.stageFailure(row: path,
+                                         message: "\(ref.displayName) doesn't serve \(desc.name) yet.")
+        }
+        guard !inputs.isEmpty else {
+            throw FlowError.badInputCardinality(row: "\(path)", expected: "a text input", got: 0)
+        }
+        let frameName = desc.refName
+            .replacingOccurrences(of: "frames/", with: "")
+            .replacingOccurrences(of: ".frame.txt", with: "")
+        let frame = try FrameRenderer.loadFrame(named: frameName)
+        let prompt = try FrameRenderer.render(frameText: frame, settings: row.settings, assets: inputs)
+        let text = try await executor.generate(instructions: "", prompt: prompt)
+        return try persist(.text(text), rowLabel: "\(path)")
+    }
+
+    /// A decider row (Classify, Gate, Score, Judge, Decide) run against Apple Foundation
+    /// Models' guided generation — never Spec §12.2's strict-parse-plus-one-retry path, and
+    /// never **F010** (AFM-2). Builds the identical prompt `runDecider` would
+    /// (`deciderPrompt`), then constrains the model's answer to the row's declared tags.
+    /// `Think`'s tool/transcript loop is out of AFM's curated scope (not in AFM-2's decider
+    /// list) — reaching here for `Think` means the row named the system slot by hand; refused
+    /// the same way an unserved task is above.
+    private func runAppleFoundationDecider(_ desc: TaskDescriptor, row: Row, inputs: [Asset], path: String,
+                                           transcript: [FlowInterpreter.TranscriptEntry]?,
+                                           context: [(label: String, content: String)]?,
+                                           ref: SystemModelRef) async throws -> Asset {
+        guard case .ready = ref.readiness else {
+            throw FlowError.stageFailure(row: path, message: Self.appleFoundationUnreadyMessage(ref))
+        }
+        guard let executor = AppleFoundationAvailability.makeExecutor() else {
+            throw FlowError.stageFailure(row: path,
+                                         message: "Apple Intelligence isn't available on this Mac right now.")
+        }
+        let task = desc.name
+        guard task != "Think" else {
+            throw FlowError.stageFailure(row: path, message: "\(ref.displayName) doesn't serve Think yet.")
+        }
+        let (basePrompt, tags) = try Self.deciderPrompt(desc, row: row, inputs: inputs,
+                                                        transcript: transcript, context: context)
+        guard !tags.isEmpty else {
+            throw FlowError.stageFailure(row: path, message: "Row \(path) declares no tags to decide between.")
+        }
+        let tag = try await executor.generateTag(instructions: "", prompt: basePrompt, tags: tags)
+        guard tags.contains(tag) else {
+            // Guided generation is supposed to make this unreachable — refuse rather than
+            // guess if it ever isn't (the same "never a plausible wrong answer" rule F004
+            // enforces on the MLX path).
+            throw FlowError.stageFailure(row: path,
+                                         message: "Apple Intelligence returned a tag outside the declared set (\(tags.joined(separator: ", "))).")
+        }
         tagBox.tag = tag
 
-        // The payload follows Spec §7.4: Judge delivers the winning candidate (R2); Think
-        // the model's own tool/final line (R3); the rest pass through (R1).
         if task == "Judge" {
             let (_, candidates) = DeciderFrame.splitJudgeBundle(inputs, tags: tags)
             if let index = tags.firstIndex(of: tag), index < candidates.count {
@@ -605,10 +714,15 @@ nonisolated struct RealExecutor: FlowExecutor {
             }
             return inputs.first ?? Asset(items: [])
         }
-        if task == "Think" {
-            return Asset(items: [Item(kind: .text, value: rawReply, path: nil, sourceText: nil)])
-        }
         return inputs.first ?? Asset(items: [])
+    }
+
+    private static func appleFoundationUnreadyMessage(_ ref: SystemModelRef) -> String {
+        switch ref.readiness {
+        case .needsSetup(let reason, _): return reason
+        case .unavailable(let reason): return reason
+        case .ready, .needsDownload: return "\(ref.displayName) isn't ready."
+        }
     }
 
     /// F004: run the prompt, strict-parse the tag (whole-word, case-insensitive, longest
@@ -636,7 +750,8 @@ nonisolated struct RealExecutor: FlowExecutor {
     }
 
     /// A decider's declared tags: `row.tags` if declared, else the decide clause's edge tags.
-    private func declaredTags(_ row: Row) -> [String] {
+    /// `static` (AFM-2) — `deciderPrompt` needs it and reads only its argument.
+    private static func declaredTags(_ row: Row) -> [String] {
         if let tags = row.tags, !tags.isEmpty { return tags }
         if let edges = row.clause?.edges, !edges.isEmpty { return edges.map(\.tag) }
         return []

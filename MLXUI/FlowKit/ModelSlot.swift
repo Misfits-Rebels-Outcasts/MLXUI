@@ -63,7 +63,15 @@ nonisolated enum ModelSlot: Sendable, Equatable, Identifiable {
     /// bare stored property); `.system`/`.provider` carry their own precomputed answer —
     /// Apple Intelligence's availability, a Keychain check — which is Phase AFM/RM's job to
     /// compute, not this one's.
-    func readiness(installedModelIDs: Set<String> = []) -> Readiness {
+    ///
+    /// MS-FOLLOWUP-1: **required, no default.** A `= []` default silently means "nothing is
+    /// installed," so an omitted argument would report every cataloged model as
+    /// `.needsDownload` — the same mistake CFM-R14-FIX-3 already fixed in
+    /// `TaskAvailability.swift`: "the derived pool is the availability authority, and a
+    /// silently-empty catalog would report every model task as unavailable — a wrong answer
+    /// that looks correct." A caller with genuinely no install state passes an explicit `[]`,
+    /// the same convention `FlowRunner` already follows for `TaskAvailability`.
+    func readiness(installedModelIDs: Set<String>) -> Readiness {
         switch self {
         case .cataloged(let entry):
             return installedModelIDs.contains(entry.id) ? .ready : .needsDownload(gb: entry.downloadSizeGB)

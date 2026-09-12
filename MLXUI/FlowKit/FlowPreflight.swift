@@ -51,9 +51,15 @@ nonisolated struct FlowPreflight {
         var installed: [ModelNeed] { needs.filter { $0.installed } }
         var toDownload: [ModelNeed] { needs.filter { !$0.installed && $0.model != nil } }
         /// MS-3 — rows whose slot needs a setup step (a key, a toggle) rather than a
-        /// download. Always empty today; Phase AFM/RM populate it.
+        /// download. Empty until a `.needsSetup` slot exists (AFM's `.system` is the first).
         var needsSetup: [ModelNeed] { needs.filter { $0.setupReason != nil } }
-        var blocked: [ModelNeed] { needs.filter { $0.model == nil && $0.setupReason == nil } }
+        /// AFM-1 caught this one: `model == nil` used to mean "blocked" by construction,
+        /// because only `.cataloged` could ever be `.ready`/`.needsDownload`, and both of
+        /// those always carried a `model`. A `.ready` `.system`/`.provider` slot breaks that
+        /// — it's genuinely fine (`installed == true`) with no `ModelEntry` at all — so
+        /// `blocked` must also exclude anything already `installed`, not just anything with
+        /// a `setupReason`.
+        var blocked: [ModelNeed] { needs.filter { !$0.installed && $0.model == nil && $0.setupReason == nil } }
 
         /// Models that must be installed before Run, deduplicated by catalog id.
         var downloadSet: [ModelEntry] {
@@ -115,11 +121,21 @@ nonisolated struct FlowPreflight {
             switch CatalogBridge.resolve(display, catalog: catalog) {
             case .runnable(let slot, let equivalence, _):
                 switch slot.readiness(installedModelIDs: installedModelIDs) {
-                case .ready, .needsDownload:
+                // `.ready`/`.needsDownload` already encode installedness — re-deriving it
+                // from `installedModelIDs.contains(slot.modelEntry?.id ?? "")` here was
+                // AFM's own trap in miniature: correct for `.cataloged` (where the two can
+                // never disagree) and silently wrong for `.system`/`.provider`, whose
+                // `modelEntry` is always nil, so the old line always read `installed: false`
+                // even when readiness was `.ready` (caught building Phase AFM's preflight
+                // test, `journal 2026-258`).
+                case .ready:
                     result.needs.append(ModelNeed(
                         task: row.task ?? "?", display: display, model: slot.modelEntry,
-                        installed: installedModelIDs.contains(slot.modelEntry?.id ?? ""),
-                        equivalence: equivalence, blockingReason: nil))
+                        installed: true, equivalence: equivalence, blockingReason: nil))
+                case .needsDownload:
+                    result.needs.append(ModelNeed(
+                        task: row.task ?? "?", display: display, model: slot.modelEntry,
+                        installed: false, equivalence: equivalence, blockingReason: nil))
                 case .needsSetup(let reason, let action):
                     result.needs.append(ModelNeed(
                         task: row.task ?? "?", display: display, model: slot.modelEntry,

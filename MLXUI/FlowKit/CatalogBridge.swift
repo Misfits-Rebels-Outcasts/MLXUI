@@ -299,6 +299,15 @@ nonisolated enum CatalogBridge {
                                 reason: "\(display) isn't installed in the model catalog — add it to the catalog before this flow can run.",
                                 action: nil)
         }
+        // AFM-1/RM: a system or provider slot names itself directly (`apple-foundation @
+        // system`, `claude-sonnet @ anthropic`) — checked before the catalog fallback since
+        // neither is a `browser.json` entry at all.
+        if let systemRef = TaskModels.systemModelRef(forDisplay: display) {
+            return .runnable(.system(systemRef), equivalence: .same, note: nil)
+        }
+        if let providerRef = TaskModels.providerModelRef(forDisplay: display) {
+            return .runnable(.provider(providerRef), equivalence: .same, note: nil)
+        }
         // No bridge row: an R14-2/7 derived pick. Match the catalog directly.
         if let model = catalog.first(where: { $0.hfModelId == display || $0.displayName == display }) {
             return .runnable(.cataloged(model), equivalence: .same, note: nil)
@@ -403,21 +412,49 @@ nonisolated struct ManifestResources: Codable, Sendable, Equatable {
 
 /// A curated manifest — the settings authority for a bridge display name. Only the fields
 /// FlowKit consumes are decoded; the rest of the file is ignored.
+///
+/// AFM-1: `kind`/`engine`/`tasks`/`credentials` join the decode (MS correctly left this to
+/// whichever phase first needed it — every provider manifest on disk has always had them;
+/// `Codable` silently dropped them before this). `kind` is what `FlowValidator.isRemoteRow`
+/// now consults instead of a `" @ "` string test — see `TaskModels.systemDisplayNames`.
 nonisolated struct CuratedManifest: Codable, Sendable, Equatable {
     var id: String
     var display: String
+    /// `"local"` (a `browser.json` download) · `"system"` (Phase AFM, e.g. Apple Foundation
+    /// Models) · `"provider"` (Phase RM, a remote API or LAN endpoint). `nil` for a manifest
+    /// written before this field existed in the Swift decode — never assumed `"local"`.
+    var kind: String?
+    /// The dispatch string (`"mlx-embed"`, `"anthropic-api"`, `"apple-foundation-models"`, …).
+    /// Not yet consumed by any Swift dispatch — RM-2/AFM's own stage names its engine
+    /// directly rather than switching on this string, so it decodes for now only to keep the
+    /// manifest's full shape visible, matching the reference.
+    var engine: String?
+    /// The task names (or `@`-prefixed group references, unexpanded — see AFM's `SPEC-Q220`
+    /// entry) this manifest's model serves. Only read by `TaskModels`'s system/provider
+    /// registries when they're built from a manifest.
+    var tasks: [String]?
+    /// The Keychain account name a `.provider` manifest's key lives under (`"anthropic"`),
+    /// or `nil` for a `.system` manifest or a credential-less LAN endpoint. Phase KEY reads
+    /// this; nothing does yet.
+    var credentials: String?
     var settings: [String: SettingSpec]
     var capabilities: ManifestCapabilities?
     var resources: ManifestResources?
 
     enum CodingKeys: String, CodingKey {
-        case id, display, settings, capabilities, resources
+        case id, display, kind, engine, tasks, credentials, settings, capabilities, resources
     }
 
-    init(id: String, display: String, settings: [String: SettingSpec],
-         capabilities: ManifestCapabilities? = nil, resources: ManifestResources?) {
+    init(id: String, display: String, kind: String? = nil, engine: String? = nil,
+         tasks: [String]? = nil, credentials: String? = nil,
+         settings: [String: SettingSpec], capabilities: ManifestCapabilities? = nil,
+         resources: ManifestResources?) {
         self.id = id
         self.display = display
+        self.kind = kind
+        self.engine = engine
+        self.tasks = tasks
+        self.credentials = credentials
         self.settings = settings
         self.capabilities = capabilities
         self.resources = resources

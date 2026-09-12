@@ -1,0 +1,33 @@
+{
+  "id": "apple/foundation-models",
+  "display": "apple-foundation @ system",
+  "kind": "system",
+  "engine": "apple-foundation-models",
+  "tasks": [
+    "Summarize",
+    "Rewrite",
+    "Translate",
+    "Answer",
+    "Draft",
+    "Title",
+    "Critique",
+    "Verify",
+    "Merge",
+    "Revise",
+    "Classify",
+    "Gate",
+    "Score",
+    "Judge",
+    "Decide"
+  ],
+  "settings": {},
+  "capabilities": {
+    "constrained_decoding": true
+  },
+  "resources": {
+    "disk_gb": 0,
+    "ram_gb": 0
+  },
+  "manifest_version": 1,
+  "pinned": false
+}

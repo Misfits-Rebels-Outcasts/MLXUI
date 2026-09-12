@@ -1698,8 +1698,18 @@ extension FlowValidator {
         return desc?.taskClass == .model
     }
 
+    /// AFM-1 (the trap the plan called out by name): "remote" means *leaves this Mac*, never
+    /// "the display name contains ` @ `" — `apple-foundation @ system` uses the same `name @
+    /// provider` grammar but runs on-device. A `" @ "` name is remote unless the system
+    /// registry (kind-based — `TaskModels.systemDisplayNames`, sourced from the curated
+    /// manifest's own `kind: "system"`, never a string test on the display) claims it.
+    /// `TaskModels.providerDisplayNames` is checked too, symmetrically, though every `" @ "`
+    /// name that isn't a system ref is remote by construction until Phase RM's registry has
+    /// entries of its own.
     static func isRemoteRow(_ row: ParsedRow) -> Bool {
-        namesAModel(row) && (row.model?.contains(" @ ") ?? false)
+        guard namesAModel(row), let model = row.model, model.contains(" @ ") else { return false }
+        if TaskModels.systemDisplayNames.contains(model) { return false }
+        return true
     }
 
     static func joinAnd(_ items: [String]) -> String {

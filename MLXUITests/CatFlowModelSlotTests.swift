@@ -56,8 +56,17 @@ struct CatFlowModelSlotTests {
         #expect(slot.readiness(installedModelIDs: []) == .needsDownload(gb: 3.25))
         #expect(slot.readiness(installedModelIDs: ["abc"]) == .ready)
         #expect(slot.readiness(installedModelIDs: ["something-else"]) == .needsDownload(gb: 3.25))
-        // The no-argument default (nothing installed) matches the empty-set call.
-        #expect(slot.readiness() == .needsDownload(gb: 3.25))
+    }
+
+    /// MS-FOLLOWUP-1: `readiness` takes no default — an omitted argument used to mean
+    /// "nothing is installed," silently reporting an *installed* cataloged model as
+    /// `.needsDownload`. This won't compile if the default ever comes back
+    /// (`slot.readiness()` is no longer callable), which is the actual enforcement; the
+    /// assertion just documents which of the two wrong answers the default used to produce.
+    @Test func readinessHasNoDefaultArgument() {
+        let entry = makeEntry(id: "abc", downloadSizeGB: 3.25)
+        let slot = ModelSlot.cataloged(entry)
+        #expect(slot.readiness(installedModelIDs: ["abc"]) != .needsDownload(gb: 3.25))
     }
 
     /// MS-1's own guardrail, made concrete: every catalog entry's readiness is
@@ -131,9 +140,17 @@ struct CatFlowModelSlotTests {
         #expect(!FlowRowInspectorView.isModelButtonEnabled(slot, installedModelIDs: ["big"], totalRAMGB: 16))
     }
 
-    // MARK: - MS-2: the picker's third section stays empty and unrendered today
+    // MARK: - MS-2: the picker's third section, empty when no registry has entries
 
+    /// AFM (`RSI/journal/2026-258`) makes `builtIn` genuinely non-empty on a real macOS 26+
+    /// Mac — this suite's own build machine included, since `AppleFoundationAvailability
+    /// .currentReadiness()` reads the real `SystemLanguageModel` when nothing overrides it.
+    /// `simulateOSUnavailable` restores MS-2's original claim precisely: with **no**
+    /// system/provider registry populated, the third section stays empty and unrendered —
+    /// this test's actual subject, not "AFM never exists."
     @Test @MainActor func sectionedModelCandidatesBuiltInSectionIsEmptyForEveryModelTask() throws {
+        AppleFoundationAvailability.simulateOSUnavailable = true
+        defer { AppleFoundationAvailability.simulateOSUnavailable = false }
         let catalog = try bundledCatalog()
         let registry = ModelRegistry()
         for module in installedModules { module.register(into: registry) }

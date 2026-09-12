@@ -211,14 +211,56 @@ nonisolated enum TaskModels {
         taskModels[task] ?? []
     }
 
-    /// MS-2 — Phase AFM's system-model registry, keyed by task name. Empty until AFM-1 gives
-    /// it real `ModelSlot.system` entries; `derivedModels` appends whatever's here so a newly
-    /// served task needs no change here, only a registry entry.
-    private static let systemModels: [String: [SystemModelRef]] = [:]
+    /// AFM-1 — Phase AFM's system-model registry, keyed by task name, driven by the curated
+    /// manifest's own `tasks` list (a policy file, not a hardcoded Swift array — MS-2 left
+    /// this empty; the manifest is what fills it in). A **computed** property, not `static
+    /// let`: readiness must reflect the current Apple Intelligence state, and a user who
+    /// enables it mid-session should see the picker change on next render, not a value
+    /// cached from launch. Empty on macOS < 26, when the manifest fails to load, or when its
+    /// `kind` isn't `"system"` — "absent from the pool," never an error (AFM-1).
+    private static var systemModels: [String: [SystemModelRef]] {
+        guard let readiness = AppleFoundationAvailability.currentReadiness(),
+              let manifest = CuratedManifest.load(manifestFile: "apple-foundation.json"),
+              manifest.kind == "system" else { return [:] }
+        let ref = SystemModelRef(id: manifest.id, displayName: manifest.display,
+                                 readiness: readiness, resourceNote: "Built into macOS")
+        let tasks = manifest.tasks ?? []
+        return Dictionary(uniqueKeysWithValues: tasks.map { ($0, [ref]) })
+    }
 
     /// MS-2 — Phase RM's provider-model registry, keyed by task name. Empty until RM-1/RM-2
     /// port the curated provider manifests into `ModelSlot.provider` entries.
     private static let providerModels: [String: [ProviderModelRef]] = [:]
+
+    /// AFM-1 — every display name the system registry currently offers, flattened: the
+    /// catalog-free membership check `FlowValidator.isRemoteRow` needs (manifest-`kind`-based,
+    /// not a `" @ "` string test). Cheap — the registry is one entry today.
+    static var systemDisplayNames: Set<String> {
+        Set(systemModels.values.flatMap { $0 }.map(\.displayName))
+    }
+
+    /// Same as `systemDisplayNames`, for Phase RM's provider registry — always empty until
+    /// RM-1/RM-2 land.
+    static var providerDisplayNames: Set<String> {
+        Set(providerModels.values.flatMap { $0 }.map(\.displayName))
+    }
+
+    /// The system-model ref backing `display`, if the registry currently offers it —
+    /// `CatalogBridge.resolve`'s fallback for a non-cataloged pick (AFM-1).
+    static func systemModelRef(forDisplay display: String) -> SystemModelRef? {
+        for refs in systemModels.values {
+            if let match = refs.first(where: { $0.displayName == display }) { return match }
+        }
+        return nil
+    }
+
+    /// Same as `systemModelRef(forDisplay:)`, for Phase RM's provider registry.
+    static func providerModelRef(forDisplay display: String) -> ProviderModelRef? {
+        for refs in providerModels.values {
+            if let match = refs.first(where: { $0.displayName == display }) { return match }
+        }
+        return nil
+    }
 
     /// The derived pool for a model task — **the** candidates in this build. Filtered by the
     /// corrected `runnerKind` (never `modelType`), the registry's own claim answer, `ModelSupport`,

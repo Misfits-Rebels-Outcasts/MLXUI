@@ -79,13 +79,13 @@ struct CatFlowTaskAvailabilityTests {
             let pool = TaskModels.derivedModels(for: task.name, catalog: catalog,
                                                 claimableModelIDs: claimable)
             for slot in pool {
-                // MS-2: every derived-pool member is `.cataloged` today (the system/provider
-                // registries are empty until Phase AFM/RM) — this test exercises the real MLX
-                // stage-building path, which only a cataloged `ModelEntry` can feed.
-                guard let model = slot.modelEntry else {
-                    Issue.record("\(task.name) offers a non-cataloged slot (\(slot.displayName)) unexpectedly")
-                    continue
-                }
+                // This test exercises the real MLX stage-building path, which only a
+                // cataloged `ModelEntry` can feed — a non-cataloged slot (AFM's `.system`,
+                // real on this machine since Phase AFM: `RSI/journal/2026-258`) is skipped
+                // here on purpose, not unexpectedly; its own dispatch is proven by
+                // `CatFlowAppleFoundationTests`, which mocks the executor instead of
+                // building a `ModelRegistry` stage.
+                guard let model = slot.modelEntry else { continue }
                 let display = slot.displayName
                 // (1) the executor's own stage path builds it.
                 let resolved = try #require(registry.bestModule(for: model),
