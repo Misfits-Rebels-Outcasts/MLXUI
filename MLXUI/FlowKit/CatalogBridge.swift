@@ -312,6 +312,20 @@ nonisolated enum CatalogBridge {
         if let model = catalog.first(where: { $0.hfModelId == display || $0.displayName == display }) {
             return .runnable(.cataloged(model), equivalence: .same, note: nil)
         }
+        // RM-3: a row naming a remote provider by its own `name @ provider` text, whose
+        // specific manifest isn't ported/known (a provider RM hasn't reached yet, or a typo)
+        // gets a provider-specific refusal with the fix-it button, not the generic sentence
+        // below — the display text alone says what it's asking for, no manifest needed.
+        // `apple-foundation @ system` also matches `" @ "` but resolved via
+        // `systemModelRef(forDisplay:)` above already; excluded here defensively in case
+        // that ever fails to load, so this never tells a system row to "add a key."
+        if let range = display.range(of: " @ "), !TaskModels.systemDisplayNames.contains(display) {
+            let provider = String(display[range.upperBound...]).capitalized
+            return .notRunnable(
+                display: display,
+                reason: "\(display) runs on \(provider)'s servers. Add your \(provider) key in Settings to use it.",
+                action: .openSettings(.providers))
+        }
         return .notRunnable(display: display,
                             reason: "\(display) isn't in the runnable-model table — this flow needs a model MLXUI can't run yet.",
                             action: nil)
@@ -435,26 +449,40 @@ nonisolated struct CuratedManifest: Codable, Sendable, Equatable {
     var tasks: [String]?
     /// The Keychain account name a `.provider` manifest's key lives under (`"anthropic"`),
     /// or `nil` for a `.system` manifest or a credential-less LAN endpoint. Phase KEY reads
-    /// this; nothing does yet.
+    /// this; RM-2 is the first to actually resolve one to a Keychain account.
     var credentials: String?
+    /// RM-4b/RM-2: `"internet"` (a hosted API) or `"lan"` (an on-prem/self-hosted endpoint
+    /// the user's own network reaches, never a third party). `nil` for every manifest
+    /// written before this field existed — never assumed `"internet"`; callers that care
+    /// check for `"lan"` explicitly rather than treating absence as either value.
+    var egress: String?
+    /// RM-2: the `openai-compatible` engine's endpoint (Groq, Together, OpenRouter, a LAN
+    /// box). `nil` for `anthropic-api`/`openai-api`/`deepseek-api`, whose base URL is fixed
+    /// per engine and lives in `ProviderExecutor`, not the manifest (ported verbatim from
+    /// `catflow-mlx/src/catflow/engines/provider.py`'s own adapters).
+    var baseURL: String?
     var settings: [String: SettingSpec]
     var capabilities: ManifestCapabilities?
     var resources: ManifestResources?
 
     enum CodingKeys: String, CodingKey {
-        case id, display, kind, engine, tasks, credentials, settings, capabilities, resources
+        case id, display, kind, engine, tasks, credentials, egress
+        case baseURL = "base_url"
+        case settings, capabilities, resources
     }
 
     init(id: String, display: String, kind: String? = nil, engine: String? = nil,
-         tasks: [String]? = nil, credentials: String? = nil,
-         settings: [String: SettingSpec], capabilities: ManifestCapabilities? = nil,
-         resources: ManifestResources?) {
+         tasks: [String]? = nil, credentials: String? = nil, egress: String? = nil,
+         baseURL: String? = nil, settings: [String: SettingSpec],
+         capabilities: ManifestCapabilities? = nil, resources: ManifestResources?) {
         self.id = id
         self.display = display
         self.kind = kind
         self.engine = engine
         self.tasks = tasks
         self.credentials = credentials
+        self.egress = egress
+        self.baseURL = baseURL
         self.settings = settings
         self.capabilities = capabilities
         self.resources = resources
@@ -554,7 +582,9 @@ nonisolated struct CuratedManifest: Codable, Sendable, Equatable {
 /// Settings row for free with no change here (that's the whole reason KEY comes before
 /// either — Q223 in `catflow-mlx/SPEC_QUESTIONS.md` already settled that a search
 /// provider is a `credentials:`-bearing manifest exactly like a model provider, so this
-/// one scan covers both).
+/// one scan covers both). RM-4b reuses the same bundle scan for `TaskModels
+/// .lanProviderDisplayNames` — one general "read every installed manifest" primitive,
+/// two call sites.
 extension CuratedManifest {
     /// The testable core: decode every URL as a `CuratedManifest` and keep the
     /// `credentials` name of the ones that have ANY declared `kind` and DO name one.
@@ -567,26 +597,33 @@ extension CuratedManifest {
     /// already is. Requiring `kind != nil` on top is belt-and-suspenders against a
     /// decode that happens to succeed by accident on a JSON file that isn't a manifest
     /// at all.
-    static func installedCredentialNames(manifestURLs urls: [URL]) -> [String] {
-        var names = Set<String>()
-        for url in urls {
+    static func installedManifests(manifestURLs urls: [URL]) -> [CuratedManifest] {
+        urls.compactMap { url in
             guard let data = try? Data(contentsOf: url),
                   let manifest = try? JSONDecoder().decode(CuratedManifest.self, from: data),
-                  manifest.kind != nil,
-                  let credentials = manifest.credentials else { continue }
-            names.insert(credentials)
+                  manifest.kind != nil else { return nil }
+            return manifest
         }
-        return names.sorted()
     }
 
     /// The production entry point: every top-level `.json` in the app bundle (where
     /// every `Resources/` subdirectory flattens to, per
-    /// `PBXFileSystemSynchronizedRootGroup`). No manifest on disk names a `credentials`
-    /// value yet — RM-1/WS-1 are what will — so this returns `[]` today; that is the
-    /// correct, verified answer, not a placeholder (confirmed by `grep -l credentials
-    /// Resources/CatFlow/models/*.json` returning nothing at journal `2026-259`).
-    static func installedCredentialNames(bundle: Bundle = .main) -> [String] {
+    /// `PBXFileSystemSynchronizedRootGroup`).
+    static func installedManifests(bundle: Bundle = .main) -> [CuratedManifest] {
         let urls = bundle.urls(forResourcesWithExtension: "json", subdirectory: nil) ?? []
-        return installedCredentialNames(manifestURLs: urls)
+        return installedManifests(manifestURLs: urls)
+    }
+
+    static func installedCredentialNames(manifestURLs urls: [URL]) -> [String] {
+        Set(installedManifests(manifestURLs: urls).compactMap(\.credentials)).sorted()
+    }
+
+    /// Phase KEY's original entry point, now built on `installedManifests(bundle:)` (RM-4b
+    /// needed the same bundle scan for `TaskModels.lanProviderDisplayNames`, so the decode
+    /// is shared rather than duplicated). As of RM, `claude-sonnet-4.json` / `gpt-5.6-
+    /// luna.json` / `deepseek-v4-flash.json` each name one (`anthropic` / `openai` /
+    /// `deepseek`) — no longer `[]`, per journal `2026-260`.
+    static func installedCredentialNames(bundle: Bundle = .main) -> [String] {
+        installedCredentialNames(manifestURLs: bundle.urls(forResourcesWithExtension: "json", subdirectory: nil) ?? [])
     }
 }

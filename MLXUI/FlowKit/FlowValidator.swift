@@ -658,6 +658,7 @@ extension FlowValidator {
             checkRateBudget(flow.rows, issues: &issues, isV08: isV08, transforms: flow.transforms)
             checkPipelineRules(flow, issues: &issues)
             checkModelsPinned(flow.rows, models: flow.models, registry: registry, issues: &issues)
+            checkOffdeviceFlag(flow.rows, models: flow.models, flags: flow.flags, registry: registry, issues: &issues)
             checkDoors(flow, issues: &issues, workspace: workspace, flowID: flowID,
                        registry: registry, rootFile: rootFile)
         }
@@ -1819,6 +1820,63 @@ extension FlowValidator {
             if let registry, !isRemoteRow(row), registry.resolveDisplay(model) != nil { continue }
             issues.append(FlowIssue(row: path, code: "E104", message: (try? ErrorCatalog.fill(
                 code: "E104", values: ["n": path, "display": model])) ?? ""))
+        }
+    }
+
+    // MARK: - Offdevice flag (E120)
+
+    /// RM-4b — a flow that binds a remote provider must declare `; offdevice` on line one.
+    /// The backlog's own ground-truth table listed E120 among things that "already ship";
+    /// Phase AFM proved that wrong (journal `2026-258`) — the message was defined and
+    /// nothing ever raised it. This is the check.
+    ///
+    /// Ported from `catflow-mlx/src/catflow/core/validator.py::_check_offdevice_flag`,
+    /// with **one deliberate, flagged divergence and one deliberate, flagged
+    /// strengthening** — both recorded here rather than silently applied:
+    ///
+    /// 1. **Divergence.** The reference raises E120 for a `lan`-egress manifest too —
+    ///    `egress` there only changes the message's wording ("leaves this machine" vs
+    ///    "leaves this building"), never whether it fires (`validator.py:1458-1466`). This
+    ///    cycle's own instruction says the opposite: "test that … the keyless LAN endpoint
+    ///    do[es] not raise it." Implemented per that instruction — a `lan`-egress row is
+    ///    exempt outright — not silently reconciled with the reference. Flagged for the
+    ///    owner in the journal.
+    /// 2. **Strengthening.** The reference's whole function returns immediately when
+    ///    `registry is None` — harmless in Python, where every real caller supplies one,
+    ///    but MLXUI's own `checkFlow` is **always** called with `registry: nil` in
+    ///    production (`AppState.swift`, `FlowEditorModel.swift` — confirmed AFM-FOLLOWUP-3,
+    ///    journal `2026-259`, the same gap already found for E104). Porting the
+    ///    registry-null-return verbatim would make this check compile, pass every test that
+    ///    supplies a registry, and **never fire for a real user** — exactly the illusion
+    ///    RM-4b exists to prevent ("that visibility is the entire basis on which 'both
+    ///    editions' was acceptable"). So the registry-independent path — `isRemoteRow`'s own
+    ///    `" @ provider"` text test, and the LAN exemption via the bundle-derived
+    ///    `TaskModels.lanProviderDisplayNames` (never the registry) — always runs, with real
+    ///    production effect. `registry` is consulted only for the reference's narrower,
+    ///    second case (no `" @ provider"` in the row text, but the row's `models:` pin
+    ///    resolves to a `kind: "provider"` manifest) — which, like E104's own registry path,
+    ///    has no live caller today and is kept for tests/future-proofing, not production
+    ///    correctness.
+    static func checkOffdeviceFlag(_ rows: [ParsedRow], models: [String: String], flags: [String],
+                                   registry: (any FlowRegistry)?, issues: inout [FlowIssue]) {
+        guard !flags.contains("offdevice") else { return }
+        for (path, row) in iterFlowRows(rows) {
+            guard namesAModel(row), let model = row.model else { continue }
+            if TaskModels.lanProviderDisplayNames.contains(model) { continue }
+            var provider = model
+            var fires = isRemoteRow(row)
+            if !fires, let registry {
+                let pinnedID = models[model]
+                let manifest = pinnedID.flatMap { registry.get($0) } ?? registry.resolveDisplay(model)
+                if let manifest, manifest.kind == "provider" {
+                    fires = true
+                    provider = manifest.display
+                }
+            }
+            guard fires else { continue }
+            issues.append(FlowIssue(row: path, code: "E120", message: (try? ErrorCatalog.fill(
+                code: "E120", values: ["n": path, "task": row.task ?? "", "provider": provider,
+                                        "egress": "leaves this building"], isV08: true)) ?? ""))
         }
     }
 

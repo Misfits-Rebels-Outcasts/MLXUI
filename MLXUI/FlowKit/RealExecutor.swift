@@ -39,6 +39,9 @@ nonisolated struct RealExecutor: FlowExecutor {
 
     var lastTag: String? { tagBox.tag }
     var lastTimeoutFlag: (code: String, message: String)? { flagBox.timeout }
+    /// RM-2 — the F010 disclosure from a provider decider's strict-parse tag, same box
+    /// shape as `lastTimeoutFlag`. `nil` for every non-provider row.
+    var lastProviderDeciderFlag: (code: String, message: String)? { flagBox.providerDecider }
     var lastStaged: (id: String, kind: String, summary: String)? { stagedBox.staged }
 
     /// A reference box for the decider's fired tag.
@@ -46,9 +49,10 @@ nonisolated struct RealExecutor: FlowExecutor {
         var tag: String?
     }
 
-    /// A reference box for the F002 timeout disclosure.
+    /// A reference box for the F002 timeout disclosure and RM-2's F010 disclosure.
     private final class FlagBox: @unchecked Sendable {
         var timeout: (code: String, message: String)?
+        var providerDecider: (code: String, message: String)?
     }
 
     /// CFM-R12-8: a staged row's effect, read by the interpreter for `effect_staged`.
@@ -66,6 +70,7 @@ nonisolated struct RealExecutor: FlowExecutor {
         }
         tagBox.tag = nil
         flagBox.timeout = nil
+        flagBox.providerDecider = nil
 
         // CFM-R10-Direct (FIX-2): a row naming a `transforms:` entry runs that script fenced —
         // in the Direct build only. The App Store build compiles the fence out and refuses
@@ -133,6 +138,16 @@ nonisolated struct RealExecutor: FlowExecutor {
                                                                transcript: transcript, context: context, ref: systemRef)
                 }
                 return try await runAppleFoundationFrame(desc, row: row, inputs: inputs, path: path, ref: systemRef)
+            }
+            // RM-2: a row naming a provider slot dispatches to `ProviderStage` (HTTP)
+            // entirely, the same bypass-`resolveModel` shape as `.system` above — there is
+            // no `ModelEntry`/local file for a remote row either.
+            if case .runnable(.provider(let providerRef), _, _) = CatalogBridge.resolve(row.model ?? "", catalog: catalog) {
+                if TaskCatalog.deciderTasks[task] != nil {
+                    return try await runProviderDecider(desc, row: row, inputs: inputs, path: path,
+                                                        transcript: transcript, context: context, ref: providerRef)
+                }
+                return try await runProviderFrame(desc, row: row, inputs: inputs, path: path, ref: providerRef)
             }
             // CFM-R9-5: deciders render their own frame and fire a declared tag (F004
             // strict-parse), instead of returning the raw reply as content.
@@ -723,6 +738,112 @@ nonisolated struct RealExecutor: FlowExecutor {
         case .unavailable(let reason): return reason
         case .ready, .needsDownload: return "\(ref.displayName) isn't ready."
         }
+    }
+
+    // MARK: - RM-2: provider dispatch
+
+    private static func providerUnreadyMessage(_ ref: ProviderModelRef) -> String {
+        switch ref.readiness {
+        case .needsSetup(let reason, _): return reason
+        case .unavailable(let reason): return reason
+        case .ready, .needsDownload: return "\(ref.displayName) isn't ready."
+        }
+    }
+
+    /// A provider's `max_tokens`, resolved through the manifest's own `resolveEngineSettings`
+    /// (SET-1) — the same `maps_to`/default machinery every MLX manifest already uses, so a
+    /// row's `max_tokens=` setting (or the manifest's own default) reaches the request body,
+    /// never a hardcoded number. Falls back to `512` (the reference's own default) only when
+    /// the manifest declares no `max_tokens` setting at all.
+    private static func providerMaxTokens(_ ref: ProviderModelRef, row: Row, path: String) throws -> Int {
+        let resolved = try ref.manifest.resolveEngineSettings(row.settings, rowLabel: path)
+        return resolved["max_tokens"].flatMap(Int.init) ?? 512
+    }
+
+    /// A frame-backed row (Answer, Summarize, Rewrite, …) or a plain `.engine` text task
+    /// (Generate) run against a remote provider instead of an MLX stage. Mirrors
+    /// `runAppleFoundationFrame`'s shape; the frame-vs-plain branch mirrors `runModel`'s own
+    /// (a provider manifest's `tasks` list is advisory for the picker, same as AFM's, not a
+    /// hard per-task allow-list at dispatch time — `44-FrontierEscalate.cat`'s own `Answer`
+    /// row against `claude-sonnet @ anthropic` relies on exactly this: the manifest's
+    /// `tasks: ["Generate", "Decide"]` doesn't list `Answer`, and the row still runs).
+    private func runProviderFrame(_ desc: TaskDescriptor, row: Row, inputs: [Asset],
+                                  path: String, ref: ProviderModelRef) async throws -> Asset {
+        guard case .ready = ref.readiness else {
+            throw FlowError.stageFailure(row: path, message: Self.providerUnreadyMessage(ref))
+        }
+        guard !inputs.isEmpty else {
+            throw FlowError.badInputCardinality(row: "\(path)", expected: "a text input", got: 0)
+        }
+        let prompt: String
+        if desc.refKind == .frame {
+            let frameName = desc.refName
+                .replacingOccurrences(of: "frames/", with: "")
+                .replacingOccurrences(of: ".frame.txt", with: "")
+            let frame = try FrameRenderer.loadFrame(named: frameName)
+            prompt = try FrameRenderer.render(frameText: frame, settings: row.settings, assets: inputs)
+        } else {
+            prompt = DeciderFrame.flatTexts(inputs).joined(separator: "\n")
+        }
+        let maxTokens = try Self.providerMaxTokens(ref, row: row, path: path)
+        let executor = ProviderAvailability.makeExecutor(for: ref.manifest)
+        do {
+            let text = try await executor.generate(instructions: "", prompt: prompt, maxTokens: maxTokens, temperature: 0)
+            return try persist(.text(text), rowLabel: "\(path)")
+        } catch let error as ProviderRequestError {
+            throw FlowError.stageFailure(row: path, message: (try? ErrorCatalog.fill(
+                code: "R904", values: ["provider": ref.displayName, "status": error.status], isV08: true)) ?? "")
+        }
+    }
+
+    /// A decider row (Classify, Gate, Score, Judge, Decide) run against a remote provider.
+    /// Every provider manifest declares `capabilities.constrained_decoding: false`, so this
+    /// is Spec §12.2's strict-parse-plus-one-retry path via `fireTag` — the same F004
+    /// mechanism the MLX path uses, wrapped through `ProviderStage` (`PipelineStage`) rather
+    /// than reimplemented — and, unlike AFM's guided generation, **F010 is disclosed**: the
+    /// row's tag is parsed, not guaranteed.
+    private func runProviderDecider(_ desc: TaskDescriptor, row: Row, inputs: [Asset], path: String,
+                                    transcript: [FlowInterpreter.TranscriptEntry]?,
+                                    context: [(label: String, content: String)]?,
+                                    ref: ProviderModelRef) async throws -> Asset {
+        guard case .ready = ref.readiness else {
+            throw FlowError.stageFailure(row: path, message: Self.providerUnreadyMessage(ref))
+        }
+        let task = desc.name
+        // Same scope line AFM-2 drew: Think's tool/transcript loop is a much larger feature
+        // than "call the provider and parse a tag," and no ported manifest's `tasks` names
+        // it. A row that names Think against a provider directly is refused, not guessed.
+        guard task != "Think" else {
+            throw FlowError.stageFailure(row: path, message: "\(ref.displayName) doesn't serve Think yet.")
+        }
+        let (basePrompt, tags) = try Self.deciderPrompt(desc, row: row, inputs: inputs,
+                                                        transcript: transcript, context: context)
+        guard !tags.isEmpty else {
+            throw FlowError.stageFailure(row: path, message: "Row \(path) declares no tags to decide between.")
+        }
+        let maxTokens = try Self.providerMaxTokens(ref, row: row, path: path)
+        let executor = ProviderAvailability.makeExecutor(for: ref.manifest)
+        let stage = ProviderStage(id: ref.id, name: ref.displayName, executor: executor,
+                                  maxTokens: maxTokens, temperature: 0)
+        let tag: String
+        do {
+            (tag, _) = try await Self.fireTag(stage: stage, prompt: basePrompt, tags: tags, rowLabel: path)
+        } catch let error as ProviderRequestError {
+            throw FlowError.stageFailure(row: path, message: (try? ErrorCatalog.fill(
+                code: "R904", values: ["provider": ref.displayName, "status": error.status], isV08: true)) ?? "")
+        }
+        tagBox.tag = tag
+        flagBox.providerDecider = ("F010", (try? ErrorCatalog.fill(
+            code: "F010", values: ["n": path, "task": task, "provider": ref.displayName], isV08: true)) ?? "")
+
+        if task == "Judge" {
+            let (_, candidates) = DeciderFrame.splitJudgeBundle(inputs, tags: tags)
+            if let index = tags.firstIndex(of: tag), index < candidates.count {
+                return Asset(items: candidates[index].items)
+            }
+            return inputs.first ?? Asset(items: [])
+        }
+        return inputs.first ?? Asset(items: [])
     }
 
     /// F004: run the prompt, strict-parse the tag (whole-word, case-insensitive, longest

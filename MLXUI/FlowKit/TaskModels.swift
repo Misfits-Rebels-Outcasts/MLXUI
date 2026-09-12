@@ -228,9 +228,37 @@ nonisolated enum TaskModels {
         return Dictionary(uniqueKeysWithValues: tasks.map { ($0, [ref]) })
     }
 
-    /// MS-2 — Phase RM's provider-model registry, keyed by task name. Empty until RM-1/RM-2
-    /// port the curated provider manifests into `ModelSlot.provider` entries.
-    private static let providerModels: [String: [ProviderModelRef]] = [:]
+    /// RM-2 — Phase RM's provider-model registry, keyed by task name. Scanned from every
+    /// bundled `kind: "provider"` manifest (`CuratedManifest.installedManifests()` — the
+    /// same general bundle scan KEY-2 built for the Settings section, not a hardcoded
+    /// filename list: a manifest RM-1/WS-1 adds gets picker rows for free, matching KEY-2's
+    /// own "never a hardcoded list" reasoning). A **computed** property, not `static let` —
+    /// `ProviderCredential.readiness` reads the Keychain, and a key pasted or removed
+    /// mid-session must change the picker on next render, same reasoning as `systemModels`.
+    private static var providerModels: [String: [ProviderModelRef]] {
+        var byTask: [String: [ProviderModelRef]] = [:]
+        for manifest in CuratedManifest.installedManifests() where manifest.kind == "provider" {
+            let ref = ProviderModelRef(manifest: manifest,
+                                       readiness: ProviderCredential.readiness(for: manifest))
+            for task in TaskCatalog.expandTaskNames(manifest.tasks ?? []) {
+                byTask[task, default: []].append(ref)
+            }
+        }
+        return byTask
+    }
+
+    /// RM-4b — provider-kind manifests whose `egress` is `"lan"` (a self-hosted/on-prem
+    /// endpoint the user's own network reaches, never a third party) — exempt from E120.
+    /// Static, bundle-derived, registry-independent for the same reason
+    /// `systemDisplayNames` is: `FlowValidator.checkOffdeviceFlag`'s classification must
+    /// work with no `FlowRegistry` (`checkFlow`'s only production callers never construct
+    /// one — AFM-FOLLOWUP-3, journal `2026-259`), so this cannot depend on anything a real
+    /// run would leave `nil`.
+    static var lanProviderDisplayNames: Set<String> {
+        Set(CuratedManifest.installedManifests()
+            .filter { $0.kind == "provider" && $0.egress == "lan" }
+            .map(\.display))
+    }
 
     /// AFM-1 — every display name a `kind: "system"` manifest in the bundle names. **Static,
     /// never gated on `AppleFoundationAvailability.currentReadiness()`** — this is

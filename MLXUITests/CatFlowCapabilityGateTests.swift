@@ -67,4 +67,23 @@ struct CatFlowCapabilityGateTests {
         #expect(parsed.flags.contains("code"))
         #expect(parsed.flowDocument?.flags.contains(.code) == true)
     }
+
+    // MARK: - RM-4: `offdevice` is deliberately not in the refused set
+
+    /// RM-4: `FlowDocument.swift`'s comment above `CapabilityFlag` used to claim
+    /// `code`/`improvise`/`offdevice` all refuse under `APPSTORE_BUILD`. That was wrong —
+    /// only `code`/`improvise` ever did (owner ruling 4: remote models ship in both
+    /// editions). Pins the actual set so it can't drift back to matching the old comment.
+    @Test func appStoreRefusedFlagsIsExactlyCodeAndImprovise() {
+        #expect(CapabilityGate.appStoreRefusedFlags == ["code", "improvise"])
+    }
+
+    @Test func canRunAcceptsOffdeviceFlag() throws {
+        let doc = try CatParser.parseForValidation("mlxflow 0.8; offdevice\n1. Read Text  a.txt\n2. Save Text  out.txt\n").flowDocument
+        let runnability = FlowRunner.canRun(try #require(doc))
+        if case .notRunnable(let reason) = runnability {
+            #expect(!reason.contains("App Store builds refuse"),
+                    "offdevice shouldn't be door-refused, got: \(reason)")
+        }
+    }
 }

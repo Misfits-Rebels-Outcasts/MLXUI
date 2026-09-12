@@ -1,0 +1,31 @@
+{
+  "id": "openai/gpt-5.6-luna",
+  "display": "gpt-5.6-luna @ openai",
+  "kind": "provider",
+  "engine": "openai-api",
+  "tasks": [
+    "Generate",
+    "Decide"
+  ],
+  "settings": {
+    "max_tokens": {
+      "type": "number",
+      "min": 1,
+      "max": 128000,
+      "default": 4096,
+      "maps_to": "max_tokens"
+    }
+  },
+  "capabilities": {
+    "constrained_decoding": false,
+    "schema_mode": true
+  },
+  "resources": {
+    "disk_gb": 0,
+    "ram_gb": 0
+  },
+  "credentials": "openai",
+  "checksum": "N/A",
+  "manifest_version": 1,
+  "pinned": false
+}

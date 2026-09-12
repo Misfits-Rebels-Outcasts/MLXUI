@@ -79,11 +79,15 @@ struct CatFlowProviderCredentialTests {
         #expect(CuratedManifest.installedCredentialNames(manifestURLs: [url]).isEmpty)
     }
 
-    /// The production entry point, run against the real bundle: no shipped manifest names
-    /// a `credentials` value yet (RM-1/WS-1 are what will), so this is `[]` today — the
-    /// verified current answer, not a placeholder.
-    @Test func noShippedManifestNamesACredentialYet() {
-        #expect(CuratedManifest.installedCredentialNames().isEmpty)
+    /// The production entry point, run against the real bundle: RM-1 ported three keyed
+    /// provider manifests (`claude-sonnet-4`/`gpt-5.6-luna`/`deepseek-v4-flash`), each
+    /// naming its own `credentials`; the fourth (`macstudio-qwen3-32b`, the keyless LAN
+    /// endpoint) correctly contributes no row. `[]` was the verified answer at KEY —
+    /// this is the verified answer now, updated rather than loosened, per that journal's
+    /// own note that it "will legitimately need updating the day RM or WS lands the first
+    /// `credentials`-bearing manifest, which is the entire point."
+    @Test func shippedManifestsNameExactlyRMsThreeKeyedProviders() {
+        #expect(CuratedManifest.installedCredentialNames() == ["anthropic", "deepseek", "openai"])
     }
 
     // MARK: - ProviderCredential.readiness

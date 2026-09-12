@@ -130,13 +130,29 @@ nonisolated struct SystemModelRef: Sendable, Equatable {
 }
 
 /// Phase RM's provider-model reference (e.g. `claude-sonnet @ anthropic`) — a `ModelSlot
-/// .provider` payload. Same shape-only status as `SystemModelRef`; RM-1/RM-2 give it real
-/// manifests and a Keychain-backed readiness.
+/// .provider` payload. RM-2: carries the full `CuratedManifest` rather than a handful of
+/// flattened fields — dispatch (`ProviderExecutor`) needs `engine`/`baseURL`/`credentials`
+/// and settings resolution (`CuratedManifest.resolveEngineSettings`) needs the manifest's
+/// own `settings` dict, so re-deriving a second, parallel shape here would just be the
+/// same trap `ModelSlot`'s own header warns against in miniature: a stripped-down copy
+/// that "happens to work" until dispatch needs a field nobody carried forward.
 nonisolated struct ProviderModelRef: Sendable, Equatable {
-    let id: String
-    let displayName: String
+    let manifest: CuratedManifest
     let readiness: Readiness
-    let resourceNote: String?
+
+    var id: String { manifest.id }
+    var displayName: String { manifest.display }
+    /// RM-2, verbatim from the backlog: said on the Model menu row, not only in a run-time
+    /// refusal — this is a *Human In Control* product, so the picker is the right place to
+    /// disclose that picking this row means the row's data leaves the machine.
+    var resourceNote: String? { "Runs on \(providerName) — leaves this Mac" }
+    /// The ` @ provider` suffix of the display name (`"anthropic"`, `"openai"`, or the
+    /// literal `"http://mac-studio.local:8080"` for the LAN case — its own display already
+    /// names the endpoint, so this reads correctly without inventing a separate label).
+    var providerName: String {
+        guard let range = manifest.display.range(of: " @ ") else { return manifest.display }
+        return String(manifest.display[range.upperBound...])
+    }
 }
 
 /// KEY-3 — the Keychain-backed half of `ProviderModelRef.readiness`, built now so RM-2
@@ -162,5 +178,14 @@ nonisolated enum ProviderCredential {
                                 action: .openSettings(.providers))
         }
         return .ready
+    }
+
+    /// RM-2's actual one line: `TaskModels.providerModels` calls this per manifest.
+    /// `manifest.credentials == nil` is the credential-less LAN case (`egress: "lan"`,
+    /// `macstudio-qwen3-32b.json`) — always `.ready`, never asks for a key that manifest
+    /// never declared.
+    static func readiness(for manifest: CuratedManifest) -> Readiness {
+        guard let name = manifest.credentials else { return .ready }
+        return readiness(providerName: name)
     }
 }

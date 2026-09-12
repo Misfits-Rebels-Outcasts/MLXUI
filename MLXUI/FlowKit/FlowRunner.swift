@@ -57,6 +57,11 @@ nonisolated protocol FlowExecutor: Sendable {
     /// for F002, or nil. `MockExecutor` sets it for Ask Human / Human Input with a `timeout=`.
     var lastTimeoutFlag: (code: String, message: String)? { get }
 
+    /// RM-2 — a provider decider's F010 disclosure ("this row's tag is parsed, not
+    /// guaranteed"), same shape as `lastTimeoutFlag`. `nil` for every non-provider-decider
+    /// row. `MockExecutor` sets it for a `name @ provider` decider row.
+    var lastProviderDeciderFlag: (code: String, message: String)? { get }
+
     /// A staged row's queued outbox effect (the Python's `last_staged`), or nil.
     var lastStaged: (id: String, kind: String, summary: String)? { get }
 }
@@ -72,6 +77,7 @@ extension FlowExecutor {
     var lastCacheHit: Bool { false }
     var lastTag: String? { nil }
     var lastTimeoutFlag: (code: String, message: String)? { nil }
+    var lastProviderDeciderFlag: (code: String, message: String)? { nil }
     var lastStaged: (id: String, kind: String, summary: String)? { nil }
 }
 

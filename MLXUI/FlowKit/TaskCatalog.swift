@@ -79,6 +79,47 @@ nonisolated enum TaskCatalog {
         catalog[name] ?? deciderTasks[name]
     }
 
+    /// RM-2 (SPEC-Q204) — expand a named `tasks:` group a provider manifest can reference
+    /// (`"tasks": ["@frames-text", "Decide"]`, e.g. `macstudio-qwen3-32b.json`, ported
+    /// verbatim in RM-1). Ported from `catflow-mlx/src/catflow/catalog/tasks.py
+    /// ::task_group_members`: membership is *derived* from the catalog's own signatures,
+    /// never a hand-written inventory, so a new frame task inherits membership the day it
+    /// lands — a manifest is a policy file, not a maintained list that drifts silently
+    /// (the exact trap AFM-2 sidestepped by NOT using this group for `apple-foundation
+    /// .json`, per its own comment — that manifest's curated list predates this function).
+    /// `"frames-text"` is the only group the reference defines: the bare `Generate`
+    /// primitive plus every frame-backed model task whose output is text (`.single`/
+    /// `.listOf` of `.text`). `deciders` are never members — `CATALOG` in the Python
+    /// excludes them too (SPEC-Q55(a)'s split), and a `Decide`/`Gate`/… row is picked by
+    /// its own explicit `tasks:` entry, not swept in by a group.
+    static func taskGroupMembers(_ group: String) -> [String] {
+        guard group == "frames-text" else { return [] }
+        var members: Set<String> = ["Generate"]
+        for entry in entries where entry.taskClass == .model && entry.refKind == .frame {
+            switch entry.gives {
+            case .single(.text), .listOf(.text):
+                members.insert(entry.name)
+            default:
+                break
+            }
+        }
+        return members.sorted()
+    }
+
+    /// A manifest's raw `tasks` array, with any `@group` entries expanded (RM-2) — the
+    /// list `TaskModels.providerModels`/`systemModels` actually key their registry by.
+    static func expandTaskNames(_ tasks: [String]) -> [String] {
+        var out: [String] = []
+        for task in tasks {
+            if task.hasPrefix("@") {
+                out.append(contentsOf: taskGroupMembers(String(task.dropFirst())))
+            } else {
+                out.append(task)
+            }
+        }
+        return out
+    }
+
     // MARK: - The table (ported verbatim from tasks.py `_ENTRIES`)
 
     /// `_t(kind)` → `Shape.single(kind)`.

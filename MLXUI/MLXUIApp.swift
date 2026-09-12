@@ -22,13 +22,11 @@ struct MLXUIApp: App {
     ///
     /// **`MLXUIApp.init()` is *not* a safe "only in a real launch" signal on its own** — a
     /// macOS app's unit test bundle runs *inside* the app process as its test host, so
-    /// `@main` fires and this initializer runs even under `xcodebuild test` (confirmed: the
-    /// app's own startup logging appeared in a plain test run before this guard existed).
-    /// The standard, tool-agnostic signal that survives both XCTest and swift-testing (both
-    /// launch through the same `xctest` host mechanism) is `XCTestConfigurationFilePath` in
-    /// the environment — Xcode's test runner sets it, nothing else does.
+    /// `@main` fires and this initializer runs even under `xcodebuild test`. Guarded on
+    /// `TestEnvironment.isRunningTests` (the KEY review's request: one named place for this
+    /// check, not a raw environment lookup repeated at every call site).
     init() {
-        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+        if !TestEnvironment.isRunningTests {
             AppleFoundationAvailability.useRealSystem = true
         }
     }

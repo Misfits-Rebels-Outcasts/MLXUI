@@ -661,6 +661,11 @@ nonisolated enum FlowInterpreter {
             if let timeout = executor.lastTimeoutFlag {
                 events.append(PathEvent.flagRaised(execPath, timeout.code, timeout.message))
             }
+            // RM-2: a provider decider's F010 disclosure — "this row's tag is parsed, not
+            // guaranteed" — after the row completes, same ordering as F002 above.
+            if let providerFlag = executor.lastProviderDeciderFlag {
+                events.append(PathEvent.flagRaised(execPath, providerFlag.code, providerFlag.message))
+            }
             if let staged = executor.lastStaged {
                 events.append(PathEvent.effectStaged(execPath, staged.id, staged.kind, staged.summary))
             }

@@ -103,10 +103,13 @@ struct CatFlowModelSlotTests {
     // MARK: - MS-1/MS-4: a fixture slot of each readiness renders the right note and state
 
     @Test func readySlotIsSelectableWithItsResourceNote() {
-        let ref = ProviderModelRef(id: "claude-sonnet@anthropic", displayName: "claude-sonnet @ anthropic",
-                                   readiness: .ready, resourceNote: "Runs on Anthropic — leaves this Mac")
+        // RM-2: `ProviderModelRef` now carries the manifest itself, not flattened fields —
+        // `resourceNote` is computed from `manifest.display`'s ` @ provider` suffix.
+        let manifest = CuratedManifest(id: "anthropic/claude-sonnet-4", display: "claude-sonnet @ anthropic",
+                                       kind: "provider", settings: [:], resources: nil)
+        let ref = ProviderModelRef(manifest: manifest, readiness: .ready)
         let slot = ModelSlot.provider(ref)
-        #expect(slot.resourceNote == "Runs on Anthropic — leaves this Mac")
+        #expect(slot.resourceNote == "Runs on anthropic — leaves this Mac")
         #expect(FlowRowInspectorView.isModelButtonEnabled(slot, installedModelIDs: [], totalRAMGB: 8))
     }
 
@@ -143,18 +146,30 @@ struct CatFlowModelSlotTests {
     // MARK: - MS-2: the picker's third section, empty when no registry has entries
 
     /// AFM-FOLLOWUP-1 (`RSI/journal/2026-259`): `AppleFoundationAvailability.useRealSystem`
-    /// defaults to `false` — only `MLXUIApp.init()` ever flips it — so this test needs no
-    /// override at all to see MS-2's original claim: with no system/provider registry
-    /// populated, the third section stays empty and unrendered, on any build machine.
-    @Test @MainActor func sectionedModelCandidatesBuiltInSectionIsEmptyForEveryModelTask() throws {
+    /// defaults to `false` — only `MLXUIApp.init()` ever flips it — so the system registry
+    /// stays empty here regardless of this build machine. The provider registry is a
+    /// different story now: RM ported four real manifests, so MS-2's original "the third
+    /// section stays empty for every model task" claim is exactly what RM exists to end
+    /// for the tasks those manifests actually name. Pinned precisely instead of loosened:
+    /// the populated set is exactly `@frames-text`'s own members (`Generate` plus every
+    /// frame-backed text task — the group `macstudio-qwen3-32b.json` references, and every
+    /// keyed manifest lists `Generate` literally too); every other model task must still
+    /// show nothing.
+    @Test @MainActor func sectionedModelCandidatesBuiltInSectionIsPopulatedOnlyForRMPortedTasks() throws {
         let catalog = try bundledCatalog()
         let registry = ModelRegistry()
         for module in installedModules { module.register(into: registry) }
         let claimable = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
+        let populated = Set(TaskCatalog.taskGroupMembers("frames-text"))
         for task in TaskCatalog.entries where task.taskClass == .model {
             let sections = FlowEditorModel.sectionedModelCandidates(
                 for: task.name, catalog: catalog, installedModelIDs: [], claimableModelIDs: claimable)
-            #expect(sections.builtIn.isEmpty, "\(task.name) unexpectedly offers a built-in slot")
+            if populated.contains(task.name) {
+                #expect(!sections.builtIn.isEmpty,
+                        "\(task.name) should offer a built-in provider slot now that RM has ported manifests")
+            } else {
+                #expect(sections.builtIn.isEmpty, "\(task.name) unexpectedly offers a built-in slot")
+            }
         }
     }
 
@@ -190,10 +205,17 @@ struct CatFlowModelSlotTests {
         #expect(FlowPreflight.blockedAction(result) == .enableAppleIntelligence)
     }
 
-    /// MS-3's own exit criterion, checked directly: no bundled gallery flow lands in the new
-    /// `needsSetup` bucket today (it can't — the registries feeding it are empty), so the
-    /// install/run sheet's set of models-to-download is unaffected by this phase.
-    @Test func noGalleryFlowNeedsSetupToday() throws {
+    /// MS-3's own exit criterion, updated for RM: it used to say no bundled gallery flow
+    /// ever lands in `needsSetup` "because the registries feeding it are empty" — RM ends
+    /// that on purpose. `44-FrontierEscalate.cat` names `claude-sonnet @ anthropic`
+    /// directly, so with no Anthropic key in the Keychain it legitimately needs setup now.
+    /// Pinned precisely (which flow, and only that one) rather than loosened to nothing.
+    @Test func onlyFrontierEscalateNeedsSetupAndOnlyForItsAnthropicKey() throws {
+        let account = KeychainHelper.providerAccount("anthropic")
+        let original = KeychainHelper.get(account: account)
+        KeychainHelper.delete(account: account)
+        defer { if let original { KeychainHelper.save(original, account: account) } }
+
         let catalog = try bundledCatalog()
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()
@@ -203,14 +225,16 @@ struct CatFlowModelSlotTests {
             return
         }
         var checked = 0
+        var needingSetup: [String] = []
         for case let url as URL in enumerator where url.pathExtension == "cat" {
             guard let text = try? String(contentsOf: url, encoding: .utf8),
                   let doc = try? CatParser.parse(text) else { continue }
             let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 64)
-            #expect(result.needsSetup.isEmpty, "\(url.lastPathComponent) unexpectedly needs setup")
+            if !result.needsSetup.isEmpty { needingSetup.append(url.lastPathComponent) }
             checked += 1
         }
         #expect(checked > 0, "expected to find at least one bundled .cat flow")
+        #expect(needingSetup == ["44-FrontierEscalate.cat"])
     }
 
     // MARK: - FlowRunnability.refusal — the back-compat wrapper agrees with the tuple form

@@ -407,8 +407,12 @@ nonisolated enum FileKind: String, Codable, Sendable, Equatable {
 }
 
 /// Header capability flags: `network`, `events`, `improvise`, `code`, `offdevice`.
-/// The `code`/`improvise`/`offdevice` doors refuse to run under `APPSTORE_BUILD`
-/// (CFM-R5-6); the rest are ordinary declarations.
+/// RM-4: only `code`/`improvise` refuse to run under `APPSTORE_BUILD`
+/// (`CapabilityGate.appStoreRefusedFlags`, CFM-R5-6) — `offdevice` deliberately stays
+/// out of that set (owner ruling 4, `RSI/DelegateOffMachineBacklog.md` §0: remote models
+/// ship in **both** editions). This comment previously claimed all three were refused;
+/// that was wrong and unrelated to the actual gate, which always consulted the
+/// two-flag set correctly.
 nonisolated enum CapabilityFlag: String, Codable, Sendable, Equatable, CaseIterable {
     case network, events, improvise, code, offdevice
 }
