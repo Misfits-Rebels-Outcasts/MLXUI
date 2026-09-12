@@ -57,10 +57,10 @@ struct CatFlowCatalogBridgeTests {
         let catalog = try loadCatalog()
         for entry in CatalogBridge.entries {
             switch CatalogBridge.resolve(entry.display, catalog: catalog) {
-            case .runnable(let model, let equivalence, _):
-                #expect(model.hfModelId == entry.candidates.first)
+            case .runnable(let slot, let equivalence, _):
+                #expect(slot.modelEntry?.hfModelId == entry.candidates.first)
                 #expect(equivalence == entry.equivalence)
-            case .notRunnable(let display, let reason):
+            case .notRunnable(let display, let reason, _):
                 Issue.record("\(display) should resolve: \(reason)")
             }
         }
@@ -92,7 +92,7 @@ struct CatFlowCatalogBridgeTests {
     @Test func unknownDisplayNameIsNotRunnable() throws {
         let catalog = try loadCatalog()
         switch CatalogBridge.resolve("Turbo Chat 5000", catalog: catalog) {
-        case .notRunnable(let display, let reason):
+        case .notRunnable(let display, let reason, _):
             #expect(display == "Turbo Chat 5000")
             #expect(reason.contains("Turbo Chat 5000"))
         case .runnable:
@@ -103,7 +103,7 @@ struct CatFlowCatalogBridgeTests {
     @Test func noCandidateIsNotRunnableNamingTheModel() throws {
         let catalog = try loadCatalog()
         switch CatalogBridge.resolve("Totally Missing", catalog: catalog) {
-        case .notRunnable(let display, let reason):
+        case .notRunnable(let display, let reason, _):
             #expect(display == "Totally Missing")
             #expect(reason.contains("Totally Missing"))
         case .runnable:
@@ -119,11 +119,11 @@ struct CatFlowCatalogBridgeTests {
         let catalog = try loadCatalog()
         let unbridged = "mlx-community/Qwen3-VL-4B-Instruct-4bit"
         switch CatalogBridge.resolve(unbridged, catalog: catalog) {
-        case .runnable(let model, let equivalence, let note):
-            #expect(model.hfModelId == unbridged)
+        case .runnable(let slot, let equivalence, let note):
+            #expect(slot.modelEntry?.hfModelId == unbridged)
             #expect(equivalence == .same)
             #expect(note == nil)
-        case .notRunnable(let display, let reason):
+        case .notRunnable(let display, let reason, _):
             Issue.record("\(display) should resolve via the derived-pool fallback: \(reason)")
         }
     }
@@ -134,9 +134,9 @@ struct CatFlowCatalogBridgeTests {
         // Qwen3-VL's browser.json displayName is the friendly name, not the id.
         let displayName = "Qwen3-VL-4B-Instruct"
         switch CatalogBridge.resolve(displayName, catalog: catalog) {
-        case .runnable(let model, _, _):
-            #expect(model.hfModelId == "mlx-community/Qwen3-VL-4B-Instruct-4bit")
-        case .notRunnable(let display, let reason):
+        case .runnable(let slot, _, _):
+            #expect(slot.modelEntry?.hfModelId == "mlx-community/Qwen3-VL-4B-Instruct-4bit")
+        case .notRunnable(let display, let reason, _):
             Issue.record("\(display) should resolve by catalog display name: \(reason)")
         }
     }
@@ -153,13 +153,13 @@ struct CatFlowCatalogBridgeTests {
         // The .cat stays byte-identical to the reference ("Segment SAM Base"); the different
         // model generation is *shown*, never hidden — the MusicGen precedent.
         switch CatalogBridge.resolve("SAM Base", catalog: catalog) {
-        case .runnable(let model, let equivalence, let note):
-            #expect(model.hfModelId == "mlx-community/sam3-4bit")
+        case .runnable(let slot, let equivalence, let note):
+            #expect(slot.modelEntry?.hfModelId == "mlx-community/sam3-4bit")
             #expect(equivalence == .substitute)
             #expect(note != nil)
             #expect(note?.contains("SAM Base") == true)
             #expect(note?.contains("mlx-community/sam3-4bit") == true)
-        case .notRunnable(let display, let reason):
+        case .notRunnable(let display, let reason, _):
             Issue.record("SAM Base should resolve: \(reason)")
             _ = display
         }
@@ -185,13 +185,13 @@ struct CatFlowCatalogBridgeTests {
         let catalog = try loadCatalog()
         for display in ["LFM2-VL 1.6B", "Gemma 3 4B"] {
             switch CatalogBridge.resolve(display, catalog: catalog) {
-            case .runnable(let model, _, _):
+            case .runnable(let slot, _, _):
                 // The cheap one is the pool's first entry, so a bare Describe Image row
                 // defaults to LFM2-VL 1.6B (0.33 GB), not Gemma 3 4B (3.38 GB).
                 if display == "LFM2-VL 1.6B" {
-                    #expect(model.ramGB < 1.0)
+                    #expect((slot.modelEntry?.ramGB ?? .infinity) < 1.0)
                 }
-            case .notRunnable(let d, let reason):
+            case .notRunnable(let d, let reason, _):
                 Issue.record("\(d) should resolve: \(reason)")
             }
         }
@@ -203,9 +203,9 @@ struct CatFlowCatalogBridgeTests {
         let catalog = try loadCatalog()
         for display in ["Whisper Tiny", "Whisper Small", "Voxtral Mini 4B Realtime"] {
             switch CatalogBridge.resolve(display, catalog: catalog) {
-            case .runnable(let model, _, _):
-                #expect(model.runnerKind == .asr)
-            case .notRunnable(let d, let reason):
+            case .runnable(let slot, _, _):
+                #expect(slot.modelEntry?.runnerKind == .asr)
+            case .notRunnable(let d, let reason, _):
                 Issue.record("\(d) should resolve: \(reason)")
             }
         }
@@ -315,12 +315,12 @@ struct CatFlowCatalogBridgeTests {
         #expect(entry.equivalence == .same)
         #expect(entry.manifestFile == "paddleocr-vl-1.5-4bit.json")
         switch CatalogBridge.resolve("PaddleOCR-VL-1.5", catalog: catalog) {
-        case .runnable(let model, let equivalence, let note):
-            #expect(model.hfModelId == "mlx-community/PaddleOCR-VL-1.5-4bit")
-            #expect(model.runnerKind == .ocr)
+        case .runnable(let slot, let equivalence, let note):
+            #expect(slot.modelEntry?.hfModelId == "mlx-community/PaddleOCR-VL-1.5-4bit")
+            #expect(slot.modelEntry?.runnerKind == .ocr)
             #expect(equivalence == .same)
             #expect(note == nil)          // .same is silent — no substitution on the row
-        case .notRunnable(let display, let reason):
+        case .notRunnable(let display, let reason, _):
             Issue.record("\(display) should resolve: \(reason)")
         }
     }
@@ -334,11 +334,11 @@ struct CatFlowCatalogBridgeTests {
         let catalog = try loadCatalog()
         let viaBridge = CatalogBridge.resolve("PaddleOCR-VL-1.5", catalog: catalog)
         let viaCatalog = catalog.first { $0.displayName == "PaddleOCR-VL-1.5" }
-        guard case .runnable(let model, _, _) = viaBridge else {
+        guard case .runnable(let slot, _, _) = viaBridge else {
             Issue.record("PaddleOCR-VL-1.5 must resolve for gallery flow 72")
             return
         }
-        #expect(model.id == viaCatalog?.id)   // same card the fallback used to reach
+        #expect(slot.modelEntry?.id == viaCatalog?.id)   // same card the fallback used to reach
     }
 
     @Test func paddleOCRVLManifestShips() throws {
@@ -383,12 +383,12 @@ struct CatFlowCatalogBridgeTests {
         #expect(entry.equivalence == .same)
         #expect(entry.manifestFile == "qwen3.5-9b-4bit.json")
         switch CatalogBridge.resolve("Qwen3.5 9B", catalog: catalog) {
-        case .runnable(let model, let equivalence, let note):
-            #expect(model.hfModelId == "mlx-community/Qwen3.5-9B-MLX-4bit")
-            #expect(model.runnerKind == .llm)
+        case .runnable(let slot, let equivalence, let note):
+            #expect(slot.modelEntry?.hfModelId == "mlx-community/Qwen3.5-9B-MLX-4bit")
+            #expect(slot.modelEntry?.runnerKind == .llm)
             #expect(equivalence == .same)
             #expect(note == nil)
-        case .notRunnable(let display, let reason):
+        case .notRunnable(let display, let reason, _):
             Issue.record("\(display) should resolve: \(reason)")
         }
         #expect(CatalogBridge.entries.count == 21)
@@ -404,12 +404,12 @@ struct CatFlowCatalogBridgeTests {
         #expect(entry.equivalence == .same)
         #expect(entry.manifestFile == "qwen3-reranker-0.6b-4bit.json")
         switch CatalogBridge.resolve("Qwen3 Reranker 0.6B", catalog: catalog) {
-        case .runnable(let model, let equivalence, let note):
-            #expect(model.hfModelId == "mlx-community/Qwen3-Reranker-0.6B-4bit")
-            #expect(model.runnerKind == .rerank)
+        case .runnable(let slot, let equivalence, let note):
+            #expect(slot.modelEntry?.hfModelId == "mlx-community/Qwen3-Reranker-0.6B-4bit")
+            #expect(slot.modelEntry?.runnerKind == .rerank)
             #expect(equivalence == .same)
             #expect(note == nil)
-        case .notRunnable(let display, let reason):
+        case .notRunnable(let display, let reason, _):
             Issue.record("\(display) should resolve: \(reason)")
         }
     }
@@ -462,22 +462,22 @@ struct CatFlowCatalogBridgeTests {
         #expect(entry.equivalence == .same)
         #expect(entry.manifestFile == "qwen3.5-9b-vision-4bit.json")
         switch CatalogBridge.resolve("Qwen3.5 9B Vision", catalog: catalog) {
-        case .runnable(let model, let equivalence, let note):
-            #expect(model.hfModelId == "mlx-community/Qwen3.5-9B-MLX-4bit")
-            #expect(model.runnerKind == .vision)
-            #expect(model.id == "mlx-community--Qwen3.5-9B-MLX-4bit-vision")
+        case .runnable(let slot, let equivalence, let note):
+            #expect(slot.modelEntry?.hfModelId == "mlx-community/Qwen3.5-9B-MLX-4bit")
+            #expect(slot.modelEntry?.runnerKind == .vision)
+            #expect(slot.modelEntry?.id == "mlx-community--Qwen3.5-9B-MLX-4bit-vision")
             #expect(equivalence == .same)
             #expect(note == nil)
-        case .notRunnable(let display, let reason):
+        case .notRunnable(let display, let reason, _):
             Issue.record("\(display) should resolve: \(reason)")
         }
         // The text entry must still resolve to the llm card, not the vision one — this is
         // the regression the `modelType` disambiguator in `resolve` guards against.
         switch CatalogBridge.resolve("Qwen3.5 9B", catalog: catalog) {
-        case .runnable(let model, _, _):
-            #expect(model.runnerKind == .llm)
-            #expect(model.id == "mlx-community--Qwen3.5-9B-MLX-4bit")
-        case .notRunnable(let display, let reason):
+        case .runnable(let slot, _, _):
+            #expect(slot.modelEntry?.runnerKind == .llm)
+            #expect(slot.modelEntry?.id == "mlx-community--Qwen3.5-9B-MLX-4bit")
+        case .notRunnable(let display, let reason, _):
             Issue.record("\(display) should resolve: \(reason)")
         }
     }

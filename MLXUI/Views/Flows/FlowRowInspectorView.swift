@@ -160,15 +160,24 @@ struct FlowRowInspectorView: View {
                 Divider()
                 if !sections.installed.isEmpty {
                     Section("Installed") {
-                        ForEach(sections.installed, id: \.model.id) { candidate in
-                            modelButton(candidate, row: row)
+                        ForEach(sections.installed, id: \.id) { slot in
+                            modelButton(slot, row: row)
+                        }
+                    }
+                }
+                // MS-2: empty until Phase AFM/RM populate a system/provider slot — never
+                // rendered today, so this changes nothing visible.
+                if !sections.builtIn.isEmpty {
+                    Section("Built in") {
+                        ForEach(sections.builtIn, id: \.id) { slot in
+                            modelButton(slot, row: row)
                         }
                     }
                 }
                 if !sections.available.isEmpty {
                     Section("Available to download — \(String(format: "%.1f GB", sections.availableTotalGB))") {
-                        ForEach(sections.available, id: \.model.id) { candidate in
-                            modelButton(candidate, row: row)
+                        ForEach(sections.available, id: \.id) { slot in
+                            modelButton(slot, row: row)
                         }
                     }
                 }
@@ -207,20 +216,36 @@ struct FlowRowInspectorView: View {
         }
     }
 
-    /// One row of the Model menu: the friendly name, the RAM figure (orange when it exceeds
-    /// this Mac's RAM), disabled when it doesn't fit. Shared by both sections (CFM-R14-3).
-    private func modelButton(_ candidate: (display: String, model: ModelEntry), row: Row) -> some View {
-        Button {
-            model.setModel(candidate.display, for: rowID)
+    /// One row of the Model menu: the friendly name, the resource note (a cataloged model's
+    /// RAM figure, orange when it exceeds this Mac's RAM), disabled when `isModelButtonEnabled`
+    /// says no. Shared by every section (CFM-R14-3 + MS-2).
+    private func modelButton(_ slot: ModelSlot, row: Row) -> some View {
+        let overRAM = (slot.modelEntry?.ramGB ?? 0) > totalRAMGB
+        return Button {
+            model.setModel(slot.displayName, for: rowID)
         } label: {
             HStack {
-                Text(candidate.display)
+                Text(slot.displayName)
                 Spacer()
-                Text(String(format: "%.1f GB", candidate.model.ramGB))
-                    .foregroundStyle(candidate.model.ramGB > totalRAMGB ? .orange : .secondary)
+                if let note = slot.resourceNote {
+                    Text(note)
+                        .foregroundStyle(overRAM ? .orange : .secondary)
+                }
             }
         }
-        .disabled(candidate.model.ramGB > totalRAMGB)
+        .disabled(!Self.isModelButtonEnabled(slot, installedModelIDs: installedModelIDs, totalRAMGB: totalRAMGB))
+    }
+
+    /// MS-4 — whether a Model-menu row for `slot` should be selectable. `.unavailable`
+    /// disables it; **`.needsSetup` stays selectable** — a flow may legitimately name a model
+    /// whose key you're about to paste in, and refusing at pick time would be a lie. A
+    /// cataloged model that doesn't fit this Mac's RAM disables too (CFM-R14-3, unchanged).
+    /// `nonisolated static` so it's unit-testable with a fixture slot, without a View.
+    nonisolated static func isModelButtonEnabled(_ slot: ModelSlot, installedModelIDs: Set<String>,
+                                                 totalRAMGB: Double) -> Bool {
+        if case .unavailable = slot.readiness(installedModelIDs: installedModelIDs) { return false }
+        if (slot.modelEntry?.ramGB ?? 0) > totalRAMGB { return false }
+        return true
     }
 
     private func substitutionNote(for display: String) -> String? {
@@ -1129,7 +1154,8 @@ struct FlowRowInspectorView: View {
     /// runnable). Resolved via `CatalogBridge` → the injected registry resolver.
     private func modelPromptSupport(for row: Row) -> PromptSupport {
         guard let display = row.model,
-              case let .runnable(model, _, _) = CatalogBridge.resolve(display, catalog: catalog)
+              case let .runnable(slot, _, _) = CatalogBridge.resolve(display, catalog: catalog),
+              let model = slot.modelEntry
         else { return .none }
         return resolvePromptSupport(model)
     }

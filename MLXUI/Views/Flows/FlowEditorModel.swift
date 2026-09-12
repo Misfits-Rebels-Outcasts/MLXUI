@@ -615,34 +615,45 @@ final class FlowEditorModel {
 
     /// The models that can serve `task` in this build — the **derived pool** (CFM-R14-2): the
     /// catalog entries whose corrected `runnerKind` serves the task, that the registry can
-    /// claim, with no `ModelSupport` gap. Paired with the `.cat` display name (`TaskModels.
-    /// displayName` — the bridge name when the model is bridged, else the raw `hfModelId`),
-    /// RAM-sorted. The inspector shows the display name and dims the ones that don't fit.
+    /// claim, with no `ModelSupport` gap, plus (MS-2) any system/provider slots the task
+    /// serves. RAM-sorted for the cataloged entries that have a RAM figure at all — a
+    /// non-cataloged slot sorts after them, in registry order (inert today: both registries
+    /// are empty, so this is always every entry, RAM-sorted, exactly as before MS).
     nonisolated static func candidateModels(for task: String,
                                             catalog: [ModelEntry],
-                                            claimableModelIDs: Set<String>) -> [(display: String, model: ModelEntry)] {
+                                            claimableModelIDs: Set<String>) -> [ModelSlot] {
         let derived = TaskModels.derivedModels(for: task, catalog: catalog,
                                                claimableModelIDs: claimableModelIDs)
-        return derived
-            .map { (TaskModels.displayName(for: $0), $0) }
-            .sorted { $0.model.ramGB < $1.model.ramGB }
+        let withRAM = derived.filter { $0.modelEntry != nil }
+            .sorted { $0.modelEntry!.ramGB < $1.modelEntry!.ramGB }
+        let withoutRAM = derived.filter { $0.modelEntry == nil }
+        return withRAM + withoutRAM
     }
 
-    /// CFM-R14-3 — the Model menu's two sections. The install state partitions the
-    /// RAM-sorted derived candidates: **Installed** first (catalog ids already on disk), then
-    /// **Available to download** with the total `downloadSizeGB` across the remaining. The
-    /// section header shows the total so a user sees the download cost before the arm sheet.
+    /// CFM-R14-3 + MS-2 — the Model menu's sections. The install state partitions the
+    /// RAM-sorted cataloged candidates: **Installed** first (catalog ids already on disk),
+    /// then **Available to download** with the total `downloadSizeGB` across the remaining.
+    /// MS-2 adds **Built in** between them for non-cataloged slots (`.system`/`.provider`) —
+    /// empty until Phase AFM/RM, so it changes no visible behaviour today; a section with no
+    /// members is never rendered (`FlowRowInspectorView.swift`'s existing pattern).
     nonisolated static func sectionedModelCandidates(
         for task: String,
         catalog: [ModelEntry],
         installedModelIDs: Set<String>,
         claimableModelIDs: Set<String>
-    ) -> (installed: [(display: String, model: ModelEntry)], available: [(display: String, model: ModelEntry)], availableTotalGB: Double) {
+    ) -> (installed: [ModelSlot], builtIn: [ModelSlot], available: [ModelSlot], availableTotalGB: Double) {
         let all = candidateModels(for: task, catalog: catalog, claimableModelIDs: claimableModelIDs)
-        let installed = all.filter { installedModelIDs.contains($0.model.id) }
-        let available = all.filter { !installedModelIDs.contains($0.model.id) }
-        let total = available.reduce(0.0) { $0 + $1.model.downloadSizeGB }
-        return (installed, available, total)
+        let installed = all.filter { slot in
+            guard let entry = slot.modelEntry else { return false }
+            return installedModelIDs.contains(entry.id)
+        }
+        let builtIn = all.filter { $0.modelEntry == nil }
+        let available = all.filter { slot in
+            guard let entry = slot.modelEntry else { return false }
+            return !installedModelIDs.contains(entry.id)
+        }
+        let total = available.reduce(0.0) { $0 + ($1.modelEntry?.downloadSizeGB ?? 0) }
+        return (installed, builtIn, available, total)
     }
 
     /// Per-task suggested instruction defaults (answer `a5`, the docs' "You write" table).
@@ -1159,8 +1170,8 @@ final class FlowEditorModel {
     private func isRunnableModel(_ display: String?, for task: String) -> Bool {
         guard let display, !modelCatalog.isEmpty else { return false }
         return TaskModels.derivedModels(for: task, catalog: modelCatalog,
-                                        claimableModelIDs: claimableModelIDs).contains { entry in
-            TaskModels.displayName(for: entry) == display || entry.hfModelId == display
+                                        claimableModelIDs: claimableModelIDs).contains { slot in
+            slot.displayName == display || slot.modelEntry?.hfModelId == display
         }
     }
 

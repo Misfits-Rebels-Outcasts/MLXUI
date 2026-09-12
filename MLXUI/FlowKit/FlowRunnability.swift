@@ -10,18 +10,37 @@ import Foundation
 /// string. B3's original ask ("derive the refusal from the language gates, not the JSON
 /// string"), now applied to both gate layers.
 nonisolated enum FlowRunnability {
-    /// The refusal sentence for a flow, or nil when it can run. `scope` (CFM-R17-3) resolves
-    /// a workspace flow's `uses:` graph so a used-flow call isn't refused as an unknown task;
+    /// MS-4 — the refusal sentence plus its fix-it action, when one exists. `FlowRunner
+    /// .canRun`'s language/doors/tools refusals never carry one (`Runnability` predates
+    /// `SetupAction` and stays that way — those refusals are "distribute it directly
+    /// instead," not "click here"); a model-preflight refusal's action comes from
+    /// `FlowPreflight.blockedAction`, always `nil` until Phase AFM/RM/WS.
+    struct Refusal: Sendable, Equatable {
+        let reason: String
+        let action: SetupAction?
+    }
+
+    /// The full refusal for a flow, or nil when it can run. `scope` (CFM-R17-3) resolves a
+    /// workspace flow's `uses:` graph so a used-flow call isn't refused as an unknown task;
     /// `nil` keeps the pre-R17 plain-flow check.
-    static func refusalReason(for doc: FlowDocument, catalog: [ModelEntry],
-                              installed: Set<String>, totalRAMGB: Double,
-                              scope: FlowScope? = nil) -> String? {
+    static func refusal(for doc: FlowDocument, catalog: [ModelEntry],
+                        installed: Set<String>, totalRAMGB: Double,
+                        scope: FlowScope? = nil) -> Refusal? {
         let runnability = scope.map { FlowRunner.canRun(doc, scope: $0) } ?? FlowRunner.canRun(doc)
         if case .notRunnable(let reason) = runnability {
-            return reason
+            return Refusal(reason: reason, action: nil)
         }
         let preflight = FlowPreflight.run(doc, catalog: catalog,
                                           installedModelIDs: installed, totalRAMGB: totalRAMGB)
-        return FlowPreflight.blockedReason(preflight, totalRAMGB: totalRAMGB)
+        guard let reason = FlowPreflight.blockedReason(preflight, totalRAMGB: totalRAMGB) else { return nil }
+        return Refusal(reason: reason, action: FlowPreflight.blockedAction(preflight))
+    }
+
+    /// The refusal sentence alone — every pre-MS caller that only needed the string (a
+    /// presence check, a display label) keeps compiling and behaving unchanged.
+    static func refusalReason(for doc: FlowDocument, catalog: [ModelEntry],
+                              installed: Set<String>, totalRAMGB: Double,
+                              scope: FlowScope? = nil) -> String? {
+        refusal(for: doc, catalog: catalog, installed: installed, totalRAMGB: totalRAMGB, scope: scope)?.reason
     }
 }

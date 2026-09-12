@@ -49,10 +49,15 @@ nonisolated struct BridgeEntry: Sendable, Equatable {
 
 /// The outcome of resolving a display name against the catalog.
 nonisolated enum CatalogBridgeResolution: Sendable, Equatable {
-    /// Runnable: the `ModelEntry` to install/run, plus the equivalence and any note.
-    case runnable(ModelEntry, equivalence: Equivalence, note: String?)
-    /// Not runnable: a plain sentence naming the model and why (never a silent `nil`).
-    case notRunnable(display: String, reason: String)
+    /// Runnable: the `ModelSlot` to install/run, plus the equivalence and any note. MS-3:
+    /// was `ModelEntry` — every existing caller resolved a `browser.json` row, which is now
+    /// `.cataloged(ModelEntry)`; `slot.modelEntry` is the unwrap for code that still needs the
+    /// raw entry (RealExecutor's MLX load path, the cache key).
+    case runnable(ModelSlot, equivalence: Equivalence, note: String?)
+    /// Not runnable: a plain sentence naming the model and why (never a silent `nil`), plus
+    /// MS-3's typed fix-it action — `nil` here for both fallback sentences below; Phase RM
+    /// attaches one for a genuinely remote name (RM-3).
+    case notRunnable(display: String, reason: String, action: SetupAction?)
 }
 
 /// Maps a `.cat` display name ("Whisper Large v3") to an installable `browser.json`
@@ -287,18 +292,20 @@ nonisolated enum CatalogBridge {
                     $0.hfModelId == candidate && (entry.modelType == nil || $0.modelType == entry.modelType)
                 }) {
                     let note = entry.equivalence.note(display: display, substitutedID: candidate)
-                    return .runnable(model, equivalence: entry.equivalence, note: note)
+                    return .runnable(.cataloged(model), equivalence: entry.equivalence, note: note)
                 }
             }
             return .notRunnable(display: display,
-                                reason: "\(display) isn't installed in the model catalog — add it to the catalog before this flow can run.")
+                                reason: "\(display) isn't installed in the model catalog — add it to the catalog before this flow can run.",
+                                action: nil)
         }
         // No bridge row: an R14-2/7 derived pick. Match the catalog directly.
         if let model = catalog.first(where: { $0.hfModelId == display || $0.displayName == display }) {
-            return .runnable(model, equivalence: .same, note: nil)
+            return .runnable(.cataloged(model), equivalence: .same, note: nil)
         }
         return .notRunnable(display: display,
-                            reason: "\(display) isn't in the runnable-model table — this flow needs a model MLXUI can't run yet.")
+                            reason: "\(display) isn't in the runnable-model table — this flow needs a model MLXUI can't run yet.",
+                            action: nil)
     }
 }
 

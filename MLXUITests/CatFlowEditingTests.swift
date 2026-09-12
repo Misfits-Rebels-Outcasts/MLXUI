@@ -140,7 +140,7 @@ struct CatFlowEditingTests {
             if let model = entry.model {
                 let derived = TaskModels.derivedModels(for: entry.task, catalog: catalog,
                                                        claimableModelIDs: claimable)
-                #expect(derived.contains { $0.hfModelId == model || TaskModels.displayName(for: $0) == model },
+                #expect(derived.contains { $0.modelEntry?.hfModelId == model || $0.displayName == model },
                         "\(entry.task) seeds \(model), which isn't a derived-pool model")
             }
         }
@@ -167,7 +167,7 @@ struct CatFlowEditingTests {
     @Test @MainActor func qwen35NineBIsReachableFromTheGenerateMenu() throws {
         let (catalog, claimable) = try loadedCatalogAndClaimable()
         let derived = TaskModels.derivedModels(for: "Generate", catalog: catalog, claimableModelIDs: claimable)
-        #expect(derived.contains { TaskModels.displayName(for: $0) == "Qwen3.5 9B" })
+        #expect(derived.contains { $0.displayName == "Qwen3.5 9B" })
     }
 
     // MARK: - CFM-R8-2: add / remove / reorder

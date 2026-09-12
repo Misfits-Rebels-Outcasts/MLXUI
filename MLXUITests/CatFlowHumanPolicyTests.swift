@@ -158,6 +158,37 @@ struct CatFlowHumanPolicyTests {
         #expect(!found.contains { $0.code == "E501" })
     }
 
+    // MARK: - HU-FOLLOWUP-1: an empty `timeout=` still raises E501 — pinning the regex, not
+    // the picker. `checkHumanRows` (`FlowValidator.swift:1717`) only tests `kv["timeout"] !=
+    // nil`; the reason an empty duration doesn't validate clean is `FlowValidator.reKV`
+    // (`:340`, `^([\w-]+)\s*=\s*(.+)$`) via `parseSettingsKV` — `(.+)` requires at least one
+    // character after `=`, so `timeout=` (what the Direct picker writes when its duration
+    // field is left blank) never becomes a `kv["timeout"]` entry there, and the row falls
+    // through to E501 exactly as if neither `wait=forever` nor `timeout=`/`default=` had been
+    // written. Note this is a *different* parser from the editor's own `FlowSettings`, which
+    // — unlike `reKV` — treats `timeout=` as present with an empty string value; the two
+    // disagreeing is exactly why nothing pins this today. This test pins the validator's
+    // reading specifically, so a future widening of `reKV` to `(.*)` can't silently produce a
+    // human row that passes every check and waits for nothing.
+    @Test @MainActor func switchingToGiveUpAfterWithAnEmptyDurationStillRaisesE501() throws {
+        let r1 = row("Read Text", settings: "memo.txt")
+        let r3 = row("Save Text", settings: "out.md")
+        let r2 = row("Ask Human", settings: "wait=forever", tags: ["approve", "edit"],
+                     clause: .decide(edges: [ClauseEdge(tag: "approve", target: .row(number: 3)),
+                                             ClauseEdge(tag: "edit", target: .row(number: 3))]))
+        let model = try editor([r1, r2, r3])
+        model.setHumanWaitPolicy(.giveUpAfter(timeout: "", default: "approve"), for: r2.id)
+        let settings = FlowSettings(model.row(withID: r2.id)?.settings)
+        // The editor's own parser sees `timeout` as present-but-empty, not absent.
+        #expect(settings.value(for: "timeout") == "")
+        #expect(settings.value(for: "wait") == nil)   // still cleared, per the mutual exclusion
+
+        // The validator's parser (a different regex) is what actually decides E501, and it
+        // disagrees — `timeout=` never becomes a key there, so the row still needs a policy.
+        let found = try issues(for: model.catText)
+        #expect(found.contains { $0.code == "E501" })
+    }
+
     // MARK: - HU-3: the repair path
 
     @Test func knownSettingKeysOffersWaitTimeoutDefaultForBothHumanTasks() {

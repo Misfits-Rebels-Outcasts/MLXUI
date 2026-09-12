@@ -213,12 +213,12 @@ struct CatFlowR9Tests {
         // CFM-R14-1 bridged all three ASR gaps + R14-2 derives the pool from the registry:
         // every Transcribe-capable ASR model is offered (Whisper Tiny, Small, Large v3,
         // Voxtral) by its bridge display name.
-        #expect(transcribe.map(\.display).contains("Whisper Large v3"))
-        #expect(transcribe.map(\.display).contains("Whisper Tiny"))
-        #expect(transcribe.map(\.display).contains("Whisper Small"))
-        #expect(transcribe.map(\.display).contains("Voxtral Mini 4B Realtime"))
+        #expect(transcribe.map(\.displayName).contains("Whisper Large v3"))
+        #expect(transcribe.map(\.displayName).contains("Whisper Tiny"))
+        #expect(transcribe.map(\.displayName).contains("Whisper Small"))
+        #expect(transcribe.map(\.displayName).contains("Voxtral Mini 4B Realtime"))
         // RAM-sorted ascending.
-        let ram = transcribe.map { $0.model.ramGB }
+        let ram = transcribe.compactMap { $0.modelEntry?.ramGB }
         #expect(ram == ram.sorted())
     }
 
@@ -233,11 +233,11 @@ struct CatFlowR9Tests {
         let sections = FlowEditorModel.sectionedModelCandidates(
             for: "Transcribe", catalog: catalog, installedModelIDs: [largeID],
             claimableModelIDs: claimable)
-        #expect(sections.installed.map(\.display) == ["Whisper Large v3"])
-        #expect(sections.available.map(\.display).contains("Whisper Tiny"))
-        #expect(sections.available.map(\.display).contains("Whisper Small"))
-        #expect(sections.available.map(\.display).contains("Voxtral Mini 4B Realtime"))
-        let expectedTotal = sections.available.reduce(0.0) { $0 + $1.model.downloadSizeGB }
+        #expect(sections.installed.map(\.displayName) == ["Whisper Large v3"])
+        #expect(sections.available.map(\.displayName).contains("Whisper Tiny"))
+        #expect(sections.available.map(\.displayName).contains("Whisper Small"))
+        #expect(sections.available.map(\.displayName).contains("Voxtral Mini 4B Realtime"))
+        let expectedTotal = sections.available.reduce(0.0) { $0 + ($1.modelEntry?.downloadSizeGB ?? 0) }
         #expect(abs(sections.availableTotalGB - expectedTotal) < 0.0001)
     }
 
@@ -248,10 +248,11 @@ struct CatFlowR9Tests {
         let sections = FlowEditorModel.sectionedModelCandidates(
             for: "Transcribe", catalog: catalog, installedModelIDs: [], claimableModelIDs: claimable)
         #expect(sections.installed.isEmpty)
-        #expect(sections.available.map { $0.model.id } == all.map { $0.model.id })
+        #expect(sections.builtIn.isEmpty)   // MS-2: empty until Phase AFM/RM
+        #expect(sections.available.map(\.id) == all.map(\.id))
         // Installed + available is a partition: no candidate appears in both, none is dropped.
-        let ids = Set(all.map(\.model.id))
-        #expect(Set(sections.available.map(\.model.id)) == ids)
+        let ids = Set(all.map(\.id))
+        #expect(Set(sections.available.map(\.id)) == ids)
     }
 
     /// The bundled catalog + the registry's own claim answer — the derived pool's inputs

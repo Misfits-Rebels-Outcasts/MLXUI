@@ -211,18 +211,32 @@ nonisolated enum TaskModels {
         taskModels[task] ?? []
     }
 
+    /// MS-2 — Phase AFM's system-model registry, keyed by task name. Empty until AFM-1 gives
+    /// it real `ModelSlot.system` entries; `derivedModels` appends whatever's here so a newly
+    /// served task needs no change here, only a registry entry.
+    private static let systemModels: [String: [SystemModelRef]] = [:]
+
+    /// MS-2 — Phase RM's provider-model registry, keyed by task name. Empty until RM-1/RM-2
+    /// port the curated provider manifests into `ModelSlot.provider` entries.
+    private static let providerModels: [String: [ProviderModelRef]] = [:]
+
     /// The derived pool for a model task — **the** candidates in this build. Filtered by the
     /// corrected `runnerKind` (never `modelType`), the registry's own claim answer, `ModelSupport`,
     /// **and the executor genuinely serving the task** (CFM-R14-FIX-2 — a model existing for a
     /// kind is not enough; the runtime must have a path for that task). This is the function the
     /// editor, the picker, and availability all read — "check and run can't drift" applied to
     /// the model side.
+    ///
+    /// MS-2: returns `[ModelSlot]`, not `[ModelEntry]` — the cataloged branch below is
+    /// byte-for-byte the pre-MS filter, wrapped in `.cataloged`; `systemModels`/`providerModels`
+    /// are appended after it and are empty today, so membership and order are unchanged until
+    /// Phase AFM/RM populate them.
     static func derivedModels(for task: String,
                               catalog: [ModelEntry],
-                              claimableModelIDs: Set<String>) -> [ModelEntry] {
+                              claimableModelIDs: Set<String>) -> [ModelSlot] {
         guard let kind = taskKinds[task], isServedByExecutor(task) else { return [] }
         let family = taskFamilies[task]?.lowercased()
-        return catalog.filter { entry in
+        let cataloged: [ModelSlot] = catalog.filter { entry in
             guard entry.runnerKind == kind,
                   claimableModelIDs.contains(entry.id),
                   ModelSupport.unsupportedReason(for: entry) == nil else { return false }
@@ -230,7 +244,10 @@ nonisolated enum TaskModels {
                 return false
             }
             return true
-        }
+        }.map { .cataloged($0) }
+        let system = (systemModels[task] ?? []).map { ModelSlot.system($0) }
+        let provider = (providerModels[task] ?? []).map { ModelSlot.provider($0) }
+        return cataloged + system + provider
     }
 
     /// The display name a `.cat` should write for a derived model: the bridge display name
@@ -251,8 +268,8 @@ nonisolated enum TaskModels {
                              claimableModelIDs: Set<String>) -> String? {
         let derived = derivedModels(for: task, catalog: catalog, claimableModelIDs: claimableModelIDs)
         for display in models(forTask: task) {
-            if derived.contains(where: { displayName(for: $0) == display }) { return display }
+            if derived.contains(where: { $0.displayName == display }) { return display }
         }
-        return derived.first.map { displayName(for: $0) }
+        return derived.first?.displayName
     }
 }

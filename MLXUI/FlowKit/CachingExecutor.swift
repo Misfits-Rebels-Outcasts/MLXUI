@@ -82,7 +82,8 @@ final class CachingExecutor: FlowExecutor, @unchecked Sendable {
         // (never a crash; mock rows aren't resolved by design).
         var modelID: String? = row.model
         if let display = row.model {
-            if case .runnable(let entry, _, _) = CatalogBridge.resolve(display, catalog: catalog) {
+            if case .runnable(let slot, _, _) = CatalogBridge.resolve(display, catalog: catalog),
+               let entry = slot.modelEntry {
                 modelID = entry.hfModelId
             }
         }

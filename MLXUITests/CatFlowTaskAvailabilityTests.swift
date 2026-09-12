@@ -78,8 +78,15 @@ struct CatFlowTaskAvailabilityTests {
         for task in TaskCatalog.entries where task.taskClass == .model {
             let pool = TaskModels.derivedModels(for: task.name, catalog: catalog,
                                                 claimableModelIDs: claimable)
-            for model in pool {
-                let display = TaskModels.displayName(for: model)
+            for slot in pool {
+                // MS-2: every derived-pool member is `.cataloged` today (the system/provider
+                // registries are empty until Phase AFM/RM) — this test exercises the real MLX
+                // stage-building path, which only a cataloged `ModelEntry` can feed.
+                guard let model = slot.modelEntry else {
+                    Issue.record("\(task.name) offers a non-cataloged slot (\(slot.displayName)) unexpectedly")
+                    continue
+                }
+                let display = slot.displayName
                 // (1) the executor's own stage path builds it.
                 let resolved = try #require(registry.bestModule(for: model),
                                             "\(task.name) offers \(model.hfModelId) but no module claims it")
@@ -270,7 +277,7 @@ struct CatFlowTaskAvailabilityTests {
             let available = TaskAvailability.isAvailable(task.name, catalog: catalog,
                                                          claimableModelIDs: claimable)
             if (derived.isEmpty == available) {
-                mismatches.append("\(task.name): derived=\(derived.map { $0.hfModelId }) availability=\(available)")
+                mismatches.append("\(task.name): derived=\(derived.map { $0.displayName }) availability=\(available)")
             }
         }
         #expect(mismatches.isEmpty, "model drift: \(mismatches.joined(separator: "; "))")
@@ -383,7 +390,7 @@ struct CatFlowTaskAvailabilityTests {
         let claimable = claimableIDs(catalog: catalog)
         let derived = TaskModels.derivedModels(for: "Rerank", catalog: catalog, claimableModelIDs: claimable)
         #expect(derived.count == 1)
-        #expect(derived.first?.hfModelId == "mlx-community/Qwen3-Reranker-0.6B-4bit")
+        #expect(derived.first?.modelEntry?.hfModelId == "mlx-community/Qwen3-Reranker-0.6B-4bit")
         #expect(TaskModels.defaultModel(forTask: "Rerank", catalog: catalog, claimableModelIDs: claimable) == "Qwen3 Reranker 0.6B")
     }
 

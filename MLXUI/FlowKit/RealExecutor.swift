@@ -533,9 +533,16 @@ nonisolated struct RealExecutor: FlowExecutor {
         }
         let modelEntry: ModelEntry
         switch CatalogBridge.resolve(display, catalog: catalog) {
-        case .runnable(let model, _, _):
-            modelEntry = model
-        case .notRunnable(let name, let reason):
+        case .runnable(let slot, _, _):
+            guard let entry = slot.modelEntry else {
+                // MS: a non-cataloged slot (system/provider) has no MLX `ModelEntry` to load.
+                // AFM/RM each add their own stage before this path is reachable for real —
+                // `resolve` never produces one of these yet (their registries are empty).
+                throw FlowError.modelNotRunnable(row: "\(path)", display: slot.displayName,
+                                                 reason: "\(slot.displayName) doesn't run through the MLX executor.")
+            }
+            modelEntry = entry
+        case .notRunnable(let name, let reason, _):
             throw FlowError.modelNotRunnable(row: "\(path)", display: name, reason: reason)
         }
         guard installedModelIDs.contains(modelEntry.id) else {

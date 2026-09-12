@@ -60,6 +60,9 @@ struct FlowListView: View {
     /// The refusal reason this flow can't run, derived from `FlowRunner.canRun(doc)` — not
     /// blindly trusted from `_metadata.json` (B3). `nil` = runnable.
     @State private var notRunnableReason: String?
+    /// MS-4 — the fix-it action paired with `notRunnableReason`, when the refusal has one
+    /// (always `nil` today; Phase AFM/RM/WS are the first to produce one).
+    @State private var notRunnableAction: SetupAction?
     /// The canonical serialized lines (CFM-R6-2) — the flow list *is* the file. Computed once
     /// in `load()`; `lineRanges` maps each row id to its lines' range in `serializedLines`.
     @State private var serializedLines: [String] = []
@@ -78,7 +81,7 @@ struct FlowListView: View {
                                        description: Text(error))
             } else if let display, let document {
                 if let reason = notRunnableReason {
-                    notRunnableView(display, doc: document, reason: reason)
+                    notRunnableView(display, doc: document, reason: reason, action: notRunnableAction)
                 } else {
                     flowList(document, display: display)
                 }
@@ -122,7 +125,8 @@ struct FlowListView: View {
     /// A read-only view for a flow this version can't run (CFM-R4-4): an honest badge
     /// naming what it needs, the description, and the canonical serialized lines (the list
     /// is the file — R6-2/3, no raw-`.cat` disclosure in the gallery view). No Run button.
-    private func notRunnableView(_ display: FlowDisplay, doc: FlowDocument, reason: String) -> some View {
+    private func notRunnableView(_ display: FlowDisplay, doc: FlowDocument, reason: String,
+                                 action: SetupAction? = nil) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
                 Label(display.title, systemImage: "flowchart")
@@ -134,12 +138,22 @@ struct FlowListView: View {
                     .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
                 Spacer()
             }
-            Label(reason, systemImage: "exclamationmark.triangle.fill")
-                .font(.callout)
-                .foregroundStyle(.orange)
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+            HStack(alignment: .top, spacing: 8) {
+                Label(reason, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                // MS-4 — the owner's fifth ask: a button next to the refusal, when it's
+                // fixable. Always absent today (no `SetupAction` is produced yet); Phase
+                // AFM/KEY/RM/WS give it something real to open.
+                if let action {
+                    Button(setupActionButtonLabel(action)) { performSetupAction(action) }
+                        .buttonStyle(.bordered)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
             Text(display.description ?? "")
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -155,6 +169,26 @@ struct FlowListView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// MS-4 — the button label for a `SetupAction`. Plain and generic on purpose: nothing
+    /// produces one of these yet, so this exists to compile and be fixture-tested, not to
+    /// anticipate exact copy AFM/KEY/RM/WS will each want for their own case.
+    private func setupActionButtonLabel(_ action: SetupAction) -> String {
+        switch action {
+        case .openSettings, .enableAppleIntelligence: return "Open Settings…"
+        case .installModel: return "Install…"
+        }
+    }
+
+    /// MS-4 — every action opens the app's own Settings sheet today. `SettingsView` has no
+    /// pane navigation yet (`SettingsPane` names panes no phase has built), and there's no
+    /// System Settings deep link for Apple Intelligence wired up — both are the phase that
+    /// actually needs them to build (Phase KEY's "Model & Search Providers" section, Phase
+    /// AFM's Apple Intelligence check). This is a safe, honest placeholder: it opens
+    /// somewhere real, never a dead button.
+    private func performSetupAction(_ action: SetupAction) {
+        appState.showSettings = true
     }
 
     // MARK: - Content
@@ -771,6 +805,7 @@ struct FlowListView: View {
     private func reload() {
         loadError = nil
         notRunnableReason = nil
+        notRunnableAction = nil
         load()
     }
 
@@ -811,11 +846,12 @@ struct FlowListView: View {
         clauseLineRanges = serialized.clauseRanges
 
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
-        if let reason = FlowRunnability.refusalReason(for: doc, catalog: catalog,
-                                                     installed: appState.installedModelIDs,
-                                                     totalRAMGB: appState.systemInfo.totalRAMGB,
-                                                     scope: makeScope()) {
-            notRunnableReason = reason
+        if let refusal = FlowRunnability.refusal(for: doc, catalog: catalog,
+                                                 installed: appState.installedModelIDs,
+                                                 totalRAMGB: appState.systemInfo.totalRAMGB,
+                                                 scope: makeScope()) {
+            notRunnableReason = refusal.reason
+            notRunnableAction = refusal.action
             return
         }
         finishLoad(doc)
@@ -842,10 +878,11 @@ struct FlowListView: View {
         // covers language/doors/tools AND the model-preflight (a row whose model has no
         // bridge entry) + RAM.
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
-        if let reason = FlowRunnability.refusalReason(for: doc, catalog: catalog,
-                                                      installed: appState.installedModelIDs,
-                                                      totalRAMGB: appState.systemInfo.totalRAMGB) {
-            notRunnableReason = reason
+        if let refusal = FlowRunnability.refusal(for: doc, catalog: catalog,
+                                                 installed: appState.installedModelIDs,
+                                                 totalRAMGB: appState.systemInfo.totalRAMGB) {
+            notRunnableReason = refusal.reason
+            notRunnableAction = refusal.action
             return
         }
 
@@ -890,10 +927,11 @@ struct FlowListView: View {
 
         // CFM-R12-FIX-1: a user flow's refusal is the same live gates a bundled flow's is.
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
-        if let reason = FlowRunnability.refusalReason(for: doc, catalog: catalog,
-                                                      installed: appState.installedModelIDs,
-                                                      totalRAMGB: appState.systemInfo.totalRAMGB) {
-            notRunnableReason = reason
+        if let refusal = FlowRunnability.refusal(for: doc, catalog: catalog,
+                                                 installed: appState.installedModelIDs,
+                                                 totalRAMGB: appState.systemInfo.totalRAMGB) {
+            notRunnableReason = refusal.reason
+            notRunnableAction = refusal.action
             return
         }
         // A user flow has no bundled assets; prepare with an empty list is a no-op.
