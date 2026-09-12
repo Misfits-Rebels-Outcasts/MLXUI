@@ -64,7 +64,7 @@ struct CatFlowRemoteModelsTests {
         #expect(manifest.baseURL == "http://mac-studio.local:8080/v1")
     }
 
-    // MARK: - RM-2: TaskModels.providerModels / lanProviderDisplayNames
+    // MARK: - RM-2: TaskModels.providerModels / providerEgress
 
     @Test func providerModelsOffersAllFourPortedManifestsUnderGenerate() {
         let names = Set(TaskModels.providerDisplayNames)
@@ -74,12 +74,16 @@ struct CatFlowRemoteModelsTests {
         }
     }
 
-    @Test func lanProviderDisplayNamesContainsOnlyTheKeylessEndpoint() {
-        let lan = TaskModels.lanProviderDisplayNames
-        #expect(lan.contains("qwen3-32b @ http://mac-studio.local:8080"))
-        #expect(!lan.contains("claude-sonnet @ anthropic"))
-        #expect(!lan.contains("gpt-5.6-luna @ openai"))
-        #expect(!lan.contains("deepseek-v4-flash @ deepseek"))
+    /// RM-FIX-1 — `providerEgress` is a wording lookup, never an exemption list: it names
+    /// which display is `"lan"` so `checkOffdeviceFlag` can pick E120's phrasing, but every
+    /// name here (LAN included) still raises E120 with no `offdevice` flag — see the E120
+    /// tests below.
+    @Test func providerEgressDistinguishesTheLANEndpointFromHostedOnes() {
+        #expect(TaskModels.providerEgress(forDisplay: "qwen3-32b @ http://mac-studio.local:8080") == "lan")
+        #expect(TaskModels.providerEgress(forDisplay: "claude-sonnet @ anthropic") == nil)
+        #expect(TaskModels.providerEgress(forDisplay: "gpt-5.6-luna @ openai") == nil)
+        #expect(TaskModels.providerEgress(forDisplay: "deepseek-v4-flash @ deepseek") == nil)
+        #expect(TaskModels.providerEgress(forDisplay: "not a real provider") == nil)
     }
 
     @Test func providerModelRefResourceNoteNamesTheProviderAndLeavingTheMac() {
@@ -145,9 +149,14 @@ struct CatFlowRemoteModelsTests {
         #expect(action == nil)
     }
 
-    // MARK: - RM-4b: E120 — the check RM-4b builds
+    // MARK: - RM-4b/RM-FIX-1: E120 — the three shapes the review required
 
-    @Test func remoteProviderRowWithoutOffdeviceRaisesE120() throws {
+    /// RM-FIX-1: a keyless LAN provider row raises E120 exactly like a hosted one —
+    /// `catflow-mlx/SPEC_QUESTIONS.md` Q203 point 5 ("Both cases need the same flag") was
+    /// already settled before RM started; RM-4b's first cut exempted it, which was wrong
+    /// (SPEC-Q221 records the mistake and the correction). Only the wording differs — see
+    /// `e120WordingDistinguishesLANFromHostedProviders` below.
+    @Test func internetProviderRowWithoutOffdeviceRaisesE120() throws {
         let text = """
         mlxflow 0.8
         1. Read Text    memo.txt
@@ -159,6 +168,37 @@ struct CatFlowRemoteModelsTests {
         """
         let found = try issues(for: text)
         #expect(found.contains { $0.code == "E120" })
+    }
+
+    @Test func lanProviderRowWithoutOffdeviceRaisesE120() throws {
+        let text = """
+        mlxflow 0.8
+        1. Read Text    memo.txt
+        2. Answer       (1)  qwen3-32b @ http://mac-studio.local:8080
+        3. Save Text    out.md
+
+        models:
+          qwen3-32b @ http://mac-studio.local:8080 = macstudio/qwen3-32b
+        """
+        let found = try issues(for: text)
+        #expect(found.contains { $0.code == "E120" })
+    }
+
+    /// The one shape that stays exempt: `.system` (AFM). Nothing leaves the machine at
+    /// all, on-prem or otherwise — this is the distinction RM-FIX-1's review explicitly
+    /// asked to keep.
+    @Test func systemModelRowNeverRaisesE120() throws {
+        let text = """
+        mlxflow 0.8
+        1. Read Text    memo.txt
+        2. Summarize    (1)  apple-foundation @ system
+        3. Save Text    out.md
+
+        models:
+          apple-foundation @ system = apple/foundation-models
+        """
+        let found = try issues(for: text)
+        #expect(!found.contains { $0.code == "E120" })
     }
 
     @Test func remoteProviderRowWithOffdeviceRaisesNoE120() throws {
@@ -175,52 +215,33 @@ struct CatFlowRemoteModelsTests {
         #expect(!found.contains { $0.code == "E120" })
     }
 
-    @Test func appleFoundationSystemRowNeverRaisesE120() throws {
-        let text = """
-        mlxflow 0.8
-        1. Read Text    memo.txt
-        2. Summarize    (1)  apple-foundation @ system
-        3. Save Text    out.md
-
-        models:
-          apple-foundation @ system = apple/foundation-models
-        """
-        let found = try issues(for: text)
-        #expect(!found.contains { $0.code == "E120" })
-    }
-
-    /// The instruction this cycle gave, and the reference does not: a keyless LAN endpoint
-    /// never raises E120, even with no `offdevice` flag. Flagged as a deliberate divergence
-    /// from `catflow-mlx`'s own `_check_offdevice_flag` at `FlowValidator.checkOffdeviceFlag`'s
-    /// definition and in the journal.
-    @Test func keylessLANEndpointNeverRaisesE120() throws {
-        let text = """
-        mlxflow 0.8
-        1. Read Text    memo.txt
-        2. Answer       (1)  qwen3-32b @ http://mac-studio.local:8080
-        3. Save Text    out.md
-
-        models:
-          qwen3-32b @ http://mac-studio.local:8080 = macstudio/qwen3-32b
-        """
-        let found = try issues(for: text)
-        #expect(!found.contains { $0.code == "E120" })
-    }
-
-    @Test func e120MessageMatchesTheEstablishedTemplateAndNamesTheRow() throws {
-        let text = """
+    /// RM-FIX-1: `{egress}` is filled from the manifest, so the message text — not whether
+    /// it fires — is what distinguishes a LAN box from a hosted API, per Q203 point 5.
+    @Test func e120WordingDistinguishesLANFromHostedProviders() throws {
+        let hosted = """
         mlxflow 0.8
         1. Answer       claude-sonnet @ anthropic; "cite sources"
 
         models:
           claude-sonnet @ anthropic = anthropic/claude-sonnet-4
         """
-        let found = try issues(for: text)
-        let e120 = try #require(found.first { $0.code == "E120" })
-        #expect(e120.row == "1")
-        #expect(e120.message.contains("claude-sonnet @ anthropic"))
-        #expect(e120.message.contains("leaves this building"))
-        #expect(e120.message.contains("; offdevice"))
+        let hostedIssue = try #require(try issues(for: hosted).first { $0.code == "E120" })
+        #expect(hostedIssue.row == "1")
+        #expect(hostedIssue.message.contains("claude-sonnet @ anthropic"))
+        #expect(hostedIssue.message.contains("leaves this building"))
+        #expect(hostedIssue.message.contains("; offdevice"))
+
+        let lan = """
+        mlxflow 0.8
+        1. Answer       qwen3-32b @ http://mac-studio.local:8080; "cite sources"
+
+        models:
+          qwen3-32b @ http://mac-studio.local:8080 = macstudio/qwen3-32b
+        """
+        let lanIssue = try #require(try issues(for: lan).first { $0.code == "E120" })
+        #expect(lanIssue.message.contains("qwen3-32b @ http://mac-studio.local:8080"))
+        #expect(lanIssue.message.contains("leaves this machine"))
+        #expect(!lanIssue.message.contains("leaves this building"))
     }
 
     /// `44-FrontierEscalate.cat` already declares `offdevice` — RM-4b's own check must not

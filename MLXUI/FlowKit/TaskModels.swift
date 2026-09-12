@@ -247,17 +247,24 @@ nonisolated enum TaskModels {
         return byTask
     }
 
-    /// RM-4b — provider-kind manifests whose `egress` is `"lan"` (a self-hosted/on-prem
-    /// endpoint the user's own network reaches, never a third party) — exempt from E120.
-    /// Static, bundle-derived, registry-independent for the same reason
-    /// `systemDisplayNames` is: `FlowValidator.checkOffdeviceFlag`'s classification must
-    /// work with no `FlowRegistry` (`checkFlow`'s only production callers never construct
-    /// one — AFM-FOLLOWUP-3, journal `2026-259`), so this cannot depend on anything a real
-    /// run would leave `nil`.
-    static var lanProviderDisplayNames: Set<String> {
-        Set(CuratedManifest.installedManifests()
-            .filter { $0.kind == "provider" && $0.egress == "lan" }
-            .map(\.display))
+    // SPEC-Q221
+    /// RM-FIX-1 (SPEC-Q221 corrects RM-4b's original `lanProviderDisplayNames` exemption —
+    /// see the journal and `catflow-mlx/SPEC_QUESTIONS.md` Q221) — a provider-kind
+    /// manifest's declared `egress` (`"lan"` | `"internet"` | `nil`), by display name.
+    /// **Never exempts anything from E120** — every `.provider` row raises it regardless of
+    /// egress (Q203 point 5: "both cases need the same flag"). `egress` only picks E120's
+    /// wording ("leaves this machine" for `lan`, "leaves this building" otherwise), exactly
+    /// the reference's own `_check_offdevice_flag`. Static, bundle-derived,
+    /// registry-independent for the same reason `systemDisplayNames` is:
+    /// `FlowValidator.checkOffdeviceFlag`'s classification must work with no
+    /// `FlowRegistry` (`checkFlow`'s only production callers never construct one —
+    /// AFM-FOLLOWUP-3, journal `2026-259`), so this cannot depend on anything a real run
+    /// would leave `nil`. Returns `nil` for a display with no known manifest (an unported
+    /// provider named directly in a row's text) — the caller reads that as "internet"
+    /// (the more disclosure-heavy wording), never silently the milder one.
+    static func providerEgress(forDisplay display: String) -> String? {
+        CuratedManifest.installedManifests()
+            .first { $0.kind == "provider" && $0.display == display }?.egress
     }
 
     /// AFM-1 — every display name a `kind: "system"` manifest in the bundle names. **Static,

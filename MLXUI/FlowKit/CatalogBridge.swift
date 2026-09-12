@@ -582,8 +582,8 @@ nonisolated struct CuratedManifest: Codable, Sendable, Equatable {
 /// Settings row for free with no change here (that's the whole reason KEY comes before
 /// either — Q223 in `catflow-mlx/SPEC_QUESTIONS.md` already settled that a search
 /// provider is a `credentials:`-bearing manifest exactly like a model provider, so this
-/// one scan covers both). RM-4b reuses the same bundle scan for `TaskModels
-/// .lanProviderDisplayNames` — one general "read every installed manifest" primitive,
+/// one scan covers both). RM-4b/RM-FIX-1 reuses the same bundle scan for `TaskModels
+/// .providerEgress(forDisplay:)` — one general "read every installed manifest" primitive,
 /// two call sites.
 extension CuratedManifest {
     /// The testable core: decode every URL as a `CuratedManifest` and keep the
@@ -619,8 +619,8 @@ extension CuratedManifest {
     }
 
     /// Phase KEY's original entry point, now built on `installedManifests(bundle:)` (RM-4b
-    /// needed the same bundle scan for `TaskModels.lanProviderDisplayNames`, so the decode
-    /// is shared rather than duplicated). As of RM, `claude-sonnet-4.json` / `gpt-5.6-
+    /// needed the same bundle scan for `TaskModels.providerEgress(forDisplay:)`, so the
+    /// decode is shared rather than duplicated). As of RM, `claude-sonnet-4.json` / `gpt-5.6-
     /// luna.json` / `deepseek-v4-flash.json` each name one (`anthropic` / `openai` /
     /// `deepseek`) — no longer `[]`, per journal `2026-260`.
     static func installedCredentialNames(bundle: Bundle = .main) -> [String] {

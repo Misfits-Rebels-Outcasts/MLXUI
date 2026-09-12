@@ -381,12 +381,24 @@ struct CatFlowEditingTests {
         #expect(text.contains("(1,2)"))
     }
 
+    @MainActor
     @Test func loadedPolicyDiffStaysGreenAndEditable() throws {
         // 08-PolicyDiff's `Diff (1,2)` is a shipped flow the editor must load without yellow.
+        // `wiredEditor` (not the plain, catalog-less `editor`), same reasoning as CFM-R14-
+        // FIX-6 already documents on it: a *real* catalog must back `model.add(task:)`'s
+        // default-model pick. RM: with an empty catalog, "Summarize" (a `@frames-text`
+        // member) has no cataloged candidate for `defaultModel` to prefer, so it falls
+        // through to `derived.first` — now a real remote provider, which correctly demands
+        // `offdevice` (RM-FIX-1) and would have failed this test for the right reason. A
+        // wired catalog restores the realistic case: a fresh row defaults to an installed
+        // local model, exactly as the picker does for a real user with a real catalog.
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
         let r1 = row("Read Text", settings: "policy-2025.md")
         let r2 = row("Read Text", settings: "policy-2026.md")
         let diff = row("Diff", settings: "format=unified", refs: [.rowRef(r1.id), .rowRef(r2.id)])
         let model = try editor(rows: [r1, r2, diff])
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
         #expect(model.warning(for: diff.id) == nil)
         #expect(model.canSave)
         // An edit round-trips without breaking it.

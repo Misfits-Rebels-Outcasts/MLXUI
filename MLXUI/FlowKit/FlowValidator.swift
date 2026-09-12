@@ -1831,39 +1831,37 @@ extension FlowValidator {
     /// nothing ever raised it. This is the check.
     ///
     /// Ported from `catflow-mlx/src/catflow/core/validator.py::_check_offdevice_flag`,
-    /// with **one deliberate, flagged divergence and one deliberate, flagged
-    /// strengthening** — both recorded here rather than silently applied:
+    /// with **one deliberate, flagged strengthening** (recorded here) and **no exemption
+    /// for a LAN endpoint** — RM-4b's first cut shipped one, and it was wrong:
+    /// `catflow-mlx/SPEC_QUESTIONS.md` Q203 point 5 already settled this ("Both cases need
+    /// the same flag") before RM ever started, and the reference's own validator raises
+    /// E120 for `egress: "lan"` exactly like `"internet"` — `egress` only ever picks the
+    /// message's wording ("leaves this machine" vs "leaves this building"), never whether
+    /// it fires. // SPEC-Q221 — RM-FIX-1 removes the exemption; the entry that should have
+    /// been filed *before* the first cut, not after — see the journal for the full account.
     ///
-    /// 1. **Divergence.** The reference raises E120 for a `lan`-egress manifest too —
-    ///    `egress` there only changes the message's wording ("leaves this machine" vs
-    ///    "leaves this building"), never whether it fires (`validator.py:1458-1466`). This
-    ///    cycle's own instruction says the opposite: "test that … the keyless LAN endpoint
-    ///    do[es] not raise it." Implemented per that instruction — a `lan`-egress row is
-    ///    exempt outright — not silently reconciled with the reference. Flagged for the
-    ///    owner in the journal.
-    /// 2. **Strengthening.** The reference's whole function returns immediately when
-    ///    `registry is None` — harmless in Python, where every real caller supplies one,
-    ///    but MLXUI's own `checkFlow` is **always** called with `registry: nil` in
-    ///    production (`AppState.swift`, `FlowEditorModel.swift` — confirmed AFM-FOLLOWUP-3,
-    ///    journal `2026-259`, the same gap already found for E104). Porting the
-    ///    registry-null-return verbatim would make this check compile, pass every test that
-    ///    supplies a registry, and **never fire for a real user** — exactly the illusion
-    ///    RM-4b exists to prevent ("that visibility is the entire basis on which 'both
-    ///    editions' was acceptable"). So the registry-independent path — `isRemoteRow`'s own
-    ///    `" @ provider"` text test, and the LAN exemption via the bundle-derived
-    ///    `TaskModels.lanProviderDisplayNames` (never the registry) — always runs, with real
-    ///    production effect. `registry` is consulted only for the reference's narrower,
-    ///    second case (no `" @ provider"` in the row text, but the row's `models:` pin
-    ///    resolves to a `kind: "provider"` manifest) — which, like E104's own registry path,
-    ///    has no live caller today and is kept for tests/future-proofing, not production
-    ///    correctness.
+    /// **The one deliberate strengthening that stands:** the reference's whole function
+    /// returns immediately when `registry is None` — harmless in Python, where every real
+    /// caller supplies one, but MLXUI's own `checkFlow` is **always** called with
+    /// `registry: nil` in production (`AppState.swift`, `FlowEditorModel.swift` — confirmed
+    /// AFM-FOLLOWUP-3, journal `2026-259`, the same gap already found for E104). Porting the
+    /// registry-null-return verbatim would make this check compile, pass every test that
+    /// supplies a registry, and **never fire for a real user** — exactly the illusion RM-4b
+    /// exists to prevent ("that visibility is the entire basis on which 'both editions' was
+    /// acceptable"). So the registry-independent path — `isRemoteRow`'s own `" @ provider"`
+    /// text test, plus `TaskModels.providerEgress(forDisplay:)` (bundle-derived, never the
+    /// registry) for the message's wording — always runs, with real production effect.
+    /// `registry` is consulted only for the reference's narrower second case (no
+    /// `" @ provider"` in the row text, but the row's `models:` pin resolves to a `kind:
+    /// "provider"` manifest) — which, like E104's own registry path, has no live caller
+    /// today and is kept for tests/future-proofing, not production correctness.
     static func checkOffdeviceFlag(_ rows: [ParsedRow], models: [String: String], flags: [String],
                                    registry: (any FlowRegistry)?, issues: inout [FlowIssue]) {
         guard !flags.contains("offdevice") else { return }
         for (path, row) in iterFlowRows(rows) {
             guard namesAModel(row), let model = row.model else { continue }
-            if TaskModels.lanProviderDisplayNames.contains(model) { continue }
             var provider = model
+            var egress = TaskModels.providerEgress(forDisplay: model)
             var fires = isRemoteRow(row)
             if !fires, let registry {
                 let pinnedID = models[model]
@@ -1871,12 +1869,16 @@ extension FlowValidator {
                 if let manifest, manifest.kind == "provider" {
                     fires = true
                     provider = manifest.display
+                    egress = TaskModels.providerEgress(forDisplay: manifest.display)
                 }
             }
             guard fires else { continue }
+            // Q203 point 5's own default: unresolved/absent egress reads as "internet" —
+            // the more disclosure-heavy wording, never silently the milder one.
+            let egressPhrase = egress == "lan" ? "leaves this machine" : "leaves this building"
             issues.append(FlowIssue(row: path, code: "E120", message: (try? ErrorCatalog.fill(
                 code: "E120", values: ["n": path, "task": row.task ?? "", "provider": provider,
-                                        "egress": "leaves this building"], isV08: true)) ?? ""))
+                                        "egress": egressPhrase], isV08: true)) ?? ""))
         }
     }
 
