@@ -142,15 +142,11 @@ struct CatFlowModelSlotTests {
 
     // MARK: - MS-2: the picker's third section, empty when no registry has entries
 
-    /// AFM (`RSI/journal/2026-258`) makes `builtIn` genuinely non-empty on a real macOS 26+
-    /// Mac — this suite's own build machine included, since `AppleFoundationAvailability
-    /// .currentReadiness()` reads the real `SystemLanguageModel` when nothing overrides it.
-    /// `simulateOSUnavailable` restores MS-2's original claim precisely: with **no**
-    /// system/provider registry populated, the third section stays empty and unrendered —
-    /// this test's actual subject, not "AFM never exists."
+    /// AFM-FOLLOWUP-1 (`RSI/journal/2026-259`): `AppleFoundationAvailability.useRealSystem`
+    /// defaults to `false` — only `MLXUIApp.init()` ever flips it — so this test needs no
+    /// override at all to see MS-2's original claim: with no system/provider registry
+    /// populated, the third section stays empty and unrendered, on any build machine.
     @Test @MainActor func sectionedModelCandidatesBuiltInSectionIsEmptyForEveryModelTask() throws {
-        AppleFoundationAvailability.simulateOSUnavailable = true
-        defer { AppleFoundationAvailability.simulateOSUnavailable = false }
         let catalog = try bundledCatalog()
         let registry = ModelRegistry()
         for module in installedModules { module.register(into: registry) }

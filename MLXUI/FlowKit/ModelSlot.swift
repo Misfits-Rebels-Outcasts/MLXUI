@@ -138,3 +138,29 @@ nonisolated struct ProviderModelRef: Sendable, Equatable {
     let readiness: Readiness
     let resourceNote: String?
 }
+
+/// KEY-3 — the Keychain-backed half of `ProviderModelRef.readiness`, built now so RM-2
+/// wires it in as one line (`readiness: ProviderCredential.readiness(providerName:)`),
+/// the same "build the plumbing, later phase plugs it in" pattern as `SetupAction`
+/// itself (MS-4) and `SystemModelRef.readiness` (AFM-1).
+///
+/// The `reason:` string here is picker/banner prose — parallel to
+/// `SystemLanguageModelAvailabilityChecker.readiness`'s "Turn on Apple Intelligence in
+/// System Settings" — not `ErrorCatalog`'s `R910`. `R910` is a distinct, row-numbered
+/// message a *remote executor* raises mid-run when a row it is about to dispatch turns
+/// out to need a key that isn't set; that raise site is RM's job once a remote executor
+/// exists, exactly as `R904` sits in the catalog unraised today, waiting for the same
+/// executor. This function only answers "can the row start at all" — the
+/// `.needsSetup` readiness it returns is what already keeps `FlowPreflight` from
+/// starting a run that names an unconfigured provider, via the same mechanism Phase
+/// AFM's `.needsSetup` readiness uses today.
+nonisolated enum ProviderCredential {
+    static func readiness(providerName: String) -> Readiness {
+        let account = KeychainHelper.providerAccount(providerName)
+        guard KeychainHelper.get(account: account) != nil else {
+            return .needsSetup(reason: "Add your \(providerName) key in Settings",
+                                action: .openSettings(.providers))
+        }
+        return .ready
+    }
+}

@@ -80,12 +80,23 @@ struct CatFlowTaskAvailabilityTests {
                                                 claimableModelIDs: claimable)
             for slot in pool {
                 // This test exercises the real MLX stage-building path, which only a
-                // cataloged `ModelEntry` can feed — a non-cataloged slot (AFM's `.system`,
-                // real on this machine since Phase AFM: `RSI/journal/2026-258`) is skipped
-                // here on purpose, not unexpectedly; its own dispatch is proven by
-                // `CatFlowAppleFoundationTests`, which mocks the executor instead of
-                // building a `ModelRegistry` stage.
-                guard let model = slot.modelEntry else { continue }
+                // cataloged `ModelEntry` can feed. AFM-FOLLOWUP-2: narrowed from a blanket
+                // `guard let model = slot.modelEntry else { continue }` — that silently
+                // skipped *any* non-cataloged slot, which was one step too far for what was a
+                // legitimate reason (AFM's `.system` is real now; its own dispatch is proven
+                // by `CatFlowAppleFoundationTests`, which mocks the executor instead of
+                // building a `ModelRegistry` stage). Skip exactly `.system`/`.provider`; a
+                // `.cataloged` slot with no `modelEntry` should be impossible, so it still
+                // fails loudly if `ModelSlot` ever grows a way to make that true.
+                guard let model = slot.modelEntry else {
+                    switch slot {
+                    case .system, .provider:
+                        continue
+                    case .cataloged:
+                        Issue.record("\(task.name) offers a cataloged slot with no modelEntry — should be impossible")
+                        continue
+                    }
+                }
                 let display = slot.displayName
                 // (1) the executor's own stage path builds it.
                 let resolved = try #require(registry.bestModule(for: model),

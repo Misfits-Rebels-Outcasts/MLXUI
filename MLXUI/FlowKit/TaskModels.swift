@@ -232,11 +232,23 @@ nonisolated enum TaskModels {
     /// port the curated provider manifests into `ModelSlot.provider` entries.
     private static let providerModels: [String: [ProviderModelRef]] = [:]
 
-    /// AFM-1 — every display name the system registry currently offers, flattened: the
-    /// catalog-free membership check `FlowValidator.isRemoteRow` needs (manifest-`kind`-based,
-    /// not a `" @ "` string test). Cheap — the registry is one entry today.
+    /// AFM-1 — every display name a `kind: "system"` manifest in the bundle names. **Static,
+    /// never gated on `AppleFoundationAvailability.currentReadiness()`** — this is
+    /// `isRemoteRow`'s classification question ("is this display structurally on-device,
+    /// per the manifest"), not the picker's *availability* question ("can this Mac run it
+    /// right now"). Those must not share a source: a flow authored on a Mac with Apple
+    /// Intelligence on, then opened on one running macOS < 26 or with it off, still names an
+    /// on-device model — `systemModels` above correctly reports it **absent from the pool**
+    /// on that machine, but `isRemoteRow` must still say **not remote**, or a `.cat` shared
+    /// between two Macs would classify differently depending on which one opened it.
+    /// (Found the hard way: gating this on `currentReadiness()`, as the first AFM cut did,
+    /// happened to work throughout Phase AFM only because this dev machine's real
+    /// `SystemLanguageModel` reachability made the registry non-empty by coincidence; AFM-
+    /// FOLLOWUP-1's deterministic-absent-by-default test seam exposed it immediately.)
     static var systemDisplayNames: Set<String> {
-        Set(systemModels.values.flatMap { $0 }.map(\.displayName))
+        guard let manifest = CuratedManifest.load(manifestFile: "apple-foundation.json"),
+              manifest.kind == "system" else { return [] }
+        return [manifest.display]
     }
 
     /// Same as `systemDisplayNames`, for Phase RM's provider registry — always empty until

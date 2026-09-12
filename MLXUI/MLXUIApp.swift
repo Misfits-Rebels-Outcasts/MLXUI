@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 @main
@@ -11,9 +12,26 @@ struct MLXUIApp: App {
     }
     @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
 
-    
+
     @State private var appState = AppState()
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+
+    /// AFM-FOLLOWUP-1: the **one** place the real app opts into reading the actual
+    /// `SystemLanguageModel` — everywhere else sees a deterministic "absent"
+    /// `AppleFoundationAvailability` by default, "mock by default" applied to the OS itself.
+    ///
+    /// **`MLXUIApp.init()` is *not* a safe "only in a real launch" signal on its own** — a
+    /// macOS app's unit test bundle runs *inside* the app process as its test host, so
+    /// `@main` fires and this initializer runs even under `xcodebuild test` (confirmed: the
+    /// app's own startup logging appeared in a plain test run before this guard existed).
+    /// The standard, tool-agnostic signal that survives both XCTest and swift-testing (both
+    /// launch through the same `xctest` host mechanism) is `XCTestConfigurationFilePath` in
+    /// the environment — Xcode's test runner sets it, nothing else does.
+    init() {
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            AppleFoundationAvailability.useRealSystem = true
+        }
+    }
 
     var body: some Scene {
         WindowGroup {

@@ -648,11 +648,29 @@ private final class ProgressDelegate: NSObject, URLSessionDownloadDelegate {
 
 // MARK: - Keychain Helper
 
-enum KeychainHelper {
+/// KEY-1 (`RSI/DelegateOffMachineBacklog.md` §0 is the owner approval for this Keychain
+/// change, cited per `policies.md`) — generalized from one hardcoded HF-token account to
+/// `account:`-parameterized `get`/`save`/`delete`, so Phase RM's provider keys (Registry §7 /
+/// decision M6: a manifest names its key **by reference**, the key lives in machine config,
+/// never in a manifest and never in a flow) use the same three functions under
+/// `account: providerAccount(name)`. The three original functions are now thin wrappers —
+/// every existing call site (`InstallManager`) is unchanged.
+///
+/// `nonisolated` (KEY-3): Security framework calls are thread-safe C APIs with no
+/// main-actor affinity of their own — the project's default `MainActor` isolation was
+/// never load-bearing here, just the ambient default. Making it explicit lets
+/// `ProviderCredential.readiness` (FlowKit, itself `nonisolated`) call straight through
+/// without an actor hop; every existing call site (`SettingsView`, `MainActor`) still
+/// compiles unchanged, since a `MainActor` context can always call a `nonisolated` func.
+nonisolated enum KeychainHelper {
     private static let service = "com.ai-browser"
-    private static let account = "huggingface-token"
+    private static let hfAccount = "huggingface-token"
 
-    static func getToken() -> String? {
+    /// Registry §7 / M6's Swift equivalent of `$CATFLOW_KEY_<NAME>`: the Keychain account a
+    /// provider manifest's `"credentials": "<name>"` reference resolves to.
+    static func providerAccount(_ name: String) -> String { "provider-\(name)" }
+
+    static func get(account: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -666,18 +684,21 @@ enum KeychainHelper {
         return String(data: data, encoding: .utf8)
     }
 
-    static func saveToken(_ token: String) {
+    static func save(_ value: String, account: String) {
+        // No force-unwrap on the UTF-8 conversion (project convention) — a value that
+        // somehow fails to encode is simply not saved, rather than crashing.
+        guard let data = value.data(using: .utf8) else { return }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-            kSecValueData as String: token.data(using: .utf8)!,
+            kSecValueData as String: data,
         ]
         SecItemDelete(query as CFDictionary)
         SecItemAdd(query as CFDictionary, nil)
     }
 
-    static func deleteToken() {
+    static func delete(account: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -685,4 +706,10 @@ enum KeychainHelper {
         ]
         SecItemDelete(query as CFDictionary)
     }
+
+    // MARK: - Back-compat wrappers — every existing call site is unchanged
+
+    static func getToken() -> String? { get(account: hfAccount) }
+    static func saveToken(_ token: String) { save(token, account: hfAccount) }
+    static func deleteToken() { delete(account: hfAccount) }
 }

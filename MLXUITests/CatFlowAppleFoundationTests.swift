@@ -4,8 +4,12 @@ import Foundation
 
 /// Phase AFM — Apple Foundation Models as a selectable model, entirely mock-driven (the real
 /// device path is excluded from CI, same convention as MLX's model-test marker).
-/// `AppleFoundationAvailability.checkerOverride`/`executorOverride`/`simulateOSUnavailable`
-/// are the seams; every test resets them, since they're process-global.
+///
+/// AFM-FOLLOWUP-1: `AppleFoundationAvailability.useRealSystem` defaults to `false` — "mock by
+/// default" applied to the OS — so **no test here needs to touch it at all**; the deterministic
+/// "absent" default is exactly what a fresh `checkerOverride`/`executorOverride`-free call
+/// returns. `checkerOverride`/`executorOverride` are the seams a test does use; every test that
+/// sets one resets it, since they're process-global.
 struct CatFlowAppleFoundationTests {
 
     /// A fixture `Readiness`, injected via `checkerOverride` so a test can drive the pool
@@ -34,10 +38,11 @@ struct CatFlowAppleFoundationTests {
         }
     }
 
-    /// Resets every override — call at the start of a test that touches them, and rely on
+    /// Resets both override seams — call at the start of a test that touches them, and rely on
     /// `defer` to reset again on exit, so a failure mid-test can't leak state into the next.
+    /// `useRealSystem` itself is never touched here: it defaults to `false` and only
+    /// `MLXUIApp.init()` ever sets it, so no test needs to reset it either.
     private func resetOverrides() {
-        AppleFoundationAvailability.simulateOSUnavailable = false
         AppleFoundationAvailability.checkerOverride = nil
         AppleFoundationAvailability.executorOverride = nil
     }
@@ -85,15 +90,18 @@ struct CatFlowAppleFoundationTests {
         #expect(!tasks.contains("Generate"))
     }
 
-    // MARK: - AFM-1: absent below macOS 26, present when ready — MS-2's third section
+    // MARK: - AFM-FOLLOWUP-1: absent by default, present only when explicitly made ready
 
-    @Test func appleFoundationIsAbsentFromThePoolWhenTheOSIsSimulatedUnavailable() throws {
+    /// The deterministic default (AFM-FOLLOWUP-1): with no override set — which is every test
+    /// in the suite except this file's own fixture-driven ones — `apple-foundation @ system`
+    /// is absent from every task's derived pool, on any Mac, any OS version, any Apple
+    /// Intelligence state. This is what makes MS's own pool tests host-independent again.
+    @Test func appleFoundationIsAbsentFromThePoolByDefault() throws {
         resetOverrides()
         defer { resetOverrides() }
-        AppleFoundationAvailability.simulateOSUnavailable = true
         let catalog = try loadCatalog()
         let pool = TaskModels.derivedModels(for: "Summarize", catalog: catalog, claimableModelIDs: [])
-        #expect(!pool.contains { if case .system = $0 { return true }; return false })
+        #expect(!pool.contains { $0.displayName == "apple-foundation @ system" })
     }
 
     @Test func appleFoundationAppearsInEveryManifestTaskWhenReady() throws {
@@ -109,27 +117,9 @@ struct CatFlowAppleFoundationTests {
         }
     }
 
-    /// AFM-1's exit condition, made concrete: the build machine this suite actually runs on
-    /// is macOS 26+ (the SDK is installed — `RSI/journal/2026-258` verified this against the
-    /// real `FoundationModels` framework), so **the default, no-override path reflects this
-    /// machine's real Apple Intelligence state, never `nil`.** Only `simulateOSUnavailable`
-    /// lets a test see the pre-AFM "absent from the pool" shape on a real macOS 26 machine —
-    /// which is exactly what every pre-AFM test file (MS's `CatFlowModelSlotTests` included)
-    /// runs under, since none of them touch this override.
-    @Test func everyExistingPoolTestRunsUnderTheSimulatedAbsentShape() throws {
-        resetOverrides()
-        defer { resetOverrides() }
-        AppleFoundationAvailability.simulateOSUnavailable = true
-        let catalog = try loadCatalog()
-        let pool = TaskModels.derivedModels(for: "Summarize", catalog: catalog, claimableModelIDs: [])
-        #expect(!pool.contains { $0.displayName == "apple-foundation @ system" })
-    }
-
     // MARK: - AFM-1: readiness states reach the picker via ModelSlot (fixture-driven)
 
     @Test func needsSetupReadinessKeepsTheSlotSelectable() {
-        resetOverrides()
-        defer { resetOverrides() }
         let ref = SystemModelRef(id: "apple/foundation-models", displayName: "apple-foundation @ system",
                                  readiness: .needsSetup(reason: "Turn on Apple Intelligence in System Settings",
                                                         action: .enableAppleIntelligence),
@@ -148,10 +138,16 @@ struct CatFlowAppleFoundationTests {
 
     // MARK: - AppleFoundationAvailability's own plumbing
 
-    @Test func currentReadinessHonorsTheSimulatedUnavailableOverride() {
+    @Test func useRealSystemDefaultsToFalse() {
+        // The actual enforcement — only `MLXUIApp.init()` ever sets this to `true`; nothing
+        // else in the app or the test target does. A direct read is the simplest possible
+        // pin of "mock by default" holding for the OS itself.
+        #expect(AppleFoundationAvailability.useRealSystem == false)
+    }
+
+    @Test func currentReadinessIsAbsentWithNoOverrideRegardlessOfThisMachine() {
         resetOverrides()
         defer { resetOverrides() }
-        AppleFoundationAvailability.simulateOSUnavailable = true
         #expect(AppleFoundationAvailability.currentReadiness() == nil)
     }
 
@@ -194,7 +190,8 @@ struct CatFlowAppleFoundationTests {
     @Test func aFlowNamingAppleFoundationValidatesWithNoE120() throws {
         // E120 has no raise site in this tree yet (verified: `grep -rn "\"E120\"" MLXUI/`
         // matches only the ErrorCatalog template) — this pins intent, not a live regression,
-        // and will start meaning something the moment a direct offdevice check is added.
+        // and will start meaning something the moment a direct offdevice check is added
+        // (RM-4b builds one, gated on `.provider`, never `.system`).
         let text = """
         mlxflow 0.8
         1. Read Text    memo.txt
@@ -225,6 +222,27 @@ struct CatFlowAppleFoundationTests {
         let found = try issues(for: text)
         #expect(!found.contains { $0.code == "E605" },
                 "an on-device model must never count as a costly row for the rate-budget check")
+    }
+
+    /// AFM-FOLLOWUP-3 — the fix's *other* live consequence: `checkModelsPinned`'s E104
+    /// exemption (`FlowValidator.swift:1819`) also gates on `!isRemoteRow(row)`. A registry
+    /// that can already resolve the display name (`DirectoryFlowRegistry` loaded from the
+    /// bundled curated manifests — the same shape `apple-foundation.json` ships as) must not
+    /// demand a redundant `models:` pin, exactly as a cataloged unbridged pick doesn't.
+    @Test func appleFoundationRowIsExemptFromE104WhenTheRegistryCanResolveIt() throws {
+        let repoRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let manifestsDir = repoRoot.appendingPathComponent("MLXUI/Resources/CatFlow/models")
+        let registry = try DirectoryFlowRegistry.load(directory: manifestsDir)
+        let text = """
+        mlxflow 0.8
+        1. Read Text    memo.txt
+        2. Summarize    (1)  apple-foundation @ system
+        3. Save Text    out.md
+        """
+        // Deliberately no `models:` pin — the exemption is the whole point of this test.
+        let flow = try CatParser.parseForValidation(text)
+        let found = FlowValidator.checkFlow(flow, registry: registry)
+        #expect(!found.contains { $0.code == "E104" })
     }
 
     // MARK: - AFM-3: FlowPreflight plans an empty download set when ready

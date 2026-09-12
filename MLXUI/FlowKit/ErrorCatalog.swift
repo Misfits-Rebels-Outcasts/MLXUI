@@ -16,7 +16,8 @@ nonisolated enum ErrorCatalog {
     // GENERATED — do not hand-edit. Regenerate via the repo's generator;
     // source of truth: catflow-mlx/src/catflow/core/errors_catalog.py.
 
-    /// 61 codes, generated from `core/errors_catalog.py` (`catalogV07`).
+    /// 61 codes generated from `core/errors_catalog.py` (`catalogV07`), plus one
+    /// MLXUI-only addition (`R910`, KEY-3 — no `catflow-mlx` equivalent).
     static let catalogV07: [String: CatErrorSpec] = [
         "E101": CatErrorSpec(code: "E101", name: "unknown version", citation: "Spec §1.1", template: "This flow needs CAT Flow {version} — it uses {feature-example}. This runtime speaks {supported}. Nothing was run."),
         "E102": CatErrorSpec(code: "E102", name: "unknown header flag", citation: "§1.1", template: "This flow declares `· {flag}`, which this runtime doesn't support. Nothing was run."),
@@ -72,6 +73,10 @@ nonisolated enum ErrorCatalog {
         "R903": CatErrorSpec(code: "R903", name: "file unreadable", citation: nil, template: "Row {n} couldn't read {path}: {reason}. Fix or re-point the row; rows 1–{n-1} are cached."),
         "R904": CatErrorSpec(code: "R904", name: "provider error (remote row)", citation: nil, template: "{provider} answered: {status}. The row is held; nothing was retried without you. Your key is configured in Settings, never in the flow."),
         "R905": CatErrorSpec(code: "R905", name: "step cap reached", citation: "Spec §8.3, R18", template: "This run hit the global cap of {N} steps and was stopped. If this flow legitimately needs more, raise the cap in Settings — budgets on rows are the better fix."),
+        // R910 (KEY-3): MLXUI-only, no catflow-mlx equivalent — Keychain-backed
+        // credentials are a Swift/macOS concept the Python reference doesn't have.
+        // Raised as preflight, before the run starts, never mid-run like R904.
+        "R910": CatErrorSpec(code: "R910", name: "missing credential", citation: nil, template: "Row {n} needs a {provider} key, and none is set. Nothing has run yet — add the key in Settings, then start the run again."),
         "F001": CatErrorSpec(code: "F001", name: "budget exhausted", citation: nil, template: "Out of visits ({N}) — proceeded on `{tag}` with the best so far."),
         "F002": CatErrorSpec(code: "F002", name: "timeout default taken", citation: nil, template: "Nobody answered by {time} — proceeded as `{default}`, unreviewed."),
         "F003": CatErrorSpec(code: "F003", name: "item skipped", citation: "`on_error=skip`", template: "Item {k} of {N} failed ({reason}) and was skipped. {N-1} delivered."),
@@ -81,7 +86,8 @@ nonisolated enum ErrorCatalog {
         "F007": CatErrorSpec(code: "F007", name: "forced substitution shown", citation: "Spec §7.5, R17", template: "This activation's first input arrived from row {m}'s edge, overriding the `({ref})` reference for this pass."),
     ]
 
-    /// 98 codes, generated from `core/errors_catalog.py` (`catalogV08`).
+    /// 98 codes generated from `core/errors_catalog.py` (`catalogV08`), plus one
+    /// MLXUI-only addition (`R910`, KEY-3 — no `catflow-mlx` equivalent).
     static let catalogV08: [String: CatErrorSpec] = [
         "E101": CatErrorSpec(code: "E101", name: "unknown version", citation: "Spec §1.1, §1.1a", template: "This flow says `mlxflow {version}`. This runtime speaks 0.8 only, and there is no converter. Nothing was run."),
         "E102": CatErrorSpec(code: "E102", name: "unknown header flag", citation: "§1.1", template: "This flow declares `; {flag}`, which this runtime doesn't support. Nothing was run."),
@@ -170,6 +176,10 @@ nonisolated enum ErrorCatalog {
         "R907": CatErrorSpec(code: "R907", name: "improvised action failed", citation: "Spec §14.4", template: "Row {n}'s action failed: {detail}. The agent had {k} of {N} actions left. Everything it changed can be undone with `mlxflow undo {run} {n}`."),
         "R908": CatErrorSpec(code: "R908", name: "non-numeric comparison", citation: nil, template: "Row {n}'s `Compare` couldn't read \"{value}\" as a number ({detail}). `Compare` only reads numbers — clean the text first (`Extract`, `Filter`) if it needs it."),
         "R909": CatErrorSpec(code: "R909", name: "transform failed", citation: "§14.6", template: "Row {n}'s transform {transform} ({script}) {detail}. Nothing downstream of row {n} ran."),
+        // R910 (KEY-3): MLXUI-only, no catflow-mlx equivalent — Keychain-backed
+        // credentials are a Swift/macOS concept the Python reference doesn't have.
+        // Raised as preflight, before the run starts, never mid-run like R904.
+        "R910": CatErrorSpec(code: "R910", name: "missing credential", citation: nil, template: "Row {n} needs a {provider} key, and none is set. Nothing has run yet — add the key in Settings, then start the run again."),
         "F001": CatErrorSpec(code: "F001", name: "budget exhausted", citation: nil, template: "Out of visits ({N}) — proceeded on `{tag}` with the best so far."),
         "F002": CatErrorSpec(code: "F002", name: "timeout default taken", citation: nil, template: "Nobody answered by {time} — proceeded as `{default}`, unreviewed."),
         "F003": CatErrorSpec(code: "F003", name: "item skipped", citation: "`on_error=skip`", template: "Item {k} of {N} failed ({reason}) and was skipped. {N-1} delivered."),

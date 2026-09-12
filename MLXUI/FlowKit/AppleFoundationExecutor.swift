@@ -91,31 +91,36 @@ nonisolated struct SystemLanguageModelAvailabilityChecker: AppleFoundationAvaila
 /// `@available` — each does its own `#available` check internally, so callers never need one
 /// either (the whole point of confining the annotation to this file).
 nonisolated enum AppleFoundationAvailability {
-    /// Test-only: when set, `currentReadiness()` returns `nil` immediately, simulating
-    /// "macOS < 26" on a machine that's actually running 26+ (`CatFlowAppleFoundationTests`).
-    /// Production code never sets this; always `false` outside a test run.
-    static var simulateOSUnavailable = false
-    /// Test-only: when set, both factories return it instead of touching `#available`/the
-    /// real framework — lets a test drive every `Readiness` state and every generation path
-    /// without a real device. Production code never sets this.
+    /// AFM-FOLLOWUP-1 — **"mock by default" applied to the OS.** `false` unless the real app
+    /// opts in exactly once (`MLXUIApp.init()`). Without this flip, `currentReadiness()`/
+    /// `makeExecutor()` return a deterministic "absent" regardless of what this build
+    /// machine's actual OS version or Apple Intelligence state is — so a test run's default
+    /// is never host-dependent, the same guarantee "mock by default" gives every real-model
+    /// path. A test that genuinely wants the real framework sets this explicitly (none do
+    /// today, matching the real-model-path convention of staying out of CI).
+    static var useRealSystem = false
+    /// Test-only: when set, both factories return it instead of touching the real framework —
+    /// lets a test drive every `Readiness` state and every generation path without a real
+    /// device, regardless of `useRealSystem`. Production code never sets this.
     static var checkerOverride: (any AppleFoundationAvailabilityChecking)?
     static var executorOverride: (any AppleFoundationExecuting)?
 
-    /// The current machine's Apple Intelligence state, mapped to `Readiness`, or `nil` below
-    /// macOS 26 — a slot simply **absent** from the pool (AFM-1), not an error.
+    /// The current machine's Apple Intelligence state, mapped to `Readiness`, or `nil` when
+    /// `useRealSystem` is off or the OS is below macOS 26 — a slot simply **absent** from the
+    /// pool (AFM-1), not an error.
     static func currentReadiness() -> Readiness? {
-        if simulateOSUnavailable { return nil }
         if let checkerOverride { return checkerOverride.readiness }
+        guard useRealSystem else { return nil }
         guard #available(macOS 26, *) else { return nil }
         return SystemLanguageModelAvailabilityChecker().readiness
     }
 
-    /// The real executor, or `nil` below macOS 26 (or when Apple Intelligence genuinely
-    /// isn't reachable — `RealExecutor` treats a `nil` here as a stage failure naming the
-    /// row, never a crash).
+    /// The real executor, or `nil` when `useRealSystem` is off, the OS is below macOS 26, or
+    /// Apple Intelligence genuinely isn't reachable (`RealExecutor` treats a `nil` here as a
+    /// stage failure naming the row, never a crash).
     static func makeExecutor() -> (any AppleFoundationExecuting)? {
-        if simulateOSUnavailable { return nil }
         if let executorOverride { return executorOverride }
+        guard useRealSystem else { return nil }
         guard #available(macOS 26, *) else { return nil }
         return AppleFoundationModelExecutor()
     }

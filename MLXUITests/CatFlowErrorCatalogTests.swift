@@ -44,13 +44,19 @@ struct CatFlowErrorCatalogTests {
     // MARK: - Both catalogs carry the code sets the Python asserts
 
     @Test func catalogSizeAndCoverage() {
-        #expect(ErrorCatalog.catalogV07.count == 61)
-        #expect(ErrorCatalog.catalogV08.count == 98)
+        // 61/98 is the Python reference's own count; KEY-3 adds one MLXUI-only code
+        // on top of each (`R910` — Keychain-backed credentials have no `catflow-mlx`
+        // equivalent, see `ErrorCatalog.swift`'s comment beside it), so 62/99 here is
+        // "61 ported + 1 Swift-only", not a drift from parity.
+        #expect(ErrorCatalog.catalogV07.count == 62)
+        #expect(ErrorCatalog.catalogV08.count == 99)
         // E108 exists only at v0.8; E707/E801/R901-R905/F001-F007 are shared.
         #expect(ErrorCatalog.catalogV07["E108"] == nil)
         #expect(ErrorCatalog.catalogV08["E108"] != nil)
         #expect(ErrorCatalog.catalogV07["E701"] != nil)
         #expect(ErrorCatalog.catalogV08["E701"] != nil)
+        #expect(ErrorCatalog.catalogV07["R910"] != nil)
+        #expect(ErrorCatalog.catalogV08["R910"] != nil)
     }
 
     // MARK: - E101 / E105 / E108 — the messages the parser surfaces

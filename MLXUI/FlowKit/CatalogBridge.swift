@@ -548,3 +548,45 @@ nonisolated struct CuratedManifest: Codable, Sendable, Equatable {
         n == n.rounded() ? String(Int(n)) : String(n)
     }
 }
+
+/// KEY-2 — the "Model & Search Providers" Settings section's row list, scanned from the
+/// installed manifests rather than hardcoded, so a manifest RM or WS adds gets a
+/// Settings row for free with no change here (that's the whole reason KEY comes before
+/// either — Q223 in `catflow-mlx/SPEC_QUESTIONS.md` already settled that a search
+/// provider is a `credentials:`-bearing manifest exactly like a model provider, so this
+/// one scan covers both).
+extension CuratedManifest {
+    /// The testable core: decode every URL as a `CuratedManifest` and keep the
+    /// `credentials` name of the ones that have ANY declared `kind` and DO name one.
+    /// `CuratedManifest.load`'s own directory (`Resources/CatFlow/models`, flattened to
+    /// the bundle root by Xcode's synchronized-folder copy — see `load`'s comment) sits
+    /// beside wholly unrelated bundled JSON: `browser.json`, the Gallery's
+    /// `_metadata.json`, per-index `*-manifest.json`. None of those share this decode's
+    /// required shape (`id`/`display`/`settings`), so they fail to decode and are
+    /// silently skipped — the same way any bundle resource this type doesn't recognize
+    /// already is. Requiring `kind != nil` on top is belt-and-suspenders against a
+    /// decode that happens to succeed by accident on a JSON file that isn't a manifest
+    /// at all.
+    static func installedCredentialNames(manifestURLs urls: [URL]) -> [String] {
+        var names = Set<String>()
+        for url in urls {
+            guard let data = try? Data(contentsOf: url),
+                  let manifest = try? JSONDecoder().decode(CuratedManifest.self, from: data),
+                  manifest.kind != nil,
+                  let credentials = manifest.credentials else { continue }
+            names.insert(credentials)
+        }
+        return names.sorted()
+    }
+
+    /// The production entry point: every top-level `.json` in the app bundle (where
+    /// every `Resources/` subdirectory flattens to, per
+    /// `PBXFileSystemSynchronizedRootGroup`). No manifest on disk names a `credentials`
+    /// value yet — RM-1/WS-1 are what will — so this returns `[]` today; that is the
+    /// correct, verified answer, not a placeholder (confirmed by `grep -l credentials
+    /// Resources/CatFlow/models/*.json` returning nothing at journal `2026-259`).
+    static func installedCredentialNames(bundle: Bundle = .main) -> [String] {
+        let urls = bundle.urls(forResourcesWithExtension: "json", subdirectory: nil) ?? []
+        return installedCredentialNames(manifestURLs: urls)
+    }
+}

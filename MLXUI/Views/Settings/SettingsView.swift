@@ -11,6 +11,10 @@ struct SettingsView: View {
     @State private var status: String = ""
 
     private var runner: ModelRunner { appState.modelRunner }
+    /// KEY-2 — scanned from installed manifests, never hardcoded (see
+    /// `CuratedManifest.installedCredentialNames`). Empty today: no manifest names a
+    /// `credentials` value yet.
+    private var providerNames: [String] { CuratedManifest.installedCredentialNames() }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -54,6 +58,22 @@ struct SettingsView: View {
                     Link("Get a token on huggingface.co",
                          destination: URL(string: "https://huggingface.co/settings/tokens")!)
                         .font(.caption)
+                }
+
+                Section("Model & Search Providers") {
+                    Text("Keys are stored in your macOS Keychain. They are never written into a flow file, and a flow you send someone does not carry them.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if providerNames.isEmpty {
+                        Text("No installed model or search provider needs a key yet.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(providerNames, id: \.self) { name in
+                            ProviderCredentialRowView(providerName: name)
+                        }
+                    }
                 }
 
                 Section("Agent Tools") {
