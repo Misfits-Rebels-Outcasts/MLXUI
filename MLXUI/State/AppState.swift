@@ -36,7 +36,7 @@ final class AppState { //appstatecomeback
     /// Set to `true` to hide the "My Workspace" shelf (the New Workspace badge and every
     /// workspace, bundled or saved) on the Automate → AI Workflows page. Flip to `false`
     /// to show the section.
-    static let hideMyWorkspace = true
+    static let hideMyWorkspace = false
 
     /// Set to `true` to hide the "Rerank" domain (and its one model, Qwen3-Reranker-0.6B)
     /// from Browse → Infrastructure. The Infrastructure section itself still renders while

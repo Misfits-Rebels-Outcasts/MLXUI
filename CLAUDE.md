@@ -32,7 +32,25 @@ can run — see "CAT Flow" below.
 - Build settings live in `Config/{Shared,AppStore,Direct}.xcconfig`, wired as each target's
   `baseConfigurationReference`. **A target-level setting in Xcode's editor overrides the
   xcconfig** — check there first when a setting doesn't take.
-- No analytics / no data collection.
+- **No analytics. The app itself sends nothing, ever** — no telemetry, no phone-home, no
+  developer-operated server. It has none.
+- **What can leave the machine, and only when a flow or the user asks for it** (revised
+  2026-09-12, after the off-machine stream — the old one-line "no data collection" claim is no
+  longer accurate on its own):
+
+  | Leaves | Carrying | Under whose account | Since |
+  |---|---|---|---|
+  | HuggingFace | the model id being fetched; the user's HF token if set | the user's | v1 |
+  | `Web Fetch` · `HTTP Get` · `Fetch Feed` · `Download File` | the URL the row names | none | CFM-R12-9 |
+  | `Web Search` → Tavily or Brave | the query text | **the user's own API key** | WS |
+  | a remote model row → Anthropic / OpenAI / DeepSeek / Together / Groq / OpenRouter / Cohere | **the row's prompt — i.e. the user's document content** | **the user's own API key** | RM |
+  | a LAN endpoint (`egress: "lan"`) | the row's prompt | none; the user's own machine | RM |
+
+  Apple Foundation Models runs **on-device** — nothing leaves. Keys live in the macOS Keychain,
+  are never written into a `.cat` file, and are never logged. A flow binding any provider must
+  declare `offdevice` on line one or fail check with **E120**, whichever the egress.
+  **Before any App Store submission with remote enabled, read
+  `RSI/RM-6-privacy-disclosure.md`** — the nutrition-label decision lives there.
 
 ### Mission
 
