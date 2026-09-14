@@ -108,21 +108,30 @@ nonisolated enum SetupAction: Sendable, Equatable {
 /// MS-1 — which section of Settings a `.openSettings` action should land on.
 /// SET-1 (`RSI/DelegateSettingsBacklog.md`) turned Settings into a real `Settings` scene with a
 /// `TabView`; `CaseIterable` + `title` + `systemImage` + the `String` raw value are that
-/// phase's G2 seam — the raw value becomes the persisted tab key `@AppStorage` reads in SET-2,
-/// so its cases must stay stable strings once written. `.agentTools` and `.privacy` arrive in
-/// SET-2 and SET-5 respectively; this phase only has the two cases the app already produces.
+/// phase's G2 seam — the raw value is the persisted tab key `SettingsRootView`'s
+/// `@AppStorage("settingsPane")` reads/writes (SET-2), so its cases must stay stable strings
+/// once shipped. `.privacy` has no tab yet — it arrives in SET-5.
 nonisolated enum SettingsPane: String, CaseIterable, Sendable, Equatable {
     /// Where a system/provider model's setup would be offered (Phase AFM/RM), and — per SET-1
     /// §3 — where model files come from and where they live on this Mac.
     case models
     /// The provider API key rows (Phase KEY/RM/WS).
     case providers
+    /// SET-2 — what a model may do on this Mac (per-tool on/off, approval, limits). Renamed
+    /// from the codebase's "Agent Tools" to "Tools" per OG-5: "Agent" is our word, not the
+    /// user's. Grouping and per-tool descriptions are SET-3's job.
+    case agentTools
+    /// SET-5 — what leaves this Mac, rendered from `RM-6-privacy-disclosure.md` §1. No tab
+    /// yet; the case exists now so `SettingsPane.allCases`' order is settled ahead of it.
+    case privacy
 
     /// The tab title, and the pane's own heading inside the window.
     var title: String {
         switch self {
         case .models: return "Models"
         case .providers: return "Providers"
+        case .agentTools: return "Tools"
+        case .privacy: return "Privacy"
         }
     }
 
@@ -131,6 +140,8 @@ nonisolated enum SettingsPane: String, CaseIterable, Sendable, Equatable {
         switch self {
         case .models: return "shippingbox"
         case .providers: return "key"
+        case .agentTools: return "wrench.and.screwdriver"
+        case .privacy: return "hand.raised"
         }
     }
 }

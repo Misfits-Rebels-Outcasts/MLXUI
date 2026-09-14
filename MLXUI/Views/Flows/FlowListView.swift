@@ -151,7 +151,7 @@ struct FlowListView: View {
                 // fixable. Always absent today (no `SetupAction` is produced yet); Phase
                 // AFM/KEY/RM/WS give it something real to open.
                 if let action {
-                    SettingsLink { Text(setupActionButtonLabel(action)) }
+                    setupActionButton(action)
                         .buttonStyle(.bordered)
                 }
             }
@@ -185,6 +185,21 @@ struct FlowListView: View {
         }
     }
 
+    /// SET-2 (D3, `RSI/DelegateSettingsBacklog.md`) — this is the phase `SetupAction` was
+    /// waiting for: `.openSettings(pane)` now lands on the pane it actually names, via
+    /// `SettingsOpener`, instead of Settings' first tab regardless of what fixed the problem.
+    /// `settingsPane(for:)` is the pure routing decision (FlowKit's G2 seam); a `nil` pane
+    /// (only `.installModel`, never produced today — MS-4) falls back to a plain
+    /// `SettingsLink`, same as every case did before this phase.
+    @ViewBuilder
+    private func setupActionButton(_ action: SetupAction) -> some View {
+        if let pane = settingsPane(for: action) {
+            SettingsOpener(pane: pane) { Text(setupActionButtonLabel(action)) }
+        } else {
+            SettingsLink { Text(setupActionButtonLabel(action)) }
+        }
+    }
+
     // MARK: - Content
 
     private func flowList(_ doc: FlowDocument, display: FlowDisplay) -> some View {
@@ -201,7 +216,7 @@ struct FlowListView: View {
                         .foregroundStyle(.blue)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if let action = advisory.action {
-                        SettingsLink { Text(setupActionButtonLabel(action)) }
+                        setupActionButton(action)
                             .buttonStyle(.bordered)
                     }
                 }

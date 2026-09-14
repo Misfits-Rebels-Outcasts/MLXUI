@@ -3,9 +3,10 @@ import Testing
 
 /// SET-1's G2 seam (`RSI/DelegateSettingsBacklog.md`) — `SettingsPane` gained `CaseIterable`,
 /// `title`, `systemImage`, and a `String` raw value when Settings became a real window with a
-/// `TabView`. The raw value becomes the persisted `@AppStorage` tab key in SET-2, so once a
-/// case ships its raw value must never change; `allCases` order is the tab order, so a case
-/// added out of order silently reorders someone's window.
+/// `TabView`. SET-2 wires the raw value up as the persisted `@AppStorage("settingsPane")` tab
+/// key and adds `.agentTools`/`.privacy`, so once a case ships its raw value must never
+/// change; `allCases` order is the tab order, so a case added out of order silently reorders
+/// someone's window.
 struct SettingsPaneTests {
 
     @Test func everyCaseHasANonEmptyTitle() {
@@ -23,10 +24,12 @@ struct SettingsPaneTests {
     @Test func rawValuesAreStableStrings() {
         #expect(SettingsPane.models.rawValue == "models")
         #expect(SettingsPane.providers.rawValue == "providers")
+        #expect(SettingsPane.agentTools.rawValue == "agentTools")
+        #expect(SettingsPane.privacy.rawValue == "privacy")
     }
 
     @Test func allCasesOrderIsTheTabOrder() {
-        #expect(SettingsPane.allCases == [.models, .providers])
+        #expect(SettingsPane.allCases == [.models, .providers, .agentTools, .privacy])
     }
 
     @Test func existingSetupActionEqualityStillHolds() {

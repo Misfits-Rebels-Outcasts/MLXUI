@@ -4,20 +4,25 @@ import SwiftUI
 /// 460×560 unresizable sheet `SettingsView` used to be. A `TabView` is the macOS-14-budget way
 /// to switch panes (`Tab`/`.sidebarAdaptable` are 15.0+ and out of budget — see backlog §3.1).
 ///
-/// Three tabs this phase: Models, Providers, Tools. Their content is each old `SettingsView`
-/// section moved verbatim into its own pane — no copy or grouping changes (that's SET-3+).
-/// Tab selection isn't yet persisted (`@AppStorage`) or driven by `SettingsPane.allCases` —
-/// the Tools tab has no `SettingsPane` case until SET-2 adds `.agentTools`, so a case-driven
-/// loop can't cover all three yet. SET-2 wires selection and the deep link together.
+/// Three tabs so far: Models, Providers, Tools (`.privacy` has no tab yet — SET-5). Content is
+/// each old `SettingsView` section moved verbatim into its own pane — no copy or grouping
+/// changes (that's SET-3+). SET-2 adds the persisted selection: `selectedPane` is
+/// `SettingsPane`'s own `String` raw value under `@AppStorage("settingsPane")`, the same key
+/// every `SettingsOpener` writes to before it opens the window.
 struct SettingsRootView: View {
+    @AppStorage("settingsPane") private var selectedPane: SettingsPane = .models
+
     var body: some View {
-        TabView {
+        TabView(selection: $selectedPane) {
             ModelsSettingsView()
                 .tabItem { Label(SettingsPane.models.title, systemImage: SettingsPane.models.systemImage) }
+                .tag(SettingsPane.models)
             ProvidersSettingsView()
                 .tabItem { Label(SettingsPane.providers.title, systemImage: SettingsPane.providers.systemImage) }
+                .tag(SettingsPane.providers)
             ToolsSettingsView()
-                .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }
+                .tabItem { Label(SettingsPane.agentTools.title, systemImage: SettingsPane.agentTools.systemImage) }
+                .tag(SettingsPane.agentTools)
         }
     }
 }
