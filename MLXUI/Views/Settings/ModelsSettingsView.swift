@@ -7,7 +7,9 @@ import AppKit
 /// `FlowMaintenanceMenu`'s per-flow clearing stays exactly as it is).
 struct ModelsSettingsView: View {
     @State private var tokenInput: String = ""
-    @State private var hasToken: Bool = KeychainHelper.getToken() != nil
+    // Read on .task, matching ProviderCredentialRowView — a stored-property initializer runs
+    // as soon as the view is built, which for a TabView pane can be before it's ever shown.
+    @State private var hasToken: Bool = false
     @State private var status: String = ""
     @State private var storageSizeBytes: Int?
     @State private var cacheSizeBytes: Int64?

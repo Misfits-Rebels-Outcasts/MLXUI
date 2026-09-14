@@ -9,13 +9,18 @@ import SwiftUI
 struct ProviderCredentialRowView: View {
     let providerName: String
     @State private var keyInput: String = ""
-    @State private var hasKey: Bool
+    // Read on .task, not here: a synchronous Keychain read in every row's init fired the
+    // instant `TabView` built this tab's content (macOS builds every tab up front, not just
+    // the selected one) — for a saved credential, that means a macOS Keychain access prompt
+    // for every provider at once, the moment Settings opens, regardless of which tab is
+    // showing. Deferring to .task means a row only touches its own Keychain item once it's
+    // actually on screen.
+    @State private var hasKey: Bool = false
     @State private var status: String = ""
     @State private var isTesting: Bool = false
 
     init(providerName: String) {
         self.providerName = providerName
-        _hasKey = State(initialValue: KeychainHelper.get(account: KeychainHelper.providerAccount(providerName)) != nil)
     }
 
     private var account: String { KeychainHelper.providerAccount(providerName) }
@@ -54,6 +59,7 @@ struct ProviderCredentialRowView: View {
             }
         }
         .padding(.vertical, 4)
+        .task { hasKey = KeychainHelper.get(account: account) != nil }
     }
 
     private func save() {
