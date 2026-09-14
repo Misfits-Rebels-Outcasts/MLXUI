@@ -138,7 +138,7 @@ struct ModelCard: View {
             case .needsAuth:
                 VStack(spacing: 2) {
                     Text("Token needed").font(.caption2).foregroundStyle(.orange).lineLimit(1)
-                    Button("Open Settings") { appState.showSettings = true }
+                    SettingsOpener(pane: .models) { Text("Open Settings") }
                         .buttonStyle(.plain).font(.caption2).foregroundStyle(.blue)
                 }
             case .resolving:

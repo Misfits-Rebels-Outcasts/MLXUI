@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 import MLXLMCommon
 
 /// Chat sheet for running an installed LLM locally via MLX. Surfaces the streaming
@@ -139,9 +138,12 @@ struct RunChatView: View {
         .padding(12)
     }
 
-    /// Per-tool on/off toggles for the agent's available tools. Tools that need approval also
-    /// expose a standing approval policy (ask / always / never) in a submenu. The sandboxed
-    /// edition additionally manages the folder grants that scope the file tools (AG5).
+    /// SET-4 (D4, `RSI/DelegateSettingsBacklog.md`) — the wrench is the in-session switch:
+    /// per-tool on/off, approval, and the Audit Log, all one click away without leaving the
+    /// chat. **Settings is the standing configuration and is complete** — the tool-call limit
+    /// and folder grants live there now (SET-3), not here, so "Tool Settings…" is this menu's
+    /// only way to reach them. Anything a future tool control needs beyond on/off + approval
+    /// belongs in `ToolsSettingsView`, not back in this menu.
     private var toolsMenu: some View {
         Menu {
             ForEach(runner.availableTools, id: \.name) { tool in
@@ -159,24 +161,9 @@ struct RunChatView: View {
                     Toggle(isOn: enabledBinding(tool.name)) { Text(tool.name) }
                 }
             }
-            #if !DIRECT_BUILD
             Divider()
-            Section("File access") {
-                ForEach(runner.folderGrantPaths, id: \.self) { path in
-                    Menu(path) {
-                        Button("Revoke Access") { runner.revokeFolderAccess(path: path) }
-                    }
-                }
-                Button("Grant Folder Access…") { grantFolderAccess() }
-            }
-            #endif
-            Divider()
-            Picker("Tool call limit", selection: limitBinding) {
-                ForEach(toolCallLimitOptions, id: \.self) { limit in
-                    Text("\(limit) per reply").tag(limit)
-                }
-            }
             Button("Audit Log…") { showAuditLog = true }
+            SettingsOpener(pane: .agentTools) { Text("Tool Settings…") }
         } label: {
             Image(systemName: "wrench.and.screwdriver")
         }
@@ -184,22 +171,6 @@ struct RunChatView: View {
         .fixedSize()
         .help("Tools the model may call")
     }
-
-    #if !DIRECT_BUILD
-    /// Let the user pick a folder for the file tools; the panel's selection is what authorizes
-    /// the sandbox grant, persisted as a security-scoped bookmark.
-    private func grantFolderAccess() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.message = "Choose a folder the model's file tools may access."
-        panel.prompt = "Grant Access"
-        if panel.runModal() == .OK, let url = panel.url {
-            runner.grantFolderAccess(to: url)
-        }
-    }
-    #endif
 
     private func enabledBinding(_ name: String) -> Binding<Bool> {
         Binding(
@@ -213,21 +184,6 @@ struct RunChatView: View {
             get: { runner.toolPolicy(for: name) },
             set: { runner.setToolPolicy($0, for: name) }
         )
-    }
-
-    private var limitBinding: Binding<Int> {
-        Binding(
-            get: { runner.toolCallLimit },
-            set: { runner.setToolCallLimit($0) }
-        )
-    }
-
-    /// Picker choices for the per-reply budget; a persisted off-list value stays selectable.
-    private var toolCallLimitOptions: [Int] {
-        let options = [2, 4, 8, 16, 32]
-        return options.contains(runner.toolCallLimit)
-            ? options
-            : (options + [runner.toolCallLimit]).sorted()
     }
 
     // MARK: - Transcript
@@ -483,8 +439,9 @@ struct RunChatView: View {
 
 /// The session's tool audit trail (AG6b-2): one timestamped row per lifecycle event, newest
 /// first. Takes the runner directly (not via `@Environment`) so the sheet's fresh environment
-/// doesn't need a re-injection (B1).
-private struct AuditLogView: View {
+/// doesn't need a re-injection (B1). Not `private` — SET-3's Tools pane presents the same
+/// sheet from `ToolsSettingsView` rather than keeping its own copy (D4).
+struct AuditLogView: View {
     @Environment(\.dismiss) private var dismiss
     let runner: ModelRunner
 

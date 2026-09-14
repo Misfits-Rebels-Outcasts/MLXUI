@@ -106,15 +106,44 @@ nonisolated enum SetupAction: Sendable, Equatable {
 }
 
 /// MS-1 — which section of Settings a `.openSettings` action should land on.
-/// `Views/Settings/SettingsView.swift` has no pane/tab navigation yet (one scrolling `Form`
-/// with two sections); wiring an action to an actual scroll/selection is Phase KEY's job (the
-/// "Model & Search Providers" section KEY-2 adds). This enum exists now so `SetupAction`
-/// compiles and is reviewable; it names no pane no phase has built yet.
-nonisolated enum SettingsPane: Sendable, Equatable {
-    /// Where a system/provider model's setup would be offered (Phase AFM/RM).
+/// SET-1 (`RSI/DelegateSettingsBacklog.md`) turned Settings into a real `Settings` scene with a
+/// `TabView`; `CaseIterable` + `title` + `systemImage` + the `String` raw value are that
+/// phase's G2 seam — the raw value is the persisted tab key `SettingsRootView`'s
+/// `@AppStorage("settingsPane")` reads/writes (SET-2), so its cases must stay stable strings
+/// once shipped. `.privacy` has no tab yet — it arrives in SET-5.
+nonisolated enum SettingsPane: String, CaseIterable, Sendable, Equatable {
+    /// Where a system/provider model's setup would be offered (Phase AFM/RM), and — per SET-1
+    /// §3 — where model files come from and where they live on this Mac.
     case models
-    /// KEY-2's "Model & Search Providers" section — provider API keys.
+    /// The provider API key rows (Phase KEY/RM/WS).
     case providers
+    /// SET-2 — what a model may do on this Mac (per-tool on/off, approval, limits). Renamed
+    /// from the codebase's "Agent Tools" to "Tools" per OG-5: "Agent" is our word, not the
+    /// user's. Grouping and per-tool descriptions are SET-3's job.
+    case agentTools
+    /// SET-5 — what leaves this Mac, rendered from `RM-6-privacy-disclosure.md` §1. No tab
+    /// yet; the case exists now so `SettingsPane.allCases`' order is settled ahead of it.
+    case privacy
+
+    /// The tab title, and the pane's own heading inside the window.
+    var title: String {
+        switch self {
+        case .models: return "Models"
+        case .providers: return "Providers"
+        case .agentTools: return "Tools"
+        case .privacy: return "Privacy"
+        }
+    }
+
+    /// The tab's SF Symbol.
+    var systemImage: String {
+        switch self {
+        case .models: return "shippingbox"
+        case .providers: return "key"
+        case .agentTools: return "wrench.and.screwdriver"
+        case .privacy: return "hand.raised"
+        }
+    }
 }
 
 /// Phase AFM's system-model reference (e.g. `apple-foundation @ system`) — a `ModelSlot

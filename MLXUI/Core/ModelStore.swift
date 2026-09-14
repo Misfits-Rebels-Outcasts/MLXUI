@@ -147,4 +147,28 @@ nonisolated struct ModelStore: Sendable {
     func file(named name: String) -> URL {
         baseDirectory.appendingPathComponent(name)
     }
+
+    // MARK: - Storage usage (SET-6)
+
+    /// SET-6's G2 seam (`RSI/DelegateSettingsBacklog.md`) — total bytes under `url`,
+    /// recursing into subdirectories. Unlike `InstallManager.saveRegistry`'s flat per-model
+    /// sum (one model's files are never nested), the Models pane's storage row sums the
+    /// whole `models/` tree — one subdirectory per installed model. An unreadable child is
+    /// skipped rather than aborting the whole count: a partial total beats a blank pane.
+    /// `nonisolated` and does no main-actor work, so a caller runs it off the main actor.
+    nonisolated static func directorySize(at url: URL) -> Int {
+        var total = 0
+        guard let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: [.fileSizeKey, .isDirectoryKey],
+            options: [.skipsHiddenFiles],
+            errorHandler: { _, _ in true }
+        ) else { return 0 }
+        for case let fileURL as URL in enumerator {
+            guard let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .isDirectoryKey]),
+                  values.isDirectory != true else { continue }
+            total += values.fileSize ?? 0
+        }
+        return total
+    }
 }
