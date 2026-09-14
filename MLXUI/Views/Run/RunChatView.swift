@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 import MLXLMCommon
 
 /// Chat sheet for running an installed LLM locally via MLX. Surfaces the streaming
@@ -167,7 +166,7 @@ struct RunChatView: View {
                         Button("Revoke Access") { runner.revokeFolderAccess(path: path) }
                     }
                 }
-                Button("Grant Folder Access…") { grantFolderAccess() }
+                Button("Grant Folder Access…") { FolderAccessPanel.presentAndGrant(using: runner) }
             }
             #endif
             Divider()
@@ -184,22 +183,6 @@ struct RunChatView: View {
         .fixedSize()
         .help("Tools the model may call")
     }
-
-    #if !DIRECT_BUILD
-    /// Let the user pick a folder for the file tools; the panel's selection is what authorizes
-    /// the sandbox grant, persisted as a security-scoped bookmark.
-    private func grantFolderAccess() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.message = "Choose a folder the model's file tools may access."
-        panel.prompt = "Grant Access"
-        if panel.runModal() == .OK, let url = panel.url {
-            runner.grantFolderAccess(to: url)
-        }
-    }
-    #endif
 
     private func enabledBinding(_ name: String) -> Binding<Bool> {
         Binding(
@@ -483,8 +466,9 @@ struct RunChatView: View {
 
 /// The session's tool audit trail (AG6b-2): one timestamped row per lifecycle event, newest
 /// first. Takes the runner directly (not via `@Environment`) so the sheet's fresh environment
-/// doesn't need a re-injection (B1).
-private struct AuditLogView: View {
+/// doesn't need a re-injection (B1). Not `private` — SET-3's Tools pane presents the same
+/// sheet from `ToolsSettingsView` rather than keeping its own copy (D4).
+struct AuditLogView: View {
     @Environment(\.dismiss) private var dismiss
     let runner: ModelRunner
 
