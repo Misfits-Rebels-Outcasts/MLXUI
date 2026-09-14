@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// SET-1's Providers tab. Content moved verbatim from the old `SettingsView`'s "Model & Search
-/// Providers" section — copy, the empty-state text, and `ProviderCredentialRowView` are
-/// unchanged; only the container changed. Renaming/rewording per §8 is SET-6+'s job.
+/// SET-1's Providers tab, content moved verbatim from the old `SettingsView`'s "Model & Search
+/// Providers" section. SET-6 removed the empty-state branch (`RSI/DelegateSettingsBacklog.md`
+/// §0: unreachable in the shipping bundle — five manifests name credentials today).
 struct ProvidersSettingsView: View {
     /// KEY-2 — scanned from installed manifests, never hardcoded (see
     /// `CuratedManifest.installedCredentialNames`).
@@ -15,14 +15,8 @@ struct ProvidersSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if providerNames.isEmpty {
-                    Text("No installed model or search provider needs a key yet.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(providerNames, id: \.self) { name in
-                        ProviderCredentialRowView(providerName: name)
-                    }
+                ForEach(providerNames, id: \.self) { name in
+                    ProviderCredentialRowView(providerName: name)
                 }
             }
         }
