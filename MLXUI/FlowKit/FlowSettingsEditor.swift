@@ -64,6 +64,15 @@ nonisolated enum FlowSettingsEditor {
     /// Everything outside the edited span is byte-identical (the QR9 round-trip).
     static func replace(key: String, value: String?, in raw: String?) -> String? {
         let text = raw ?? ""
+        // SP-2 (`RSI/DelegateFixItBacklog.md`; SPEC-Q226 in `catflow-mlx`): an empty or
+        // whitespace-only value is treated as no value at all, i.e. a removal — a picker
+        // field left blank (the Direct build's duration control) can no longer write a
+        // valueless `key=` (`timeout=` with nothing after the `=`). `FlowSettings` and
+        // `FlowValidator.parseSettingsKV` already disagree about how to *read* one of those
+        // (Q226, open); this stops the app *writing* one, which is correct under either
+        // answer — it only changes what a fresh edit produces, never how an existing file's
+        // text is read.
+        let value = value.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
         var target: (token: String, range: Range<String.Index>)?
         for entry in tokensAndRanges(text) {
             if entry.token.hasPrefix("\(key)=") {

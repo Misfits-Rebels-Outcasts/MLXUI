@@ -158,18 +158,27 @@ struct CatFlowHumanPolicyTests {
         #expect(!found.contains { $0.code == "E501" })
     }
 
-    // MARK: - HU-FOLLOWUP-1: an empty `timeout=` still raises E501 — pinning the regex, not
-    // the picker. `checkHumanRows` (`FlowValidator.swift:1717`) only tests `kv["timeout"] !=
-    // nil`; the reason an empty duration doesn't validate clean is `FlowValidator.reKV`
-    // (`:340`, `^([\w-]+)\s*=\s*(.+)$`) via `parseSettingsKV` — `(.+)` requires at least one
-    // character after `=`, so `timeout=` (what the Direct picker writes when its duration
-    // field is left blank) never becomes a `kv["timeout"]` entry there, and the row falls
-    // through to E501 exactly as if neither `wait=forever` nor `timeout=`/`default=` had been
-    // written. Note this is a *different* parser from the editor's own `FlowSettings`, which
-    // — unlike `reKV` — treats `timeout=` as present with an empty string value; the two
-    // disagreeing is exactly why nothing pins this today. This test pins the validator's
-    // reading specifically, so a future widening of `reKV` to `(.*)` can't silently produce a
-    // human row that passes every check and waits for nothing.
+    // MARK: - HU-FOLLOWUP-1 / SP-2: an empty `timeout=` still raises E501 — the picker no
+    // longer writes it at all.
+    //
+    // Originally (HU-FOLLOWUP-1) this test pinned a *disagreement*: `checkHumanRows`
+    // (`FlowValidator.swift:1717`) only tests `kv["timeout"] != nil`, and `FlowValidator.reKV`
+    // (`:340`, `^([\w-]+)\s*=\s*(.+)$`) via `parseSettingsKV` reads a valueless `timeout=` as
+    // absent (`(.+)` requires ≥1 character after `=`) — so E501 fired — while the editor's own
+    // `FlowSettings` read the *same* text as `timeout` present with an empty string. Two
+    // readers of one row disagreeing about whether it has a waiting policy is exactly the bug
+    // Phase FIX/SP exists to close (`RSI/DelegateFixItBacklog.md`, MS-FOLLOWUP-2 →
+    // `SPEC_QUESTIONS.md` Q226 in `catflow-mlx`, open).
+    //
+    // SP-2 fixes the cheaper half regardless of Q226's eventual answer: `FlowSettingsEditor
+    // .replace(key:value:)` now treats an empty/whitespace value as a removal, so
+    // `setHumanWaitPolicy(.giveUpAfter(timeout: "", …))` (what the Direct picker calls when
+    // its duration field is left blank) never writes `timeout=` at all — `FlowSettings` and
+    // the validator now **agree**: the key is genuinely absent, not present-but-empty. This
+    // test still pins the same thing it always did (E501 fires), by a route that no longer
+    // depends on `reKV`/`FlowSettings` disagreeing — so a future widening of `reKV` to `(.*)`
+    // (Q226's other possible answer) still can't silently produce a human row that passes
+    // every check and waits for nothing.
     @Test @MainActor func switchingToGiveUpAfterWithAnEmptyDurationStillRaisesE501() throws {
         let r1 = row("Read Text", settings: "memo.txt")
         let r3 = row("Save Text", settings: "out.md")
@@ -178,13 +187,15 @@ struct CatFlowHumanPolicyTests {
                                              ClauseEdge(tag: "edit", target: .row(number: 3))]))
         let model = try editor([r1, r2, r3])
         model.setHumanWaitPolicy(.giveUpAfter(timeout: "", default: "approve"), for: r2.id)
-        let settings = FlowSettings(model.row(withID: r2.id)?.settings)
-        // The editor's own parser sees `timeout` as present-but-empty, not absent.
-        #expect(settings.value(for: "timeout") == "")
+        let rawSettings = model.row(withID: r2.id)?.settings ?? ""
+        // SP-2: no `timeout` token is written at all — not even a bare `timeout=`.
+        #expect(!rawSettings.contains("timeout"))
+        let settings = FlowSettings(rawSettings)
+        #expect(settings.value(for: "timeout") == nil)
         #expect(settings.value(for: "wait") == nil)   // still cleared, per the mutual exclusion
 
-        // The validator's parser (a different regex) is what actually decides E501, and it
-        // disagrees — `timeout=` never becomes a key there, so the row still needs a policy.
+        // The row still needs a policy — `default=approve` alone isn't one — so E501 still
+        // fires, now because *both* parsers agree the key is absent, not because they disagree.
         let found = try issues(for: model.catText)
         #expect(found.contains { $0.code == "E501" })
     }
