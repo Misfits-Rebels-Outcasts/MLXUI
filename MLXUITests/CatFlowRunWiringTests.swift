@@ -238,7 +238,8 @@ struct CatFlowRunWiringTests {
             .domains.flatMap { $0.allModels }
 
         let doc = FlowDocument(version: "0.8", rows: [Row(task: "Transcribe", model: "Whisper Large v3")])
-        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 16)
+        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 16,
+                                       claimableModelIDs: [])
         #expect(!result.toDownload.isEmpty, "the model must be uninstalled for this to test anything")
         #expect(!result.isBlocked)
 
@@ -336,7 +337,8 @@ struct CatFlowRunWiringTests {
 
         let row = Row(task: "Generate Sound", model: "MusicGen")
         let doc = FlowDocument(version: "0.8", rows: [row])
-        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 16)
+        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 16,
+                                       claimableModelIDs: [])
 
         let session = FlowRunSession()
         session.prepareInstall(result, doc: doc)
@@ -356,7 +358,8 @@ struct CatFlowRunWiringTests {
 
         let row = Row(task: "Transcribe", model: "Whisper Large v3")
         let doc = FlowDocument(version: "0.8", rows: [row])
-        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 16)
+        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 16,
+                                       claimableModelIDs: [])
         let session = FlowRunSession()
         session.prepareInstall(result, doc: doc)
         #expect(session.substitutionNotes[row.id] == nil)

@@ -114,8 +114,8 @@ nonisolated struct FlowPreflight {
         catalog: [ModelEntry],
         installedModelIDs: Set<String>,
         totalRAMGB: Double,
-        isAppStore: Bool = CapabilityGate.isAppStoreBuild,
-        claimableModelIDs: Set<String> = []
+        claimableModelIDs: Set<String>,
+        isAppStore: Bool = CapabilityGate.isAppStoreBuild
     ) -> Result {
         var result = Result()
         // Flatten rows (blocks aren't in the linear subset, but be safe).

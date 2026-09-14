@@ -48,29 +48,35 @@ struct CatFlowErrorAffordanceTests {
         }.map(\.code))
     }
 
-    // MARK: - The scan itself
-
-    @Test func everyPromisingTemplateIsServedOrExempt() {
-        let codes = promisingCodes(in: ErrorCatalog.catalogV07).union(promisingCodes(in: ErrorCatalog.catalogV08))
-        let unaccounted = codes.sorted().filter { code in
+    /// FIX-3's actual scan: every code among `catalogs` that promises a fix and is neither
+    /// served (`headerRepairCodes`/`otherServedCodes`) nor exempt (`exemptCodes`). Both tests
+    /// below call this — not their own copy of the served/exempt decision — so a real drift in
+    /// the scan and a broken proof-of-concept fail the same way.
+    private func unaccounted(in catalogs: [String: CatErrorSpec]...) -> [String] {
+        let codes = catalogs.reduce(into: Set<String>()) { $0.formUnion(promisingCodes(in: $1)) }
+        return codes.sorted().filter { code in
             !Self.headerRepairCodes.contains(code)
                 && Self.otherServedCodes[code] == nil
                 && Self.exemptCodes[code] == nil
         }
-        #expect(unaccounted.isEmpty,
-                "these codes promise a fix with no registered affordance and no exemption: \(unaccounted)")
     }
 
-    /// FIX-3's own exit criterion: a deliberately unserved promise fails the suite.
+    // MARK: - The scan itself
+
+    @Test func everyPromisingTemplateIsServedOrExempt() {
+        let found = unaccounted(in: ErrorCatalog.catalogV07, ErrorCatalog.catalogV08)
+        #expect(found.isEmpty,
+                "these codes promise a fix with no registered affordance and no exemption: \(found)")
+    }
+
+    /// FIX-3's own exit criterion: a deliberately unserved promise fails the scan. Calls the
+    /// same `unaccounted(in:)` the real scan above does, so this proves the scan catches the
+    /// case — not just that this test's own logic would have.
     @Test func aDeliberatelyUnservedPromiseFailsTheScan() {
         var scratch = ErrorCatalog.catalogV08
         scratch["E999"] = CatErrorSpec(code: "E999", name: "scratch", citation: nil,
                                        template: "Row {n} is scratch. (fmt will do this for you.)")
-        let codes = promisingCodes(in: scratch)
-        #expect(codes.contains("E999"))
-        let served = Self.headerRepairCodes.contains("E999") || Self.otherServedCodes["E999"] != nil
-        let exempt = Self.exemptCodes["E999"] != nil
-        #expect(!served && !exempt, "a deliberately unserved template must not accidentally match a registration")
+        #expect(unaccounted(in: scratch) == ["E999"])
     }
 
     @Test func r906r907f009AreRegisteredAsServedNotExempt() {

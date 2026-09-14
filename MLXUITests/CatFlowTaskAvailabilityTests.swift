@@ -110,7 +110,8 @@ struct CatFlowTaskAvailabilityTests {
                 ])
                 let preflight = FlowPreflight.run(doc, catalog: catalog,
                                                   installedModelIDs: [],
-                                                  totalRAMGB: SystemInfo.detect().totalRAMGB)
+                                                  totalRAMGB: SystemInfo.detect().totalRAMGB,
+                                                  claimableModelIDs: claimable)
                 #expect(!preflight.blocked.map(\.display).contains(display),
                         "\(task.name) offers \(display) but preflight blocks it — CFM-R14-FIX-1")
             }

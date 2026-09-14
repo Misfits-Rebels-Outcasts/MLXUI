@@ -35,7 +35,8 @@ struct CatFlowVoiceoverBedTests {
     @Test func voiceoverBedResolvesMusicGenThroughSubstitute() throws {
         let doc = try decode("65-VoiceoverBed")
         let catalog = try loadCatalog()
-        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 16)
+        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 16,
+                                       claimableModelIDs: [])
 
         // Row 1 is a model row (Generate Sound / MusicGen), not blocked.
         #expect(result.isBlocked == false)

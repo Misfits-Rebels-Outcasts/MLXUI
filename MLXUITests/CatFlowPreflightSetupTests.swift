@@ -51,7 +51,8 @@ struct CatFlowPreflightSetupTests {
                 Row(task: "Web Search", settings: "\"weather in Tokyo\""),
                 Row(task: "Save Text", settings: "out.md"),
             ])
-            let result = FlowPreflight.run(doc, catalog: [], installedModelIDs: [], totalRAMGB: 16)
+            let result = FlowPreflight.run(doc, catalog: [], installedModelIDs: [], totalRAMGB: 16,
+                                           claimableModelIDs: [])
             let advisory = try #require(FlowPreflight.setupAdvisory(result))
             #expect(advisory.task == "Web Search")
             #expect(advisory.action == .openSettings(.providers))
@@ -74,7 +75,8 @@ struct CatFlowPreflightSetupTests {
             let doc = FlowDocument(version: "0.8", rows: [
                 Row(task: "Web Search", settings: "\"weather in Tokyo\""),
             ])
-            let result = FlowPreflight.run(doc, catalog: [], installedModelIDs: [], totalRAMGB: 16)
+            let result = FlowPreflight.run(doc, catalog: [], installedModelIDs: [], totalRAMGB: 16,
+                                           claimableModelIDs: [])
             #expect(result.rowAdvisories.isEmpty)
             #expect(FlowPreflight.setupAdvisory(result) == nil)
         }
@@ -91,7 +93,8 @@ struct CatFlowPreflightSetupTests {
         let doc = FlowDocument(version: "0.8", rows: [
             Row(task: "Summarize", model: "apple-foundation @ system", settings: "\"x\""),
         ])
-        let result = FlowPreflight.run(doc, catalog: [], installedModelIDs: [], totalRAMGB: 16)
+        let result = FlowPreflight.run(doc, catalog: [], installedModelIDs: [], totalRAMGB: 16,
+                                       claimableModelIDs: [])
         #expect(result.needsSetup.count == 1)
         #expect(result.blocked.isEmpty)
         #expect(!result.isBlocked)

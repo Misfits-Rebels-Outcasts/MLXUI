@@ -678,7 +678,8 @@ struct FlowListView: View {
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
         let result = FlowPreflight.run(doc, catalog: catalog,
                                        installedModelIDs: appState.installedModelIDs,
-                                       totalRAMGB: appState.systemInfo.totalRAMGB)
+                                       totalRAMGB: appState.systemInfo.totalRAMGB,
+                                       claimableModelIDs: appState.claimableModelIDs)
         session.prepareInstall(result, doc: doc, scope: workspaceRef != nil ? makeScope() : nil)
         pendingOccurrence = occurrence
         guard !result.toDownload.isEmpty else {
@@ -791,7 +792,8 @@ struct FlowListView: View {
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
         session.prepareInstall(FlowPreflight.run(doc, catalog: catalog,
                                                   installedModelIDs: appState.installedModelIDs,
-                                                  totalRAMGB: appState.systemInfo.totalRAMGB),
+                                                  totalRAMGB: appState.systemInfo.totalRAMGB,
+                                                  claimableModelIDs: appState.claimableModelIDs),
                                doc: doc, scope: workspaceRef != nil ? makeScope() : nil)
     }
 
@@ -874,6 +876,7 @@ struct FlowListView: View {
         if let refusal = FlowRunnability.refusal(for: doc, catalog: catalog,
                                                  installed: appState.installedModelIDs,
                                                  totalRAMGB: appState.systemInfo.totalRAMGB,
+                                                 claimableModelIDs: appState.claimableModelIDs,
                                                  scope: makeScope()) {
             notRunnableReason = refusal.reason
             notRunnableAction = refusal.action
@@ -905,7 +908,8 @@ struct FlowListView: View {
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
         if let refusal = FlowRunnability.refusal(for: doc, catalog: catalog,
                                                  installed: appState.installedModelIDs,
-                                                 totalRAMGB: appState.systemInfo.totalRAMGB) {
+                                                 totalRAMGB: appState.systemInfo.totalRAMGB,
+                                                 claimableModelIDs: appState.claimableModelIDs) {
             notRunnableReason = refusal.reason
             notRunnableAction = refusal.action
             return
@@ -954,7 +958,8 @@ struct FlowListView: View {
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
         if let refusal = FlowRunnability.refusal(for: doc, catalog: catalog,
                                                  installed: appState.installedModelIDs,
-                                                 totalRAMGB: appState.systemInfo.totalRAMGB) {
+                                                 totalRAMGB: appState.systemInfo.totalRAMGB,
+                                                 claimableModelIDs: appState.claimableModelIDs) {
             notRunnableReason = refusal.reason
             notRunnableAction = refusal.action
             return

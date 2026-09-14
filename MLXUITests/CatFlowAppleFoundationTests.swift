@@ -254,7 +254,7 @@ struct CatFlowAppleFoundationTests {
         let doc = FlowDocument(version: "0.8", rows: [
             Row(task: "Summarize", model: "apple-foundation @ system", settings: "\"x\""),
         ])
-        let result = FlowPreflight.run(doc, catalog: [], installedModelIDs: [], totalRAMGB: 16)
+        let result = FlowPreflight.run(doc, catalog: [], installedModelIDs: [], totalRAMGB: 16, claimableModelIDs: [])
         #expect(result.toDownload.isEmpty)
         #expect(result.installed.count == 1)
         #expect(!result.isBlocked)
@@ -269,7 +269,7 @@ struct CatFlowAppleFoundationTests {
         let doc = FlowDocument(version: "0.8", rows: [
             Row(task: "Summarize", model: "apple-foundation @ system", settings: "\"x\""),
         ])
-        let result = FlowPreflight.run(doc, catalog: [], installedModelIDs: [], totalRAMGB: 16)
+        let result = FlowPreflight.run(doc, catalog: [], installedModelIDs: [], totalRAMGB: 16, claimableModelIDs: [])
         #expect(result.needsSetup.count == 1)
         #expect(result.blocked.isEmpty)
         #expect(!result.isBlocked)   // needsSetup alone doesn't hard-block

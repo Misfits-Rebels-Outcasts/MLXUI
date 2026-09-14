@@ -648,7 +648,8 @@ struct FlowEditorView: View {
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
         let result = FlowPreflight.run(model.document, catalog: catalog,
                                        installedModelIDs: appState.installedModelIDs,
-                                       totalRAMGB: appState.systemInfo.totalRAMGB)
+                                       totalRAMGB: appState.systemInfo.totalRAMGB,
+                                       claimableModelIDs: appState.claimableModelIDs)
         session.prepareInstall(result, doc: model.document, scope: workspaceRef != nil ? makeScope() : nil)
         guard !result.toDownload.isEmpty else {
             startRun()
@@ -667,7 +668,8 @@ struct FlowEditorView: View {
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
         session.prepareInstall(FlowPreflight.run(model.document, catalog: catalog,
                                                  installedModelIDs: appState.installedModelIDs,
-                                                 totalRAMGB: appState.systemInfo.totalRAMGB),
+                                                 totalRAMGB: appState.systemInfo.totalRAMGB,
+                                                 claimableModelIDs: appState.claimableModelIDs),
                                doc: model.document, scope: workspaceRef != nil ? makeScope() : nil)
     }
 
