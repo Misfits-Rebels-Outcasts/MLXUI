@@ -116,10 +116,6 @@ struct MLXUIApp: App {
                 }
                 .environment(appState)   // B1 re-inject
             }
-            .sheet(isPresented: $appState.showSettings) {
-                SettingsView()
-                    .environment(appState)
-            }
             .alert("Couldn't Open This Flow", isPresented: Binding(
                 get: { appState.openCatFlowError != nil },
                 set: { if !$0 { appState.openCatFlowError = nil } }
@@ -180,12 +176,6 @@ struct MLXUIApp: App {
                 }
                 .keyboardShortcut("o", modifiers: .command)
             }
-            CommandGroup(replacing: .appSettings) {
-                Button("Settings…") {
-                    appState.showSettings = true
-                }
-                .keyboardShortcut(",", modifiers: .command)
-            }
             CommandMenu("Find") {
                 Button("Find Models...") {
                     appState.showCommandPalette = true
@@ -199,6 +189,14 @@ struct MLXUIApp: App {
                 Link("Help build MLXUI", destination: URL(string: "https://www.connectcode.net/mlxui_local_llm_ai_browser.html")!)
                  */
             }
+        }
+
+        // SET-1 (`RSI/DelegateSettingsBacklog.md`) — a real `Settings` scene replaces the old
+        // 460×560 sheet. The scene itself supplies the app menu's "Settings…" item and ⌘,;
+        // `CommandGroup(replacing: .appSettings)` above is gone, so there is exactly one.
+        Settings {
+            SettingsRootView()
+                .environment(appState)
         }
     }
 }

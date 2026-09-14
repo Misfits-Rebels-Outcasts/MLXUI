@@ -151,7 +151,7 @@ struct FlowListView: View {
                 // fixable. Always absent today (no `SetupAction` is produced yet); Phase
                 // AFM/KEY/RM/WS give it something real to open.
                 if let action {
-                    Button(setupActionButtonLabel(action)) { performSetupAction(action) }
+                    SettingsLink { Text(setupActionButtonLabel(action)) }
                         .buttonStyle(.bordered)
                 }
             }
@@ -185,16 +185,6 @@ struct FlowListView: View {
         }
     }
 
-    /// MS-4 — every action opens the app's own Settings sheet today. `SettingsView` has no
-    /// pane navigation yet (`SettingsPane` names panes no phase has built), and there's no
-    /// System Settings deep link for Apple Intelligence wired up — both are the phase that
-    /// actually needs them to build (Phase KEY's "Model & Search Providers" section, Phase
-    /// AFM's Apple Intelligence check). This is a safe, honest placeholder: it opens
-    /// somewhere real, never a dead button.
-    private func performSetupAction(_ action: SetupAction) {
-        appState.showSettings = true
-    }
-
     // MARK: - Content
 
     private func flowList(_ doc: FlowDocument, display: FlowDisplay) -> some View {
@@ -211,7 +201,7 @@ struct FlowListView: View {
                         .foregroundStyle(.blue)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if let action = advisory.action {
-                        Button(setupActionButtonLabel(action)) { performSetupAction(action) }
+                        SettingsLink { Text(setupActionButtonLabel(action)) }
                             .buttonStyle(.bordered)
                     }
                 }

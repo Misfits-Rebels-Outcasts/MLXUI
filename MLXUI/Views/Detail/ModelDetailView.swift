@@ -192,7 +192,7 @@ struct ModelDetailView: View {
                     Label(msg, systemImage: "lock.fill")
                         .font(.caption).foregroundStyle(.orange)
                     HStack(spacing: 8) {
-                        Button("Open Settings") { appState.showSettings = true }
+                        SettingsLink { Text("Open Settings") }
                             .buttonStyle(.borderedProminent).controlSize(.small)
                         Button("Retry") { appState.installModel(model) }
                             .buttonStyle(.bordered).controlSize(.small)

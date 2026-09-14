@@ -149,9 +149,6 @@ final class AppState { //appstatecomeback
     var showCommandPalette = false
     var searchQuery = ""
 
-    // Settings sheet
-    var showSettings = false
-
     // Automate → AI Workflows: a gallery flow chosen from the badge grid. Non-nil pushes
     // that flow's detail (title, rows, inspector) onto the detail NavigationStack.
     var selectedFlow: FlowSelection?
