@@ -501,6 +501,13 @@ final class FlowEditorModel {
     /// Direct build with `timeout=`/`default=` must keep displaying that policy, not have it
     /// silently overridden by the fresh-row default (Ruling 3 restricts *authoring* in the App
     /// Store build, never *reading*).
+    ///
+    /// SP-3 (SPEC-Q226, owner ruling 2026-09-14): a row whose text still carries a bare,
+    /// valueless `timeout=` (SP-2 stops the picker writing one, but a hand-edited or
+    /// pre-SP-2 `.cat` may already have one) now falls straight through to the
+    /// "No waiting policy is set" line instead of rendering an empty duration as a real
+    /// policy — `FlowSettings.value(for: "timeout")` reads that token as absent, matching
+    /// `FlowValidator.parseSettingsKV`'s reading, which is what raises E501 on the same row.
     nonisolated static func waitPolicyDescription(settings raw: String?) -> String {
         let settings = FlowSettings(raw)
         if let timeout = settings.value(for: "timeout"), let dflt = settings.value(for: "default") {

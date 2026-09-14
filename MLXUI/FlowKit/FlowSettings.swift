@@ -41,13 +41,23 @@ nonisolated struct FlowSettings {
             if let eq = token.firstIndex(of: "=") {
                 let key = String(token[..<eq])
                 let value = String(token[token.index(after: eq)...])
-                if Self.isValidKey(key) {
+                if !Self.isValidKey(key) {
+                    bare.append(Self.unquote(token))
+                } else if value.isEmpty {
+                    // SPEC-Q226 (SP-3, owner ruling 2026-09-14): a valueless `key=` — nothing
+                    // at all after the `=` — is absent, not present-with-an-empty-value,
+                    // matching `FlowValidator.reKV`'s `(.+)` (requires ≥1 character; see
+                    // `parseSettingsKV:366`). Dropped entirely: neither a pair nor bare data.
+                    // A quoted `key=""` (2 characters, the quote marks) does not hit this
+                    // branch — `value` is `"\"\""`, not empty — and still reads as present
+                    // with an empty value, unaffected. This is a deliberate parity divergence
+                    // from `catflow-mlx`'s `tools/_settings.py::Settings`, which has no such
+                    // check, until the reference adopts the same ruling.
+                } else {
                     if pairs[key] == nil { orderedKeys.append(key) }
                     let unquoted = Self.unquote(value)
                     pairs[key] = unquoted
                     multiPairs[key, default: []].append(unquoted)
-                } else {
-                    bare.append(Self.unquote(token))
                 }
             } else {
                 bare.append(Self.unquote(token))
