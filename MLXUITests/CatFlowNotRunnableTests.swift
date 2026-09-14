@@ -19,7 +19,7 @@ struct CatFlowNotRunnableTests {
     private func refusal(_ flowID: String) throws -> String? {
         let doc = try GalleryLoader.loadDocument(flowID: flowID)
         return FlowRunnability.refusalReason(for: doc, catalog: try catalog(),
-                                             installed: [], totalRAMGB: 32)
+                                             installed: [], totalRAMGB: 32, claimableModelIDs: [])
     }
 
     /// CFM-R12-FIX-1's missing test: the six flows the stale metadata locked out now reach

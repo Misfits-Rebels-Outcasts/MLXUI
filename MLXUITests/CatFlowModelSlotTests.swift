@@ -229,7 +229,8 @@ struct CatFlowModelSlotTests {
         for case let url as URL in enumerator where url.pathExtension == "cat" {
             guard let text = try? String(contentsOf: url, encoding: .utf8),
                   let doc = try? CatParser.parse(text) else { continue }
-            let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 64)
+            let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 64,
+                                           claimableModelIDs: [])
             if !result.needsSetup.isEmpty { needingSetup.append(url.lastPathComponent) }
             checked += 1
         }
@@ -244,8 +245,10 @@ struct CatFlowModelSlotTests {
         let doc = FlowDocument(version: "0.8", rows: [
             Row(task: "Transcribe", model: "A Model That Doesn't Exist"),
         ])
-        let full = FlowRunnability.refusal(for: doc, catalog: catalog, installed: [], totalRAMGB: 32)
-        let reasonOnly = FlowRunnability.refusalReason(for: doc, catalog: catalog, installed: [], totalRAMGB: 32)
+        let full = FlowRunnability.refusal(for: doc, catalog: catalog, installed: [], totalRAMGB: 32,
+                                           claimableModelIDs: [])
+        let reasonOnly = FlowRunnability.refusalReason(for: doc, catalog: catalog, installed: [], totalRAMGB: 32,
+                                                        claimableModelIDs: [])
         #expect(full?.reason == reasonOnly)
         #expect(full?.action == nil)   // nothing produces a non-nil action yet
     }

@@ -22,16 +22,21 @@ nonisolated enum FlowRunnability {
 
     /// The full refusal for a flow, or nil when it can run. `scope` (CFM-R17-3) resolves a
     /// workspace flow's `uses:` graph so a used-flow call isn't refused as an unknown task;
-    /// `nil` keeps the pre-R17 plain-flow check.
+    /// `nil` keeps the pre-R17 plain-flow check. `claimableModelIDs` is **required**, not
+    /// defaulted — `FlowPreflight.run` reads it (CFM-R14-FIX-3's derived-pool rule), and a
+    /// silently-empty default here is exactly the "wrong answer that looks correct" shape
+    /// `TaskAvailability.swift:59` warns about (and the one `ModelSlot.readiness` was fixed
+    /// out of one phase earlier, MS-FOLLOWUP-1).
     static func refusal(for doc: FlowDocument, catalog: [ModelEntry],
                         installed: Set<String>, totalRAMGB: Double,
+                        claimableModelIDs: Set<String>,
                         scope: FlowScope? = nil) -> Refusal? {
         let runnability = scope.map { FlowRunner.canRun(doc, scope: $0) } ?? FlowRunner.canRun(doc)
         if case .notRunnable(let reason) = runnability {
             return Refusal(reason: reason, action: nil)
         }
-        let preflight = FlowPreflight.run(doc, catalog: catalog,
-                                          installedModelIDs: installed, totalRAMGB: totalRAMGB)
+        let preflight = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: installed,
+                                          totalRAMGB: totalRAMGB, claimableModelIDs: claimableModelIDs)
         guard let reason = FlowPreflight.blockedReason(preflight, totalRAMGB: totalRAMGB) else { return nil }
         return Refusal(reason: reason, action: FlowPreflight.blockedAction(preflight))
     }
@@ -40,7 +45,9 @@ nonisolated enum FlowRunnability {
     /// presence check, a display label) keeps compiling and behaving unchanged.
     static func refusalReason(for doc: FlowDocument, catalog: [ModelEntry],
                               installed: Set<String>, totalRAMGB: Double,
+                              claimableModelIDs: Set<String>,
                               scope: FlowScope? = nil) -> String? {
-        refusal(for: doc, catalog: catalog, installed: installed, totalRAMGB: totalRAMGB, scope: scope)?.reason
+        refusal(for: doc, catalog: catalog, installed: installed, totalRAMGB: totalRAMGB,
+               claimableModelIDs: claimableModelIDs, scope: scope)?.reason
     }
 }

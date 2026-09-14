@@ -105,7 +105,7 @@ struct CatFlowSaveToolsTests {
         func runs(_ fid: String) -> String? {
             guard let doc = try? GalleryLoader.loadDocument(flowID: fid) else { return "no doc" }
             return FlowRunnability.refusalReason(for: doc, catalog: catalog,
-                                                 installed: [], totalRAMGB: 32)
+                                                 installed: [], totalRAMGB: 32, claimableModelIDs: [])
         }
         // These flows have a resolvable model in the catalog (not blocked at the bridge gate).
         #expect(runs("65-VoiceoverBed") == nil)

@@ -29,7 +29,8 @@ struct CatFlowPreflightTests {
     @Test func spokenSummaryPreflightBuckets() throws {
         let doc = try decode("01-SpokenSummary")
         let catalog = try loadCatalog()
-        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 16)
+        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 16,
+                                       claimableModelIDs: [])
 
         // Three distinct model rows: Whisper Large v3, Qwen3 8B, Kokoro 82M.
         let displays = Set(result.needs.map(\.display))
@@ -48,7 +49,8 @@ struct CatFlowPreflightTests {
         let catalog = try loadCatalog()
         let whisper = try #require(catalog.first { $0.hfModelId == "mlx-community/whisper-large-v3-asr-fp16" })
         let result = FlowPreflight.run(doc, catalog: catalog,
-                                       installedModelIDs: [whisper.id], totalRAMGB: 16)
+                                       installedModelIDs: [whisper.id], totalRAMGB: 16,
+                                       claimableModelIDs: [])
         #expect(result.installed.count == 1)
         #expect(result.installed.first?.display == "Whisper Large v3")
         #expect(result.toDownload.count == 2)
@@ -59,7 +61,8 @@ struct CatFlowPreflightTests {
     @Test func ramCheckUsesLargestRowNotSum() throws {
         let doc = try decode("01-SpokenSummary")
         let catalog = try loadCatalog()
-        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 16)
+        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 16,
+                                       claimableModelIDs: [])
 
         // The three rows' ramGB are 4.62 / 6.75 / 0.25. Sum ≈ 11.62, max = 6.75.
         // A 16 GB machine fits the largest row, so the flow is not RAM-blocked.
@@ -79,7 +82,8 @@ struct CatFlowPreflightTests {
         ]
         let doc = FlowDocument(version: "0.8", rows: rows)
         let catalog = try loadCatalog()
-        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 6)
+        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 6,
+                                       claimableModelIDs: [])
         #expect(result.largestRowRAMGB == 6.75)
         #expect(FlowPreflight.fitsRAM(result, totalRAMGB: 6) == false)
         let reason = FlowPreflight.blockedReason(result, totalRAMGB: 6)
@@ -92,7 +96,8 @@ struct CatFlowPreflightTests {
         let rows = [Row(task: "Transcribe", model: "A Model That Doesn't Exist")]
         let doc = FlowDocument(version: "0.8", rows: rows)
         let catalog = try loadCatalog()
-        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 16)
+        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 16,
+                                       claimableModelIDs: [])
         #expect(result.isBlocked)
         #expect(result.blocked.count == 1)
         #expect(result.blocked.first?.display == "A Model That Doesn't Exist")
@@ -108,7 +113,8 @@ struct CatFlowPreflightTests {
             Row(task: "Save Text", settings: "out.txt"),
         ]
         let doc = FlowDocument(version: "0.8", rows: rows)
-        let result = FlowPreflight.run(doc, catalog: [], installedModelIDs: [], totalRAMGB: 16)
+        let result = FlowPreflight.run(doc, catalog: [], installedModelIDs: [], totalRAMGB: 16,
+                                       claimableModelIDs: [])
         #expect(result.needs.isEmpty)
         #expect(result.isBlocked == false)
     }

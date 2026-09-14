@@ -171,7 +171,7 @@ struct CatFlowHumanRowsTests {
                                             blobDirectory: base, executor: mock)
         let runner = FlowRunner()
         session.prepareInstall(FlowPreflight.run(doc, catalog: [], installedModelIDs: [],
-                                                 totalRAMGB: 128),
+                                                 totalRAMGB: 128, claimableModelIDs: []),
                                doc: doc)
 
         session.start(doc: doc, runner: runner, context: context)
@@ -214,7 +214,7 @@ struct CatFlowHumanRowsTests {
                                             blobDirectory: base, executor: mock)
         let runner = FlowRunner()
         session.prepareInstall(FlowPreflight.run(doc, catalog: [], installedModelIDs: [],
-                                                 totalRAMGB: 128),
+                                                 totalRAMGB: 128, claimableModelIDs: []),
                                doc: doc)
 
         session.start(doc: doc, runner: runner, context: context)

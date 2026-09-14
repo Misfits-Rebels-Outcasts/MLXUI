@@ -63,6 +63,10 @@ struct FlowListView: View {
     /// MS-4 — the fix-it action paired with `notRunnableReason`, when the refusal has one
     /// (always `nil` today; Phase AFM/RM/WS are the first to produce one).
     @State private var notRunnableAction: SetupAction?
+    /// FIX-2 — a non-`.model` row's setup advisory (e.g. a keyless `Web Search` row), or nil.
+    /// Never blocks the run the way `notRunnableReason` does — it renders as a banner
+    /// alongside a still-enabled Run (§2 of `RSI/DelegateFixItBacklog.md`).
+    @State private var setupAdvisory: FlowPreflight.RowAdvisory?
     /// The canonical serialized lines (CFM-R6-2) — the flow list *is* the file. Computed once
     /// in `load()`; `lineRanges` maps each row id to its lines' range in `serializedLines`.
     @State private var serializedLines: [String] = []
@@ -197,6 +201,26 @@ struct FlowListView: View {
         VStack(alignment: .leading, spacing: 0) {
             header(doc, display: display)
             Divider()
+            // FIX-2 — a non-blocking advisory (e.g. no Tavily/Brave key set): the flow stays
+            // runnable and this is not `notRunnableView`'s red refusal, so it renders inline,
+            // above the row list, with the same fix-it button style.
+            if let advisory = setupAdvisory {
+                HStack(alignment: .top, spacing: 8) {
+                    Label(advisory.reason, systemImage: "exclamationmark.circle")
+                        .font(.callout)
+                        .foregroundStyle(.blue)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if let action = advisory.action {
+                        Button(setupActionButtonLabel(action)) { performSetupAction(action) }
+                            .buttonStyle(.bordered)
+                    }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
             if let sentence = session.errorSentence {
                 HStack(alignment: .top, spacing: 8) {
                     Label(sentence, systemImage: "exclamationmark.triangle.fill")
@@ -654,7 +678,8 @@ struct FlowListView: View {
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
         let result = FlowPreflight.run(doc, catalog: catalog,
                                        installedModelIDs: appState.installedModelIDs,
-                                       totalRAMGB: appState.systemInfo.totalRAMGB)
+                                       totalRAMGB: appState.systemInfo.totalRAMGB,
+                                       claimableModelIDs: appState.claimableModelIDs)
         session.prepareInstall(result, doc: doc, scope: workspaceRef != nil ? makeScope() : nil)
         pendingOccurrence = occurrence
         guard !result.toDownload.isEmpty else {
@@ -767,7 +792,8 @@ struct FlowListView: View {
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
         session.prepareInstall(FlowPreflight.run(doc, catalog: catalog,
                                                   installedModelIDs: appState.installedModelIDs,
-                                                  totalRAMGB: appState.systemInfo.totalRAMGB),
+                                                  totalRAMGB: appState.systemInfo.totalRAMGB,
+                                                  claimableModelIDs: appState.claimableModelIDs),
                                doc: doc, scope: workspaceRef != nil ? makeScope() : nil)
     }
 
@@ -806,6 +832,7 @@ struct FlowListView: View {
         loadError = nil
         notRunnableReason = nil
         notRunnableAction = nil
+        setupAdvisory = nil
         load()
     }
 
@@ -849,6 +876,7 @@ struct FlowListView: View {
         if let refusal = FlowRunnability.refusal(for: doc, catalog: catalog,
                                                  installed: appState.installedModelIDs,
                                                  totalRAMGB: appState.systemInfo.totalRAMGB,
+                                                 claimableModelIDs: appState.claimableModelIDs,
                                                  scope: makeScope()) {
             notRunnableReason = refusal.reason
             notRunnableAction = refusal.action
@@ -880,7 +908,8 @@ struct FlowListView: View {
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
         if let refusal = FlowRunnability.refusal(for: doc, catalog: catalog,
                                                  installed: appState.installedModelIDs,
-                                                 totalRAMGB: appState.systemInfo.totalRAMGB) {
+                                                 totalRAMGB: appState.systemInfo.totalRAMGB,
+                                                 claimableModelIDs: appState.claimableModelIDs) {
             notRunnableReason = refusal.reason
             notRunnableAction = refusal.action
             return
@@ -929,7 +958,8 @@ struct FlowListView: View {
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
         if let refusal = FlowRunnability.refusal(for: doc, catalog: catalog,
                                                  installed: appState.installedModelIDs,
-                                                 totalRAMGB: appState.systemInfo.totalRAMGB) {
+                                                 totalRAMGB: appState.systemInfo.totalRAMGB,
+                                                 claimableModelIDs: appState.claimableModelIDs) {
             notRunnableReason = refusal.reason
             notRunnableAction = refusal.action
             return
@@ -941,10 +971,14 @@ struct FlowListView: View {
     /// The shared tail of both loads: preflight, trigger inspection, install wiring.
     private func finishLoad(_ doc: FlowDocument) {
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
-        session.prepareInstall(FlowPreflight.run(doc, catalog: catalog,
-                                                  installedModelIDs: appState.installedModelIDs,
-                                                  totalRAMGB: appState.systemInfo.totalRAMGB),
-                               doc: doc, scope: workspaceRef != nil ? makeScope() : nil)
+        let preflight = FlowPreflight.run(doc, catalog: catalog,
+                                          installedModelIDs: appState.installedModelIDs,
+                                          totalRAMGB: appState.systemInfo.totalRAMGB,
+                                          claimableModelIDs: appState.claimableModelIDs)
+        session.prepareInstall(preflight, doc: doc, scope: workspaceRef != nil ? makeScope() : nil)
+        // FIX-2: the setup pass now covers every row, not only `.model` ones — surfaced as a
+        // non-blocking banner, never fed into the blocking `notRunnableReason` path above.
+        setupAdvisory = FlowPreflight.setupAdvisory(preflight)
         // The inspector's frozen Properties tab reuses the editor's resolution machinery
         // (candidate models, input labels, display numbers) over a read-only model.
         inspectModel = FlowEditorModel(name: display?.title ?? flowID, flowID: locationID,

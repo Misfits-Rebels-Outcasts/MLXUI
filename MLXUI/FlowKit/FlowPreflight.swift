@@ -45,9 +45,24 @@ nonisolated struct FlowPreflight {
         }
     }
 
+    /// FIX-2 — a non-`.model` row (net/instant/agent/staged) whose `TaskAvailability` verdict
+    /// is `.needsSetup` (e.g. a `Web Search` row with no Tavily/Brave key yet). Advisory only:
+    /// it never feeds `blocked`/`needsSetup` below — those buckets' semantics are
+    /// model-row-specific (§2 of `RSI/DelegateFixItBacklog.md`), and `FlowRunner
+    /// .rowClassRefusal` deliberately keeps a `.needsSetup` net row selectable and runnable.
+    struct RowAdvisory: Sendable, Equatable {
+        let task: String
+        let reason: String
+        let action: SetupAction?
+    }
+
     /// The buckets + the flow-wide verdict.
     struct Result: Sendable, Equatable {
         var needs: [ModelNeed] = []
+        /// FIX-2 — every non-`.model` row's setup advisory, in row order. Never blocks a run
+        /// (`isBlocked` below reads only `blocked`, unchanged) — `setupAdvisory(_:)` is the
+        /// banner's own read of this.
+        var rowAdvisories: [RowAdvisory] = []
         var installed: [ModelNeed] { needs.filter { $0.installed } }
         var toDownload: [ModelNeed] { needs.filter { !$0.installed && $0.model != nil } }
         /// MS-3 — rows whose slot needs a setup step (a key, a toggle) rather than a
@@ -98,13 +113,25 @@ nonisolated struct FlowPreflight {
         _ doc: FlowDocument,
         catalog: [ModelEntry],
         installedModelIDs: Set<String>,
-        totalRAMGB: Double
+        totalRAMGB: Double,
+        claimableModelIDs: Set<String>,
+        isAppStore: Bool = CapabilityGate.isAppStoreBuild
     ) -> Result {
         var result = Result()
         // Flatten rows (blocks aren't in the linear subset, but be safe).
         let rows = allRows(doc.rows)
         for row in rows {
-            guard let desc = TaskCatalog.get(row.task ?? ""), desc.taskClass == .model else {
+            guard let desc = TaskCatalog.get(row.task ?? "") else { continue }
+            guard desc.taskClass == .model else {
+                // FIX-2: every non-`.model` row is asked too, not just skipped — but only as
+                // an *advisory*. Feeding a `.needsSetup` net/instant row into `blocked` here
+                // would make every keyless `Web Search` flow un-runnable, silently reversing
+                // WS-3's own tested decision (`FlowRunner.rowClassRefusal` keeps it selectable).
+                if case .needsSetup(let reason, let action) = TaskAvailability.state(
+                    for: desc, isAppStore: isAppStore, catalog: catalog, claimableModelIDs: claimableModelIDs
+                ) {
+                    result.rowAdvisories.append(RowAdvisory(task: desc.name, reason: reason, action: action))
+                }
                 continue   // instant tools don't need a model
             }
             guard let display = row.model else {
@@ -182,6 +209,13 @@ nonisolated struct FlowPreflight {
         if let first = result.blocked.first { return first.setupAction }
         if let first = result.needsSetup.first { return first.setupAction }
         return nil
+    }
+
+    /// FIX-2 — the non-blocking advisory banner's content, or nil: the first row advisory
+    /// (row order), never consulted by `blockedReason`/`blockedAction` above, which keep
+    /// their model-row-only semantics exactly (§2 of `RSI/DelegateFixItBacklog.md`).
+    static func setupAdvisory(_ result: Result) -> RowAdvisory? {
+        result.rowAdvisories.first
     }
 
     // MARK: - Helpers

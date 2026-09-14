@@ -63,12 +63,26 @@ struct FlowRowInspectorView: View {
             if let row {
                 header(row)
                 if let warning = model.warning(for: rowID) {
-                    Label(warning, systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .padding(8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label(warning, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        // FIX-1 — the message names a fix ("fmt will do this for you"); this
+                        // app has no `fmt`, so offer the one-flag repair directly, only where
+                        // the document is writable (`editable`) and the flag can run in this
+                        // edition (`headerRepair` already excludes App-Store-refused flags).
+                        if editable, let flag = model.headerRepair(for: rowID) {
+                            Button("Add `\(flag.rawValue)` to line one") {
+                                model.applyHeaderRepair(flag)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                    }
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
                 }
                 Divider()
                 ScrollView {

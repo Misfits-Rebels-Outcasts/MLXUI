@@ -273,7 +273,8 @@ final class AppState { //appstatecomeback
             if let doc = try? GalleryLoader.loadDocument(flowID: flow.flowID),
                FlowRunnability.refusalReason(for: doc, catalog: catalog,
                                              installed: installedModelIDs,
-                                             totalRAMGB: systemInfo.totalRAMGB) != nil {
+                                             totalRAMGB: systemInfo.totalRAMGB,
+                                             claimableModelIDs: claimableModelIDs) != nil {
                 blocked.insert(flow.flowID)
             }
         }

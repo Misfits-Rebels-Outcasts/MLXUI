@@ -67,7 +67,8 @@ struct CatFlowModelOptionalConsistencyTests {
 
             // 2. Preflight: the flow is not blocked, and there is no refusal sentence.
             let preflight = FlowPreflight.run(doc, catalog: catalog,
-                                              installedModelIDs: [], totalRAMGB: 1_000_000)
+                                              installedModelIDs: [], totalRAMGB: 1_000_000,
+                                              claimableModelIDs: claimable)
             #expect(!preflight.isBlocked, "\(task): FlowPreflight blocks a model-optional row")
             #expect(FlowPreflight.blockedReason(preflight, totalRAMGB: 1_000_000) == nil,
                     "\(task): FlowPreflight has a refusal sentence for a model-optional row")

@@ -768,6 +768,32 @@ final class FlowEditorModel {
         return nil
     }
 
+    /// FIX-1 — the flag a one-click repair would add for this row's own issue
+    /// (E103/E109/E118/E120/E604), or nil when there's no such issue, no such repair, or this
+    /// edition refuses to run the flag (`CapabilityGate.appStoreRefusedFlags`): offering
+    /// "add `code`" in the App Store build would produce a flow that same build then refuses
+    /// to run — a fix that creates the next refusal. Driven from the issue's code, not a
+    /// hard-coded button per error, so all five share one path (rule 11: never parse the
+    /// message back apart to find the flag).
+    func headerRepair(for rowID: UUID) -> CapabilityFlag? {
+        guard let issue = issues(for: rowID).first,
+              let flag = FlowHeaderRepair.flag(forCode: issue.code) else { return nil }
+        if CapabilityGate.isAppStoreBuild, CapabilityGate.appStoreRefusedFlags.contains(flag.rawValue) {
+            return nil
+        }
+        return flag
+    }
+
+    /// FIX-1 — apply a header-flag repair through the editor's own change path
+    /// (`commitChange`, the same wrapper `setHumanWaitPolicy` uses), so it joins the undo
+    /// stack like any other edit and a second application is a no-op (`FlowHeaderRepair.apply`
+    /// is idempotent).
+    func applyHeaderRepair(_ flag: CapabilityFlag) {
+        commitChange {
+            document = FlowHeaderRepair.apply(flag, to: document)
+        }
+    }
+
     /// The `(?N)` reference label for a row (a broken ref renders `(?N)`, the row is yellow).
     func referenceLabel(for rowID: UUID) -> String? {
         guard let row = row(withID: rowID), !row.refs.isEmpty else { return nil }
