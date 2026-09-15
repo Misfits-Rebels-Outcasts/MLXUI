@@ -53,6 +53,12 @@ final class AppState { //appstatecomeback
     /// render.
     static let hideAdvanceGallery = false //cbx
 
+    /// Set to `true` to hide **Settings → Providers** and **Settings → Privacy** from the
+    /// `SettingsRootView` tab bar. Models and Tools always render regardless of this flag.
+    /// `SettingsRootView` also redirects `selectedPane` back to `.models` if a prior launch
+    /// left `@AppStorage("settingsPane")` pointed at a now-hidden tab.
+    static let hideProvidersPrivacy = true
+
     /// Hide individual gallery flows (badges) by gallery number. Numbers are the
     /// `_metadata.json` `number` field (1–71 today), stable across renames. Basic Gallery's
     /// filenames restart at `1-`/`2-` for a friendly per-shelf look, but their `number` values

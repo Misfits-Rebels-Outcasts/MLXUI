@@ -81,8 +81,9 @@ struct CatFlowProviderCredentialTests {
 
     /// The production entry point, run against the real bundle: RM-1 ported three keyed
     /// provider manifests (`claude-sonnet-4`/`gpt-5.6-luna`/`deepseek-v4-flash`), each
-    /// naming its own `credentials`; the fourth (`macstudio-qwen3-32b`, the keyless LAN
-    /// endpoint) correctly contributes no row. `[]` was the verified answer at KEY —
+    /// naming its own `credentials` (the fourth ported manifest, the keyless LAN endpoint
+    /// `macstudio-qwen3-32b`, correctly contributed no row while it shipped — removed since,
+    /// the owner having no such LAN box). `[]` was the verified answer at KEY —
     /// this is the verified answer now, updated rather than loosened, per that journal's
     /// own note that it "will legitimately need updating the day RM or WS lands the first
     /// `credentials`-bearing manifest, which is the entire point."

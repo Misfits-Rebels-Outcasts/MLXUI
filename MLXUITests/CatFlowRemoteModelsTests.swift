@@ -2,8 +2,8 @@ import Testing
 import Foundation
 @testable import MLXUI
 
-/// Phase RM — remote models (Claude, GPT, DeepSeek, and a keyless LAN endpoint), entirely
-/// mock-driven at the network boundary (`ProviderAvailability.executorOverride`) — no test
+/// Phase RM — remote models (Claude, GPT, DeepSeek), entirely mock-driven at the network
+/// boundary (`ProviderAvailability.executorOverride`) — no test
 /// here ever issues a real HTTP request, "mock by default" applied to the network exactly
 /// as Phase AFM applied it to the OS. Every Keychain value used is a throwaway,
 /// UUID-suffixed string, never printed — the same constraint that has run through KEY.
@@ -55,31 +55,32 @@ struct CatFlowRemoteModelsTests {
         #expect(manifest.baseURL == nil)   // fixed per engine, not manifest-declared
     }
 
-    @Test func macstudioManifestIsTheKeylessLANEndpoint() throws {
-        let manifest = try #require(CuratedManifest.load(manifestFile: "macstudio-qwen3-32b.json"))
-        #expect(manifest.kind == "provider")
-        #expect(manifest.engine == "openai-compatible")
-        #expect(manifest.egress == "lan")
-        #expect(manifest.credentials == nil)
-        #expect(manifest.baseURL == "http://mac-studio.local:8080/v1")
-    }
+    // `macstudioManifestIsTheKeylessLANEndpoint` removed with `macstudio-qwen3-32b.json` —
+    // the app no longer ships an example LAN endpoint (the owner doesn't have that Mac
+    // Studio; see the journal entry removing it). The keyless-LAN *mechanism* — an
+    // `openai-compatible` manifest with `egress: "lan"` and no `credentials` — is still
+    // covered without a bundled fixture: `ProviderCredential.readiness` below, and
+    // `ProviderWireFormat.openAICompatibleRequest`/`apiModelNameStripsTheOrgPrefix` further
+    // down, both construct their own inputs rather than loading a manifest file.
 
     // MARK: - RM-2: TaskModels.providerModels / providerEgress
 
-    @Test func providerModelsOffersAllFourPortedManifestsUnderGenerate() {
+    @Test func providerModelsOffersAllThreePortedManifestsUnderGenerate() {
         let names = Set(TaskModels.providerDisplayNames)
         for expected in ["claude-sonnet @ anthropic", "gpt-5.6-luna @ openai",
-                         "deepseek-v4-flash @ deepseek", "qwen3-32b @ http://mac-studio.local:8080"] {
+                         "deepseek-v4-flash @ deepseek"] {
             #expect(names.contains(expected), "expected \(expected) in the provider registry")
         }
     }
 
     /// RM-FIX-1 — `providerEgress` is a wording lookup, never an exemption list: it names
     /// which display is `"lan"` so `checkOffdeviceFlag` can pick E120's phrasing, but every
-    /// name here (LAN included) still raises E120 with no `offdevice` flag — see the E120
-    /// tests below.
-    @Test func providerEgressDistinguishesTheLANEndpointFromHostedOnes() {
-        #expect(TaskModels.providerEgress(forDisplay: "qwen3-32b @ http://mac-studio.local:8080") == "lan")
+    /// name here still raises E120 with no `offdevice` flag — see the E120 tests below.
+    /// No bundled manifest declares `egress: "lan"` today (it shipped `egress` was
+    /// `macstudio-qwen3-32b.json` alone), so the `"lan"` branch itself has no fixture to
+    /// exercise here until a LAN-class manifest ships again — only the "no known manifest"
+    /// and hosted-provider paths are checked.
+    @Test func providerEgressDistinguishesHostedProvidersFromAnUnknownDisplay() {
         #expect(TaskModels.providerEgress(forDisplay: "claude-sonnet @ anthropic") == nil)
         #expect(TaskModels.providerEgress(forDisplay: "gpt-5.6-luna @ openai") == nil)
         #expect(TaskModels.providerEgress(forDisplay: "deepseek-v4-flash @ deepseek") == nil)
@@ -97,8 +98,13 @@ struct CatFlowRemoteModelsTests {
 
     // MARK: - RM-2: ProviderCredential.readiness(for:) — the LAN case never asks for a key
 
-    @Test func lanManifestReadinessIsAlwaysReadyRegardlessOfKeychain() throws {
-        let manifest = try #require(CuratedManifest.load(manifestFile: "macstudio-qwen3-32b.json"))
+    @Test func credentialLessManifestReadinessIsAlwaysReadyRegardlessOfKeychain() {
+        // The shape `macstudio-qwen3-32b.json` used to exercise: `kind: "provider"`,
+        // `egress: "lan"`, no `credentials` — constructed inline now that no bundled
+        // manifest has this shape.
+        let manifest = CuratedManifest(id: "lanbox/some-model", display: "some-model @ http://lanbox.local:8080",
+                                       kind: "provider", engine: "openai-compatible", egress: "lan",
+                                       baseURL: "http://lanbox.local:8080/v1", settings: [:], resources: nil)
         #expect(ProviderCredential.readiness(for: manifest) == .ready)
     }
 
@@ -216,8 +222,12 @@ struct CatFlowRemoteModelsTests {
     }
 
     /// RM-FIX-1: `{egress}` is filled from the manifest, so the message text — not whether
-    /// it fires — is what distinguishes a LAN box from a hosted API, per Q203 point 5.
-    @Test func e120WordingDistinguishesLANFromHostedProviders() throws {
+    /// it fires — is what distinguishes a LAN box from a hosted API, per Q203 point 5. The
+    /// LAN-wording half of this used `macstudio-qwen3-32b.json` (the only bundled manifest
+    /// ever declaring `egress: "lan"`); with it removed, `TaskModels.providerEgress` has no
+    /// bundled fixture to resolve a LAN display to `"lan"`, so only the hosted/unknown-
+    /// display wording (the always-reachable default) is checked here now.
+    @Test func e120WordingReadsAsHostedForAKnownProvider() throws {
         let hosted = """
         mlxflow 0.8
         1. Answer       claude-sonnet @ anthropic; "cite sources"
@@ -230,18 +240,6 @@ struct CatFlowRemoteModelsTests {
         #expect(hostedIssue.message.contains("claude-sonnet @ anthropic"))
         #expect(hostedIssue.message.contains("leaves this building"))
         #expect(hostedIssue.message.contains("; offdevice"))
-
-        let lan = """
-        mlxflow 0.8
-        1. Answer       qwen3-32b @ http://mac-studio.local:8080; "cite sources"
-
-        models:
-          qwen3-32b @ http://mac-studio.local:8080 = macstudio/qwen3-32b
-        """
-        let lanIssue = try #require(try issues(for: lan).first { $0.code == "E120" })
-        #expect(lanIssue.message.contains("qwen3-32b @ http://mac-studio.local:8080"))
-        #expect(lanIssue.message.contains("leaves this machine"))
-        #expect(!lanIssue.message.contains("leaves this building"))
     }
 
     /// `44-FrontierEscalate.cat` already declares `offdevice` — RM-4b's own check must not

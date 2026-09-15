@@ -59,9 +59,12 @@ struct PrivacyInventoryTests {
     }
 
     @Test func aCredentialLessLanRowHasNoCredentialsName() throws {
-        // macstudio-qwen3-32b.json: kind "provider", egress "lan", no credentials.
-        let manifests = CuratedManifest.installedManifests(manifestURLs: try bundledManifestURLs())
-        let lan = try #require(manifests.first { $0.egress == "lan" })
+        // The shape `macstudio-qwen3-32b.json` used to ship (kind "provider", egress "lan",
+        // no credentials) — constructed inline now that no bundled manifest has this shape;
+        // the app no longer ships an example LAN endpoint.
+        let lan = CuratedManifest(id: "lanbox/some-model", display: "some-model @ http://lanbox.local:8080",
+                                  kind: "provider", engine: "openai-compatible", egress: "lan",
+                                  baseURL: "http://lanbox.local:8080/v1", settings: [:], resources: nil)
         let row = try #require(PrivacyInventory.rows(from: [lan]).first)
         #expect(row.credentialsName == nil)
         #expect(row.account == "none — the user's own machine")

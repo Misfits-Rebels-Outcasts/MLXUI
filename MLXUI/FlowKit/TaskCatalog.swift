@@ -80,8 +80,8 @@ nonisolated enum TaskCatalog {
     }
 
     /// RM-2 (SPEC-Q204) — expand a named `tasks:` group a provider manifest can reference
-    /// (`"tasks": ["@frames-text", "Decide"]`, e.g. `macstudio-qwen3-32b.json`, ported
-    /// verbatim in RM-1). Ported from `catflow-mlx/src/catflow/catalog/tasks.py
+    /// (`"tasks": ["@frames-text", "Decide"]`, e.g. the now-removed `macstudio-qwen3-32b.json`,
+    /// ported verbatim in RM-1). Ported from `catflow-mlx/src/catflow/catalog/tasks.py
     /// ::task_group_members`: membership is *derived* from the catalog's own signatures,
     /// never a hand-written inventory, so a new frame task inherits membership the day it
     /// lands — a manifest is a policy file, not a maintained list that drifts silently

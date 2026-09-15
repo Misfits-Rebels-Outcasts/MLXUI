@@ -148,19 +148,22 @@ struct CatFlowModelSlotTests {
     /// AFM-FOLLOWUP-1 (`RSI/journal/2026-259`): `AppleFoundationAvailability.useRealSystem`
     /// defaults to `false` — only `MLXUIApp.init()` ever flips it — so the system registry
     /// stays empty here regardless of this build machine. The provider registry is a
-    /// different story now: RM ported four real manifests, so MS-2's original "the third
-    /// section stays empty for every model task" claim is exactly what RM exists to end
-    /// for the tasks those manifests actually name. Pinned precisely instead of loosened:
-    /// the populated set is exactly `@frames-text`'s own members (`Generate` plus every
-    /// frame-backed text task — the group `macstudio-qwen3-32b.json` references, and every
-    /// keyed manifest lists `Generate` literally too); every other model task must still
-    /// show nothing.
+    /// different story now: RM ported three keyed manifests (claude/gpt/deepseek), each
+    /// literally naming `Generate` (and `Decide`, a decider — excluded from this `.model`-
+    /// class loop). Pinned precisely instead of loosened: `Generate` is the only `.model`-
+    /// class task any bundled provider manifest names today, so it's the only one whose
+    /// built-in section is populated; every other model task must still show nothing.
+    /// (`macstudio-qwen3-32b.json` used to also cover the rest of `@frames-text` — Summarize,
+    /// Translate, Answer, Rewrite, Draft, Ask, Title, Critique, Verify, Revise, Merge — via
+    /// its own group reference; removed since, the owner having no such LAN box. Those tasks
+    /// still run fine on installed local models; they just have no built-in *remote*
+    /// candidate until a new provider/LAN manifest names them.)
     @Test @MainActor func sectionedModelCandidatesBuiltInSectionIsPopulatedOnlyForRMPortedTasks() throws {
         let catalog = try bundledCatalog()
         let registry = ModelRegistry()
         for module in installedModules { module.register(into: registry) }
         let claimable = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
-        let populated = Set(TaskCatalog.taskGroupMembers("frames-text"))
+        let populated: Set<String> = ["Generate"]
         for task in TaskCatalog.entries where task.taskClass == .model {
             let sections = FlowEditorModel.sectionedModelCandidates(
                 for: task.name, catalog: catalog, installedModelIDs: [], claimableModelIDs: claimable)

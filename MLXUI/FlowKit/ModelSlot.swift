@@ -210,9 +210,9 @@ nonisolated enum ProviderCredential {
     }
 
     /// RM-2's actual one line: `TaskModels.providerModels` calls this per manifest.
-    /// `manifest.credentials == nil` is the credential-less LAN case (`egress: "lan"`,
-    /// `macstudio-qwen3-32b.json`) — always `.ready`, never asks for a key that manifest
-    /// never declared.
+    /// `manifest.credentials == nil` is the credential-less LAN case (`egress: "lan"`, e.g.
+    /// the now-removed `macstudio-qwen3-32b.json`) — always `.ready`, never asks for a key
+    /// that manifest never declared.
     static func readiness(for manifest: CuratedManifest) -> Readiness {
         guard let name = manifest.credentials else { return .ready }
         return readiness(providerName: name)
