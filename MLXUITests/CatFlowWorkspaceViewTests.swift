@@ -91,6 +91,42 @@ struct CatFlowWorkspaceViewTests {
         #expect(!events.contains { if case .failed = $0 { return true } else { return false } })
     }
 
+    // MARK: - KW-2-1: New Flow in this workspace
+
+    /// Mirrors `WorkspaceListView.addFlow()`'s exact steps (write the starter under a
+    /// collision-free name, rescan) against a workspace that already holds two flows, then
+    /// confirms a `uses:` reference in an existing flow resolves to the one just added —
+    /// `UsesResolver` needs real siblings, which is the whole point of adding one this way.
+    @Test func newFlowNeverOverwritesAndIsResolvableViaUses() throws {
+        let (base, ws) = try makeWorkspace(id: "docs", files: [
+            ("Ingest.cat", validCat),
+            ("Flow.cat", "mlxflow 0.8\n1. Read Text   old.txt\n"),   // a pre-existing collision
+        ])
+        defer { try? FileManager.default.removeItem(at: base) }
+        let dir = ws.directory(for: "docs")
+
+        let starter = "mlxflow 0.8\n1. Read Text   notes.txt\n2. Save Text   out.md\n"
+        let filename = WorkspaceStore.firstFreeFlowName(stem: "Flow", in: dir)
+        #expect(filename == "Flow-2.cat")               // never the colliding "Flow.cat"
+        try starter.write(to: dir.appendingPathComponent(filename), atomically: true, encoding: .utf8)
+
+        // The pre-existing "Flow.cat" survives untouched.
+        #expect(try String(contentsOf: dir.appendingPathComponent("Flow.cat"), encoding: .utf8)
+            .contains("old.txt"))
+
+        let listed = WorkspaceStore.scan(workspace: ws)
+        let workspace = try #require(listed.first { $0.workspaceID == "docs" })
+        #expect(workspace.flows.count == 3)
+        #expect(workspace.flows.map(\.title).contains("Flow-2"))
+
+        // A sibling's `uses:` line resolves to the flow just added.
+        let callerText = "mlxflow 0.8\n1. Read Text   memo.txt\n2. NewStep\n\nuses:\n  NewStep = ./Flow-2.cat\n"
+        let callerDoc = try CatParser.parse(callerText)
+        let selfFile = dir.appendingPathComponent("Caller.cat")
+        let resolved = UsesResolver.resolve(callerDoc, workspace: ws, flowID: "docs", selfFile: selfFile)
+        #expect(resolved["NewStep"] != nil)
+    }
+
     // MARK: - The bundled uses_example is on the shelf
 
     @Test func bundledUsesExampleIsListedByWorkspaceStoreAfterPrepare() throws {

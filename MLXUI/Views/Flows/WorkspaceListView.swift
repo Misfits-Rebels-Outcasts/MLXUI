@@ -96,6 +96,9 @@ struct WorkspaceListView: View {
                 Label(workspace.title, systemImage: "folder.badge.gearshape")
                     .font(.largeTitle.weight(.bold))
                 Spacer()
+                Button { addFlow() } label: {
+                    Label("New Flow", systemImage: "doc.badge.plus")
+                }
                 Button {
                     FlowWorkspace(root: ModelStore.shared.workspacesDirectory)
                         .revealInFinder(flowID: workspace.workspaceID)
@@ -235,6 +238,28 @@ struct WorkspaceListView: View {
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    /// KW-2-1: add a second (or third, …) flow to this workspace — the same three-step
+    /// template `createWorkspace` (`FlowGalleryView.swift:245`) uses one directory up: write
+    /// the starter `.cat`, rescan, open. `WorkspaceStore.firstFreeFlowName` picks a name that
+    /// can never collide with — and so can never overwrite — an existing sibling. Adding a
+    /// flow can turn a Knowledge Base side ambiguous (two builders, say); that's an honest
+    /// collision the card already words, not something to suppress here.
+    private func addFlow() {
+        let starter = "mlxflow 0.8\n1. Read Text   notes.txt\n2. Save Text   out.md\n"
+        let filename = WorkspaceStore.firstFreeFlowName(stem: "Flow", in: workspace.url)
+        let fileURL = workspace.url.appendingPathComponent(filename)
+        do {
+            try starter.write(to: fileURL, atomically: true, encoding: .utf8)
+            let doc = try CatParser.parse(starter)
+            appState.reloadWorkspaces()
+            let ref = WorkspaceRef(workspaceID: workspace.workspaceID, flowFile: filename)
+            appState.editingFlow = FlowEditTarget(flowID: ref.workspaceID, name: ref.flowStem,
+                                                  document: doc, savedText: starter, workspace: ref)
+        } catch {
+            appState.workspaceImportError = "Couldn't create a new flow in this workspace."
         }
     }
 

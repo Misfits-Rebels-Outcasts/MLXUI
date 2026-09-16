@@ -207,6 +207,33 @@ struct CatFlowWorkspaceStoreTests {
         #expect(!sentence.contains("index"))
     }
 
+    // MARK: - KW-2-1: firstFreeFlowName
+
+    @Test func firstFreeFlowNamePicksFlowDotCatWhenNothingCollides() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "docs", flows: [("Ingest", validCat)])
+        let dir = ws.directory(for: "docs")
+        #expect(WorkspaceStore.firstFreeFlowName(stem: "Flow", in: dir) == "Flow.cat")
+    }
+
+    @Test func firstFreeFlowNameSkipsToFlow2WhenFlowDotCatExists() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "docs", flows: [("Flow", validCat)])
+        let dir = ws.directory(for: "docs")
+        #expect(WorkspaceStore.firstFreeFlowName(stem: "Flow", in: dir) == "Flow-2.cat")
+    }
+
+    @Test func firstFreeFlowNameKeepsIncrementingPastMultipleCollisions() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "docs",
+                         flows: [("Flow", validCat), ("Flow-2", validCat), ("Flow-3", validCat)])
+        let dir = ws.directory(for: "docs")
+        #expect(WorkspaceStore.firstFreeFlowName(stem: "Flow", in: dir) == "Flow-4.cat")
+    }
+
     // MARK: - remove
 
     @Test func removeDeletesTheWholeDirectory() throws {

@@ -116,6 +116,20 @@ nonisolated enum WorkspaceStore {
         return "'\(workspace.title)' — \(inventory) — will be deleted from your workspaces folder. This can't be undone."
     }
 
+    /// KW-2-1: the first unused `<stem>.cat` name in a workspace directory — `Flow.cat`,
+    /// `Flow-2.cat`, `Flow-3.cat`, … Purely a name choice; never routes through `save()`'s
+    /// sibling-clearing path, so adding a flow can never overwrite an existing one.
+    static func firstFreeFlowName(stem: String, in dir: URL) -> String {
+        let fm = FileManager.default
+        var candidate = "\(stem).cat"
+        var n = 2
+        while fm.fileExists(atPath: dir.appendingPathComponent(candidate).path) {
+            candidate = "\(stem)-\(n).cat"
+            n += 1
+        }
+        return candidate
+    }
+
     /// Delete a workspace's folder (and everything in it) from disk.
     static func remove(workspaceID: String, workspace: FlowWorkspace) throws {
         let dir = workspace.directory(for: workspaceID)
