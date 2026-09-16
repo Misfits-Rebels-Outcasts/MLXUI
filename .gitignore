@@ -23,6 +23,9 @@ scripts/
 *.bak
 .derived-data-log-*
 
+# === Terminal-session transcript exports dropped at repo root (e.g. by a CLI recorder) ===
+/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*.txt
+
 # === Python tooling cruft ===
 __pycache__/
 *.pyc
