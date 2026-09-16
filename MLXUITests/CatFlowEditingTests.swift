@@ -755,6 +755,27 @@ struct CatFlowEditingTests {
         #expect(FlowEditorModel.seedSavedURL(document: doc, workspace: nil) == nil)
     }
 
+    // MARK: - KW-1-FIX-1: seeding savedURL also enables Run and Reveal, not only rename
+
+    /// `FlowEditorView` gates Run (`:258`), its help text (`:264`), and Reveal in Finder
+    /// (`:244`, `:641`) on `model.savedURL != nil` — none of that is new here, but before
+    /// KW-1-1 seeded `savedURL` on open, a freshly-opened *workspace* flow always failed this
+    /// check even though its file was already on disk: Run told the user to "Save the flow
+    /// first" for a file that needed no saving. This is coverage for behaviour KW-1-1 already
+    /// shipped, not a new fix — production code is unchanged in this item.
+    @Test func aFreshlyOpenedWorkspaceFlowIsRunnableAndRevealableWithoutSavingFirst() {
+        let ref = WorkspaceRef(workspaceID: "docs", flowFile: "DocChat.cat")
+        let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow",
+                               rows: [row("Read Image", settings: "budget.png")])
+        // Exactly what FlowEditorView.init produces on open — no save() call in this test.
+        let model = FlowEditorModel(name: "DocChat", flowID: ref.workspaceID, document: doc,
+                                    workspace: ref.workspace,
+                                    savedURL: FlowEditorModel.seedSavedURL(document: doc, workspace: ref))
+        #expect(model.savedURL != nil)          // clears the Run/Reveal precondition
+        #expect(model.canSave)                  // no blocking issue on this document
+        #expect(model.runnability == .runnable) // the interpreter accepts the document itself
+    }
+
     @Test func saveRefusesWhileAReferenceIsBroken() throws {
         let r1 = row("Read Audio", settings: "memo.m4a")
         let r2 = row("Transcribe", model: "Whisper Large v3")
