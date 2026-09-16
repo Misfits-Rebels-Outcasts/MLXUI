@@ -8,7 +8,24 @@ import AppKit
 /// `.cat` paths land in the shared directory (CFM-R17-1).
 struct WorkspaceListView: View {
     @Environment(AppState.self) private var appState
-    let workspace: WorkspaceStore.Workspace
+    /// KW-2-1-FIX: `workspace` used to be the `Workspace` value snapshotted at navigation
+    /// time, so a flow added or renamed while this page stayed open never showed up here —
+    /// `appState.selectedWorkspace` is never re-synced to a fresh scan except on removal, and
+    /// `reloadWorkspaces()` only refreshed `appState.workspaceEntries`, which this view never
+    /// read. `workspace` is now computed from that array by id every time it's read, so a
+    /// mutation to `workspaceEntries` (from `addFlow()`, or the appear-time rescan after
+    /// popping back from the editor) is picked up live, the same way `manifest(for:)` already
+    /// reads the index off disk fresh every time rather than trusting a cached copy. `initial`
+    /// is only the seed for the instant before the environment is available and for the rare
+    /// case the id has vanished from the array entirely (e.g. removed from another window).
+    private let initial: WorkspaceStore.Workspace
+    private var workspace: WorkspaceStore.Workspace {
+        appState.workspaceEntries.first { $0.workspaceID == initial.workspaceID } ?? initial
+    }
+
+    init(workspace: WorkspaceStore.Workspace) {
+        self.initial = workspace
+    }
 
     @State private var pendingRemoval = false
 
