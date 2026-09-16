@@ -91,6 +91,44 @@ struct CatFlowWorkspaceViewTests {
         #expect(!events.contains { if case .failed = $0 { return true } else { return false } })
     }
 
+    // MARK: - KW-4-1: the New Workspace starter pair (Q4 — "a working pair of flows")
+
+    /// `NewWorkspaceStarter`'s literal content — the same text `FlowGalleryView.createWorkspace`
+    /// writes — parses, is genuinely runnable (not just syntactically valid), and produces a
+    /// real Knowledge Base card with a working Build **and** a working Ask on the one index
+    /// name `newWorkspaceBadge`'s copy promises. Before `KW-4-1` the single-flow starter
+    /// touched no index at all; this is the proof the two-file replacement actually delivers
+    /// what the badge says.
+    @Test func newWorkspaceStarterProducesAWorkingKnowledgeBaseCard() throws {
+        let builderDoc = try CatParser.parse(NewWorkspaceStarter.builderText)
+        let querierDoc = try CatParser.parse(NewWorkspaceStarter.querierText)
+        #expect(FlowRunner.canRun(builderDoc) == .runnable)
+        #expect(FlowRunner.canRun(querierDoc) == .runnable)
+
+        let (base, ws) = try makeWorkspace(id: "starter", files: [
+            (NewWorkspaceStarter.builderFilename, NewWorkspaceStarter.builderText),
+            (NewWorkspaceStarter.querierFilename, NewWorkspaceStarter.querierText),
+        ])
+        defer { try? FileManager.default.removeItem(at: base) }
+        let dir = ws.directory(for: "starter")
+
+        let parsed = [
+            (file: NewWorkspaceStarter.builderFilename, doc: builderDoc,
+             url: dir.appendingPathComponent(NewWorkspaceStarter.builderFilename)),
+            (file: NewWorkspaceStarter.querierFilename, doc: querierDoc,
+             url: dir.appendingPathComponent(NewWorkspaceStarter.querierFilename)),
+        ]
+        let cards = WorkspaceKnowledge.classifyWorkspace(
+            flows: parsed,
+            resolveUses: { doc, selfFile in
+                UsesResolver.resolve(doc, workspace: ws, flowID: "starter", selfFile: selfFile)
+            },
+            resolvePath: { rawPath in try? ws.resolve(rawPath, flowID: "starter") })
+        let card = try #require(cards.first { $0.indexName == "library.index" })
+        #expect(card.buildFile == NewWorkspaceStarter.builderFilename)
+        #expect(card.askFile == NewWorkspaceStarter.querierFilename)
+    }
+
     // MARK: - KW-2-1: New Flow in this workspace
 
     /// Mirrors `WorkspaceListView.addFlow()`'s exact steps (write the starter under a

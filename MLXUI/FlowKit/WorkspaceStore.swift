@@ -398,3 +398,20 @@ nonisolated enum WorkspaceStoreError: Error, CustomStringConvertible, Equatable 
         }
     }
 }
+
+/// KW-4-1 (Q4, owner ruling 2026-09-16 — "a working pair of flows"): the two-file starter
+/// `createWorkspace` (`FlowGalleryView.swift:245`) writes for every New Workspace — a minimal
+/// builder and a minimal querier on one index name, so `newWorkspaceBadge`'s own promise ("a
+/// builder and a querier, an index they both use") is true from the first second, and the
+/// Knowledge Base card is present and self-explanatory immediately — rather than the old
+/// single `Read Text` → `Save Text` flow, which touched no index at all. A separate,
+/// standalone type (not nested in `WorkspaceStore`) so `CatFlowEditingTests` can validate the
+/// literal content `createWorkspace` writes without constructing a view.
+nonisolated enum NewWorkspaceStarter {
+    static let builderFilename = "Build Index.cat"
+    static let builderText =
+        "mlxflow 0.8\n1. Read Text   notes.txt\n2. Embed   BGE-M3\n3. Store Index   (1,2)   library.index\n"
+    static let querierFilename = "Ask a Question.cat"
+    static let querierText =
+        "mlxflow 0.8\n1. Read Index   library.index\n2. Read Text   question.txt\n3. Embed   BGE-M3\n4. Retrieve   (1,3)   top_k=3\n5. Save Text   answer.md\n"
+}

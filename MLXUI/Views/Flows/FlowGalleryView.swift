@@ -166,8 +166,9 @@ struct FlowGalleryView: View {
         }
     }
 
-    /// CFM-R17-3 — New Workspace: create `workspaces/<uuid>/` with one starter flow and open
-    /// the workspace page. Failures surface as the app-level alert.
+    /// CFM-R17-3 — New Workspace: create `workspaces/<uuid>/` with a builder + querier starter
+    /// pair (`KW-4-1`, Q4) and open the workspace page. Failures surface as the app-level
+    /// alert.
     private var newWorkspaceBadge: some View {
         Button {
             createWorkspace()
@@ -246,10 +247,14 @@ struct FlowGalleryView: View {
         let ws = FlowWorkspace(root: ModelStore.shared.workspacesDirectory)
         let id = "Workspace-\(UUID().uuidString.prefix(8))"
         let dir = ws.directory(for: id)
-        let starter = "mlxflow 0.8\n1. Read Text   notes.txt\n2. Save Text   out.md\n"
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            try starter.write(to: dir.appendingPathComponent("Flow.cat"), atomically: true, encoding: .utf8)
+            try NewWorkspaceStarter.builderText.write(
+                to: dir.appendingPathComponent(NewWorkspaceStarter.builderFilename),
+                atomically: true, encoding: .utf8)
+            try NewWorkspaceStarter.querierText.write(
+                to: dir.appendingPathComponent(NewWorkspaceStarter.querierFilename),
+                atomically: true, encoding: .utf8)
         } catch {
             appState.workspaceImportError = "Couldn't create the workspace folder."
             return
