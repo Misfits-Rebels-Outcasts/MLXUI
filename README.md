@@ -25,6 +25,60 @@ them with one click, and provides a purpose-built Run UI for each model type.
 
 ## ✨ What's New
 
+<!-- Items marked *(hidden in-app)* are built but switched off behind an in-app flag right
+     now — pruning candidates if you don't want to announce them before they're switched on. -->
+
+### AI Workflows — automate your models with a visual, numbered flow
+
+A brand-new way to chain your installed models together. Reached from **Automate → AI
+Workflows**, a flow is a simple numbered list — each row picks a task (and a model, if it
+needs one) — that runs top to bottom, with live progress dots and cancel. Comes with a
+gallery of ready-made sample flows, plus save, open, import and export for your own.
+
+- **~40 built-in row types** — text tools (split, filter, dedupe, template), image tools
+  (resize, crop, convert, watermark), record/table tools, document retrieval (build and
+  search an index), OCR and image-description rows, and more
+- **Per-row output caching** — re-running a flow only redoes the rows that actually changed
+- **Human-in-the-loop rows** — a flow can pause and wait for you to type an answer before
+  continuing, with an optional timeout
+- **Remote model providers** — a row can call Claude, GPT, DeepSeek, or a LAN endpoint using
+  your own API key (stored in Keychain), or run certain tasks fully on-device via Apple
+  Intelligence; every remote row is clearly marked before it can send anything off-device
+  *(the Settings tab for entering provider keys is hidden in-app right now)*
+- **Web Search row** — search the web from inside a flow with your own Tavily or Brave key
+- **Workspaces** — group related flows in one folder that share files; pair a "build" flow
+  (indexes your documents) with an "ask" flow (queries them) for a one-card document-Q&A
+  setup, with a bundled "Ask Your Docs" starter
+- **Missing-file warnings** — a flow now tells you up front if a file a row needs isn't
+  there, instead of failing partway through the run
+- **In-flow file picker** — reuse a file already in the flow, add a new one, or create a
+  folder, instead of a bare system file dialog
+- **A real Settings window** — tabs for Models (storage usage, clear cache), Providers,
+  Tools (every agent capability, with an audit log), and Privacy (a plain-language summary
+  of what can leave your Mac) *(the Providers and Privacy tabs are hidden in-app right now)*
+
+### SAM3 — image segmentation
+
+Click points on an image and SAM3 produces a mask you can save as a PNG. Also usable as a
+"Segment" step inside AI Workflows.
+
+### WAN 2.1 — text-to-video generation *(hidden in-app)*
+
+Type a prompt, get a short generated video, exported to MP4 with a built-in player.
+
+### SeedVR2 — image upscaling *(rolling out)*
+
+A 3B-parameter upscaling model, added as a new Browse entry.
+
+### New models in the catalog
+
+- **GLM-OCR** — a new OCR model, usable in Browse and in AI Workflows
+- **Qwen3.5-9B** and **Qwen3.5-9B Vision** — new chat and vision models
+- **Rerank / Qwen3-Reranker-0.6B** *(hidden in-app)* — reorders search results inside
+  retrieval flows for better relevance
+- **Faster, cheaper installs** — if two catalog entries share the same underlying model
+  files, installing one no longer re-downloads it for the other
+
 ### MusicGen — type a description, get music back
 
 MusicGen-small is now in the catalog. Type a musical description (e.g. "happy rock with drums"),
