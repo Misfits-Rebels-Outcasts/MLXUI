@@ -34,7 +34,9 @@ struct WorkspaceListView: View {
     /// rename alert. `renameText` seeds from the flow's current stem each time it's set.
     @State private var flowPendingRename: WorkspaceStore.FlowFile?
     @State private var renameText = ""
-    @State private var renameError: String?
+    /// KW-2-FIX-4: surfaces a failed rename *or* delete — both call into `WorkspaceStore`
+    /// functions with real, plain-voice refusals; neither should be swallowed by `try?`.
+    @State private var flowActionError: String?
 
     private var columns: [GridItem] { [GridItem(.adaptive(minimum: 240), spacing: 14)] }
 
@@ -138,13 +140,13 @@ struct WorkspaceListView: View {
         } message: {
             Text("Choose a new name for '\(flowPendingRename?.title ?? "")'.")
         }
-        .alert("Couldn't Rename", isPresented: Binding(
-            get: { renameError != nil },
-            set: { if !$0 { renameError = nil } }
+        .alert("Couldn't Complete That", isPresented: Binding(
+            get: { flowActionError != nil },
+            set: { if !$0 { flowActionError = nil } }
         )) {
-            Button("OK", role: .cancel) { renameError = nil }
+            Button("OK", role: .cancel) { flowActionError = nil }
         } message: {
-            Text(renameError ?? "")
+            Text(flowActionError ?? "")
         }
     }
 
@@ -388,10 +390,17 @@ struct WorkspaceListView: View {
     /// KW-2-2 (Q3): deletes the confirmed flow. The Knowledge Base card recomputes on the next
     /// render because `workspace` is a live lookup (KW-2-1-FIX) — a two-builder ambiguity that
     /// becomes single-builder gets its Build button back with no extra plumbing here.
+    /// KW-2-FIX-4: `removeFlow` carries two real, plain-voice refusals — surface them instead
+    /// of swallowing them with `try?`, the same way `renameFlow`'s failure already is.
     private func deleteFlow() {
         guard let flow = flowPendingRemoval else { return }
-        try? WorkspaceStore.removeFlow(file: flow.url, from: workspace.url)
         flowPendingRemoval = nil
+        do {
+            try WorkspaceStore.removeFlow(file: flow.url, from: workspace.url)
+        } catch {
+            flowActionError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+            return
+        }
         appState.reloadWorkspaces()
         let isTheDeletedFlow: (WorkspaceRef?) -> Bool = { ref in
             ref?.workspaceID == workspace.workspaceID && ref?.flowFile == flow.url.lastPathComponent
@@ -414,7 +423,7 @@ struct WorkspaceListView: View {
                                               in: workspace.url)
             appState.reloadWorkspaces()
         } catch {
-            renameError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+            flowActionError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
         }
     }
 }

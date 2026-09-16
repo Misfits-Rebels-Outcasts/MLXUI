@@ -356,6 +356,57 @@ struct CatFlowWorkspaceStoreTests {
         #expect(files == ["INGEST.cat"])
     }
 
+    // MARK: - KW-2-FIX-3: renameFlow's containment and stem guards
+
+    @Test func renameFlowRefusesASourceOutsideTheDirectory() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "docs", flows: [("Ingest", validCat)])
+        try makeWorkspace(root: ws.root, id: "other", flows: [("Ask", validCat)])
+        let docsDir = ws.directory(for: "docs")
+        let otherFile = ws.directory(for: "other").appendingPathComponent("Ask.cat")
+        #expect(throws: WorkspaceStoreError.flowNotFound("Ask.cat")) {
+            _ = try WorkspaceStore.renameFlow(file: otherFile, toStem: "Stolen", in: docsDir)
+        }
+        #expect(FileManager.default.fileExists(atPath: otherFile.path))
+    }
+
+    @Test func renameFlowRefusesAnEmptyStem() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "docs", flows: [("Ingest", validCat)])
+        let dir = ws.directory(for: "docs")
+        #expect(throws: WorkspaceStoreError.invalidFlowName("")) {
+            _ = try WorkspaceStore.renameFlow(file: dir.appendingPathComponent("Ingest.cat"), toStem: "", in: dir)
+        }
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("Ingest.cat").path))
+    }
+
+    /// The exact `KW-1-2` orphan-state trap named in the finding: a leading-dot stem would
+    /// write a hidden file that `scan`'s `.skipsHiddenFiles` drops from the shelf entirely.
+    @Test func renameFlowRefusesALeadingDotStem() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "docs", flows: [("Ingest", validCat)])
+        let dir = ws.directory(for: "docs")
+        #expect(throws: WorkspaceStoreError.invalidFlowName(".old")) {
+            _ = try WorkspaceStore.renameFlow(file: dir.appendingPathComponent("Ingest.cat"), toStem: ".old", in: dir)
+        }
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("Ingest.cat").path))
+    }
+
+    @Test func renameFlowRefusesAStemContainingASlash() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "docs", flows: [("Ingest", validCat)])
+        let dir = ws.directory(for: "docs")
+        #expect(throws: WorkspaceStoreError.invalidFlowName("../escape")) {
+            _ = try WorkspaceStore.renameFlow(file: dir.appendingPathComponent("Ingest.cat"),
+                                              toStem: "../escape", in: dir)
+        }
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("Ingest.cat").path))
+    }
+
     // MARK: - import / export
 
     @Test func importCopiesEveryFlowAndSharedFile() throws {

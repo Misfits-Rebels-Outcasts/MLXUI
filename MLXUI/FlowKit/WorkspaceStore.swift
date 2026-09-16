@@ -167,10 +167,23 @@ nonisolated enum WorkspaceStore {
     /// KW-2-2: rename one flow file in place — `Rename…` as its own action rather than
     /// inferred from the editor's name field. Refuses onto an existing *different* sibling's
     /// name, the same rule `KW-1-FIX-2` gives `FlowEditorModel.save()`, so this can never
-    /// destroy another flow; a case-only rename (same file, re-cased) is allowed. Read-then
-    /// -remove-then-write, not `moveItem`, so a case-only rename is not left to the
-    /// filesystem's own (unreliable) case-insensitive-move behavior.
+    /// destroy another flow; a case-only rename (same file, re-cased) is allowed. KW-2-FIX-2:
+    /// the common (non-case-only) path is already proven collision-free by the guard above it
+    /// — exactly what an atomic `moveItem` is for, and unlike read-remove-write it can never
+    /// lose the flow if the write half fails. Read-then-remove-then-write is kept for the
+    /// case-only branch only, where a case-insensitive volume's own move semantics are
+    /// unreliable about actually updating the casing. KW-2-FIX-3: refuses a source outside
+    /// `directory` (the same containment rule `removeFlow` already has) and a stem that's
+    /// empty, escapes the directory, or would write a leading-dot (hidden) file — a hidden
+    /// flow is `scan`'s `.skipsHiddenFiles` dropping it from the page while it sits on disk,
+    /// `KW-1-2`'s orphan state reached by a typo in the rename box.
     static func renameFlow(file url: URL, toStem newStem: String, in directory: URL) throws -> URL {
+        guard url.deletingLastPathComponent().standardizedFileURL == directory.standardizedFileURL else {
+            throw WorkspaceStoreError.flowNotFound(url.lastPathComponent)
+        }
+        guard !newStem.isEmpty, !newStem.hasPrefix("."), !newStem.contains("/") else {
+            throw WorkspaceStoreError.invalidFlowName(newStem)
+        }
         let newURL = directory.appendingPathComponent("\(newStem).\(url.pathExtension)")
         guard newURL.lastPathComponent != url.lastPathComponent else { return url }   // no-op
         let fm = FileManager.default
@@ -178,9 +191,13 @@ nonisolated enum WorkspaceStore {
         if !caseOnly, fm.fileExists(atPath: newURL.path) {
             throw WorkspaceStoreError.flowNameTaken(newURL.lastPathComponent)
         }
-        let data = try Data(contentsOf: url)
-        try fm.removeItem(at: url)
-        try data.write(to: newURL)
+        if caseOnly {
+            let data = try Data(contentsOf: url)
+            try fm.removeItem(at: url)
+            try data.write(to: newURL)
+        } else {
+            try fm.moveItem(at: url, to: newURL)
+        }
         return newURL
     }
 
@@ -318,6 +335,9 @@ nonisolated enum WorkspaceStoreError: Error, CustomStringConvertible, Equatable 
     case flowNotFound(String)
     /// KW-2-2: a rename's target name already belongs to a different flow in the workspace.
     case flowNameTaken(String)
+    /// KW-2-FIX-3: a rename's stem is empty, escapes the directory, or would write a
+    /// leading-dot (hidden) file — `scan`'s `.skipsHiddenFiles` would drop it from the shelf.
+    case invalidFlowName(String)
 
     var description: String {
         switch self {
@@ -333,6 +353,10 @@ nonisolated enum WorkspaceStoreError: Error, CustomStringConvertible, Equatable 
             return "'\(name)' isn't in this workspace anymore — nothing to remove."
         case .flowNameTaken(let name):
             return "'\(name)' already exists in this workspace — pick a different name."
+        case .invalidFlowName(let name):
+            return name.isEmpty
+                ? "A flow needs a name."
+                : "'\(name)' isn't a valid flow name — it can't start with a dot or contain '/'."
         }
     }
 }
