@@ -247,6 +247,115 @@ struct CatFlowWorkspaceStoreTests {
         }
     }
 
+    // MARK: - KW-2-2: removeFlow
+
+    @Test func removeFlowDeletesOnlyThatFileSiblingsUntouched() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "docs",
+                         flows: [("Ingest", validCat), ("Ask", validCat)])
+        let dir = ws.directory(for: "docs")
+        try WorkspaceStore.removeFlow(file: dir.appendingPathComponent("Ask.cat"), from: dir)
+        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("Ask.cat").path))
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("Ingest.cat").path))
+        let w = try #require(WorkspaceStore.scan(workspace: ws).first)
+        #expect(w.flows.map(\.title) == ["Ingest"])
+    }
+
+    @Test func removeFlowRefusesAPathOutsideTheGivenDirectory() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "docs", flows: [("Ingest", validCat)])
+        try makeWorkspace(root: ws.root, id: "other", flows: [("Ask", validCat)])
+        let docsDir = ws.directory(for: "docs")
+        let otherFile = ws.directory(for: "other").appendingPathComponent("Ask.cat")
+        #expect(throws: WorkspaceStoreError.flowNotFound("Ask.cat")) {
+            try WorkspaceStore.removeFlow(file: otherFile, from: docsDir)
+        }
+        #expect(FileManager.default.fileExists(atPath: otherFile.path))
+    }
+
+    @Test func removeFlowRefusesAMissingFile() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "docs", flows: [("Ingest", validCat)])
+        let dir = ws.directory(for: "docs")
+        #expect(throws: WorkspaceStoreError.flowNotFound("Ghost.cat")) {
+            try WorkspaceStore.removeFlow(file: dir.appendingPathComponent("Ghost.cat"), from: dir)
+        }
+    }
+
+    // MARK: - KW-2-2: flowDeletionSummary (Q3, owner ruling 2026-09-16)
+
+    @Test func flowDeletionSummaryNamesTheFileWhenOthersRemain() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "docs",
+                         flows: [("Ingest", validCat), ("Ask", validCat)])
+        let w = try #require(WorkspaceStore.scan(workspace: ws).first)
+        let sentence = WorkspaceStore.flowDeletionSummary(fileName: "Ask.cat", isLastFlow: false, workspace: w)
+        #expect(sentence.contains("Ask.cat"))
+        #expect(!sentence.contains("no flows"))
+    }
+
+    @Test func flowDeletionSummaryWarnsWhatStaysBehindOnTheLastFlow() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "docs", flows: [("Ingest", validCat)])
+        let dir = ws.directory(for: "docs")
+        let idx = dir.appendingPathComponent("library.index", isDirectory: true)
+        try FileManager.default.createDirectory(at: idx, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: idx.appendingPathComponent("manifest.json"))
+        let w = try #require(WorkspaceStore.scan(workspace: ws).first)
+        let sentence = WorkspaceStore.flowDeletionSummary(fileName: "Ingest.cat", isLastFlow: true, workspace: w)
+        #expect(sentence.contains("Ingest.cat"))
+        #expect(sentence.contains("no flows"))
+        #expect(sentence.contains("its index"))
+    }
+
+    // MARK: - KW-2-2: renameFlow
+
+    @Test func renameFlowRenamesInPlace() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "docs", flows: [("Ingest", validCat)])
+        let dir = ws.directory(for: "docs")
+        let newURL = try WorkspaceStore.renameFlow(file: dir.appendingPathComponent("Ingest.cat"),
+                                                   toStem: "Build", in: dir)
+        #expect(newURL.lastPathComponent == "Build.cat")
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("Build.cat").path))
+        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("Ingest.cat").path))
+        #expect(try String(contentsOf: newURL, encoding: .utf8) == validCat)
+    }
+
+    @Test func renameFlowRefusesOntoADifferentSiblingsName() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "docs",
+                         flows: [("Ingest", validCat), ("Ask", validCat)])
+        let dir = ws.directory(for: "docs")
+        #expect(throws: WorkspaceStoreError.flowNameTaken("Ask.cat")) {
+            _ = try WorkspaceStore.renameFlow(file: dir.appendingPathComponent("Ingest.cat"),
+                                              toStem: "Ask", in: dir)
+        }
+        // Neither file moved.
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("Ingest.cat").path))
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("Ask.cat").path))
+    }
+
+    @Test func renameFlowAllowsACaseOnlyRename() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "docs", flows: [("Ingest", validCat)])
+        let dir = ws.directory(for: "docs")
+        let newURL = try WorkspaceStore.renameFlow(file: dir.appendingPathComponent("Ingest.cat"),
+                                                   toStem: "INGEST", in: dir)
+        #expect(newURL.lastPathComponent == "INGEST.cat")
+        let files = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+            .filter { $0.hasSuffix(".cat") }
+        #expect(files == ["INGEST.cat"])
+    }
+
     // MARK: - import / export
 
     @Test func importCopiesEveryFlowAndSharedFile() throws {

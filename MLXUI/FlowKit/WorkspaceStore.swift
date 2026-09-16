@@ -130,6 +130,60 @@ nonisolated enum WorkspaceStore {
         return candidate
     }
 
+    /// KW-2-2 (Q3, owner ruling 2026-09-16 — "allow with a warning"): the confirmation
+    /// sentence for deleting one flow — names the file, not the workspace. Deleting the last
+    /// flow left is allowed, but the sentence says plainly what stays behind (an index, other
+    /// files), since `KW-1-2` is what makes that state reachable and cleanable afterward.
+    static func flowDeletionSummary(fileName: String, isLastFlow: Bool, workspace: Workspace) -> String {
+        guard isLastFlow else {
+            return "'\(fileName)' will be deleted from this workspace."
+        }
+        var parts: [String] = []
+        let indexes = indexDirectoryCount(in: workspace.url)
+        if indexes == 1 { parts.append("its index") }
+        else if indexes > 1 { parts.append("its \(indexes) indexes") }
+        if let trash = directorySizePhrase(workspace.url.appendingPathComponent(".trash", isDirectory: true)) {
+            parts.append("\(trash) of earlier versions in .trash")
+        }
+        let stays = parts.isEmpty ? "its other files" : parts.joined(separator: " and ")
+        return "'\(fileName)' will be deleted, leaving this workspace with no flows — \(stays) stays until you Remove the whole workspace."
+    }
+
+    /// KW-2-2: delete one flow file from a workspace — the file-level counterpart to `remove`
+    /// (whole directory). `UserFlowStore.remove` is keyed on `flows/<flowID>` and deletes a
+    /// **whole folder** (its own exactly-one rule), the wrong granularity here, so this is its
+    /// own function rather than bending that one. Refuses if `file` isn't actually inside
+    /// `directory` — never follows a path outside the workspace it was asked to touch.
+    static func removeFlow(file url: URL, from directory: URL) throws {
+        guard url.deletingLastPathComponent().standardizedFileURL == directory.standardizedFileURL else {
+            throw WorkspaceStoreError.flowNotFound(url.lastPathComponent)
+        }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw WorkspaceStoreError.flowNotFound(url.lastPathComponent)
+        }
+        try FileManager.default.removeItem(at: url)
+    }
+
+    /// KW-2-2: rename one flow file in place — `Rename…` as its own action rather than
+    /// inferred from the editor's name field. Refuses onto an existing *different* sibling's
+    /// name, the same rule `KW-1-FIX-2` gives `FlowEditorModel.save()`, so this can never
+    /// destroy another flow; a case-only rename (same file, re-cased) is allowed. Read-then
+    /// -remove-then-write, not `moveItem`, so a case-only rename is not left to the
+    /// filesystem's own (unreliable) case-insensitive-move behavior.
+    static func renameFlow(file url: URL, toStem newStem: String, in directory: URL) throws -> URL {
+        let newURL = directory.appendingPathComponent("\(newStem).\(url.pathExtension)")
+        guard newURL.lastPathComponent != url.lastPathComponent else { return url }   // no-op
+        let fm = FileManager.default
+        let caseOnly = newURL.lastPathComponent.compare(url.lastPathComponent, options: .caseInsensitive) == .orderedSame
+        if !caseOnly, fm.fileExists(atPath: newURL.path) {
+            throw WorkspaceStoreError.flowNameTaken(newURL.lastPathComponent)
+        }
+        let data = try Data(contentsOf: url)
+        try fm.removeItem(at: url)
+        try data.write(to: newURL)
+        return newURL
+    }
+
     /// Delete a workspace's folder (and everything in it) from disk.
     static func remove(workspaceID: String, workspace: FlowWorkspace) throws {
         let dir = workspace.directory(for: workspaceID)
@@ -259,6 +313,11 @@ nonisolated enum WorkspaceStoreError: Error, CustomStringConvertible, Equatable 
     case importNeedsAFlowFile
     case importDestinationExists(String)
     case exportDestinationExists(String)
+    /// KW-2-2: the flow named no longer exists at the expected path (deleted elsewhere, or a
+    /// path outside the workspace directory was passed in).
+    case flowNotFound(String)
+    /// KW-2-2: a rename's target name already belongs to a different flow in the workspace.
+    case flowNameTaken(String)
 
     var description: String {
         switch self {
@@ -270,6 +329,10 @@ nonisolated enum WorkspaceStoreError: Error, CustomStringConvertible, Equatable 
             return "A workspace named '\(id)' already exists in your workspaces folder — rename it or try again."
         case .exportDestinationExists(let name):
             return "A folder named '\(name)' already exists where you're exporting — pick another folder or rename it."
+        case .flowNotFound(let name):
+            return "'\(name)' isn't in this workspace anymore — nothing to remove."
+        case .flowNameTaken(let name):
+            return "'\(name)' already exists in this workspace — pick a different name."
         }
     }
 }

@@ -28,6 +28,13 @@ struct WorkspaceListView: View {
     }
 
     @State private var pendingRemoval = false
+    /// KW-2-2: the flow a trash click is confirming — non-nil shows the confirmation dialog.
+    @State private var flowPendingRemoval: WorkspaceStore.FlowFile?
+    /// KW-2-2: the flow a `Rename…` click is prompting for a new name — non-nil shows the
+    /// rename alert. `renameText` seeds from the flow's current stem each time it's set.
+    @State private var flowPendingRename: WorkspaceStore.FlowFile?
+    @State private var renameText = ""
+    @State private var renameError: String?
 
     private var columns: [GridItem] { [GridItem(.adaptive(minimum: 240), spacing: 14)] }
 
@@ -104,6 +111,40 @@ struct WorkspaceListView: View {
         } message: {
             Text(WorkspaceStore.deletionSummary(
                 workspace, bundled: BundledWorkspaces.isBundled(workspace.workspaceID)))
+        }
+        // KW-2-2 (Q3): deleting the last flow is allowed, with a warning naming what stays.
+        .confirmationDialog("Delete this flow?", isPresented: Binding(
+            get: { flowPendingRemoval != nil },
+            set: { if !$0 { flowPendingRemoval = nil } }
+        ), titleVisibility: .visible) {
+            Button("Delete", role: .destructive) { deleteFlow() }
+            Button("Cancel", role: .cancel) { flowPendingRemoval = nil }
+        } message: {
+            Text(flowPendingRemoval.map {
+                WorkspaceStore.flowDeletionSummary(fileName: $0.url.lastPathComponent,
+                                                   isLastFlow: workspace.flows.count == 1,
+                                                   workspace: workspace)
+            } ?? "")
+        }
+        // KW-2-2 (Q3): Rename… as its own action rather than a side effect of the editor's
+        // name field — renames the file in place, no need to open it.
+        .alert("Rename Flow", isPresented: Binding(
+            get: { flowPendingRename != nil },
+            set: { if !$0 { flowPendingRename = nil } }
+        )) {
+            TextField("Name", text: $renameText)
+            Button("Rename") { renameFlow() }
+            Button("Cancel", role: .cancel) { flowPendingRename = nil }
+        } message: {
+            Text("Choose a new name for '\(flowPendingRename?.title ?? "")'.")
+        }
+        .alert("Couldn't Rename", isPresented: Binding(
+            get: { renameError != nil },
+            set: { if !$0 { renameError = nil } }
+        )) {
+            Button("OK", role: .cancel) { renameError = nil }
+        } message: {
+            Text(renameError ?? "")
         }
     }
 
@@ -320,5 +361,60 @@ struct WorkspaceListView: View {
         }
         .buttonStyle(.plain)
         .contentShape(RoundedRectangle(cornerRadius: 14))
+        // KW-2-2: Rename… as a named action, not a side effect of the editor's name field.
+        .contextMenu {
+            Button("Rename…") {
+                renameText = flow.title
+                flowPendingRename = flow
+            }
+            Button("Delete", role: .destructive) { flowPendingRemoval = flow }
+        }
+        // KW-2-2: the trash overlay mirrors `workspaceBadge`'s (`FlowGalleryView.swift:228`).
+        .overlay(alignment: .topTrailing) {
+            Button { flowPendingRemoval = flow } label: {
+                Image(systemName: "trash")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .background(.quaternary.opacity(0.75), in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .help("Delete this flow")
+            .padding(8)
+        }
+    }
+
+    /// KW-2-2 (Q3): deletes the confirmed flow. The Knowledge Base card recomputes on the next
+    /// render because `workspace` is a live lookup (KW-2-1-FIX) — a two-builder ambiguity that
+    /// becomes single-builder gets its Build button back with no extra plumbing here.
+    private func deleteFlow() {
+        guard let flow = flowPendingRemoval else { return }
+        try? WorkspaceStore.removeFlow(file: flow.url, from: workspace.url)
+        flowPendingRemoval = nil
+        appState.reloadWorkspaces()
+        let isTheDeletedFlow: (WorkspaceRef?) -> Bool = { ref in
+            ref?.workspaceID == workspace.workspaceID && ref?.flowFile == flow.url.lastPathComponent
+        }
+        if isTheDeletedFlow(appState.editingFlow?.workspace) { appState.editingFlow = nil }
+        if isTheDeletedFlow(appState.selectedFlow?.workspace) { appState.selectedFlow = nil }
+    }
+
+    /// KW-2-2 (Q3): renames the confirmed flow to `renameText`'s stem. A collision with a
+    /// *different* sibling refuses (`WorkspaceStoreError.flowNameTaken`) rather than
+    /// overwriting it — the same rule `KW-1-FIX-2` gives the editor's own Save.
+    private func renameFlow() {
+        guard let flow = flowPendingRename else { return }
+        flowPendingRename = nil
+        let stem = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !stem.isEmpty else { return }
+        do {
+            _ = try WorkspaceStore.renameFlow(file: flow.url,
+                                              toStem: FlowEditorModel.sanitizedFileName(stem),
+                                              in: workspace.url)
+            appState.reloadWorkspaces()
+        } catch {
+            renameError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+        }
     }
 }

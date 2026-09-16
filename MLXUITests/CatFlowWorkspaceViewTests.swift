@@ -127,6 +127,46 @@ struct CatFlowWorkspaceViewTests {
         #expect(resolved["NewStep"] != nil)
     }
 
+    // MARK: - KW-2-2: deleting a flow resolves a Knowledge Base ambiguity
+
+    /// Two builders on the same index name make the card's builder side ambiguous
+    /// (`buildFile == nil`). Deleting one — `WorkspaceStore.removeFlow`, then a fresh
+    /// `classifyWorkspace` over the rescanned flows — should turn it back into a single,
+    /// actionable builder. `WorkspaceListView` gets this for free at the SwiftUI layer because
+    /// `workspace` is a live lookup (`KW-2-1-FIX`); this proves the plumbing underneath it.
+    @Test func deletingOneOfTwoBuildersResolvesTheAmbiguity() throws {
+        let buildA = "mlxflow 0.8\n1. Read Files   docs/\n6. Store Index   library.index\n"
+        let buildB = "mlxflow 0.8\n1. Read Files   more/\n6. Store Index   library.index\n"
+        let askText = "mlxflow 0.8\n1. Read Index   library.index\n2. Embed   BGE-M3\n"
+        let (base, ws) = try makeWorkspace(id: "kb", files: [
+            ("BuildA.cat", buildA), ("BuildB.cat", buildB), ("Ask.cat", askText),
+        ])
+        defer { try? FileManager.default.removeItem(at: base) }
+        let dir = ws.directory(for: "kb")
+
+        func cards() throws -> [WorkspaceKnowledge.IndexCard] {
+            let flows = WorkspaceStore.scan(workspace: ws).first!.flows
+            let parsed = flows.compactMap { flow -> (file: String, doc: FlowDocument, url: URL)? in
+                guard let doc = try? WorkspaceStore.loadDocument(flow: flow) else { return nil }
+                return (flow.url.lastPathComponent, doc, flow.url)
+            }
+            return WorkspaceKnowledge.classifyWorkspace(
+                flows: parsed,
+                resolveUses: { doc, selfFile in
+                    UsesResolver.resolve(doc, workspace: ws, flowID: "kb", selfFile: selfFile)
+                },
+                resolvePath: { rawPath in try? ws.resolve(rawPath, flowID: "kb") })
+        }
+
+        let before = try #require(try cards().first { $0.indexName == "library.index" })
+        #expect(before.buildFile == nil)          // ambiguous: two builders
+
+        try WorkspaceStore.removeFlow(file: dir.appendingPathComponent("BuildB.cat"), from: dir)
+
+        let after = try #require(try cards().first { $0.indexName == "library.index" })
+        #expect(after.buildFile == "BuildA.cat")   // resolved: one builder, Build button back
+    }
+
     // MARK: - The bundled uses_example is on the shelf
 
     @Test func bundledUsesExampleIsListedByWorkspaceStoreAfterPrepare() throws {
