@@ -47,6 +47,13 @@ final class FlowEditorModel {
     var selectedRowID: UUID?
     /// The URL the flow was last saved to, nil until the first save.
     private(set) var savedURL: URL?
+    /// Whether this flow's folder may hold sibling flow files that this editor did not open —
+    /// true for a flow opened from a shared `workspaces/<id>/` folder, where `save()`'s
+    /// stale-sibling guard must leave untouched flows alone (KW-1-1). Defaults to comparing the
+    /// injected `workspace.root` against the live app's workspaces directory, matching every
+    /// production call site; tests that stand in for a workspace with a temp root can set it
+    /// directly, since a temp path never equals that singleton.
+    var isSharedWorkspaceFolder: Bool
     /// The text last written to disk — the dirty check compares the current document to it.
     private(set) var savedText: String?
     var saveError: String?
@@ -76,13 +83,15 @@ final class FlowEditorModel {
 
     init(name: String, flowID: String = UUID().uuidString, document: FlowDocument? = nil,
          workspace: FlowWorkspace = .shared, sampleSourceDir: URL? = Bundle.main.resourceURL,
-         savedText: String? = nil) {
+         savedText: String? = nil, isSharedWorkspaceFolder: Bool? = nil) {
         self.name = name
         self.flowID = flowID
         self.workspace = workspace
         self.document = document ?? FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [])
         self.sampleSourceDir = sampleSourceDir
         self.savedText = savedText
+        self.isSharedWorkspaceFolder = isSharedWorkspaceFolder
+            ?? (workspace.root == ModelStore.shared.workspacesDirectory)
         // Opening an existing flow selects its first row so the inspector pane is up and
         // showing the Properties tab (CFM — a click on a My Workflows flow opens Edit).
         if let first = self.document.rows.first {
@@ -913,7 +922,6 @@ final class FlowEditorModel {
         // reuses the existing directory entry on a case-insensitive volume, so the old casing
         // sticks unless the file is removed first. Comparisons are by name — `contentsOf
         // Directory` can hand back `/private/var/…` where `url` is `/var/…`.
-        let isSharedWorkspaceFolder = workspace.root == ModelStore.shared.workspacesDirectory
         let siblings = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
         for f in siblings where f.pathExtension == "cat" || f.pathExtension == "catpipeline" {
             let name = f.lastPathComponent
