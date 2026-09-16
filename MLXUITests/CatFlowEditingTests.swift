@@ -889,6 +889,138 @@ struct CatFlowEditingTests {
         #expect(model.savedURL?.deletingLastPathComponent() == dir)
     }
 
+    // MARK: - KW-3-1: copyIntoWorkspace
+
+    private let ingestCat = """
+    mlxflow 0.8
+    1. Read Files   docs/
+    6. Store Index   library.index
+    """
+
+    @Test func copyIntoWorkspaceWritesIntoTheExistingWorkspaceDirectory() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-copyin-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ws = FlowWorkspace(root: root.appendingPathComponent("workspaces"))
+        // The workspace already exists, with one flow in it.
+        let dir = ws.directory(for: "kb")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try "mlxflow 0.8\n1. Read Index   library.index\n2. Embed   BGE-M3\n"
+            .write(to: dir.appendingPathComponent("Ask.cat"), atomically: true, encoding: .utf8)
+
+        let doc = try CatParser.parse(ingestCat)
+        let target = try FlowEditRoute.copyIntoWorkspace(
+            flowID: "16-IngestFolder", title: "Ingest a Folder", document: doc,
+            workspaceID: "kb", workspace: ws, sourceDir: root)
+
+        // Lands beside the existing flow, not in a fresh folder.
+        #expect(target.flowID == "kb")
+        #expect(target.workspace?.workspaceID == "kb")
+        #expect(target.workspace?.flowFile == "Ingest a Folder.cat")
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("Ingest a Folder.cat").path))
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("Ask.cat").path))   // untouched
+        #expect(WorkspaceStore.scan(workspace: ws).first?.flows.count == 2)
+    }
+
+    @Test func copyIntoWorkspaceNeverOverwritesACollidingSibling() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-copyin-collide-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ws = FlowWorkspace(root: root.appendingPathComponent("workspaces"))
+        let dir = ws.directory(for: "kb")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let existingText = "mlxflow 0.8\n1. Read Text   already-here.txt\n"
+        try existingText.write(to: dir.appendingPathComponent("Ingest a Folder.cat"),
+                               atomically: true, encoding: .utf8)
+
+        let doc = try CatParser.parse(ingestCat)
+        let target = try FlowEditRoute.copyIntoWorkspace(
+            flowID: "16-IngestFolder", title: "Ingest a Folder", document: doc,
+            workspaceID: "kb", workspace: ws, sourceDir: root)
+
+        #expect(target.workspace?.flowFile == "Ingest a Folder-2.cat")
+        #expect(try String(contentsOf: dir.appendingPathComponent("Ingest a Folder.cat"), encoding: .utf8) == existingText)
+    }
+
+    @Test func copyIntoWorkspaceOnlyCopiesAssetsMissingFromTheSharedFolder() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-copyin-assets-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ws = FlowWorkspace(root: root.appendingPathComponent("workspaces"))
+        let dir = ws.directory(for: "kb")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        // A sibling flow already owns "memo.m4a" with its own content -- copying in a flow
+        // that also wants "memo.m4a" must not clobber it.
+        let siblingsOwnAudio = "already a sibling's file"
+        try siblingsOwnAudio.write(to: dir.appendingPathComponent("memo.m4a"), atomically: true, encoding: .utf8)
+        let sourceDir = root.appendingPathComponent("bundle")
+        try FileManager.default.createDirectory(at: sourceDir, withIntermediateDirectories: true)
+        try "bundled audio bytes".write(to: sourceDir.appendingPathComponent("memo.m4a"), atomically: true, encoding: .utf8)
+
+        let doc = try CatParser.parse("mlxflow 0.8\n1. Read Audio   memo.m4a\n")
+        _ = try FlowEditRoute.copyIntoWorkspace(
+            flowID: "01-SpokenSummary", title: "Spoken Summary", document: doc,
+            workspaceID: "kb", workspace: ws, sourceDir: sourceDir)
+
+        #expect(try String(contentsOf: dir.appendingPathComponent("memo.m4a"), encoding: .utf8) == siblingsOwnAudio)
+    }
+
+    @Test func copyIntoWorkspaceRefusesACatpipelineDocument() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-copyin-pipe-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ws = FlowWorkspace(root: root.appendingPathComponent("workspaces"))
+        let doc = FlowDocument(version: "0.8", fileKind: .catpipeline, rows: [
+            Row(id: UUID(), task: "Generate Image", model: "Z-Image Turbo", settings: "a tree"),
+        ])
+        #expect(throws: WorkspaceStoreError.catpipelineNotSupportedInWorkspace("Pick a Look")) {
+            _ = try FlowEditRoute.copyIntoWorkspace(
+                flowID: "69-PickALook", title: "Pick a Look", document: doc,
+                workspaceID: "kb", workspace: ws, sourceDir: root)
+        }
+        #expect(!FileManager.default.fileExists(atPath: ws.directory(for: "kb").path))
+    }
+
+    /// The literal done-when: gallery 16 and 18, copied into one workspace, produce a working
+    /// Knowledge Base card.
+    @Test func copyingGallery16And18IntoOneWorkspaceProducesAWorkingKnowledgeBaseCard() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-copyin-e2e-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ws = FlowWorkspace(root: root.appendingPathComponent("workspaces"))
+        let sourceDir = GalleryLoader.resourcesDirectory ?? Bundle.main.resourceURL!
+
+        let ingestDoc = try GalleryLoader.loadDocument(flowID: "16-IngestFolder")
+        let docChatDoc = try GalleryLoader.loadDocument(flowID: "18-DocChat")
+        _ = try FlowEditRoute.copyIntoWorkspace(flowID: "16-IngestFolder", title: "Ingest a Folder",
+                                                document: ingestDoc, workspaceID: "kb",
+                                                workspace: ws, sourceDir: sourceDir)
+        _ = try FlowEditRoute.copyIntoWorkspace(flowID: "18-DocChat", title: "Chat With Your Docs",
+                                                document: docChatDoc, workspaceID: "kb",
+                                                workspace: ws, sourceDir: sourceDir)
+
+        let w = try #require(WorkspaceStore.scan(workspace: ws).first)
+        #expect(w.flows.count == 2)
+        let parsed = w.flows.compactMap { flow -> (file: String, doc: FlowDocument, url: URL)? in
+            guard let doc = try? WorkspaceStore.loadDocument(flow: flow) else { return nil }
+            return (flow.url.lastPathComponent, doc, flow.url)
+        }
+        let cards = WorkspaceKnowledge.classifyWorkspace(
+            flows: parsed,
+            resolveUses: { doc, selfFile in
+                UsesResolver.resolve(doc, workspace: ws, flowID: "kb", selfFile: selfFile)
+            },
+            resolvePath: { rawPath in try? ws.resolve(rawPath, flowID: "kb") })
+        #expect(!cards.isEmpty)
+        #expect(cards.contains { $0.buildFile != nil })
+        #expect(cards.contains { $0.askFile != nil })
+    }
+
     @Test func editOpenedCopyWritesTheFileIntoTheFlowFolder() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("catflow-edit-opened-\(UUID().uuidString)")

@@ -371,6 +371,9 @@ nonisolated enum WorkspaceStoreError: Error, CustomStringConvertible, Equatable 
     /// KW-2-FIX-3: a rename's stem is empty, escapes the directory, or would write a
     /// leading-dot (hidden) file — `scan`'s `.skipsHiddenFiles` would drop it from the shelf.
     case invalidFlowName(String)
+    /// KW-3-1: a `.catpipeline` flow was asked to copy into a workspace — still an open R17
+    /// decision (`.catpipeline` inside a workspace), deliberately out of scope for this phase.
+    case catpipelineNotSupportedInWorkspace(String)
 
     var description: String {
         switch self {
@@ -390,6 +393,8 @@ nonisolated enum WorkspaceStoreError: Error, CustomStringConvertible, Equatable 
             return name.isEmpty
                 ? "A flow needs a name."
                 : "'\(name)' isn't a valid flow name — it can't start with a dot or contain '/'."
+        case .catpipelineNotSupportedInWorkspace(let title):
+            return "'\(title)' is a .catpipeline flow — copying one into a workspace isn't supported yet."
         }
     }
 }

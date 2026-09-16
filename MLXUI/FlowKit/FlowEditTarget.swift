@@ -64,4 +64,34 @@ nonisolated enum FlowEditRoute {
         try text.write(to: dir.appendingPathComponent(filename), atomically: true, encoding: .utf8)
         return FlowEditTarget(flowID: newID, name: displayName, document: document, savedText: text)
     }
+
+    /// KW-3-1 (Q1 — "Copy flow here" on the workspace page): copy a bundled gallery flow's
+    /// `.cat` and input assets into an **existing** `workspaces/<workspaceID>/` directory,
+    /// rather than minting a fresh single-flow folder under `flows/`. `duplicateAndEdit`
+    /// cannot be reused for this — its `newID` is generated inside, so passing a different
+    /// `workspace:` there produces a brand-new pseudo-workspace *inside* `workspaces/`, not a
+    /// file inside the workspace the user meant.
+    ///
+    /// The collision rule matches `KW-2-1`'s: `WorkspaceStore.firstFreeFlowName` picks the
+    /// first free name rather than overwriting a sibling. `workspace.prepare` is already
+    /// idempotent about a destination that exists, so a shared folder's assets another flow
+    /// already owns are never overwritten — only what's missing is copied.
+    static func copyIntoWorkspace(flowID: String, title: String, document: FlowDocument,
+                                  workspaceID: String, workspace: FlowWorkspace,
+                                  sourceDir: URL) throws -> FlowEditTarget {
+        guard document.fileKind != .catpipeline else {
+            throw WorkspaceStoreError.catpipelineNotSupportedInWorkspace(title)
+        }
+        let dir = workspace.directory(for: workspaceID)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try workspace.prepare(flowID: workspaceID, sourceDir: sourceDir,
+                              bundledAssets: GalleryLoader.bundledAssets(flowID: flowID))
+        let filename = WorkspaceStore.firstFreeFlowName(
+            stem: FlowEditorModel.sanitizedFileName(title), in: dir)
+        let text = CatSerializer.serialize(document)
+        try text.write(to: dir.appendingPathComponent(filename), atomically: true, encoding: .utf8)
+        let ref = WorkspaceRef(workspaceID: workspaceID, flowFile: filename)
+        return FlowEditTarget(flowID: workspaceID, name: ref.flowStem, document: document,
+                              savedText: text, workspace: ref)
+    }
 }

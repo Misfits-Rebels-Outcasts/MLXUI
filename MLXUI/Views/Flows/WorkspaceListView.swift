@@ -28,6 +28,8 @@ struct WorkspaceListView: View {
     }
 
     @State private var pendingRemoval = false
+    /// KW-3-1: shows the "Copy flow here" gallery picker sheet.
+    @State private var showCopyPicker = false
     /// KW-2-2: the flow a trash click is confirming — non-nil shows the confirmation dialog.
     @State private var flowPendingRemoval: WorkspaceStore.FlowFile?
     /// KW-2-2: the flow a `Rename…` click is prompting for a new name — non-nil shows the
@@ -144,6 +146,10 @@ struct WorkspaceListView: View {
         } message: {
             Text(flowActionError ?? "")
         }
+        // KW-3-1: the "Copy flow here" picker.
+        .sheet(isPresented: $showCopyPicker) {
+            GalleryFlowPickerView(onPick: copyFlowHere)
+        }
     }
 
     private var header: some View {
@@ -154,6 +160,11 @@ struct WorkspaceListView: View {
                 Spacer()
                 Button { addFlow() } label: {
                     Label("New Flow", systemImage: "doc.badge.plus")
+                }
+                // KW-3-1 (Q1 — "a button on the workspace page"): copy an existing gallery
+                // flow in, rather than a destination picker on every gallery row.
+                Button { showCopyPicker = true } label: {
+                    Label("Copy Flow Here", systemImage: "doc.on.doc")
                 }
                 Button {
                     FlowWorkspace(root: ModelStore.shared.workspacesDirectory)
@@ -316,6 +327,25 @@ struct WorkspaceListView: View {
                                                   document: doc, savedText: starter, workspace: ref)
         } catch {
             appState.workspaceImportError = "Couldn't create a new flow in this workspace."
+        }
+    }
+
+    /// KW-3-1 (Q1): copy a bundled gallery flow into this workspace and open the copy in the
+    /// editor, scoped to it. `FlowEditRoute.copyIntoWorkspace` writes into the *existing*
+    /// workspace directory (not a fresh `flows/<uuid>/` folder), names collision-free, and
+    /// copies only the bundled assets this workspace doesn't already have.
+    private func copyFlowHere(_ entry: GalleryFlowMetadata) {
+        do {
+            let doc = try GalleryLoader.loadDocument(flowID: entry.flowID)
+            let target = try FlowEditRoute.copyIntoWorkspace(
+                flowID: entry.flowID, title: entry.title, document: doc,
+                workspaceID: workspace.workspaceID, workspace: workspaceFileSystem,
+                sourceDir: GalleryLoader.resourcesDirectory ?? Bundle.main.resourceURL ?? URL(fileURLWithPath: "/"))
+            appState.reloadWorkspaces()
+            appState.editingFlow = target
+        } catch {
+            flowActionError = (error as? CustomStringConvertible)?.description
+                ?? "Couldn't copy '\(entry.title)' into this workspace."
         }
     }
 
