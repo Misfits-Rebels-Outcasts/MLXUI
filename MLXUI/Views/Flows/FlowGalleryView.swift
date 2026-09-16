@@ -255,6 +255,16 @@ struct FlowGalleryView: View {
             try NewWorkspaceStarter.querierText.write(
                 to: dir.appendingPathComponent(NewWorkspaceStarter.querierFilename),
                 atomically: true, encoding: .utf8)
+            // KW-4-FIX-1: the two .cat files alone are not enough — row 1 of each names a
+            // file that must already exist, or Build (the one button the card invites) fails
+            // immediately. Write the sample inputs beside the flows, same as CFM-R17-FIX-6
+            // does for the bundled `uses_example` workspace.
+            try NewWorkspaceStarter.notesText.write(
+                to: dir.appendingPathComponent(NewWorkspaceStarter.notesFilename),
+                atomically: true, encoding: .utf8)
+            try NewWorkspaceStarter.questionText.write(
+                to: dir.appendingPathComponent(NewWorkspaceStarter.questionFilename),
+                atomically: true, encoding: .utf8)
         } catch {
             appState.workspaceImportError = "Couldn't create the workspace folder."
             return

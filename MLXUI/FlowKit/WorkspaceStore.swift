@@ -399,7 +399,7 @@ nonisolated enum WorkspaceStoreError: Error, CustomStringConvertible, Equatable 
     }
 }
 
-/// KW-4-1 (Q4, owner ruling 2026-09-16 — "a working pair of flows"): the two-file starter
+/// KW-4-1 (Q4, owner ruling 2026-09-16 — "a working pair of flows"): the starter
 /// `createWorkspace` (`FlowGalleryView.swift:245`) writes for every New Workspace — a minimal
 /// builder and a minimal querier on one index name, so `newWorkspaceBadge`'s own promise ("a
 /// builder and a querier, an index they both use") is true from the first second, and the
@@ -407,11 +407,36 @@ nonisolated enum WorkspaceStoreError: Error, CustomStringConvertible, Equatable 
 /// single `Read Text` → `Save Text` flow, which touched no index at all. A separate,
 /// standalone type (not nested in `WorkspaceStore`) so `CatFlowEditingTests` can validate the
 /// literal content `createWorkspace` writes without constructing a view.
+///
+/// KW-4-FIX-1: the two `.cat` files alone weren't enough — the builder's row 1 (`Read Text
+/// notes.txt`) and the querier's `Read Text question.txt` both name files `createWorkspace`
+/// never created, so the one button the Knowledge Base card invites (Build) failed on row 1.
+/// This repo had already solved the identical failure once, for `uses_example`
+/// (`BundledWorkspaces.swift`'s header, `CFM-R17-FIX-6`): a shelf user fails on row 1 unless
+/// the app supplies what the Python reference otherwise left for a test harness to install.
+/// `notesText`/`questionText` are that supply, kept as literals beside the flow texts so the
+/// whole starter — what runs and what it reads — stays one reviewable unit. `library.index`
+/// (the `Read Index` row's target) is deliberately **not** created here: it's `Store Index`'s
+/// job when Build runs, exactly as the bundled `ask_your_docs` ships no prebuilt index either.
+///
+/// KW-4-FIX-2 (implementer's call, pending owner confirmation — option 1 of the two the item
+/// offered): the querier never had an `Answer` row — it retrieves passages and saves them,
+/// no LLM involved, keeping the starter to one small embedding model rather than requiring a
+/// chat-model download on a brand-new workspace's first Ask. That's a defensible choice, but
+/// "Ask a Question.cat" writing "answer.md" oversold it — a first-time user got a file of raw
+/// passages where the names promised a reply. Renamed to `Find Passages.cat` / `matches.md` so
+/// the name matches what runs; the Knowledge Base card's own "Ask" button label is the card's
+/// word for the querier side and is untouched by this rename.
 nonisolated enum NewWorkspaceStarter {
     static let builderFilename = "Build Index.cat"
     static let builderText =
         "mlxflow 0.8\n1. Read Text   notes.txt\n2. Embed   BGE-M3\n3. Store Index   (1,2)   library.index\n"
-    static let querierFilename = "Ask a Question.cat"
+    static let querierFilename = "Find Passages.cat"
     static let querierText =
-        "mlxflow 0.8\n1. Read Index   library.index\n2. Read Text   question.txt\n3. Embed   BGE-M3\n4. Retrieve   (1,3)   top_k=3\n5. Save Text   answer.md\n"
+        "mlxflow 0.8\n1. Read Index   library.index\n2. Read Text   question.txt\n3. Embed   BGE-M3\n4. Retrieve   (1,3)   top_k=3\n5. Save Text   matches.md\n"
+    static let notesFilename = "notes.txt"
+    static let notesText =
+        "A workspace is a folder that holds two kinds of flow sharing one search index: a builder that reads files and stores what it finds, and a querier that searches the index a question at a time. Build Index reads this file and stores it; Find Passages searches it."
+    static let questionFilename = "question.txt"
+    static let questionText = "What does a workspace share between its flows?"
 }

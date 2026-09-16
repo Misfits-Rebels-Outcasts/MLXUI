@@ -105,12 +105,47 @@ struct CatFlowWorkspaceViewTests {
         #expect(FlowRunner.canRun(builderDoc) == .runnable)
         #expect(FlowRunner.canRun(querierDoc) == .runnable)
 
+        // KW-4-FIX-1: everything createWorkspace actually writes -- the two .cat files *and*
+        // the two sample inputs their row-1s name. Without notes.txt/question.txt the pair is
+        // well-formed and canRun == .runnable, but Build still fails on row 1: canRun is a
+        // static gate (task exists, model served, uses: resolves) that never touches disk.
         let (base, ws) = try makeWorkspace(id: "starter", files: [
             (NewWorkspaceStarter.builderFilename, NewWorkspaceStarter.builderText),
             (NewWorkspaceStarter.querierFilename, NewWorkspaceStarter.querierText),
+            (NewWorkspaceStarter.notesFilename, NewWorkspaceStarter.notesText),
+            (NewWorkspaceStarter.questionFilename, NewWorkspaceStarter.questionText),
         ])
         defer { try? FileManager.default.removeItem(at: base) }
         let dir = ws.directory(for: "starter")
+
+        // Resolve each Read Text row's path the way ReadPath.resolve actually does (settings'
+        // bare token, through the workspace's own security boundary) and require the file be
+        // there already -- not a hardcoded filename list, which would pass even if
+        // createWorkspace wrote the sample under a name no row actually reads.
+        for (doc, docFilename) in [(builderDoc, NewWorkspaceStarter.builderFilename),
+                                   (querierDoc, NewWorkspaceStarter.querierFilename)] {
+            for row in doc.rows where row.task == "Read Text" {
+                let raw = try #require(FlowSettings(row.settings).pathValue(),
+                                       "\(docFilename)'s Read Text row has no path")
+                let url = try ws.resolve(raw, flowID: "starter")
+                #expect(FileManager.default.fileExists(atPath: url.path),
+                       "\(docFilename)'s Read Text row names '\(raw)', which createWorkspace never wrote")
+            }
+        }
+
+        // Store Index and Read Index must resolve to the *same* file (proving the builder and
+        // querier genuinely share one index, not just a coincidentally-matching raw string) --
+        // and that file must NOT exist yet: building it is Store Index's job when the user
+        // presses Build, exactly as the bundled ask_your_docs workspace ships no prebuilt
+        // library.index either.
+        let storeIndexRow = try #require(builderDoc.rows.first { $0.task == "Store Index" })
+        let readIndexRow = try #require(querierDoc.rows.first { $0.task == "Read Index" })
+        let storeIndexRaw = try #require(FlowSettings(storeIndexRow.settings).pathValue())
+        let readIndexRaw = try #require(FlowSettings(readIndexRow.settings).pathValue())
+        let storeIndexURL = try ws.resolve(storeIndexRaw, flowID: "starter")
+        let readIndexURL = try ws.resolve(readIndexRaw, flowID: "starter")
+        #expect(storeIndexURL == readIndexURL)
+        #expect(!FileManager.default.fileExists(atPath: storeIndexURL.path))
 
         let parsed = [
             (file: NewWorkspaceStarter.builderFilename, doc: builderDoc,
