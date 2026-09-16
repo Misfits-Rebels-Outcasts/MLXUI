@@ -13,24 +13,21 @@ nonisolated struct ReadAudioTool: AssetStage {
     let workspace: FlowWorkspace
     let flowID: String
     let settings: String
+    /// FIP-3: see `ReadImageTool.path` (`ReadTools.swift`).
+    var path: String = "1"
 
     var accepts: Shape { .single(.file) }
     var produces: Shape { .single(.audio) }
 
     func run(_ input: Asset, progress: @Sendable @escaping (Double) -> Void) async throws -> Asset {
-        let path = try requirePath(row: "Read Audio")
-        let url = try workspace.resolve(path, flowID: flowID)
+        // FIP-3: Read Audio never checked an upstream `.file` item before this — verified
+        // against the prior code, not assumed; `checksUpstream: false` keeps that unchanged.
+        let url = try ReadPath.resolve(workspace: workspace, flowID: flowID, path: path, settings: settings,
+                                       inputs: [input], kind: .file, row: "Read Audio", checksUpstream: false)
         progress(0.3)
         let buffer = try AudioFileReader.read(url)
         progress(1.0)
         return Asset(items: [Item(kind: .audio, value: nil, path: url, sourceText: nil)])
-    }
-
-    private func requirePath(row: String) throws -> String {
-        guard let path = FlowSettings(settings).pathValue() else {
-            throw FlowError.missingInlineValue(row: row, kind: .file)
-        }
-        return path
     }
 }
 
@@ -114,22 +111,26 @@ nonisolated struct ReadTextTool: AssetStage {
     let workspace: FlowWorkspace
     let flowID: String
     let settings: String
+    /// FIP-3: see `ReadImageTool.path` (`ReadTools.swift`).
+    var path: String = "1"
 
     var accepts: Shape { .single(.file) }
     var produces: Shape { .single(.text) }
 
     func run(_ input: Asset, progress: @Sendable @escaping (Double) -> Void) async throws -> Asset {
-        guard let path = FlowSettings(settings).pathValue() else {
-            throw FlowError.missingInlineValue(row: "Read Text", kind: .file)
-        }
-        let url = try workspace.resolve(path, flowID: flowID)
+        // FIP-3: Read Text never checked an upstream `.file` item before this — verified
+        // against the prior code, not assumed.
+        let url = try ReadPath.resolve(workspace: workspace, flowID: flowID, path: path, settings: settings,
+                                       inputs: [input], kind: .file, row: "Read Text", checksUpstream: false)
         progress(0.3)
         do {
             let text = try String(contentsOf: url, encoding: .utf8)
             progress(1.0)
             return Asset(items: [Item(kind: .text, value: text, path: nil, sourceText: nil)])
         } catch {
-            throw FlowError.fileReadFailed(row: "Read Text", path: path)
+            // resolve() already refused a missing file; a present-but-undecodable one is its
+            // own, unrelated failure.
+            throw FlowError.fileReadFailed(row: "Read Text", path: FlowSettings(settings).pathValue() ?? url.path)
         }
     }
 }

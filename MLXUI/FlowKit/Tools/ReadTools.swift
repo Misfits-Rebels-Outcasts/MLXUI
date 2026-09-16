@@ -52,16 +52,45 @@ nonisolated enum SampleSeed {
 /// Shared path resolution for the `Read *` tools — mirrors `tools/files.py::_resolve_path`:
 /// an upstream item of the matching kind wins, else the settings' `path=`/first bare token,
 /// resolved through the flow's working directory (the CFM-R1-4 security boundary).
-private enum ReadPath {
-    static func resolve(workspace: FlowWorkspace, flowID: String, settings: String,
-                        inputs: [Asset], kind: Kind, row: String) throws -> URL {
-        if let item = inputs.first?.items.first, item.kind == kind, let path = item.path {
-            return path
+///
+/// FIP-3: also the one place a missing input is reported, so all eleven `Read *` tasks report
+/// identically instead of each tool inventing its own sentence — `ErrorCatalog`'s R903 ("file
+/// unreadable"), a code both runtimes' docs already carry
+/// (`MLXWorkflow_Errors_v0_9.md:597-599`) but neither runtime had ever actually raised: the
+/// Python reference's own `_require_exists` (`tools/files.py`) raises a bare `FileNotFoundError`
+/// with no `ErrorSpec` formatting, and this Swift port's tools each threw their own
+/// `FlowError.fileReadFailed`/`missingInlineValue` sentence, or (`Read Audio`/`Read Video`/
+/// `Read CSV`/`Read JSON`) let the underlying reader's raw error escape uncaught.
+/// `checksUpstream: false` is `Read Audio`/`Read Text`/`Read Video`/`Read Index` — verified
+/// against each tool's own prior code, not assumed (see `FlowInputFile`'s identical
+/// classification, arrived at independently for the preflight advisory).
+enum ReadPath {
+    static func resolve(workspace: FlowWorkspace, flowID: String, path: String, settings: String,
+                        inputs: [Asset], kind: Kind, row: String,
+                        checksUpstream: Bool = true) throws -> URL {
+        if checksUpstream, let item = inputs.first?.items.first, item.kind == kind, let itemPath = item.path {
+            return itemPath
         }
         guard let raw = FlowSettings(settings).pathValue() else {
             throw FlowError.missingInlineValue(row: row, kind: kind)
         }
-        return try workspace.resolve(raw, flowID: flowID)
+        let url = try workspace.resolve(raw, flowID: flowID)
+        try requireExists(url, raw: raw, path: path, row: row)
+        return url
+    }
+
+    /// Throws `FlowError.missingInput` (the fully rendered R903 sentence) when `url` doesn't
+    /// exist. Exposed separately from `resolve` so `Read Index` can check `manifest.json`
+    /// inside the resolved directory — the file that's actually missing when an index hasn't
+    /// been built yet — using the same house-voice sentence.
+    static func requireExists(_ url: URL, raw: String, path: String, row: String) throws {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            let message = (try? ErrorCatalog.fill(code: "R903", values: [
+                "n": path, "path": raw, "reason": "no such file",
+                "n-1": String(max((Int(path) ?? 1) - 1, 0)),
+            ], isV08: true)) ?? "\(row) couldn't read '\(raw)' — make sure it's in the flow's folder."
+            throw FlowError.missingInput(row: path, message: message)
+        }
     }
 }
 
@@ -71,16 +100,16 @@ nonisolated struct ReadImageTool: AssetStage {
     let workspace: FlowWorkspace
     let flowID: String
     let settings: String
+    /// FIP-3: the row's display path ("3", "2.1"), for `ErrorCatalog`'s R903 `{n}` — defaulted
+    /// so every existing construction site (tests included) is unaffected.
+    var path: String = "1"
 
     var accepts: Shape { .single(.file) }
     var produces: Shape { .single(.image) }
 
     func run(_ input: Asset, progress: @Sendable @escaping (Double) -> Void) async throws -> Asset {
-        let url = try ReadPath.resolve(workspace: workspace, flowID: flowID, settings: settings,
+        let url = try ReadPath.resolve(workspace: workspace, flowID: flowID, path: path, settings: settings,
                                        inputs: [input], kind: .file, row: "Read Image")
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            throw FlowError.fileReadFailed(row: "Read Image", path: url.path)
-        }
         progress(1.0)
         return Asset(items: [Item(kind: .image, value: nil, path: url, sourceText: nil)])
     }
@@ -114,12 +143,17 @@ nonisolated struct ReadImagesTool: AssetStage {
     let workspace: FlowWorkspace
     let flowID: String
     let settings: String
+    /// FIP-3: see `ReadImageTool.path`.
+    var path: String = "1"
 
     var accepts: Shape { .single(.folder) }
     var produces: Shape { .listOf(.image) }
 
     func run(_ input: Asset, progress: @Sendable @escaping (Double) -> Void) async throws -> Asset {
-        let folder = try ReadPath.resolve(workspace: workspace, flowID: flowID, settings: settings,
+        // FIP-3: resolve() already refuses a folder that doesn't exist at all (the missing
+        // -input case, house voice); the guard below is the narrower "exists but isn't a
+        // directory" case, unrelated to a missing input and left as its own sentence.
+        let folder = try ReadPath.resolve(workspace: workspace, flowID: flowID, path: path, settings: settings,
                                           inputs: [input], kind: .folder, row: "Read Images")
         let fm = FileManager.default
         let isDir = (try? folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
@@ -157,12 +191,16 @@ nonisolated struct ReadFilesTool: AssetStage {
     let workspace: FlowWorkspace
     let flowID: String
     let settings: String
+    /// FIP-3: see `ReadImageTool.path`.
+    var path: String = "1"
 
     var accepts: Shape { .single(.folder) }
     var produces: Shape { .listOf(.file) }
 
     func run(_ input: Asset, progress: @Sendable @escaping (Double) -> Void) async throws -> Asset {
-        let folder = try ReadPath.resolve(workspace: workspace, flowID: flowID, settings: settings,
+        // FIP-3: resolve() already refuses a folder that doesn't exist at all; this guard is
+        // the narrower "exists but isn't a directory" case.
+        let folder = try ReadPath.resolve(workspace: workspace, flowID: flowID, path: path, settings: settings,
                                           inputs: [input], kind: .folder, row: "Read Files")
         let fm = FileManager.default
         let isDir = (try? folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
@@ -208,16 +246,17 @@ nonisolated struct ReadPDFTool: AssetStage {
     let workspace: FlowWorkspace
     let flowID: String
     let settings: String
+    /// FIP-3: see `ReadImageTool.path`.
+    var path: String = "1"
 
     var accepts: Shape { .single(.file) }
     var produces: Shape { .single(.text) }
 
     func run(_ input: Asset, progress: @Sendable @escaping (Double) -> Void) async throws -> Asset {
-        let url = try ReadPath.resolve(workspace: workspace, flowID: flowID, settings: settings,
+        let url = try ReadPath.resolve(workspace: workspace, flowID: flowID, path: path, settings: settings,
                                        inputs: [input], kind: .file, row: "Read PDF")
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            throw FlowError.fileReadFailed(row: "Read PDF", path: url.path)
-        }
+        // FIP-3: resolve() already refused a missing file; a present-but-unparseable PDF is
+        // its own, unrelated failure.
         guard let document = PDFDocument(url: url) else {
             throw FlowError.fileReadFailed(row: "Read PDF", path: url.path)
         }

@@ -214,25 +214,25 @@ nonisolated struct RealExecutor: FlowExecutor {
     private func runInstant(_ desc: TaskDescriptor, row: Row, inputs: [Asset], path: String) async throws -> Asset {
         switch desc.name {
         case "Read Audio":
-            return try await ReadAudioTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+            return try await ReadAudioTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "", path: path)
                 .run(inputs.first ?? Asset(items: [])) { _ in }
         case "Read Text":
-            return try await ReadTextTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+            return try await ReadTextTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "", path: path)
                 .run(inputs.first ?? Asset(items: [])) { _ in }
         case "Read Image":
-            return try await ReadImageTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+            return try await ReadImageTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "", path: path)
                 .run(inputs.first ?? Asset(items: [])) { _ in }
         case "Read Images":
-            return try await ReadImagesTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+            return try await ReadImagesTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "", path: path)
                 .run(inputs.first ?? Asset(items: [])) { _ in }
         case "Read Files":
-            return try await ReadFilesTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+            return try await ReadFilesTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "", path: path)
                 .run(inputs.first ?? Asset(items: [])) { _ in }
         case "Read PDF":
-            return try await ReadPDFTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+            return try await ReadPDFTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "", path: path)
                 .run(inputs.first ?? Asset(items: [])) { _ in }
         case "Read Index":
-            return try await ReadIndexTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+            return try await ReadIndexTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "", path: path)
                 .run(inputs.first ?? Asset(items: [])) { _ in }
         case "Store Index":
             return try await StoreIndexTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
@@ -283,9 +283,9 @@ nonisolated struct RealExecutor: FlowExecutor {
             return try await TemplateTool(settings: row.settings ?? "")
                 .run(bundle(inputs)) { _ in }
         case "Read CSV":
-            return try TableTool.readCSV(settings: row.settings, from: try resolveFile(row: row, inputs: inputs))
+            return try TableTool.readCSV(settings: row.settings, from: try resolveFile(row: row, path: path, inputs: inputs))
         case "Read Video":
-            return try await ReadVideoTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+            return try await ReadVideoTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "", path: path)
                 .run(inputs.first ?? Asset(items: [])) { _ in }
         case "Extract Frame":
             return try await ExtractFrameTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
@@ -309,9 +309,9 @@ nonisolated struct RealExecutor: FlowExecutor {
             return try await DetectPoseTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
                 .run(inputs.first ?? Asset(items: [])) { _ in }
         case "Read JSON":
-            return try TableTool.readJSON(settings: row.settings, from: try resolveFile(row: row, inputs: inputs))
+            return try TableTool.readJSON(settings: row.settings, from: try resolveFile(row: row, path: path, inputs: inputs))
         case "Read Context":
-            return try await ReadContextTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+            return try await ReadContextTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "", path: path)
                 .run(inputs.first ?? Asset(items: [])) { _ in }
         case "Save Context":
             return try await SaveContextTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
@@ -545,14 +545,17 @@ nonisolated struct RealExecutor: FlowExecutor {
     }
 
     /// Resolve a Read tool's source file: an upstream `.file` item, else the settings path.
-    private func resolveFile(row: Row, inputs: [Asset]) throws -> URL {
-        if let first = inputs.first?.items.first, first.kind == .file, let filePath = first.path {
-            return filePath
-        }
-        guard let raw = FlowSettings(row.settings).pathValue() else {
+    /// FIP-3: routed through the shared `ReadPath.resolve`, so `Read CSV`/`Read JSON` report a
+    /// missing file the same house-voice way as the other nine `Read *` tasks, instead of
+    /// letting `TableTool.readCSV`/`readJSON`'s raw `Data(contentsOf:)` failure escape uncaught.
+    private func resolveFile(row: Row, path: String, inputs: [Asset]) throws -> URL {
+        do {
+            return try ReadPath.resolve(workspace: workspace, flowID: flowID, path: path,
+                                        settings: row.settings ?? "", inputs: inputs,
+                                        kind: .file, row: row.task ?? "?")
+        } catch FlowError.missingInlineValue {
             throw FlowError.badInputCardinality(row: row.task ?? "?", expected: "a file path", got: 0)
         }
-        return try workspace.resolve(raw, flowID: flowID)
     }
 
     private func resolveModel(display: String?, path: String) throws -> ModelEntry {

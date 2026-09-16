@@ -155,6 +155,17 @@ struct CatFlowRunWiringTests {
                 .contains("SAM Base"))
     }
 
+    /// FIP-3: `.missingInput` carries the fully-rendered `ErrorCatalog` R903 sentence already
+    /// — `FlowErrorDisplay` must show it verbatim, with no further "Row N" prefixing (unlike
+    /// every other `FlowError` case, whose sentence `FlowErrorDisplay` builds itself).
+    @Test func missingInputShowsTheR903SentenceVerbatim() throws {
+        let message = try ErrorCatalog.fill(code: "R903", values: [
+            "n": "3", "path": "notes.txt", "reason": "no such file", "n-1": "2",
+        ], isV08: true)
+        #expect(message == "Row 3 couldn't read notes.txt: no such file. Fix or re-point the row; rows 1–2 are cached.")
+        #expect(FlowErrorDisplay.sentence(for: FlowError.missingInput(row: "3", message: message)) == message)
+    }
+
     @Test func stageErrorSentencesNameTheProblem() {
         #expect(FlowErrorDisplay.sentence(for: StageError.modelNotInstalled(id: "mlx-community--x"))
                 .contains("mlx-community--x"))

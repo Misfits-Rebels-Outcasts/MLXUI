@@ -419,6 +419,7 @@ nonisolated struct FlowRunner {
         case .invalidSettings(let row, _, _): return row
         case .missingRerankQuery(let row): return row
         case .emptyFolder(let row, _): return row
+        case .missingInput(let row, _): return row
         }
     }
 

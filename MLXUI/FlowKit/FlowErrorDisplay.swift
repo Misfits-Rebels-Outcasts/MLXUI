@@ -49,6 +49,8 @@ nonisolated enum FlowErrorDisplay {
             return "Row \(row) needs a query — e.g. Rerank BGE Reranker; query=\"...\"."
         case .emptyFolder(let row, let path):
             return "Row \(row) found nothing to read in '\(path)' — add files there, or point the row at a different folder."
+        case .missingInput(_, let message):
+            return message
         }
     }
 

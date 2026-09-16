@@ -59,10 +59,57 @@ struct CatFlowReadToolsTests {
         let (ws, base) = try makeWorkspace()
         defer { teardown(base) }
 
-        let tool = ReadImageTool(workspace: ws, flowID: "sample-flow", settings: "nope.png")
-        await #expect(throws: FlowError.self) {
+        let tool = ReadImageTool(workspace: ws, flowID: "sample-flow", settings: "nope.png", path: "4")
+        do {
             _ = try await tool.run(Asset(items: [])) { _ in }
+            Issue.record("expected a missing-input refusal")
+        } catch let error as FlowError {
+            // FIP-3: the shared, house-voice R903 sentence, naming the row and the file —
+            // not each tool's own ad-hoc wording.
+            guard case .missingInput(let row, let message) = error else {
+                Issue.record("unexpected error \(error)")
+                return
+            }
+            #expect(row == "4")
+            #expect(message.contains("Row 4"))
+            #expect(message.contains("nope.png"))
         }
+    }
+
+    // MARK: - FIP-3: ReadPath's shared missing-input error (R903)
+
+    @Test func readPathResolveThrowsMissingInputWithTheR903Sentence() throws {
+        let (ws, base) = try makeWorkspace()
+        defer { teardown(base) }
+        let dir = ws.directory(for: "sample-flow")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        do {
+            _ = try ReadPath.resolve(workspace: ws, flowID: "sample-flow", path: "3", settings: "notes.txt",
+                                     inputs: [], kind: .file, row: "Read Text", checksUpstream: false)
+            Issue.record("expected a missing-input refusal")
+        } catch let error as FlowError {
+            guard case .missingInput(let row, let message) = error else {
+                Issue.record("unexpected error \(error)")
+                return
+            }
+            #expect(row == "3")
+            #expect(message == "Row 3 couldn't read notes.txt: no such file. Fix or re-point the row; rows 1–2 are cached.")
+        }
+    }
+
+    /// The precedence rule this whole item exists to get right: an upstream `.file` item's
+    /// path is real by construction (it came from an actual `Read Files` enumeration), so
+    /// `resolve` must return it without any existence check of its own — never a false refusal
+    /// on a correct flow.
+    @Test func readPathResolveSkipsTheExistenceCheckWhenUpstreamSupplies() throws {
+        let (ws, base) = try makeWorkspace()
+        defer { teardown(base) }
+        let phantom = URL(fileURLWithPath: "/does/not/exist-in-this-test.png")
+        let upstream = Asset(items: [Item(kind: .file, value: nil, path: phantom, sourceText: nil)])
+        let url = try ReadPath.resolve(workspace: ws, flowID: "sample-flow", path: "2", settings: "unused.png",
+                                       inputs: [upstream], kind: .file, row: "Read Image")
+        #expect(url == phantom)
     }
 
     // MARK: - Read Images

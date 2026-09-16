@@ -250,6 +250,8 @@ nonisolated struct ReadIndexTool: AssetStage {
     let workspace: FlowWorkspace
     let flowID: String
     let settings: String
+    /// FIP-3: see `ReadImageTool.path` (`ReadTools.swift`).
+    var path: String = "1"
 
     var accepts: Shape { .single(.file) }
     var produces: Shape { .single(.index) }
@@ -259,9 +261,13 @@ nonisolated struct ReadIndexTool: AssetStage {
             throw FlowError.missingInlineValue(row: "Read Index", kind: .file)
         }
         let dir = try workspace.resolve(raw, flowID: flowID)
-        let manifestURL = dir.appendingPathComponent("manifest.json")
-        guard FileManager.default.fileExists(atPath: manifestURL.path),
-              let data = try? Data(contentsOf: manifestURL) else {
+        // FIP-3: an index is a directory carrying manifest.json — checking that file (rather
+        // than the directory itself) is what's actually missing when the index hasn't been
+        // built yet, or the directory doesn't exist at all (fileExists on a path inside a
+        // nonexistent directory is false either way). Same house-voice R903 sentence as every
+        // other Read * task.
+        try ReadPath.requireExists(dir.appendingPathComponent("manifest.json"), raw: raw, path: path, row: "Read Index")
+        guard let data = try? Data(contentsOf: dir.appendingPathComponent("manifest.json")) else {
             throw FlowError.fileReadFailed(row: "Read Index", path: raw)
         }
         _ = try IndexFormat.manifest(from: data)

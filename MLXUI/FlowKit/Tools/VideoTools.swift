@@ -48,18 +48,17 @@ nonisolated struct ReadVideoTool: AssetStage {
     let workspace: FlowWorkspace
     let flowID: String
     let settings: String
+    /// FIP-3: see `ReadImageTool.path` (`ReadTools.swift`).
+    var path: String = "1"
 
     var accepts: Shape { .single(.file) }
     var produces: Shape { .single(.video) }
 
     func run(_ input: Asset, progress: @Sendable @escaping (Double) -> Void) async throws -> Asset {
-        guard let raw = FlowSettings(settings).pathValue() else {
-            throw FlowError.missingInlineValue(row: "Read Video", kind: .file)
-        }
-        let url = try workspace.resolve(raw, flowID: flowID)
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            throw FlowError.fileReadFailed(row: "Read Video", path: raw)
-        }
+        // FIP-3: Read Video never checked an upstream `.file` item before this — verified
+        // against the prior code, not assumed.
+        let url = try ReadPath.resolve(workspace: workspace, flowID: flowID, path: path, settings: settings,
+                                       inputs: [input], kind: .file, row: "Read Video", checksUpstream: false)
         progress(1.0)
         return Asset(items: [Item(kind: .video, value: nil, path: url, sourceText: nil)])
     }

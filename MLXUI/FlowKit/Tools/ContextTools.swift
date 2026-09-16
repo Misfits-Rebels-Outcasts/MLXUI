@@ -38,6 +38,8 @@ nonisolated struct ReadContextTool: AssetStage {
     let workspace: FlowWorkspace
     let flowID: String
     let settings: String
+    /// FIP-3: see `ReadImageTool.path` (`ReadTools.swift`).
+    var path: String = "1"
 
     var accepts: Shape { .single(.file) }
     var produces: Shape { .single(.context) }
@@ -45,19 +47,15 @@ nonisolated struct ReadContextTool: AssetStage {
     func run(_ input: Asset, progress: @Sendable @escaping (Double) -> Void) async throws -> Asset {
         // FIX-11: an upstream file input wins (the Python `_resolve_path` reads it first) —
         // `Read Context (1)` fed by an upstream `Read Files` row must not fail.
-        let url: URL
-        if let upstream = input.items.first, upstream.kind == .file, let path = upstream.path {
-            url = path
-        } else if let raw = FlowSettings(settings).pathValue() {
-            url = try workspace.resolve(raw, flowID: flowID)
-        } else {
-            throw FlowError.missingInlineValue(row: "Read Context", kind: .file)
-        }
+        let url = try ReadPath.resolve(workspace: workspace, flowID: flowID, path: path, settings: settings,
+                                       inputs: [input], kind: .file, row: "Read Context")
         do {
             let raw = try String(contentsOf: url, encoding: .utf8)
             progress(1.0)
             return Asset(items: [Item(kind: .context, value: raw, path: nil, sourceText: nil)])
         } catch {
+            // resolve() already refused a missing file; a present-but-undecodable one is its
+            // own, unrelated failure.
             throw FlowError.fileReadFailed(row: "Read Context", path: url.lastPathComponent)
         }
     }

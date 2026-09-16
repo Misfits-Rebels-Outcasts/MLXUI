@@ -212,6 +212,12 @@ nonisolated enum FlowError: Error, CustomStringConvertible, Equatable {
     /// would complete green having done nothing. Deliberate divergence from the Python
     /// reference, which returns an empty list here; see SPEC-Q219.
     case emptyFolder(row: String, path: String)
+    /// FIP-3: a `Read *` row's target — the file itself, or `manifest.json` inside the
+    /// directory for `Read Index` — doesn't exist. Raised by the one shared read-path
+    /// resolution (`ReadPath.resolve`) all eleven read tasks now go through, rather than each
+    /// tool inventing its own sentence. `message` is the fully rendered `ErrorCatalog` R903
+    /// sentence ("file unreadable") — shown verbatim, with no further "Row N" prefixing.
+    case missingInput(row: String, message: String)
 
     var description: String {
         switch self {
@@ -247,6 +253,8 @@ nonisolated enum FlowError: Error, CustomStringConvertible, Equatable {
             return "\(row) needs a query — e.g. Rerank BGE Reranker; query=\"...\"."
         case .emptyFolder(let row, let path):
             return "\(row) found nothing to read in '\(path)' — add files there, or point the row at a different folder."
+        case .missingInput(_, let message):
+            return message
         }
     }
 }
