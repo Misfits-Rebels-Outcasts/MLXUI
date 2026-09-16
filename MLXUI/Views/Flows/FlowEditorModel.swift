@@ -52,8 +52,10 @@ final class FlowEditorModel {
     /// stale-sibling guard must leave untouched flows alone (KW-1-1). Defaults to comparing the
     /// injected `workspace.root` against the live app's workspaces directory, matching every
     /// production call site; tests that stand in for a workspace with a temp root can set it
-    /// directly, since a temp path never equals that singleton.
-    var isSharedWorkspaceFolder: Bool
+    /// directly, since a temp path never equals that singleton. KW-1-FIX-3: `private(set)` —
+    /// `workspace` is never reassigned after init anywhere in `MLXUI/`, so this is set once and
+    /// never goes stale; nothing outside init has a reason to flip save semantics at runtime.
+    private(set) var isSharedWorkspaceFolder: Bool
     /// The text last written to disk — the dirty check compares the current document to it.
     private(set) var savedText: String?
     var saveError: String?
@@ -98,6 +100,17 @@ final class FlowEditorModel {
         if let first = self.document.rows.first {
             self.selectedRowID = first.id
         }
+    }
+
+    /// KW-1-FIX-3: the production decision behind seeding `savedURL` on open, extracted out of
+    /// `FlowEditorView.init` so it's testable on its own rather than only through a SwiftUI
+    /// view's `@State` init. A workspace flow whose document already exists on disk (a
+    /// `WorkspaceRef` paired with a non-nil `document`) seeds from its real file URL; a plain
+    /// `flows/` flow (`workspace == nil`), or a `WorkspaceRef` with no document (the
+    /// unparseable-flow path, which routes to `FlowListView`, never the editor), seeds nothing.
+    nonisolated static func seedSavedURL(document: FlowDocument?, workspace: WorkspaceRef?) -> URL? {
+        guard document != nil else { return nil }
+        return workspace?.fileURL
     }
 
     // MARK: - Step picker (CFM-R8-1, CFM-R8-FIX-2/7)

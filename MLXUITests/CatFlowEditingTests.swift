@@ -733,6 +733,28 @@ struct CatFlowEditingTests {
         #expect(files == ["Chat.cat"])
     }
 
+    // MARK: - KW-1-FIX-3: the savedURL seeding decision, extracted and testable
+
+    @Test func seedSavedURLSeedsAWorkspaceFlowThatHasADocument() {
+        let ref = WorkspaceRef(workspaceID: "docs", flowFile: "DocChat.cat")
+        let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [])
+        #expect(FlowEditorModel.seedSavedURL(document: doc, workspace: ref) == ref.fileURL)
+    }
+
+    /// The unparseable-workspace-flow path: `WorkspaceListView.open` falls back to
+    /// `FlowSelection` (which routes to `FlowListView`, not the editor) whenever the file
+    /// doesn't parse, so the editor never actually sees this combination in production — but
+    /// the function must still answer "don't seed" rather than assume a document exists.
+    @Test func seedSavedURLDoesNotSeedAWorkspaceRefWithNoDocument() {
+        let ref = WorkspaceRef(workspaceID: "docs", flowFile: "Broken.cat")
+        #expect(FlowEditorModel.seedSavedURL(document: nil, workspace: ref) == nil)
+    }
+
+    @Test func seedSavedURLDoesNotSeedAPlainFlowsFlow() {
+        let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [])
+        #expect(FlowEditorModel.seedSavedURL(document: doc, workspace: nil) == nil)
+    }
+
     @Test func saveRefusesWhileAReferenceIsBroken() throws {
         let r1 = row("Read Audio", settings: "memo.m4a")
         let r2 = row("Transcribe", model: "Whisper Large v3")

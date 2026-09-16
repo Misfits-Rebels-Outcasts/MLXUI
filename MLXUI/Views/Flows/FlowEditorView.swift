@@ -34,14 +34,15 @@ struct FlowEditorView: View {
         // KW-1-1: a workspace flow opened from disk (a `WorkspaceRef` naming an existing
         // document) already has a file at `workspace.fileURL` — seed `savedURL` so a rename's
         // stale-sibling guard recognizes that file as this editor's own and clears it, instead
-        // of leaving it behind as an untracked duplicate.
+        // of leaving it behind as an untracked duplicate. KW-1-FIX-3: the decision itself is
+        // `FlowEditorModel.seedSavedURL`, tested on its own.
         _model = State(initialValue: FlowEditorModel(
             name: workspace?.flowStem ?? name,
             flowID: workspace?.workspaceID ?? flowID,
             document: document,
             workspace: workspace?.workspace ?? .shared,
             savedText: savedText,
-            savedURL: document != nil ? workspace?.fileURL : nil))
+            savedURL: FlowEditorModel.seedSavedURL(document: document, workspace: workspace)))
     }
 
     /// The run scope for this flow — workspace-rooted when it lives in one (CFM-R17-1).
