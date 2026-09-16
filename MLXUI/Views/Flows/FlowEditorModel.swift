@@ -83,13 +83,14 @@ final class FlowEditorModel {
 
     init(name: String, flowID: String = UUID().uuidString, document: FlowDocument? = nil,
          workspace: FlowWorkspace = .shared, sampleSourceDir: URL? = Bundle.main.resourceURL,
-         savedText: String? = nil, isSharedWorkspaceFolder: Bool? = nil) {
+         savedText: String? = nil, isSharedWorkspaceFolder: Bool? = nil, savedURL: URL? = nil) {
         self.name = name
         self.flowID = flowID
         self.workspace = workspace
         self.document = document ?? FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [])
         self.sampleSourceDir = sampleSourceDir
         self.savedText = savedText
+        self.savedURL = savedURL
         self.isSharedWorkspaceFolder = isSharedWorkspaceFolder
             ?? (workspace.root == ModelStore.shared.workspacesDirectory)
         // Opening an existing flow selects its first row so the inspector pane is up and

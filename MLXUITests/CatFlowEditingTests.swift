@@ -604,6 +604,41 @@ struct CatFlowEditingTests {
         #expect(try flowFiles() == ["EXTRACT TABLE DATA FROM IMAGE.cat"])
     }
 
+    /// KW-1-1: `WorkspaceListView.open` builds a fresh `FlowEditorModel` from a `WorkspaceRef`
+    /// every time a workspace flow is opened, so `savedURL` starts `nil` even though the file
+    /// already exists on disk. Before the fix, `isSharedWorkspaceFolder` being true plus a nil
+    /// `savedURL` meant a non-case rename left the old file behind — the workspace held both,
+    /// which is exactly what breaks the Knowledge Base card's Ask button (two files on the
+    /// querier side turns it ambiguous).
+    @Test func renamingAWorkspaceFlowInAFreshlyOpenedEditorLeavesOneFile() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-workspace-rename-\(UUID().uuidString)")
+        let workspace = FlowWorkspace(root: root)
+        let flowID = "my-workspace"
+        let dir = workspace.directory(for: flowID)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let ingestText = "mlxflow 0.8\n1. Read Text notes.txt\n"
+        try ingestText.write(to: dir.appendingPathComponent("Ingest.cat"), atomically: true, encoding: .utf8)
+        let docChatText = "mlxflow 0.8\n1. Read Image budget.png\n"
+        let docChatURL = dir.appendingPathComponent("DocChat.cat")
+        try docChatText.write(to: docChatURL, atomically: true, encoding: .utf8)
+
+        // A freshly-opened editor on DocChat.cat — no `savedURL` tracked yet, matching what
+        // `FlowEditorView.init` produced before the fix.
+        let fresh = FlowEditorModel(name: "DocChat", flowID: flowID,
+                                    document: FlowDocument(version: "0.8", headerKeyword: "mlxflow",
+                                                           rows: [row("Read Image", settings: "budget.png")]),
+                                    workspace: workspace, savedText: docChatText,
+                                    isSharedWorkspaceFolder: true, savedURL: docChatURL)
+        fresh.name = "Chat"
+        try fresh.save()
+
+        let files = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+            .filter { $0.hasSuffix(".cat") }.sorted()
+        #expect(files == ["Chat.cat", "Ingest.cat"])
+        #expect(try String(contentsOf: dir.appendingPathComponent("Ingest.cat"), encoding: .utf8) == ingestText)
+    }
+
     @Test func saveRefusesWhileAReferenceIsBroken() throws {
         let r1 = row("Read Audio", settings: "memo.m4a")
         let r2 = row("Transcribe", model: "Whisper Large v3")
