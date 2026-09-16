@@ -122,11 +122,7 @@ struct WorkspaceListView: View {
             Button("Delete", role: .destructive) { deleteFlow() }
             Button("Cancel", role: .cancel) { flowPendingRemoval = nil }
         } message: {
-            Text(flowPendingRemoval.map {
-                WorkspaceStore.flowDeletionSummary(fileName: $0.url.lastPathComponent,
-                                                   isLastFlow: workspace.flows.count == 1,
-                                                   workspace: workspace)
-            } ?? "")
+            Text(flowPendingRemoval.map(deleteConfirmationMessage) ?? "")
         }
         // KW-2-2 (Q3): Rename… as its own action rather than a side effect of the editor's
         // name field — renames the file in place, no need to open it.
@@ -138,7 +134,7 @@ struct WorkspaceListView: View {
             Button("Rename") { renameFlow() }
             Button("Cancel", role: .cancel) { flowPendingRename = nil }
         } message: {
-            Text("Choose a new name for '\(flowPendingRename?.title ?? "")'.")
+            Text(flowPendingRename.map(renameConfirmationMessage) ?? "")
         }
         .alert("Couldn't Complete That", isPresented: Binding(
             get: { flowActionError != nil },
@@ -385,6 +381,34 @@ struct WorkspaceListView: View {
             .help("Delete this flow")
             .padding(8)
         }
+    }
+
+    /// KW-2-FIX-1 (Q6 — "just warn them"): the filesystem this workspace resolves `uses:`
+    /// paths against, for `WorkspaceStore.callers(of:in:ws:)`.
+    private var workspaceFileSystem: FlowWorkspace { FlowWorkspace(root: ModelStore.shared.workspacesDirectory) }
+
+    /// KW-2-FIX-1: the delete confirmation's message — the base sentence plus, when a sibling
+    /// `uses:` names this flow, who calls it. Never edits anything; the warning is purely
+    /// informational and the Delete/Cancel buttons already let the user decide.
+    private func deleteConfirmationMessage(for flow: WorkspaceStore.FlowFile) -> String {
+        var sentence = WorkspaceStore.flowDeletionSummary(fileName: flow.url.lastPathComponent,
+                                                           isLastFlow: workspace.flows.count == 1,
+                                                           workspace: workspace)
+        let callers = WorkspaceStore.callers(of: flow.url, in: workspace, ws: workspaceFileSystem)
+        if let warning = WorkspaceStore.usesWarning(callers: callers) {
+            sentence += " " + warning
+        }
+        return sentence
+    }
+
+    /// KW-2-FIX-1: the rename alert's message, same warning as the delete confirmation.
+    private func renameConfirmationMessage(for flow: WorkspaceStore.FlowFile) -> String {
+        var sentence = "Choose a new name for '\(flow.title)'."
+        let callers = WorkspaceStore.callers(of: flow.url, in: workspace, ws: workspaceFileSystem)
+        if let warning = WorkspaceStore.usesWarning(callers: callers) {
+            sentence += " " + warning
+        }
+        return sentence
     }
 
     /// KW-2-2 (Q3): deletes the confirmed flow. The Knowledge Base card recomputes on the next

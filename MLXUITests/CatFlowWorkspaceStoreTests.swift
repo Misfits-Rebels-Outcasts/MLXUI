@@ -207,6 +207,66 @@ struct CatFlowWorkspaceStoreTests {
         #expect(!sentence.contains("index"))
     }
 
+    // MARK: - KW-2-FIX-1: callers / usesWarning (Q6, owner ruling 2026-09-16 — "just warn them")
+
+    private let usesExampleAsk = """
+    mlxflow 0.8
+    1. Read Text   question.txt
+    2. RagQuery
+    3. Save Text   answer.md
+
+    uses:
+      RagQuery = ./RagQuery.cat
+    """
+    private let usesExampleRag = """
+    mlxflow 0.8
+    1. Embed   BGE-M3
+    2. Read Index   kb.index
+    3. Retrieve   (2,1)
+    4. Answer   Qwen3 8B
+    """
+
+    /// The shipped `uses_example` shape, one click from the finding: renaming or deleting
+    /// `RagQuery.cat` from the badge would silently stop `AskYourDocs.cat`'s call from
+    /// resolving. `callers` catches it before that happens.
+    @Test func callersFindsTheSiblingWhoseUsesLineNamesTheTarget() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "rag",
+                         flows: [("AskYourDocs", usesExampleAsk), ("RagQuery", usesExampleRag)])
+        let w = try #require(WorkspaceStore.scan(workspace: ws).first)
+        let ragURL = ws.directory(for: "rag").appendingPathComponent("RagQuery.cat")
+        #expect(WorkspaceStore.callers(of: ragURL, in: w, ws: ws) == ["AskYourDocs.cat"])
+    }
+
+    /// The other direction the done-when names: a flow nothing calls is unaffected.
+    @Test func callersIsEmptyForAFlowNothingCalls() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        try makeWorkspace(root: ws.root, id: "rag",
+                         flows: [("AskYourDocs", usesExampleAsk), ("RagQuery", usesExampleRag)])
+        let w = try #require(WorkspaceStore.scan(workspace: ws).first)
+        let askURL = ws.directory(for: "rag").appendingPathComponent("AskYourDocs.cat")
+        #expect(WorkspaceStore.callers(of: askURL, in: w, ws: ws).isEmpty)   // nothing uses: it
+    }
+
+    @Test func usesWarningIsNilWhenNothingCalls() {
+        #expect(WorkspaceStore.usesWarning(callers: []) == nil)
+    }
+
+    @Test func usesWarningNamesASingleCaller() throws {
+        let warning = try #require(WorkspaceStore.usesWarning(callers: ["AskYourDocs.cat"]))
+        #expect(warning.contains("AskYourDocs.cat"))
+        #expect(warning.contains("calls"))
+    }
+
+    @Test func usesWarningNamesEachOfSeveralCallers() throws {
+        let warning = try #require(WorkspaceStore.usesWarning(callers: ["A.cat", "B.cat"]))
+        #expect(warning.contains("A.cat"))
+        #expect(warning.contains("B.cat"))
+        #expect(warning.contains("call"))
+    }
+
     // MARK: - KW-2-1: firstFreeFlowName
 
     @Test func firstFreeFlowNamePicksFlowDotCatWhenNothingCollides() throws {

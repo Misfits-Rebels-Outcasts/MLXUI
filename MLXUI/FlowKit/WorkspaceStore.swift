@@ -85,6 +85,39 @@ nonisolated enum WorkspaceStore {
         return try CatParser.parse(text)
     }
 
+    /// KW-2-FIX-1 (Q6, owner ruling 2026-09-16 — "just warn them"): the sibling flows whose
+    /// `uses:` block names `target`, resolved through `FlowWorkspace.resolve` — the same
+    /// authority `UsesResolver` uses — so a caller is caught regardless of which relative-path
+    /// spelling it wrote. Read-only: this never edits a `.cat` the user didn't open, only
+    /// answers "who calls this" before a rename or delete proceeds.
+    static func callers(of target: URL, in workspace: Workspace, ws: FlowWorkspace) -> [String] {
+        let targetResolved = target.resolvingSymlinksInPath()
+        var names: [String] = []
+        for flow in workspace.flows where flow.url != target {
+            guard let doc = try? loadDocument(flow: flow) else { continue }
+            for rawPath in doc.uses.values {
+                guard let resolved = try? ws.resolve(rawPath, flowID: workspace.workspaceID) else { continue }
+                if resolved.resolvingSymlinksInPath() == targetResolved {
+                    names.append(flow.url.lastPathComponent)
+                    break
+                }
+            }
+        }
+        return names.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
+    /// KW-2-FIX-1: the sentence appended to a rename/delete confirmation when `callers` (from
+    /// `callers(of:in:ws:)`) is non-empty — named, so the user decides with the same
+    /// information a run-time failure would otherwise surface later, in a file they never
+    /// touched. `nil` when nothing calls the flow, so an unaffected flow's confirmation is
+    /// unchanged.
+    static func usesWarning(callers: [String]) -> String? {
+        guard !callers.isEmpty else { return nil }
+        let names = callers.map { "'\($0)'" }.joined(separator: " and ")
+        let verb = callers.count == 1 ? "calls" : "call"
+        return "\(names) \(verb) this flow — this will break that call."
+    }
+
     /// A plain sentence for the delete confirmation. "'X' and its files" understates a
     /// workspace, so this names what is actually going — N flows, and any index directories
     /// (CFM-R17-3 wires it into the dialog).
