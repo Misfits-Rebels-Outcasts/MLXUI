@@ -73,13 +73,47 @@ struct CatFlowWorkspaceStoreTests {
         #expect(w.flows.filter { $0.title.hasPrefix("Good") }.allSatisfy { $0.parseIssue == nil })
     }
 
-    @Test func folderWithNoFlowFileIsNotAWorkspace() throws {
+    @Test func trulyEmptyFolderIsNotAWorkspace() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        let bare = ws.root.appendingPathComponent("nothing-here", isDirectory: true)
+        try FileManager.default.createDirectory(at: bare, withIntermediateDirectories: true)
+        #expect(WorkspaceStore.scan(workspace: ws).isEmpty)
+    }
+
+    /// KW-1-2 (Q2, owner ruling 2026-09-16): a directory with no `.cat` but *something* else
+    /// in it (an index, leftover user files) lists as a workspace with no flows, rather than
+    /// vanishing with no UI that can reach it for Remove.
+    @Test func folderWithNoFlowFileButOtherContentListsWithNoFlows() throws {
         let (ws, base) = try makeRoot()
         defer { teardown(base) }
         let bare = ws.root.appendingPathComponent("just-files", isDirectory: true)
         try FileManager.default.createDirectory(at: bare, withIntermediateDirectories: true)
         try Data([1, 2, 3]).write(to: bare.appendingPathComponent("notes.txt"))
-        #expect(WorkspaceStore.scan(workspace: ws).isEmpty)
+        let all = WorkspaceStore.scan(workspace: ws)
+        #expect(all.count == 1)
+        let w = try #require(all.first)
+        #expect(w.workspaceID == "just-files")
+        #expect(w.flows.isEmpty)
+        // Reachable and removable — the whole point of the ruling.
+        try WorkspaceStore.remove(workspaceID: "just-files", workspace: ws)
+        #expect(!FileManager.default.fileExists(atPath: bare.path))
+    }
+
+    /// The same state, but the leftover is a built index — the exact "stranded, potentially
+    /// gigabytes" scenario the finding describes.
+    @Test func folderWithOnlyAnIndexListsWithNoFlowsAndDeletionSummaryNamesTheIndex() throws {
+        let (ws, base) = try makeRoot()
+        defer { teardown(base) }
+        let bare = ws.root.appendingPathComponent("orphaned", isDirectory: true)
+        let idx = bare.appendingPathComponent("library.index", isDirectory: true)
+        try FileManager.default.createDirectory(at: idx, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: idx.appendingPathComponent("manifest.json"))
+        let w = try #require(WorkspaceStore.scan(workspace: ws).first)
+        #expect(w.flows.isEmpty)
+        let sentence = WorkspaceStore.deletionSummary(w)
+        #expect(sentence.contains("1 index"))
+        #expect(!sentence.contains("0 flow"))
     }
 
     @Test func newestWorkspaceFirst() throws {

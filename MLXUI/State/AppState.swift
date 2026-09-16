@@ -89,9 +89,11 @@ final class AppState { //appstatecomeback
     /// `reloadUserFlows()` — never trusted to be current across an editor save.
     private(set) var userFlowEntries: [UserFlowStore.Entry] = []
 
-    /// CFM-R17-3: the workspaces on the "My Workflows" shelf — every directory under
-    /// `workspaces/` that holds one or more `.cat` files, plus the bundled ones materialised
-    /// on first launch. Loaded by `reloadWorkspaces()`.
+    /// CFM-R17-3: the workspaces on the "My Workflows" shelf — every non-empty directory
+    /// under `workspaces/`: one or more `.cat` files, or (KW-1-2, Q2) no `.cat` at all but
+    /// some other content, so Remove can still reach it — plus the bundled ones materialised
+    /// on first launch. A directory with nothing in it at all still doesn't list. Loaded by
+    /// `reloadWorkspaces()`.
     private(set) var workspaceEntries: [WorkspaceStore.Workspace] = []
     /// A workspace whose page is pushed onto the detail stack (CFM-R17-3).
     var selectedWorkspace: WorkspaceStore.Workspace?

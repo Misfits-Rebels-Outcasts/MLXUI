@@ -36,8 +36,10 @@ nonisolated enum WorkspaceStore {
         let title: String
         /// Last modification of the workspace folder (the shelf sorts newest first).
         let modifiedAt: Date
-        /// The flow files in it, sorted by name — **one or more**. A folder with none is
-        /// not a workspace and `scan` skips it.
+        /// The flow files in it, sorted by name — may be **empty** (KW-1-2, Q2, owner ruling
+        /// 2026-09-16): a directory with no `.cat` but some other content (an index, `docs/`,
+        /// anything left behind) still lists, with no flows, so Remove can reach it. A
+        /// directory with nothing in it at all is not a workspace and `scan` skips it.
         let flows: [FlowFile]
 
         var id: String { workspaceID }
@@ -58,7 +60,11 @@ nonisolated enum WorkspaceStore {
             guard let contents = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { continue }
             let flowFiles = contents.filter { isFlowFile($0) }
                 .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
-            guard !flowFiles.isEmpty else { continue }        // no `.cat` at all → not a workspace
+            // KW-1-2 (Q2, owner ruling 2026-09-16): a directory with no `.cat` still lists as
+            // a workspace with no flows when it holds anything else (an index, `docs/`, any
+            // leftover) — otherwise that data is stranded with no UI that can reach it. A
+            // directory with nothing in it at all is still not a workspace.
+            guard !flowFiles.isEmpty || !contents.isEmpty else { continue }
             let modified = (try? dir.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
                 ?? .distantPast
             out.append(Workspace(
@@ -88,8 +94,11 @@ nonisolated enum WorkspaceStore {
     /// claim irreversibility, but it must still say that the index the user built and any
     /// documents they added here are lost (only the shipped original comes back on Restore).
     static func deletionSummary(_ workspace: Workspace, bundled: Bool = false) -> String {
-        let flowsPhrase = workspace.flows.count == 1 ? "1 flow" : "\(workspace.flows.count) flows"
-        var parts = [flowsPhrase]
+        // KW-1-2 (Q2): a flows-less workspace (no `.cat`, listed only because it holds an
+        // index or other files) has nothing to call "0 flows" about — name what's actually
+        // there instead.
+        var parts: [String] = workspace.flows.isEmpty ? [] :
+            [workspace.flows.count == 1 ? "1 flow" : "\(workspace.flows.count) flows"]
         let indexes = indexDirectoryCount(in: workspace.url)
         if indexes == 1 { parts.append("1 index") }
         else if indexes > 1 { parts.append("\(indexes) indexes") }
@@ -99,6 +108,7 @@ nonisolated enum WorkspaceStore {
         if let trash = directorySizePhrase(workspace.url.appendingPathComponent(".trash", isDirectory: true)) {
             parts.append("\(trash) of earlier versions in .trash")
         }
+        if parts.isEmpty { parts.append("its files") }
         let inventory = parts.joined(separator: " and ")
         if bundled {
             return "'\(workspace.title)' — \(inventory) — will be removed. Any documents you added and any index you built here will be lost; you can bring the original back with “Restore bundled workspaces” in AI Workflows."

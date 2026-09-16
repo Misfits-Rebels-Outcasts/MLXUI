@@ -71,7 +71,7 @@ struct WorkspaceListView: View {
                 header
                 let cards = knowledgeCards
                 if !cards.isEmpty { indexSection(cards) }
-                flowsSection
+                if !workspace.flows.isEmpty { flowsSection }
                 if !sharedFiles.isEmpty { sharedFilesSection }
             }
             .padding(20)
@@ -106,7 +106,11 @@ struct WorkspaceListView: View {
                     Label("Remove", systemImage: "trash")
                 }
             }
-            Text("\(workspace.flows.count) flow\(workspace.flows.count == 1 ? "" : "s") sharing one folder — every relative path resolves against it.")
+            // KW-1-2 (Q2): a workspace can list with no `.cat` at all — whatever it holds
+            // (an index, leftover files) is still reachable and removable, just not runnable.
+            Text(workspace.flows.isEmpty
+                 ? "No flows in this folder — whatever's left in it is listed below, and Remove still reaches it."
+                 : "\(workspace.flows.count) flow\(workspace.flows.count == 1 ? "" : "s") sharing one folder — every relative path resolves against it.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
