@@ -639,6 +639,100 @@ struct CatFlowEditingTests {
         #expect(try String(contentsOf: dir.appendingPathComponent("Ingest.cat"), encoding: .utf8) == ingestText)
     }
 
+    /// KW-1-FIX-2: `save()`'s sibling loop correctly refused to *delete* a sibling whose name
+    /// equals the write target — and then the write went ahead and overwrote it anyway. Renaming
+    /// `DocChat.cat` onto the existing `Ingest.cat` used to silently destroy `Ingest.cat`. Now it
+    /// refuses, naming the colliding file, and both files survive byte-identical.
+    @Test func renamingOntoAnExistingSiblingRefusesRatherThanOverwritingIt() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-collision-\(UUID().uuidString)")
+        let workspace = FlowWorkspace(root: root)
+        let flowID = "my-workspace"
+        let dir = workspace.directory(for: flowID)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let ingestText = "mlxflow 0.8\n1. Read Text notes.txt\n"
+        let ingestURL = dir.appendingPathComponent("Ingest.cat")
+        try ingestText.write(to: ingestURL, atomically: true, encoding: .utf8)
+        let docChatText = "mlxflow 0.8\n1. Read Image budget.png\n"
+        let docChatURL = dir.appendingPathComponent("DocChat.cat")
+        try docChatText.write(to: docChatURL, atomically: true, encoding: .utf8)
+
+        let fresh = FlowEditorModel(name: "DocChat", flowID: flowID,
+                                    document: FlowDocument(version: "0.8", headerKeyword: "mlxflow",
+                                                           rows: [row("Read Image", settings: "budget.png")]),
+                                    workspace: workspace, savedText: docChatText,
+                                    isSharedWorkspaceFolder: true, savedURL: docChatURL)
+        fresh.name = "Ingest"
+        do {
+            try fresh.save()
+            Issue.record("expected a collision refusal")
+        } catch let error as FlowEditingError {
+            guard case .refusingToSave(let reason) = error else {
+                Issue.record("unexpected error \(error)")
+                return
+            }
+            #expect(reason.contains("Ingest.cat"))
+        }
+
+        // Neither file moved — no delete, no overwrite.
+        #expect(try String(contentsOf: ingestURL, encoding: .utf8) == ingestText)
+        #expect(try String(contentsOf: docChatURL, encoding: .utf8) == docChatText)
+        let files = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+            .filter { $0.hasSuffix(".cat") }.sorted()
+        #expect(files == ["DocChat.cat", "Ingest.cat"])
+    }
+
+    /// The same refusal covers a `.cat` ↔ `.catpipeline` collision on the same stem — the
+    /// write-target check is by full filename (stem + extension), not by stem alone, but a
+    /// `.catpipeline` document renamed onto an existing `.catpipeline` sibling hits the same path.
+    @Test func renamingAPipelineOntoAnExistingPipelineSiblingAlsoRefuses() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-collision-pipe-\(UUID().uuidString)")
+        let workspace = FlowWorkspace(root: root)
+        let flowID = "pipe-workspace"
+        let dir = workspace.directory(for: flowID)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let ingestURL = dir.appendingPathComponent("Ingest.catpipeline")
+        try "mlxpipeline 0.8\n".write(to: ingestURL, atomically: true, encoding: .utf8)
+        let docText = "mlxpipeline 0.8\n1. Generate Image  a tree\n"
+        let docURL = dir.appendingPathComponent("DocChat.catpipeline")
+        try docText.write(to: docURL, atomically: true, encoding: .utf8)
+
+        let doc = FlowDocument(version: "0.8", fileKind: .catpipeline, rows: [
+            Row(id: UUID(), task: "Generate Image", model: "Z-Image Turbo", settings: "a tree"),
+        ])
+        let fresh = FlowEditorModel(name: "DocChat", flowID: flowID, document: doc,
+                                    workspace: workspace, savedText: docText,
+                                    isSharedWorkspaceFolder: true, savedURL: docURL)
+        fresh.name = "Ingest"
+        #expect(throws: (any Error).self) { try fresh.save() }
+        #expect(try String(contentsOf: ingestURL, encoding: .utf8).hasPrefix("mlxpipeline"))
+    }
+
+    /// A rename onto a name nothing else holds still works exactly as `KW-1-1` left it.
+    @Test func renamingOntoAFreeNameStillWorks() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-collision-free-\(UUID().uuidString)")
+        let workspace = FlowWorkspace(root: root)
+        let flowID = "my-workspace"
+        let dir = workspace.directory(for: flowID)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let docChatText = "mlxflow 0.8\n1. Read Image budget.png\n"
+        let docChatURL = dir.appendingPathComponent("DocChat.cat")
+        try docChatText.write(to: docChatURL, atomically: true, encoding: .utf8)
+
+        let fresh = FlowEditorModel(name: "DocChat", flowID: flowID,
+                                    document: FlowDocument(version: "0.8", headerKeyword: "mlxflow",
+                                                           rows: [row("Read Image", settings: "budget.png")]),
+                                    workspace: workspace, savedText: docChatText,
+                                    isSharedWorkspaceFolder: true, savedURL: docChatURL)
+        fresh.name = "Chat"
+        try fresh.save()
+        let files = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+            .filter { $0.hasSuffix(".cat") }.sorted()
+        #expect(files == ["Chat.cat"])
+    }
+
     @Test func saveRefusesWhileAReferenceIsBroken() throws {
         let r1 = row("Read Audio", settings: "memo.m4a")
         let r2 = row("Transcribe", model: "Whisper Large v3")

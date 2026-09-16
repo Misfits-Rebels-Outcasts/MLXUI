@@ -924,6 +924,27 @@ final class FlowEditorModel {
         // sticks unless the file is removed first. Comparisons are by name — `contentsOf
         // Directory` can hand back `/private/var/…` where `url` is `/var/…`.
         let siblings = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+
+        // KW-1-FIX-2: in a *shared* workspace folder, a sibling that exactly occupies the
+        // write target's name and isn't the file this editor already owns (`savedURL`) is a
+        // *different* flow — writing would silently destroy it. The loop below already skips
+        // deleting it (`name != url.lastPathComponent` below), which is right, but nothing
+        // previously stopped the write itself from overwriting it anyway. Refuse instead of
+        // guessing a fix. A case-only match (the `Extract table data...` vs `EXTRACT TABLE
+        // DATA...` case) is this same file re-cased, not a collision, so it isn't caught here.
+        // Restricted to shared folders: a plain `flows/<flowID>/` folder holds exactly one
+        // file by construction, so a pre-existing file at the target name there is always this
+        // editor's own (e.g. a freshly-opened model with no seeded `savedURL` resaving itself)
+        // — never someone else's.
+        if isSharedWorkspaceFolder, let collision = siblings.first(where: {
+            ($0.pathExtension == "cat" || $0.pathExtension == "catpipeline")
+                && $0.lastPathComponent == url.lastPathComponent
+                && savedURL?.lastPathComponent != $0.lastPathComponent
+        }) {
+            throw FlowEditingError.refusingToSave(
+                "'\(collision.lastPathComponent)' already exists in this workspace — pick a different name.")
+        }
+
         for f in siblings where f.pathExtension == "cat" || f.pathExtension == "catpipeline" {
             let name = f.lastPathComponent
             guard name != url.lastPathComponent else { continue }        // never the exact target
