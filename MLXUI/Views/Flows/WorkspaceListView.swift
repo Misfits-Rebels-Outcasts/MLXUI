@@ -82,6 +82,26 @@ struct WorkspaceListView: View {
         return try? IndexFormat.manifest(from: data)
     }
 
+    /// FIP-2 — the missing input Build or Ask is about to fail on, read fresh each render
+    /// (same discipline as `manifest(for:)`, CFM-R17-4). Checks the builder first: that is
+    /// the exact scenario the backlog's done-when names (a not-yet-built index whose builder
+    /// reads a file that was never created — `KW-4-FIX-1`'s own shape). Falls back to the
+    /// querier so an ask-only card (or a builder whose own input is fine) still catches its
+    /// own missing file. Owner ruling: warn only — this never disables Build or Ask below.
+    private func inputAdvisory(for card: WorkspaceKnowledge.IndexCard) -> FlowPreflight.RowAdvisory? {
+        for file in [card.buildFile, card.askFile].compactMap({ $0 }) {
+            if let advisory = inputAdvisory(forFlow: file) { return advisory }
+        }
+        return nil
+    }
+
+    private func inputAdvisory(forFlow file: String) -> FlowPreflight.RowAdvisory? {
+        guard let flow = workspace.flows.first(where: { $0.url.lastPathComponent == file }),
+              let doc = try? WorkspaceStore.loadDocument(flow: flow) else { return nil }
+        let ref = WorkspaceRef(workspaceID: workspace.workspaceID, flowFile: file)
+        return FlowInputAdvisory.advisory(for: doc, scope: ref.scope(text: nil))
+    }
+
     /// The non-`.cat` entries in the directory the flows share — indexes, `docs/`, fixtures.
     private var sharedFiles: [URL] {
         let flowNames = Set(workspace.flows.map { $0.url.lastPathComponent })
@@ -230,6 +250,16 @@ struct WorkspaceListView: View {
                 Text("not built yet")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            // FIP-2: say so before Build or Ask is pressed and fails on row 1.
+            if let advisory = inputAdvisory(for: card) {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.circle").foregroundStyle(.blue)
+                    Text(advisory.reason)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             // CFM-R17-FIX-11(d): omit the row entirely when neither side has a button (both
             // ambiguous, or ambiguous + none) — `-11(c)` made that shape reachable, and an

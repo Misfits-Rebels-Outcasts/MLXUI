@@ -22,6 +22,9 @@ struct FlowEditorView: View {
     @State private var showFullCatalog = false
     @State private var showInstallSheet = false
     @State private var session = FlowRunSession()
+    /// FIP-2 — a `Read *` row whose file isn't there yet, or nil. Warn only (owner ruling):
+    /// renders as a banner, never disables Run.
+    @State private var inputAdvisory: FlowPreflight.RowAdvisory?
 
     /// CFM-R17-3: non-nil when the flow being edited lives inside a workspace — the model
     /// then saves into and resolves against the shared workspace directory.
@@ -60,6 +63,21 @@ struct FlowEditorView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
+            // FIP-2 — same non-blocking shape `FlowListView`'s setup advisory renders: names
+            // the row and the missing file, never disables Run below.
+            if let advisory = inputAdvisory {
+                HStack(alignment: .top, spacing: 8) {
+                    Label(advisory.reason, systemImage: "exclamationmark.circle")
+                        .font(.callout)
+                        .foregroundStyle(.blue)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
             if model.document.rows.isEmpty {
                 emptyState
             } else {
@@ -677,6 +695,10 @@ struct FlowEditorView: View {
                                                  totalRAMGB: appState.systemInfo.totalRAMGB,
                                                  claimableModelIDs: appState.claimableModelIDs),
                                doc: model.document, scope: workspaceRef != nil ? makeScope() : nil)
+        // FIP-2: `makeScope()` already falls back to `.plain(model.flowID)` for a non-workspace
+        // flow, so this is safe to call unconditionally (unlike the line above, which only
+        // needs a scope at all for a workspace flow's `uses:` resolution).
+        inputAdvisory = FlowInputAdvisory.advisory(for: model.document, scope: makeScope())
     }
 
     private func installSheet(_ result: FlowPreflight.Result) -> some View {

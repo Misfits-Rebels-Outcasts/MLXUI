@@ -67,6 +67,9 @@ struct FlowListView: View {
     /// Never blocks the run the way `notRunnableReason` does — it renders as a banner
     /// alongside a still-enabled Run (§2 of `RSI/DelegateFixItBacklog.md`).
     @State private var setupAdvisory: FlowPreflight.RowAdvisory?
+    /// FIP-2 — a `Read *` row whose file isn't there yet, or nil. Same non-blocking shape and
+    /// rendering as `setupAdvisory` (owner ruling: warn only, never block).
+    @State private var inputAdvisory: FlowPreflight.RowAdvisory?
     /// The canonical serialized lines (CFM-R6-2) — the flow list *is* the file. Computed once
     /// in `load()`; `lineRanges` maps each row id to its lines' range in `serializedLines`.
     @State private var serializedLines: [String] = []
@@ -200,6 +203,27 @@ struct FlowListView: View {
         }
     }
 
+    /// Shared rendering for `setupAdvisory` and `inputAdvisory` — same non-blocking shape,
+    /// same fix-it button style when the advisory carries one (a missing-input advisory
+    /// never does; there's no settings pane that creates a file).
+    private func advisoryBanner(_ advisory: FlowPreflight.RowAdvisory) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Label(advisory.reason, systemImage: "exclamationmark.circle")
+                .font(.callout)
+                .foregroundStyle(.blue)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let action = advisory.action {
+                setupActionButton(action)
+                    .buttonStyle(.bordered)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+
     // MARK: - Content
 
     private func flowList(_ doc: FlowDocument, display: FlowDisplay) -> some View {
@@ -210,21 +234,12 @@ struct FlowListView: View {
             // runnable and this is not `notRunnableView`'s red refusal, so it renders inline,
             // above the row list, with the same fix-it button style.
             if let advisory = setupAdvisory {
-                HStack(alignment: .top, spacing: 8) {
-                    Label(advisory.reason, systemImage: "exclamationmark.circle")
-                        .font(.callout)
-                        .foregroundStyle(.blue)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if let action = advisory.action {
-                        setupActionButton(action)
-                            .buttonStyle(.bordered)
-                    }
-                }
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                advisoryBanner(advisory)
+            }
+            // FIP-2 — same shape, for a missing `Read *` input. Owner ruling: warn only, so
+            // this never disables Run below.
+            if let advisory = inputAdvisory {
+                advisoryBanner(advisory)
             }
             if let sentence = session.errorSentence {
                 HStack(alignment: .top, spacing: 8) {
@@ -838,6 +853,7 @@ struct FlowListView: View {
         notRunnableReason = nil
         notRunnableAction = nil
         setupAdvisory = nil
+        inputAdvisory = nil
         load()
     }
 
@@ -984,6 +1000,9 @@ struct FlowListView: View {
         // FIX-2: the setup pass now covers every row, not only `.model` ones — surfaced as a
         // non-blocking banner, never fed into the blocking `notRunnableReason` path above.
         setupAdvisory = FlowPreflight.setupAdvisory(preflight)
+        // FIP-2: same non-blocking shape, for a `Read *` row whose file isn't there yet.
+        // `makeScope()` already falls back to `.plain(flowID)` for a non-workspace flow.
+        inputAdvisory = FlowInputAdvisory.advisory(for: doc, scope: makeScope())
         // The inspector's frozen Properties tab reuses the editor's resolution machinery
         // (candidate models, input labels, display numbers) over a read-only model.
         inspectModel = FlowEditorModel(name: display?.title ?? flowID, flowID: locationID,
