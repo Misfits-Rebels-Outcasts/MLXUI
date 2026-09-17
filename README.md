@@ -23,6 +23,45 @@ them with one click, and provides a purpose-built Run UI for each model type.
 
 ---
 
+## 🔀 Run AI Workflows
+
+### What is mlx-workflow?
+
+A readable AI workflow you can run locally — and MLXUI now runs it natively.
+
+```
+1. Read Audio   client-call.m4a
+2. Transcribe   Whisper Large v3
+3. Summarize    Qwen3 8B; "Action items only"
+4. Save Text    followups.md
+```
+
+*(Note: "Whisper Large v3" and "Qwen3 8B" are AI models.)*
+
+That's an entire AI workflow. You can read it, so you can change it. No developer, no canvas
+full of boxes and arrows, no wondering what it did while you weren't looking.
+
+You chain local models together by writing a numbered list, where each row takes one file in
+and gives one out. Position is the wiring — by default every row takes whatever the row above
+it produced, and you point elsewhere with a number in parens when you need to. Those two rules
+give you a full directed acyclic graph written as a plain list you can diff in git or paste
+into a chat.
+
+It all runs on your own Mac, so your files stay put and running it costs nothing. Keep using
+frontier agents for the thinking and the one-off stuff. When something becomes a weekly habit,
+move it here and it becomes a button you press.
+
+MLXUI runs these readable `.cat` workflows through its **Pipeline Runner**, so the models you
+install in the catalog are the same models your workflows use — no separate setup.
+
+![AI Workflow](https://www.connectcode.net/neoimages/ai-workflow.png)
+
+<a href="https://www.connectcode.net/mlx-workflow.html">
+  <img src="https://img.shields.io/badge/Learn%20more-mlx--workflow-blue?style=for-the-badge" alt="Learn more about mlx-workflow">
+</a>
+
+---
+
 ## ✨ What's New
 
 <!-- Items marked *(hidden in-app)* are built but switched off behind an in-app flag right
