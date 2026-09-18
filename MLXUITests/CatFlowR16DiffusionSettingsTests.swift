@@ -217,7 +217,7 @@ struct CatFlowR16DiffusionSettingsTests {
 }
 
 /// A no-op stage for `RealExecutor` config tests (no model needed).
-private struct StubStage: PipelineStage {
+private nonisolated struct StubStage: PipelineStage {
     let id = "stub.r16"
     let name = "Stub"
     var accepts: MediaKind { .text }

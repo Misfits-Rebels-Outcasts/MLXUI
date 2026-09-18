@@ -35,7 +35,7 @@ nonisolated final class SAM3Embeddings: Module {
 
     func callAsFunction(_ x: MLXArray) -> MLXArray {
         let patches = patchEmbeddings(x)   // (B, H, W, D)
-        let (b, h, w, d) = (patches.dim(0), patches.dim(1), patches.dim(2), patches.dim(3))
+        let (h, w, d) = (patches.dim(1), patches.dim(2), patches.dim(3))
         let g = Int(sqrt(Float(positionEmbeddings.dim(1))))
         var pe = positionEmbeddings.reshaped([1, g, g, d])
         let repsH = h / g, repsW = w / g

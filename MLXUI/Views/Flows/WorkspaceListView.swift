@@ -374,8 +374,7 @@ struct WorkspaceListView: View {
             appState.reloadWorkspaces()
             appState.editingFlow = target
         } catch {
-            flowActionError = (error as? CustomStringConvertible)?.description
-                ?? "Couldn't copy '\(entry.title)' into this workspace."
+            flowActionError = (error as CustomStringConvertible).description
         }
     }
 
@@ -482,7 +481,7 @@ struct WorkspaceListView: View {
         do {
             try WorkspaceStore.removeFlow(file: flow.url, from: workspace.url)
         } catch {
-            flowActionError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+            flowActionError = (error as CustomStringConvertible).description
             return
         }
         appState.reloadWorkspaces()
@@ -507,7 +506,7 @@ struct WorkspaceListView: View {
                                               in: workspace.url)
             appState.reloadWorkspaces()
         } catch {
-            flowActionError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+            flowActionError = (error as CustomStringConvertible).description
         }
     }
 }

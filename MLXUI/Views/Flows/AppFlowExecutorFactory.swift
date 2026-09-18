@@ -10,7 +10,7 @@ import Foundation
     /// scope's *location* (`workspace` + `locationID`) — for a workspace flow that is the
     /// shared workspace directory — while the `RunContext` keeps the scope's *identity* for
     /// `On Flow` matching and run records.
-    nonisolated enum AppFlowExecutorFactory {
+    enum AppFlowExecutorFactory {
 
     /// Build the real executor for `scope`, resolving model stages through `appState`.
     static func make(

@@ -77,7 +77,7 @@ struct CatFlowSerializerTests {
 
     @Test func wholeGalleryRoundTripsByteForByte() throws {
         let files = try allGalleryFiles()
-        #expect(files.count == 72)
+        #expect(files.count == 73)
 
         var checked = 0
         var failing: [String] = []
@@ -91,7 +91,7 @@ struct CatFlowSerializerTests {
             }
             checked += 1
         }
-        #expect(checked == 72)
+        #expect(checked == 73)
         #expect(failing.isEmpty,
                 "non-canonical gallery files (serialize(parse(x)) != x): \(failing.joined(separator: ", "))")
         if !failing.isEmpty {

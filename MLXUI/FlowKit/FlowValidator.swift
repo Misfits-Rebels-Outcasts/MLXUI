@@ -620,7 +620,7 @@ nonisolated enum FlowValidator {
     static func checkDeclaredSignature(row: ParsedRow, path: String, accepts: Shape, resolvedGives: Shape?, issues: inout [FlowIssue]) {
         guard let raw = row.declaredSignature else { return }
         let (dAccept, dGive) = parseDeclaredSignature(raw)
-        if row.blockKind == nil, let dAccept, case .anyKind = accepts {} else {
+        if row.blockKind == nil, dAccept != nil, case .anyKind = accepts {} else {
             if row.blockKind == nil, let dAccept, !shapesLooselyMatch(dAccept, accepts) {
                 issues.append(FlowIssue(row: path, code: "signature-mismatch",
                     message: "Row \(path)'s declared signature says the input is \(describe(dAccept)), but the inferred type is \(describe(accepts)). Update the annotation, or fix the row."))

@@ -185,7 +185,7 @@ nonisolated struct FlowCacheStore: Sendable {
 
 // MARK: - Manifest DTO
 
-extension FlowCacheStore {
+nonisolated extension FlowCacheStore {
     /// One cached `Asset`'s manifest — inline values stored directly, file-backed items by
     /// content hash. `kind` is the raw kind string, mirroring the Python's
     /// `{"kind": item.kind.value, ...}` shape.

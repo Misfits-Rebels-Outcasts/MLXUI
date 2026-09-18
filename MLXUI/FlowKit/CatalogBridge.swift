@@ -590,7 +590,7 @@ nonisolated struct CuratedManifest: Codable, Sendable, Equatable {
 /// one scan covers both). RM-4b/RM-FIX-1 reuses the same bundle scan for `TaskModels
 /// .providerEgress(forDisplay:)` — one general "read every installed manifest" primitive,
 /// two call sites.
-extension CuratedManifest {
+nonisolated extension CuratedManifest {
     /// The testable core: decode every URL as a `CuratedManifest` and keep the
     /// `credentials` name of the ones that have ANY declared `kind` and DO name one.
     /// `CuratedManifest.load`'s own directory (`Resources/CatFlow/models`, flattened to

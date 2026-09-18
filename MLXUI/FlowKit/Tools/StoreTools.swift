@@ -347,13 +347,13 @@ nonisolated enum StoreTool {
 
         if mode == "insert" {
             for row in rows {
-                existing.append(Dictionary(uniqueKeysWithValues: zip(columns, row)))
+                existing.append(Dictionary(uniqueKeysWithValues: zip(columns, row.map { $0 ?? NSNull() })))
             }
         } else {
         let keyIdx = columns.firstIndex(of: key!)!
         for row in rows {
             let keyValue = row[keyIdx]
-            let newRecord = Dictionary(uniqueKeysWithValues: zip(columns, row))
+            let newRecord = Dictionary(uniqueKeysWithValues: zip(columns, row.map { $0 ?? NSNull() }))
             let matchPos = existing.firstIndex { "\($0[key!] ?? "")" == "\(keyValue ?? "")" }
                 if let matchPos, mode == "replace" {
                     existing.remove(at: matchPos)
@@ -375,7 +375,7 @@ nonisolated enum StoreTool {
 }
 
 private extension NSRegularExpression {
-    func fullMatch(_ text: String) -> Bool {
+    nonisolated func fullMatch(_ text: String) -> Bool {
         let ns = NSRange(text.startIndex..<text.endIndex, in: text)
         return firstMatch(in: text, range: ns)?.range == ns
     }

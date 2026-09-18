@@ -329,7 +329,7 @@ private final class ExtractStructuredTestConfigBox: @unchecked Sendable {
 /// A stub LLM stage for the executor seam: answers the yes/no gate ("yes" for the first two
 /// checks, then "no") and returns a canned value for each field prompt — enough to prove the
 /// branch assembles a real table, without weights.
-private struct StubExtractStage: PipelineStage {
+private nonisolated struct StubExtractStage: PipelineStage {
     let id = "stub.extract.llm"
     let name = "Stub Extract LLM"
     var accepts: MediaKind { .text }

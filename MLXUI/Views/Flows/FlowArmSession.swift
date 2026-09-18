@@ -277,7 +277,7 @@ final class FlowArmSession {
 
     /// The newest file in the watched folder matching `pattern=`.
     private var lastMatchingFile: URL? {
-        guard let fileSource else { return nil }
+        guard fileSource != nil else { return nil }
         // The watched folder path is the file descriptor's original; recover from the
         // pending occurrence bookkeeping by re-walking the settings path stored on arm.
         guard let folder = watchedFolder else { return nil }

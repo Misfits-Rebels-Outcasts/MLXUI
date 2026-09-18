@@ -161,7 +161,7 @@ struct CatFlowRerankStageConfigTests {
 }
 
 /// A local text→text stub for RealExecutor config tests (no model needed).
-private struct StubTextStage: PipelineStage {
+private nonisolated struct StubTextStage: PipelineStage {
     let id = "stub.rerank"
     let name = "Stub"
     var accepts: MediaKind { .text }

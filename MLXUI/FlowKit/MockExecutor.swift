@@ -52,7 +52,7 @@ final class MockExecutor: FlowExecutor, @unchecked Sendable {
             _lastTimeoutFlag = nil
             _lastStaged = nil
         }
-        if let desc = TaskCatalog.deciderTasks[row.task ?? ""] {
+        if TaskCatalog.deciderTasks[row.task ?? ""] != nil {
             let tag = pickTag(path: path, row: row)
             lock.withLock { _lastTag = tag }
             return deciderPayload(path: path, row: row, inputs: inputs, tag: tag)

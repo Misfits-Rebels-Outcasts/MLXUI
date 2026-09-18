@@ -38,7 +38,7 @@ nonisolated protocol FlowExecutor: Sendable {
     /// `· ctx` journal snapshot this activation read, `usedFlowContent` the ambient `uses:`
     /// flow's exact text — the three ingredients the cache key folds in (FIX-12), mirroring
     /// `interpreter.py:1220-1221`. Throws a `FlowError`.
-    func execute(path: String, row: Row, inputs: [Asset],
+    nonisolated func execute(path: String, row: Row, inputs: [Asset],
                  transcript: [FlowInterpreter.TranscriptEntry]?,
                  context: [(label: String, content: String)]?,
                  usedFlowContent: String?) async throws -> Asset
@@ -46,27 +46,27 @@ nonisolated protocol FlowExecutor: Sendable {
     /// Whether the last `execute` served from cache. Default `false` for plain executors;
     /// `CachingExecutor` overrides (a reference type so the mutation persists across the
     /// protocol existential). The runner reads this to emit `.cacheHit`.
-    var lastCacheHit: Bool { get }
+    nonisolated var lastCacheHit: Bool { get }
 
     /// The tag a decider row fired on its last `execute` (the Python's `last_tag`), or nil
     /// for a non-decider row. The interpreter routes a `DecideClause` on it. Default `nil`;
     /// `MockExecutor` sets it for decider rows.
-    var lastTag: String? { get }
+    nonisolated var lastTag: String? { get }
 
     /// A human row's timeout default (the Python's `last_timeout_flag`): `(code, message)`
     /// for F002, or nil. `MockExecutor` sets it for Ask Human / Human Input with a `timeout=`.
-    var lastTimeoutFlag: (code: String, message: String)? { get }
+    nonisolated var lastTimeoutFlag: (code: String, message: String)? { get }
 
     /// RM-2 — a provider decider's F010 disclosure ("this row's tag is parsed, not
     /// guaranteed"), same shape as `lastTimeoutFlag`. `nil` for every non-provider-decider
     /// row. `MockExecutor` sets it for a `name @ provider` decider row.
-    var lastProviderDeciderFlag: (code: String, message: String)? { get }
+    nonisolated var lastProviderDeciderFlag: (code: String, message: String)? { get }
 
     /// A staged row's queued outbox effect (the Python's `last_staged`), or nil.
-    var lastStaged: (id: String, kind: String, summary: String)? { get }
+    nonisolated var lastStaged: (id: String, kind: String, summary: String)? { get }
 }
 
-extension FlowExecutor {
+nonisolated extension FlowExecutor {
     /// The 3-arg convenience form — a row with no transcript/context/uses ambient. Provided
     /// as an extension so the interpreter always calls the full seam while existing call
     /// sites keep compiling.

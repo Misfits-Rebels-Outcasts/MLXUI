@@ -45,18 +45,18 @@ nonisolated struct RealExecutor: FlowExecutor {
     var lastStaged: (id: String, kind: String, summary: String)? { stagedBox.staged }
 
     /// A reference box for the decider's fired tag.
-    private final class TagBox: @unchecked Sendable {
+    private nonisolated final class TagBox: @unchecked Sendable {
         var tag: String?
     }
 
     /// A reference box for the F002 timeout disclosure and RM-2's F010 disclosure.
-    private final class FlagBox: @unchecked Sendable {
+    private nonisolated final class FlagBox: @unchecked Sendable {
         var timeout: (code: String, message: String)?
         var providerDecider: (code: String, message: String)?
     }
 
     /// CFM-R12-8: a staged row's effect, read by the interpreter for `effect_staged`.
-    private final class StagedBox: @unchecked Sendable {
+    private nonisolated final class StagedBox: @unchecked Sendable {
         var staged: (id: String, kind: String, summary: String)?
     }
 

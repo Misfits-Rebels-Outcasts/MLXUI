@@ -4,7 +4,7 @@ import MLXNN
 
 // MARK: - Config
 
-struct WanDiTConfig: Sendable {
+nonisolated struct WanDiTConfig: Sendable {
     var dim:      Int = 1536    // 12 heads × 128 head_dim
     var ffnDim:   Int = 8960
     var freqDim:  Int = 256     // sinusoidal timestep embedding dim

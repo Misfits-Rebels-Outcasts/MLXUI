@@ -52,12 +52,12 @@ nonisolated enum BlockKind: String, Sendable {
 /// conforms to it in CFM-R1-3; the shared compatibility logic stays in Core so the
 /// validator, runner, and step picker can never drift (the `shapes.py` isolation rule).
 protocol RowShape: Sendable {
-    var task: String? { get }
-    var blockKind: BlockKind? { get }
-    var children: [any RowShape] { get }
+    nonisolated var task: String? { get }
+    nonisolated var blockKind: BlockKind? { get }
+    nonisolated var children: [any RowShape] { get }
 }
 
-extension Shape {
+nonisolated extension Shape {
     /// `signature(row)` from `catflow-mlx/src/catflow/core/shapes.py` — the (accepts, gives)
     /// pair for a task row (catalog lookup) or a block row (first-child/last-child
     /// inference, `<each>` lifting `Single → ListOf`). `nil` if the task/block signature

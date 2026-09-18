@@ -520,7 +520,7 @@ nonisolated enum FlowDocumentError: Error, CustomStringConvertible, Equatable {
 
 /// The Python's `flow_to_dict`/`conformance` parse-tree shape. `kind`-discriminated refs
 /// carry a `number` (row ref), `position` (input ref), or `name` (param ref).
-private struct RawFlow: Decodable {
+private nonisolated struct RawFlow: Decodable {
     var version: String?
     var rows: [RawRow]
     var flags: [String]?
@@ -584,7 +584,7 @@ private struct RawParamDecl: Decodable {
     }
 }
 
-private struct RawRow: Codable {
+private nonisolated struct RawRow: Codable {
     var task: String?
     var model: String?
     var settings: String?
@@ -725,7 +725,7 @@ private struct RawRow: Codable {
     }
 }
 
-private struct RawRef: Codable {
+private nonisolated struct RawRef: Codable {
     var kind: String
     var number: Int?
     var position: Int?

@@ -177,7 +177,7 @@ struct RerankStageTests {
 /// A stub registry stage standing in for MoC-4's `RerankSDK`: `.text → .text`, parsing the
 /// bridge's `"query\ncandidate"` input and replying with the candidate's score as text —
 /// the seam contract `RealExecutor.runModel`'s `engines.rerank.` branch relies on.
-private struct StubScoringStage: PipelineStage {
+private nonisolated struct StubScoringStage: PipelineStage {
     let id = "stub.rerank.model"
     let name = "Stub Reranker"
     let scores: [String: Double]

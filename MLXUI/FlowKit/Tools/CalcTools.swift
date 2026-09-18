@@ -129,6 +129,7 @@ nonisolated enum CalcEngine {
         init(tokens: [Token]) { self.tokens = tokens }
 
         func peek() -> Token { tokens[pos] }
+        @discardableResult
         func advance() -> Token { defer { pos += 1 }; return tokens[pos] }
 
         func expect(_ kind: String) throws -> Token {

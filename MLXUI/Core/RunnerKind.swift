@@ -8,7 +8,7 @@ nonisolated enum RunnerKind: String, Sendable {
     case llm, asr, tts, vision, embedding, ocr, image, music, segmentation, video, upscale, rerank, unsupported
 }
 
-extension ModelEntry {
+nonisolated extension ModelEntry {
     /// Normalized routing key: start from `modelType`, then override known catalog
     /// mislabels by family. This is the only place dispatch decisions are made.
     var runnerKind: RunnerKind {

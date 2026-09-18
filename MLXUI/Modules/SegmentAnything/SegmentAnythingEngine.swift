@@ -43,7 +43,7 @@ nonisolated final class SAM3ModelContainer: Module {
 
 /// The cached image-side tensors produced once per image (`encodeImage`), re-used on every
 /// prompt decode. `imagePe` is the dense positional encoding of the 72×72 grid.
-struct SAM3ImageFeatures {
+nonisolated struct SAM3ImageFeatures {
     let imageEmbedding: MLXArray     // [1, 72, 72, 256]  (with `no_mem_embed` added)
     let highResFeatures: [MLXArray]  // [[1,288,288,32] (conv_s0), [1,144,144,64] (conv_s1)]
     let imagePe: MLXArray            // [1, 72, 72, 256]

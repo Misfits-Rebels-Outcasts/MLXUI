@@ -15,7 +15,7 @@ final class AppState { //appstatecomeback
 
     /// Set to `true` to hide the "Image Upscaling" domain (and every model listed
     /// under it, e.g. SeedVR2 3B) from the catalog UI. Mirrors `hideVideoGeneration`.
-    static let hideSeedVR2 = true
+    static let hideSeedVR2 = false
 
     /// Set to `true` to hide the entire "Flows" section (sidebar, gallery, run views).
     /// When `true`, `galleryEntries` is empty and the section does not render — the app
@@ -31,12 +31,12 @@ final class AppState { //appstatecomeback
     /// page: the section still renders, but every control in it is non-interactive —
     /// Import Flow, the New Flow badge, and each saved flow's open/export/remove. The two
     /// bundled shelves — Basic Gallery and Advance Gallery — are unaffected.
-    static let disableMyWorkflows = false //cbx
+    static let disableMyWorkflows = false //comeback
 
     /// Set to `true` to hide the "My Workspace" shelf (the New Workspace badge and every
     /// workspace, bundled or saved) on the Automate → AI Workflows page. Flip to `false`
     /// to show the section.
-    static let hideMyWorkspace = false
+    static let hideMyWorkspace = false //comeback
 
     /// Set to `true` to hide the "Rerank" domain (and its one model, Qwen3-Reranker-0.6B)
     /// from Browse → Infrastructure. The Infrastructure section itself still renders while
@@ -51,7 +51,7 @@ final class AppState { //appstatecomeback
     /// Set to `true` to hide the "Advance Gallery" shelf (every bundled flow that isn't
     /// basic) on the Automate → AI Workflows page. My Workflows and Basic Gallery still
     /// render.
-    static let hideAdvanceGallery = false //cbx
+    static let hideAdvanceGallery = false //comeback
 
     /// Set to `true` to hide **Settings → Providers** and **Settings → Privacy** from the
     /// `SettingsRootView` tab bar. Models and Tools always render regardless of this flag.
@@ -240,7 +240,7 @@ final class AppState { //appstatecomeback
             if selectedFlow?.workspace?.workspaceID == workspaceID { selectedFlow = nil }
             if editingFlow?.workspace?.workspaceID == workspaceID { editingFlow = nil }
         } catch {
-            workspaceRemoveError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+            workspaceRemoveError = (error as CustomStringConvertible).description
         }
     }
 
@@ -264,7 +264,7 @@ final class AppState { //appstatecomeback
             if selectedFlow?.flowID == flowID { selectedFlow = nil }
             if editingFlow?.flowID == flowID { editingFlow = nil }
         } catch {
-            flowRemoveError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+            flowRemoveError = (error as CustomStringConvertible).description
         }
     }
 
@@ -600,8 +600,9 @@ final class AppState { //appstatecomeback
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.plainText, .data]
-        panel.allowedFileTypes = ["cat", "catpipeline", "txt"]
+        let catType = UTType(filenameExtension: "cat") ?? .plainText
+        let catPipelineType = UTType(filenameExtension: "catpipeline") ?? .plainText
+        panel.allowedContentTypes = [.plainText, .data, catType, catPipelineType]
         panel.begin { [weak self] response in
             guard response == .OK, let self, let url = panel.url else { return }
             let accessed = url.startAccessingSecurityScopedResource()
@@ -619,7 +620,7 @@ final class AppState { //appstatecomeback
             do {
                 try self.openCatFlow(at: url, bookmarkData: bookmark)
             } catch {
-                self.openCatFlowError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+                self.openCatFlowError = (error as CustomStringConvertible).description
             }
         }
     }

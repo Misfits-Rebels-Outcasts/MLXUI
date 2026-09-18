@@ -312,7 +312,7 @@ nonisolated struct ContactSheetTool {
     }
 }
 
-private extension ImageTools {
+private nonisolated extension ImageTools {
     /// The single image input's file path (the image tools' input contract).
     static func requireImagePath(_ input: Asset, row: String) throws -> URL {
         guard let item = input.items.first, let path = item.path else {

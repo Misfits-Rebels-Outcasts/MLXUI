@@ -25,7 +25,7 @@ nonisolated struct ReadAudioTool: AssetStage {
         let url = try ReadPath.resolve(workspace: workspace, flowID: flowID, path: path, settings: settings,
                                        inputs: [input], kind: .file, row: "Read Audio", checksUpstream: false)
         progress(0.3)
-        let buffer = try AudioFileReader.read(url)
+        _ = try AudioFileReader.read(url)
         progress(1.0)
         return Asset(items: [Item(kind: .audio, value: nil, path: url, sourceText: nil)])
     }

@@ -90,7 +90,9 @@ nonisolated enum NetTools {
     }
 
     /// Cap redirects at `limit` (an unbounded redirect chain is how a fetch becomes a loop).
-    private final class RedirectCappingDelegate: NSObject, URLSessionTaskDelegate {
+    /// `@unchecked`: `capped`/`count` are mutated only on the delegate's own callback and
+    /// read only after `session.bytes(for:)` has been awaited — never concurrently.
+    private final class RedirectCappingDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
         let limit: Int
         private(set) var capped = false
         private var count = 0
@@ -214,7 +216,7 @@ nonisolated struct FetchFeedTool {
 
 // MARK: - Shared helpers
 
-extension NetTools {
+nonisolated extension NetTools {
     static func resolveURL(inputs: [Asset], settings: String) throws -> String {
         if let first = inputs.first?.items.first, first.kind == .text, let value = first.value, !value.isEmpty {
             return value

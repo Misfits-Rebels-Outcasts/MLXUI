@@ -2,7 +2,7 @@ import Foundation
 
 /// SeedVR2 3B transformer configuration.
 /// Decoded from `config.json` in the installed model directory.
-struct SeedVR2Config: Codable, Sendable {
+nonisolated struct SeedVR2Config: Codable, Sendable {
     var vidInChannels:  Int   = 33
     var vidOutChannels: Int   = 16
     var vidDim:         Int   = 2560

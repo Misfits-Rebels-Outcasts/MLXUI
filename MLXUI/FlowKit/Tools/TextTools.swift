@@ -271,7 +271,7 @@ nonisolated struct DedupeTool: AssetStage {
     }
 }
 
-private extension String {
+private nonisolated extension String {
     /// A practical `str.casefold()` — full Unicode case folding isn't in Foundation, so this
     /// covers the folds that matter in practice (sharp s, the common ligatures, Turkish
     /// dotted capital İ, final sigma, Kelvin/Angstrom signs) then lowercases (CFM-FIX-3/M3).
@@ -472,7 +472,7 @@ nonisolated struct TemplateTool: AssetStage {
 // MARK: - Diff
 
 /// The full set of Unicode line boundaries `str.splitlines()` recognizes (beyond `\n`/`\r`).
-private let pythonLineBreakScalars: Set<Unicode.Scalar> = [
+private nonisolated let pythonLineBreakScalars: Set<Unicode.Scalar> = [
     "\u{0B}", "\u{0C}", "\u{1C}", "\u{1D}", "\u{1E}", "\u{85}", "\u{2028}", "\u{2029}",
 ]
 

@@ -154,7 +154,7 @@ nonisolated enum UserFlowStoreError: Error, CustomStringConvertible, Equatable {
 
     var description: String {
         switch self {
-        case .notFound(let flowID):
+        case .notFound:
             return "The flow's folder isn't in your flows directory anymore — nothing to remove."
         case .importNeedsOneFlowFile(let count):
             return "A flow folder needs exactly one .cat or .catpipeline file — this one has \(count)."

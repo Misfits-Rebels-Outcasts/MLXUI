@@ -477,7 +477,7 @@ struct FlowListView: View {
         return Self.aggregateDescendantStatus(of: row, session: session, fallback: own)
     }
 
-    private nonisolated static func aggregateDescendantStatus(of row: Row, session: FlowRunSession,
+    private static func aggregateDescendantStatus(of row: Row, session: FlowRunSession,
                                                               fallback: FlowStatus) -> FlowStatus {
         var worst = fallback
         for child in row.children {
@@ -883,7 +883,7 @@ struct FlowListView: View {
         do {
             document = try CatParser.parse(text)
         } catch {
-            loadError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+            loadError = (error as CustomStringConvertible).description
             return
         }
         guard let doc = document else { return }
@@ -911,7 +911,7 @@ struct FlowListView: View {
         do {
             document = try GalleryLoader.loadDocument(flowID: flowID)
         } catch {
-            loadError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+            loadError = (error as CustomStringConvertible).description
             return
         }
         guard let doc = document else { return }
@@ -965,7 +965,7 @@ struct FlowListView: View {
         do {
             document = try UserFlowStore.loadDocument(entry: entry)
         } catch {
-            loadError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+            loadError = (error as CustomStringConvertible).description
             return
         }
         guard let doc = document else { return }

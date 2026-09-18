@@ -23,7 +23,7 @@ enum SeedVR2EngineError: Error, LocalizedError {
 
 // MARK: - Latent creator
 
-private enum SeedVR2LatentCreator {
+private nonisolated enum SeedVR2LatentCreator {
     /// Gaussian noise latent: [1, 16, 1, H, W].
     static func noiseLatents(seed: UInt64, height: Int, width: Int) -> MLXArray {
         let key = MLXRandom.key(seed)
@@ -39,7 +39,7 @@ private enum SeedVR2LatentCreator {
 
 // MARK: - Euler scheduler (1-step)
 
-private struct SeedVR2EulerScheduler {
+private nonisolated struct SeedVR2EulerScheduler {
     let timesteps: [Float]  // typically [1000.0]
 
     init(numSteps: Int = 1) {

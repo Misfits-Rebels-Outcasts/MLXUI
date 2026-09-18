@@ -382,7 +382,7 @@ nonisolated enum TableTool {
         guard allItems.count >= 2, let pathA = allItems[0].path, let pathB = allItems[1].path else {
             throw FlowError.stageFailure(row: "Merge Record", message: "needs two table inputs")
         }
-        var (columnsA, rowsA) = try readTable(from: pathA)
+        let (columnsA, rowsA) = try readTable(from: pathA)
         let (columnsB, rowsB) = try readTable(from: pathB)
         let s = FlowSettings(settings)
         guard let key = s.value(for: "key") else {

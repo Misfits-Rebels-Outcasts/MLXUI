@@ -93,7 +93,7 @@ public struct ShellInvocation: Sendable {
 // MARK: - Result
 
 /// Outcome of a child process that ran to completion (any exit code).
-public struct ShellResult: Sendable {
+nonisolated public struct ShellResult: Sendable {
     public let standardOutput: String
     public let standardError: String
     public let exitCode: Int32

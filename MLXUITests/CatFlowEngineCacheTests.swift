@@ -7,7 +7,7 @@ import Foundation
 /// one first. The footprint numbers are the catalog's `ramGB` (the preflight's figure).
 struct CatFlowEngineCacheTests {
 
-    private struct CountingStage: PipelineStage {
+    private nonisolated struct CountingStage: PipelineStage {
         let id = "counting"
         let name = "Counting"
         var accepts: MediaKind { .text }

@@ -773,7 +773,12 @@ final class FlowEditorModel {
             // (47929d1) gave Ask Human/Human Input a real runtime path (park, or resolve to a
             // declared default on timeout) without this stale check being told — every fresh
             // human row showed a false "can't complete" warning underneath, on top of E501.
-            if desc.taskClass != .instant, desc.taskClass != .model, desc.taskClass != .human {
+            // Same drift hit `.net`: CFM-R12-9 + WS-2 gave `RealExecutor.runNet` a real path
+            // for all five networked tools (Web Fetch/Search/Fetch Feed/Download File/HTTP
+            // Get), and `FlowRunner.rowClassRefusal` already lets `.net` run — this check
+            // wasn't told either, so every net row showed the same false warning.
+            if desc.taskClass != .instant, desc.taskClass != .model, desc.taskClass != .human,
+               desc.taskClass != .net {
                 return "Row \(path) is a \(desc.taskClass.rawValue) row, which this version of Flows can't complete."
             }
             // ES-UI-1: `Extract Structured`'s settings string *is* its column list. An empty or

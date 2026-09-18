@@ -100,7 +100,7 @@ nonisolated enum FrameError: Error, CustomStringConvertible, Equatable {
 private extension NSRegularExpression {
     /// Replace every match, passing its first capture group to `replacement`. Throws if
     /// the closure throws. Matches are replaced right-to-left so earlier ranges stay valid.
-    func substitute(in string: String, replacement: (String) throws -> String) throws -> String {
+    nonisolated func substitute(in string: String, replacement: (String) throws -> String) throws -> String {
         var output = string
         let matches = self.matches(in: string, range: NSRange(string.startIndex..<string.endIndex, in: string))
         for match in matches.reversed() {

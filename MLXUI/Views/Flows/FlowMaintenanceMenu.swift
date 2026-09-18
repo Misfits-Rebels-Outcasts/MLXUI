@@ -45,8 +45,7 @@ struct FlowMaintenanceMenu<ExtraItems: View>: View {
                         onNotice(try session.undoImprovise(doc: doc, workspace: workspace,
                                                            flowID: flowID))
                     } catch {
-                        onNotice((error as? CustomStringConvertible)?.description
-                                 ?? error.localizedDescription)
+                        onNotice((error as CustomStringConvertible).description)
                     }
                 }
             }

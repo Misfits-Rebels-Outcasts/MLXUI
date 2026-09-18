@@ -163,7 +163,7 @@ extension PaddleOCRVLModel {
             let groupSize = config.quantization?.groupSize ?? 64
             let bits = config.quantization?.bits ?? 4
             quantize(model: model, filter: { path, _ in
-                sanitizedWeights["\(path).scales"] != nil ? (groupSize: groupSize, bits: bits) : nil
+                sanitizedWeights["\(path).scales"] != nil ? (groupSize: groupSize, bits: bits, mode: .affine) : nil
             })
         }
 

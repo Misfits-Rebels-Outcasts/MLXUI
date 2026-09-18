@@ -1,7 +1,7 @@
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import Foundation
-import MLX
+@preconcurrency import MLX
 
 public enum ProcessingMode: String, CaseIterable, Sendable {
     case base

@@ -9,10 +9,7 @@ nonisolated enum FlowErrorDisplay {
         if let stage = error as? StageError { return sentence(for: stage) }
         // M1: the remaining FlowKit errors conform to `CustomStringConvertible` (not
         // `LocalizedError`) — surface the written sentence, never "couldn't be completed".
-        if let convertible = error as? CustomStringConvertible {
-            return convertible.description
-        }
-        return "This step failed: \(error.localizedDescription)"
+        return (error as CustomStringConvertible).description
     }
 
     static func sentence(for error: FlowError) -> String {
@@ -68,8 +65,7 @@ nonisolated enum FlowErrorDisplay {
         case .engineFailure(let stage, let underlying):
             // Name the stage and the fix; surface the underlying cause when it has a real
             // description (the bridge to the engine's own error voice).
-            let cause = (underlying as? CustomStringConvertible)?.description
-                ?? (underlying as NSError).localizedDescription
+            let cause = (underlying as CustomStringConvertible).description
             if !cause.isEmpty && !cause.contains("couldn't be completed") {
                 return "The \(stage) engine failed — \(cause). Check the model files and try again."
             }

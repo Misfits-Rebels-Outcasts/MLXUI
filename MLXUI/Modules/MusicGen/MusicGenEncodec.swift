@@ -143,7 +143,7 @@ nonisolated struct MusicGenEncodecConfig: Sendable {
     var hopLength: Int { upsamplingRatios.reduce(1, *) }
 }
 
-private struct EncodecConfigDTO: Codable {
+private nonisolated struct EncodecConfigDTO: Codable {
     let audioChannels: Int
     let numFilters: Int
     let kernelSize: Int

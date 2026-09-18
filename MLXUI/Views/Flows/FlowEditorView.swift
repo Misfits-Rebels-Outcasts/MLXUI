@@ -650,7 +650,7 @@ struct FlowEditorView: View {
             try model.save()
             model.saveError = nil
         } catch {
-            model.saveError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+            model.saveError = (error as CustomStringConvertible).description
         }
         prepareInstall()
     }

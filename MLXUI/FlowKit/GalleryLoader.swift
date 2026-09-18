@@ -198,6 +198,8 @@ nonisolated enum GalleryLoader {
                 ("receipt-02.png", "receipts/receipt-02.png"),
                 ("receipt-03.png", "receipts/receipt-03.png")
             ]
+        case "35-WebIngest":
+            return [("urls.txt", "urls.txt")]
         case "36-SupportAutoDraft":
             return [
                 ("36-SupportAutoDraft-ticket-01.txt", "tickets/ticket-01.txt"),
@@ -271,6 +273,8 @@ nonisolated enum GalleryLoader {
             ]
         case "56-OrderTriageQueue":
             return [("new_orders.csv", "new_orders.csv"), ("orders.db", "orders.db")]
+        case "73-WebSummaryLinks":
+            return [("73-WebSummaryLinks-urls.txt", "urls.txt")]
         case "1-TranscribeAudio":
             return [("canond.wav", "canond.wav")]
         case "2-SummaryFromAudio":

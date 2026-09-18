@@ -559,7 +559,7 @@ private final class CountingExecutor: FlowExecutor, @unchecked Sendable {
 
 /// A stub `text → text` PipelineStage that echoes its input, so a frame-backed row's
 /// rendered prompt is observable.
-private struct EchoPromptStage: PipelineStage {
+private nonisolated struct EchoPromptStage: PipelineStage {
     let id = "stub.echo"
     let name = "Echo Prompt"
     var accepts: MediaKind { .text }

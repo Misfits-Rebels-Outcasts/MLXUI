@@ -8,7 +8,7 @@ import Foundation
 ///
 /// Keyed on `hfModelId`/`id` substrings (precise to the catalog entries) so we don't need the
 /// model installed to flag it. Update when an architecture is ported (remove its entry).
-enum ModelSupport {
+nonisolated enum ModelSupport {
     private struct Gap {
         let idFragment: String   // matched case-insensitively against id / hfModelId
         let reason: String

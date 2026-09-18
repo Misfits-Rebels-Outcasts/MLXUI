@@ -506,6 +506,13 @@
    "category": "Basic",
    "description": "Point PaddleOCR-VL at a screenshot of a table and get the grid back as OTSL table markup — the model's table mode, saved to table.otsl.",
    "tier": "basic"
+  },
+  {
+   "number": 73,
+   "title": "Web to Summary Links",
+   "filename": "73-WebSummaryLinks.cat",
+   "category": "The Web, Read-Only",
+   "description": "The same hand-picked URLs as Web to Index, read for their headlines instead — one HTML page of story, summary and link."
   }
  ]
 }

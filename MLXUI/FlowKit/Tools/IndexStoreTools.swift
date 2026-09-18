@@ -25,7 +25,7 @@ nonisolated enum NpyCodec {
         var data = Data([0x93, 0x4E, 0x55, 0x4D, 0x50, 0x59, 0x01, 0x00])
         data.append(contentsOf: withUnsafeBytes(of: UInt16(header.utf8.count).littleEndian) { Array($0) })
         data.append(Data(header.utf8))
-        var floats = values
+        let floats = values
         floats.withUnsafeBytes { data.append(contentsOf: $0) }
         try data.write(to: url)
     }
@@ -443,11 +443,11 @@ nonisolated struct KeywordSearchTool {
     }
 }
 
-extension StoreIndexTool {
+nonisolated extension StoreIndexTool {
     /// SPEC-Q22: read the `embedder.json` sidecar when every vector came from the same
     /// directory (the Python's `engines/embed.py` writes it); nil otherwise.
     fileprivate static func autoEmbedder(_ vectorItems: [Item]) -> String? {
-        guard let first = vectorItems.first?.path else { return nil }
+        guard vectorItems.first?.path != nil else { return nil }
         let parents = Set(vectorItems.compactMap { $0.path?.deletingLastPathComponent() })
         guard parents.count == 1, let dir = parents.first else { return nil }
         let sidecar = dir.appendingPathComponent("embedder.json")

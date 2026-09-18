@@ -291,7 +291,7 @@ struct FlowGalleryView: View {
                     from: url, workspace: FlowWorkspace(root: ModelStore.shared.workspacesDirectory))
                 appState.reloadWorkspaces()
             } catch {
-                appState.workspaceImportError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+                appState.workspaceImportError = (error as CustomStringConvertible).description
             }
         }
     }
@@ -349,7 +349,7 @@ struct FlowGalleryView: View {
                 _ = try UserFlowStore.importFlow(from: url, workspace: FlowWorkspace.shared)
                 appState.reloadUserFlows()
             } catch {
-                appState.flowImportError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+                appState.flowImportError = (error as CustomStringConvertible).description
             }
         }
     }
@@ -372,7 +372,7 @@ struct FlowGalleryView: View {
                                                     to: url, workspace: FlowWorkspace.shared)
                 NSWorkspace.shared.activateFileViewerSelecting([dest])
             } catch {
-                appState.flowExportError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+                appState.flowExportError = (error as CustomStringConvertible).description
             }
         }
     }

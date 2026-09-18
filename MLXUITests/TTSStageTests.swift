@@ -168,7 +168,7 @@ struct TTSStageTests {
 }
 
 /// A local text→text stub for RealExecutor config tests (no model needed).
-private struct TTSStubStage: PipelineStage {
+private nonisolated struct TTSStubStage: PipelineStage {
     let id = "stub.tts"
     let name = "Stub TTS"
     var accepts: MediaKind { .text }

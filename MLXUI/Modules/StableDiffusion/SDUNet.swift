@@ -93,7 +93,7 @@ nonisolated final class SDUNet: Module {
         for i in 0 ..< downCount {
             let out = c.blockOutChannels[i]
             let layers = c.layersPerBlock[i]
-            var resnetIns = [prevOut] + Array(repeating: out, count: layers - 1)
+            let resnetIns = [prevOut] + Array(repeating: out, count: layers - 1)
             downs.append(SDDownBlock(
                 resnetInChannels: resnetIns, outChannels: out, tembChannels: c.tembChannels,
                 hasCrossAttention: i > 0, transformerLayers: c.transformerLayersPerBlock[i],

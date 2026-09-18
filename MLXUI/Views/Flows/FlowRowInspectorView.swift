@@ -692,7 +692,7 @@ struct FlowRowInspectorView: View {
             creatingFolder = false
             newFolderName = ""
         } catch {
-            model.saveError = (error as? CustomStringConvertible)?.description ?? error.localizedDescription
+            model.saveError = (error as CustomStringConvertible).description
         }
     }
 
@@ -816,7 +816,7 @@ struct FlowRowInspectorView: View {
     /// One entry the in-flow list offers: its flow-relative token — the exact one FILE-1's
     /// guard writes, trailing `/` on a directory — plus a count for directories and, only for
     /// the synthesized "current but not listed" row, a flagging note.
-    struct InFlowEntry: Equatable {
+    nonisolated struct InFlowEntry: Equatable {
         let token: String
         let isDirectory: Bool
         let count: Int?

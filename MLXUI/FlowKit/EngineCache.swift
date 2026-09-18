@@ -18,7 +18,7 @@ import MLX
 /// same budget sets MLX's own `Memory.cacheLimit`, so freed buffers from evicted engines
 /// don't pile up either. The preflight's largest-single-row rule stays the gate that every
 /// engine individually fits RAM; the cache is bounded independently.
-final class EngineCache: @unchecked Sendable {
+nonisolated final class EngineCache: @unchecked Sendable {
     /// Builds a stage for an installed model (the app's registry path).
     typealias Builder = @Sendable (ModelEntry, StageConfig) async throws -> any PipelineStage
 
@@ -39,6 +39,15 @@ final class EngineCache: @unchecked Sendable {
     private var recency: [Key] = []
     private let budgetBytes: Int64
 
+    /// `lock`/`unlock` are `noasync` — the SDK's push toward async-safe scoped locking.
+    /// Wrapping the critical section in this synchronous helper keeps the lock/unlock pair
+    /// out of `stage`'s async frame, which is otherwise held only across synchronous work.
+    private func withLock<T>(_ body: () -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body()
+    }
+
     /// The app-wide cache. Its budget is fixed from system RAM at first access; the builder
     /// is passed per call (the registry isn't available at static-init time).
     static let shared = EngineCache(budgetBytes: EngineCache.defaultBudget(totalRAMGB: SystemInfo.detect().totalRAMGB))
@@ -58,47 +67,48 @@ final class EngineCache: @unchecked Sendable {
     func stage(for model: ModelEntry, config: StageConfig,
                builder: Builder) async throws -> any PipelineStage {
         let key = Key(id: model.id, config: config)
-        lock.lock()
-        if let entry = entries[key] {
-            touchLocked(key)
-            lock.unlock()
-            return entry.stage
+        if let cached = withLock({ () -> (any PipelineStage)? in
+            if let entry = entries[key] {
+                touchLocked(key)
+                return entry.stage
+            }
+            // Make room for this model's footprint before building. Evict immediately so
+            // the running total reflects each removal (deferring them over-evicts).
+            let newBytes = Int64(model.ramGB * 1_073_741_824)
+            while totalBytesLocked() + newBytes > budgetBytes, let oldest = recency.last {
+                recency.removeLast()
+                entries[oldest] = nil
+            }
+            return nil
+        }) {
+            return cached
         }
-        // Make room for this model's footprint before building. Evict immediately so the
-        // running total reflects each removal (deferring them over-evicts).
-        let newBytes = Int64(model.ramGB * 1_073_741_824)
-        while totalBytesLocked() + newBytes > budgetBytes, let oldest = recency.last {
-            recency.removeLast()
-            entries[oldest] = nil
-        }
-        lock.unlock()
 
         let stage = try await builder(model, config)
 
-        lock.lock()
-        entries[key] = Entry(key: key, model: model, stage: stage)
-        touchLocked(key)
-        lock.unlock()
+        withLock {
+            entries[key] = Entry(key: key, model: model, stage: stage)
+            touchLocked(key)
+        }
         return stage
     }
 
     /// Total cached footprint, in bytes (the catalog's `ramGB` figures, not measured).
     var totalCachedBytes: Int64 {
-        lock.lock(); defer { lock.unlock() }
-        return totalBytesLocked()
+        withLock { totalBytesLocked() }
     }
 
     /// The number of warm engines currently held.
     var count: Int {
-        lock.lock(); defer { lock.unlock() }
-        return entries.count
+        withLock { entries.count }
     }
 
     /// Drop every engine (e.g. a "Clear Cache" action) — the next row reloads.
     func clear() {
-        lock.lock(); defer { lock.unlock() }
-        entries.removeAll()
-        recency.removeAll()
+        withLock {
+            entries.removeAll()
+            recency.removeAll()
+        }
     }
 
     // MARK: - Lock-held helpers

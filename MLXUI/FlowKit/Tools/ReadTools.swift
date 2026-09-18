@@ -64,7 +64,7 @@ nonisolated enum SampleSeed {
 /// `checksUpstream: false` is `Read Audio`/`Read Text`/`Read Video`/`Read Index` — verified
 /// against each tool's own prior code, not assumed (see `FlowInputFile`'s identical
 /// classification, arrived at independently for the preflight advisory).
-enum ReadPath {
+nonisolated enum ReadPath {
     static func resolve(workspace: FlowWorkspace, flowID: String, path: String, settings: String,
                         inputs: [Asset], kind: Kind, row: String,
                         checksUpstream: Bool = true) throws -> URL {

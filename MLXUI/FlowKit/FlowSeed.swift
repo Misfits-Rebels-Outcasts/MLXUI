@@ -99,6 +99,6 @@ nonisolated enum FlowSeed {
     }
 }
 
-extension SHA256.Digest {
+nonisolated extension SHA256.Digest {
     var bytes: [UInt8] { Array(self) }
 }

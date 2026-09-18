@@ -1,0 +1,23 @@
+mlxflow 0.8; network
+1. Read Text   urls.txt
+2. Split       by=lines
+3. <each page; on_error=skip>   [text] -> [text]
+     1. Web Fetch   (input:1)     as=markdown
+     2. Template    (1,input:1)   "From the news index page below, pick the 5
+                                  most newsworthy AI items. For each, output
+                                  exactly one block:\n<article><h3>TITLE</h3>
+                                  <p>ONE SENTENCE, 25 words max</p> <p><a
+                                  href='URL'>Read the story</a></p>
+                                  </article>\n\nRules: copy URL verbatim from a
+                                  [text](url) link in PAGE_TEXT. If it does not
+                                  begin with http, join it to the origin of
+                                  PAGE_URL. Never invent a URL. Skip any item
+                                  you cannot link. Output HTML only, no
+                                  commentary.\n\nPAGE_URL:
+                                  {2}\n\nPAGE_TEXT:\n{1}"
+     3. Generate                  Qwen3 8B
+4. Join Text   separator="\n"
+5. Template    "<!doctype html>\n<html><head><meta charset='utf-8'>
+               <title>AI News</title></head>\n<body>\n<h1>AI News</h1>\n
+               {input}\n</body></html>\n"
+6. Save Text   ai-news.html

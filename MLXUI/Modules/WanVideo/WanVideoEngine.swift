@@ -435,9 +435,12 @@ nonisolated enum WanVideoEngine {
                     }
                 }
                 input.markAsFinished()
+                // `AVAssetWriter` predates Sendable but its completion handler always fires
+                // after `finishWriting` returns, so this capture never races the caller.
+                nonisolated(unsafe) let uncheckedWriter = writer
                 writer.finishWriting {
-                    if writer.status == .failed {
-                        cont.resume(throwing: writer.error ?? CocoaError(.fileWriteUnknown))
+                    if uncheckedWriter.status == .failed {
+                        cont.resume(throwing: uncheckedWriter.error ?? CocoaError(.fileWriteUnknown))
                     } else {
                         cont.resume()
                     }

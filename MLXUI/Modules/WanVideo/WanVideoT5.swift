@@ -4,7 +4,7 @@ import MLXNN
 
 // MARK: - Config
 
-struct WanT5Config: Sendable {
+nonisolated struct WanT5Config: Sendable {
     var dModel: Int = 4096
     var dFF: Int = 10240
     var heads: Int = 64

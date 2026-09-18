@@ -1,10 +1,10 @@
 import Foundation
 
-enum ModelSource: String, Codable {
+nonisolated enum ModelSource: String, Codable {
     case mlx, coreai, coreml, research
 }
 
-enum ModelType: String, Codable {
+nonisolated enum ModelType: String, Codable {
     case llm, asr, tts, embedding, vision, ocr, video, image, music, segmentation, upscale, rerank
     var sfSymbol: String {
         switch self {
@@ -24,7 +24,7 @@ enum ModelType: String, Codable {
     }
 }
 
-struct ModelVariant: Codable, Identifiable, Hashable {
+nonisolated struct ModelVariant: Codable, Identifiable {
     var id: String { hfModelId }
     let quantization: String
     let format: String
@@ -35,7 +35,28 @@ struct ModelVariant: Codable, Identifiable, Hashable {
     let recommended: Bool?
 }
 
-struct ModelBenchmarks: Codable, Hashable {
+// Written explicitly, rather than relying on synthesis, so the conformance witnesses are
+// unambiguously nonisolated under whole-module compilation (WMO surfaced a stray
+// "main actor-isolated conformance" warning on the compiler-synthesized version).
+nonisolated extension ModelVariant: Hashable {
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.quantization == rhs.quantization && lhs.format == rhs.format && lhs.ramGB == rhs.ramGB
+            && lhs.downloadSizeGB == rhs.downloadSizeGB && lhs.qualityPercent == rhs.qualityPercent
+            && lhs.hfModelId == rhs.hfModelId && lhs.recommended == rhs.recommended
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(quantization)
+        hasher.combine(format)
+        hasher.combine(ramGB)
+        hasher.combine(downloadSizeGB)
+        hasher.combine(qualityPercent)
+        hasher.combine(hfModelId)
+        hasher.combine(recommended)
+    }
+}
+
+nonisolated struct ModelBenchmarks: Codable {
     let mmlu: Double?
     let humanEval: Double?
     let gsm8k: Double?
@@ -44,7 +65,26 @@ struct ModelBenchmarks: Codable, Hashable {
     let truthfulQA: Double?
 }
 
-struct ModelEntry: Codable, Identifiable, Hashable {
+// Written explicitly, rather than relying on synthesis, so the conformance witnesses are
+// unambiguously nonisolated under whole-module compilation (WMO surfaced a stray
+// "main actor-isolated conformance" warning on the compiler-synthesized version).
+nonisolated extension ModelBenchmarks: Hashable {
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.mmlu == rhs.mmlu && lhs.humanEval == rhs.humanEval && lhs.gsm8k == rhs.gsm8k
+            && lhs.hellaswag == rhs.hellaswag && lhs.arc == rhs.arc && lhs.truthfulQA == rhs.truthfulQA
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(mmlu)
+        hasher.combine(humanEval)
+        hasher.combine(gsm8k)
+        hasher.combine(hellaswag)
+        hasher.combine(arc)
+        hasher.combine(truthfulQA)
+    }
+}
+
+nonisolated struct ModelEntry: Codable, Identifiable {
     let id: String
     let family: String
     let displayName: String
@@ -144,5 +184,61 @@ struct ModelEntry: Codable, Identifiable, Hashable {
         if d >= 1_000_000 { return String(format: "%.1fM", Double(d) / 1_000_000) }
         if d >= 1_000 { return String(format: "%.1fK", Double(d) / 1_000) }
         return "\(d)"
+    }
+}
+
+// Written explicitly, rather than relying on synthesis, so the conformance witnesses are
+// unambiguously nonisolated under whole-module compilation (WMO surfaced a stray
+// "main actor-isolated conformance" warning on the compiler-synthesized version).
+nonisolated extension ModelEntry: Hashable {
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id && lhs.family == rhs.family && lhs.displayName == rhs.displayName
+            && lhs.paramSize == rhs.paramSize && lhs.paramCountB == rhs.paramCountB
+            && lhs.modelType == rhs.modelType && lhs.source == rhs.source && lhs.format == rhs.format
+            && lhs.platforms == rhs.platforms && lhs.minMacOSVersion == rhs.minMacOSVersion
+            && lhs.hfRepo == rhs.hfRepo && lhs.hfModelId == rhs.hfModelId && lhs.ramGB == rhs.ramGB
+            && lhs.downloadSizeGB == rhs.downloadSizeGB && lhs.contextWindow == rhs.contextWindow
+            && lhs.license == rhs.license && lhs.licenseUrl == rhs.licenseUrl
+            && lhs.description == rhs.description && lhs.summary == rhs.summary
+            && lhs.descriptionSource == rhs.descriptionSource && lhs.architecture == rhs.architecture
+            && lhs.languages == rhs.languages && lhs.lastUpdated == rhs.lastUpdated
+            && lhs.taskTags == rhs.taskTags && lhs.benchmarks == rhs.benchmarks
+            && lhs.speedTokensPerSec == rhs.speedTokensPerSec && lhs.speedHardware == rhs.speedHardware
+            && lhs.speedEstimated == rhs.speedEstimated && lhs.communityDownloads == rhs.communityDownloads
+            && lhs.communityLikes == rhs.communityLikes && lhs.variants == rhs.variants
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(family)
+        hasher.combine(displayName)
+        hasher.combine(paramSize)
+        hasher.combine(paramCountB)
+        hasher.combine(modelType)
+        hasher.combine(source)
+        hasher.combine(format)
+        hasher.combine(platforms)
+        hasher.combine(minMacOSVersion)
+        hasher.combine(hfRepo)
+        hasher.combine(hfModelId)
+        hasher.combine(ramGB)
+        hasher.combine(downloadSizeGB)
+        hasher.combine(contextWindow)
+        hasher.combine(license)
+        hasher.combine(licenseUrl)
+        hasher.combine(description)
+        hasher.combine(summary)
+        hasher.combine(descriptionSource)
+        hasher.combine(architecture)
+        hasher.combine(languages)
+        hasher.combine(lastUpdated)
+        hasher.combine(taskTags)
+        hasher.combine(benchmarks)
+        hasher.combine(speedTokensPerSec)
+        hasher.combine(speedHardware)
+        hasher.combine(speedEstimated)
+        hasher.combine(communityDownloads)
+        hasher.combine(communityLikes)
+        hasher.combine(variants)
     }
 }

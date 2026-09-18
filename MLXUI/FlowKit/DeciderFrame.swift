@@ -150,7 +150,7 @@ nonisolated enum DeciderFrame {
 }
 
 private extension NSRegularExpression {
-    func replace(in string: String, replacement: (String) -> String) -> String {
+    nonisolated func replace(in string: String, replacement: (String) -> String) -> String {
         var output = string
         let matches = self.matches(in: string, range: NSRange(string.startIndex..<string.endIndex, in: string))
         for match in matches.reversed() {

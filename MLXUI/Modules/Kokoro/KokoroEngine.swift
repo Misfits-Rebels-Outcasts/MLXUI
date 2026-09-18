@@ -121,7 +121,7 @@ enum KokoroEngine {
     }
 
     /// Split a too-long string at whitespace boundaries into ≤`maxLength` pieces.
-    private static func hardSplit(_ text: String, maxLength: Int) -> [String] {
+    private nonisolated static func hardSplit(_ text: String, maxLength: Int) -> [String] {
         let words = text.split(whereSeparator: \.isWhitespace).map(String.init)
         var chunks: [String] = []
         var current = ""

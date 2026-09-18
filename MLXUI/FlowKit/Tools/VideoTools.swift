@@ -23,20 +23,24 @@ nonisolated enum VideoTools {
         }
     }
 
-    static func cmTime(_ seconds: Double, asset: AVAsset) -> CMTime {
-        let scale = asset.duration.timescale > 0 ? asset.duration.timescale : 600
+    static func cmTime(_ seconds: Double, asset: AVAsset) async throws -> CMTime {
+        let duration = try await asset.load(.duration)
+        let scale = duration.timescale > 0 ? duration.timescale : 600
         return CMTime(seconds: seconds, preferredTimescale: scale)
     }
 
     /// Await an export session to completion.
     static func export(_ session: AVAssetExportSession) async throws {
+        // `AVAssetExportSession` predates Sendable but its completion handler always fires
+        // after `exportAsynchronously` returns, so this capture never races the caller.
+        nonisolated(unsafe) let uncheckedSession = session
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            session.exportAsynchronously {
-                switch session.status {
+            uncheckedSession.exportAsynchronously {
+                switch uncheckedSession.status {
                 case .completed: cont.resume()
                 case .cancelled: cont.resume(throwing: FlowError.stageFailure(row: "video", message: "cancelled"))
                 default:
-                    cont.resume(throwing: session.error ?? FlowError.stageFailure(row: "video", message: "export failed"))
+                    cont.resume(throwing: uncheckedSession.error ?? FlowError.stageFailure(row: "video", message: "export failed"))
                 }
             }
         }
@@ -84,7 +88,7 @@ nonisolated struct ExtractFrameTool: AssetStage {
         generator.appliesPreferredTrackTransform = true
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = .zero
-        let time = VideoTools.cmTime(seconds, asset: asset)
+        let time = try await VideoTools.cmTime(seconds, asset: asset)
         let cg: CGImage
         do {
             cg = try generator.copyCGImage(at: time, actualTime: nil)
@@ -156,10 +160,11 @@ nonisolated struct TrimTool: AssetStage {
         guard let session = AVAssetExportSession(asset: asset, presetName: preset) else {
             throw FlowError.stageFailure(row: "Trim", message: "no compatible export preset")
         }
-        var range = CMTimeRange(start: .zero, end: asset.duration)
-        let duration = asset.duration.seconds
+        let assetDuration = try await asset.load(.duration)
+        var range = CMTimeRange(start: .zero, end: assetDuration)
+        let duration = assetDuration.seconds
         if let start, let t = VideoTools.parseTime(start) {
-            range = CMTimeRange(start: VideoTools.cmTime(min(t, duration), asset: asset), duration: range.duration)
+            range = CMTimeRange(start: try await VideoTools.cmTime(min(t, duration), asset: asset), duration: range.duration)
         }
         if let end, let t = VideoTools.parseTime(end) {
             let length = max(t - range.start.seconds, 0)
@@ -195,11 +200,13 @@ nonisolated struct MuxTool {
               let sourceVideo = try await videoAsset.loadTracks(withMediaType: .video).first else {
             throw FlowError.stageFailure(row: "Mux", message: "no video track")
         }
-        try videoTrack.insertTimeRange(CMTimeRange(start: .zero, duration: videoAsset.duration),
+        let videoDuration = try await videoAsset.load(.duration)
+        try videoTrack.insertTimeRange(CMTimeRange(start: .zero, duration: videoDuration),
                                        of: sourceVideo, at: .zero)
         if let sourceAudio = try await audioAsset.loadTracks(withMediaType: .audio).first,
            let audioTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
-            try audioTrack.insertTimeRange(CMTimeRange(start: .zero, duration: audioAsset.duration),
+            let audioDuration = try await audioAsset.load(.duration)
+            try audioTrack.insertTimeRange(CMTimeRange(start: .zero, duration: audioDuration),
                                            of: sourceAudio, at: .zero)
         }
 
@@ -295,7 +302,7 @@ nonisolated struct JoinVideoTool {
         // frame duration for a multi-insert composition, and a plain export then fails with
         // "The operation is not supported for this media." The render size is the first
         // clip's (the size check guarantees they all agree).
-        let fps = max(Int(clips[0].track.nominalFrameRate), 1)
+        let fps = max(Int(try await clips[0].track.load(.nominalFrameRate)), 1)
         let videoComposition = AVMutableVideoComposition()
         videoComposition.renderSize = clips[0].size
         videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(fps))

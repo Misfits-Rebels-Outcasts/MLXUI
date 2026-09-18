@@ -132,7 +132,7 @@ struct CatFlowSettingsResolutionTests {
     }
 }
 
-private struct SetOneStubStage: PipelineStage {
+private nonisolated struct SetOneStubStage: PipelineStage {
     let id = "stub.set1"
     let name = "SET-1 stub"
     var accepts: MediaKind { .text }

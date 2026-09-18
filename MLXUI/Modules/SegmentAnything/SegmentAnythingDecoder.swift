@@ -27,7 +27,6 @@ nonisolated final class SAM3PromptEncoder: Module {
     /// points: [N, 2] in 1008-px space; labels: [N] (0=background, 1=foreground).
     /// Returns sparse [1, N+1, promptDim] (appends a `not_a_point` padding token).
     func callAsFunction(points: MLXArray, labels: MLXArray) -> MLXArray {
-        let n = points.dim(0)
         let pts = (points + 0.5).asType(.float32)          // shift to pixel center
         let padded = concatenated([pts, MLXArray.zeros([1, 2])], axis: 0)          // [N+1, 2]
         let paddedLabels = concatenated([labels, MLXArray([Int32(-1)])], axis: 0)  // [N+1]

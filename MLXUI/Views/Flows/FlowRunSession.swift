@@ -303,7 +303,12 @@ final class FlowRunSession {
             if rowStates[id]?.status != .failed { setStatus(.running, for: id) }
         case .finished(let id, let asset):
             outputs[id] = asset
-            setStatus(.succeeded, for: id)
+            // DA-10-FIX-2: an `<each on_error=skip>` body row reuses the same row id across
+            // items — a later item's own `.finished` must not paint over an earlier item's
+            // skip on this run. Once any item skipped, the dot stays △ for the rest of the
+            // run (the caption's reason is real evidence *this row* dropped something, even
+            // though a later item of the same row went on to succeed).
+            if rowStates[id]?.wasSkipped != true { setStatus(.succeeded, for: id) }
             metrics.record(rowID: id)
         case .failed(let id, let error):
             rowStates[id]?.status = .failed
@@ -311,7 +316,7 @@ final class FlowRunSession {
             errorSentence = FlowErrorDisplay.sentence(for: error)
             metrics.record(rowID: id)
         case .cacheHit(let id):
-            setStatus(.succeeded, for: id)
+            if rowStates[id]?.wasSkipped != true { setStatus(.succeeded, for: id) }
             cacheHitRows.insert(id)
             metrics.record(rowID: id)
         case .flagRaised(let id, let message):

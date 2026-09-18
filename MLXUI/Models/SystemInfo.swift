@@ -1,6 +1,6 @@
 import Foundation
 
-struct SystemInfo {
+nonisolated struct SystemInfo {
     let modelIdentifier: String
     let chipName: String
     let totalRAMGB: Double

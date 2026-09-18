@@ -1555,7 +1555,7 @@ nonisolated enum CatParser {
 }
 
 /// A `re.match`-style result with captured groups (0 = whole match).
-struct ReMatch {
+nonisolated struct ReMatch {
     var range: NSRange
     var groups: [String?]
 
@@ -1566,7 +1566,7 @@ struct ReMatch {
 
 /// The grammar pass's intermediate row: references are still numeric (the wire
 /// shape), to be rewritten to ids by `CatParser.resolve`.
-struct ParsedRow {
+nonisolated struct ParsedRow {
     var task: String?
     var blockKind: BlockKind?
     var blockName: String?
@@ -1687,14 +1687,14 @@ nonisolated enum CatParserError: Error, Equatable, CustomStringConvertible {
 
 extension String {
     /// If the string starts with *prefix*, returns the remainder; else nil.
-    func ltrimmedPrefix(_ prefix: String) -> String? {
+    nonisolated func ltrimmedPrefix(_ prefix: String) -> String? {
         hasPrefix(prefix) ? String(dropFirst(prefix.count)) : nil
     }
 }
 
 extension NSRegularExpression {
     /// `re.search`-style: first match anywhere in *text*.
-    func firstMatch(in text: String) -> NSTextCheckingResult? {
+    nonisolated func firstMatch(in text: String) -> NSTextCheckingResult? {
         let ns = text as NSString
         return firstMatch(in: text, range: NSRange(location: 0, length: ns.length))
     }

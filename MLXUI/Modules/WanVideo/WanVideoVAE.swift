@@ -4,7 +4,7 @@ import MLXNN
 
 // MARK: - Config
 
-struct WanVAEConfig: Sendable {
+nonisolated struct WanVAEConfig: Sendable {
     var baseDim: Int = 96    // smallest channel count
     var zDim:    Int = 16    // latent channel count
     var outCh:   Int = 3     // RGB output

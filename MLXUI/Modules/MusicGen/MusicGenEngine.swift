@@ -4,7 +4,7 @@ import MLXNN
 
 /// Audio-codec decode seam (MG-ENG2) so the engine's run loop is testable with a stub.
 protocol MusicGenAudioDecoding: Sendable {
-    func decode(_ codes: MLXArray) -> MLXArray
+    nonisolated func decode(_ codes: MLXArray) -> MLXArray
 }
 
 extension MusicGenEncodec: MusicGenAudioDecoding {}
@@ -174,7 +174,7 @@ nonisolated enum MusicGenEngine {
     /// BOS row and trim the tail. Returns `[T', codebooks]` int32.
     nonisolated static func undoDelay(_ rows: [MLXArray], codebooks: Int) -> MLXArray {
         let T = rows.count
-        var orig = rows.map { $0.asArray(Int32.self) }               // [T][codebooks]
+        let orig = rows.map { $0.asArray(Int32.self) }               // [T][codebooks]
         var shifted = orig
         for k in 0 ..< codebooks {
             for p in 0 ..< (T - codebooks) {

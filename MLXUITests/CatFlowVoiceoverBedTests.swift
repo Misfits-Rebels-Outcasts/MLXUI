@@ -111,7 +111,7 @@ struct CatFlowVoiceoverBedTests {
 
 /// A stub `text → text` stage that echoes its input — the smoke-34 harness: it proves the
 /// settings prompt reached the stage instead of a "needs an input" refusal.
-private struct CapturingStage: PipelineStage {
+private nonisolated struct CapturingStage: PipelineStage {
     let id = "stub.capture"
     let name = "Capture"
     var accepts: MediaKind { .text }

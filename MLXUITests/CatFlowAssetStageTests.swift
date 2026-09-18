@@ -8,7 +8,7 @@ import Foundation
 struct CatFlowAssetStageTests {
 
     /// A stub `PipelineStage` that echoes audio at a fixed rate (like ASR/TTS stages).
-    private struct EchoAudioStage: PipelineStage {
+    private nonisolated struct EchoAudioStage: PipelineStage {
         let id = "stub.echo-audio"
         let name = "Stub Audio"
         var accepts: MediaKind { .audio }
@@ -156,7 +156,7 @@ struct CatFlowAssetStageTests {
 }
 
 /// A stub `text → text` PipelineStage.
-private struct StubTextPipelineStage: PipelineStage {
+private nonisolated struct StubTextPipelineStage: PipelineStage {
     let id = "stub.text"
     let name = "Stub Text"
     var accepts: MediaKind { .text }

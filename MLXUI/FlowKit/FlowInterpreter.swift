@@ -1364,7 +1364,7 @@ nonisolated enum FlowInterpreter {
 /// replaced via `replacement` (the group's own text when the map has no entry — the Python's
 /// `values.get(name, group(0))`). Replaces right-to-left so earlier ranges stay valid.
 private extension NSRegularExpression {
-    func replace(in string: String, replacement: (String) -> String) -> String {
+    nonisolated func replace(in string: String, replacement: (String) -> String) -> String {
         var output = string
         let matches = self.matches(in: string, range: NSRange(string.startIndex..<string.endIndex, in: string))
         for match in matches.reversed() {

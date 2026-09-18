@@ -5,14 +5,14 @@ import MLXNN
 
 // MARK: - Precision + norm helpers
 
-private enum VAEPrecision { static let dtype: DType = .bfloat16 }
+private nonisolated enum VAEPrecision { static let dtype: DType = .bfloat16 }
 
-private func groupNorm32(_ dims: Int) -> GroupNorm {
+private nonisolated func groupNorm32(_ dims: Int) -> GroupNorm {
     GroupNorm(groupCount: 32, dimensions: dims, eps: 1e-6, affine: true, pytorchCompatible: true)
 }
 
 /// GroupNorm over channels (input [B,C,T,H,W]) in fp32, cast back to VAE precision.
-private func vaeGroupNorm(_ x: MLXArray, _ norm: GroupNorm) -> MLXArray {
+private nonisolated func vaeGroupNorm(_ x: MLXArray, _ norm: GroupNorm) -> MLXArray {
     var h = x.transposed(0, 2, 3, 4, 1)   // NDHWC
     h = norm(h.asType(.float32)).asType(VAEPrecision.dtype)
     return h.transposed(0, 4, 1, 2, 3)

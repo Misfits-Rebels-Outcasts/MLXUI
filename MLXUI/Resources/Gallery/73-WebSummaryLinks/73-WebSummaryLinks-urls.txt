@@ -1,0 +1,7 @@
+https://thehackernews.com/search/label/artificial%20intelligence
+https://news.ycombinator.com
+https://www.theregister.com/software/ai_ml/
+https://aiweekly.co
+https://www.artificialintelligence-news.com
+https://github.com/ml-explore/mlx/releases
+https://huggingface.co/mlx-community

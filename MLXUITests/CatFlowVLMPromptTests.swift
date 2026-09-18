@@ -135,7 +135,7 @@ import Foundation
 }
 
 /// A no-op `text → text` stage for the `RealExecutor` config tests (no model needed).
-private struct StubTextStage: PipelineStage {
+private nonisolated struct StubTextStage: PipelineStage {
     let id = "stub.ocp2"
     let name = "Stub"
     var accepts: MediaKind { .text }

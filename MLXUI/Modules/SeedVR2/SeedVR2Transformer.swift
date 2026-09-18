@@ -6,23 +6,23 @@ import MLXNN
 // MARK: - Helpers
 
 /// SwiGLU hidden dim: round_up(2/3 * dim * expandRatio, 256).
-private func svHidden(_ dim: Int, expand: Int) -> Int {
+private nonisolated func svHidden(_ dim: Int, expand: Int) -> Int {
     let raw = 2 * dim * expand / 3
     return (raw + 255) / 256 * 256
 }
 
 /// Affine-free RMSNorm (ones weight) over the last axis.
-private func rmsNormOnes(_ x: MLXArray, eps: Float) -> MLXArray {
+private nonisolated func rmsNormOnes(_ x: MLXArray, eps: Float) -> MLXArray {
     let d = x.shape[x.ndim - 1]
     return MLXFast.rmsNorm(x, weight: MLXArray.ones([d]).asType(x.dtype), eps: eps)
 }
 
-private func ceilDiv(_ a: Int, _ b: Int) -> Int { (a + b - 1) / b }
+private nonisolated func ceilDiv(_ a: Int, _ b: Int) -> Int { (a + b - 1) / b }
 
 // MARK: - Window partitioner
 
 /// Gather/scatter indices that reorder video tokens into variable-size windows.
-struct SeedVR2WindowPartitioner {
+nonisolated struct SeedVR2WindowPartitioner {
     let forwardIdx: MLXArray
     let reverseIdx: MLXArray
     let windowShapes: [[Int]]
