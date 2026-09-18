@@ -170,6 +170,17 @@ struct FlowRowInspectorView: View {
             Spacer(minLength: 0)
         }
         .opacity(isFrozen ? 0.85 : 1)
+        // RT-5 fix (reviewer-caught defect): neither call site gives this view `.id(rowID)`,
+        // so SwiftUI keeps `@State` across a row-selection change — without this, a pending
+        // "Row text" draft (and its refusal banner) would survive onto the newly selected
+        // row, and a blur that fires after `rowID` has already moved would write the old
+        // row's draft onto the new row via `setRowText(draft, for: rowID)`. Discarding is
+        // deliberate here, not incidental: switching rows away from an uncommitted raw-text
+        // edit abandons it, the same way navigating away from an unsaved form field would.
+        .onChange(of: rowID) { _, _ in
+            rowTextDraft = nil
+            rowTextRefusal = nil
+        }
     }
 
     // MARK: - Header
