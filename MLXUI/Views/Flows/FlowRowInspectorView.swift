@@ -108,6 +108,8 @@ struct FlowRowInspectorView: View {
                                 schemaEditor(row: row)
                             case .patternEditor:
                                 patternEditor(row: row)
+                            case .singleLineField(let label):
+                                singleLineField(label: label, row: row)
                             case .none:
                                 EmptyView()
                             }
@@ -283,11 +285,13 @@ struct FlowRowInspectorView: View {
 
     // MARK: - R9-3 instruction textbox
 
-    /// RT-2 (§8 copy table) — the one instruction-box label that isn't "What should it do?":
-    /// these two rows don't tell a model what to do, they ask a person a question.
+    /// RT-2/RT-3 (§8 copy table) — the instruction-box labels that aren't "What should it do?":
+    /// the human rows ask a person a question, not a model; the diffusion rows' whole point is
+    /// the prompt.
     private static func instructionBoxLabel(for task: String) -> String {
         switch task {
         case "Ask Human", "Human Input": return "What should the person be asked?"
+        case "Generate Image", "Generate Sound", "Generate Video": return "Prompt"
         default: return "What should it do?"
         }
     }
@@ -323,6 +327,24 @@ struct FlowRowInspectorView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - RT-3: a short, structured value (not prose)
+
+    /// RT-3 (§3 rule 4) — `Compare`'s criterion today. Reads and writes the same first-quoted
+    /// token as `instructionBox` (`quotedInstruction`/`setInstruction`); the only difference is
+    /// a true single-line field, since a multi-line box would misrepresent a short expression
+    /// like `"> 50"` as prose.
+    private func singleLineField(label: String, row: Row) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.subheadline.weight(.semibold))
+            TextField("…", text: Binding(
+                get: { quotedInstruction(row.settings) ?? "" },
+                set: { model.setInstruction($0.isEmpty ? nil : $0, for: rowID) }
+            ))
+            .textFieldStyle(.roundedBorder)
         }
     }
 
@@ -1267,6 +1289,10 @@ struct FlowRowInspectorView: View {
         /// "bare quoted span, no `key=`" shape as `schemaEditor`, with its own multi-line box
         /// and placeholder chips instead of a column-list label.
         case patternEditor
+        /// RT-3 (§3 rule 4) — a short, structured authored value that isn't prose: `Compare`'s
+        /// criterion (`"> 50"`) today. Same first-quoted-token read/write as `.instructionBox`,
+        /// but a true single-line field — a multi-line box would misrepresent the value's type.
+        case singleLineField(label: String)
         case none
     }
 
@@ -1287,6 +1313,12 @@ struct FlowRowInspectorView: View {
         // also carry `timeout=`/`default=`/`wait=`, which the splice already leaves alone.
         if desc.refName == "tools.human.ask_human" { return .instructionBox }
         if desc.refName == "tools.human.human_input" { return .instructionBox }
+        // RT-3 — the diffusion prompt, read the same way `RealExecutor.runModel` reads it
+        // (`RealExecutor.swift:469-479`, `firstBare()`) when the row has no input: the same
+        // `engines.diffusion.generate_*` prefix, so a future fourth generator inherits the
+        // box the day it lands, matching that call site instead of re-deriving its own list.
+        if desc.refName.hasPrefix("engines.diffusion.generate_") { return .instructionBox }
+        if desc.refName == "tools.compare.compare" { return .singleLineField(label: "Criterion") }  // RT-3
         if desc.refName == "engines.vlm.ocr" {
             switch modelPromptSupport(for: row) {
             case .freeText: return .instructionBox

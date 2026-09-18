@@ -28,9 +28,17 @@ import Foundation
 /// genuine rows, inspected individually — real authored pattern text, no parse artifact or
 /// double-count; see journal `2026-284`). RT-1 (journal `2026-285`) gave `Template` a Pattern
 /// editor (ceiling 80 → 17). RT-2 gave `Ask Human`/`Human Input` their question back (an
-/// `.instructionBox`, `RSI/DelegateRowTextBacklog.md` RT-2) — ceiling 17 → **8**, exactly
-/// 17 − 5 − 4. RT-3..RT-5 lower it further; no later change may raise it. This test itself
-/// fixes nothing (RT-0's own rule) — it only ever reflects what the surfaces above already do.
+/// `.instructionBox`) — ceiling 17 → 8. RT-3's diffusion-prompt and `Compare` sub-commits
+/// (journal `2026-287`) give `Generate Image`/`Generate Sound`/`Generate Video` an
+/// `.instructionBox` and `Compare` a `.singleLineField` — ceiling 8 → **5**. RT-3's `Embed`
+/// and `Improvise` sub-commits are deliberately **not** built (see that journal: `Embed` hits
+/// a confirmed parity bug, `catflow-mlx/SPEC_QUESTIONS.md` Q228; `Improvise` was ruled "agent
+/// goal" but the fix is an out-of-scope `FencedRunner` rewrite, Q227) — both stay in the
+/// remaining 5, alongside `Web Search`'s bare query, which was never RT-3's to fix at all
+/// (§3 rule 3: `query` is already a known Settings key for that task, so it's Tier-2/RT-4
+/// material — a shadowing warning, not a new box). RT-4/RT-5 lower it further; no later
+/// change may raise it. This test itself fixes nothing (RT-0's own rule) — it only ever
+/// reflects what the surfaces above already do.
 struct CatFlowRowTextCoverageTests {
 
     private struct UncoveredRow {
@@ -62,6 +70,8 @@ struct CatFlowRowTextCoverageTests {
         if desc.refName == "tools.text.template" { return true }           // patternEditor (RT-1)
         if desc.refName == "tools.human.ask_human" { return true }         // instructionBox (RT-2)
         if desc.refName == "tools.human.human_input" { return true }       // instructionBox (RT-2)
+        if desc.refName.hasPrefix("engines.diffusion.generate_") { return true } // instructionBox (RT-3)
+        if desc.refName == "tools.compare.compare" { return true }         // singleLineField (RT-3)
         if desc.refName == "engines.vlm.ocr" { return true }                // model-dependent; see above
         return false
     }
@@ -124,13 +134,15 @@ struct CatFlowRowTextCoverageTests {
             .map { "\($0.key): \($0.value)" }
             .joined(separator: ", ")
 
-        // Regression guard first: 8 is what this walk measures after RT-2 (see the type doc
-        // comment). RT-3..RT-5 must only lower this, never raise it.
-        #expect(uncovered.count <= 8,
-                "regression: \(uncovered.count) rows now uncovered (ceiling 8) — \(summary)")
-        // RT-0's own exit, still red until RT-5: a row whose authored text has no
+        // Regression guard first: 5 is what this walk measures after RT-3's diffusion-prompt
+        // and Compare sub-commits (see the type doc comment). RT-4/RT-5 must only lower this,
+        // never raise it.
+        #expect(uncovered.count <= 5,
+                "regression: \(uncovered.count) rows now uncovered (ceiling 5) — \(summary)")
+        // RT-0's own exit, still red until RT-4/RT-5: a row whose authored text has no
         // Properties-tab control at all. RT-1 closed Template, RT-2 closed Ask Human/Human
-        // Input; RT-3's diffusion prompts / Compare / Embed / Improvise are next.
+        // Input, RT-3 closed the diffusion prompts and Compare. `Embed`/`Improvise` are
+        // deliberately deferred (see the type doc comment); `Web Search` is RT-4's.
         #expect(uncovered.isEmpty,
                 "\(uncovered.count) rows carry authored text with no Properties-tab control — \(summary)")
     }
