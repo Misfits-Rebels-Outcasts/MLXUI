@@ -1192,8 +1192,12 @@ nonisolated enum FlowInterpreter {
         return (Asset(items: [Item(kind: .text, value: answer.text ?? "", path: nil, sourceText: nil)]), nil)
     }
 
-    /// `_row_prompt_text` — a human row's leading quoted criterion, unquoted.
-    private static func rowPromptText(_ row: Row) -> String {
+    /// `_row_prompt_text` — a human row's leading quoted criterion, unquoted. Not `private`:
+    /// RT-2 (`RSI/DelegateRowTextBacklog.md`) needs this exact reading, not a re-derivation, to
+    /// verify the Properties tab's human-question box never edits a token this runtime displays
+    /// differently (hazard 8 — this doesn't process `\n`/`\t` escapes the way `FlowSettings
+    /// .unquote` does).
+    static func rowPromptText(_ row: Row) -> String {
         let settings = row.settings ?? ""
         var inQuotes = false
         var chars: [Character] = []

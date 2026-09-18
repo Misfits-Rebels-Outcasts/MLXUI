@@ -283,9 +283,18 @@ struct FlowRowInspectorView: View {
 
     // MARK: - R9-3 instruction textbox
 
+    /// RT-2 (§8 copy table) — the one instruction-box label that isn't "What should it do?":
+    /// these two rows don't tell a model what to do, they ask a person a question.
+    private static func instructionBoxLabel(for task: String) -> String {
+        switch task {
+        case "Ask Human", "Human Input": return "What should the person be asked?"
+        default: return "What should it do?"
+        }
+    }
+
     private func instructionBox(_ task: String, row: Row) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("What should it do?")
+            Text(Self.instructionBoxLabel(for: task))
                 .font(.subheadline.weight(.semibold))
             let instruction = quotedInstruction(row.settings)
             TextField("…", text: Binding(
@@ -1273,6 +1282,11 @@ struct FlowRowInspectorView: View {
         if desc.refName == "engines.vlm.describe_image" { return .instructionBox }
         if desc.refName == "engines.llm.extract_structured" { return .schemaEditor }   // ES-UI-1
         if desc.refName == "tools.text.template" { return .patternEditor }             // RT-1
+        // RT-2 — the question a person is actually asked at run time. Written with the same
+        // `setInstruction` (first quoted token) as every other `.instructionBox`: these rows
+        // also carry `timeout=`/`default=`/`wait=`, which the splice already leaves alone.
+        if desc.refName == "tools.human.ask_human" { return .instructionBox }
+        if desc.refName == "tools.human.human_input" { return .instructionBox }
         if desc.refName == "engines.vlm.ocr" {
             switch modelPromptSupport(for: row) {
             case .freeText: return .instructionBox

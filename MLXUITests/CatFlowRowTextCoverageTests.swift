@@ -27,9 +27,10 @@ import Foundation
 /// non-`Template` task counts matched §0 exactly, but `Template` was 63, not 61 (two more
 /// genuine rows, inspected individually — real authored pattern text, no parse artifact or
 /// double-count; see journal `2026-284`). RT-1 (journal `2026-285`) gave `Template` a Pattern
-/// editor, so `hasAControlFor` below now covers it — the ceiling drops to **17**, exactly
-/// 80 − 63. RT-2..RT-5 lower it further; no later change may raise it. This test itself fixes
-/// nothing (RT-0's own rule) — it only ever reflects what the surfaces above already do.
+/// editor (ceiling 80 → 17). RT-2 gave `Ask Human`/`Human Input` their question back (an
+/// `.instructionBox`, `RSI/DelegateRowTextBacklog.md` RT-2) — ceiling 17 → **8**, exactly
+/// 17 − 5 − 4. RT-3..RT-5 lower it further; no later change may raise it. This test itself
+/// fixes nothing (RT-0's own rule) — it only ever reflects what the surfaces above already do.
 struct CatFlowRowTextCoverageTests {
 
     private struct UncoveredRow {
@@ -59,6 +60,8 @@ struct CatFlowRowTextCoverageTests {
         if desc.refName == "engines.vlm.describe_image" { return true }     // instructionBox
         if desc.refName == "engines.llm.extract_structured" { return true } // schemaEditor (ES-UI-1)
         if desc.refName == "tools.text.template" { return true }           // patternEditor (RT-1)
+        if desc.refName == "tools.human.ask_human" { return true }         // instructionBox (RT-2)
+        if desc.refName == "tools.human.human_input" { return true }       // instructionBox (RT-2)
         if desc.refName == "engines.vlm.ocr" { return true }                // model-dependent; see above
         return false
     }
@@ -121,13 +124,13 @@ struct CatFlowRowTextCoverageTests {
             .map { "\($0.key): \($0.value)" }
             .joined(separator: ", ")
 
-        // Regression guard first: 17 is what this walk measures after RT-1 (see the type doc
-        // comment). RT-2..RT-5 must only lower this, never raise it.
-        #expect(uncovered.count <= 17,
-                "regression: \(uncovered.count) rows now uncovered (ceiling 17) — \(summary)")
+        // Regression guard first: 8 is what this walk measures after RT-2 (see the type doc
+        // comment). RT-3..RT-5 must only lower this, never raise it.
+        #expect(uncovered.count <= 8,
+                "regression: \(uncovered.count) rows now uncovered (ceiling 8) — \(summary)")
         // RT-0's own exit, still red until RT-5: a row whose authored text has no
-        // Properties-tab control at all. RT-1 closed the owner's own report (Template); RT-2's
-        // Ask Human/Human Input rows are next.
+        // Properties-tab control at all. RT-1 closed Template, RT-2 closed Ask Human/Human
+        // Input; RT-3's diffusion prompts / Compare / Embed / Improvise are next.
         #expect(uncovered.isEmpty,
                 "\(uncovered.count) rows carry authored text with no Properties-tab control — \(summary)")
     }
