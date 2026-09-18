@@ -129,6 +129,12 @@ struct FlowRowInspectorView: View {
                         // which would otherwise offer a way to silently corrupt the pattern
                         // with an unrelated token — is hidden for `Template` rows.
                         if row.task != "Template" {
+                            if let warning = shadowingWarning(row) {
+                                Label(warning, systemImage: "exclamationmark.triangle")
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                             settingsSection(row)
                         }
                         if let task = row.task, hasPathSetting(task) {
@@ -549,19 +555,50 @@ struct FlowRowInspectorView: View {
     // MARK: - R9-1 settings fields
 
     private func settingsSection(_ row: Row) -> some View {
-        let settings = FlowSettings(row.settings)
-        let keys = settings.testKeys.sorted()
+        // RT-4: `orderedPairs` (source order), not the test-only `testKeys.sorted()` — a
+        // `Set`'s iteration order isn't source order, and driving production UI off a
+        // `test`-prefixed accessor was never the point of that accessor's existing.
+        let pairs = FlowSettings(row.settings).orderedPairs
         return VStack(alignment: .leading, spacing: 6) {
             Text("Settings")
                 .font(.subheadline.weight(.semibold))
-            ForEach(keys, id: \.self) { key in
-                HStack(spacing: 6) {
-                    Text(key)
-                        .font(.caption.monospaced())
-                        .frame(width: 90, alignment: .trailing)
+            ForEach(pairs, id: \.key) { pair in
+                settingField(key: pair.key, row: row)
+            }
+            if pairs.isEmpty {
+                Text("No settings on this row yet.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            addSettingMenu(row: row)
+        }
+    }
+
+    /// RT-4 — the per-key control shape: a prose key gets a short multi-line field, a
+    /// `separator` gets the escape-visible field (below), everything else stays single-line.
+    @ViewBuilder
+    private func settingField(key: String, row: Row) -> some View {
+        if key == "separator" {
+            separatorField(row: row)
+        } else {
+            let settings = FlowSettings(row.settings)
+            HStack(alignment: .top, spacing: 6) {
+                Text(key)
+                    .font(.caption.monospaced())
+                    .frame(width: 90, alignment: .trailing)
+                if Self.proseSettingKeys.contains(key) {
                     TextField("value", text: Binding(
-                        // FIX-7: write the value even when empty — clearing to nil deletes the
-                        // key, so select-all-and-retype would make the field vanish mid-edit.
+                        // FIX-7: write the value even when empty — clearing to nil deletes
+                        // the key, so select-all-and-retype would make the field vanish
+                        // mid-edit.
+                        get: { settings.value(for: key) ?? "" },
+                        set: { model.setSetting(key: key, value: $0, for: rowID) }
+                    ), axis: .vertical)
+                    .lineLimit(1...4)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.caption)
+                } else {
+                    TextField("value", text: Binding(
                         get: { settings.value(for: key) ?? "" },
                         set: { model.setSetting(key: key, value: $0, for: rowID) }
                     ))
@@ -569,13 +606,52 @@ struct FlowRowInspectorView: View {
                     .font(.caption)
                 }
             }
-            if keys.isEmpty {
-                Text("No settings on this row yet.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            addSettingMenu(row: row)
         }
+    }
+
+    /// RT-4 (§3 rule 4) — a string value, not a mode or number: `query`/`contains`/`expected`/
+    /// `text`/`naming` get room to wrap rather than a cramped one-line field. `separator` is
+    /// excluded (`settingField` routes it to `separatorField` instead) — its value is a short
+    /// symbolic string, not prose, and needs to stay visibly escaped (below), which a real
+    /// multi-line box would defeat by rendering `\n` as an actual, easy-to-miss blank line.
+    private static let proseSettingKeys: Set<String> = ["query", "contains", "expected", "text", "naming"]
+
+    /// RT-4 (escape-visibility) — `separator`'s value round-trips through the same `\n`/`\t`
+    /// escapes a quoted settings value does (`FlowSettingsEditor.quote` / `FlowSettings
+    /// .unquote`), so it's shown and edited as that escaped literal — `\n`, two characters —
+    /// rather than the real, invisible control character `FlowSettings.value(for:)` already
+    /// decoded it to. "Do not silently normalise": what's on screen is what's on disk.
+    private func separatorField(row: Row) -> some View {
+        let settings = FlowSettings(row.settings)
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .top, spacing: 6) {
+                Text("separator")
+                    .font(.caption.monospaced())
+                    .frame(width: 90, alignment: .trailing)
+                TextField("value", text: Binding(
+                    get: { Self.escapedForDisplay(settings.value(for: "separator") ?? "") },
+                    set: { model.setSetting(key: "separator", value: Self.unescapedFromDisplay($0), for: rowID) }
+                ))
+                .textFieldStyle(.roundedBorder)
+                .font(.caption.monospaced())
+            }
+            Text("Shown escaped — \\n is a newline, \\t is a tab.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(.leading, 96)
+        }
+    }
+
+    /// The exact inverse pair `FlowSettingsEditor.quote`/`FlowSettings.unquote` already
+    /// implement, reused rather than re-derived — stripped of (added back for) the surrounding
+    /// quote marks those two assume, since a settings *value* (not a whole quoted token) has
+    /// none. Not `private`: `CatFlowSettingsListEditorTests` asserts against these directly.
+    static func escapedForDisplay(_ value: String) -> String {
+        String(FlowSettingsEditor.quote(value).dropFirst().dropLast())
+    }
+
+    static func unescapedFromDisplay(_ text: String) -> String {
+        FlowSettings.unquote("\"\(text)\"")
     }
 
     private func addSettingMenu(row: Row) -> some View {
@@ -608,14 +684,29 @@ struct FlowRowInspectorView: View {
         // unchanged; `provider` is WS-2's own addition (an explicit override of the
         // Tavily-first selection), not part of the reference's settings surface.
         case "Web Search": return ["query", "top_k", "site", "recency", "timeout", "provider"]
-        case "Filter": return ["by"]
+        case "Filter": return ["by", "contains"]              // TextTools.swift:169
         case "Sort": return ["by", "reverse"]
         case "Dedupe": return ["by"]
         case "Extract": return ["by"]
         case "Count": return ["group_by"]
         case "Compare": return ["mode"]
         case "Template": return []
-        default: return []
+        // RT-4 (§4 Tier 2) — the rest of the keys the executors already read that
+        // `knownSettingKeys` never offered, each cited at the line that reads it.
+        case "Join Text": return ["separator"]                // TextTools.swift:418
+        case "Text to Table": return ["expected"]             // TextToTableStage.swift:26
+        case "Save Images": return ["naming"]                 // SaveImageTools.swift:95
+        case "Web Fetch", "HTTP Get", "Fetch Feed", "Download File":
+            return ["url"]                                    // NetTools.swift:220 (resolveURL)
+        default:
+            // The diffusion four — every `engines.diffusion.*` task shares
+            // `RealExecutor.stageConfig`'s one `seed`/`width`/`height`/`steps` reader
+            // (`RealExecutor.swift:918-921`), so this is keyed on the refName prefix rather
+            // than naming each of the dozen-plus diffusion tasks by hand.
+            if TaskCatalog.get(task)?.refName.hasPrefix("engines.diffusion.") == true {
+                return ["seed", "width", "height", "steps"]
+            }
+            return []
         }
     }
 
@@ -1382,6 +1473,33 @@ struct FlowRowInspectorView: View {
         else { return nil }
         return Self.strandedPromptMessage(token: token, display: display,
                                           support: modelPromptSupport(for: row))
+    }
+
+    /// RT-4 (fact 23, Tier-2 "key/bare shadowing") — `Web Search`/`Rerank` read
+    /// `value(for: "query") ?? firstBare()` (`Tools/WebSearchTool.swift:154`,
+    /// `RealExecutor.swift`'s `engines.rerank.` branch): when a row carries **both**, the key
+    /// silently wins and the pane said nothing. Same amber `Label` shape `strandedPromptWarning`
+    /// uses. Copy from §8, not invented here.
+    ///
+    /// Fact 23 names `Retrieve` too, but `RetrieveTool.run` (`Tools/IndexStoreTools.swift:285`)
+    /// never reads a `query` setting at all — its query is the bound **vector** input, not
+    /// text. `knownSettingKeys("Retrieve")` already (pre-RT-4) offers `query` in the Add menu
+    /// regardless; that's a separate, pre-existing loose end this phase doesn't touch. Scoped
+    /// here to the two tasks actually verified to read it this way.
+    private func shadowingWarning(_ row: Row) -> String? {
+        guard let task = row.task, task == "Web Search" || task == "Rerank"
+        else { return nil }
+        let settings = FlowSettings(row.settings)
+        guard settings.value(for: "query") != nil,
+              let bare = settings.firstBare(), !bare.isEmpty
+        else { return nil }
+        return Self.shadowingMessage(key: "query")
+    }
+
+    /// The pure decision behind `shadowingWarning` — `nonisolated static` so it's
+    /// unit-testable without a View, same reasoning as `strandedPromptMessage`.
+    nonisolated static func shadowingMessage(key: String) -> String {
+        "This row sets both \(key)= and a bare value. \(key)= is the one that runs."
     }
 
     /// The pure decision behind `strandedPromptWarning` — `nil` when the token is fine for the
