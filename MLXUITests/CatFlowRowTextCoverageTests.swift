@@ -23,14 +23,13 @@ import Foundation
 /// reaches it: one of the four `promptControl` shapes (`FlowRowInspectorView.promptControl`),
 /// the file/folder path picker (`hasPathSetting`), or a `Save *` row's filename field
 /// (`task.hasPrefix("Save")`). `RSI/DelegateRowTextBacklog.md` §0 hand-counted **78** against
-/// this tree; this walk — the same tree, mechanically — measures **80**, all 8 non-`Template`
-/// task counts matching §0 exactly (`Ask Human` 5, `Compare` 1, `Embed` 3, `Generate Image` 1,
-/// `Generate Sound` 1, `Human Input` 4, `Improvise` 1, `Web Search` 1) and `Template` at 63, not
-/// 61 — two more genuine rows (inspected individually; both carry real authored pattern text,
-/// neither a parse artifact nor a double-count). Pinned at the number this walk actually
-/// measures, **80**, since a manual count across 71 files is exactly the kind of arithmetic a
-/// mechanical audit is meant to correct — see the journal for this cycle. RT-1..RT-5 lower it;
-/// no later change may raise it. Fixes nothing itself (RT-0's own rule).
+/// the RT-0 tree; RT-0's mechanical walk measured **80** on that same tree instead — all 8
+/// non-`Template` task counts matched §0 exactly, but `Template` was 63, not 61 (two more
+/// genuine rows, inspected individually — real authored pattern text, no parse artifact or
+/// double-count; see journal `2026-284`). RT-1 (journal `2026-285`) gave `Template` a Pattern
+/// editor, so `hasAControlFor` below now covers it — the ceiling drops to **17**, exactly
+/// 80 − 63. RT-2..RT-5 lower it further; no later change may raise it. This test itself fixes
+/// nothing (RT-0's own rule) — it only ever reflects what the surfaces above already do.
 struct CatFlowRowTextCoverageTests {
 
     private struct UncoveredRow {
@@ -59,6 +58,7 @@ struct CatFlowRowTextCoverageTests {
         if desc.refName.hasPrefix("frames/") { return true }                // instructionBox
         if desc.refName == "engines.vlm.describe_image" { return true }     // instructionBox
         if desc.refName == "engines.llm.extract_structured" { return true } // schemaEditor (ES-UI-1)
+        if desc.refName == "tools.text.template" { return true }           // patternEditor (RT-1)
         if desc.refName == "engines.vlm.ocr" { return true }                // model-dependent; see above
         return false
     }
@@ -121,14 +121,13 @@ struct CatFlowRowTextCoverageTests {
             .map { "\($0.key): \($0.value)" }
             .joined(separator: ", ")
 
-        // Regression guard first: 80 is what this walk measures against this tree today (see
-        // the type doc comment — 2 more Template rows than RSI/DelegateRowTextBacklog.md §0's
-        // hand count, both verified genuine). RT-1..RT-5 must only lower this, never raise it.
-        #expect(uncovered.count <= 80,
-                "regression: \(uncovered.count) rows now uncovered (ceiling 80) — \(summary)")
-        // RT-0's own exit: expected RED today. A row whose authored text has no Properties-tab
-        // control at all is the owner's report (Template row 3.2 of 73-WebSummaryLinks.cat, the
-        // largest single case — 63 of the 80) generalized to the whole corpus.
+        // Regression guard first: 17 is what this walk measures after RT-1 (see the type doc
+        // comment). RT-2..RT-5 must only lower this, never raise it.
+        #expect(uncovered.count <= 17,
+                "regression: \(uncovered.count) rows now uncovered (ceiling 17) — \(summary)")
+        // RT-0's own exit, still red until RT-5: a row whose authored text has no
+        // Properties-tab control at all. RT-1 closed the owner's own report (Template); RT-2's
+        // Ask Human/Human Input rows are next.
         #expect(uncovered.isEmpty,
                 "\(uncovered.count) rows carry authored text with no Properties-tab control — \(summary)")
     }

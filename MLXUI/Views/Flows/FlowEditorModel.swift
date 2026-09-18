@@ -551,6 +551,18 @@ final class FlowEditorModel {
         }
     }
 
+    /// RT-1 — set a `Template` row's pattern, the row's entire settings string (fact 11), via
+    /// the whole-string writer rather than `setInstruction`'s first-quoted-token splice — a
+    /// second token in the settings string would otherwise desync what this box shows from
+    /// what the runtime renders (§6 Q1). `nil` (or empty) clears the row's settings entirely.
+    func setPattern(_ text: String?, for rowID: UUID) {
+        commitChange {
+            replaceRow(id: rowID) { row in
+                row.settings = FlowSettingsEditor.replaceWholeSettings(text ?? "", in: row.settings)
+            }
+        }
+    }
+
     /// Set a row's path token — the settings' `path=` or first bare token (CFM-R11-0b's
     /// "the chooser replaces the file by copying it in and the row still says a bare
     /// filename": the inspector writes the copied-in file's bare name here).
@@ -744,6 +756,23 @@ final class FlowEditorModel {
         guard let r = row(withID: rowID), let accepts = Self.signature(of: r)?.accepts else { return 1 }
         if case .tupleOf(let kinds) = accepts { return kinds.count }
         return 1
+    }
+
+    /// RT-1 — whether `id` sits inside an `<each>` block at any depth. Governs the Pattern
+    /// box's `{index}`/`{item}` chips: those placeholders are only legal there
+    /// (`FlowValidator.checkTemplatePlaceholders`'s `inEach`, propagated the same way —
+    /// `inEach || row.blockKind == .each` — down through nested blocks).
+    func isInsideEach(_ id: UUID) -> Bool {
+        Self.isInsideEach(id, rows: document.rows, inEach: false)
+    }
+
+    private nonisolated static func isInsideEach(_ id: UUID, rows: [Row], inEach: Bool) -> Bool {
+        for row in rows {
+            if row.id == id { return inEach }
+            let childInEach = inEach || row.blockKind == .each
+            if isInsideEach(id, rows: row.children, inEach: childInEach) { return true }
+        }
+        return false
     }
 
     // MARK: - Integrity (the yellow row; CFM-R8-FIX-1/3)

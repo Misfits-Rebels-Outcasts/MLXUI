@@ -131,6 +131,16 @@ nonisolated enum FlowSettingsEditor {
         return "\(text); \(needsQuoting(path) ? quote(path) : path)"
     }
 
+    /// RT-1 — `Template`'s Pattern box. `Template`'s settings string **is** the whole pattern
+    /// (`TextTools.unquoteWhole`, fact 11), not a single spliced token like every other
+    /// `replace*` here, so this replaces the row's entire settings string outright rather than
+    /// locating and splicing a span. `raw` isn't read — kept for call-site symmetry with
+    /// `replaceInstruction`/`replacePath`. An empty pattern clears the settings entirely
+    /// (`nil`), matching this file's other "empty box" behavior.
+    static func replaceWholeSettings(_ text: String, in raw: String?) -> String? {
+        text.isEmpty ? nil : quote(text)
+    }
+
     /// The first quoted span's `(token, range)` — the instruction's true extent.
     static func firstQuotedToken(in text: String) -> (token: String, range: Range<String.Index>)? {
         let quoted = NSRegularExpression.compiled(#""(?:[^"\\]|\\.)*""#)

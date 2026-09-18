@@ -57,6 +57,8 @@ struct FlowRowInspectorView: View {
     private var row: Row? { model.row(withID: rowID) }
 
     @State private var showAdvanced = false
+    /// RT-1 — the Pattern box's "Edit…" sheet.
+    @State private var showPatternSheet = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -104,6 +106,8 @@ struct FlowRowInspectorView: View {
                                 modePicker(row: row, values: values, defaultValue: defaultValue)
                             case .schemaEditor:
                                 schemaEditor(row: row)
+                            case .patternEditor:
+                                patternEditor(row: row)
                             case .none:
                                 EmptyView()
                             }
@@ -117,7 +121,14 @@ struct FlowRowInspectorView: View {
                         if let task = row.task, isHumanClass(task) {
                             humanWaitPolicySection(task, row: row)
                         }
-                        settingsSection(row)
+                        // RT-1 (§6 Q1): a `Template` row's Pattern box owns the *entire*
+                        // settings string (fact 11 — the runtime reads it whole, not as
+                        // `key=value` pairs), so the generic Settings list — and its Add menu,
+                        // which would otherwise offer a way to silently corrupt the pattern
+                        // with an unrelated token — is hidden for `Template` rows.
+                        if row.task != "Template" {
+                            settingsSection(row)
+                        }
                         if let task = row.task, hasPathSetting(task) {
                             chooseFileButton(task: task)
                         }
@@ -304,6 +315,105 @@ struct FlowRowInspectorView: View {
                 }
             }
         }
+    }
+
+    // MARK: - RT-1: Template's Pattern box
+
+    /// RT-1 — a `Template` row's pattern *is* its entire settings string (fact 11:
+    /// `TextTools.unquoteWhole`, not a single spliced token), so this reads and writes the
+    /// whole thing through `FlowEditorModel.setPattern` / `FlowSettingsEditor
+    /// .replaceWholeSettings`, never `setInstruction`'s first-quoted-token splice — a second
+    /// token would desync what the box shows from what the runtime renders (§6 Q1). The
+    /// generic Settings list is hidden for `Template` rows for the same reason (see `body`).
+    private func patternEditor(row: Row) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Pattern")
+                .font(.subheadline.weight(.semibold))
+            TextField("…", text: Binding(
+                get: { TextTools.unquoteWhole(row.settings ?? "") },
+                set: { model.setPattern($0.isEmpty ? nil : $0, for: rowID) }
+            ), axis: .vertical)
+            .lineLimit(4...12)
+            .font(.caption.monospaced())
+            .textFieldStyle(.roundedBorder)
+            Text("Placeholders pull in this row's inputs. {1} is the first input, {2} the second, {input} all of them.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            placeholderChips(row: row)
+            Button("Edit…") { showPatternSheet = true }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
+        .sheet(isPresented: $showPatternSheet) {
+            patternEditSheet(row: row)
+        }
+    }
+
+    /// The full-size editor — the pane itself is 260–320 pt (fact 15) and a real pattern runs
+    /// 600+ characters, too cramped for the inline box alone.
+    private func patternEditSheet(row: Row) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Edit pattern")
+                .font(.headline)
+            TextEditor(text: Binding(
+                get: { TextTools.unquoteWhole(model.row(withID: rowID)?.settings ?? "") },
+                set: { model.setPattern($0.isEmpty ? nil : $0, for: rowID) }
+            ))
+            .font(.body.monospaced())
+            .frame(minWidth: 420, minHeight: 320)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+            // E207 (fact 13) reaches this sheet the same way it reaches the header banner
+            // underneath it — both read `model.warning(for:)`, which recomputes whenever
+            // `setPattern` mutates the document. The sheet occludes that banner, so it's
+            // repeated here rather than left invisible until the sheet closes.
+            if let warning = model.warning(for: rowID) {
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+            HStack {
+                Spacer()
+                Button("Done") { showPatternSheet = false }
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding()
+        .frame(minWidth: 460)
+    }
+
+    /// `{1}`, `{2}`, … for `model.inputSlotCount(for:)`, `{input}`, and — only inside an
+    /// `<each>` block, where they're legal (`FlowValidator.reTemplateToken` / `checkTemplate
+    /// Placeholders`'s `inEach`, hazard 9) — `{index}`/`{item}`. Tapping one appends it to the
+    /// pattern: this box has no reliable cursor-position API at the app's macOS 14.0 floor, so
+    /// "insert" here means "append", not a mid-string splice.
+    private func placeholderChips(row: Row) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(placeholderTokens(row: row), id: \.self) { token in
+                    Button {
+                        let current = TextTools.unquoteWhole(row.settings ?? "")
+                        model.setPattern(current + token, for: rowID)
+                    } label: {
+                        Text(token)
+                            .font(.caption2.monospaced())
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.quaternary.opacity(0.5), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func placeholderTokens(row: Row) -> [String] {
+        let slots = model.inputSlotCount(for: rowID)
+        var tokens = slots >= 1 ? (1...slots).map { "{\($0)}" } : []
+        tokens.append("{input}")
+        if model.isInsideEach(rowID) {
+            tokens.append(contentsOf: ["{index}", "{item}"])
+        }
+        return tokens
     }
 
     // MARK: - ES-UI-1: Extract Structured column list
@@ -1144,6 +1254,10 @@ struct FlowRowInspectorView: View {
         /// settings section offers it. This is an instruction-box-shaped editor with the right
         /// label for a column list.
         case schemaEditor
+        /// RT-1 — `Template`'s whole settings string *is* its pattern (fact 11), the same
+        /// "bare quoted span, no `key=`" shape as `schemaEditor`, with its own multi-line box
+        /// and placeholder chips instead of a column-list label.
+        case patternEditor
         case none
     }
 
@@ -1158,6 +1272,7 @@ struct FlowRowInspectorView: View {
         if desc.refName.hasPrefix("frames/") { return .instructionBox }
         if desc.refName == "engines.vlm.describe_image" { return .instructionBox }
         if desc.refName == "engines.llm.extract_structured" { return .schemaEditor }   // ES-UI-1
+        if desc.refName == "tools.text.template" { return .patternEditor }             // RT-1
         if desc.refName == "engines.vlm.ocr" {
             switch modelPromptSupport(for: row) {
             case .freeText: return .instructionBox
