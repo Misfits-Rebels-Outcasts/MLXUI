@@ -23,6 +23,36 @@ them with one click, and provides a purpose-built Run UI for each model type.
 
 ---
 
+## What this is
+
+**The ultimate native SwiftUI cockpit for local AI, built exclusively for MLX and Apple Silicon.**
+
+There are thousands of MLX models on Hugging Face. Using them today means finding the
+right repo, reading the README, managing Python dependencies, figuring out CLI flags,
+and converting formats when things don't match.
+
+MLXUI replaces all of that with a single app. Browse by category (Chat & Text, Vision,
+OCR, Speech-to-Text, Text-to-Speech, Embeddings), filter by what fits your hardware,
+install with a click, and run each model in a purpose-built interface — chat for LLMs,
+a microphone and transcript for ASR, a voice picker for TTS, an image dropwell for OCR.
+
+Under the hood, MLXUI wraps Apple's `mlx-swift` and `mlx-libraries` (MLXLLM, MLXVLM,
+MLXWhisper, MLXAudioTTS, etc.) in a modular SwiftUI architecture. Each model type gets
+its own isolated module folder — updating Whisper never touches Kokoro, and a
+contributor adding image-generation support doesn't need to understand the chat pipeline.
+
+---
+
+## Screenshots
+
+<!-- TODO: add screenshots once you have them -->
+
+| Browse | Model Detail |
+|--------|-------------|
+| ![Browse](docs/screenshots/MLXUI_Local_AI_Browser.png) | ![Detail](docs/screenshots/MLX_UI.png) | 
+
+---
+
 ## 🔀 Run AI Workflows
 
 ### What is mlx-workflow?
@@ -191,36 +221,6 @@ Prism ML's [Ternary-Bonsai-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2
 | **Sandbox** | ✅ Full sandbox | — |
 | **File tools** | Scoped to folders you grant | Full filesystem (denylist-guarded) |
 | **Shell tool** | — | ✅ `run_shell`, approval-gated |
-
----
-
-## What this is
-
-**The ultimate native SwiftUI cockpit for local AI, built exclusively for MLX and Apple Silicon.**
-
-There are thousands of MLX models on Hugging Face. Using them today means finding the
-right repo, reading the README, managing Python dependencies, figuring out CLI flags,
-and converting formats when things don't match.
-
-MLXUI replaces all of that with a single app. Browse by category (Chat & Text, Vision,
-OCR, Speech-to-Text, Text-to-Speech, Embeddings), filter by what fits your hardware,
-install with a click, and run each model in a purpose-built interface — chat for LLMs,
-a microphone and transcript for ASR, a voice picker for TTS, an image dropwell for OCR.
-
-Under the hood, MLXUI wraps Apple's `mlx-swift` and `mlx-libraries` (MLXLLM, MLXVLM,
-MLXWhisper, MLXAudioTTS, etc.) in a modular SwiftUI architecture. Each model type gets
-its own isolated module folder — updating Whisper never touches Kokoro, and a
-contributor adding image-generation support doesn't need to understand the chat pipeline.
-
----
-
-## Screenshots
-
-<!-- TODO: add screenshots once you have them -->
-
-| Browse | Model Detail |
-|--------|-------------|
-| ![Browse](docs/screenshots/MLXUI_Local_AI_Browser.png) | ![Detail](docs/screenshots/MLX_UI.png) | 
 
 ---
 
