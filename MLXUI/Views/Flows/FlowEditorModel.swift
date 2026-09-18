@@ -574,6 +574,46 @@ final class FlowEditorModel {
         }
     }
 
+    /// RT-5 — the no-dead-ends backstop's raw "Row text" box. Unlike every other setter here,
+    /// this replaces the row's settings string outright (like `setPattern`) but additionally
+    /// **refuses** a commit that makes things worse: if the edit either makes the whole
+    /// document unparseable, or gives this specific row a validator issue it didn't already
+    /// have, the mutation is rolled back before this returns — inside the same `commitChange`
+    /// call, so a refused edit is a true no-op (`currentSnapshot` unchanged) and never reaches
+    /// the undo stack. Returns `nil` on a no-op or an accepted edit, the refusing issue's own
+    /// sentence otherwise — the caller (the box) is responsible for leaving what the user
+    /// typed on screen ("left dirty"), never silently reverting the visible text along with
+    /// the data.
+    @discardableResult
+    func setRowText(_ text: String, for rowID: UUID) -> String? {
+        guard let originalSettings = row(withID: rowID)?.settings else { return nil }
+        let newSettings = text.isEmpty ? nil : text
+        guard newSettings != originalSettings else { return nil }
+
+        let path = displayNumber(of: rowID) ?? ""
+        let beforeAll = structuralIssues()
+        let beforeUnparseable = beforeAll.contains { $0.code == "E100" }
+        let beforeRowCodes = Set(beforeAll.filter { $0.row == path }.map(\.code))
+
+        var refusal: String?
+        commitChange {
+            replaceRow(id: rowID) { $0.settings = newSettings }
+            let afterAll = structuralIssues()
+            if !beforeUnparseable, let parseFailure = afterAll.first(where: { $0.code == "E100" }) {
+                refusal = parseFailure.message
+            } else {
+                let afterRowCodes = afterAll.filter { $0.row == path }
+                if let newIssue = afterRowCodes.first(where: { !beforeRowCodes.contains($0.code) }) {
+                    refusal = newIssue.message
+                }
+            }
+            if refusal != nil {
+                replaceRow(id: rowID) { $0.settings = originalSettings }
+            }
+        }
+        return refusal
+    }
+
     /// Set a decider's declared tags — keeping the decide clause's edge tags in sync (FIX-4:
     /// the two halves must never drift).
     func setTags(_ tags: [String], for rowID: UUID) {

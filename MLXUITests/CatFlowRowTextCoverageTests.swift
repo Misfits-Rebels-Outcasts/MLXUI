@@ -30,15 +30,31 @@ import Foundation
 /// editor (ceiling 80 → 17). RT-2 gave `Ask Human`/`Human Input` their question back (an
 /// `.instructionBox`) — ceiling 17 → 8. RT-3's diffusion-prompt and `Compare` sub-commits
 /// (journal `2026-287`) give `Generate Image`/`Generate Sound`/`Generate Video` an
-/// `.instructionBox` and `Compare` a `.singleLineField` — ceiling 8 → **5**. RT-3's `Embed`
-/// and `Improvise` sub-commits are deliberately **not** built (see that journal: `Embed` hits
-/// a confirmed parity bug, `catflow-mlx/SPEC_QUESTIONS.md` Q228; `Improvise` was ruled "agent
-/// goal" but the fix is an out-of-scope `FencedRunner` rewrite, Q227) — both stay in the
-/// remaining 5, alongside `Web Search`'s bare query, which was never RT-3's to fix at all
-/// (§3 rule 3: `query` is already a known Settings key for that task, so it's Tier-2/RT-4
-/// material — a shadowing warning, not a new box). RT-4/RT-5 lower it further; no later
-/// change may raise it. This test itself fixes nothing (RT-0's own rule) — it only ever
-/// reflects what the surfaces above already do.
+/// `.instructionBox` and `Compare` a `.singleLineField` — ceiling 8 → 5. RT-3's `Embed` and
+/// `Improvise` sub-commits are deliberately **not** built (see that journal: `Embed` hits a
+/// confirmed parity bug, `catflow-mlx/SPEC_QUESTIONS.md` Q228; `Improvise` was ruled "agent
+/// goal" but the fix is an out-of-scope `FencedRunner` rewrite, Q227); `Web Search`'s bare
+/// query was never RT-3's to fix (§3 rule 3 — already a known Settings key, Tier-2/RT-4
+/// material). RT-4 (journal `2026-288`) doesn't move this number — its shadowing warning only
+/// fires when a row carries *both* the key and the bare token, and the one bundled `Web
+/// Search` row has only the bare token.
+///
+/// **RT-5 changes what this number means.** `FlowRowInspectorView.rowTextDisclosure` (the
+/// "Row text" backstop, `RSI/DelegateRowTextBacklog.md` RT-5) is a **universal** fallback —
+/// every editable row gets it, unconditionally, regardless of task. Per RT-0's own framing
+/// ("a prompt control, a rendered settings key, a path field, or … the raw disclosure"), the
+/// backstop is itself a valid answer to "does some control reach this row" — so from RT-5
+/// onward *every* row is covered by that broader definition, which is the whole point ("no
+/// row … is uneditable in the UI"). Re-auditing "is every row reachable at all" would now be
+/// vacuously true forever and catch nothing. What's still worth tracking — and what
+/// `hasADedicatedControlFor` below measures — is **dedicated, task-shaped** coverage: does the
+/// row get a purpose-built editor (an instruction box, a pattern box, a single-line field …),
+/// or does it fall through to the generic raw-text box. `Embed` (3), `Improvise` (1), and
+/// `Web Search` (1) — 5 rows — still fall through today; the ceiling below tracks exactly
+/// that, as a non-regression signal for future dedicated-control work, not as "is this row a
+/// dead end" (RT-5's own tests, `CatFlowRowTextBackstopTests`, plus the owner's manual
+/// confirmation on the running app, are what verify *that*). This test itself fixes nothing
+/// (RT-0's own rule) — it only ever reflects what the surfaces above already do.
 struct CatFlowRowTextCoverageTests {
 
     private struct UncoveredRow {
@@ -48,16 +64,16 @@ struct CatFlowRowTextCoverageTests {
     }
 
     /// Mirrors `FlowRowInspectorView.promptControl` + `hasPathSetting` + the `Save *` filename
-    /// field's `task.hasPrefix("Save")` gate — the three surfaces (plus, after RT-6, the
-    /// raw-text backstop, not built yet) that can put a row's authored text in front of the
-    /// user today. Task-level, not row-level: none of the three read anything but the task's
-    /// own `TaskDescriptor`, except `engines.vlm.ocr`, whose actual control (instruction box vs.
-    /// mode picker vs. nothing) depends on the row's *named model*. No bare-token `OCR` row
-    /// exists in the bundled corpus today (verified: every `OCR` row's `settings` is `nil`), so
-    /// this treats it as covered without resolving a model — narrowing that would need the same
-    /// registry wiring `CatFlowR9Tests.loadedCatalogAndClaimable()` uses, for zero rows it would
-    /// currently affect.
-    private func hasAControlFor(task: String) -> Bool {
+    /// field's `task.hasPrefix("Save")` gate — the **dedicated, task-shaped** surfaces, not
+    /// counting the RT-5 universal backstop (every row gets that regardless of this function's
+    /// answer — see the type doc comment). Task-level, not row-level: none of the three read
+    /// anything but the task's own `TaskDescriptor`, except `engines.vlm.ocr`, whose actual
+    /// control (instruction box vs. mode picker vs. nothing) depends on the row's *named
+    /// model*. No bare-token `OCR` row exists in the bundled corpus today (verified: every
+    /// `OCR` row's `settings` is `nil`), so this treats it as covered without resolving a
+    /// model — narrowing that would need the same registry wiring `CatFlowR9Tests
+    /// .loadedCatalogAndClaimable()` uses, for zero rows it would currently affect.
+    private func hasADedicatedControlFor(task: String) -> Bool {
         if task.hasPrefix("Save") { return true }                            // saveFilenameField
         guard let desc = TaskCatalog.get(task) else { return false }
         switch desc.accepts {
@@ -115,7 +131,11 @@ struct CatFlowRowTextCoverageTests {
         return out
     }
 
-    @Test func everyBareTokenRowHasAPropertiesControl() throws {
+    /// RT-0's original gate: is every bare-quoted-token row *dedicatedly* covered. Since RT-5,
+    /// this is a non-regression tracker for task-shaped coverage, not "is this row reachable
+    /// at all" — see the type doc comment. Every row named here still has a real,
+    /// general-purpose editor (`CatFlowRowTextBackstopTests` covers that surface directly).
+    @Test func everyBareTokenRowHasADedicatedPropertiesControl() throws {
         let rows = try corpusRows()
         #expect(rows.count >= 500, "expected the bundled corpus to be substantial (got \(rows.count))")
 
@@ -123,7 +143,7 @@ struct CatFlowRowTextCoverageTests {
         for (flow, row) in rows {
             guard let task = row.task else { continue }
             guard let token = firstBareQuotedToken(row.settings) else { continue }
-            if !hasAControlFor(task: task) {
+            if !hasADedicatedControlFor(task: task) {
                 uncovered.append(UncoveredRow(flow: flow, task: task, token: token))
             }
         }
@@ -134,16 +154,11 @@ struct CatFlowRowTextCoverageTests {
             .map { "\($0.key): \($0.value)" }
             .joined(separator: ", ")
 
-        // Regression guard first: 5 is what this walk measures after RT-3's diffusion-prompt
-        // and Compare sub-commits (see the type doc comment). RT-4/RT-5 must only lower this,
-        // never raise it.
+        // 5 is what this walk measures after RT-4 (see the type doc comment): `Embed` (3),
+        // `Improvise` (1), `Web Search` (1) — all deliberately still generic-box-only. A drop
+        // is welcome (a future phase giving one of these a dedicated control); a rise is a
+        // regression in existing routing and should fail here.
         #expect(uncovered.count <= 5,
-                "regression: \(uncovered.count) rows now uncovered (ceiling 5) — \(summary)")
-        // RT-0's own exit, still red until RT-4/RT-5: a row whose authored text has no
-        // Properties-tab control at all. RT-1 closed Template, RT-2 closed Ask Human/Human
-        // Input, RT-3 closed the diffusion prompts and Compare. `Embed`/`Improvise` are
-        // deliberately deferred (see the type doc comment); `Web Search` is RT-4's.
-        #expect(uncovered.isEmpty,
-                "\(uncovered.count) rows carry authored text with no Properties-tab control — \(summary)")
+                "regression: \(uncovered.count) rows now lack a dedicated control (ceiling 5) — \(summary)")
     }
 }

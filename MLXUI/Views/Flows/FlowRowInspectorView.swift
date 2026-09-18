@@ -59,6 +59,12 @@ struct FlowRowInspectorView: View {
     @State private var showAdvanced = false
     /// RT-1 — the Pattern box's "Edit…" sheet.
     @State private var showPatternSheet = false
+    /// RT-5 — the "Row text" box's own draft, decoupled from `row.settings` while the user is
+    /// mid-edit (and left showing the rejected text — "dirty" — after a refusal). `nil` means
+    /// "not being edited right now; show the committed value."
+    @State private var rowTextDraft: String?
+    @State private var rowTextRefusal: String?
+    @FocusState private var rowTextFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -141,6 +147,14 @@ struct FlowRowInspectorView: View {
                             chooseFileButton(task: task)
                         }
                         decisionsSection(row)
+                        // RT-5 — the no-dead-ends backstop: after this, no row in any flow,
+                        // present or future, is uneditable in the UI. A frozen gallery flow's
+                        // raw text is already visible in the row list itself; the box adds
+                        // nothing there but a false invitation to edit read-only bytes, so
+                        // it's hidden (not just disabled) when `isFrozen`.
+                        if !isFrozen {
+                            rowTextDisclosure(row)
+                        }
                     }
                     .padding(4)
                 }
@@ -1147,6 +1161,55 @@ struct FlowRowInspectorView: View {
         }
         try fm.createDirectory(at: dest, withIntermediateDirectories: false)
         return name + "/"
+    }
+
+    // MARK: - RT-5: the no-dead-ends backstop
+
+    /// The row's raw settings string, one monospaced `TextEditor`, committed on blur — not
+    /// live per-keystroke like every other box here, because a commit re-validates the whole
+    /// row, and validating mid-keystroke against an unterminated quote would refuse constantly
+    /// while the user is still typing. Read-only when `!editable`: the outer `ScrollView`'s
+    /// `.disabled(!editable)` already covers this (a disabled `TextEditor` can't be typed into
+    /// or focused, so the commit-on-blur path simply never fires). Hidden entirely when
+    /// `isFrozen` (the call site, `body`).
+    private func rowTextDisclosure(_ row: Row) -> some View {
+        DisclosureGroup("Row text") {
+            VStack(alignment: .leading, spacing: 4) {
+                TextEditor(text: Binding(
+                    get: { rowTextDraft ?? row.settings ?? "" },
+                    set: { rowTextDraft = $0 }
+                ))
+                .font(.caption.monospaced())
+                .frame(minHeight: 60, maxHeight: 160)
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+                .focused($rowTextFocused)
+                .onChange(of: rowTextFocused) { _, isFocused in
+                    if !isFocused { commitRowText(row) }
+                }
+                if let rowTextRefusal {
+                    // §8 copy, verbatim — not invented at the call site.
+                    Label("That change wouldn't check: \(rowTextRefusal). The row's text is unchanged until it does.",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
+            }
+            .padding(.top, 4)
+        }
+        .font(.caption)
+    }
+
+    /// A refusal leaves `rowTextDraft` exactly as typed ("left dirty" — never silently
+    /// dropped back to the last-committed value); acceptance clears it, so the box falls back
+    /// to reading `row.settings` (now equal to the draft) directly.
+    private func commitRowText(_ row: Row) {
+        guard let draft = rowTextDraft else { return }
+        if let refusal = model.setRowText(draft, for: rowID) {
+            rowTextRefusal = refusal
+        } else {
+            rowTextRefusal = nil
+            rowTextDraft = nil
+        }
     }
 
     // MARK: - R9-5 decisions & budget
