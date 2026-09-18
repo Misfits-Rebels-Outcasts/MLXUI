@@ -475,6 +475,11 @@ nonisolated struct RealExecutor: FlowExecutor {
             }
             media = Asset(items: [Item(kind: .text, value: prompt, path: nil, sourceText: nil)])
         } else {
+            // SPEC-Q228: the reference's `engines/embed.py` falls back to the settings string
+            // here too (`engines.embed.embed`), the same way the diffusion branch above does —
+            // this `else` throws instead. A no-input `Embed` row fails on this runtime where
+            // the reference succeeds; confirmed live in 3 bundled flows (17-AskYourDocs,
+            // 19-CorrectiveRag, 44-FrontierEscalate). Not fixed here — its own cycle.
             throw FlowError.badInputCardinality(row: "\(path)", expected: "an input", got: 0)
         }
         let config = try await sanitizedPrompt(
@@ -649,6 +654,11 @@ nonisolated struct RealExecutor: FlowExecutor {
         } else {
             // `Decide` (the engine-backed decider) has no frame file — the Python's `decide`
             // builds the ask from the asset directly.
+            // SPEC-Q230 (does this get a Properties-tab prompt box, and if so what does it
+            // say when `text` isn't empty and this fallback never runs?) / SPEC-Q231 (`settings`
+            // here is `row.settings` raw — quote marks and escapes included, never unquoted —
+            // matching the reference's `_resolve_prompt`; any future box over this value
+            // should still display the *unquoted* text, per every other editor in this app).
             let text = DeciderFrame.flatTexts(inputs).joined(separator: "\n")
             basePrompt = text.isEmpty ? settings ?? "" : text
         }

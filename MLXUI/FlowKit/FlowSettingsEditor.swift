@@ -136,7 +136,8 @@ nonisolated enum FlowSettingsEditor {
     /// `replace*` here, so this replaces the row's entire settings string outright rather than
     /// locating and splicing a span. `raw` isn't read — kept for call-site symmetry with
     /// `replaceInstruction`/`replacePath`. An empty pattern clears the settings entirely
-    /// (`nil`), matching this file's other "empty box" behavior.
+    /// (`nil`), matching this file's other "empty box" behavior. SPEC-Q229 — built to the
+    /// backlog's own recommended reading; implementer's call, pending owner confirmation.
     static func replaceWholeSettings(_ text: String, in raw: String?) -> String? {
         text.isEmpty ? nil : quote(text)
     }

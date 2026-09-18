@@ -376,6 +376,8 @@ struct FlowRowInspectorView: View {
     /// .replaceWholeSettings`, never `setInstruction`'s first-quoted-token splice — a second
     /// token would desync what the box shows from what the runtime renders (§6 Q1). The
     /// generic Settings list is hidden for `Template` rows for the same reason (see `body`).
+    /// SPEC-Q229 — built to the backlog's own recommended reading (whole string); no owner
+    /// quote on record for this specific call, so implementer's call, pending confirmation.
     private func patternEditor(row: Row) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Pattern")
