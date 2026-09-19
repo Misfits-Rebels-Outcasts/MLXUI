@@ -586,7 +586,7 @@ final class AppState { //appstatecomeback
             displayName: url.deletingPathExtension().lastPathComponent,
             rawText: rawText,
             parsed: parsed,
-            issues: FlowValidator.checkFlow(parsed),
+            issues: FlowValidator.checkFlow(parsed, registry: CuratedManifest.installedFlowRegistry()),
             bookmarkData: bookmarkData
         )
     }

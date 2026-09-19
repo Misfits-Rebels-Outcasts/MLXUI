@@ -631,4 +631,20 @@ nonisolated extension CuratedManifest {
     static func installedCredentialNames(bundle: Bundle = .main) -> [String] {
         installedCredentialNames(manifestURLs: bundle.urls(forResourcesWithExtension: "json", subdirectory: nil) ?? [])
     }
+
+    /// WA-4 — the curated manifests as a `FlowRegistry`, the input `FlowValidator.checkFlow`
+    /// needs to resolve a display name (E104's exemption, E209's canonicalization, the
+    /// offdevice/F010 registry paths). Reuses this file's own `installedManifests(bundle:)`
+    /// scan rather than a second directory read — one general primitive, three call sites
+    /// now (KEY-2, RM-4b, this one). `capabilities` maps to `[:]`: no curated manifest field
+    /// carries the `constrained_decoding` capability `FlowManifest.capabilityBool` reads, and
+    /// that read is a `FlowLint` (`lintRemoteDeciderUnconstrained`), never a `FlowIssue` —
+    /// outside anything `checkFlow` returns.
+    static func installedFlowRegistry(bundle: Bundle = .main) -> DirectoryFlowRegistry {
+        let manifests = installedManifests(bundle: bundle).map { m in
+            FlowManifest(id: m.id, display: m.display, kind: m.kind ?? "", engine: m.engine ?? "",
+                        tasks: m.tasks ?? [], capabilities: [:])
+        }
+        return DirectoryFlowRegistry(manifests: manifests)
+    }
 }

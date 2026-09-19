@@ -46,12 +46,19 @@ struct CatFlowDiffusionAndCompareEditorTests {
     // MARK: - Diffusion prompts: the edited bare token is what RealExecutor would read
 
     @Test func editingGenerateImagePromptChangesWhatRealExecutorWouldRead() throws {
-        let doc = try GalleryLoader.loadDocument(flowID: "60-GenerateProductShot")
+        var doc = try GalleryLoader.loadDocument(flowID: "60-GenerateProductShot")
         let row0 = doc.rows[0]
         #expect(row0.task == "Generate Image")
         let original = row0.settings ?? ""
 
-        let model = try editor(doc.rows)
+        // WA-4: the validator now resolves a display through the real curated registry
+        // (`CuratedManifest.installedFlowRegistry`), and "Z-Image Turbo (4-bit)" has no
+        // curated manifest yet — a pre-existing gap the WA-4 gallery audit found and filed
+        // separately (`RSI/journal`), not something this row-text-editing test is about.
+        // `editor(_:)` already drops the loaded document's own sections (its own doc
+        // comment), so pinning one here keeps this test scoped to `setInstruction`.
+        doc.models["Z-Image Turbo (4-bit)"] = "mlx-community/z-image-turbo"
+        let model = try editorForDocument(doc)
         // No-op edit: byte-identical (QR9).
         model.setInstruction(FlowSettings(original).firstBare(), for: row0.id)
         #expect(model.row(withID: row0.id)?.settings == original)

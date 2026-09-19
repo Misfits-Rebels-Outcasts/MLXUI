@@ -826,8 +826,22 @@ final class FlowEditorModel {
         guard let r = row(withID: rowID) else { return nil }
         let path = displayNumber(of: rowID) ?? "?"
 
+        // WA-4 fallout: the validator's E104 is no longer filtered out (the registry now
+        // resolves a real display name, so a genuine unresolvable one is a real issue —
+        // `structuralIssues()`/`saveBlockReason` still see it and still block Save). But for
+        // a model-class row with **no runnable model at all**, the check just below already
+        // produces the GUI-appropriate sentence ("needs a model — pick one that runs on this
+        // Mac", pointing at the Model menu); E104's own wording ("pin an id … add the line
+        // yourself") is CLI-authoring advice that doesn't apply to this editor. Skip E104
+        // here only in that case and let the check below speak instead — every other
+        // validator issue, and E104 on a row whose model the app CAN otherwise run (a real
+        // registry-coverage gap), still surfaces as-is.
         let ownIssues = issues(for: rowID)
-        if let first = ownIssues.first {
+        let isUnresolvableUnrunnableModel = ownIssues.first?.code == "E104"
+            && r.task != nil && r.blockKind == nil
+            && TaskCatalog.get(r.task ?? "")?.taskClass == .model
+            && !isRunnableModel(r.model, for: r.task ?? "")
+        if let first = ownIssues.first, !isUnresolvableUnrunnableModel {
             return "\(first.message)"
         }
 
@@ -966,8 +980,13 @@ final class FlowEditorModel {
         var issues: [FlowIssue] = []
         do {
             let parsed = try CatParser.parseForValidation(catText)
-            issues = FlowValidator.checkFlow(parsed, workspace: workspace, flowID: flowID)
-                .filter { $0.code != "E104" }
+            // WA-4: the registry now resolves a display name the way `mlxflow check` does
+            // (`CuratedManifest.installedFlowRegistry`), including inside a nested `uses:`
+            // check (`resolveUsesLevel` passes this same `registry` down) — the blanket
+            // `.filter { $0.code != "E104" }` this line used to carry is gone with it; a
+            // display the registry can't resolve now genuinely means E104.
+            issues = FlowValidator.checkFlow(parsed, registry: CuratedManifest.installedFlowRegistry(),
+                                             workspace: workspace, flowID: flowID)
         } catch {
             issues = [FlowIssue(row: "run", code: "E100",
                                 message: "This flow doesn't parse as a valid .cat right now — fix or undo the last edit, then save.")]

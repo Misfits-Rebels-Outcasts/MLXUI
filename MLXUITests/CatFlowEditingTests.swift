@@ -1068,9 +1068,14 @@ struct CatFlowEditingTests {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
+        // WA-4: the validator now resolves a display name through the real curated
+        // registry (no more blanket E104 exclusion), so a synthetic row naming a model the
+        // registry can't resolve needs its own `models:` pin — exactly what a real flow
+        // author would add — rather than tripping an unrelated refusal in a test that is
+        // only exercising the `.catpipeline` extension round-trip.
         let doc = FlowDocument(version: "0.8", fileKind: .catpipeline, rows: [
             Row(id: UUID(), task: "Generate Image", model: "Z-Image Turbo", settings: "a tree"),
-        ])
+        ], models: ["Z-Image Turbo": "mlx-community/z-image-turbo"])
         let model = FlowEditorModel(name: "Look", flowID: "pipe-flow", document: doc,
                                     workspace: FlowWorkspace(root: root), savedText: nil)
         try model.save()
