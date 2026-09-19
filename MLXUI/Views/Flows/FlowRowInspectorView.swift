@@ -59,9 +59,11 @@ struct FlowRowInspectorView: View {
     @State private var showAdvanced = false
     /// RT-1 — the Pattern box's "Edit…" sheet.
     @State private var showPatternSheet = false
-    /// RT-5 — the "Row text" box's own draft, decoupled from `row.settings` while the user is
-    /// mid-edit (and left showing the rejected text — "dirty" — after a refusal). `nil` means
-    /// "not being edited right now; show the committed value."
+    /// RT-5 — the "Raw settings" box's own draft (FV-1: relabelled from "Row text" — the box
+    /// is the settings string, not the row's text; the identifiers below keep the RT- name),
+    /// decoupled from `row.settings` while the user is mid-edit (and left showing the rejected
+    /// text — "dirty" — after a refusal). `nil` means "not being edited right now; show the
+    /// committed value."
     @State private var rowTextDraft: String?
     @State private var rowTextRefusal: String?
     @FocusState private var rowTextFocused: Bool
@@ -172,7 +174,7 @@ struct FlowRowInspectorView: View {
         .opacity(isFrozen ? 0.85 : 1)
         // RT-5 fix (reviewer-caught defect): neither call site gives this view `.id(rowID)`,
         // so SwiftUI keeps `@State` across a row-selection change — without this, a pending
-        // "Row text" draft (and its refusal banner) would survive onto the newly selected
+        // "Raw settings" draft (and its refusal banner) would survive onto the newly selected
         // row, and a blur that fires after `rowID` has already moved would write the old
         // row's draft onto the new row via `setRowText(draft, for: rowID)`. Discarding is
         // deliberate here, not incidental: switching rows away from an uncommitted raw-text
@@ -1184,9 +1186,10 @@ struct FlowRowInspectorView: View {
     /// while the user is still typing. Read-only when `!editable`: the outer `ScrollView`'s
     /// `.disabled(!editable)` already covers this (a disabled `TextEditor` can't be typed into
     /// or focused, so the commit-on-blur path simply never fires). Hidden entirely when
-    /// `isFrozen` (the call site, `body`).
+    /// `isFrozen` (the call site, `body`). FV-1 (R-FV-b): labelled "Raw settings", not "Row
+    /// text" — the number, the task and the model aren't in this box and can't be edited here.
     private func rowTextDisclosure(_ row: Row) -> some View {
-        DisclosureGroup("Row text") {
+        DisclosureGroup("Raw settings") {
             VStack(alignment: .leading, spacing: 4) {
                 TextEditor(text: Binding(
                     get: { rowTextDraft ?? row.settings ?? "" },
@@ -1199,6 +1202,10 @@ struct FlowRowInspectorView: View {
                 .onChange(of: rowTextFocused) { _, isFocused in
                     if !isFocused { commitRowText(row) }
                 }
+                // §7 copy, verbatim.
+                Text("The row's settings text, exactly as the file stores it — quote marks included.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
                 if let rowTextRefusal {
                     // §8 copy, verbatim — not invented at the call site.
                     Label("That change wouldn't check: \(rowTextRefusal). The row's text is unchanged until it does.",

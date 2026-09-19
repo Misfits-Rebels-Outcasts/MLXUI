@@ -574,7 +574,8 @@ final class FlowEditorModel {
         }
     }
 
-    /// RT-5 — the no-dead-ends backstop's raw "Row text" box. Unlike every other setter here,
+    /// RT-5 — the no-dead-ends backstop's raw "Raw settings" box (FV-1: relabelled from "Row
+    /// text"). Unlike every other setter here,
     /// this replaces the row's settings string outright (like `setPattern`) but additionally
     /// **refuses** a commit that makes things worse: if the edit either makes the whole
     /// document unparseable, or gives this specific row a validator issue it didn't already
