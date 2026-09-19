@@ -1589,30 +1589,43 @@ struct FlowRowInspectorView: View {
     /// that isn't `refKind == .frame` — `Decide`'s prompt box stays SPEC-Q230, untouched (§8).
     @ViewBuilder
     private func framePreviewSection(_ task: String, row: Row) -> some View {
-        if let desc = TaskCatalog.get(task), desc.refKind == .frame,
-           let rendered = try? renderedFramePreview(task: task, desc: desc, row: row) {
-            DisclosureGroup("Prompt frame") {
-                VStack(alignment: .leading, spacing: 4) {
-                    // §7 copy, verbatim.
-                    Text("Fixed by the task and shared with every runtime — your text above goes where {settings} is. To write a whole prompt yourself, use Template + Generate.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    ScrollView {
-                        Text(rendered)
-                            .font(.caption.monospaced())
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+        if let desc = TaskCatalog.get(task), desc.refKind == .frame {
+            switch Result(catching: { try renderedFramePreview(task: task, desc: desc, row: row) }) {
+            case .success(let rendered):
+                DisclosureGroup("Prompt frame") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        // §7 copy, verbatim.
+                        Text("Fixed by the task and shared with every runtime — your text above goes where {settings} is. To write a whole prompt yourself, use Template + Generate.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        ScrollView {
+                            Text(rendered)
+                                .font(.caption.monospaced())
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: 160)
+                        // §7 copy (Q6), verbatim — names the source without the pane pretending
+                        // to have invented the wording.
+                        Text("From \(FramePreview.frameFileName(refName: desc.refName)).frame.txt, published in the catalog.")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
                     }
-                    .frame(maxHeight: 160)
-                    // §7 copy (Q6), verbatim — names the source without the pane pretending
-                    // to have invented the wording.
-                    Text("From \(FramePreview.frameFileName(refName: desc.refName)).frame.txt, published in the catalog.")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                    .padding(.top, 4)
                 }
-                .padding(.top, 4)
+                .font(.caption)
+            case .failure:
+                // FV-4-1: a render failure used to vanish behind `try?` — silently no section
+                // at all, which is exactly how the `Revise`/`Verify` slot-count bug shipped
+                // and passed its own tests. Say so instead; the row itself is unaffected — a
+                // real run passes the full reference bundle (B1), never the preview's
+                // edit-time stand-ins.
+                Label("This row's frame couldn't be rendered for preview. The row itself is unaffected.",
+                      systemImage: "exclamationmark.triangle")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .font(.caption)
         }
     }
 
@@ -1624,7 +1637,16 @@ struct FlowRowInspectorView: View {
     /// (`DeciderFrame.renderThinkTools`, derivable from the row's own decide-clause edges);
     /// `{transcript}` and the `; ctx` splice are stand-ins, since both only exist mid-run.
     private func renderedFramePreview(task: String, desc: TaskDescriptor, row: Row) throws -> String {
-        let slots = max(model.inputSlotCount(for: rowID), 1)
+        // FV-4-1: a task's *signature* slot count (`inputSlotCount`) is not the same as how
+        // many refs a row actually binds — `Revise`/`Verify` both declare a single-slot
+        // signature (`.listOf(.text) -> text` / `text -> text`) but their frames read
+        // `{input[0]}` AND `{input[1]}`, and every bundled row of either task binds two refs
+        // (a real run passes the full reference bundle, B1, unbound by the signature). Using
+        // `inputSlotCount` alone starved the renderer of the second stand-in and
+        // `FrameRenderer` threw `frameInputOutOfRange` for every such row. `currentInputLabel`
+        // already reads `row.refs[slot - 1]` directly (fact 24), so counting bound refs needs
+        // no other change to produce the right stand-in.
+        let slots = max(row.refs.count, model.inputSlotCount(for: rowID), 1)
         let assets = (1...slots).map { slot in
             // §7: Judge's `{candidates}` gets its own stand-in — "the text from row N" would
             // misname a slot whose content is a future *candidate*, not a value to read as-is.

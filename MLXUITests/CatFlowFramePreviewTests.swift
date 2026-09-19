@@ -69,10 +69,17 @@ struct CatFlowFramePreviewTests {
         #expect(rendered.contains("Input:\nhi there"))
     }
 
-    @Test func nonFrameTaskRefuses() {
-        #expect(throws: (any Error).self) {
-            try FramePreview.render(task: "Decide", refName: "engines.llm.decide",
-                                    settings: nil, assets: [], tags: [])
+    /// FV-4-2: the refusal names the task and says there's nothing to preview — not
+    /// `missingFrame`'s "reinstall to restore it", which is the wrong fix for a task that was
+    /// never frame-backed to begin with.
+    @Test func nonFrameTaskRefusesWithItsOwnErrorVoice() throws {
+        do {
+            _ = try FramePreview.render(task: "Decide", refName: "engines.llm.decide",
+                                        settings: nil, assets: [], tags: [])
+            Issue.record("expected FramePreview.render to throw for a non-frame task")
+        } catch let error as FrameError {
+            #expect(error == .noPublishedFrame(task: "Decide"))
+            #expect(error.description == "Decide has no published frame — nothing to preview.")
         }
     }
 
@@ -126,5 +133,89 @@ struct CatFlowFramePreviewTests {
             #expect(!text.contains("⟨"),
                     "\(file) must never hardcode a preview stand-in — the run path only ever sees real bound data")
         }
+    }
+
+    // MARK: - FV-4-1: bound-ref count, not signature-slot count
+
+    private func allRows(_ rows: [Row]) -> [Row] {
+        rows.flatMap { [$0] + allRows($0.children) }
+    }
+
+    /// A task's own signature slot count (`FlowEditorModel.inputSlotCount`'s rule, reproduced
+    /// here without a live document: `.tupleOf` counts its kinds, everything else is 1).
+    private func signatureSlots(_ accepts: Shape) -> Int {
+        if case .tupleOf(let kinds) = accepts { return kinds.count }
+        return 1
+    }
+
+    /// The regression itself: `Revise`/`Verify` both declare a single-slot signature, but
+    /// every corpus row of either task binds **two** refs, and both frames read
+    /// `{input[0]}`/`{input[1]}`. Before FV-4-1, `renderedFramePreview` sized its stand-in
+    /// assets off the signature alone, so `FrameRenderer` threw `frameInputOutOfRange` for
+    /// every such row — silently, because `framePreviewSection`'s `try?` swallowed it (the
+    /// reason the 16-task bundle-lookup walk above stayed green despite the bug). This walks
+    /// the same corpus with the row's *actual* bound-ref count, exactly as the fixed View
+    /// code now does (`max(row.refs.count, inputSlotCount, 1)`), and fails loudly if any
+    /// framed row can't render.
+    @Test func everyFramedCorpusRowRendersWithItsBoundRefCount() throws {
+        let dirs = ["MLXUI/Resources/BasicGallery", "MLXUI/Resources/Gallery", "MLXUI/Resources/Workspaces"]
+        var checked = 0
+        var failures: [String] = []
+        for dir in dirs {
+            let dirURL = repoRoot.appendingPathComponent(dir)
+            let files = try FileManager.default.contentsOfDirectory(atPath: dirURL.path)
+                .filter { $0.hasSuffix(".cat") }.sorted()
+            for file in files {
+                let text = try String(contentsOf: dirURL.appendingPathComponent(file), encoding: .utf8)
+                let doc = try CatParser.parse(text)
+                for row in allRows(doc.rows) {
+                    guard let task = row.task, let desc = TaskCatalog.get(task),
+                          desc.refKind == .frame else { continue }
+                    checked += 1
+                    let slots = max(row.refs.count, signatureSlots(desc.accepts), 1)
+                    let assets = (1...slots).map { _ in asset("⟨stand-in⟩") }
+                    do {
+                        _ = try FramePreview.render(task: task, refName: desc.refName,
+                                                    settings: row.settings, assets: assets,
+                                                    tags: RealExecutor.declaredTags(row))
+                    } catch {
+                        failures.append("\(dir)/\(file) — \(task) (\(row.refs.count) refs): \(error)")
+                    }
+                }
+            }
+        }
+        #expect(checked >= 100, "expected the framed-row corpus walk to cover ~111 rows (§0); got \(checked)")
+        #expect(failures.isEmpty, "frame render failed for:\n\(failures.joined(separator: "\n"))")
+    }
+
+    /// The exit criterion, named directly: `11-ReflexionWriter.cat` row 6, `Revise (3,4)`.
+    @Test func reviseRowWithTwoBoundRefsRendersTwoDistinctStandIns() throws {
+        let url = repoRoot.appendingPathComponent("MLXUI/Resources/Gallery/11-ReflexionWriter.cat")
+        let doc = try CatParser.parse(try String(contentsOf: url, encoding: .utf8))
+        let row = try #require(doc.rows.first { $0.task == "Revise" })
+        #expect(row.refs.count == 2)
+
+        let desc = try #require(TaskCatalog.get("Revise"))
+        let rendered = try FramePreview.render(
+            task: "Revise", refName: desc.refName, settings: row.settings,
+            assets: [asset("⟨the text from row 3⟩"), asset("⟨the text from row 4⟩")], tags: [])
+        #expect(rendered.contains("Draft:      ⟨the text from row 3⟩"))
+        #expect(rendered.contains("Weaknesses: ⟨the text from row 4⟩"))
+    }
+
+    /// The reviewer's other named repro: `46-IndexSelfTest.cat` row 10, `Verify (9,3)`.
+    @Test func verifyRowWithTwoBoundRefsRendersTwoDistinctStandIns() throws {
+        let url = repoRoot.appendingPathComponent("MLXUI/Resources/Gallery/46-IndexSelfTest.cat")
+        let doc = try CatParser.parse(try String(contentsOf: url, encoding: .utf8))
+        // Row 10 is nested inside a block, not top-level — `allRows` walks children.
+        let row = try #require(allRows(doc.rows).first { $0.task == "Verify" })
+        #expect(row.refs.count == 2)
+
+        let desc = try #require(TaskCatalog.get("Verify"))
+        let rendered = try FramePreview.render(
+            task: "Verify", refName: desc.refName, settings: row.settings,
+            assets: [asset("⟨the text from row 9⟩"), asset("⟨the text from row 3⟩")], tags: [])
+        #expect(rendered.contains("Text (claims): ⟨the text from row 9⟩"))
+        #expect(rendered.contains("Source:        ⟨the text from row 3⟩"))
     }
 }

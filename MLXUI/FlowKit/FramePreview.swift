@@ -41,7 +41,9 @@ nonisolated enum FramePreview {
         context: String? = nil
     ) throws -> String {
         guard refName.hasPrefix("frames/") else {
-            throw FrameError.missingFrame(name: refName)
+            // FV-4-2: a task with no published frame at all is not a missing-file problem —
+            // `missingFrame`'s "reinstall to restore it" would be the wrong fix to suggest.
+            throw FrameError.noPublishedFrame(task: task)
         }
         let frameText = try FrameRenderer.loadFrame(named: frameFileName(refName: refName))
 

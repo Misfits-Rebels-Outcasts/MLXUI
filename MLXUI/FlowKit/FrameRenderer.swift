@@ -86,11 +86,18 @@ nonisolated enum FrameRenderer {
 /// Frame-loading failures. Error voice: one plain sentence implying the fix.
 nonisolated enum FrameError: Error, CustomStringConvertible, Equatable {
     case missingFrame(name: String)
+    /// FV-4-2: `task` names no `refKind == .frame` catalog entry at all — a task that
+    /// legitimately has no published frame, not a file this app failed to install. Distinct
+    /// from `missingFrame`, whose "reinstall to restore it" is the wrong sentence here: there
+    /// is nothing to reinstall, because there was never a frame to begin with.
+    case noPublishedFrame(task: String)
 
     var description: String {
         switch self {
         case .missingFrame(let name):
             return "The prompt frame '\(name)' isn't in the app — reinstall to restore it."
+        case .noPublishedFrame(let task):
+            return "\(task) has no published frame — nothing to preview."
         }
     }
 }
