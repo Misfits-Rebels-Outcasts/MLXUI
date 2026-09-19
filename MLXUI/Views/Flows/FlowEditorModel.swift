@@ -760,7 +760,7 @@ final class FlowEditorModel {
     /// The row's output shape (its `gives`), or nil when unknown.
     func outputShape(for rowID: UUID) -> Shape? {
         guard let r = row(withID: rowID) else { return nil }
-        return Self.signature(of: r)?.gives
+        return Self.signature(of: r, context: signatureContext)?.gives
     }
 
     // MARK: - The input picker (CFM-R8-FIX-1/2)
@@ -770,7 +770,8 @@ final class FlowEditorModel {
     /// slot. Ordered by display path. The save gate (not this menu) is the final authority
     /// on whether the whole document is valid.
     func validInputs(for rowID: UUID, slot: Int = 1) -> [(rowID: UUID, number: String, task: String)] {
-        guard let r = row(withID: rowID), let accepts = Self.signature(of: r)?.accepts else { return [] }
+        let context = signatureContext
+        guard let r = row(withID: rowID), let accepts = Self.signature(of: r, context: context)?.accepts else { return [] }
         let slotShape: Shape
         if case .tupleOf(let kinds) = accepts {
             guard slot >= 1, slot <= kinds.count else { return [] }
@@ -782,7 +783,7 @@ final class FlowEditorModel {
         let scope = scopeRows(containing: rowID)
         guard let index = scope.firstIndex(where: { $0.id == rowID }), index > 0 else { return [] }
         return scope[0..<index].compactMap { candidate in
-            guard let gives = Self.signature(of: candidate)?.gives else { return nil }
+            guard let gives = Self.signature(of: candidate, context: context)?.gives else { return nil }
             let given: Shape = gives == .sameAsInput ? .anyKind : gives
             let refKind = r.task.flatMap { TaskCatalog.get($0)?.refKind }
             guard Shape.singleCompatible(accepts: slotShape, given: given, rk: refKind) else {
@@ -794,7 +795,7 @@ final class FlowEditorModel {
 
     /// The number of input slots a row needs (1 for ordinary accepts; `tupleOf` arity).
     func inputSlotCount(for rowID: UUID) -> Int {
-        guard let r = row(withID: rowID), let accepts = Self.signature(of: r)?.accepts else { return 1 }
+        guard let r = row(withID: rowID), let accepts = Self.signature(of: r, context: signatureContext)?.accepts else { return 1 }
         if case .tupleOf(let kinds) = accepts { return kinds.count }
         return 1
     }
@@ -860,15 +861,38 @@ final class FlowEditorModel {
             }
         }
 
-        if r.refs.isEmpty, let previous = previousRow(before: rowID) {
-            if !Self.isCompatible(from: previous, to: r) {
+        // WA-2: mirrors `FlowValidator.checkRows`' E201 gate (`FlowValidator.swift:1067`,
+        // ported verbatim from `core/validator.py:784-791`) — the gate raises E201 only
+        // when `row.settings == nil` **and** `position not in edgeTargets`, on top of
+        // `row.refs.isEmpty`. A row that carries its own settings sources itself (`Read
+        // Index kb.index`, `Human Input "…"`); a row a decider jumps to is entered by the
+        // jump, not by the row above it. Both make the row above's output shape
+        // irrelevant, so neither is a real incompatibility.
+        if r.refs.isEmpty, r.settings == nil, let previous = previousRow(before: rowID) {
+            let scope = scopeRows(containing: rowID)
+            let position = (scope.firstIndex(where: { $0.id == rowID }) ?? -1) + 1
+            let edgeTargets = Set(scope.flatMap { FlowValidator.clauseTargets($0.clause) }.compactMap { target -> Int? in
+                switch target {
+                case .row(let n), .call(let n): return n
+                case .resume, .done: return nil
+                }
+            })
+            if !edgeTargets.contains(position),
+               !Self.isCompatible(from: previous, to: r, context: signatureContext) {
                 return "Row \(path) can't take row \(displayNumber(of: previous.id) ?? "?")'s output — add an input reference."
             }
         }
         if r.refs.isEmpty, r.blockKind == nil,
            let task = r.task, !Self.startingNodes().contains(where: { $0.name == task }),
            previousRow(before: rowID) == nil {
-            return "Row \(path) needs an input — nothing feeds it."
+            // WA-3: this branch is right for a flow being built from scratch and wrong for
+            // a **used** flow, whose row 1 is fed by its caller — restricted to the flow's
+            // own row 1 (not a block's first child, which is a different `blockInputs`
+            // question this check never modeled).
+            let isFlowRowOne = document.rows.first?.id == rowID
+            if !(isFlowRowOne && isCalledByWorkspaceSibling) {
+                return "Row \(path) needs an input — nothing feeds it."
+            }
         }
         return nil
     }
@@ -1304,12 +1328,19 @@ final class FlowEditorModel {
     }
 
     /// Whether `target`'s output can feed `row`'s accepts as a bundle (CFM-R8-FIX-2).
-    private nonisolated static func isCompatible(from target: Row, to row: Row) -> Bool {
-        guard let accepts = signature(of: row)?.accepts,
-              let gives = signature(of: target)?.gives else { return false }
-        let given: Shape = gives == .sameAsInput ? .anyKind : gives
+    /// WA-1: a `nil` signature on either side means "the editor cannot type this row" — an
+    /// **unknown** shape, not an incompatible one (`FlowValidator.checkRows`' E201 gate
+    /// never fires on a `uses:`/`definitions:`/`transforms:` row precisely because it
+    /// always resolves a signature for one, `FlowValidator.swift:983-999`). Returning
+    /// `false` here for a task the editor genuinely can't resolve produced a false yellow
+    /// row on every task next to a `uses:` call; a wrong warning is worse than a missing
+    /// one.
+    private nonisolated static func isCompatible(from target: Row, to row: Row, context: FlowSignatureContext) -> Bool {
+        guard let toSig = signature(of: row, context: context),
+              let fromSig = signature(of: target, context: context) else { return true }
+        let given: Shape = fromSig.gives == .sameAsInput ? .anyKind : fromSig.gives
         let refKind = row.task.flatMap { TaskCatalog.get($0)?.refKind }
-        return Shape.bundleCompatible(accepts: accepts, given: [given], rk: refKind)
+        return Shape.bundleCompatible(accepts: toSig.accepts, given: [given], rk: refKind)
     }
 
     /// Whether a display model name can run **the row's task** — membership in that task's
@@ -1330,17 +1361,38 @@ final class FlowEditorModel {
     /// resolution the interpreter and auto-chain use. (A block's *declared* signature is the
     /// validator's concern — `structuralIssues()` runs `checkFlow`, which compares it to the
     /// resolved type and flags a mismatch. Declared signatures do NOT change auto-chain.)
-    private nonisolated static func signature(of row: Row) -> (accepts: Shape, gives: Shape)? {
+    ///
+    /// WA-1: a task outside `TaskCatalog` is not necessarily unknown — it may name a
+    /// `definitions:` composite, a `uses:` entry, or a `transforms:` entry, exactly the
+    /// three cases `FlowValidator.checkRows` resolves before falling through to
+    /// unknown-task (`FlowValidator.swift:980`-`:1000`, ported verbatim below). Only a task
+    /// in none of those four places stays unresolved.
+    private nonisolated static func signature(of row: Row, context: FlowSignatureContext) -> (accepts: Shape, gives: Shape)? {
         if let blockKind = row.blockKind {
-            return inferredBlockSignature(row, blockKind: blockKind)
+            return inferredBlockSignature(row, blockKind: blockKind, context: context)
         }
-        guard let task = row.task, let desc = TaskCatalog.get(task) else { return nil }
-        return (desc.accepts, desc.gives)
+        guard let task = row.task else { return nil }
+        if let desc = TaskCatalog.get(task) {
+            return (desc.accepts, desc.gives)
+        }
+        if let comp = context.definitions[task] {
+            let declared = comp.signature.flatMap(FlowValidator.parseDeclaredSignature)
+            return (declared?.0 ?? .anyKind, declared?.1 ?? .anyKind)
+        }
+        if context.uses[task] != nil {
+            return (.anyKind, .anyKind)
+        }
+        if let transform = context.transforms[task] {
+            let declared = transform.signature.flatMap(FlowValidator.parseDeclaredSignature)
+            return (declared?.0 ?? .anyKind, declared?.1 ?? .anyKind)
+        }
+        return nil
     }
 
-    private nonisolated static func inferredBlockSignature(_ row: Row, blockKind: BlockKind) -> (accepts: Shape, gives: Shape)? {
+    private nonisolated static func inferredBlockSignature(_ row: Row, blockKind: BlockKind, context: FlowSignatureContext) -> (accepts: Shape, gives: Shape)? {
         guard let first = row.children.first, let last = row.children.last,
-              let firstSig = signature(of: first), let lastSig = signature(of: last) else {
+              let firstSig = signature(of: first, context: context),
+              let lastSig = signature(of: last, context: context) else {
             return nil
         }
         var accepts = firstSig.accepts
@@ -1350,6 +1402,47 @@ final class FlowEditorModel {
             if case .single(let k) = gives { gives = .listOf(k) }
         }
         return (accepts, gives)
+    }
+
+    /// WA-1 — the `uses:`/`definitions:`/`transforms:` sections `signature(of:)` needs to
+    /// resolve a non-catalog row the way `FlowValidator.checkRows` does. A value type
+    /// (rather than making `signature(of:)` an instance method) so the function stays
+    /// `nonisolated static` — `validInputs`, `outputShape`, `inputSlotCount` and
+    /// `isCompatible` all call it off the main actor in tests.
+    private nonisolated struct FlowSignatureContext {
+        var uses: [String: String]
+        var definitions: [String: CompositeDef]
+        var transforms: [String: TransformDef]
+    }
+
+    private var signatureContext: FlowSignatureContext {
+        FlowSignatureContext(uses: document.uses, definitions: document.definitions, transforms: document.transforms)
+    }
+
+    /// WA-3 — whether any sibling flow in this workspace calls this flow via `uses:`,
+    /// the same fact `KW-2-FIX-1`'s rename/delete confirmation already computes
+    /// (`WorkspaceStore.callers(of:in:ws:)`, `WorkspaceStore.swift:93`). Computed once per
+    /// model rather than per render: `warning(for:)` evaluates every row on every render,
+    /// and the underlying scan touches disk. Never invalidated — there is no file watcher
+    /// on `workspaces/` (`CLAUDE.md`), so the sibling set is stable for an editing session.
+    /// A plain memoized function, not `lazy var`: `@Observable`'s macro expansion can't
+    /// generate an init accessor for a `lazy` stored property.
+    private var isCalledByWorkspaceSiblingCache: Bool?
+
+    private var isCalledByWorkspaceSibling: Bool {
+        if let cached = isCalledByWorkspaceSiblingCache { return cached }
+        let result: Bool
+        if isSharedWorkspaceFolder,
+           let ws = WorkspaceStore.scan(workspace: workspace).first(where: { $0.url == workspace.directory(for: flowID) }) {
+            let dir = workspace.directory(for: flowID)
+            let target = savedURL ?? dir.appendingPathComponent(
+                "\(Self.sanitizedFileName(name)).\(Self.fileExtension(for: document.fileKind))")
+            result = !WorkspaceStore.callers(of: target, in: ws, ws: workspace).isEmpty
+        } else {
+            result = false
+        }
+        isCalledByWorkspaceSiblingCache = result
+        return result
     }
 
     private nonisolated static func displayTaskName(_ row: Row) -> String {

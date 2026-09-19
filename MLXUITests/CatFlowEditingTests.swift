@@ -1247,4 +1247,160 @@ struct CatFlowEditingTests {
         let edge = try #require(model.row(withID: gate.id)?.clause?.edges?.first)
         #expect(edge.target == .row(number: 2))
     }
+
+    // MARK: - WA-1/2/3 — the editor's yellow rows lie about workspace flows
+
+    /// Opens one bundled-workspace flow the way `WorkspaceListView.open` does — through
+    /// `BundledWorkspaces.prepare` into a temp `workspaces/` root, `savedURL` seeded from
+    /// the real file (`FlowEditorModel.seedSavedURL`'s production case), the real catalog
+    /// wired so a model row's "needs a model" check has a verdict. WA-6's own regression
+    /// bed (`CatFlowWorkspaceAdvisoryTests`) is the exhaustive sweep; these are the
+    /// backlog's "opens the actual bundled workspace file" per-phase checks.
+    @MainActor
+    private func openedBundledWorkspaceFlow(workspaceID: String, fileName: String) throws -> FlowEditorModel {
+        let meta = try #require(BundledWorkspaces.meta(id: workspaceID))
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-wa-\(UUID().uuidString)")
+        let root = base.appendingPathComponent("workspaces")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let ws = FlowWorkspace(root: root)
+        try BundledWorkspaces.prepare(meta, workspace: ws)
+        let fileURL = ws.directory(for: workspaceID).appendingPathComponent(fileName)
+        let text = try String(contentsOf: fileURL, encoding: .utf8)
+        let doc = try CatParser.parse(text)
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let model = FlowEditorModel(name: fileURL.deletingPathExtension().lastPathComponent,
+                                    flowID: workspaceID, document: doc, workspace: ws,
+                                    savedText: text, isSharedWorkspaceFolder: true, savedURL: fileURL)
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+        return model
+    }
+
+    @Test @MainActor func usesRowInputPickerOffersItsPredecessor() throws {
+        // WA-1: `signature(of:)` must resolve a `uses:` row as `(.anyKind, .anyKind)`, the
+        // way `FlowValidator.checkRows` does (`FlowValidator.swift:986-989`) — before this,
+        // `validInputs` read the row's own `nil` accepts as "nothing fits" and offered
+        // nothing (root cause 2).
+        let model = try openedBundledWorkspaceFlow(workspaceID: "uses_example", fileName: "AskYourDocs.cat")
+        let usesRow = try #require(model.document.rows.first { $0.task == "RagQuery" })
+        let inputs = model.validInputs(for: usesRow.id)
+        #expect(inputs.contains { $0.task == "Read Text" })
+    }
+
+    @Test @MainActor func transformsCallRowAndItsSuccessorAreClean() throws {
+        // WA-1: a `transforms:` entry resolves by its declared signature
+        // (`FlowValidator.swift:995-1000`), so a settings-free, ref-free row auto-chains
+        // *into* it and its successor auto-chains *out* of it, instead of either side
+        // reading its `nil` signature as incompatible. `Read Text` seeds row 1 so the
+        // call itself sits at position 2 — the realistic shape (WA-3 covers a transforms:
+        // or uses: call legitimately sitting at row 1 of a used flow; this is not that).
+        let transform = TransformDef(name: "Tidy", signature: "text -> text", run: "t.sh",
+                                     timeout: "10s", workdir: "work", params: [])
+        let source = row("Read Text", settings: "memo.txt")
+        let call = row("Tidy")
+        let successor = row("Summarize", model: "Qwen3 8B")
+        let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [source, call, successor],
+                               flags: [.code], transforms: ["Tidy": transform])
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-transform-\(UUID().uuidString)")
+        let flowID = "transform-flow"
+        let ws = FlowWorkspace(root: root)
+        let flowDir = ws.directory(for: flowID)
+        try FileManager.default.createDirectory(at: flowDir, withIntermediateDirectories: true)
+        // E409 needs the declared `run:` script to actually exist and be executable.
+        let scriptURL = flowDir.appendingPathComponent("t.sh")
+        try "#!/bin/sh\ncat\n".write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let model = FlowEditorModel(name: "Transform Flow", flowID: flowID, document: doc, workspace: ws)
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+        #expect(model.warning(for: call.id) == nil)
+        #expect(model.warning(for: successor.id) == nil)
+    }
+
+    @Test @MainActor func bundledUsesExampleRowsAreClean() throws {
+        // WA-1 + WA-2: `AskYourDocs.cat` row 3 (`Save Text`) no longer reads row 2's `uses:`
+        // call as an incompatible upstream.
+        let model = try openedBundledWorkspaceFlow(workspaceID: "uses_example", fileName: "AskYourDocs.cat")
+        let saveText = try #require(model.document.rows.first { $0.task == "Save Text" })
+        #expect(model.warning(for: saveText.id) == nil)
+    }
+
+    @Test @MainActor func bundledDocChatSelfSourcedAndEdgeTargetRowsAreClean() throws {
+        // WA-2: row 2 (`Human Input`, settings + `ask: 2` edge target) and row 9
+        // (`Save Context`, settings + `done: 9` edge target) both carry their own settings
+        // and are decider edge targets — either alone exempts them from the auto-chain
+        // check (`FlowValidator.swift:1067`'s `row.settings == nil` / `!edgeTargets
+        // .contains(position)` terms).
+        let model = try openedBundledWorkspaceFlow(workspaceID: "ask_your_docs", fileName: "DocChat.cat")
+        let humanInput = try #require(model.document.rows.first { $0.task == "Human Input" })
+        let saveContext = try #require(model.document.rows.first { $0.task == "Save Context" })
+        #expect(model.warning(for: humanInput.id) == nil)
+        #expect(model.warning(for: saveContext.id) == nil)
+    }
+
+    @Test @MainActor func bundledRagQueryReadIndexRowIsClean() throws {
+        // WA-2: `RagQuery.cat` row 2 (`Read Index kb.index`) sources itself from settings.
+        let model = try openedBundledWorkspaceFlow(workspaceID: "uses_example", fileName: "RagQuery.cat")
+        let readIndex = try #require(model.document.rows.first { $0.task == "Read Index" })
+        #expect(model.warning(for: readIndex.id) == nil)
+    }
+
+    @Test @MainActor func autoChainShapeClashWithNoSettingsAndNoEdgeStillWarns() throws {
+        // WA-2 must not over-exempt: a row with genuinely no settings, no refs, and no
+        // decider pointing at it, whose upstream output can't feed it, still warns. Mirrors
+        // `shapeIncompatibleReferenceIsYellowAndBlocksSave`'s pairing (`Read Text` → a task
+        // that needs audio) but through the *auto-chain* path (no explicit ref) rather than
+        // an explicit wrong one.
+        let text = row("Read Text", settings: "memo.txt")
+        let transcribe = row("Transcribe", model: "Whisper Tiny")
+        let model = try wiredEditor(rows: [text, transcribe])
+        #expect(model.warning(for: transcribe.id) != nil)
+    }
+
+    @Test @MainActor func bundledRagQueryRowOneIsCleanWhenASiblingUsesIt() throws {
+        // WA-3: `RagQuery.cat` row 1 (`Embed`) is fed by its caller (`AskYourDocs.cat` row
+        // 2, `uses: RagQuery = ./RagQuery.cat`), so the "nothing feeds this row" check must
+        // not fire on it — `WorkspaceStore.callers(of:in:ws:)` finds the sibling.
+        let model = try openedBundledWorkspaceFlow(workspaceID: "uses_example", fileName: "RagQuery.cat")
+        let embed = try #require(model.document.rows.first)
+        #expect(embed.task == "Embed")
+        #expect(model.warning(for: embed.id) == nil)
+    }
+
+    @Test @MainActor func usedFlowAloneInAWorkspaceNobodyCallsStillWarnsOnRowOne() throws {
+        // WA-3's negative case: the same `RagQuery.cat`, copied into a workspace with no
+        // caller, still warns on row 1 — the suppression is `callers(of:)`, not a blanket
+        // exemption for every `Embed` row.
+        let meta = try #require(BundledWorkspaces.meta(id: "uses_example"))
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-wa3-\(UUID().uuidString)")
+        let root = base.appendingPathComponent("workspaces")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let sourceWS = FlowWorkspace(root: root)
+        try BundledWorkspaces.prepare(meta, workspace: sourceWS)
+        let ragQueryText = try String(
+            contentsOf: sourceWS.directory(for: "uses_example").appendingPathComponent("RagQuery.cat"),
+            encoding: .utf8)
+
+        let loneID = "lone-\(UUID().uuidString)"
+        let loneDir = root.appendingPathComponent(loneID)
+        try FileManager.default.createDirectory(at: loneDir, withIntermediateDirectories: true)
+        let loneFile = loneDir.appendingPathComponent("RagQuery.cat")
+        try ragQueryText.write(to: loneFile, atomically: true, encoding: .utf8)
+
+        let doc = try CatParser.parse(ragQueryText)
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let model = FlowEditorModel(name: "RagQuery", flowID: loneID, document: doc,
+                                    workspace: FlowWorkspace(root: root), savedText: ragQueryText,
+                                    isSharedWorkspaceFolder: true, savedURL: loneFile)
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+        let embed = try #require(model.document.rows.first)
+        #expect(embed.task == "Embed")
+        #expect(model.warning(for: embed.id) != nil)
+    }
 }
