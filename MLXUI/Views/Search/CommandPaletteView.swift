@@ -48,7 +48,9 @@ struct CommandPaletteView: View {
                             Button {
                                 dismiss()
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    appState.selectedModel = model
+                                    // WA-5: a command-palette jump replaces the stack, same
+                                    // as a sidebar pick — a global "go here", not a push.
+                                    appState.route = [.model(model)]
                                 }
                             } label: {
                                 HStack(spacing: 10) {

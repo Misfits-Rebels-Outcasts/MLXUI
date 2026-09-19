@@ -102,8 +102,8 @@ struct FlowListView: View {
         // fires again when the editor is popped off the navigation stack. Returning
         // from an edit of *this* flow (a rename, or any row change) would otherwise
         // leave the page showing the pre-edit title, serialized rows and refusal.
-        .onChange(of: appState.editingFlow) { old, new in
-            guard new == nil, old?.flowID == flowID else { return }
+        .onChange(of: appState.route) { old, new in
+            guard let closed = old.topEditor, new.topEditor == nil, closed.flowID == flowID else { return }
             reload()
         }
         .sheet(isPresented: $session.showInstallSheet) {
@@ -527,7 +527,7 @@ struct FlowListView: View {
                 flowID: flowID, title: display.title, document: doc,
                 workspace: FlowWorkspace.shared,
                 sourceDir: GalleryLoader.resourcesDirectory ?? Bundle.main.resourceURL ?? .init(fileURLWithPath: "/"))
-            appState.editingFlow = target
+            appState.route.append(.editor(target))
         } catch {
             appState.openCatFlowError = "Couldn't copy '\(display.title)' into your flows folder — the flow stays read-only."
         }
@@ -580,9 +580,9 @@ struct FlowListView: View {
                 .disabled(false) //comeback cbx
             } else {
                 Button {
-                    appState.editingFlow = FlowEditTarget(flowID: flowID, name: display.title,
-                                                          document: doc,
-                                                          savedText: CatSerializer.serialize(doc))
+                    appState.route.append(.editor(FlowEditTarget(flowID: flowID, name: display.title,
+                                                                  document: doc,
+                                                                  savedText: CatSerializer.serialize(doc))))
                 } label: {
                     Label("Edit", systemImage: "square.and.pencil")
                 }
