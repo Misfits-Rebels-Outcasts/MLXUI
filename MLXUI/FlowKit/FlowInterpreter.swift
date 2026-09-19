@@ -1077,8 +1077,12 @@ nonisolated enum FlowInterpreter {
     private static let reCtxRead = NSRegularExpression.compiled(#"[·;]\s*ctx(?!\+)\b"#)
     private static let reCtxAppend = NSRegularExpression.compiled(#"[·;]\s*ctx\+"#)
 
-    /// `_row_ctx_markers` — (reads, appends) for a row's own marker text.
-    private static func rowCtxMarkers(_ row: Row) -> (reads: Bool, appends: Bool) {
+    /// `_row_ctx_markers` — (reads, appends) for a row's own marker text. Widened from
+    /// `private` for FV-2 (`RSI/DelegateFrameViewBacklog.md` §4.1 point 3, the `; ctx` splice
+    /// row): the Properties-tab frame preview needs `reads` to know whether to render a
+    /// stand-in "Shared context so far:" block, and this regex pair is the one place that
+    /// decision is made.
+    static func rowCtxMarkers(_ row: Row) -> (reads: Bool, appends: Bool) {
         guard let settings = row.settings, !settings.isEmpty else { return (false, false) }
         let ns = NSRange(settings.startIndex..<settings.endIndex, in: settings)
         return (reCtxRead.firstMatch(in: settings, range: ns) != nil,

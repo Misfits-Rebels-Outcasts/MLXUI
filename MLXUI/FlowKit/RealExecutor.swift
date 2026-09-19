@@ -413,15 +413,14 @@ nonisolated struct RealExecutor: FlowExecutor {
 
         // Frame-backed: render the frame into a prompt, then run the LLM stage on it. The
         // full reference bundle feeds the renderer (B1) — `Rewrite (1,2)` sees both refs.
+        // FV-2: goes through `FramePreview.render`, the same function the Properties-tab
+        // preview calls, so a run and its preview cannot render different prompts.
         if desc.refKind == .frame {
             guard !inputs.isEmpty else {
                 throw FlowError.badInputCardinality(row: "\(path)", expected: "a text input", got: 0)
             }
-            let frameName = desc.refName
-                .replacingOccurrences(of: "frames/", with: "")
-                .replacingOccurrences(of: ".frame.txt", with: "")
-            let frame = try FrameRenderer.loadFrame(named: frameName)
-            let prompt = try FrameRenderer.render(frameText: frame, settings: row.settings, assets: inputs)
+            let prompt = try FramePreview.render(task: desc.name, refName: desc.refName,
+                                                 settings: row.settings, assets: inputs, tags: [])
             // SET-1 / RA-04: a framed generation row (Summarize, Rewrite, Revise, …) receives
             // its manifest's sampler defaults — before this it always ran at StageConfig's
             // hardcoded 512 tokens whatever the manifest or a `max_tokens=` row setting said.
@@ -634,23 +633,15 @@ nonisolated struct RealExecutor: FlowExecutor {
 
         let basePrompt: String
         if desc.refName.hasPrefix("frames/") {
-            let frameName = desc.refName
-                .replacingOccurrences(of: "frames/", with: "")
-                .replacingOccurrences(of: ".frame.txt", with: "")
-            let frameText = try FrameRenderer.loadFrame(named: frameName)
-            if task == "Judge" {
-                basePrompt = DeciderFrame.renderJudgeFrame(frameText: frameText, settings: settings,
-                                                           inputs: inputs, tags: tags, context: ctxText)
-            } else if task == "Think" {
-                let toolLines = DeciderFrame.renderThinkTools(edges: row.clause?.edges ?? [])
-                let soFar = DeciderFrame.renderTranscript(entries: transcript ?? [])
-                basePrompt = DeciderFrame.renderThinkFrame(frameText: frameText, settings: settings,
-                                                           inputs: inputs, tags: tags, tools: toolLines,
-                                                           transcript: soFar, context: ctxText)
-            } else {
-                basePrompt = DeciderFrame.renderFrame(frameText: frameText, settings: settings,
-                                                      inputs: inputs, tags: tags, context: ctxText)
-            }
+            // FV-2: goes through `FramePreview.render`, the same function the Properties-tab
+            // preview calls (fact 7's Judge/Think/else split now lives there, once, instead
+            // of here). `toolLines`/`soFar` are only read by the Think branch inside it;
+            // computing them for every decider is cheap (empty edges/transcript otherwise).
+            let toolLines = DeciderFrame.renderThinkTools(edges: row.clause?.edges ?? [])
+            let soFar = DeciderFrame.renderTranscript(entries: transcript ?? [])
+            basePrompt = try FramePreview.render(task: task, refName: desc.refName, settings: settings,
+                                                 assets: inputs, tags: tags, tools: toolLines,
+                                                 transcript: soFar, context: ctxText)
         } else {
             // `Decide` (the engine-backed decider) has no frame file — the Python's `decide`
             // builds the ask from the asset directly.
@@ -886,8 +877,11 @@ nonisolated struct RealExecutor: FlowExecutor {
     }
 
     /// A decider's declared tags: `row.tags` if declared, else the decide clause's edge tags.
-    /// `static` (AFM-2) — `deciderPrompt` needs it and reads only its argument.
-    private static func declaredTags(_ row: Row) -> [String] {
+    /// `static` (AFM-2) — `deciderPrompt` needs it and reads only its argument. Widened from
+    /// `private` for FV-2 (`RSI/DelegateFrameViewBacklog.md` fact 13): the Properties-tab
+    /// frame preview needs the same rule for `{tags}`, and re-deriving "row.tags, else the
+    /// decide clause's edge tags" in a View would be exactly the second copy §6 warns against.
+    static func declaredTags(_ row: Row) -> [String] {
         if let tags = row.tags, !tags.isEmpty { return tags }
         if let edges = row.clause?.edges, !edges.isEmpty { return edges.map(\.tag) }
         return []

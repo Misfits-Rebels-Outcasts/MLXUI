@@ -122,6 +122,15 @@ struct FlowRowInspectorView: View {
                                 EmptyView()
                             }
                         }
+                        // FV-2 — the frame view. Directly below the instruction box, since it
+                        // explains that box (R-FV-c: the frame with the row's known values
+                        // filled in). Shown whether or not `isFrozen` (§5 Q1) — unlike
+                        // `Raw settings` below, a read-only preview has nothing to hide on a
+                        // bundled flow, and the most useful moment to read the prompt is
+                        // before deciding to duplicate one.
+                        if let task = row.task {
+                            framePreviewSection(task, row: row)
+                        }
                         // CFM — a `Save *` row's filename is its path token; let the user
                         // type it (or a subfolder) instead of hunting in the file list.
                         if let task = row.task, task.hasPrefix("Save") {
@@ -1556,6 +1565,80 @@ struct FlowRowInspectorView: View {
         else { return nil }
         return Self.strandedPromptMessage(token: token, display: display,
                                           support: modelPromptSupport(for: row))
+    }
+
+    // MARK: - FV-2: the frame view
+
+    /// R-FV-a/c — a read-only, collapsed-by-default preview of the prompt `task`'s frame
+    /// actually sends, rendered through `FramePreview.render` (`FlowKit/FramePreview.swift`) —
+    /// the same function `RealExecutor` calls to run the row, so this view and a real run
+    /// cannot diverge (§6 "drift between preview and run"). `nil` (`EmptyView`) for any task
+    /// that isn't `refKind == .frame` — `Decide`'s prompt box stays SPEC-Q230, untouched (§8).
+    @ViewBuilder
+    private func framePreviewSection(_ task: String, row: Row) -> some View {
+        if let desc = TaskCatalog.get(task), desc.refKind == .frame,
+           let rendered = try? renderedFramePreview(task: task, desc: desc, row: row) {
+            DisclosureGroup("Prompt frame") {
+                VStack(alignment: .leading, spacing: 4) {
+                    // §7 copy, verbatim.
+                    Text("Fixed by the task and shared with every runtime — your text above goes where {settings} is. To write a whole prompt yourself, use Template + Generate.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    ScrollView {
+                        Text(rendered)
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 160)
+                    // §7 copy (Q6), verbatim — names the source without the pane pretending
+                    // to have invented the wording.
+                    Text("From \(FramePreview.frameFileName(refName: desc.refName)).frame.txt, published in the catalog.")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.top, 4)
+            }
+            .font(.caption)
+        }
+    }
+
+    /// Builds `FramePreview.render`'s arguments from what is knowable at edit time (the
+    /// backlog's §4.1 table): `{settings}`/`{settings.KEY}` and `{tags}` are real — the same
+    /// row and `RealExecutor.declaredTags` a run would use; every bound-reference placeholder
+    /// (`{asset}`, `{asset list}`, `{input[N]}`, `{candidates}`) gets a stand-in naming the
+    /// bound row instead of that row's actual (not-yet-produced) output; `{tools}` is real
+    /// (`DeciderFrame.renderThinkTools`, derivable from the row's own decide-clause edges);
+    /// `{transcript}` and the `; ctx` splice are stand-ins, since both only exist mid-run.
+    private func renderedFramePreview(task: String, desc: TaskDescriptor, row: Row) throws -> String {
+        let slots = max(model.inputSlotCount(for: rowID), 1)
+        let assets = (1...slots).map { slot in
+            // §7: Judge's `{candidates}` gets its own stand-in — "the text from row N" would
+            // misname a slot whose content is a future *candidate*, not a value to read as-is.
+            let text = task == "Judge"
+                ? "⟨the candidates, once the rows above run⟩"
+                : standInInputText(slot: slot)
+            return Asset(items: [Item(kind: .text, value: text, path: nil, sourceText: nil)])
+        }
+        let tags = RealExecutor.declaredTags(row)
+        let tools = task == "Think" ? DeciderFrame.renderThinkTools(edges: row.clause?.edges ?? []) : []
+        // §7 stand-ins — Think's transcript only exists mid-run; the `; ctx` splice only
+        // fires when the row's own settings carry a `· ctx`/`; ctx` read marker (fact 14,
+        // `FlowInterpreter.rowCtxMarkers` — deterministic from `row.settings` alone).
+        let transcript = "⟨what the agent has tried so far, once it runs⟩"
+        let context = FlowInterpreter.rowCtxMarkers(row).reads
+            ? "⟨the shared context so far, once it runs⟩" : nil
+        return try FramePreview.render(task: task, refName: desc.refName, settings: row.settings,
+                                       assets: assets, tags: tags, tools: tools,
+                                       transcript: transcript, context: context)
+    }
+
+    /// The `{asset}`/`{input[N]}` stand-in for one input slot — §7's copy, built the same way
+    /// `currentInputLabel(slot:)` builds its own "N — Task" label (fact 24), so the two can
+    /// never disagree about which row a slot names.
+    private func standInInputText(slot: Int) -> String {
+        let label = currentInputLabel(slot: slot)
+        return label == "None" ? "⟨no input bound yet⟩" : "⟨the text from row \(label)⟩"
     }
 
     /// RT-4 (fact 23, Tier-2 "key/bare shadowing") — `Web Search`/`Rerank` read
