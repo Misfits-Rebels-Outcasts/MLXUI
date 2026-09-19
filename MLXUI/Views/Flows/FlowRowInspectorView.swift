@@ -122,6 +122,16 @@ struct FlowRowInspectorView: View {
                                 EmptyView()
                             }
                         }
+                        // FV-3 — the five framed tasks whose frame never reads {settings} at
+                        // all (Answer, Revise, Verify, Think, Translate). `promptControl` still
+                        // gives them the instruction box above (fact 3, unchanged) — this says
+                        // so when the row actually has quoted text sitting in it unused.
+                        if let warning = strandedInstructionWarning(row) {
+                            Label(warning, systemImage: "exclamationmark.triangle")
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                         // FV-2 — the frame view. Directly below the instruction box, since it
                         // explains that box (R-FV-c: the frame with the row's known values
                         // filled in). Shown whether or not `isFrozen` (§5 Q1) — unlike
@@ -736,6 +746,9 @@ struct FlowRowInspectorView: View {
         case "Save Images": return ["naming"]                 // SaveImageTools.swift:95
         case "Web Fetch", "HTTP Get", "Fetch Feed", "Download File":
             return ["url"]                                    // NetTools.swift:220 (resolveURL)
+        // FV-3 — `Translate` reads `{settings.to}` (its frame's only substitution besides
+        // `{asset}`); the Add menu never offered it before this.
+        case "Translate": return ["to"]
         default:
             // The diffusion four — every `engines.diffusion.*` task shares
             // `RealExecutor.stageConfig`'s one `seed`/`width`/`height`/`steps` reader
@@ -1680,6 +1693,42 @@ struct FlowRowInspectorView: View {
         case .modes(let values, _):
             guard !values.contains(token) else { return nil }
             return "\"\(token)\" isn't a recognition mode \(display) understands (\(values.joined(separator: ", "))) — this row will run in the default mode."
+        }
+    }
+
+    // MARK: - FV-3: the five tasks that ignore the instruction box
+
+    /// §0's finding: `promptControl` gives every `refKind == .frame` task the instruction box
+    /// (fact 3), but five of the sixteen frames never read `{settings}` at all —
+    /// `Answer`/`Revise`/`Verify`/`Think` have no `{settings}` placeholder whatsoever,
+    /// `Translate` reads only the keyed `{settings.to}`. Derived from the frame file's own
+    /// text (`!frameText.contains("{settings}")`), never a hardcoded task list — Part C owns
+    /// the wording, and a task-name list here would silently stop matching the day a frame
+    /// changes. SPEC-Q232 (`catflow-mlx/SPEC_QUESTIONS.md`): the catalog's own Part B table
+    /// disagrees with Part C for `Verify` specifically (says it takes "support rules"; its
+    /// frame reads none) — this function is the one place that mismatch would actually bite,
+    /// since it trusts the frame, not the table.
+    private func strandedInstructionWarning(_ row: Row) -> String? {
+        guard let task = row.task, let desc = TaskCatalog.get(task), desc.refKind == .frame,
+              let instruction = quotedInstruction(row.settings), !instruction.isEmpty,
+              let frameText = try? FrameRenderer.loadFrame(named: FramePreview.frameFileName(refName: desc.refName)),
+              !frameText.contains("{settings}")
+        else { return nil }
+        return Self.strandedInstructionMessage(task: task)
+    }
+
+    /// The pure decision behind `strandedInstructionWarning` — `nonisolated static` so it's
+    /// unit-testable without a View, same reasoning as `strandedPromptMessage`. §7 copy,
+    /// verbatim; `Answer` and `Translate` get the more specific sentences the copy table names,
+    /// everything else (`Revise`, `Verify`, `Think`) the generic one.
+    nonisolated static func strandedInstructionMessage(task: String) -> String {
+        switch task {
+        case "Answer":
+            return "Answer takes no instruction — its question arrives with the input, so the text in quotes never reaches the model."
+        case "Translate":
+            return "Translate reads to= for the target language — the text in quotes isn't used."
+        default:
+            return "\(task) doesn't use the text in quotes — its frame never reads it, so the model never sees it."
         }
     }
 
