@@ -298,9 +298,19 @@ final class FlowRunSession {
         case .queued(let id):
             setStatus(.notRun, for: id)
         case .started(let id):
-            setStatus(.running, for: id)
+            // DA-10-FIX-3: an `<each on_error=skip>` body row reuses the same row id across
+            // items (fact already documented at `.finished` below). Once one item skipped,
+            // a *later* item's own `.started` must not repaint the dot blue — that silently
+            // undoes "the dot stays △ for the rest of the run" the moment the next item
+            // begins, and since a skipped row's `.finished` never promotes back to ✓ either
+            // (below), the dot was left stuck on ● with no event left to move it anywhere:
+            // exactly the bug this fixes (row 3.1 of `31-ResearchBrief.cat` stuck blue while
+            // rows 4-6 already finished green).
+            if rowStates[id]?.wasSkipped != true { setStatus(.running, for: id) }
         case .progress(let id, _):
-            if rowStates[id]?.status != .failed { setStatus(.running, for: id) }
+            if rowStates[id]?.status != .failed, rowStates[id]?.wasSkipped != true {
+                setStatus(.running, for: id)
+            }
         case .finished(let id, let asset):
             outputs[id] = asset
             // DA-10-FIX-2: an `<each on_error=skip>` body row reuses the same row id across

@@ -88,6 +88,52 @@ struct CatFlowRunWiringTests {
         #expect(session.statusNote(for: doc.rows[0].id) == nil)
     }
 
+    /// DA-10-FIX-3 repro: an `<each on_error=skip>` body row reuses the same row id across
+    /// items. When one item skips (△) but a *later* item of the same row then succeeds, that
+    /// later item's own `.started` event must not repaint the dot ● — and since a skipped
+    /// row's `.finished` never promotes it to ✓ either (the sticky-△ rule
+    /// `skippedEachChildCarriesItsReasonInTheSession` covers), the dot was left stuck on ●
+    /// with no later event to move it anywhere. (Owner repro: `31-ResearchBrief.cat` row 3.1
+    /// stuck ● while rows 4-6 had already finished ✓.)
+    @Test func laterItemSucceedingAfterAnEarlierSkipLeavesTheDotAtNeedsAttention() async throws {
+        let doc = try CatParser.parse("""
+        mlxflow 0.8
+        1. Template   "a\\nb\\nc"
+        2. Split   (1)   by=lines
+        3. <each go; on_error=skip>   (2)
+            1. Summarize   {item}
+        4. Join Text   (3)
+        """)
+        let child = try #require(doc.rows[2].children.first)
+
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-skip-later-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        let blob = base.appendingPathComponent("blobs")
+        let ctx = FlowRunner.RunContext(
+            flowID: "t",
+            workspace: FlowWorkspace(root: base.appendingPathComponent("flows")),
+            blobDirectory: blob,
+            executor: NthCallFailingExecutor(failTask: "Summarize", failOnCallIndex: 1,
+                                             inner: MockExecutor(blobDirectory: blob)))
+
+        let session = FlowRunSession()
+        session.prepareInstall(FlowPreflight.Result())
+        session.start(doc: doc, runner: FlowRunner(), context: ctx)
+        let deadline = Date().addingTimeInterval(10)
+        while session.isRunning && Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+
+        // The run continued past the skip (`on_error=skip`) and completed — row 4 (which
+        // consumes row 3's output) must have finished, not stalled.
+        #expect(session.status(for: doc.rows[3].id) == .succeeded)
+        // The regression itself: item "c" (the third, succeeding item) running after item
+        // "b" skipped must leave the dot at △, not stuck on ● or falsely promoted to ✓.
+        #expect(session.status(for: child.id) == .needsAttention)
+        #expect(session.wasSkipped(child.id))
+    }
+
     /// CFM-R12-FIX-3: block children get their own status dot — `rowStates` is seeded from
     /// the flattened row set, so a child's `.finished` event records instead of being
     /// silently dropped.
@@ -517,6 +563,46 @@ private struct RowFailingExecutor: FlowExecutor {
                  usedFlowContent: String?) async throws -> Asset {
         if row.task == failTask {
             throw FlowError.stageFailure(row: path, message: "the receipts are on fire")
+        }
+        return try await inner.execute(path: path, row: row, inputs: inputs,
+                                       transcript: transcript, context: context,
+                                       usedFlowContent: usedFlowContent)
+    }
+}
+
+/// Fails only the Nth (0-indexed) call to a named task, delegating every other call —
+/// including other items of the same task — to a real mock. Lets a DA-10-FIX-3 repro fail
+/// exactly one item of a multi-item `<each on_error=skip>` while its siblings succeed, unlike
+/// `RowFailingExecutor` (which fails a named task unconditionally, for every item). Counts
+/// calls rather than matching settings content: `MockExecutor` doesn't echo an `<each>` item's
+/// real text, only a synthetic per-item trace string, so content isn't a reliable selector
+/// here. `runEach` calls sequentially (`for item in source.items`, `await`ed in order), so a
+/// plain counter under a lock is enough — no risk of two items racing for the same index.
+private final class NthCallFailingExecutor: FlowExecutor, @unchecked Sendable {
+    let failTask: String
+    let failOnCallIndex: Int
+    let inner: MockExecutor
+    private let lock = NSLock()
+    private var callIndex = 0
+
+    init(failTask: String, failOnCallIndex: Int, inner: MockExecutor) {
+        self.failTask = failTask
+        self.failOnCallIndex = failOnCallIndex
+        self.inner = inner
+    }
+
+    func execute(path: String, row: Row, inputs: [Asset],
+                 transcript: [FlowInterpreter.TranscriptEntry]?,
+                 context: [(label: String, content: String)]?,
+                 usedFlowContent: String?) async throws -> Asset {
+        if row.task == failTask {
+            let index = lock.withLock { () -> Int in
+                defer { callIndex += 1 }
+                return callIndex
+            }
+            if index == failOnCallIndex {
+                throw FlowError.stageFailure(row: path, message: "the receipts are on fire")
+            }
         }
         return try await inner.execute(path: path, row: row, inputs: inputs,
                                        transcript: transcript, context: context,
