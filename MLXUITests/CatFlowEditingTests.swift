@@ -365,6 +365,21 @@ struct CatFlowEditingTests {
         #expect(warning != "Row 1 has nothing to fall back on — if nobody answers, this row produces nothing.")
     }
 
+    @Test func rowOneHumanInputWithTimeoutButNoDefaultAlsoShowsE501() throws {
+        // Backlog HR-1, corrected 2026-09-20: `checkHumanRows`' gate is `wait=forever` **or**
+        // (`timeout=` **and** `default=`) — an incomplete policy (`timeout=` alone, no
+        // `default=`) is a *different*, wider case than "no settings at all" above, and also
+        // preempts via E501 before the row-1 branch is reached. HR-1's new "nothing to fall
+        // back on" sentence is reachable only on a row with a *complete* `timeout=`/`default=`
+        // pair (contrast `rowOneHumanInputWithTimeoutShowsTheMissingFallbackSentence` above).
+        let r = row("Human Input", settings: "\"q\"; timeout=30s")
+        let model = try editor(rows: [r])
+        let warning = try #require(model.warning(for: r.id))
+        #expect(warning.contains("doesn't say what happens if nobody answers"))
+        #expect(warning != "Row 1 needs an input — nothing feeds it.")
+        #expect(warning != "Row 1 has nothing to fall back on — if nobody answers, this row produces nothing.")
+    }
+
     @Test func rowOneAskHumanIsNeverExemptedEvenWithSettings() throws {
         // HR-1 scopes the exemption to `Human Input` by name, not the `.human` class: `Ask
         // Human` is `.sameAsInput` and can never source content at row 1.
