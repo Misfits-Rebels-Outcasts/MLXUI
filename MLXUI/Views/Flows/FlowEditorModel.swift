@@ -323,9 +323,17 @@ final class FlowEditorModel {
     /// visible and editable instead of implicit. Kept separate from `seedSample` (which
     /// exists to copy **sample assets**, not to answer a validator check) and merged with it
     /// at the call sites, per the backlog's instruction not to overload it.
+    ///
+    /// HR-3 (`RSI/DelegateHumanRowBacklog.md`) — `Human Input` additionally gets a seeded
+    /// quoted criterion, so a freshly added row has something to ask instead of leaving
+    /// `FlowHumanPromptView` to render a blank line (root cause 3). `Ask Human` is left as
+    /// `wait=forever` alone, unchanged: the backlog's recommended seed is `Human Input`-only,
+    /// and this stays optional either way — a row with no criterion is still legal in the
+    /// language (E501 polices the waiting policy, never the question).
     nonisolated static func defaultSettings(forTask task: String) -> String? {
         switch task {
-        case "Ask Human", "Human Input": return "wait=forever"
+        case "Human Input": return "\(FlowSettingsEditor.quote("What should I use?")); wait=forever"
+        case "Ask Human": return "wait=forever"
         default: return nil
         }
     }

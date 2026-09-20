@@ -19,7 +19,7 @@ struct FlowHumanPromptView: View {
         VStack(alignment: .leading, spacing: 14) {
             Label(friendlyTitle, systemImage: "person.circle")
                 .font(.headline)
-            Text(parked.prompt)
+            Text(promptText)
                 .font(.body)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -117,6 +117,20 @@ struct FlowHumanPromptView: View {
     private var friendlyTitle: String {
         row.task == "Ask Human" ? "Ask me before sending (waits for you)"
                                 : "Wait for me to type (waits for you)"
+    }
+
+    /// HR-3, root cause 3 — a row with no seeded or hand-written criterion parks with an
+    /// empty `parked.prompt`, which used to render as a blank line between the title and the
+    /// reply field. Falls back to a plain sentence instead; the criterion itself stays
+    /// optional in the language (no validator change), only the sheet stops looking broken
+    /// when one is absent. A `static` pure function, not inlined, so it's unit-testable the
+    /// same way `FlowEditorModel.waitPolicyDescription` is.
+    private var promptText: String { Self.promptText(prompt: parked.prompt, task: row.task) }
+
+    nonisolated static func promptText(prompt: String, task: String?) -> String {
+        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        return task == "Ask Human" ? "This step needs your decision:" : "This step needs your input:"
     }
 
     /// The `Ask Human` row's answerable tags — declared `tags:`, else the decide clause edges.

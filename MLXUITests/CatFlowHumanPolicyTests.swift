@@ -36,19 +36,22 @@ struct CatFlowHumanPolicyTests {
     // MARK: - HU-1: seeding a fresh row
 
     @Test func defaultSettingsSeedsWaitForeverForBothHumanTasksOnly() {
+        // HR-3: Human Input additionally seeds a quoted criterion, so its sheet is never
+        // blank; Ask Human is left as `wait=forever` alone (recommended seed is Human
+        // Input-only — RSI/DelegateHumanRowBacklog.md HR-3).
         #expect(FlowEditorModel.defaultSettings(forTask: "Ask Human") == "wait=forever")
-        #expect(FlowEditorModel.defaultSettings(forTask: "Human Input") == "wait=forever")
+        #expect(FlowEditorModel.defaultSettings(forTask: "Human Input") == "\"What should I use?\"; wait=forever")
         #expect(FlowEditorModel.defaultSettings(forTask: "Read Text") == nil)
         #expect(FlowEditorModel.defaultSettings(forTask: "Summarize") == nil)
     }
 
-    @Test @MainActor func addingAHumanInputRowSeedsWaitForeverAndNeedsNoWarning() throws {
+    @Test @MainActor func addingAHumanInputRowSeedsAQuestionAndWaitForeverAndNeedsNoWarning() throws {
         let model = try editor([row("Read Text", settings: "memo.txt")])
         model.selectedRowID = model.document.rows[0].id
         model.add(task: "Human Input")
         let newRow = try #require(model.document.rows.last)
         #expect(newRow.task == "Human Input")
-        #expect(newRow.settings == "wait=forever")
+        #expect(newRow.settings == "\"What should I use?\"; wait=forever")
         #expect(model.warning(for: newRow.id) == nil)
     }
 
@@ -62,14 +65,14 @@ struct CatFlowHumanPolicyTests {
         #expect(!model.issues(for: newRow.id).contains { $0.code == "E501" })
     }
 
-    @Test @MainActor func addingAHumanChildRowIntoABlockAlsoSeedsWaitForever() throws {
+    @Test @MainActor func addingAHumanChildRowIntoABlockAlsoSeedsAQuestionAndWaitForever() throws {
         let block = Row(id: UUID(), task: nil, blockKind: .each, blockName: "Each",
                         children: [Row(id: UUID(), task: "Template", settings: "\"\"")])
         let model = try editor([block])
         model.addChild(task: "Human Input", into: block.id)
         let child = try #require(model.document.rows.first?.children.last)
         #expect(child.task == "Human Input")
-        #expect(child.settings == "wait=forever")
+        #expect(child.settings == "\"What should I use?\"; wait=forever")
     }
 
     @Test func freshlySeededHumanInputRowValidatesWithNoE501() throws {
@@ -247,5 +250,18 @@ struct CatFlowHumanPolicyTests {
         #expect(description.contains("edit"))
         // Reading the policy for display is a pure read — the row's own bytes are untouched.
         #expect(CatSerializer.serialize(doc) == before)
+    }
+
+    // MARK: - HR-3: the prompt sheet is never blank
+
+    @Test func promptTextPassesThroughATrimmedNonEmptyPrompt() {
+        #expect(FlowHumanPromptView.promptText(prompt: "Enter URL:", task: "Human Input") == "Enter URL:")
+        #expect(FlowHumanPromptView.promptText(prompt: "  Enter URL:  ", task: "Human Input") == "Enter URL:")
+    }
+
+    @Test func promptTextFallsBackByTaskWhenTheCriterionIsEmpty() {
+        #expect(FlowHumanPromptView.promptText(prompt: "", task: "Human Input") == "This step needs your input:")
+        #expect(FlowHumanPromptView.promptText(prompt: "   ", task: "Human Input") == "This step needs your input:")
+        #expect(FlowHumanPromptView.promptText(prompt: "", task: "Ask Human") == "This step needs your decision:")
     }
 }
