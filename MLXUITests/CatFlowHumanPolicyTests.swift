@@ -264,4 +264,32 @@ struct CatFlowHumanPolicyTests {
         #expect(FlowHumanPromptView.promptText(prompt: "   ", task: "Human Input") == "This step needs your input:")
         #expect(FlowHumanPromptView.promptText(prompt: "", task: "Ask Human") == "This step needs your decision:")
     }
+
+    // MARK: - HR-4: the prompt sheet prefills the incoming default (SPEC-Q233)
+
+    @Test func effectivePrefillPassesThroughAFittingDefault() {
+        #expect(FlowHumanPromptView.effectivePrefill(
+            defaultText: "https://news.ycombinator.com", task: "Human Input")
+            == "https://news.ycombinator.com")
+    }
+
+    @Test func effectivePrefillIsNilWithNoDefaultText() {
+        #expect(FlowHumanPromptView.effectivePrefill(defaultText: nil, task: "Human Input") == nil)
+    }
+
+    @Test func effectivePrefillIsNilForAskHumanEvenWithADefault() {
+        // Ask Human answers with tag buttons, not a text field — there is nothing to prefill.
+        #expect(FlowHumanPromptView.effectivePrefill(defaultText: "approve", task: "Ask Human") == nil)
+    }
+
+    @Test func effectivePrefillIsNilPastTheDisplayCap() {
+        let tooLong = String(repeating: "a", count: 501)
+        #expect(FlowHumanPromptView.effectivePrefill(defaultText: tooLong, task: "Human Input") == nil)
+        let fits = String(repeating: "a", count: 500)
+        #expect(FlowHumanPromptView.effectivePrefill(defaultText: fits, task: "Human Input") == fits)
+    }
+
+    @Test func effectivePrefillIsNilForAnEmptyDefaultText() {
+        #expect(FlowHumanPromptView.effectivePrefill(defaultText: "", task: "Human Input") == nil)
+    }
 }

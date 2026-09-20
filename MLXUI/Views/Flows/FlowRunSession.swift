@@ -58,6 +58,9 @@ final class FlowRunSession {
         let execPath: String
         /// When the run falls back to the row's default if unanswered — nil = waits forever.
         let deadline: Date?
+        /// HR-4 (SPEC-Q233) — the row's incoming value, for the prompt sheet's prefill. `nil`
+        /// when the row has none (row 1) or it isn't a single text item.
+        let defaultText: String?
     }
 
     // MARK: - Gating
@@ -340,10 +343,10 @@ final class FlowRunSession {
             rowStates[id]?.errorSentence = reason
             rowStates[id]?.wasSkipped = true
             metrics.record(rowID: id)
-        case .parked(let id, let prompt, let policy, let execPath):
+        case .parked(let id, let prompt, let policy, let execPath, let defaultText):
             isRunning = false
             parked = ParkedInfo(rowID: id, prompt: prompt, policy: policy, execPath: execPath,
-                                deadline: Self.deadline(fromPolicy: policy))
+                                deadline: Self.deadline(fromPolicy: policy), defaultText: defaultText)
         }
     }
 

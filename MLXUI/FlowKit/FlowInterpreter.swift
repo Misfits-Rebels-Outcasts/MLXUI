@@ -49,50 +49,57 @@ nonisolated enum FlowInterpreter {
         let parkPrompt: String?
         let parkPolicy: String?
         let context: [(label: String, content: String)]?
+        /// HR-4 (`RSI/DelegateHumanRowBacklog.md`, SPEC-Q233 resolved 2026-09-20) — the parked
+        /// row's incoming value, so the GUI's prompt sheet can show what `default=unchanged`
+        /// would actually produce, before the person answers or the deadline passes. `nil` at
+        /// every call site but `runParked`'s own. Display-only: `resolveHumanAnswer` (`:1182`)
+        /// is untouched and keeps resolving `inputs.first` itself; this field is a read of the
+        /// same value at the parking moment, not a new source of truth for it.
+        let parkDefaultText: String?
 
         static func rowStarted(_ path: String) -> PathEvent {
             PathEvent(kind: .rowStarted, path: path, output: nil, index: nil, total: nil,
                       durationMS: 0, firedTag: nil, edge: nil, code: nil, message: nil, error: nil, staged: nil, transcript: nil,
-                      entry: nil, entryIndex: nil, parkPrompt: nil, parkPolicy: nil, context: nil)
+                      entry: nil, entryIndex: nil, parkPrompt: nil, parkPolicy: nil, context: nil, parkDefaultText: nil)
         }
         static func rowCompleted(_ path: String, _ output: Asset, firedTag: String?,
                                  context: [(label: String, content: String)]?) -> PathEvent {
             PathEvent(kind: .rowCompleted, path: path, output: output, index: nil, total: nil,
                       durationMS: 0, firedTag: firedTag, edge: nil, code: nil, message: nil, error: nil, staged: nil, transcript: nil,
-                      entry: nil, entryIndex: nil, parkPrompt: nil, parkPolicy: nil, context: context)
+                      entry: nil, entryIndex: nil, parkPrompt: nil, parkPolicy: nil, context: context, parkDefaultText: nil)
         }
         static func eachStarted(_ path: String, _ index: Int, _ total: Int) -> PathEvent {
             PathEvent(kind: .eachItemStarted, path: path, output: nil, index: index, total: total,
                       durationMS: 0, firedTag: nil, edge: nil, code: nil, message: nil, error: nil, staged: nil, transcript: nil,
-                      entry: nil, entryIndex: nil, parkPrompt: nil, parkPolicy: nil, context: nil)
+                      entry: nil, entryIndex: nil, parkPrompt: nil, parkPolicy: nil, context: nil, parkDefaultText: nil)
         }
         static func eachCompleted(_ path: String, _ index: Int, _ total: Int) -> PathEvent {
             PathEvent(kind: .eachItemCompleted, path: path, output: nil, index: index, total: total,
                       durationMS: 0, firedTag: nil, edge: nil, code: nil, message: nil, error: nil, staged: nil, transcript: nil,
-                      entry: nil, entryIndex: nil, parkPrompt: nil, parkPolicy: nil, context: nil)
+                      entry: nil, entryIndex: nil, parkPrompt: nil, parkPolicy: nil, context: nil, parkDefaultText: nil)
         }
         static func budgetForced(_ path: String, _ edge: String) -> PathEvent {
             PathEvent(kind: .budgetForced, path: path, output: nil, index: nil, total: nil,
                       durationMS: 0, firedTag: nil, edge: edge, code: nil, message: nil, error: nil, staged: nil, transcript: nil,
-                      entry: nil, entryIndex: nil, parkPrompt: nil, parkPolicy: nil, context: nil)
+                      entry: nil, entryIndex: nil, parkPrompt: nil, parkPolicy: nil, context: nil, parkDefaultText: nil)
         }
         static func transcriptAppended(_ path: String, _ tool: String, _ input: String,
                                        _ observation: String) -> PathEvent {
             PathEvent(kind: .transcriptAppended, path: path, output: nil, index: nil, total: nil,
                       durationMS: 0, firedTag: nil, edge: nil, code: nil, message: nil, error: nil, staged: nil,
                       transcript: (tool, input, observation), entry: nil, entryIndex: nil,
-                      parkPrompt: nil, parkPolicy: nil, context: nil)
+                      parkPrompt: nil, parkPolicy: nil, context: nil, parkDefaultText: nil)
         }
         static func journalAppended(_ path: String, _ index: Int, _ label: String, _ content: String) -> PathEvent {
             PathEvent(kind: .journalAppended, path: path, output: nil, index: nil, total: nil,
                       durationMS: 0, firedTag: nil, edge: nil, code: nil, message: nil, error: nil, staged: nil, transcript: nil,
-                      entry: (label, content), entryIndex: index, parkPrompt: nil, parkPolicy: nil, context: nil)
+                      entry: (label, content), entryIndex: index, parkPrompt: nil, parkPolicy: nil, context: nil, parkDefaultText: nil)
         }
         static func rowFailed(_ path: String, _ error: String) -> PathEvent {
             PathEvent(kind: .rowFailed, path: path, output: nil, index: nil, total: nil,
                       durationMS: 0, firedTag: nil, edge: nil, code: nil, message: nil,
                       error: error, staged: nil, transcript: nil, entry: nil, entryIndex: nil,
-                      parkPrompt: nil, parkPolicy: nil, context: nil)
+                      parkPrompt: nil, parkPolicy: nil, context: nil, parkDefaultText: nil)
         }
         /// SPEC-Q216 (DA-10): a row an enclosing `<each on_error=skip>` chose to drop — the
         /// block continues, so the row is neither `rowCompleted` nor `rowFailed`. The reason
@@ -102,36 +109,38 @@ nonisolated enum FlowInterpreter {
             PathEvent(kind: .rowSkipped, path: path, output: nil, index: nil, total: nil,
                       durationMS: 0, firedTag: nil, edge: nil, code: nil, message: nil,
                       error: reason, staged: nil, transcript: nil, entry: nil, entryIndex: nil,
-                      parkPrompt: nil, parkPolicy: nil, context: nil)
+                      parkPrompt: nil, parkPolicy: nil, context: nil, parkDefaultText: nil)
         }
         static func cacheHit(_ path: String) -> PathEvent {
             PathEvent(kind: .cacheHit, path: path, output: nil, index: nil, total: nil,
                       durationMS: 0, firedTag: nil, edge: nil, code: nil, message: nil,
                       error: nil, staged: nil, transcript: nil, entry: nil, entryIndex: nil,
-                      parkPrompt: nil, parkPolicy: nil, context: nil)
+                      parkPrompt: nil, parkPolicy: nil, context: nil, parkDefaultText: nil)
         }
         static func runResumed(_ path: String) -> PathEvent {
             PathEvent(kind: .runResumed, path: path, output: nil, index: nil, total: nil,
                       durationMS: 0, firedTag: nil, edge: nil, code: nil, message: nil,
                       error: nil, staged: nil, transcript: nil, entry: nil, entryIndex: nil,
-                      parkPrompt: nil, parkPolicy: nil, context: nil)
+                      parkPrompt: nil, parkPolicy: nil, context: nil, parkDefaultText: nil)
         }
         static func effectStaged(_ path: String, _ id: String, _ kind: String, _ summary: String) -> PathEvent {
             PathEvent(kind: .effectStaged, path: path, output: nil, index: nil, total: nil,
                       durationMS: 0, firedTag: nil, edge: nil, code: nil, message: nil,
                       error: nil, staged: (id, kind, summary), transcript: nil,
-                      entry: nil, entryIndex: nil, parkPrompt: nil, parkPolicy: nil, context: nil)
+                      entry: nil, entryIndex: nil, parkPrompt: nil, parkPolicy: nil, context: nil, parkDefaultText: nil)
         }
         static func flagRaised(_ path: String, _ code: String, _ message: String) -> PathEvent {
             PathEvent(kind: .flagRaised, path: path, output: nil, index: nil, total: nil,
                       durationMS: 0, firedTag: nil, edge: nil, code: code, message: message, error: nil, staged: nil,
                       transcript: nil, entry: nil, entryIndex: nil, parkPrompt: nil,
-                      parkPolicy: nil, context: nil)
+                      parkPolicy: nil, context: nil, parkDefaultText: nil)
         }
-        static func runParked(_ path: String, _ prompt: String, _ policy: String) -> PathEvent {
+        static func runParked(_ path: String, _ prompt: String, _ policy: String,
+                              defaultText: String? = nil) -> PathEvent {
             PathEvent(kind: .runParked, path: path, output: nil, index: nil, total: nil,
                       durationMS: 0, firedTag: nil, edge: nil, code: nil, message: nil, error: nil, staged: nil, transcript: nil,
-                      entry: nil, entryIndex: nil, parkPrompt: prompt, parkPolicy: policy, context: nil)
+                      entry: nil, entryIndex: nil, parkPrompt: prompt, parkPolicy: policy, context: nil,
+                      parkDefaultText: defaultText)
         }
     }
 
@@ -165,7 +174,12 @@ nonisolated enum FlowInterpreter {
     private struct NotReadyYet: Error {}
     private struct ItemFailed: Error { let reason: String }
     private struct StopRun: Error {}
-    private struct ParkRun: Error { let path: String; let prompt: String; let policy: String }
+    private struct ParkRun: Error {
+        let path: String; let prompt: String; let policy: String
+        /// HR-4/SPEC-Q233 — carried alongside `prompt`/`policy` from the throw site
+        /// (`inputs` is in scope there) through to `PathEvent.runParked`.
+        let defaultText: String?
+    }
 
     /// One `· ctx+`/`Read Context` journal entry (`JournalEntry`).
     struct JournalEntry: Sendable, Equatable {
@@ -284,9 +298,10 @@ nonisolated enum FlowInterpreter {
                 parkOnTimeout: parkOnTimeout)
             events.append(PathEvent(kind: .runCompleted, path: "", output: nil, index: nil, total: nil,
                                     durationMS: 0, firedTag: nil, edge: nil, code: nil, message: nil, error: nil, staged: nil, transcript: nil,
-                                    entry: nil, entryIndex: nil, parkPrompt: nil, parkPolicy: nil, context: nil))
+                                    entry: nil, entryIndex: nil, parkPrompt: nil, parkPolicy: nil, context: nil,
+                                    parkDefaultText: nil))
         } catch let park as ParkRun {
-            events.append(PathEvent.runParked(park.path, park.prompt, park.policy))
+            events.append(PathEvent.runParked(park.path, park.prompt, park.policy, defaultText: park.defaultText))
         } catch is StopRun {
             // A row failure was emitted as `.rowFailed`; the run stops there (no run_completed).
         }
@@ -599,7 +614,8 @@ nonisolated enum FlowInterpreter {
             if (execRow.task == "Ask Human" || execRow.task == "Human Input")
                 && (waitsForever(execRow) || (hasTimeout(execRow) && parkOnTimeout)) {
                 guard let answer = answers[execPath] else {
-                    throw ParkRun(path: execPath, prompt: rowPromptText(execRow), policy: parkPolicy(execRow))
+                    throw ParkRun(path: execPath, prompt: rowPromptText(execRow), policy: parkPolicy(execRow),
+                                  defaultText: parkDefaultText(inputs))
                 }
                 // A timeout default (nobody answered by the deadline) is disclosed as F002,
                 // the same sentence the non-parked executor path emits.
@@ -1180,6 +1196,22 @@ nonisolated enum FlowInterpreter {
             return "Nobody answered by \(timeout) — proceeded as `\(dflt)`, unreviewed."
         }
         return "Nobody answered by \(timeout) — proceeded as `unchanged`, unreviewed."
+    }
+
+    /// HR-4 (SPEC-Q233 resolved 2026-09-20) — the parked row's incoming value as a single
+    /// displayable string, for `ParkRun`/`PathEvent.runParked` to carry. Reads the exact same
+    /// source `resolveHumanAnswer`'s `unchanged` timeout fallback resolves to (`inputs.first`)
+    /// — this is a read of that value at parking time, not a second source of truth for it —
+    /// but only when it is a single text item: a multi-item or non-text asset has no sensible
+    /// one-string representation, so this returns `nil` rather than guess at a join. Uncapped
+    /// in length; per Q233's ruling, the reference stores the full value and any display cap
+    /// (`FlowHumanPromptView`'s ≤ 500 characters) is the GUI's own choice on top of it, not a
+    /// truncation performed here.
+    private static func parkDefaultText(_ inputs: [Asset]) -> String? {
+        guard let first = inputs.first, first.items.count == 1,
+              let item = first.items.first, item.kind == .text,
+              let value = item.value, !value.isEmpty else { return nil }
+        return value
     }
 
     /// `_resolve_human_answer` — a live answer, resolved without touching an executor.

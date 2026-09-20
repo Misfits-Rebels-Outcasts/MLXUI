@@ -195,6 +195,41 @@ struct CatFlowHumanRowsTests {
         #expect(session.status(for: doc.rows[2].id) == .succeeded)
     }
 
+    @Test func sessionParkedInfoCarriesTheDefaultTextThroughToTheView() async throws {
+        // HR-4's whole point: the value has to survive all five hops — ParkRun →
+        // PathEvent.runParked → FlowRunner.RunEvent.parked → FlowRunSession.ParkedInfo — so
+        // `FlowHumanPromptView` has something to prefill from. Checked at the session layer,
+        // the last hop before the view itself.
+        let doc = try parse("""
+        mlxflow 0.8
+        1. Template      "https://news.ycombinator.com"
+        2. Human Input   "Enter URL:" ; timeout=30s; default=unchanged
+        """)
+        let session = FlowRunSession()
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-human-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        // The real executor, not the mock: `Template`'s literal pattern passthrough is what
+        // makes the incoming value predictable end to end (the mock fingerprints every task's
+        // output generically, `Template` included — that's exercised by the mock's own tests).
+        let context = FlowRunner.RunContext(flowID: "t", workspace: FlowWorkspace(root: base),
+                                            blobDirectory: base, executor: realExecutor())
+        let runner = FlowRunner()
+        session.prepareInstall(FlowPreflight.run(doc, catalog: [], installedModelIDs: [],
+                                                 totalRAMGB: 128, claimableModelIDs: []),
+                               doc: doc)
+
+        session.start(doc: doc, runner: runner, context: context)
+        var parkedInfo: FlowRunSession.ParkedInfo?
+        for _ in 0..<40 {
+            if let parked = session.parked { parkedInfo = parked; break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let parked = try #require(parkedInfo)
+        #expect(parked.defaultText == "https://news.ycombinator.com")
+    }
+
     @Test func sessionFallbackTimeoutRunsToTheDefault() async throws {
         // A one-second timeout so the deadline is reachable, not a claim about the clock.
         let doc = try parse("""
@@ -244,5 +279,87 @@ struct CatFlowHumanRowsTests {
         // refused for its human row; now it runs (parked until answered).
         let doc = try GalleryLoader.loadDocument(flowID: "39-MinutesNameFix")
         #expect(FlowRunner.canRun(doc) == .runnable)
+    }
+
+    // MARK: - HR-4: the parked event carries the row's incoming default (SPEC-Q233)
+
+    private let templateDefaultFlow = """
+    mlxflow 0.8
+    1. Template      "https://news.ycombinator.com"
+    2. Human Input   "Enter URL:" ; timeout=30s; default=unchanged
+    """
+
+    @Test func parkedHumanInputCarriesTheTemplateRowsOutputAsItsDefaultText() async throws {
+        let doc = try parse(templateDefaultFlow)
+        // The real executor: `Template`'s literal pattern passthrough is what makes the
+        // incoming value the exact URL, not a mock fingerprint of it.
+        // The GUI path (parkOnTimeout) parks a timeout row, same as timeoutRowParksLikeWaitForever.
+        let events = try await FlowInterpreter.run(doc, executor: realExecutor(), parkOnTimeout: true)
+        guard let parked = events.first(where: { $0.kind == .runParked }) else {
+            Issue.record("expected a parked run")
+            return
+        }
+        #expect(parked.path == "2")
+        #expect(parked.parkDefaultText == "https://news.ycombinator.com")
+    }
+
+    @Test func parkedRowOneHumanInputHasNoDefaultText() async throws {
+        // Row 1 has nothing upstream — `inputs` is empty at the throw site, so there is
+        // nothing to show as a default. `default_text` is absent, not an empty string
+        // (SPEC-Q233's own distinction).
+        let doc = try parse("""
+        mlxflow 0.8
+        1. Human Input   "Enter URL:" ; timeout=30s; default=unchanged
+        """)
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-human-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let mock = MockExecutor(blobDirectory: base.appendingPathComponent("blobs"))
+        let events = try await FlowInterpreter.run(doc, executor: mock, parkOnTimeout: true)
+        guard let parked = events.first(where: { $0.kind == .runParked }) else {
+            Issue.record("expected a parked run")
+            return
+        }
+        #expect(parked.parkDefaultText == nil)
+    }
+
+    @Test func lettingTheTimerRunOutStillProducesTheSameDefaultTextRegardless() async throws {
+        // HR-4 is display-only: prefilling the sheet must not change what an unanswered
+        // timeout row resolves to. Same flow as above, but driven all the way through — the
+        // resolved row's own `rowCompleted` output is checked directly, not just the F002
+        // disclosure's wording.
+        let doc = try parse(templateDefaultFlow)
+        let events = try await FlowInterpreter.run(
+            doc, executor: realExecutor(),
+            answers: ["2": FlowInterpreter.HumanAnswer(tag: nil, text: nil, isTimeoutDefault: true)],
+            parkOnTimeout: true)
+        #expect(events.contains { $0.kind == .runResumed })
+        #expect(events.last?.kind == .runCompleted)
+        let f002 = try #require(events.first(where: { $0.kind == .flagRaised && $0.code == "F002" }))
+        #expect(f002.message == "Nobody answered by 30s — proceeded as `unchanged`, unreviewed.")
+        let resolved = try #require(events.first(where: { $0.kind == .rowCompleted && $0.path == "2" }))
+        #expect(resolved.output?.items.first?.value == "https://news.ycombinator.com")
+    }
+
+    @Test func parkDefaultTextIsAbsentForAMultiItemOrNonTextInput() async throws {
+        // parkDefaultText only ever names a single text item — a list or a non-text kind has
+        // no sensible one-string representation, so it's nil rather than a guessed join.
+        let doc = try parse("""
+        mlxflow 0.8
+        1. Read Images   images/
+        2. Human Input   (1)  "Describe these:" ; timeout=30s; default=unchanged
+        """)
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-human-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let mock = MockExecutor(blobDirectory: base.appendingPathComponent("blobs"))
+        let events = try await FlowInterpreter.run(doc, executor: mock, parkOnTimeout: true)
+        guard let parked = events.first(where: { $0.kind == .runParked }) else {
+            Issue.record("expected a parked run")
+            return
+        }
+        #expect(parked.parkDefaultText == nil)
     }
 }

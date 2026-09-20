@@ -14,6 +14,19 @@ struct FlowHumanPromptView: View {
     let context: FlowRunner.RunContext
 
     @State private var typedText = ""
+    /// HR-4 — focused programmatically (not by the user's own Tab/click) only when there's a
+    /// prefill to protect: macOS selects a text field's full contents when it gains focus this
+    /// way (the standard Cocoa first-responder convention, distinct from a mouse click, which
+    /// places the cursor instead), so the first keystroke replaces the prefill rather than
+    /// inserting into it. Left unset — and so behaviorally unchanged from before HR-4 — for a
+    /// row with nothing to prefill.
+    @FocusState private var replyFieldFocused: Bool
+
+    /// HR-4 — the GUI's own display cap (SPEC-Q233: the reference stores `default_text`
+    /// uncapped; this is a rendering choice on top of it, not a truncation of the stored
+    /// value). A parked row fed a whole document must not dump it into a one-line field —
+    /// when it's longer than this, the field starts empty, exactly as it did before HR-4.
+    private static let maxPrefillLength = 500
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -46,6 +59,7 @@ struct FlowHumanPromptView: View {
             } else {
                 TextField("Your reply…", text: $typedText)
                     .textFieldStyle(.roundedBorder)
+                    .focused($replyFieldFocused)
                 HStack {
                     Spacer()
                     Button("Send") {
@@ -53,7 +67,10 @@ struct FlowHumanPromptView: View {
                                        runner: runner, context: context)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(typedText.isEmpty)
+                    // HR-4: with a prefill present, an emptied field is a deliberate choice to
+                    // send nothing, not an unfilled form — only block Send on empty when there
+                    // was never a default to fall back to.
+                    .disabled(typedText.isEmpty && parked.defaultText == nil)
                     .keyboardShortcut(.defaultAction)
                 }
             }
@@ -67,11 +84,37 @@ struct FlowHumanPromptView: View {
         }
         .padding(20)
         .frame(width: 460)
+        // HR-4: seed the reply field from the row's incoming value once, on the sheet's
+        // appearance — not in the `@State` initialiser, which runs before `parked` is
+        // meaningfully different per-instance and can't gate on `row.task`/the length cap the
+        // way a body-level check can. Runs once per parked sheet (a fresh `ParkedInfo`, and so
+        // a fresh view identity, is what `FlowRunSession` produces per park).
+        .onAppear { seedPrefillIfNeeded() }
         // If the user never answers, wait out the deadline and fall back to the row's
         // default — answering dismisses the sheet and cancels this task first.
         .task {
             await autoFallbackIfNeeded()
         }
+    }
+
+    /// HR-4 — prefills `typedText` from `parked.defaultText` when there is one, it fits the
+    /// display cap, and this isn't `Ask Human` (which has no text field to prefill). Also
+    /// gives the field focus, which on macOS selects its full contents (the standard
+    /// first-responder convention, distinct from a mouse click) — the first keystroke then
+    /// replaces the prefill rather than inserting into it.
+    private func seedPrefillIfNeeded() {
+        guard let prefill = Self.effectivePrefill(defaultText: parked.defaultText, task: row.task) else { return }
+        typedText = prefill
+        replyFieldFocused = true
+    }
+
+    /// The decision half of `seedPrefillIfNeeded`, pulled out as a pure `static` function —
+    /// same reason `promptText(prompt:task:)` above is one — so the cap and the `Ask Human`
+    /// exclusion are unit-testable without a live view.
+    static func effectivePrefill(defaultText: String?, task: String?) -> String? {
+        guard task != "Ask Human", let defaultText, !defaultText.isEmpty,
+              defaultText.count <= maxPrefillLength else { return nil }
+        return defaultText
     }
 
     /// The live countdown to a `timeout=` row's fallback deadline.

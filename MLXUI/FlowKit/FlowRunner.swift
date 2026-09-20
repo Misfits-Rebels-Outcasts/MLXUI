@@ -23,8 +23,10 @@ nonisolated enum FlowEvent: Sendable {
     /// continues — this is neither `.failed` (the run stops) nor `.started` (still going).
     case skipped(rowID: UUID, reason: String)
     /// CFM-R10-Human: a `wait=forever` human row parked the run. `execPath` is the
-    /// activation key a resumed answer must use (`"3@1"`).
-    case parked(rowID: UUID, prompt: String, policy: String, execPath: String)
+    /// activation key a resumed answer must use (`"3@1"`). `defaultText` (HR-4, SPEC-Q233) is
+    /// the row's incoming value, for the prompt sheet's prefill — `nil` when the row has none
+    /// (row 1) or it isn't a single text item.
+    case parked(rowID: UUID, prompt: String, policy: String, execPath: String, defaultText: String?)
 }
 
 /// Executes one row's transform given its gathered inputs — the seam `FlowRunner` runs
@@ -453,7 +455,7 @@ nonisolated struct FlowRunner {
         case .runParked:
             return rowID(for: event.path, in: pathToID).map {
                 .parked(rowID: $0, prompt: event.parkPrompt ?? "", policy: event.parkPolicy ?? "",
-                        execPath: event.path)
+                        execPath: event.path, defaultText: event.parkDefaultText)
             }
         case .runCompleted, .eachItemStarted, .eachItemCompleted, .budgetForced,
              .transcriptAppended, .journalAppended, .runResumed, .effectStaged:
