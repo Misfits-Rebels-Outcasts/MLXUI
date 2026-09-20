@@ -157,6 +157,16 @@ final class FlowEditorModel {
         let advanced: Set<String> = ["Generate", "Decide"]
         return TaskCatalog.allTasks().filter { desc in
             if advanced.contains(desc.name) { return false }
+            // HR-2 (`RSI/DelegateHumanRowBacklog.md`) — a single-task exception to the
+            // `.human` class refusal just below, admitted by name rather than by widening the
+            // class: `TaskCatalog.swift:234`/`:235`'s signature difference is the reason —
+            // `Ask Human` gives `.sameAsInput` (a passthrough that fires a tag and cannot
+            // source content at row 1), `Human Input` gives `t(.text)` (it produces text of
+            // its own). `FlowRunner.rowClassRefusal` (`:233`) already returns `nil` for the
+            // whole `.human` class (`:217` — "model / human / trigger / staged … in scope"),
+            // so this function's own doc comment ("restricted to what `canRun` accepts")
+            // still holds for this one addition.
+            if desc.name == "Human Input" { return true }
             switch desc.taskClass {
             case .human, .staged, .net, .agent, .trigger: return false
             case .instant, .model: break
@@ -1004,41 +1014,47 @@ final class FlowEditorModel {
                 return "Row \(path) can't take row \(displayNumber(of: previous.id) ?? "?")'s output — add an input reference."
             }
         }
+        // HR-1 (`RSI/DelegateHumanRowBacklog.md`) — a `Human Input` row at row 1 that carries
+        // its own settings sources itself from a person, exactly as `Read Index`/`Read Text`
+        // source themselves from a filename in their own settings; this mirrors the general
+        // principle behind E201's `row.settings == nil` clause (`FlowValidator.swift
+        // :1067-1068`: `row.refs.isEmpty && effectiveAccepts == nil && row.settings == nil` —
+        // a settings-bearing row is never treated as unfed), the same exemption WA-2 already
+        // gave the auto-chain branch above. Scoped to the task by name, not the `.human`
+        // class: `Ask Human` shares the class but not the shape (`TaskCatalog.swift:234` gives
+        // it `.sameAsInput`, a passthrough that cannot source content at row 1 — only `Human
+        // Input`'s `t(.text)`, `:235`, produces one), so `Ask Human` never gets this exemption.
+        //
+        // **Not folded into the generic row-1 branch below, and evaluated first, deliberately
+        // (HR-2 hazard):** HR-2 adds `Human Input` to `startingNodes()` so the step picker can
+        // offer it, but that branch's own guard is `!startingNodes().contains(task)` — once
+        // `Human Input` is a starting node, that guard goes false for it and the whole branch,
+        // including its own settings-based read, would silently stop running for `Human Input`
+        // specifically. That would mean a `timeout=`-without-`wait=forever` row 1 — the exact
+        // case HR-1's new sentence exists for — goes back to showing nothing, regressing Q1's
+        // owner-ruled split. Reading `Human Input` here, ahead of and independent of the
+        // `startingNodes()` gate, is what keeps HR-1's distinction alive after HR-2 lands.
+        if r.task == "Human Input", r.refs.isEmpty, r.blockKind == nil,
+           previousRow(before: rowID) == nil, r.settings != nil {
+            // Root cause 2: `timeout=` at row 1 is a real defect — Spec §10.1's
+            // `default=unchanged` has no input to pass through here, so an unanswered row
+            // silently emits an empty asset (`FlowInterpreter.swift:1182-1200`). A truthful,
+            // different sentence about the missing fallback, not the false one about a
+            // missing input; it blocks nothing (no `saveBlockReason` change).
+            if FlowInterpreter.hasTimeout(r), !FlowInterpreter.waitsForever(r) {
+                return "Row 1 has nothing to fall back on — if nobody answers, this row produces nothing."
+            }
+            return nil
+        }
         if r.refs.isEmpty, r.blockKind == nil,
            let task = r.task, !Self.startingNodes().contains(where: { $0.name == task }),
            previousRow(before: rowID) == nil {
             // WA-3: this branch is right for a flow being built from scratch and wrong for
             // a **used** flow, whose row 1 is fed by its caller — restricted to the flow's
             // own row 1 (not a block's first child, which is a different `blockInputs`
-            // question this check never modeled). Kept alongside, not replaced by, HR-1's
-            // exemption below — two different reasons a row-1 branch can be a false warning,
-            // and both must keep firing independently.
+            // question this check never modeled).
             let isFlowRowOne = document.rows.first?.id == rowID
             if isFlowRowOne && isCalledByWorkspaceSibling {
-                return nil
-            }
-            // HR-1 (`RSI/DelegateHumanRowBacklog.md`) — a `Human Input` row that carries its
-            // own settings sources itself from a person, exactly as `Read Index`/`Read Text`
-            // source themselves from a filename in their own settings. `startingNodes()`
-            // (above) never modeled a source row that isn't a file reader, which is the whole
-            // reason this branch is reached for `Human Input` at all; this mirrors the general
-            // principle behind E201's `row.settings == nil` clause (`FlowValidator.swift
-            // :1067-1068`: `row.refs.isEmpty && effectiveAccepts == nil && row.settings ==
-            // nil` — a settings-bearing row is never treated as unfed), the same exemption
-            // WA-2 already gave the auto-chain branch above, applied here to the row-1 branch.
-            // Scoped to the task by name, not the `.human` class: `Ask Human` shares the class
-            // but not the shape (`TaskCatalog.swift:234` gives it `.sameAsInput`, a passthrough
-            // that cannot source content at row 1 — only `Human Input`'s `t(.text)`, `:235`,
-            // produces one), so `Ask Human` at row 1 still falls through to the old sentence.
-            if task == "Human Input", r.settings != nil {
-                // Root cause 2: `timeout=` at row 1 is a real defect — Spec §10.1's
-                // `default=unchanged` has no input to pass through here, so an unanswered
-                // row silently emits an empty asset (`FlowInterpreter.swift:1182-1200`). A
-                // truthful, different sentence about the missing fallback, not the false one
-                // about a missing input; it blocks nothing (no `saveBlockReason` change).
-                if FlowInterpreter.hasTimeout(r), !FlowInterpreter.waitsForever(r) {
-                    return "Row 1 has nothing to fall back on — if nobody answers, this row produces nothing."
-                }
                 return nil
             }
             return "Row \(path) needs an input — nothing feeds it."

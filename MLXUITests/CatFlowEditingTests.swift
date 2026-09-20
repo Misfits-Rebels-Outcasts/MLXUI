@@ -103,6 +103,10 @@ struct CatFlowEditingTests {
         #expect(starts.contains("Read Images"))
         #expect(starts.contains("Template"))
         #expect(starts.contains("Save Text"))       // anyKind, instant
+        // HR-2: `Human Input` is a single-task exception to the `.human` class refusal —
+        // it produces text of its own (`t(.text)`); `Ask Human` (`.sameAsInput`) still can't
+        // source content and must stay out.
+        #expect(starts.contains("Human Input"))
         // FIX-7: the hidden primitives, the triggers, and the things `canRun` refuses are out.
         #expect(!starts.contains("Decide"))
         #expect(!starts.contains("Generate"))
@@ -404,6 +408,37 @@ struct CatFlowEditingTests {
         model.add(task: "Summarize")
         let r = try #require(model.document.rows.first)
         #expect(model.warning(for: r.id) == "Row 1 needs an input — nothing feeds it.")
+    }
+
+    // MARK: - HR-2: `Human Input` joins the step picker's starting nodes
+
+    @Test func addingHumanInputToAnEmptyFlowFromThePickerProducesACleanRow() throws {
+        // HR-2 depends on HR-3's seeded question: without it, a freshly added `Human Input`
+        // row would have `wait=forever` but no criterion — still settings-bearing, so HR-1's
+        // exemption alone is enough to keep it clean, but this asserts the picker path
+        // end-to-end rather than the seed and the exemption separately.
+        let model = try editor()
+        model.add(task: "Human Input")
+        let r = try #require(model.document.rows.first)
+        #expect(r.task == "Human Input")
+        #expect(model.warning(for: r.id) == nil)
+    }
+
+    @Test func humanInputStillSplitsByWaitingPolicyNowThatItsAStartingNode() throws {
+        // Regression: HR-2 puts `Human Input` in `startingNodes()`, and the generic row-1
+        // branch's own guard is `!startingNodes().contains(task)` — once `Human Input` is a
+        // starting node, that guard alone would silently stop the whole branch from running
+        // for it, including HR-1's timeout-without-fallback sentence. `warning(for:)` reads
+        // `Human Input` ahead of and independent of that gate specifically so HR-1's Q1 split
+        // survives HR-2 landing. Re-proves both halves of that split post-HR-2.
+        #expect(FlowEditorModel.startingNodes().contains(where: { $0.name == "Human Input" }))
+
+        let clean = row("Human Input", settings: "\"Enter URL:\"; wait=forever")
+        #expect(try editor(rows: [clean]).warning(for: clean.id) == nil)
+
+        let noFallback = row("Human Input", settings: "\"Enter URL:\"; timeout=30s; default=unchanged")
+        #expect(try editor(rows: [noFallback]).warning(for: noFallback.id) ==
+                "Row 1 has nothing to fall back on — if nobody answers, this row produces nothing.")
     }
 
     @Test @MainActor func rowWithNoRunnableModelIsYellow() throws {
