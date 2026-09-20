@@ -137,4 +137,50 @@ struct CatFlowHumanRowPhaseTests {
         #expect(parked.defaultText == "https://news.ycombinator.com")
         session.cancel()
     }
+
+    // MARK: - HR-5: "Give this row a default value…" (Q3 ruled (c), 2026-09-20)
+
+    @Test func addDefaultValueRowInsertsAnEmptyTemplateAboveAndSelectsIt() throws {
+        let humanInput = row("Human Input", settings: "\"Enter URL:\"; timeout=30s; default=unchanged")
+        let model = try editor([humanInput])
+        model.addDefaultValueRow(above: humanInput.id)
+
+        #expect(model.document.rows.count == 2)
+        let template = try #require(model.document.rows.first)
+        #expect(template.task == "Template")
+        #expect(template.settings == "\"\"")
+        #expect(model.document.rows[1].id == humanInput.id)
+        // The target row's own settings are untouched — HR-5 doesn't add default=unchanged
+        // itself, only the row above it.
+        #expect(model.document.rows[1].settings == humanInput.settings)
+        #expect(model.selectedRowID == template.id)
+    }
+
+    @Test func addDefaultValueRowIsByteIdenticalToHandTypingTheTwoRows() throws {
+        let humanInput = row("Human Input", settings: "\"Enter URL:\"; timeout=30s; default=unchanged")
+        let model = try editor([humanInput])
+        model.addDefaultValueRow(above: humanInput.id)
+
+        let handTyped = """
+        mlxflow 0.8
+        1. Template      ""
+        2. Human Input   "Enter URL:"; timeout=30s; default=unchanged
+        """
+        let handTypedDoc = try CatParser.parse(handTyped)
+        #expect(CatSerializer.serialize(handTypedDoc) == model.catText)
+    }
+
+    @Test func addDefaultValueRowWorksForABlockChild() throws {
+        let humanInput = row("Human Input", settings: "\"Enter URL:\"; wait=forever")
+        let block = Row(id: UUID(), task: nil, blockKind: .each, blockName: "each_group",
+                        children: [humanInput])
+        let model = try editor([block])
+        model.addDefaultValueRow(above: humanInput.id)
+
+        let children = try #require(model.document.rows.first?.children)
+        #expect(children.count == 2)
+        #expect(children[0].task == "Template")
+        #expect(children[1].id == humanInput.id)
+        #expect(model.selectedRowID == children[0].id)
+    }
 }

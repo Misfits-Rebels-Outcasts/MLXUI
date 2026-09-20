@@ -493,6 +493,13 @@ struct FlowEditorView: View {
                 Button("<list>") { model.wrapInBlock(row.id, kind: .list, name: "list_group") }
             }
         }
+        // HR-5 (Q3 ruled (c), 2026-09-20): `Human Input` only — `Ask Human`'s `default=` names
+        // a tag, not a row-above value, so the pattern this inserts has nothing to give it.
+        if row.task == "Human Input" {
+            Button("Give this row a default value…") {
+                model.addDefaultValueRow(above: row.id)
+            }
+        }
         Menu("Block…") {
             Button("<each>") { model.insertBlock(kind: .each, name: "each_group", after: row.id) }
             Button("<parallel>") { model.insertBlock(kind: .parallel, name: "parallel_group", after: row.id) }

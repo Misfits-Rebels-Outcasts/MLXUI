@@ -384,6 +384,35 @@ final class FlowEditorModel {
         }
     }
 
+    /// HR-5 (`RSI/DelegateHumanRowBacklog.md`, Q3 ruled (c), 2026-09-20) — "Give this row a
+    /// default value…": inserts an empty `Template` row directly above `rowID` and selects it,
+    /// so a `Human Input` row's `default=unchanged` has something of its own to resolve to
+    /// (Q2's ruling: the default value *is* the row above, never a new setting). The inserted
+    /// row is an ordinary `Template` row — same shape `insertBlock`'s own child seed uses
+    /// (`settings: "\"\""`, an empty pattern) — with no marker comment or hidden token, so the
+    /// `.cat` output is byte-identical to a user typing the two rows by hand. Deliberately does
+    /// **not** touch `rowID`'s own settings (it does not add `default=unchanged` itself): that
+    /// stays the user's own edit via the existing waiting-policy control, same as any other
+    /// row's settings. One level of block nesting, matching `childIndexOf`'s own scope (the
+    /// same one `moveMenu`'s context-menu actions already assume).
+    func addDefaultValueRow(above rowID: UUID) {
+        commitChange {
+            let before = document.rows
+            let template = Row(id: UUID(), task: "Template", settings: "\"\"", refs: [])
+            if let (blockID, idx) = childIndexOf(rowID) {
+                replaceRow(id: blockID) { block in
+                    block.children.insert(template, at: idx)
+                }
+            } else if let idx = document.rows.firstIndex(where: { $0.id == rowID }) {
+                document.rows.insert(template, at: idx)
+            } else {
+                return
+            }
+            selectedRowID = template.id
+            reaimClauseTargets(before: before, after: document.rows)
+        }
+    }
+
     /// Duplicate `rowID` (a new id, new child ids — CFM-R8-FIX-6; the duplicate-keys trap in
     /// `FlowDocument` is fixed in the same commit).
     func duplicate(_ rowID: UUID) {
