@@ -1,0 +1,20 @@
+mlxflow 0.8; network
+1. Template              "https://thehackernews.com/search/label/artificial%20intelligence"
+2. Human Input           "Enter a URL to summarize:" ; timeout=30s; default=unchanged
+3. Web Fetch             as=markdown
+4. Template      (2,3)   "From the news index page below, pick the 5 most
+                         newsworthy AI items. For each, output exactly one
+                         block:\n<article><h3>TITLE</h3> <p>ONE SENTENCE,
+                         25 words max</p> <p><a href='URL'>Read the
+                         story</a></p> </article>\n\nRules: copy URL
+                         verbatim from a [text](url) link in PAGE_TEXT. If
+                         it does not begin with http, join it to the
+                         origin of PAGE_URL. Never invent a URL. Skip any
+                         item you cannot link. Output HTML only, no
+                         commentary.\n\nPAGE_URL: {1}\n\nPAGE_TEXT:{2}"
+5. Generate              Qwen3 8B
+6. Template              "<!doctype html>\n<html><head><meta
+                         charset='utf-8'> <title>AI
+                         News</title></head>\n<body>\n<h1>AI News</h1>\n
+                         {input}\n</body></html>\n"
+7. Save Text             links.html

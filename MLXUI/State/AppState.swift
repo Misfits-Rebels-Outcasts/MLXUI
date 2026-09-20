@@ -60,9 +60,9 @@ final class AppState { //appstatecomeback
     static let hideProvidersPrivacy = true
 
     /// Hide individual gallery flows (badges) by gallery number. Numbers are the
-    /// `_metadata.json` `number` field (1–71 today), stable across renames. Basic Gallery's
+    /// `_metadata.json` `number` field (1–76 today), stable across renames. Basic Gallery's
     /// filenames restart at `1-`/`2-` for a friendly per-shelf look, but their `number` values
-    /// (70, 71) stay in the single global sequence — hiding by number never accidentally
+    /// (70–76) stay in the single global sequence — hiding by number never accidentally
     /// catches both an Advance Gallery flow and a same-numbered Basic Gallery one. Ranges
     /// read naturally — hide flows 60–69:
     /// `static let hiddenFlowNumbers: Set<Int> = Set(60...69)`
