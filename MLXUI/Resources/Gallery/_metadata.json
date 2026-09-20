@@ -513,6 +513,13 @@
    "filename": "73-WebSummaryLinks.cat",
    "category": "The Web, Read-Only",
    "description": "The same hand-picked URLs as Web to Index, read for their headlines instead — one HTML page of story, summary and link."
+  },
+  {
+   "number": 74,
+   "title": "Web Page Summary",
+   "filename": "74-WebPageSummary.cat",
+   "category": "The Web, Read-Only",
+   "description": "Type a URL — or just press Enter to summarize Hacker News, the row's own default — and get one paragraph back, fetched and boiled down."
   }
  ]
 }

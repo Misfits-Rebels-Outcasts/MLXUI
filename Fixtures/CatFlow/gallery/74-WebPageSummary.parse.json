@@ -1,0 +1,58 @@
+{
+  "flags": [
+    "network"
+  ],
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "\"https://news.ycombinator.com\"",
+      "task": "Template"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "\"Enter a URL to summarize:\" ; timeout=30s; default=unchanged",
+      "task": "Human Input"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "as=markdown",
+      "task": "Web Fetch"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": "Qwen3 8B",
+      "refs": [],
+      "settings": "\"one paragraph\"",
+      "task": "Summarize"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "summary.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

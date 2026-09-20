@@ -5,7 +5,7 @@ import Foundation
 /// Covers the R5 pre-parsed-JSON retirement (CFM-FIX-5 / M11): the bundled gallery ships
 /// `.cat` text only (no `*.parse.json` in the app bundle), and `CatParser` reproduces every
 /// gallery flow's parse tree **byte-for-byte** against trees regenerated from the Python
-/// runtime into `Fixtures/CatFlow/gallery/`. 73 free conformance cases — the retired
+/// runtime into `Fixtures/CatFlow/gallery/`. 74 free conformance cases — the retired
 /// `*.parse.json` corpus, restored as fixtures instead of deleted. Two shelves ship the flows:
 /// `MLXUI/Resources/Gallery` (Advance) and `MLXUI/Resources/BasicGallery` (Basic) — both are
 /// flattened into the same app-bundle `Contents/Resources/` root, so every test here reads
@@ -61,7 +61,7 @@ struct CatFlowGalleryReproductionTests {
 
     @Test func everyGalleryFlowParses() throws {
         let files = try allGalleryFiles()
-        #expect(files.count == 73, "the gallery drifted — expected 73 flows, found \(files.count)")
+        #expect(files.count == 74, "the gallery drifted — expected 74 flows, found \(files.count)")
 
         var checked = 0
         for f in files {
@@ -102,7 +102,7 @@ struct CatFlowGalleryReproductionTests {
     /// in `Fixtures/CatFlow/gallery/`, byte-for-byte on the canonical JSON.
     @Test func everyGalleryFlowMatchesPythonParseTree() throws {
         let files = try allGalleryFiles()
-        #expect(files.count == 73)
+        #expect(files.count == 74)
 
         var checked = 0
         for f in files {

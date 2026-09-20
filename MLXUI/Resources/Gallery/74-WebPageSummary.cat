@@ -1,0 +1,6 @@
+mlxflow 0.8; network
+1. Template      "https://news.ycombinator.com"
+2. Human Input   "Enter a URL to summarize:" ; timeout=30s; default=unchanged
+3. Web Fetch     as=markdown
+4. Summarize     Qwen3 8B; "one paragraph"
+5. Save Text     summary.md
