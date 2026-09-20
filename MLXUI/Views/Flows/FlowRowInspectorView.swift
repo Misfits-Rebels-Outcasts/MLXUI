@@ -59,6 +59,13 @@ struct FlowRowInspectorView: View {
     @State private var showAdvanced = false
     /// RT-1 — the Pattern box's "Edit…" sheet.
     @State private var showPatternSheet = false
+    /// INPUTS-1 — the owner's ruling on the open UX question: the add-input control is
+    /// present but quiet, a small `+` under the last picker rather than a labelled button.
+    /// This counts the empty pickers the `+` has revealed beyond what's actually bound
+    /// (`model.slotsToDraw`) — purely view state, never touches the row until the user picks
+    /// a target from one of them, so clicking `+` and walking away leaves the document
+    /// exactly as it was.
+    @State private var pendingExtraInputSlots = 0
     /// RT-5 — the "Raw settings" box's own draft (FV-1: relabelled from "Row text" — the box
     /// is the settings string, not the row's text; the identifiers below keep the RT- name),
     /// decoupled from `row.settings` while the user is mid-edit (and left showing the rejected
@@ -201,6 +208,7 @@ struct FlowRowInspectorView: View {
         .onChange(of: rowID) { _, _ in
             rowTextDraft = nil
             rowTextRefusal = nil
+            pendingExtraInputSlots = 0
         }
     }
 
@@ -466,7 +474,7 @@ struct FlowRowInspectorView: View {
         .frame(minWidth: 460)
     }
 
-    /// `{1}`, `{2}`, … for `model.inputSlotCount(for:)`, `{input}`, and — only inside an
+    /// `{1}`, `{2}`, … for `model.slotsToDraw(for:)`, `{input}`, and — only inside an
     /// `<each>` block, where they're legal (`FlowValidator.reTemplateToken` / `checkTemplate
     /// Placeholders`'s `inEach`, hazard 9) — `{index}`/`{item}`. Tapping one appends it to the
     /// pattern: this box has no reliable cursor-position API at the app's macOS 14.0 floor, so
@@ -492,7 +500,10 @@ struct FlowRowInspectorView: View {
     }
 
     private func placeholderTokens(row: Row) -> [String] {
-        let slots = model.inputSlotCount(for: rowID)
+        // INPUTS-1: bound refs only, never `pendingExtraInputSlots` — an empty picker the
+        // `+` revealed but nothing has been chosen for yet must not offer a `{n}` chip with
+        // no input behind it.
+        let slots = model.slotsToDraw(for: rowID)
         var tokens = slots >= 1 ? (1...slots).map { "{\($0)}" } : []
         tokens.append("{input}")
         if model.isInsideEach(rowID) {
@@ -549,7 +560,9 @@ struct FlowRowInspectorView: View {
 
     @ViewBuilder
     private func inputs(_ row: Row) -> some View {
-        let slots = model.inputSlotCount(for: rowID)
+        let base = model.slotsToDraw(for: rowID)
+        let canAdd = model.canAddInput(for: rowID)
+        let slots = canAdd ? base + pendingExtraInputSlots : base
         if slots > 0 {
             VStack(alignment: .leading, spacing: 6) {
                 Text(slots > 1 ? "Inputs" : "Input")
@@ -557,17 +570,51 @@ struct FlowRowInspectorView: View {
                 ForEach(1...slots, id: \.self) { slot in
                     inputPicker(slot: slot)
                 }
+                // INPUTS-1 — the owner's ruling: present but quiet, a small `+` under the
+                // last picker rather than a labelled button, offered only when the task's
+                // shape actually takes another ref (`canAddInput`; `Diff`'s two fixed slots
+                // never see this). `−` only retracts a pending, still-unbound `+` reveal —
+                // it never deletes an already-bound ref from an unlabelled icon; a bound
+                // slot's own picker already has an honest "None" for that (review note: an
+                // icon with no label is the wrong place to put a destructive action).
+                if canAdd {
+                    HStack(spacing: 10) {
+                        Button {
+                            pendingExtraInputSlots += 1
+                        } label: {
+                            Image(systemName: "plus.circle")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        if pendingExtraInputSlots > 0 {
+                            Button {
+                                pendingExtraInputSlots -= 1
+                            } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
         }
     }
 
     private func inputPicker(slot: Int) -> some View {
         Menu {
-            Button("None") { model.setReference(to: nil, slot: slot, for: rowID) }
+            Button("None") {
+                model.setReference(to: nil, slot: slot, for: rowID)
+                pendingExtraInputSlots = 0
+            }
             Divider()
             ForEach(model.validInputs(for: rowID, slot: slot), id: \.rowID) { input in
                 Button("\(input.number) — \(input.task)") {
                     model.setReference(to: input.rowID, slot: slot, for: rowID)
+                    // A pick always leaves `model.slotsToDraw` accounting for this slot on
+                    // its own — carrying a stale `pendingExtraInputSlots` forward would draw
+                    // one extra empty picker past whatever's now genuinely bound.
+                    pendingExtraInputSlots = 0
                 }
             }
         } label: {
@@ -586,7 +633,7 @@ struct FlowRowInspectorView: View {
     }
 
     private func inputLabel(slot: Int) -> String {
-        let count = model.inputSlotCount(for: rowID)
+        let count = model.slotsToDraw(for: rowID) + (model.canAddInput(for: rowID) ? pendingExtraInputSlots : 0)
         return count > 1 ? "Input \(slot)" : "Input"
     }
 
@@ -595,6 +642,10 @@ struct FlowRowInspectorView: View {
               case .rowRef(let id) = row.refs[slot - 1] else {
             return "None"
         }
+        // INPUTS-1: a slot `setReference` marked "nothing chosen yet" (hazard 2's fix, and
+        // hazard 1's "clear in place") dangles exactly like a reference to a deleted row —
+        // `isSlotUnset` is what tells the picker which honest word to use.
+        if model.isSlotUnset(for: rowID, slot: slot) { return "None" }
         guard let target = model.row(withID: id) else { return "(?)" }
         let number = model.displayNumber(of: id) ?? "?"
         return "\(number) — \(FlowRowSummary.taskName(for: target))"
@@ -1637,16 +1688,7 @@ struct FlowRowInspectorView: View {
     /// (`DeciderFrame.renderThinkTools`, derivable from the row's own decide-clause edges);
     /// `{transcript}` and the `; ctx` splice are stand-ins, since both only exist mid-run.
     private func renderedFramePreview(task: String, desc: TaskDescriptor, row: Row) throws -> String {
-        // FV-4-1: a task's *signature* slot count (`inputSlotCount`) is not the same as how
-        // many refs a row actually binds — `Revise`/`Verify` both declare a single-slot
-        // signature (`.listOf(.text) -> text` / `text -> text`) but their frames read
-        // `{input[0]}` AND `{input[1]}`, and every bundled row of either task binds two refs
-        // (a real run passes the full reference bundle, B1, unbound by the signature). Using
-        // `inputSlotCount` alone starved the renderer of the second stand-in and
-        // `FrameRenderer` threw `frameInputOutOfRange` for every such row. `currentInputLabel`
-        // already reads `row.refs[slot - 1]` directly (fact 24), so counting bound refs needs
-        // no other change to produce the right stand-in.
-        let slots = max(row.refs.count, model.inputSlotCount(for: rowID), 1)
+        let slots = model.slotsToDraw(for: rowID)
         let assets = (1...slots).map { slot in
             // §7: Judge's `{candidates}` gets its own stand-in — "the text from row N" would
             // misname a slot whose content is a future *candidate*, not a value to read as-is.

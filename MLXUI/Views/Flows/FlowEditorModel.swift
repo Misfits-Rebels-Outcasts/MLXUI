@@ -43,6 +43,14 @@ final class FlowEditorModel {
     /// Save — the QR9 ruling: a clause target is never silently re-aimed at whatever now
     /// sits in the dead row's slot.
     private(set) var staleClauseTargets: [UUID: Set<Int>] = [:]
+    /// INPUTS-1 — ids `setReference` minted as "nothing chosen for this slot yet", never a
+    /// real row. Reuses `Ref.rowRef` (never a new case to teach the parser/serializer/
+    /// interpreter about) with an id that can never resolve, and gives `structuralIssues()`
+    /// and the pickers a way to tell "never bound" apart from "the target row was deleted" —
+    /// both dangle the same way structurally, but only one of them is honestly "None". Not
+    /// part of `Snapshot`: an id undo strands here (the ref it marked is gone from
+    /// `document.rows` again) is just an unreferenced UUID, not a correctness issue.
+    private var unsetSlotIDs: Set<UUID> = []
     /// The row the step picker and Add-below target; nil = append at the end.
     var selectedRowID: UUID?
     /// The URL the flow was last saved to, nil until the first save.
@@ -420,19 +428,62 @@ final class FlowEditorModel {
 
     /// Set a row's k-th reference (1-based) to `targetID`, or nil to clear that slot —
     /// ordered-input support for bundle-accepting tasks like `Diff` (CFM-R8-FIX-2).
+    ///
+    /// INPUTS-1 fixes two hazards this used to have. First, clearing slot `k` used to
+    /// `refs.remove(at:)`, which shifts every later ref down a position — clearing Input 1
+    /// of a two-input row silently re-pointed `{2}` (Template) or a frame's own
+    /// `{input[1]}` (Revise, Verify, …) at whatever Input 2 named, with no warning. A slot
+    /// is now cleared **in place** — every other bound ref keeps exactly the position it
+    /// had. Second, growing past the bound prefix (jumping to slot 3 with only slot 1 set,
+    /// or setting slot 2 before slot 1 — Diff's two pickers are independent, so this is
+    /// reachable in stock order) used to pad the gap with `.inputRef(n)`, a *real* reference
+    /// to the row's own positional block input — inventing a binding the author never chose,
+    /// and one that silently "works" (with the wrong data) for any row inside a block with
+    /// that many inputs. Both cases now fill the gap with `markUnsetSlot()` instead: a
+    /// `.rowRef` that can never resolve, so the picker reads it as "None" (`isSlotUnset`)
+    /// and `structuralIssues()` blocks Save with an honest message, never a silent success
+    /// or a confusing "(input:N) only makes sense inside a block" parser error.
     func setReference(to targetID: UUID?, slot: Int = 1, for rowID: UUID) {
         commitChange {
             replaceRow(id: rowID) { row in
                 var refs = row.refs
-                while refs.count < slot { refs.append(.inputRef(refs.count + 1)) }
-                if let targetID {
-                    refs[slot - 1] = .rowRef(targetID)
+                while refs.count < slot - 1 { refs.append(.rowRef(markUnsetSlot())) }
+                let value: Ref = .rowRef(targetID ?? markUnsetSlot())
+                if refs.count < slot {
+                    refs.append(value)
                 } else {
-                    refs.remove(at: slot - 1)
+                    refs[slot - 1] = value
                 }
+                // Trailing unset slots carry no information (nothing bound after them to
+                // preserve the position of) — drop them so `refs.count` keeps meaning "how
+                // many slots are meaningfully occupied," the way `slotsToDraw` relies on.
+                while let last = refs.last, isUnsetSlot(last) { refs.removeLast() }
                 row.refs = refs
             }
         }
+    }
+
+    /// A fresh id `setReference` can hand to a slot with nothing chosen yet — see the
+    /// `unsetSlotIDs` doc comment.
+    private func markUnsetSlot() -> UUID {
+        let id = UUID()
+        unsetSlotIDs.insert(id)
+        return id
+    }
+
+    private func isUnsetSlot(_ ref: Ref) -> Bool {
+        if case .rowRef(let id) = ref { return unsetSlotIDs.contains(id) }
+        return false
+    }
+
+    /// Whether `rowID`'s `slot`-th ref is genuinely unbound (never chosen, or cleared in
+    /// place) rather than pointing at a row that once existed and was deleted — the two
+    /// look identical structurally (a `.rowRef` to an id `document.rows` doesn't have), but
+    /// only one of them is honestly "None" (`FlowRowInspectorView.currentInputLabel`).
+    func isSlotUnset(for rowID: UUID, slot: Int) -> Bool {
+        guard let row = row(withID: rowID), slot >= 1, slot <= row.refs.count,
+              case .rowRef(let id) = row.refs[slot - 1] else { return false }
+        return unsetSlotIDs.contains(id)
     }
 
     // MARK: - CFM-R9 — the row inspector's edits (byte-preserving settings round-trip)
@@ -777,7 +828,12 @@ final class FlowEditorModel {
             guard slot >= 1, slot <= kinds.count else { return [] }
             slotShape = .single(kinds[slot - 1])
         } else {
-            guard slot == 1 else { return [] }
+            // INPUTS-1: every non-tuple shape's compatibility rule is the same regardless
+            // of position — `listOf(K)` needs every member to be `K`, `.frame` needs every
+            // member to be text (`singleCompatible` ignores `accepts` entirely when
+            // `rk == .frame`), and `.anyKind` accepts anything — so `slot == 1` was never a
+            // correctness requirement, only an artifact of the panel not offering slot > 1.
+            guard slot >= 1 else { return [] }
             slotShape = accepts
         }
         let scope = scopeRows(containing: rowID)
@@ -793,11 +849,55 @@ final class FlowEditorModel {
         }
     }
 
-    /// The number of input slots a row needs (1 for ordinary accepts; `tupleOf` arity).
-    func inputSlotCount(for rowID: UUID) -> Int {
+    /// INPUTS-1 — `inputSlotCount` retired. It answered one question ("how many pickers")
+    /// from the task's declared *signature* alone, which is only ever right for `tupleOf`
+    /// (a fixed arity) and a non-frame `single` (always 1) — `Shape.bundleCompatible`
+    /// (`Core/Shape.swift:123`) is what actually governs how many refs a row may bind, and
+    /// it has three more cases (`listOf`, `.frame`, `.anyKind`) where the signature says
+    /// nothing about ref count at all. Replaced with the two questions that function was
+    /// conflating: `declaredSlotFloor` (the fixed part, unchanged) plus `slotsToDraw` (what
+    /// to actually show, `RSI/backlog.md` INPUTS-1) for "how many pickers", and
+    /// `canAddInput` for "may this row take another one".
+
+    /// The task's declared floor — `tupleOf`'s fixed arity, or 1 for every other shape.
+    /// This alone was the old `inputSlotCount`'s whole answer; it's still exactly right for
+    /// `tupleOf` (Diff, Retrieve, Store Index, Edit Image, Contact Sheet, …), whose slots are
+    /// fixed, always shown, and never grow — but it's only ever a lower bound for everything
+    /// else, which `slotsToDraw` accounts for.
+    func declaredSlotFloor(for rowID: UUID) -> Int {
         guard let r = row(withID: rowID), let accepts = Self.signature(of: r, context: signatureContext)?.accepts else { return 1 }
         if case .tupleOf(let kinds) = accepts { return kinds.count }
         return 1
+    }
+
+    /// How many input pickers to draw for `rowID` right now: however many refs are actually
+    /// bound, or the declared floor, whichever is larger. A `tupleOf` task's floor already
+    /// covers its whole (fixed) slot count, so this is unchanged for it; every other shape —
+    /// `listOf`, `.frame`, `.anyKind` — now draws one picker per **bound** ref instead of
+    /// always exactly 1, so a hand-authored row loaded with several refs (33 rows across 28
+    /// bundled flows, `RSI/backlog.md` INPUTS-1) shows all of them, not just the first. A row
+    /// with nothing bound yet still shows exactly 1 empty picker — the simple case is
+    /// pixel-identical to before.
+    func slotsToDraw(for rowID: UUID) -> Int {
+        let bound = row(withID: rowID)?.refs.count ?? 0
+        return max(bound, declaredSlotFloor(for: rowID), 1)
+    }
+
+    /// Whether `rowID` may bind one more reference than `slotsToDraw` already shows —
+    /// mirrors `Shape.bundleCompatible`'s branch order exactly, so the two can never
+    /// disagree about what's legal: a `.frame` task ignores its declared `accepts` for
+    /// ref-count purposes entirely (checked first, same as `bundleCompatible`), so it always
+    /// takes another one regardless of what it declares; otherwise a `listOf`/`.anyKind`
+    /// accepts takes any number, while `tupleOf` (a fixed arity) and a non-frame
+    /// `single`/`unionOf`/`sameAsInput` (exactly one) never do.
+    func canAddInput(for rowID: UUID) -> Bool {
+        guard let r = row(withID: rowID) else { return false }
+        if let task = r.task, TaskCatalog.get(task)?.refKind == .frame { return true }
+        guard let accepts = Self.signature(of: r, context: signatureContext)?.accepts else { return false }
+        switch accepts {
+        case .listOf, .anyKind: return true
+        case .tupleOf, .single, .unionOf, .sameAsInput: return false
+        }
     }
 
     /// RT-1 — whether `id` sits inside an `<each>` block at any depth. Governs the Pattern
@@ -944,6 +1044,7 @@ final class FlowEditorModel {
             switch ref {
             case .rowRef(let id):
                 if let number = displayNumber(of: id) { return number }
+                if unsetSlotIDs.contains(id) { return "_" }
                 return "?" + String(tombstones[id] ?? 0)
             case .inputRef(let position):
                 return "input:\(position)"
@@ -978,6 +1079,19 @@ final class FlowEditorModel {
     func structuralIssues() -> [FlowIssue] {
         if let cached = issueCache, cached.document == document { return cached.issues }
         var issues: [FlowIssue] = []
+        // INPUTS-1: an unset-slot marker (`markUnsetSlot`) has to be checked, and added,
+        // *before* the round-trip validator runs — `saveBlockReason`/`warning(for:)` both
+        // take `issues.first`, so a row that also happens to carry some unrelated validator
+        // issue must still show the honest "isn't set yet" first, not lose to whatever the
+        // validator says.
+        for row in allRows() {
+            for (index, ref) in row.refs.enumerated() {
+                guard case .rowRef(let targetID) = ref, unsetSlotIDs.contains(targetID) else { continue }
+                guard let path = Self.displayPath(row.id, rows: document.rows) else { continue }
+                issues.append(FlowIssue(row: path, code: "E203",
+                                        message: "Row \(path)'s input \(index + 1) isn't set yet — pick one or remove the slot, then save."))
+            }
+        }
         do {
             let parsed = try CatParser.parseForValidation(catText)
             // WA-4: the registry now resolves a display name the way `mlxflow check` does
@@ -985,15 +1099,15 @@ final class FlowEditorModel {
             // check (`resolveUsesLevel` passes this same `registry` down) — the blanket
             // `.filter { $0.code != "E104" }` this line used to carry is gone with it; a
             // display the registry can't resolve now genuinely means E104.
-            issues = FlowValidator.checkFlow(parsed, registry: CuratedManifest.installedFlowRegistry(),
+            issues += FlowValidator.checkFlow(parsed, registry: CuratedManifest.installedFlowRegistry(),
                                              workspace: workspace, flowID: flowID)
         } catch {
-            issues = [FlowIssue(row: "run", code: "E100",
-                                message: "This flow doesn't parse as a valid .cat right now — fix or undo the last edit, then save.")]
+            issues.append(FlowIssue(row: "run", code: "E100",
+                                message: "This flow doesn't parse as a valid .cat right now — fix or undo the last edit, then save."))
         }
         for row in allRows() {
             for ref in row.refs {
-                guard case .rowRef(let targetID) = ref else { continue }
+                guard case .rowRef(let targetID) = ref, !unsetSlotIDs.contains(targetID) else { continue }
                 if Self.findRow(targetID, in: document.rows) == nil, let path = Self.displayPath(row.id, rows: document.rows) {
                     issues.append(FlowIssue(row: path, code: "E203",
                                             message: "Row \(path) references a row that was deleted — fix the reference or undo, then save."))

@@ -364,7 +364,7 @@ struct CatFlowEditingTests {
         let model = try editor(rows: [a, b, diff])
 
         // Diff has two input slots.
-        #expect(model.inputSlotCount(for: diff.id) == 2)
+        #expect(model.slotsToDraw(for: diff.id) == 2)
         // Both earlier text rows are valid inputs.
         let slot1 = model.validInputs(for: diff.id, slot: 1)
         #expect(slot1.map(\.rowID).contains(a.id))
@@ -379,6 +379,136 @@ struct CatFlowEditingTests {
         // The serialized row reads `(1,2)`.
         let text = CatSerializer.serialize(model.document)
         #expect(text.contains("(1,2)"))
+    }
+
+    // MARK: - INPUTS-1: `Shape.bundleCompatible`'s five cases (`RSI/backlog.md`)
+
+    @Test func tupleTaskNeverOffersAnAddControl() throws {
+        // Diff: `.tupleOf([.text, .text])` — a fixed, always-shown arity, never open-ended.
+        let model = try editor(rows: [row("Diff")])
+        let diff = model.document.rows[0]
+        #expect(model.canAddInput(for: diff.id) == false)
+        #expect(model.declaredSlotFloor(for: diff.id) == 2)
+        #expect(model.slotsToDraw(for: diff.id) == 2)
+    }
+
+    @Test func singleNonFrameTaskNeverOffersAnAddControl() throws {
+        // Transcribe: `t(.audio)` — a plain single, non-frame accepts.
+        let model = try editor(rows: [row("Transcribe")])
+        let transcribe = model.document.rows[0]
+        #expect(model.canAddInput(for: transcribe.id) == false)
+        #expect(model.slotsToDraw(for: transcribe.id) == 1)
+    }
+
+    @Test func listOfTaskDrawsOnePickerPerBoundRef() throws {
+        // Template: `.listOf(.text)` — the finding that opened INPUTS-1. A row with nothing
+        // bound yet must look exactly like a single-input row (`slotsToDraw == 1`); each
+        // bound ref grows the picker count by one, with no fixed ceiling.
+        let a = row("Read Text", settings: "a.txt")
+        let b = row("Read Text", settings: "b.txt")
+        let c = row("Read Text", settings: "c.txt")
+        let template = row("Template")
+        let model = try editor(rows: [a, b, c, template])
+        #expect(model.canAddInput(for: template.id) == true)
+        #expect(model.slotsToDraw(for: template.id) == 1)
+        model.setReference(to: a.id, slot: 1, for: template.id)
+        #expect(model.slotsToDraw(for: template.id) == 1)
+        model.setReference(to: b.id, slot: 2, for: template.id)
+        #expect(model.slotsToDraw(for: template.id) == 2)
+        model.setReference(to: c.id, slot: 3, for: template.id)
+        #expect(model.slotsToDraw(for: template.id) == 3)
+        #expect(model.validInputs(for: template.id, slot: 3).map(\.rowID).contains(c.id))
+        let text = CatSerializer.serialize(model.document)
+        #expect(text.contains("(1,2,3)"))
+    }
+
+    @Test func frameTaskAcceptsAnyRefCountDespiteASingleDeclaredSlot() throws {
+        // Verify declares `text -> text` — a shape that would cap a non-frame task at one
+        // ref — but `refKind == .frame` makes `bundleCompatible` ignore the declared
+        // `accepts` for ref-count purposes entirely (`Core/Shape.swift:123`), which is
+        // exactly why every bundled `Verify`/`Revise` row binds two refs (content +
+        // context). `canAddInput` must agree, not just the declared signature.
+        #expect(TaskCatalog.get("Verify")?.accepts == .single(.text))
+        let a = row("Read Text", settings: "a.txt")
+        let b = row("Read Text", settings: "b.txt")
+        let verify = row("Verify")
+        let model = try editor(rows: [a, b, verify])
+        #expect(model.canAddInput(for: verify.id) == true)
+        model.setReference(to: a.id, slot: 1, for: verify.id)
+        model.setReference(to: b.id, slot: 2, for: verify.id)
+        #expect(model.slotsToDraw(for: verify.id) == 2)
+    }
+
+    @Test func anyKindTaskAcceptsAnyRefCount() throws {
+        let a = row("Read Text", settings: "a.txt")
+        let b = row("Read Text", settings: "b.txt")
+        let save = row("Save Text")
+        let model = try editor(rows: [a, b, save])
+        #expect(model.canAddInput(for: save.id) == true)
+        model.setReference(to: a.id, slot: 1, for: save.id)
+        model.setReference(to: b.id, slot: 2, for: save.id)
+        #expect(model.slotsToDraw(for: save.id) == 2)
+    }
+
+    // MARK: - INPUTS-1: the two `setReference` hazards
+
+    @Test func settingALaterSlotBeforeAnEarlierOneLeavesTheEarlierHonestlyUnset() throws {
+        // Diff's two pickers are independent — nothing stops a user from choosing Input 2
+        // before Input 1. The old code padded the skipped slot with a real `.inputRef`,
+        // which (being a top-level row, not inside a block) would raise the parser's own
+        // "(input:N) only makes sense inside a <list>/<each> block" error instead of the
+        // honest "not set yet" — or, inside a block with enough inputs, would silently bind
+        // to the wrong real value with no error at all.
+        let a = row("Read Text", settings: "a.txt")
+        let b = row("Read Text", settings: "b.txt")
+        let diff = row("Diff")
+        let model = try editor(rows: [a, b, diff])
+        model.setReference(to: b.id, slot: 2, for: diff.id)
+        #expect(model.isSlotUnset(for: diff.id, slot: 1))
+        #expect(model.isSlotUnset(for: diff.id, slot: 2) == false)
+        // Still yellow, still un-saveable (same contract `deletingARowNeverSilentlyReAims
+        // ItsReferences` checks for the analogous dangling-rowRef case) — never a silent
+        // success, and never the parser's own "(input:N) only makes sense inside a block"
+        // wording the old `.inputRef` filler would have surfaced instead.
+        #expect(model.warning(for: diff.id) != nil)
+        #expect(model.canSave == false)
+    }
+
+    @Test func clearingAMiddleSlotDoesNotShiftLaterSlotsIntoItsPlace() throws {
+        // Clearing Input 2 of a three-input Template must not silently re-point `{3}`
+        // (bound to `c`) at Input 2's old position — `c` keeps exactly the slot it had.
+        let a = row("Read Text", settings: "a.txt")
+        let b = row("Read Text", settings: "b.txt")
+        let c = row("Read Text", settings: "c.txt")
+        let template = row("Template")
+        let model = try editor(rows: [a, b, c, template])
+        model.setReference(to: a.id, slot: 1, for: template.id)
+        model.setReference(to: b.id, slot: 2, for: template.id)
+        model.setReference(to: c.id, slot: 3, for: template.id)
+
+        model.setReference(to: nil, slot: 2, for: template.id)
+
+        #expect(model.isSlotUnset(for: template.id, slot: 2))
+        #expect(model.slotsToDraw(for: template.id) == 3)
+        guard case .rowRef(let stillThere) = model.document.rows[3].refs[2] else {
+            Issue.record("slot 3 should still be a real reference to c")
+            return
+        }
+        #expect(stillThere == c.id)
+    }
+
+    @Test func clearingTheLastSlotShrinksCleanly() throws {
+        let a = row("Read Text", settings: "a.txt")
+        let b = row("Read Text", settings: "b.txt")
+        let diff = row("Diff")
+        let model = try editor(rows: [a, b, diff])
+        model.setReference(to: a.id, slot: 1, for: diff.id)
+        model.setReference(to: b.id, slot: 2, for: diff.id)
+
+        model.setReference(to: nil, slot: 2, for: diff.id)
+
+        #expect(model.document.rows[2].refs.count == 1)
+        #expect(model.warning(for: diff.id) != nil)   // back to "still needs slot 2"
     }
 
     @MainActor
@@ -404,6 +534,32 @@ struct CatFlowEditingTests {
         // An edit round-trips without breaking it.
         model.add(task: "Summarize")
         #expect(model.warning(for: diff.id) == nil)
+        #expect(model.canSave)
+    }
+
+    @MainActor
+    @Test func loadedShowNotesTemplateStaysGreenAndEditable() throws {
+        // 03-ShowNotes.cat row 6: `Template (5,4) "# {1}\n\n{2}"` — a `listOf(.text)` row
+        // binding two refs, out of row-number order (the later-numbered row, 5, bound
+        // first), the exact shape INPUTS-1 opens up: before it, the Properties panel could
+        // only ever draw one picker for a non-tuple task, so this row could load and run but
+        // never be reproduced or re-edited through the UI.
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let textA = row("Read Text", settings: "notes.txt")
+        let textB = row("Read Text", settings: "quotes.txt")
+        let merge = row("Merge", model: "Qwen3 8B", refs: [.rowRef(textA.id), .rowRef(textB.id)])
+        let title = row("Title", model: "Ministral 3B", refs: [.rowRef(merge.id)])
+        let template = row("Template", settings: "\"# {1}\n\n{2}\"", refs: [.rowRef(title.id), .rowRef(merge.id)])
+        let model = try editor(rows: [textA, textB, merge, title, template])
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+        #expect(model.warning(for: template.id) == nil)
+        #expect(model.canSave)
+        #expect(model.slotsToDraw(for: template.id) == 2)
+        #expect(model.canAddInput(for: template.id))
+        // An edit round-trips without breaking it.
+        model.add(task: "Save Text")
+        #expect(model.warning(for: template.id) == nil)
         #expect(model.canSave)
     }
 

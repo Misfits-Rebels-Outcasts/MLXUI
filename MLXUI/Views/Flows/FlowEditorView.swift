@@ -501,7 +501,11 @@ struct FlowEditorView: View {
         // CFM-R12-3 item 6: reorder stays inside its scope — top-level via `move`, a block
         // child among its siblings via `moveInside`.
         moveMenu(for: row)
-        let slots = model.inputSlotCount(for: row.id)
+        // INPUTS-1: one submenu per bound ref, plus one more open, empty slot when the
+        // task's shape allows another (`canAddInput`) — picking from that last one binds
+        // it and the next menu-open offers a fresh one, so the context menu never needs
+        // its own persisted "+" state the way the Properties panel does.
+        let slots = model.slotsToDraw(for: row.id) + (model.canAddInput(for: row.id) ? 1 : 0)
         ForEach(1...slots, id: \.self) { slot in
             inputMenu(for: row, slot: slot)
         }
@@ -573,7 +577,7 @@ struct FlowEditorView: View {
     }
 
     private func slotLabel(for row: Row, slot: Int) -> String {
-        let count = model.inputSlotCount(for: row.id)
+        let count = model.slotsToDraw(for: row.id) + (model.canAddInput(for: row.id) ? 1 : 0)
         return count > 1 ? "Input \(slot)…" : "Choose input…"
     }
 
