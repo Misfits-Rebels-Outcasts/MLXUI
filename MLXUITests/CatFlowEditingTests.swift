@@ -337,6 +337,60 @@ struct CatFlowEditingTests {
         #expect(model.warning(for: model.document.rows[1].id) == nil)   // text → text
     }
 
+    // MARK: - HR-1: the row-1 advisory splits by waiting policy
+
+    @Test func rowOneHumanInputWithWaitForeverIsClean() throws {
+        let r = row("Human Input", settings: "\"Enter URL:\"; wait=forever")
+        let model = try editor(rows: [r])
+        #expect(model.warning(for: r.id) == nil)
+    }
+
+    @Test func rowOneHumanInputWithTimeoutShowsTheMissingFallbackSentence() throws {
+        let r = row("Human Input", settings: "\"Enter URL:\"; timeout=30s; default=unchanged")
+        let model = try editor(rows: [r])
+        #expect(model.warning(for: r.id) ==
+                "Row 1 has nothing to fall back on — if nobody answers, this row produces nothing.")
+    }
+
+    @Test func rowOneHumanInputWithNoSettingsAtAllShowsE501NotTheRowOneSentence() throws {
+        // Backlog HR-1: "no settings at all... E501 is about to fire on it anyway" — a row
+        // with neither `wait=forever` nor `timeout=`+`default=` fails `checkHumanRows` before
+        // `warning(for:)` ever reaches the row-1 branch (`ownIssues.first` wins). HR-1 must
+        // not suppress this — it's a genuine missing waiting policy, not a false row-1 read.
+        let r = row("Human Input")
+        let model = try editor(rows: [r])
+        let warning = try #require(model.warning(for: r.id))
+        #expect(warning.contains("doesn't say what happens if nobody answers"))
+        #expect(warning != "Row 1 needs an input — nothing feeds it.")
+        #expect(warning != "Row 1 has nothing to fall back on — if nobody answers, this row produces nothing.")
+    }
+
+    @Test func rowOneAskHumanIsNeverExemptedEvenWithSettings() throws {
+        // HR-1 scopes the exemption to `Human Input` by name, not the `.human` class: `Ask
+        // Human` is `.sameAsInput` and can never source content at row 1.
+        let waitForever = row("Ask Human", settings: "wait=forever")
+        let model1 = try editor(rows: [waitForever])
+        #expect(model1.warning(for: waitForever.id) == "Row 1 needs an input — nothing feeds it.")
+
+        // A `timeout=`/`default=` Ask Human row, with its default among its declared tags so
+        // E501/E502 stay quiet and the row-1 branch itself is what's under test.
+        let withTimeout = Row(id: UUID(), task: "Ask Human",
+                              settings: "timeout=30s; default=approve", tags: ["approve"])
+        let model2 = try editor(rows: [withTimeout])
+        #expect(model2.warning(for: withTimeout.id) == "Row 1 needs an input — nothing feeds it.")
+    }
+
+    @Test @MainActor func rowOneSyntheticNoSettingsNoRefsRowStillWarns() throws {
+        // A non-human task with neither settings nor refs must still fall through to the old
+        // sentence — HR-1's exemption never widens past `Human Input`. Model-wired (via
+        // `add(task:)`'s automatic default model) so a genuine "needs a model" warning can't
+        // mask the assertion under test.
+        let model = try wiredEditor(rows: [])
+        model.add(task: "Summarize")
+        let r = try #require(model.document.rows.first)
+        #expect(model.warning(for: r.id) == "Row 1 needs an input — nothing feeds it.")
+    }
+
     @Test @MainActor func rowWithNoRunnableModelIsYellow() throws {
         // FIX-3 + CFM-R14-2: a model-class row seeded with no runnable model warns. Upscale
         // has no catalog model at all → seeds nothing and warns; a row whose model name is

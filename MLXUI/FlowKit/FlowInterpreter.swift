@@ -1144,15 +1144,19 @@ nonisolated enum FlowInterpreter {
 
     // MARK: - Human rows (P3-MC-02)
 
-    /// `_waits_forever` — `wait=forever` in the settings.
-    private static func waitsForever(_ row: Row) -> Bool {
+    /// `_waits_forever` — `wait=forever` in the settings. Not `private`: HR-1
+    /// (`RSI/DelegateHumanRowBacklog.md`) needs this exact reading from the editor's
+    /// row-1 advisory, the same way RT-2 widened `rowPromptText` above rather than let
+    /// `FlowEditorModel` re-derive the policy from `FlowSettings` a second time.
+    static func waitsForever(_ row: Row) -> Bool {
         guard let settings = row.settings else { return false }
         return settings.range(of: #"\bwait\s*=\s*forever\b"#, options: .regularExpression) != nil
     }
 
     /// Whether the row declares a `timeout=` — it parks (like `wait=forever`) and falls back
-    /// to its default when the deadline passes unanswered.
-    private static func hasTimeout(_ row: Row) -> Bool {
+    /// to its default when the deadline passes unanswered. Not `private`: same reason as
+    /// `waitsForever` above (HR-1).
+    static func hasTimeout(_ row: Row) -> Bool {
         guard let settings = row.settings else { return false }
         return settings.range(of: #"\btimeout\s*="#, options: .regularExpression) != nil
     }
