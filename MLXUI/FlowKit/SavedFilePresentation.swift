@@ -21,6 +21,11 @@ nonisolated enum SavedFilePresentation: String, CaseIterable, Sendable {
     /// every case except `.folder`: opening a folder in "its app" is Finder, which is what
     /// Show in Finder already does.
     var allowsOpenInApp: Bool { self != .folder }
+
+    /// Whether the Output tab offers "Export a Copy…" for this presentation (OV-4) — every
+    /// case except `.folder`: exporting a folder would mean zipping or recursively copying it,
+    /// both out of scope (OV-4 copies a single file); Show in Finder is the folder's answer.
+    var allowsExport: Bool { self != .folder }
 }
 
 /// OV-3: the "Open in ‹app›" button's label — nil when there's no app to hand the file to,

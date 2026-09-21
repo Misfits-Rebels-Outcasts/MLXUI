@@ -93,6 +93,13 @@ struct CatFlowSavedFilePresentationTests {
         #expect(openLabel(appDisplayName: nil) == nil)
     }
 
+    // MARK: - OV-4: which presentations "Export a Copy…" is offered for
+
+    @Test(arguments: SavedFilePresentation.allCases)
+    func allowsExportExceptFolder(presentation: SavedFilePresentation) {
+        #expect(presentation.allowsExport == (presentation != .folder))
+    }
+
     // MARK: - A real directory, regardless of task
 
     @Test func aRealDirectoryClassifiesAsFolderRegardlessOfTask() throws {

@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import AppKit
+import UniformTypeIdentifiers
 
 /// The inspector pane (CFM-R3-3): a right-hand pane bound to the selected row, split into
 /// two tabs.
@@ -216,8 +217,9 @@ struct FlowInspectorPane<Properties: View>: View {
         }
     }
 
-    /// OV-2/OV-3: Quick Look and "Open in ‹app›", each shown only when this presentation
-    /// allows it (every case but `.folder`), beside the existing Show in Finder.
+    /// OV-2/OV-3/OV-4: Quick Look, "Open in ‹app›" and Export a Copy…, each shown only when
+    /// this presentation allows it (every case but `.folder`), beside the existing Show in
+    /// Finder.
     @ViewBuilder
     private func savedFileButtons(_ url: URL) -> some View {
         HStack(spacing: 8) {
@@ -225,6 +227,7 @@ struct FlowInspectorPane<Properties: View>: View {
                 quickLookButton
             }
             openInAppButton(url)
+            exportCopyButton(url)
             openInFinderButton(url)
         }
     }
@@ -252,6 +255,31 @@ struct FlowInspectorPane<Properties: View>: View {
             }
             .controlSize(.small)
         }
+    }
+
+    /// OV-4: copies the saved file to wherever the user picks — never moves the original.
+    /// `.folder`: out of scope (no zip, no recursive copy); Show in Finder is the answer there,
+    /// which `allowsExport` already excludes this button for.
+    @ViewBuilder
+    private func exportCopyButton(_ url: URL) -> some View {
+        if savedPresentation?.allowsExport == true {
+            Button {
+                exportCopy(of: url)
+            } label: {
+                Label("Export a Copy…", systemImage: "square.and.arrow.up")
+            }
+            .controlSize(.small)
+        }
+    }
+
+    private func exportCopy(of url: URL) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = url.lastPathComponent
+        if let type = UTType(filenameExtension: url.pathExtension) {
+            panel.allowedContentTypes = [type]
+        }
+        guard panel.runModal() == .OK, let destination = panel.url else { return }
+        try? FileManager.default.copyItem(at: url, to: destination)
     }
 
     private func fileContent(_ url: URL) -> some View {
