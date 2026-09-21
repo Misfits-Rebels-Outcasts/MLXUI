@@ -183,6 +183,10 @@ struct CatFlowSavedFileTests {
                         continue
                     }
 
+                    // .resolvingSymlinksInPath() here is load-bearing, not decoration: resolve()
+                    // resolves the flow directory internally, and /tmp → /private/tmp on macOS,
+                    // so the full-path comparison below would fail on that prefix alone without
+                    // matching it up front on both sides.
                     let base = FileManager.default.temporaryDirectory
                         .resolvingSymlinksInPath()
                         .appendingPathComponent("catflow-corpus-\(UUID().uuidString)")
@@ -210,7 +214,11 @@ struct CatFlowSavedFileTests {
         }
         // Pins §0.1's count (71 + 11 + 2 + 1 + 0 = 85) so a new gallery flow's Save rows are
         // never silently skipped by this corpus walk.
-        #expect(checkedRows == 85)
+        #expect(checkedRows == 85, """
+            Corpus row count changed from 85 — if a new Save * row shipped, confirm it \
+            resolves correctly above, then bump this count; if a row disappeared, confirm \
+            that was intentional.
+            """)
     }
 
     /// Rows the Output tab can present as a saved file — i.e. those `FlowSavedFile.kind`
