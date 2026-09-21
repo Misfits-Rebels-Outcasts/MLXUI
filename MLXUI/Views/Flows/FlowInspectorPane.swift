@@ -216,14 +216,15 @@ struct FlowInspectorPane<Properties: View>: View {
         }
     }
 
-    /// OV-2: Quick Look, shown only when this presentation allows it (every case but
-    /// `.folder`), beside the existing Show in Finder.
+    /// OV-2/OV-3: Quick Look and "Open in ‹app›", each shown only when this presentation
+    /// allows it (every case but `.folder`), beside the existing Show in Finder.
     @ViewBuilder
     private func savedFileButtons(_ url: URL) -> some View {
         HStack(spacing: 8) {
             if savedPresentation?.allowsQuickLook == true {
                 quickLookButton
             }
+            openInAppButton(url)
             openInFinderButton(url)
         }
     }
@@ -235,6 +236,22 @@ struct FlowInspectorPane<Properties: View>: View {
             Label("Quick Look", systemImage: "eye")
         }
         .controlSize(.small)
+    }
+
+    /// OV-3: hidden entirely (not just disabled) when the presentation is `.folder` or macOS
+    /// has no registered handler for the file — never a generic "Open" that may do nothing.
+    @ViewBuilder
+    private func openInAppButton(_ url: URL) -> some View {
+        if savedPresentation?.allowsOpenInApp == true,
+           let appURL = NSWorkspace.shared.urlForApplication(toOpen: url),
+           let label = openLabel(appDisplayName: FileManager.default.displayName(atPath: appURL.path)) {
+            Button {
+                NSWorkspace.shared.open(url)
+            } label: {
+                Label(label, systemImage: "arrow.up.forward.app")
+            }
+            .controlSize(.small)
+        }
     }
 
     private func fileContent(_ url: URL) -> some View {

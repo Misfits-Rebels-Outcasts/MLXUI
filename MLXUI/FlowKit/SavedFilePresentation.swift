@@ -16,4 +16,18 @@ nonisolated enum SavedFilePresentation: String, CaseIterable, Sendable {
     /// case except `.folder`: Quick Look previews a file, and a folder already has its own
     /// "Show in Finder" affordance for browsing what's inside it.
     var allowsQuickLook: Bool { self != .folder }
+
+    /// Whether the Output tab offers an "Open in ‹app›" button for this presentation (OV-3) —
+    /// every case except `.folder`: opening a folder in "its app" is Finder, which is what
+    /// Show in Finder already does.
+    var allowsOpenInApp: Bool { self != .folder }
+}
+
+/// OV-3: the "Open in ‹app›" button's label — nil when there's no app to hand the file to,
+/// which hides the button entirely (never render a generic "Open" that may do nothing). The
+/// `NSWorkspace` lookup that produces `appDisplayName` lives at the view edge; this is the
+/// pure, testable decision on top of it.
+nonisolated func openLabel(appDisplayName: String?) -> String? {
+    guard let appDisplayName else { return nil }
+    return "Open in \(appDisplayName)"
 }

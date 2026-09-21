@@ -76,6 +76,23 @@ struct CatFlowSavedFilePresentationTests {
         #expect(presentation.allowsQuickLook == (presentation != .folder))
     }
 
+    // MARK: - OV-3: which presentations "Open in ‹app›" is offered for, and its label
+
+    @Test(arguments: SavedFilePresentation.allCases)
+    func allowsOpenInAppExceptFolder(presentation: SavedFilePresentation) {
+        #expect(presentation.allowsOpenInApp == (presentation != .folder))
+    }
+
+    @Test func openLabelNamesTheApp() {
+        #expect(openLabel(appDisplayName: "Safari") == "Open in Safari")
+        #expect(openLabel(appDisplayName: "Preview") == "Open in Preview")
+    }
+
+    /// No app to hand the file to → the button is hidden entirely, never a generic "Open".
+    @Test func openLabelIsNilWithNoAppName() {
+        #expect(openLabel(appDisplayName: nil) == nil)
+    }
+
     // MARK: - A real directory, regardless of task
 
     @Test func aRealDirectoryClassifiesAsFolderRegardlessOfTask() throws {
