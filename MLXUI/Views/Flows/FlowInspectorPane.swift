@@ -187,49 +187,76 @@ struct FlowInspectorPane<Properties: View>: View {
     }
 
     /// Present a `Save *` row's written file with the same viewers as a live output, plus
-    /// "Show in Finder" and (OV-2) Quick Look. OV-5 replaces this per-branch button pair with
-    /// one shared four-button row (`savedFileActions`); until then, Quick Look is added
-    /// alongside the existing Show-in-Finder call in each branch rather than restructuring them.
+    /// (OV-5) the shared action row every branch gets alike.
     @ViewBuilder
     private func savedContent(for url: URL, kind: Kind) -> some View {
         let item = Item(kind: kind, value: nil, path: url, sourceText: nil)
+        let presentation = savedPresentation ?? .other
         switch kind {
         case .audio:
             VStack(alignment: .leading, spacing: 6) {
                 audioContent(item)
-                savedFileButtons(url)
+                savedFileActions(url: url, presentation: presentation)
             }
         case .text:
             VStack(alignment: .leading, spacing: 6) {
                 textContent(item)
-                savedFileButtons(url)
+                savedFileActions(url: url, presentation: presentation)
             }
         case .image:
             VStack(alignment: .leading, spacing: 6) {
                 imageContent(item)
-                savedFileButtons(url)
+                savedFileActions(url: url, presentation: presentation)
             }
         default:
             VStack(alignment: .leading, spacing: 6) {
-                fileContent(url)
-                savedFileButtons(url)
+                fileContent(url, isFolder: presentation == .folder)
+                savedFileActions(url: url, presentation: presentation)
             }
         }
     }
 
-    /// OV-2/OV-3/OV-4: Quick Look, "Open in ‹app›" and Export a Copy…, each shown only when
-    /// this presentation allows it (every case but `.folder`), beside the existing Show in
-    /// Finder.
+    /// OV-5: the shared action row — Quick Look · Open in ‹app› · Export a Copy… · Show in
+    /// Finder, same order for every presentation, `.folder` getting only the last. Wrapped
+    /// across up to two lines (`.controlSize(.small)`, `spacing: 8`) rather than one fixed
+    /// `HStack`: the pane is only 260–320 pt wide (`:72`), and up to four labeled buttons — one
+    /// of them "Export a Copy…" — do not fit on one line without clipping. This is the Output
+    /// tab, not the toolbar (FH-5's adaptive collapsing doesn't apply here), so a plain
+    /// two-button-per-row wrap is the right amount of layout, not a custom flow `Layout`.
     @ViewBuilder
-    private func savedFileButtons(_ url: URL) -> some View {
-        HStack(spacing: 8) {
-            if savedPresentation?.allowsQuickLook == true {
-                quickLookButton
+    private func savedFileActions(url: URL, presentation: SavedFilePresentation) -> some View {
+        let buttons = actionButtons(url: url, presentation: presentation)
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(stride(from: 0, to: buttons.count, by: 2)), id: \.self) { start in
+                HStack(spacing: 8) {
+                    buttons[start]
+                    if start + 1 < buttons.count {
+                        buttons[start + 1]
+                    }
+                }
             }
-            openInAppButton(url)
-            exportCopyButton(url)
-            openInFinderButton(url)
         }
+    }
+
+    /// The up-to-four buttons `savedFileActions` lays out, in order, for the given
+    /// presentation — `.folder` yields just `[Show in Finder]`; everything else yields up to
+    /// all four, each gated by its own `allows*` and (for "Open in ‹app›") whether macOS has a
+    /// handler at all.
+    private func actionButtons(url: URL, presentation: SavedFilePresentation) -> [AnyView] {
+        var buttons: [AnyView] = []
+        if presentation.allowsQuickLook {
+            buttons.append(AnyView(quickLookButton))
+        }
+        if presentation.allowsOpenInApp,
+           let appURL = NSWorkspace.shared.urlForApplication(toOpen: url),
+           let label = openLabel(appDisplayName: FileManager.default.displayName(atPath: appURL.path)) {
+            buttons.append(AnyView(openInAppButton(url: url, label: label)))
+        }
+        if presentation.allowsExport {
+            buttons.append(AnyView(exportCopyButton(url)))
+        }
+        buttons.append(AnyView(openInFinderButton(url)))
+        return buttons
     }
 
     private var quickLookButton: some View {
@@ -241,35 +268,28 @@ struct FlowInspectorPane<Properties: View>: View {
         .controlSize(.small)
     }
 
-    /// OV-3: hidden entirely (not just disabled) when the presentation is `.folder` or macOS
-    /// has no registered handler for the file — never a generic "Open" that may do nothing.
-    @ViewBuilder
-    private func openInAppButton(_ url: URL) -> some View {
-        if savedPresentation?.allowsOpenInApp == true,
-           let appURL = NSWorkspace.shared.urlForApplication(toOpen: url),
-           let label = openLabel(appDisplayName: FileManager.default.displayName(atPath: appURL.path)) {
-            Button {
-                NSWorkspace.shared.open(url)
-            } label: {
-                Label(label, systemImage: "arrow.up.forward.app")
-            }
-            .controlSize(.small)
+    /// OV-3's button — always rendered when called; the caller (`actionButtons`) is what
+    /// decides whether it belongs in the row at all, so hiding it for "no handler" or
+    /// `.folder` never means a disabled button, only its absence.
+    private func openInAppButton(url: URL, label: String) -> some View {
+        Button {
+            NSWorkspace.shared.open(url)
+        } label: {
+            Label(label, systemImage: "arrow.up.forward.app")
         }
+        .controlSize(.small)
     }
 
-    /// OV-4: copies the saved file to wherever the user picks — never moves the original.
-    /// `.folder`: out of scope (no zip, no recursive copy); Show in Finder is the answer there,
-    /// which `allowsExport` already excludes this button for.
-    @ViewBuilder
+    /// OV-4's button — copies the saved file to wherever the user picks, never moves the
+    /// original. `.folder` is excluded by the caller (`actionButtons`): no zip, no recursive
+    /// copy, Show in Finder is the folder's answer.
     private func exportCopyButton(_ url: URL) -> some View {
-        if savedPresentation?.allowsExport == true {
-            Button {
-                exportCopy(of: url)
-            } label: {
-                Label("Export a Copy…", systemImage: "square.and.arrow.up")
-            }
-            .controlSize(.small)
+        Button {
+            exportCopy(of: url)
+        } label: {
+            Label("Export a Copy…", systemImage: "square.and.arrow.up")
         }
+        .controlSize(.small)
     }
 
     private func exportCopy(of url: URL) {
@@ -282,9 +302,12 @@ struct FlowInspectorPane<Properties: View>: View {
         try? FileManager.default.copyItem(at: url, to: destination)
     }
 
-    private func fileContent(_ url: URL) -> some View {
+    /// OV-5: `.folder`'s card reads "Saved folder" (§9, mirrors the existing "Saved file")
+    /// — everything else that reaches this generic card (today, only a saved video) keeps the
+    /// existing title. Icon unchanged either way — §9 names only the title string.
+    private func fileContent(_ url: URL, isFolder: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Saved file", systemImage: "doc")
+            Label(isFolder ? "Saved folder" : "Saved file", systemImage: "doc")
                 .font(.subheadline.bold())
             Text(url.lastPathComponent)
                 .font(.caption2)
