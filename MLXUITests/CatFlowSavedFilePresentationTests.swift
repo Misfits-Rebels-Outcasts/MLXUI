@@ -69,6 +69,13 @@ struct CatFlowSavedFilePresentationTests {
         #expect(FlowSavedFile.presentation(url: url, task: "Save Context") == .other)
     }
 
+    // MARK: - OV-2: which presentations Quick Look is offered for
+
+    @Test(arguments: SavedFilePresentation.allCases)
+    func allowsQuickLookExceptFolder(presentation: SavedFilePresentation) {
+        #expect(presentation.allowsQuickLook == (presentation != .folder))
+    }
+
     // MARK: - A real directory, regardless of task
 
     @Test func aRealDirectoryClassifiesAsFolderRegardlessOfTask() throws {

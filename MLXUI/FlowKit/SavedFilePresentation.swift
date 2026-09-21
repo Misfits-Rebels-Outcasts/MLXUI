@@ -11,4 +11,9 @@ import Foundation
 /// `SavedFilePresentation` (`FlowSavedFile.presentation(url:task:)`) is what tells them apart.
 nonisolated enum SavedFilePresentation: String, CaseIterable, Sendable {
     case text, web, image, audio, video, pdf, table, folder, other
+
+    /// Whether the Output tab offers a Quick Look button for this presentation (OV-2) — every
+    /// case except `.folder`: Quick Look previews a file, and a folder already has its own
+    /// "Show in Finder" affordance for browsing what's inside it.
+    var allowsQuickLook: Bool { self != .folder }
 }

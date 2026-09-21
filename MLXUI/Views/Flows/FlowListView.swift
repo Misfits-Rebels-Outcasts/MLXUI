@@ -319,6 +319,7 @@ struct FlowListView: View {
                     statusNote: session.selectedRowID.flatMap { session.statusNote(for: $0) },
                     savedFile: savedFileURL(in: doc),
                     savedKind: savedFileKind(in: doc),
+                    savedPresentation: savedFilePresentation(in: doc),
                     initialTab: .output
                 ) {
                     // The Properties tab is browse-only here: bundled gallery flows are
@@ -439,6 +440,15 @@ struct FlowListView: View {
         guard let id = session.selectedRowID,
               let row = doc.rows.first(where: { $0.id == id }) else { return nil }
         return FlowSavedFile.kind(forTask: row.task)
+    }
+
+    /// OV-1: the saved file's presentation (by extension, task as fallback) — drives whether
+    /// the Output tab offers a Quick Look button (OV-2).
+    private func savedFilePresentation(in doc: FlowDocument) -> SavedFilePresentation? {
+        guard let id = session.selectedRowID,
+              let row = doc.rows.first(where: { $0.id == id }),
+              let url = savedFileURL(in: doc) else { return nil }
+        return FlowSavedFile.presentation(url: url, task: row.task)
     }
 
     /// One row's `FlowSerializedRow` — extracted so the row builder stays type-checkable.

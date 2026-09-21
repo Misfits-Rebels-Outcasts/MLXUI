@@ -35,15 +35,20 @@ struct FlowInspectorPane<Properties: View>: View {
     var savedFile: URL?
     /// The saved file's kind, driving the presentation.
     var savedKind: Kind?
+    /// OV-1: the saved file's presentation (by its own extension, task name as fallback) —
+    /// drives whether the Output tab offers a Quick Look button (OV-2).
+    var savedPresentation: SavedFilePresentation?
     /// The row-properties pane — editable in the editor, frozen in the read-only flow list.
     private let properties: () -> Properties
 
     @State private var tab: Tab
     @State private var audio = InspectorAudioController()
+    @State private var isShowingQuickLook = false
 
     init(output: Asset?, rowTitle: String, substitutionNote: String?,
          statusNote: (text: String, isSkip: Bool)? = nil,
          savedFile: URL? = nil, savedKind: Kind? = nil,
+         savedPresentation: SavedFilePresentation? = nil,
          initialTab: Tab = .output,
          @ViewBuilder properties: @escaping () -> Properties) {
         self.output = output
@@ -52,6 +57,7 @@ struct FlowInspectorPane<Properties: View>: View {
         self.statusNote = statusNote
         self.savedFile = savedFile
         self.savedKind = savedKind
+        self.savedPresentation = savedPresentation
         self.properties = properties
         _tab = State(initialValue: initialTab)
     }
@@ -75,6 +81,9 @@ struct FlowInspectorPane<Properties: View>: View {
         // when the pane goes away, so the Play/Stop button never lies about a stale player.
         .onChange(of: displayedAudioPath) { audio.stop() }
         .onDisappear { audio.stop() }
+        .sheet(isPresented: $isShowingQuickLook) {
+            if let savedFile { QuickLookSheet(url: savedFile) }
+        }
     }
 
     /// The audio file the Output tab is currently showing a Play button for, if any.
@@ -176,8 +185,10 @@ struct FlowInspectorPane<Properties: View>: View {
         }
     }
 
-    /// Present a `Save *` row's written file with the same viewers as a live output, plus a
-    /// "Show in Finder" affordance.
+    /// Present a `Save *` row's written file with the same viewers as a live output, plus
+    /// "Show in Finder" and (OV-2) Quick Look. OV-5 replaces this per-branch button pair with
+    /// one shared four-button row (`savedFileActions`); until then, Quick Look is added
+    /// alongside the existing Show-in-Finder call in each branch rather than restructuring them.
     @ViewBuilder
     private func savedContent(for url: URL, kind: Kind) -> some View {
         let item = Item(kind: kind, value: nil, path: url, sourceText: nil)
@@ -185,24 +196,45 @@ struct FlowInspectorPane<Properties: View>: View {
         case .audio:
             VStack(alignment: .leading, spacing: 6) {
                 audioContent(item)
-                openInFinderButton(url)
+                savedFileButtons(url)
             }
         case .text:
             VStack(alignment: .leading, spacing: 6) {
                 textContent(item)
-                openInFinderButton(url)
+                savedFileButtons(url)
             }
         case .image:
             VStack(alignment: .leading, spacing: 6) {
                 imageContent(item)
-                openInFinderButton(url)
+                savedFileButtons(url)
             }
         default:
             VStack(alignment: .leading, spacing: 6) {
                 fileContent(url)
-                openInFinderButton(url)
+                savedFileButtons(url)
             }
         }
+    }
+
+    /// OV-2: Quick Look, shown only when this presentation allows it (every case but
+    /// `.folder`), beside the existing Show in Finder.
+    @ViewBuilder
+    private func savedFileButtons(_ url: URL) -> some View {
+        HStack(spacing: 8) {
+            if savedPresentation?.allowsQuickLook == true {
+                quickLookButton
+            }
+            openInFinderButton(url)
+        }
+    }
+
+    private var quickLookButton: some View {
+        Button {
+            isShowingQuickLook = true
+        } label: {
+            Label("Quick Look", systemImage: "eye")
+        }
+        .controlSize(.small)
     }
 
     private func fileContent(_ url: URL) -> some View {

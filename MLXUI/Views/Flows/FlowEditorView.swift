@@ -332,6 +332,7 @@ struct FlowEditorView: View {
                     substitutionNote: selectedSubstitutionNote,
                     savedFile: selectedSavedFile,
                     savedKind: selectedSavedKind,
+                    savedPresentation: selectedSavedPresentation,
                     initialTab: .properties
                 ) {
                     FlowRowInspectorView(model: model,
@@ -393,6 +394,14 @@ struct FlowEditorView: View {
     private var selectedSavedKind: Kind? {
         guard let id = model.selectedRowID, let row = model.row(withID: id) else { return nil }
         return FlowSavedFile.kind(forTask: row.task)
+    }
+
+    /// OV-1: the saved file's presentation (by extension, task as fallback) — drives whether
+    /// the Output tab offers a Quick Look button (OV-2).
+    private var selectedSavedPresentation: SavedFilePresentation? {
+        guard let id = model.selectedRowID, let row = model.row(withID: id),
+              let url = selectedSavedFile else { return nil }
+        return FlowSavedFile.presentation(url: url, task: row.task)
     }
 
     /// R12-3: every row flattened with depth; a collapsed block hides its children.
