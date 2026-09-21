@@ -4,11 +4,20 @@ import Foundation
 /// can play/view the saved result instead of only its status sentence. Pure enough to test.
 nonisolated enum FlowSavedFile {
     /// The file a `Save *` row wrote, resolved against the flow's working folder — nil when
-    /// the row isn't a Save row, has no path, or the file hasn't been written (yet).
+    /// the row isn't a Save row, has no path, the path was refused (absolute, `..`, or a
+    /// symlink escaping the flow directory), or the file hasn't been written (yet).
+    ///
+    /// BF-2: routed through `workspace.resolve`, the same boundary every Save *tool* writes
+    /// through (`SaveImageTools.swift`) — this used to build the URL with a raw
+    /// `appendingPathComponent`, so a path the writer refused could still resolve to a URL
+    /// here and `fileExists` could say yes for it, showing the Output tab a file the row
+    /// never produced. `normalizedSavePath` matches the writer's own `./out.png` → `out.png`
+    /// normalization so both sides agree byte for byte.
     static func resolved(row: Row, flowID: String, workspace: FlowWorkspace) -> URL? {
         guard let task = row.task, task.hasPrefix("Save"),
-              let path = FlowSettings(row.settings).pathValue() else { return nil }
-        let url = workspace.directory(for: flowID).appendingPathComponent(path)
+              let rawPath = FlowSettings(row.settings).pathValue(),
+              let url = try? workspace.resolve(normalizedSavePath(rawPath), flowID: flowID)
+        else { return nil }
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
