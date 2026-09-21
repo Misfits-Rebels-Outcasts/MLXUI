@@ -18,7 +18,8 @@ nonisolated enum FlowSavedFile {
         switch task {
         case "Save Audio": return .audio
         case "Save Text": return .text
-        case "Save Image", "Save Images": return .image
+        case "Save Image": return .image
+        case "Save Images": return .folder
         case "Save Video": return .video
         default: return nil
         }

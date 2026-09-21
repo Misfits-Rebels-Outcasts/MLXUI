@@ -52,9 +52,38 @@ struct CatFlowSavedFileTests {
         #expect(FlowSavedFile.kind(forTask: "Save Audio") == .audio)
         #expect(FlowSavedFile.kind(forTask: "Save Text") == .text)
         #expect(FlowSavedFile.kind(forTask: "Save Image") == .image)
-        #expect(FlowSavedFile.kind(forTask: "Save Images") == .image)
+        #expect(FlowSavedFile.kind(forTask: "Save Images") == .folder)
         #expect(FlowSavedFile.kind(forTask: "Save Video") == .video)
         #expect(FlowSavedFile.kind(forTask: "Read Audio") == nil)
         #expect(FlowSavedFile.kind(forTask: nil) == nil)
+    }
+
+    /// BF-1: `Save Images` writes a folder (`vacation-web/`, Gallery flow 21 row 3), which
+    /// `.image` cannot render — `Data(contentsOf:)` on a directory fails and the Output tab
+    /// showed "Couldn't load the image." Pinned separately from `Save Image` so the two can
+    /// never be collapsed back into one case (§7 trap 1 — no new `Kind` case; `.folder` is
+    /// already one of the fourteen).
+    @Test func saveImagesIsNeverConfusedWithSaveImage() {
+        #expect(FlowSavedFile.kind(forTask: "Save Images") != FlowSavedFile.kind(forTask: "Save Image"))
+        #expect(FlowSavedFile.kind(forTask: "Save Images") == .folder)
+        #expect(FlowSavedFile.kind(forTask: "Save Image") == .image)
+    }
+
+    /// BF-1, against a real temp flow directory: Gallery flow 21's row 3
+    /// (`3. Save Images   vacation-web/; naming="{name}-web"`) resolves to the folder it
+    /// wrote, typed `.folder`.
+    @Test func resolvesFlow21Row3AsAFolder() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-saved-\(UUID().uuidString)")
+        let ws = FlowWorkspace(root: base.appendingPathComponent("flows"))
+        let dir = ws.directory(for: "flow-21")
+        let folder = dir.appendingPathComponent("vacation-web")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let row = Row(id: UUID(), task: "Save Images", settings: "vacation-web/; naming=\"{name}-web\"")
+        let url = FlowSavedFile.resolved(row: row, flowID: "flow-21", workspace: ws)
+        #expect(url?.lastPathComponent == "vacation-web")
+        #expect(FlowSavedFile.kind(forTask: row.task) == .folder)
     }
 }
