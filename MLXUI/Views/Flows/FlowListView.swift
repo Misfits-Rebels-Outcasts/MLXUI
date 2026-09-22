@@ -824,18 +824,31 @@ struct FlowListView: View {
     /// `FlowReassessment.compute`, a pure function a test can call directly.
     private func reassess() {
         guard let doc = document else { return }
+        apply(assess(doc), doc: doc)
+    }
+
+    /// WR-3 follow-up: the one call to `FlowReassessment.compute` every load path and
+    /// `reassess()` share — was duplicated inline in `loadGallery`/`loadUserFlow`/
+    /// `loadWorkspaceFlow` (two copies of one decision, this project's named recurring
+    /// failure per R14-FIX) until this pass folded them back into the seam WR-3 already
+    /// extracted the *logic* into but not yet the *call sites* out of.
+    private func assess(_ doc: FlowDocument) -> FlowReassessment {
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
-        let result = FlowReassessment.compute(
+        return FlowReassessment.compute(
             doc: doc, catalog: catalog, installed: appState.installedModelIDs,
             totalRAMGB: appState.systemInfo.totalRAMGB, claimableModelIDs: appState.claimableModelIDs,
             refusalScope: workspaceRef != nil ? makeScope() : nil, inputScope: makeScope())
+    }
+
+    /// Apply a `FlowReassessment` to `@State` — always calls `session.prepareInstall`, refused
+    /// or not (owner review, 2026-09-22: never leave a stale preflight from before a refusal
+    /// in place — see `FlowReassessment`'s own doc).
+    private func apply(_ result: FlowReassessment, doc: FlowDocument) {
         notRunnableReason = result.notRunnableReason
         notRunnableAction = result.notRunnableAction
         setupAdvisory = result.setupAdvisory
         inputAdvisory = result.inputAdvisory
-        if let preflight = result.preflight {
-            session.prepareInstall(preflight, doc: doc, scope: workspaceRef != nil ? makeScope() : nil)
-        }
+        session.prepareInstall(result.preflight, doc: doc, scope: workspaceRef != nil ? makeScope() : nil)
     }
 
     private var installManager: InstallManager {
@@ -913,16 +926,9 @@ struct FlowListView: View {
         lineRanges = serialized.lineRanges
         clauseLineRanges = serialized.clauseRanges
 
-        let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
-        if let refusal = FlowRunnability.refusal(for: doc, catalog: catalog,
-                                                 installed: appState.installedModelIDs,
-                                                 totalRAMGB: appState.systemInfo.totalRAMGB,
-                                                 claimableModelIDs: appState.claimableModelIDs,
-                                                 scope: makeScope()) {
-            notRunnableReason = refusal.reason
-            notRunnableAction = refusal.action
-            return
-        }
+        let result = assess(doc)
+        apply(result, doc: doc)
+        guard result.notRunnableReason == nil else { return }
         finishLoad(doc)
     }
 
@@ -946,15 +952,9 @@ struct FlowListView: View {
         // from a hand-written `_metadata.json` string that can go stale. `FlowRunnability`
         // covers language/doors/tools AND the model-preflight (a row whose model has no
         // bridge entry) + RAM.
-        let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
-        if let refusal = FlowRunnability.refusal(for: doc, catalog: catalog,
-                                                 installed: appState.installedModelIDs,
-                                                 totalRAMGB: appState.systemInfo.totalRAMGB,
-                                                 claimableModelIDs: appState.claimableModelIDs) {
-            notRunnableReason = refusal.reason
-            notRunnableAction = refusal.action
-            return
-        }
+        let result = assess(doc)
+        apply(result, doc: doc)
+        guard result.notRunnableReason == nil else { return }
 
         // Copy the bundled input assets into the flow's working folder before a run
         // can touch them — "Reveal in Finder" alone used to do this, so running a
@@ -996,33 +996,20 @@ struct FlowListView: View {
         clauseLineRanges = serialized.clauseRanges
 
         // CFM-R12-FIX-1: a user flow's refusal is the same live gates a bundled flow's is.
-        let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
-        if let refusal = FlowRunnability.refusal(for: doc, catalog: catalog,
-                                                 installed: appState.installedModelIDs,
-                                                 totalRAMGB: appState.systemInfo.totalRAMGB,
-                                                 claimableModelIDs: appState.claimableModelIDs) {
-            notRunnableReason = refusal.reason
-            notRunnableAction = refusal.action
-            return
-        }
+        let result = assess(doc)
+        apply(result, doc: doc)
+        guard result.notRunnableReason == nil else { return }
         // A user flow has no bundled assets; prepare with an empty list is a no-op.
         finishLoad(doc)
     }
 
-    /// The shared tail of both loads: preflight, trigger inspection, install wiring.
+    /// The load-only tail, once a flow is known not refused (WR-3 follow-up: the refusal +
+    /// preflight themselves are `assess(_:)`/`apply(_:doc:)`'s job now, called by every
+    /// `load*` function before this runs — this is only the work that doesn't overlap with
+    /// `reassess()`, which must not rebuild the inspector or re-trigger auto-run on every
+    /// install).
     private func finishLoad(_ doc: FlowDocument) {
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
-        let preflight = FlowPreflight.run(doc, catalog: catalog,
-                                          installedModelIDs: appState.installedModelIDs,
-                                          totalRAMGB: appState.systemInfo.totalRAMGB,
-                                          claimableModelIDs: appState.claimableModelIDs)
-        session.prepareInstall(preflight, doc: doc, scope: workspaceRef != nil ? makeScope() : nil)
-        // FIX-2: the setup pass now covers every row, not only `.model` ones — surfaced as a
-        // non-blocking banner, never fed into the blocking `notRunnableReason` path above.
-        setupAdvisory = FlowPreflight.setupAdvisory(preflight)
-        // FIP-2: same non-blocking shape, for a `Read *` row whose file isn't there yet.
-        // `makeScope()` already falls back to `.plain(flowID)` for a non-workspace flow.
-        inputAdvisory = FlowInputAdvisory.advisory(for: doc, scope: makeScope())
         // The inspector's frozen Properties tab reuses the editor's resolution machinery
         // (candidate models, input labels, display numbers) over a read-only model.
         inspectModel = FlowEditorModel(name: display?.title ?? flowID, flowID: locationID,
@@ -1084,34 +1071,54 @@ nonisolated struct FlowDisplay {
 /// WR-3 (`RSI/DelegateWorkspaceRunBacklog.md`) — the "refusal + preflight" tail shared by every
 /// `load*` function in `FlowListView`, pulled out so `.onChange(of: installedModelIDs)` can
 /// re-derive **both** (not just the preflight, which is all `refreshPreflight()` used to do)
-/// from a test-reachable seam. A refused flow's `preflight` is `nil` — the caller must not
-/// treat a stale prior preflight as still valid once a flow is refused.
+/// from a test-reachable seam. `preflight` is **always** present, refused or not — owner
+/// review, 2026-09-22: an earlier version returned `nil` on the refused path, on the theory
+/// that a refused flow has no preflight worth keeping. But the caller (`FlowListView.apply`)
+/// only called `session.prepareInstall` when `preflight != nil`, which left whatever
+/// preflight was already in `session` (from before the refusal) in place — a stale download
+/// set that could render the install sheet. Unreachable today only because `installed` alone
+/// never flips a flow between refused and not (see below); reachable the moment any future
+/// gate makes the refusal genuinely install-sensitive.
 nonisolated struct FlowReassessment {
     let notRunnableReason: String?
     let notRunnableAction: SetupAction?
     let setupAdvisory: FlowPreflight.RowAdvisory?
     let inputAdvisory: FlowPreflight.RowAdvisory?
-    let preflight: FlowPreflight.Result?
+    let preflight: FlowPreflight.Result
 
     /// `refusalScope` matches each `load*` function's existing call: `nil` for a gallery/user
     /// flow, `makeScope()` for a workspace flow (so a `uses:` call isn't refused as an unknown
     /// task). `inputScope` is always concrete — `FlowInputAdvisory.advisory` has always taken
     /// `makeScope()` unconditionally (it already falls back to `.plain(flowID)`).
+    ///
+    /// Runs `FlowPreflight.run` exactly **once**. `FlowRunnability.refusal` computes its own
+    /// preflight internally to derive `blockedReason`/`blockedAction` and throws it away — a
+    /// caller that also needs the preflight object (every caller here does) would otherwise
+    /// run it twice per call. The doors-check + `blockedReason`/`blockedAction` logic below is
+    /// `FlowRunnability.refusal`'s own decision, inlined rather than duplicated blind: both
+    /// read the identical `FlowRunner.canRun` → `FlowPreflight.blockedReason`/`blockedAction`
+    /// gates `FlowRunnability.swift` defines, so there is one *authority* for what refuses a
+    /// flow even though there are now two call sites expressing it — `FlowRunnability.swift`
+    /// wasn't itself in this phase's five-file scope.
     static func compute(doc: FlowDocument, catalog: [ModelEntry], installed: Set<String>,
                         totalRAMGB: Double, claimableModelIDs: Set<String>,
                         refusalScope: FlowScope?, inputScope: FlowScope) -> FlowReassessment {
-        if let refusal = FlowRunnability.refusal(for: doc, catalog: catalog, installed: installed,
-                                                 totalRAMGB: totalRAMGB,
-                                                 claimableModelIDs: claimableModelIDs,
-                                                 scope: refusalScope) {
-            return FlowReassessment(notRunnableReason: refusal.reason, notRunnableAction: refusal.action,
-                                    setupAdvisory: nil, inputAdvisory: nil, preflight: nil)
-        }
         let preflight = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: installed,
                                           totalRAMGB: totalRAMGB, claimableModelIDs: claimableModelIDs)
-        return FlowReassessment(notRunnableReason: nil, notRunnableAction: nil,
-                                setupAdvisory: FlowPreflight.setupAdvisory(preflight),
-                                inputAdvisory: FlowInputAdvisory.advisory(for: doc, scope: inputScope),
-                                preflight: preflight)
+        let runnability = refusalScope.map { FlowRunner.canRun(doc, scope: $0) } ?? FlowRunner.canRun(doc)
+        var notRunnableReason: String?
+        var notRunnableAction: SetupAction?
+        if case .notRunnable(let reason) = runnability {
+            notRunnableReason = reason
+        } else if let reason = FlowPreflight.blockedReason(preflight, totalRAMGB: totalRAMGB) {
+            notRunnableReason = reason
+            notRunnableAction = FlowPreflight.blockedAction(preflight)
+        }
+        let refused = notRunnableReason != nil
+        return FlowReassessment(
+            notRunnableReason: notRunnableReason, notRunnableAction: notRunnableAction,
+            setupAdvisory: refused ? nil : FlowPreflight.setupAdvisory(preflight),
+            inputAdvisory: refused ? nil : FlowInputAdvisory.advisory(for: doc, scope: inputScope),
+            preflight: preflight)
     }
 }

@@ -80,6 +80,11 @@ struct CatFlowWorkspaceViewTests {
     /// Deleting the workspace-refusal-clearing behavior locally (reverting to the old
     /// preflight-only recompute) turns the first two `#expect`s red — confirmed before
     /// restoring.
+    ///
+    /// `preflight` is asserted non-nil even on the refused path — owner review, 2026-09-22: an
+    /// earlier version returned `nil` there, which let `FlowListView.apply` skip
+    /// `session.prepareInstall` and leave a stale prior preflight in place. `compute` now runs
+    /// `FlowPreflight.run` exactly once and always returns it.
     @Test func reassessmentRecomputesBothTheRefusalAndThePreflightFromTheSameDocument() throws {
         let doc = try CatParser.parse("mlxflow 0.8\n1. Embed   Test Model\n")
         let model = makeEntry(id: "test-embed", displayName: "Test Model")
@@ -92,7 +97,7 @@ struct CatFlowWorkspaceViewTests {
                                                   totalRAMGB: 128, claimableModelIDs: [],
                                                   refusalScope: nil, inputScope: scope)
         #expect(unresolved.notRunnableReason != nil)
-        #expect(unresolved.preflight == nil)
+        #expect(unresolved.preflight.isBlocked == true)
 
         // Same document. The catalog now carries the named model, so it resolves — no longer
         // refused, whether or not it's installed yet (that's half 2, below).
@@ -100,7 +105,7 @@ struct CatFlowWorkspaceViewTests {
             doc: doc, catalog: [model], installed: [],
             totalRAMGB: 128, claimableModelIDs: [model.id], refusalScope: nil, inputScope: scope)
         #expect(resolvedNotInstalled.notRunnableReason == nil)
-        #expect(resolvedNotInstalled.preflight?.toDownload.contains { $0.model?.id == model.id } == true)
+        #expect(resolvedNotInstalled.preflight.toDownload.contains { $0.model?.id == model.id })
 
         // Half 2 (the preflight): same document, same catalog — only `installed` changes —
         // moves the model out of `toDownload` and into `installed`. This half already worked
@@ -109,8 +114,8 @@ struct CatFlowWorkspaceViewTests {
             doc: doc, catalog: [model], installed: [model.id],
             totalRAMGB: 128, claimableModelIDs: [model.id], refusalScope: nil, inputScope: scope)
         #expect(installed.notRunnableReason == nil)
-        #expect(installed.preflight?.toDownload.isEmpty == true)
-        #expect(installed.preflight?.installed.contains { $0.model?.id == model.id } == true)
+        #expect(installed.preflight.toDownload.isEmpty)
+        #expect(installed.preflight.installed.contains { $0.model?.id == model.id })
     }
 
     // MARK: - WorkspaceRef → FlowScope
