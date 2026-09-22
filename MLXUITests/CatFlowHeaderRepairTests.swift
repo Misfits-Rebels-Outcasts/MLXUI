@@ -176,6 +176,68 @@ struct CatFlowHeaderRepairTests {
         #expect(!model.document.flags.contains(.offdevice))
     }
 
+    /// The mirror of the test above, for the Flow tab's untick path (FH-4) rather than the
+    /// row-level one-click repair: starting from a flow that already declares `offdevice` and
+    /// genuinely needs it, `removeHeaderFlag` — the exact function `FlowInspectorPane`'s
+    /// checkbox calls when unticked — must actually block Save, not just change the flag.
+    /// Written on direct request to confirm this end-to-end, after `FH-4-FIX-1` found the
+    /// opposite gap for `network` (a status that claimed enforcement nothing backed).
+    @Test @MainActor func removingOffdeviceFromARemoteRowFlowBlocksSaveAndUndoRestoresIt() throws {
+        let text = """
+        mlxflow 0.8; offdevice
+        1. Read Text    memo.txt
+        2. Answer       (1)  claude-sonnet @ anthropic
+        3. Save Text    out.md
+
+        models:
+          claude-sonnet @ anthropic = anthropic/claude-sonnet-4
+        """
+        let doc = try CatParser.parse(text)
+        let model = editor(doc)
+        #expect(model.canSave, "the flow is valid as declared — nothing should block Save yet")
+
+        let (workspace, cleanup) = tempFlagInventoryWorkspace()
+        defer { cleanup() }
+        let beforeStatus = FlowFlagInventory.status(of: .offdevice, in: model.document,
+                                                    workspace: workspace, flowID: "flow-1")
+        guard case .requiredAndDeclared(let rowNumber, let task) = beforeStatus else {
+            Issue.record("expected .requiredAndDeclared before removal, got \(beforeStatus)")
+            return
+        }
+        #expect(rowNumber == "2")
+        #expect(task == "Answer")
+
+        let before = model.catText
+        model.removeHeaderFlag(.offdevice)
+        #expect(!model.document.flags.contains(.offdevice))
+        #expect(model.catText != before)
+
+        // The actual gate a Flow-tab untick must trip: Save is blocked, with a real message.
+        #expect(!model.canSave, "unticking a genuinely-needed offdevice must block Save")
+        let reason = try #require(model.saveBlockReason)
+        #expect(reason.contains("offdevice"))
+
+        let afterStatus = FlowFlagInventory.status(of: .offdevice, in: model.document,
+                                                   workspace: workspace, flowID: "flow-1")
+        guard case .requiredButMissing(let code, let message) = afterStatus else {
+            Issue.record("expected .requiredButMissing after removal, got \(afterStatus)")
+            return
+        }
+        #expect(code == "E120")
+        #expect(message == reason, "the Flow tab's reason line and the real Save-block reason must be the same sentence")
+
+        model.undo()
+        #expect(model.catText == before)
+        #expect(model.document.flags.contains(.offdevice))
+        #expect(model.canSave)
+    }
+
+    private func tempFlagInventoryWorkspace() -> (workspace: FlowWorkspace, cleanup: () -> Void) {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-flaginventory-\(UUID().uuidString)")
+        return (FlowWorkspace(root: root), { try? FileManager.default.removeItem(at: root) })
+    }
+
     /// Under `APPSTORE_BUILD` (the MLXUI test host — `CatFlowCapabilityGateTests` pins this),
     /// `code`/`improvise` are in `CapabilityGate.appStoreRefusedFlags`: offering "add `code`"
     /// there would produce a flow that same build then refuses to run. `offdevice`/`events`
