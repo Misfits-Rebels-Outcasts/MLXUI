@@ -399,7 +399,16 @@ struct FlowEditorView: View {
                     fileExtension: FlowEditorModel.fileExtension(for: model.document.fileKind),
                     savedURL: model.savedURL,
                     rowCount: model.document.rows.count,
-                    flagsOrder: model.document.flagsOrder,
+                    document: model.document,
+                    workspace: model.workspace,
+                    flowID: model.flowID,
+                    toggleFlag: { flag, declared in
+                        if declared {
+                            model.applyHeaderRepair(flag)
+                        } else {
+                            model.removeHeaderFlag(flag)
+                        }
+                    },
                     editable: true)
     }
 

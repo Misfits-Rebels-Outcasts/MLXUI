@@ -463,7 +463,10 @@ struct FlowListView: View {
                     fileExtension: FlowEditorModel.fileExtension(for: doc.fileKind),
                     savedURL: workspaceRef?.fileURL ?? userEntry?.url,
                     rowCount: doc.rows.count,
-                    flagsOrder: doc.flagsOrder,
+                    document: doc,
+                    workspace: flowWorkspace,
+                    flowID: locationID,
+                    toggleFlag: { _, _ in },
                     editable: false)
     }
 

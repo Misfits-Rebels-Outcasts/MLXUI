@@ -143,8 +143,62 @@ struct FlowInspectorPane<Properties: View>: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
+                Divider()
+                Text("Capabilities")
+                    .font(.subheadline.bold())
+                flagRows
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: - Capability flags (FH-4)
+
+    private var flagRows: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(CapabilityFlag.allCases, id: \.self) { flag in
+                flagRow(flag)
+            }
+        }
+    }
+
+    private func flagRow(_ flag: CapabilityFlag) -> some View {
+        let status = FlowFlagInventory.status(of: flag, in: flowInfo.document,
+                                              workspace: flowInfo.workspace, flowID: flowInfo.flowID)
+        let isDeclared = flowInfo.document.flags.contains(flag)
+        let disabled: Bool
+        switch status {
+        case .inherited, .refusedByChannel: disabled = true
+        default: disabled = !flowInfo.editable
+        }
+        return VStack(alignment: .leading, spacing: 2) {
+            Toggle(isOn: Binding(get: { isDeclared },
+                                  set: { flowInfo.toggleFlag(flag, $0) })) {
+                Text(flowFlagLabels[flag] ?? flag.rawValue)
+                    .font(.callout)
+            }
+            .disabled(disabled)
+            Text(flagReason(status, flag: flag))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.leading, 20)
+        }
+    }
+
+    /// §9's copy table — the five reason lines, verbatim (`requiredButMissing`'s is the
+    /// validator's own message, not rewritten here).
+    private func flagReason(_ status: FlowFlagStatus, flag: CapabilityFlag) -> String {
+        switch status {
+        case .requiredAndDeclared(let rowNumber, let task):
+            return "Required by row \(rowNumber) (\(task))."
+        case .requiredButMissing(_, let message):
+            return message
+        case .declaredNotRequired:
+            return "No row needs this. Safe to remove."
+        case .inherited(let path):
+            return "Declared in \(path), not here."
+        case .refusedByChannel:
+            return CapabilityGate.appStoreRefusal(flags: [flag.rawValue]) ?? ""
         }
     }
 
@@ -503,6 +557,17 @@ final class InspectorAudioController: NSObject, AVAudioPlayerDelegate {
     }
 }
 
+/// FH-4: §9's copy table — the five flags' plain-English labels, verbatim. File-scope, not a
+/// static member of `FlowInspectorPane`, because that struct is generic (`Properties: View`)
+/// and Swift doesn't allow stored static properties in a generic type.
+private let flowFlagLabels: [CapabilityFlag: String] = [
+    .network: "May fetch pages from the internet",
+    .offdevice: "May send this flow's text to a remote model or search provider",
+    .events: "May start on its own, from a trigger",
+    .improvise: "May choose and run shell commands",
+    .code: "May run a script this flow ships",
+]
+
 /// FH-3: the flow's own identity, decoupled from `FlowEditorModel` — a small value type so the
 /// read-only flow list can feed the same Flow tab the editor does (fact 3,
 /// `RSI/DelegateOutputViewerBacklog.md`). `name` is a real `Binding`, not a plain `String`: in
@@ -517,8 +582,16 @@ struct FlowTabInfo {
     var fileExtension: String
     var savedURL: URL?
     var rowCount: Int
-    /// FH-4 renders these as checkbox rows with reasons; FH-3 only carries them through so
-    /// that later work doesn't need to touch either call site again.
-    var flagsOrder: [CapabilityFlag]
+    /// FH-4: the full document (flags, `flagsOrder`, `uses`), so `FlowFlagInventory.status`
+    /// can compute each flag's status, including resolving a `uses:` sibling for `inherited`.
+    var document: FlowDocument
+    /// FH-4: what `document.uses` paths resolve against — needed for `inherited`.
+    var workspace: FlowWorkspace
+    var flowID: String
+    /// FH-4: tick/untick a flag from the Flow tab. A no-op in the read-only list (`editable
+    /// == false`, and the checkbox is disabled there anyway) — the editor's implementation
+    /// routes `true` through the existing `applyHeaderRepair` (no second repair path) and
+    /// `false` through the new mirror, `removeHeaderFlag`.
+    var toggleFlag: (CapabilityFlag, Bool) -> Void
     var editable: Bool
 }

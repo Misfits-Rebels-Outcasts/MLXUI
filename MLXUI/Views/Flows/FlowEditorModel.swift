@@ -1117,6 +1117,17 @@ final class FlowEditorModel {
         }
     }
 
+    /// FH-4 — the Flow tab's untick action, the mirror of `applyHeaderRepair` through the
+    /// same `commitChange` wrapper, so it joins undo/redo like any other edit. Untick is
+    /// always offered (owner ruling Q1, already recorded): it cannot make the flow *unsafe* —
+    /// at worst it fails `check` with the same defined error `applyHeaderRepair` fixes, and
+    /// Save stays blocked until it's fixed or the flag is re-added.
+    func removeHeaderFlag(_ flag: CapabilityFlag) {
+        commitChange {
+            document = FlowHeaderRepair.remove(flag, from: document)
+        }
+    }
+
     /// The `(?N)` reference label for a row (a broken ref renders `(?N)`, the row is yellow).
     func referenceLabel(for rowID: UUID) -> String? {
         guard let row = row(withID: rowID), !row.refs.isEmpty else { return nil }

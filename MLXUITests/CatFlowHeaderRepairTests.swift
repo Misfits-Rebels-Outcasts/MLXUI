@@ -52,6 +52,55 @@ struct CatFlowHeaderRepairTests {
         #expect(repaired.flags == [.network, .offdevice])
     }
 
+    // MARK: - `FlowHeaderRepair.remove` (FH-4)
+
+    @Test func removeIsIdempotent() {
+        let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [],
+                               flags: [.offdevice], flagsOrder: [.offdevice])
+        let once = FlowHeaderRepair.remove(.offdevice, from: doc)
+        let twice = FlowHeaderRepair.remove(.offdevice, from: once)
+        #expect(once == twice)
+        #expect(CatSerializer.serialize(once) == CatSerializer.serialize(twice))
+    }
+
+    @Test func removeOnAnUndeclaredFlagReturnsTheDocumentUnchanged() {
+        let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [],
+                               flags: [.network], flagsOrder: [.network])
+        let removed = FlowHeaderRepair.remove(.offdevice, from: doc)
+        #expect(removed == doc)
+    }
+
+    @Test func removeDropsFromBothFlagsAndFlagsOrder() {
+        let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [],
+                               flags: [.network, .offdevice], flagsOrder: [.network, .offdevice])
+        let removed = FlowHeaderRepair.remove(.network, from: doc)
+        #expect(removed.flags == [.offdevice])
+        #expect(removed.flagsOrder == [.offdevice])
+    }
+
+    /// FH-4's own byte-identical round-trip golden: `apply` then `remove` returns exactly the
+    /// original bytes, and a lone `remove` changes only line one.
+    @Test func applyThenRemoveRoundTripsByteIdentically() throws {
+        let text = """
+        mlxflow 0.8; network
+        1. Read Text    memo.txt
+        2. Save Text    out.md
+        """
+        let doc = try CatParser.parse(text)
+        let original = CatSerializer.serialize(doc)
+
+        let repaired = FlowHeaderRepair.apply(.offdevice, to: doc)
+        let roundTripped = FlowHeaderRepair.remove(.offdevice, from: repaired)
+        #expect(CatSerializer.serialize(roundTripped) == original)
+
+        let removedOnly = FlowHeaderRepair.remove(.network, from: doc)
+        let originalLines = original.split(separator: "\n", omittingEmptySubsequences: false)
+        let removedLines = CatSerializer.serialize(removedOnly).split(separator: "\n", omittingEmptySubsequences: false)
+        #expect(originalLines.count == removedLines.count)
+        #expect(originalLines[0] != removedLines[0])
+        #expect(originalLines.dropFirst().elementsEqual(removedLines.dropFirst()))
+    }
+
     // MARK: - Round trip: repair -> serialize -> reparse -> checkFlow
 
     @Test func e120RoundTripClearsTheIssueAndConfinesTheByteDiffToLineOne() throws {

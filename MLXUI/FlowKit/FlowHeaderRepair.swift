@@ -35,4 +35,18 @@ nonisolated enum FlowHeaderRepair {
         out.flagsOrder.append(flag)
         return out
     }
+
+    /// FH-4: the mirror of `apply` — drops `flag` from both `flags` and `flagsOrder` (fact
+    /// 17: a flag lives in two places), touches nothing else, so the byte diff of a removal
+    /// is confined to line one exactly like an addition. Idempotent: a second removal (the
+    /// flag already gone) returns `doc` unchanged. No `SPEC_QUESTIONS.md` entry needed (owner
+    /// gate Q2, already answered in the backlog) — removing a flag produces a file `mlxflow
+    /// check` already rejects with an existing error code; no new language semantics.
+    static func remove(_ flag: CapabilityFlag, from doc: FlowDocument) -> FlowDocument {
+        guard doc.flags.contains(flag) else { return doc }
+        var out = doc
+        out.flags.remove(flag)
+        out.flagsOrder.removeAll { $0 == flag }
+        return out
+    }
 }
