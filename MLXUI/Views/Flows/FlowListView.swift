@@ -22,6 +22,13 @@ struct FlowListView: View {
     /// Ask verbs).
     let autoRun: Bool
     @State private var didAutoRun = false
+    /// WR-4 (`RSI/DelegateWorkspaceRunBacklog.md`, owner gate Q1): true exactly while this
+    /// flow's *own* auto-run is the reason the install sheet is up — set right before the
+    /// auto-run's `run(doc)` call raises it, cleared the moment that sheet closes by any
+    /// means. Never set by a manual "Install Required Models" press, so `AutoRunResume
+    /// .shouldRun` can never fire for one. Deliberately **not** `didAutoRun` reset — resetting
+    /// that would re-arm the auto-run on Cancel and on every later, unrelated install too.
+    @State private var autoRunAwaitingInstall = false
 
     /// A user flow has no bundled assets, so `prepare` is called with an empty list (it is
     /// already idempotent). A gallery flow's input assets come from the flattened bundle.
@@ -769,8 +776,13 @@ struct FlowListView: View {
 
             HStack {
                 Spacer()
-                Button("Cancel") { session.showInstallSheet = false }
-                    .keyboardShortcut(.cancelAction)
+                Button("Cancel") {
+                    session.showInstallSheet = false
+                    // WR-4: Cancel is never "the install the auto-run asked for" — clear the
+                    // flag so a later, unrelated install can never retroactively run this flow.
+                    autoRunAwaitingInstall = false
+                }
+                .keyboardShortcut(.cancelAction)
                 Button("Install") {
                     session.showInstallSheet = false
                     installRequiredModels(result)
@@ -814,6 +826,16 @@ struct FlowListView: View {
             session.errorSentence = "One of the required models failed to download — check your connection and try again."
         }
         reassess()
+        // WR-4 (owner gate Q1, recommended reading — implementer's call, pending owner
+        // confirmation): resume the auto-run, but only on the exact path it asked for this
+        // install. `autoRunAwaitingInstall` is cleared unconditionally either way — a failed
+        // install (or a later, separate install) must never retroactively run this flow.
+        let dismissal: InstallSheetDismissal = succeeded ? .installSucceeded : .installFailed
+        let shouldRun = AutoRunResume.shouldRun(autoRunPending: autoRunAwaitingInstall, dismissal: dismissal)
+        autoRunAwaitingInstall = false
+        if shouldRun, let doc = document {
+            run(doc)
+        }
     }
 
     /// WR-3: re-derive both the refusal and the preflight from the current `document` — the
@@ -1034,6 +1056,11 @@ struct FlowListView: View {
                 guard autoRun, !didAutoRun else { return }
                 guard session.canRun || session.blockedOnlyOnDownloads else { return }
                 didAutoRun = true
+                // WR-4: mark that *this* install sheet, if `run(doc)` raises one, is the
+                // auto-run's own — the only path `AutoRunResume.shouldRun` may fire for.
+                if !session.canRun, session.blockedOnlyOnDownloads {
+                    autoRunAwaitingInstall = true
+                }
                 run(doc)
             }
         }
@@ -1120,5 +1147,29 @@ nonisolated struct FlowReassessment {
             setupAdvisory: refused ? nil : FlowPreflight.setupAdvisory(preflight),
             inputAdvisory: refused ? nil : FlowInputAdvisory.advisory(for: doc, scope: inputScope),
             preflight: preflight)
+    }
+}
+
+/// WR-4 (`RSI/DelegateWorkspaceRunBacklog.md`) — how the install sheet closed, when it was
+/// raised by this flow's own auto-run. `.cancelled` covers Cancel, Esc and click-outside alike
+/// (none of them attempt an install, so none produce an outcome).
+nonisolated enum InstallSheetDismissal: Equatable {
+    case cancelled
+    case installSucceeded
+    case installFailed
+}
+
+/// WR-4, owner gate Q1 (recommended reading (a), implementer's call pending confirmation) —
+/// whether an auto-run that opened the install sheet should resume once that sheet closes.
+/// Pure: no view, no session, no `didAutoRun`. `didAutoRun` burns once by design
+/// (CFM-R17-FIX-7) so the auto-run never opens the sheet a second time; resetting it to "try
+/// again" would also re-arm Cancel and every later, unrelated install, which is the wrong
+/// answer (root cause 4's actual bug was the *lack* of any resume path, not that `didAutoRun`
+/// needed clearing). This is the resume path instead, decided from exactly what the backlog
+/// asks for: was *this* flow's auto-run the one waiting on an install, and what happened to
+/// the sheet it raised.
+nonisolated enum AutoRunResume {
+    static func shouldRun(autoRunPending: Bool, dismissal: InstallSheetDismissal) -> Bool {
+        autoRunPending && dismissal == .installSucceeded
     }
 }

@@ -118,6 +118,37 @@ struct CatFlowWorkspaceViewTests {
         #expect(installed.preflight.installed.contains { $0.model?.id == model.id })
     }
 
+    // MARK: - WR-4: AutoRunResume — the re-arm decision as a pure function
+
+    /// Root cause 4: `didAutoRun` burns once, by design (CFM-R17-FIX-7), so an auto-run that
+    /// opens the install sheet never opens it twice — but nothing resumed the run once the
+    /// install it asked for actually finished ("Build → Install → nothing runs"). The obvious
+    /// fix, resetting `didAutoRun`, is wrong: it would re-arm the Cancel path and every later,
+    /// unrelated install too. `AutoRunResume.shouldRun` is the alternative, decided purely from
+    /// (was this flow's own auto-run waiting on an install, what closed the sheet) — never
+    /// touching `didAutoRun`. Deleting the `dismissal == .installSucceeded` half of the
+    /// condition (always `true` when pending) turns the `.cancelled`/`.installFailed` cases red;
+    /// deleting `autoRunPending &&` turns the `autoRunPending: false` cases red — confirmed
+    /// both locally before restoring.
+    @Test func autoRunResumesOnlyOnThePathThatOpenedTheInstallSheetItself() {
+        // The path WR-4 exists for: this flow's own auto-run opened the sheet, the user
+        // installed, it succeeded.
+        #expect(AutoRunResume.shouldRun(autoRunPending: true, dismissal: .installSucceeded))
+
+        // Cancel — the sheet the auto-run raised closes without an install. Never runs.
+        #expect(!AutoRunResume.shouldRun(autoRunPending: true, dismissal: .cancelled))
+
+        // A failed download — surfaces `session.errorSentence` elsewhere; never runs, and
+        // (per the view's own handling) never leaves `autoRunPending` armed for a retry.
+        #expect(!AutoRunResume.shouldRun(autoRunPending: true, dismissal: .installFailed))
+
+        // Not this flow's auto-run waiting — a manual "Install Required Models" press, or a
+        // plain manual visit with no auto-run at all. Never runs, regardless of outcome.
+        #expect(!AutoRunResume.shouldRun(autoRunPending: false, dismissal: .installSucceeded))
+        #expect(!AutoRunResume.shouldRun(autoRunPending: false, dismissal: .cancelled))
+        #expect(!AutoRunResume.shouldRun(autoRunPending: false, dismissal: .installFailed))
+    }
+
     // MARK: - WorkspaceRef → FlowScope
 
     @Test func workspaceRefBuildsAWorkspaceRootedScope() {
