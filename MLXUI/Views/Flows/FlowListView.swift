@@ -111,6 +111,13 @@ struct FlowListView: View {
             guard new == nil, old?.flowID == flowID else { return }
             reload()
         }
+        // WR-3 (`RSI/DelegateWorkspaceRunBacklog.md`): a re-opened view's refusal AND
+        // preflight are both stale if an install finished while away — moved onto the outer
+        // `Group` (was inside `flowList` alone) so it fires on the placeholder and on
+        // `notRunnableView` too, not only on an already-runnable flow's row list (smoke-30:
+        // "Install Required Models" reappearing after the install completed; and the owner's
+        // report that a refusal never clears without navigating away and back).
+        .onChange(of: appState.installedModelIDs) { _, _ in reassess() }
         .sheet(isPresented: $session.showInstallSheet) {
             if let result = session.preflight {
                 installSheet(result)
@@ -371,10 +378,6 @@ struct FlowListView: View {
             outboxDisclosure
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        // A re-opened view's preflight is stale if installs finished while away; recompute it
-        // whenever the installed set changes (smoke-30: "Install Required Models" reappearing
-        // after the install completed).
-        .onChange(of: appState.installedModelIDs) { _, _ in refreshPreflight() }
         .confirmationDialog("Remove this flow?", isPresented: $flowPendingRemoval,
                             titleVisibility: .visible) {
             Button("Remove", role: .destructive) {
@@ -793,8 +796,8 @@ struct FlowListView: View {
     }
 
     /// Drive `InstallManager.install` **sequentially** — one model at a time, awaiting each
-    /// `.installed` marker before starting the next. Always refreshes the preflight when done
-    /// (so the install sheet and `needsInstall` reflect what actually landed, even after a
+    /// `.installed` marker before starting the next. Always reassesses when done (so the
+    /// install sheet, `needsInstall` and any refusal reflect what actually landed, even after a
     /// partial install — M13), and surfaces a sentence when a download failed instead of
     /// silently reverting the button.
     private func installSequentially(_ models: [ModelEntry]) async {
@@ -810,19 +813,29 @@ struct FlowListView: View {
         if !succeeded {
             session.errorSentence = "One of the required models failed to download — check your connection and try again."
         }
-        refreshPreflight()
+        reassess()
     }
 
-    /// Recompute the preflight after installs land — the installed set changed, so the old
-    /// `toDownload` bucket is stale until refreshed.
-    private func refreshPreflight() {
+    /// WR-3: re-derive both the refusal and the preflight from the current `document` — the
+    /// installed-model set changed, so both the refusal (`FlowRunnability`, which reads the
+    /// same `installed:` set) and the preflight's `toDownload` bucket are stale until this
+    /// runs. Never re-reads the `.cat` from disk (that's `reload()`'s job, and it would
+    /// discard run state) — `document` is already parsed and unchanged. The actual decision is
+    /// `FlowReassessment.compute`, a pure function a test can call directly.
+    private func reassess() {
         guard let doc = document else { return }
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
-        session.prepareInstall(FlowPreflight.run(doc, catalog: catalog,
-                                                  installedModelIDs: appState.installedModelIDs,
-                                                  totalRAMGB: appState.systemInfo.totalRAMGB,
-                                                  claimableModelIDs: appState.claimableModelIDs),
-                               doc: doc, scope: workspaceRef != nil ? makeScope() : nil)
+        let result = FlowReassessment.compute(
+            doc: doc, catalog: catalog, installed: appState.installedModelIDs,
+            totalRAMGB: appState.systemInfo.totalRAMGB, claimableModelIDs: appState.claimableModelIDs,
+            refusalScope: workspaceRef != nil ? makeScope() : nil, inputScope: makeScope())
+        notRunnableReason = result.notRunnableReason
+        notRunnableAction = result.notRunnableAction
+        setupAdvisory = result.setupAdvisory
+        inputAdvisory = result.inputAdvisory
+        if let preflight = result.preflight {
+            session.prepareInstall(preflight, doc: doc, scope: workspaceRef != nil ? makeScope() : nil)
+        }
     }
 
     private var installManager: InstallManager {
@@ -1065,5 +1078,40 @@ nonisolated struct FlowDisplay {
                                description: "in \(workspace.workspaceID)")
         }
         return nil
+    }
+}
+
+/// WR-3 (`RSI/DelegateWorkspaceRunBacklog.md`) — the "refusal + preflight" tail shared by every
+/// `load*` function in `FlowListView`, pulled out so `.onChange(of: installedModelIDs)` can
+/// re-derive **both** (not just the preflight, which is all `refreshPreflight()` used to do)
+/// from a test-reachable seam. A refused flow's `preflight` is `nil` — the caller must not
+/// treat a stale prior preflight as still valid once a flow is refused.
+nonisolated struct FlowReassessment {
+    let notRunnableReason: String?
+    let notRunnableAction: SetupAction?
+    let setupAdvisory: FlowPreflight.RowAdvisory?
+    let inputAdvisory: FlowPreflight.RowAdvisory?
+    let preflight: FlowPreflight.Result?
+
+    /// `refusalScope` matches each `load*` function's existing call: `nil` for a gallery/user
+    /// flow, `makeScope()` for a workspace flow (so a `uses:` call isn't refused as an unknown
+    /// task). `inputScope` is always concrete — `FlowInputAdvisory.advisory` has always taken
+    /// `makeScope()` unconditionally (it already falls back to `.plain(flowID)`).
+    static func compute(doc: FlowDocument, catalog: [ModelEntry], installed: Set<String>,
+                        totalRAMGB: Double, claimableModelIDs: Set<String>,
+                        refusalScope: FlowScope?, inputScope: FlowScope) -> FlowReassessment {
+        if let refusal = FlowRunnability.refusal(for: doc, catalog: catalog, installed: installed,
+                                                 totalRAMGB: totalRAMGB,
+                                                 claimableModelIDs: claimableModelIDs,
+                                                 scope: refusalScope) {
+            return FlowReassessment(notRunnableReason: refusal.reason, notRunnableAction: refusal.action,
+                                    setupAdvisory: nil, inputAdvisory: nil, preflight: nil)
+        }
+        let preflight = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: installed,
+                                          totalRAMGB: totalRAMGB, claimableModelIDs: claimableModelIDs)
+        return FlowReassessment(notRunnableReason: nil, notRunnableAction: nil,
+                                setupAdvisory: FlowPreflight.setupAdvisory(preflight),
+                                inputAdvisory: FlowInputAdvisory.advisory(for: doc, scope: inputScope),
+                                preflight: preflight)
     }
 }

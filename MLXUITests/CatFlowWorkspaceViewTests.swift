@@ -66,6 +66,53 @@ struct CatFlowWorkspaceViewTests {
         #expect(display == nil)
     }
 
+    // MARK: - WR-3: FlowReassessment recomputes the refusal AND the preflight
+
+    /// Root cause 3: `refreshPreflight()` used to recompute only `session.prepareInstall(...)`
+    /// — never `notRunnableReason`, which was derived once at load time and never revisited.
+    /// Read `CatalogBridge.resolve`, `ModelSlot.readiness` and `TaskAvailability.state`: none
+    /// of the three consult `installedModelIDs` to decide whether a model row *resolves* — only
+    /// whether an already-resolved one is `.ready` vs `.needsDownload`. So the refusal half is
+    /// genuinely a function of `catalog`/`claimableModelIDs` (an unresolvable display name),
+    /// not of `installed`; the preflight half (`toDownload` vs `installed`) is the one that
+    /// genuinely depends on `installed`. `FlowReassessment.compute` must get both right, on the
+    /// same document, and this test drives each half with the input that actually decides it.
+    /// Deleting the workspace-refusal-clearing behavior locally (reverting to the old
+    /// preflight-only recompute) turns the first two `#expect`s red — confirmed before
+    /// restoring.
+    @Test func reassessmentRecomputesBothTheRefusalAndThePreflightFromTheSameDocument() throws {
+        let doc = try CatParser.parse("mlxflow 0.8\n1. Embed   Test Model\n")
+        let model = makeEntry(id: "test-embed", displayName: "Test Model")
+        let scope = FlowScope.plain("t")
+
+        // Half 1 (the refusal): an empty catalog can't resolve "Test Model" at all —
+        // `CatalogBridge.resolve`'s terminal `.notRunnable` fallback — independent of
+        // `installed`, so this is genuinely "unresolvable," not "not downloaded yet."
+        let unresolved = FlowReassessment.compute(doc: doc, catalog: [], installed: [],
+                                                  totalRAMGB: 128, claimableModelIDs: [],
+                                                  refusalScope: nil, inputScope: scope)
+        #expect(unresolved.notRunnableReason != nil)
+        #expect(unresolved.preflight == nil)
+
+        // Same document. The catalog now carries the named model, so it resolves — no longer
+        // refused, whether or not it's installed yet (that's half 2, below).
+        let resolvedNotInstalled = FlowReassessment.compute(
+            doc: doc, catalog: [model], installed: [],
+            totalRAMGB: 128, claimableModelIDs: [model.id], refusalScope: nil, inputScope: scope)
+        #expect(resolvedNotInstalled.notRunnableReason == nil)
+        #expect(resolvedNotInstalled.preflight?.toDownload.contains { $0.model?.id == model.id } == true)
+
+        // Half 2 (the preflight): same document, same catalog — only `installed` changes —
+        // moves the model out of `toDownload` and into `installed`. This half already worked
+        // before WR-3 (`refreshPreflight()`'s whole job); `reassess()` must not regress it.
+        let installed = FlowReassessment.compute(
+            doc: doc, catalog: [model], installed: [model.id],
+            totalRAMGB: 128, claimableModelIDs: [model.id], refusalScope: nil, inputScope: scope)
+        #expect(installed.notRunnableReason == nil)
+        #expect(installed.preflight?.toDownload.isEmpty == true)
+        #expect(installed.preflight?.installed.contains { $0.model?.id == model.id } == true)
+    }
+
     // MARK: - WorkspaceRef → FlowScope
 
     @Test func workspaceRefBuildsAWorkspaceRootedScope() {
