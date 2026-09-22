@@ -358,23 +358,19 @@ final class FlowRunSession {
 
     /// Stop the run outright — whether it's actively executing or already parked on a human
     /// row (by the time a row parks, the run task has already drained and `isRunning` is
-    /// already false, so this is the only thing that makes "Stop the run" do anything; WR-2).
-    /// Distinct from `clearParked()` below: this is the "stop" verb, that one is "dismiss
-    /// without stopping anything" — they happen to converge on `parked = nil` today only
-    /// because nothing currently reads "stopped vs. merely dismissed" as separate states.
+    /// already false, so clearing `parked` here is the only thing that makes "Stop the run"
+    /// do anything; WR-2). Q2 (`RSI/DelegateWorkspaceRunBacklog.md`, owner ruling 2026-09-22):
+    /// Esc and click-outside on the parked sheet route here too — dismissing the sheet by any
+    /// means stops the run. Dismissing drops the prompt; the dots already earned stand; a
+    /// later Run replays from the parked row into a **fresh** prompt (`apply(.parked)` sets no
+    /// status on the row it parks on, so `firstGrayIndex` lands back on it) — whatever was
+    /// typed before dismissal is gone, there is no resume.
     func cancel() {
         runTask?.cancel()
         runTask = nil
         isRunning = false
         parked = nil
         // The partially-run flow keeps the dots it earned (dots aren't reset on cancel).
-    }
-
-    /// Dismiss the parked prompt without answering or stopping (the run stays parked, and a
-    /// later Send/Rerun resumes it) — Esc and click-outside reach this through the sheet's
-    /// binding `set`, not `cancel()`.
-    func clearParked() {
-        parked = nil
     }
 
     // MARK: - CFM-R10-FIX-6: Improvise undo, reachable from the app

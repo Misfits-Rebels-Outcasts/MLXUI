@@ -118,9 +118,12 @@ struct FlowListView: View {
             }
         }
         // CFM-R10-Human: a `wait=forever` human row parked the run — ask the person.
+        // Q2 (`RSI/DelegateWorkspaceRunBacklog.md`, owner ruling 2026-09-22): dismissing this
+        // sheet — Esc, click outside, or the Stop button inside it — is one operation, not
+        // two. All three now route through `cancel()`.
         .sheet(isPresented: Binding(
             get: { session.parked != nil },
-            set: { if !$0 { session.clearParked() } }
+            set: { if !$0 { session.cancel() } }
         )) {
             if let parked = session.parked, let document {
                 FlowHumanPromptView(
