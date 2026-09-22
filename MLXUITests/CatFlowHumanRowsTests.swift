@@ -195,6 +195,65 @@ struct CatFlowHumanRowsTests {
         #expect(session.status(for: doc.rows[2].id) == .succeeded)
     }
 
+    /// WR-6 (`RSI/DelegateWorkspaceRunBacklog.md`) — the missing neighbour of cancel-clears-
+    /// parked: `answer(text:)`, "Send" on a **Human Input** row (a different function, a
+    /// different row class, from `answer(tag:)`'s Ask Human path above — that test alone
+    /// doesn't cover this one). Send is the only one of the three parked exits — Send,
+    /// timeout fallback, Stop — a user hits on the happy path, so a future change to `start()`
+    /// that silently broke it would ship unnoticed without this. Proves both that `parked`
+    /// clears and that the run resumes carrying the **typed** text, not the row's own default.
+    @Test func sessionParksOnHumanInputAndSendingTextDrivesTheRunnerWithTheTypedText() async throws {
+        let doc = try parse("""
+        mlxflow 0.8
+        1. Template      ""
+        2. Human Input   "Type something:"; wait=forever
+        3. Save Text     out.md
+        """)
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-human-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        // `Save Text` writes into the flow's own directory (`root/<flowID>/`) — create it
+        // first, the way `FlowWorkspace.prepare` normally would on a real open.
+        try FileManager.default.createDirectory(at: base.appendingPathComponent("test"),
+                                                withIntermediateDirectories: true)
+        // The real executor, rooted at `base` (not the shared `realExecutor()` helper, which
+        // hardcodes the raw system temp directory as its workspace root — fine for the other
+        // tests here, which never check saved file content, but wrong for this one, which
+        // needs `Save Text` to actually land under `base`).
+        let executor = RealExecutor(
+            workspace: FlowWorkspace(root: base), flowID: "test", blobDirectory: base,
+            makeModelStage: { _, _ in throw StageError.unsupportedModel(id: "unused", kind: .llm) },
+            installedModelIDs: [], catalog: [])
+        let context = FlowRunner.RunContext(flowID: "test", workspace: FlowWorkspace(root: base),
+                                            blobDirectory: base, executor: executor)
+        let runner = FlowRunner()
+        let session = FlowRunSession()
+        session.prepareInstall(FlowPreflight.run(doc, catalog: [], installedModelIDs: [],
+                                                 totalRAMGB: 128, claimableModelIDs: []),
+                               doc: doc)
+
+        session.start(doc: doc, runner: runner, context: context)
+        var parkedInfo: FlowRunSession.ParkedInfo?
+        for _ in 0..<40 {
+            if let parked = session.parked { parkedInfo = parked; break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let parked = try #require(parkedInfo)
+        #expect(parked.prompt == "Type something:")
+        #expect(parked.deadline == nil)
+
+        session.answer(text: "hello world", for: parked, doc: doc, runner: runner, context: context)
+        for _ in 0..<40 {
+            if session.parked == nil, session.status(for: doc.rows[2].id) == .succeeded { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(session.parked == nil)
+        #expect(session.status(for: doc.rows[2].id) == .succeeded)
+        let saved = try String(contentsOf: base.appendingPathComponent("test/out.md"), encoding: .utf8)
+        #expect(saved.contains("hello world"))
+    }
+
     @Test func sessionParkedInfoCarriesTheDefaultTextThroughToTheView() async throws {
         // HR-4's whole point: the value has to survive all five hops — ParkRun →
         // PathEvent.runParked → FlowRunner.RunEvent.parked → FlowRunSession.ParkedInfo — so

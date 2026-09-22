@@ -149,6 +149,24 @@ struct CatFlowWorkspaceViewTests {
         #expect(!AutoRunResume.shouldRun(autoRunPending: false, dismissal: .installFailed))
     }
 
+    /// Finding B (owner review, 2026-09-22): `shouldRun` above only answers *whether* to
+    /// resume, not *when*. `InstallPoller.awaitInstalled` resolves off the on-disk `.installed`
+    /// marker; `appState.installedModelIDs` updates on a separate completion-callback path — if
+    /// the poller wins that race, `session.canRun` still reads the old installed set the
+    /// instant `finishInstallSheet` checks it, even though the install genuinely succeeded.
+    /// `resumeAttempt` is the decision for that: run now if `canRunNow` already agrees, stay
+    /// armed for exactly one more `.onChange(of: installedModelIDs)` pass if not — and on that
+    /// one retry (`isFinalAttempt: true`), resolve one way or the other, never a third time.
+    @Test func resumeAttemptRunsImmediatelyOrWaitsExactlyOnePassBeforeGivingUp() {
+        // canRun already agrees, first attempt or the retry — run either way.
+        #expect(AutoRunResume.resumeAttempt(canRunNow: true, isFinalAttempt: false) == .runNow)
+        #expect(AutoRunResume.resumeAttempt(canRunNow: true, isFinalAttempt: true) == .runNow)
+        // Still stale on the first attempt — buy one more onChange pass, don't give up yet.
+        #expect(AutoRunResume.resumeAttempt(canRunNow: false, isFinalAttempt: false) == .stayArmedOnce)
+        // Still stale on the retry (its one grace pass spent) — give up, don't wait a third time.
+        #expect(AutoRunResume.resumeAttempt(canRunNow: false, isFinalAttempt: true) == .giveUp)
+    }
+
     // MARK: - WorkspaceRef → FlowScope
 
     @Test func workspaceRefBuildsAWorkspaceRootedScope() {
