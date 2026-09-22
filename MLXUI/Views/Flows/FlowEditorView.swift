@@ -180,28 +180,21 @@ struct FlowEditorView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
+            // FH-3: identity (name, header keyword/version, extension) moved to the Flow tab —
+            // renaming happens there now. What's left here is just enough to say which flow
+            // this is, truncating rather than claiming a fixed width the way the old
+            // `TextField` did.
             HStack(spacing: 4) {
                 if model.isDirty {
                     Text("•")
                         .font(.headline)
                         .foregroundStyle(.secondary)
                 }
-                TextField("Flow name", text: $model.name)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 200)
+                Text(model.name)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
-            // CFM-R18-5: the family the document carries, not a literal — a fresh flow is
-            // `mlxflow`, an opened `.catpipeline` keeps `mlxpipeline`/`catpipeline`.
-            Text("\(model.document.headerKeyword) \(model.document.version)")
-                .font(.caption.monospaced())
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
-            // CFM-R11-3: the saved file's kind — a `.catpipeline` opened in the editor saves
-            // back as `.catpipeline` (a `.cat` as `.cat`).
-            Text("." + FlowEditorModel.fileExtension(for: model.document.fileKind))
-                .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
             Spacer()
             Button {
                 model.undo()
@@ -342,13 +335,14 @@ struct FlowEditorView: View {
             if model.selectedRowID != nil {
                 Divider()
                 FlowInspectorPane(
+                    flowInfo: flowTabInfo,
                     output: selectedRowOutput,
                     rowTitle: selectedRowTitle,
                     substitutionNote: selectedSubstitutionNote,
                     savedFile: selectedSavedFile,
                     savedKind: selectedSavedKind,
                     savedPresentation: selectedSavedPresentation,
-                    initialTab: .properties
+                    initialTab: .step
                 ) {
                     FlowRowInspectorView(model: model,
                                          rowID: model.selectedRowID ?? UUID(),
@@ -393,6 +387,20 @@ struct FlowEditorView: View {
     private var selectedRowTitle: String {
         guard let id = model.selectedRowID, let row = model.row(withID: id) else { return "" }
         return FlowRowSummary.taskName(for: row)
+    }
+
+    /// FH-3: the Flow tab's identity, bound live to the model — `name` is `$model.name`
+    /// itself, so a rename typed there reaches `FlowEditorModel.save()`'s stale-sibling guard
+    /// exactly as the old toolbar `TextField` did (§7 trap 8).
+    private var flowTabInfo: FlowTabInfo {
+        FlowTabInfo(name: $model.name,
+                    headerKeyword: model.document.headerKeyword,
+                    version: model.document.version,
+                    fileExtension: FlowEditorModel.fileExtension(for: model.document.fileKind),
+                    savedURL: model.savedURL,
+                    rowCount: model.document.rows.count,
+                    flagsOrder: model.document.flagsOrder,
+                    editable: true)
     }
 
     private var selectedSubstitutionNote: String? {

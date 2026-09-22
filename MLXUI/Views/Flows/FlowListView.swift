@@ -313,6 +313,7 @@ struct FlowListView: View {
                 }
                 Divider()
                 FlowInspectorPane(
+                    flowInfo: flowTabInfo(doc),
                     output: session.selectedRowID.flatMap { session.outputs[$0] },
                     rowTitle: selectedRowTitle(doc),
                     substitutionNote: session.selectedRowID.flatMap { session.substitutionNotes[$0] },
@@ -449,6 +450,21 @@ struct FlowListView: View {
               let row = doc.rows.first(where: { $0.id == id }),
               let url = savedFileURL(in: doc) else { return nil }
         return FlowSavedFile.presentation(url: url, task: row.task)
+    }
+
+    /// FH-3: the Flow tab's identity, read-only here — `name` is `.constant(_:)` (typing is
+    /// blocked by `editable: false` anyway, matching `FlowRowInspectorView`'s own pattern),
+    /// `savedURL` is the workspace flow's file or the user flow's, nil for a bundled gallery
+    /// flow (no on-disk file of the user's own to name).
+    private func flowTabInfo(_ doc: FlowDocument) -> FlowTabInfo {
+        FlowTabInfo(name: .constant(display?.title ?? flowID),
+                    headerKeyword: doc.headerKeyword,
+                    version: doc.version,
+                    fileExtension: FlowEditorModel.fileExtension(for: doc.fileKind),
+                    savedURL: workspaceRef?.fileURL ?? userEntry?.url,
+                    rowCount: doc.rows.count,
+                    flagsOrder: doc.flagsOrder,
+                    editable: false)
     }
 
     /// One row's `FlowSerializedRow` — extracted so the row builder stays type-checkable.

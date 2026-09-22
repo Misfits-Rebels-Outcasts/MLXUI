@@ -4,23 +4,29 @@ import AppKit
 import UniformTypeIdentifiers
 
 /// The inspector pane (CFM-R3-3): a right-hand pane bound to the selected row, split into
-/// two tabs.
+/// three tabs.
 ///
+/// - **Flow** (FH-3): the flow's own identity — name, header, version, extension, row count —
+///   moved here out of the editor's toolbar. Editable only in the editor (`FlowTabInfo
+///   .editable`); the My Workflows list and both gallery shelves render it read-only.
+/// - **Step** (renamed from Properties, FH-3 — a pane that showed "Properties" for both a row
+///   and the flow itself would be unreadable): the row's editable details — model, instruction,
+///   inputs, settings, decisions. The flow editor embeds a live `FlowRowInspectorView`; the
+///   read-only flow list embeds a frozen one, so a gallery flow's properties are browsable
+///   (scrollable) but never mutable.
 /// - **Output**: the selected row's cached `Asset`, or a `Save *` row's written file,
 ///   presented per modality the way the run views do — the presentation half of
 ///   `TTSRunView`/`ASRRunView`/`OCRRunView`/`ImageQARunView`/`EmbeddingRunView`
 ///   (design doc §6), extracted rather than duplicated, and the standalone Run sheets are
 ///   untouched. Also surfaces the `CatalogBridge` substitution note (CFM-R2-2 rule 3) for a
 ///   row whose model is `.sameFamily`/`.substitute`.
-/// - **Properties**: the row's editable details — model, instruction, inputs, settings,
-///   decisions. The flow editor embeds a live `FlowRowInspectorView`; the read-only flow
-///   list embeds a frozen one, so a gallery flow's properties are browsable (scrollable)
-///   but never mutable.
 struct FlowInspectorPane<Properties: View>: View {
     enum Tab: Hashable {
-        case properties, output
+        case flow, step, output
     }
 
+    /// FH-3: the flow's own identity, shown in the Flow tab.
+    let flowInfo: FlowTabInfo
     /// The selected row's cached output, or nil when nothing is selected / no run yet.
     let output: Asset?
     /// The row's title (task name) for the output pane header.
@@ -46,12 +52,13 @@ struct FlowInspectorPane<Properties: View>: View {
     @State private var audio = InspectorAudioController()
     @State private var isShowingQuickLook = false
 
-    init(output: Asset?, rowTitle: String, substitutionNote: String?,
+    init(flowInfo: FlowTabInfo, output: Asset?, rowTitle: String, substitutionNote: String?,
          statusNote: (text: String, isSkip: Bool)? = nil,
          savedFile: URL? = nil, savedKind: Kind? = nil,
          savedPresentation: SavedFilePresentation? = nil,
          initialTab: Tab = .output,
          @ViewBuilder properties: @escaping () -> Properties) {
+        self.flowInfo = flowInfo
         self.output = output
         self.rowTitle = rowTitle
         self.substitutionNote = substitutionNote
@@ -69,7 +76,9 @@ struct FlowInspectorPane<Properties: View>: View {
             Divider()
                 .padding(.bottom, 10)
             switch tab {
-            case .properties:
+            case .flow:
+                flowPane
+            case .step:
                 properties()
             case .output:
                 outputPane
@@ -98,11 +107,45 @@ struct FlowInspectorPane<Properties: View>: View {
 
     private var tabBar: some View {
         HStack(spacing: 4) {
-            tabButton(.properties, "Properties", systemImage: "slider.horizontal.3")
+            tabButton(.flow, "Flow", systemImage: "flowchart")
+            tabButton(.step, "Step", systemImage: "slider.horizontal.3")
             tabButton(.output, "Output", systemImage: "sidebar.right")
             Spacer()
         }
         .padding(.bottom, 8)
+    }
+
+    // MARK: - Flow tab (FH-3)
+
+    private var flowPane: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                TextField("Flow name", text: flowInfo.name)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(!flowInfo.editable)
+                HStack(spacing: 6) {
+                    Text("\(flowInfo.headerKeyword) \(flowInfo.version)")
+                        .font(.caption.monospaced())
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
+                    Text("." + flowInfo.fileExtension)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                Text("\(flowInfo.rowCount) row\(flowInfo.rowCount == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let savedURL = flowInfo.savedURL {
+                    Text(savedURL.lastPathComponent)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private func tabButton(_ target: Tab, _ title: String, systemImage: String) -> some View {
@@ -458,4 +501,24 @@ final class InspectorAudioController: NSObject, AVAudioPlayerDelegate {
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         stop()
     }
+}
+
+/// FH-3: the flow's own identity, decoupled from `FlowEditorModel` — a small value type so the
+/// read-only flow list can feed the same Flow tab the editor does (fact 3,
+/// `RSI/DelegateOutputViewerBacklog.md`). `name` is a real `Binding`, not a plain `String`: in
+/// the editor it's `$model.name` itself, so typing in the Flow tab writes straight into the
+/// same property `FlowEditorModel.save()`'s stale-sibling guard reads — never a disconnected
+/// copy that would silently stop the guard from firing (§7 trap 8). The read-only list passes
+/// `.constant(_:)`; `editable` disables the field either way.
+struct FlowTabInfo {
+    var name: Binding<String>
+    var headerKeyword: String
+    var version: String
+    var fileExtension: String
+    var savedURL: URL?
+    var rowCount: Int
+    /// FH-4 renders these as checkbox rows with reasons; FH-3 only carries them through so
+    /// that later work doesn't need to touch either call site again.
+    var flagsOrder: [CapabilityFlag]
+    var editable: Bool
 }
