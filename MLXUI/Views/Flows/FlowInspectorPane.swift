@@ -154,9 +154,20 @@ struct FlowInspectorPane<Properties: View>: View {
 
     // MARK: - Capability flags (FH-4)
 
+    /// `AppState.hideCodeImprovise`: hides the `code`/`improvise` rows from this list only —
+    /// changes nothing about what a `.cat` can declare or how `check`/`CapabilityGate` treat
+    /// those flags.
+    private var visibleCapabilityFlags: [CapabilityFlag] {
+        guard AppState.hideCodeImprovise else { return CapabilityFlag.allCases }
+        return CapabilityFlag.allCases.filter { flag -> Bool in
+            let isHidden = flag == .code || flag == .improvise
+            return !isHidden
+        }
+    }
+
     private var flagRows: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(CapabilityFlag.allCases, id: \.self) { flag in
+            ForEach(visibleCapabilityFlags, id: \.self) { flag in
                 flagRow(flag)
             }
         }
