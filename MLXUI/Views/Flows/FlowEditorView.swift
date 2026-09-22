@@ -63,6 +63,23 @@ struct FlowEditorView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
+            // FH-1: the save/seed error, moved out of the header's fixed-width toolbar row
+            // (where it was the only unbounded child) into a banner here — same shape as the
+            // input advisory just below, red instead of blue. Shown first when both are
+            // present, since a save-blocking error outranks a non-blocking setup note.
+            if let notice = model.saveError ?? model.seedError {
+                HStack(alignment: .top, spacing: 8) {
+                    Label(notice, systemImage: "exclamationmark.circle")
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
             // FIP-2 — same non-blocking shape `FlowListView`'s setup advisory renders: names
             // the row and the missing file, never disables Run below.
             if let advisory = inputAdvisory {
@@ -186,11 +203,6 @@ struct FlowEditorView: View {
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
             Spacer()
-            if let notice = model.saveError ?? model.seedError {
-                Text(notice)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
             Button {
                 model.undo()
             } label: {
