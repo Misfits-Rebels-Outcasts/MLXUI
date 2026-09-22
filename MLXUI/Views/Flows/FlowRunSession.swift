@@ -356,14 +356,23 @@ final class FlowRunSession {
 
     // MARK: - Cancel
 
+    /// Stop the run outright — whether it's actively executing or already parked on a human
+    /// row (by the time a row parks, the run task has already drained and `isRunning` is
+    /// already false, so this is the only thing that makes "Stop the run" do anything; WR-2).
+    /// Distinct from `clearParked()` below: this is the "stop" verb, that one is "dismiss
+    /// without stopping anything" — they happen to converge on `parked = nil` today only
+    /// because nothing currently reads "stopped vs. merely dismissed" as separate states.
     func cancel() {
         runTask?.cancel()
         runTask = nil
         isRunning = false
+        parked = nil
         // The partially-run flow keeps the dots it earned (dots aren't reset on cancel).
     }
 
-    /// Dismiss the parked prompt without answering (the run stays parked until re-run).
+    /// Dismiss the parked prompt without answering or stopping (the run stays parked, and a
+    /// later Send/Rerun resumes it) — Esc and click-outside reach this through the sheet's
+    /// binding `set`, not `cancel()`.
     func clearParked() {
         parked = nil
     }

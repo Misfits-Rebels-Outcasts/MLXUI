@@ -138,6 +138,56 @@ struct CatFlowHumanRowPhaseTests {
         session.cancel()
     }
 
+    // MARK: - WR-2 (`RSI/DelegateWorkspaceRunBacklog.md`): "Stop the run" stops the run
+
+    /// Root cause 2: by the time a row parks, the run task has already drained and
+    /// `apply(.parked)` already set `isRunning = false` — `cancel()`'s three statements were
+    /// all already in their target state, so the Stop button was inert by construction.
+    /// `cancel()` now clears `parked` too, which is the only thing that changed.
+    @Test func stoppingAParkedRunClearsParkedAndLeavesEarnedDotsIntact() async throws {
+        let doc = try GalleryLoader.loadDocument(flowID: "74-WebPageSummary")
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-hr-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let executor = RealExecutor(
+            workspace: FlowWorkspace(root: base), flowID: "74-WebPageSummary",
+            blobDirectory: base,
+            makeModelStage: { _, _ in throw StageError.unsupportedModel(id: "unused", kind: .llm) },
+            installedModelIDs: [], catalog: [])
+        let session = FlowRunSession()
+        let context = FlowRunner.RunContext(flowID: "74-WebPageSummary", workspace: FlowWorkspace(root: base),
+                                            blobDirectory: base, executor: executor)
+        let runner = FlowRunner()
+        session.prepareInstall(FlowPreflight.run(doc, catalog: [], installedModelIDs: [],
+                                                 totalRAMGB: 128, claimableModelIDs: []),
+                               doc: doc)
+
+        session.start(doc: doc, runner: runner, context: context)
+        var parkedInfo: FlowRunSession.ParkedInfo?
+        for _ in 0..<40 {
+            if let parked = session.parked { parkedInfo = parked; break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let parked = try #require(parkedInfo)
+        let templateRow = try #require(doc.rows.first)
+        // Row 1 (Template) finished before row 2 parked — the dot it earned.
+        #expect(session.status(for: templateRow.id) == .succeeded)
+
+        session.cancel()
+
+        #expect(session.parked == nil)
+        #expect(session.isRunning == false)
+        // "dots aren't reset on cancel" — unchanged by this fix, confirmed still true.
+        #expect(session.status(for: templateRow.id) == .succeeded)
+
+        // A `timeout=` fallback that fires after Stop must not restart the flow: the guard
+        // compares `self.parked` (now nil) against the captured `parked`, so it no-ops.
+        session.fallbackTimeout(for: parked, doc: doc, runner: runner, context: context)
+        #expect(session.isRunning == false)
+        #expect(session.parked == nil)
+    }
+
     // MARK: - HR-5: "Give this row a default value…" (Q3 ruled (c), 2026-09-20)
 
     @Test func addDefaultValueRowInsertsAnEmptyTemplateAboveAndSelectsIt() throws {
