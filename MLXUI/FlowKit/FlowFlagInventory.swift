@@ -11,7 +11,10 @@ nonisolated enum FlowFlagStatus: Sendable, Equatable {
     /// silently refused, never silently fixed.
     case requiredAndDeclared(rowNumber: String, task: String)
     /// A row needs this flag and the header doesn't declare it — a real check error today
-    /// (E103/E109/E118/E120/E604). Unticked; ticking it runs the existing one-click repair
+    /// (E109/E118/E120/E604 — **not** `network`'s E103, which has no raise site anywhere in
+    /// `FlowValidator`; an unticked-but-used `network` reads `.declaredNotRequired` instead,
+    /// since this case's whole meaning is "Save is blocked until this is fixed" and nothing
+    /// currently blocks on `network`). Unticked; ticking it runs the existing one-click repair
     /// (`FlowEditorModel.applyHeaderRepair`) — there is no second repair path.
     case requiredButMissing(code: String, message: String)
     /// No row needs this flag right now, whatever the header currently says (fact 20: there
@@ -58,15 +61,21 @@ nonisolated enum FlowFlagInventory {
             }
             return .declaredNotRequired
         }
-        // Not declared. `network`'s E103 has no raise site anywhere in `FlowValidator` today
-        // (`FlowHeaderRepair.swift`'s own comment) — the template exists and is golden-tested
-        // (`ErrorCatalog`), it is simply never called from a real check. Reusing it here is
-        // display only: no new `FlowIssue`, no change to what `mlxflow check` reports, and no
-        // parity risk — `FlowFlagInventory` is new to this repo, not ported.
-        if flag == .network, let (path, task) = requiringRow(for: .network, parsed: parsed) {
-            let message = (try? ErrorCatalog.fill(code: "E103", values: ["n": path, "task": task], isV08: true)) ?? ""
-            return .requiredButMissing(code: "E103", message: message)
-        }
+        // Not declared. FIX (found in owner smoke-testing FH-S2, 2026-09-22): an earlier
+        // version of this function also special-cased `network` here, synthesizing a
+        // `.requiredButMissing` status from E103's dormant `ErrorCatalog` template. That was
+        // wrong to ship: `requiredButMissing`'s whole meaning is "Save is blocked until this
+        // is fixed" (owner ruling Q1), and E103 has no raise site anywhere in
+        // `FlowValidator.checkFlow` (`FlowHeaderRepair.swift`'s own comment, a prior,
+        // deliberate decision — trap 4 of that phase's own backlog forbids adding one) — so
+        // unticking `network` on a flow that uses it doesn't block anything, and the Flow tab
+        // must not claim it does. Wiring a real E103 check into the shared validator would be
+        // a parity-relevant change to what `mlxflow check` reports, outside this item's scope
+        // and this implementer's standing authority; the honest, conservative fix is for the
+        // Flow tab to stop overclaiming instead. `network`'s `requiringRow` predicate still
+        // drives `requiredAndDeclared` above (a true statement — "this row does use it" — with
+        // no enforcement claim attached), it is only the missing-and-unenforced case that
+        // falls through to `declaredNotRequired` below like every other unenforced flag would.
         let issues = FlowValidator.checkFlow(parsed, workspace: workspace, flowID: flowID)
         if let issue = issues.first(where: { FlowHeaderRepair.flagForCode[$0.code] == flag }) {
             return .requiredButMissing(code: issue.code, message: issue.message)

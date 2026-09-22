@@ -44,7 +44,13 @@ struct CatFlowFlagInventoryTests {
     /// A copy of flow 76 with `network` stripped: the same `Web Fetch` row still needs it, but
     /// now nothing declares it — `requiredButMissing`, carrying `E103`'s own (golden-tested,
     /// never-raised-until-now) template.
-    @Test func flow76WithNetworkStrippedIsRequiredButMissing() throws {
+    /// FIX (found in owner smoke-testing FH-S2, 2026-09-22): stripping `network` from flow 76
+    /// must **not** read as `.requiredButMissing` — that status's whole meaning is "Save is
+    /// blocked until this is fixed" (owner ruling Q1), and nothing in `FlowValidator` actually
+    /// blocks on `network` (E103 has no raise site). Confirmed by the owner unticking it on
+    /// a real flow and watching Run still complete. An earlier version of this test asserted
+    /// the wrong (over-claiming) behavior; this pins the corrected one instead.
+    @Test func flow76WithNetworkStrippedIsDeclaredNotRequiredNotRequiredButMissing() throws {
         let url = repoRoot.appendingPathComponent("MLXUI/Resources/BasicGallery/5-ExtractWebPageLinks.cat")
         let text = try String(contentsOf: url, encoding: .utf8)
         let doc = try CatParser.parse(text)
@@ -54,14 +60,7 @@ struct CatFlowFlagInventoryTests {
         let (workspace, cleanup) = tempWorkspace()
         defer { cleanup() }
         let status = FlowFlagInventory.status(of: .network, in: stripped, workspace: workspace, flowID: "flow-76")
-        guard case .requiredButMissing(let code, let message) = status else {
-            Issue.record("expected .requiredButMissing, got \(status)")
-            return
-        }
-        #expect(code == "E103")
-        #expect(message.contains("Row 3"))
-        #expect(message.contains("Web Fetch"))
-        #expect(message.contains("network"))
+        #expect(status == .declaredNotRequired)
     }
 
     // MARK: - declaredNotRequired
