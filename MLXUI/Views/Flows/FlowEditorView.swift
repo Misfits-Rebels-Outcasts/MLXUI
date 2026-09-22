@@ -266,18 +266,21 @@ struct FlowEditorView: View {
             .disabled(!model.canSave)
             .keyboardShortcut("s", modifiers: .command)
             .help(model.saveBlockReason ?? "Save the flow as a .cat file")
-            Button {
-                reveal()
-            } label: {
-                Label("Reveal in Finder", systemImage: "folder")
-            }
-            .disabled(model.savedURL == nil)
             // CACHE-Q: the same ⋯ menu the gallery detail carries — a working My Workflows
             // flow opens here, and DA-5's determinism check / DA-10's skip test need a way to
             // force a cold re-run of an *unchanged* flow. Editing a row already changes its
             // cache key, so this is a verification affordance, not a correctness fix.
+            // FH-2: Reveal in Finder joins this menu too, the same `extraItems` mechanism
+            // `FlowListView` already uses for "Remove Flow…" — one less fixed-width button in
+            // the toolbar row. Still disabled before the first save, exactly as before.
             FlowMaintenanceMenu(session: session, doc: model.document,
-                                workspace: model.workspace, flowID: model.flowID)
+                                workspace: model.workspace, flowID: model.flowID) {
+                Divider()
+                Button("Reveal in Finder", systemImage: "folder") {
+                    reveal()
+                }
+                .disabled(model.savedURL == nil)
+            }
         }
         .padding(12)
     }
