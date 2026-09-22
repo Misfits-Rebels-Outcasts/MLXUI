@@ -79,6 +79,9 @@ struct FlowListView: View {
     /// R7-5: block rows whose children are collapsed (start expanded).
     @State private var collapsedBlocks: Set<UUID> = []
     @State private var session = FlowRunSession()
+    /// FH-7: owned here (not `FlowInspectorPane`'s local state) so a run's completion can force
+    /// it to `.output` from `flowList(_:display:)`'s completion handler below.
+    @State private var inspectorTab: FlowInspectorTab = .output
 
     var body: some View {
         Group {
@@ -321,7 +324,7 @@ struct FlowListView: View {
                     savedFile: savedFileURL(in: doc),
                     savedKind: savedFileKind(in: doc),
                     savedPresentation: savedFilePresentation(in: doc),
-                    initialTab: .output
+                    tab: $inspectorTab
                 ) {
                     // The Properties tab is browse-only here: bundled gallery flows are
                     // frozen (dimmed + a lock), a user's own flow reads at full opacity —
@@ -369,6 +372,14 @@ struct FlowListView: View {
         // whenever the installed set changes (smoke-30: "Install Required Models" reappearing
         // after the install completed).
         .onChange(of: appState.installedModelIDs) { _, _ in refreshPreflight() }
+        // FH-7: a run that reaches the end un-cancelled, un-parked, and without a hard failure
+        // — select the last row and show its Output tab.
+        .onChange(of: session.completedRunToken) { _, _ in
+            if let last = doc.rows.last {
+                session.selectedRowID = last.id
+                inspectorTab = .output
+            }
+        }
         .confirmationDialog("Remove this flow?", isPresented: $flowPendingRemoval,
                             titleVisibility: .visible) {
             Button("Remove", role: .destructive) {
@@ -611,7 +622,8 @@ struct FlowListView: View {
                 Button {
                     appState.editingFlow = FlowEditTarget(flowID: flowID, name: display.title,
                                                           document: doc,
-                                                          savedText: CatSerializer.serialize(doc))
+                                                          savedText: CatSerializer.serialize(doc),
+                                                          fileURL: userEntry?.url)
                 } label: {
                     Label("Edit", systemImage: "square.and.pencil")
                 }

@@ -31,6 +31,11 @@ final class FlowRunSession {
     private(set) var substitutionNotes: [UUID: String] = [:]
     /// The row the inspector pane is bound to (nil = nothing selected).
     var selectedRowID: UUID?
+    /// FH-7: increments once per run that reaches the end of the stream un-cancelled,
+    /// un-parked, and without a hard failure — the signal a view can `.onChange` on to select
+    /// the last row and show its Output tab. `isRunning` alone can't be that signal: it also
+    /// flips false on `cancel()` and on a parked human row (`.parked`, below).
+    private(set) var completedRunToken = 0
     var isRunning = false
     var errorSentence: String?
     /// CFM-R10-Human: the parked human row awaiting an answer, or nil.
@@ -208,11 +213,17 @@ final class FlowRunSession {
                 if Task.isCancelled { break }
                 apply(event)
             }
+            let wasCancelled = Task.isCancelled
             isRunning = false
             // CFM-R11-1: also land the record in the console so a run's peak survives
             // scrollback / logs, not just the on-screen footer.
             if !metrics.rowSamples.isEmpty {
                 print("CFM-R11-1 run peak: \(metrics.summary())")
+            }
+            // FH-7: a genuine finish — not cancelled, not parked on a human row, no hard
+            // failure sentence.
+            if !wasCancelled, parked == nil, errorSentence == nil {
+                completedRunToken += 1
             }
         }
     }

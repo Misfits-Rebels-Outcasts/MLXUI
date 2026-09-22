@@ -22,6 +22,9 @@ struct FlowEditorView: View {
     @State private var showFullCatalog = false
     @State private var showInstallSheet = false
     @State private var session = FlowRunSession()
+    /// FH-7: owned here (not `FlowInspectorPane`'s local state) so a run's completion can force
+    /// it to `.output` from `run()`'s completion handler below.
+    @State private var inspectorTab: FlowInspectorTab = .step
     /// FIP-2 — a `Read *` row whose file isn't there yet, or nil. Warn only (owner ruling):
     /// renders as a banner, never disables Run.
     @State private var inputAdvisory: FlowPreflight.RowAdvisory?
@@ -32,20 +35,23 @@ struct FlowEditorView: View {
 
     init(flowID: String = UUID().uuidString, name: String = "Untitled Flow",
          document: FlowDocument? = nil, savedText: String? = nil,
-         workspace: WorkspaceRef? = nil) {
+         workspace: WorkspaceRef? = nil, fileURL: URL? = nil) {
         self.workspaceRef = workspace
         // KW-1-1: a workspace flow opened from disk (a `WorkspaceRef` naming an existing
         // document) already has a file at `workspace.fileURL` — seed `savedURL` so a rename's
         // stale-sibling guard recognizes that file as this editor's own and clears it, instead
         // of leaving it behind as an untracked duplicate. KW-1-FIX-3: the decision itself is
-        // `FlowEditorModel.seedSavedURL`, tested on its own.
+        // `FlowEditorModel.seedSavedURL`, tested on its own. FH-6: the plain-`flows/`
+        // equivalent — `fileURL` is the caller's own on-disk URL for a non-workspace flow that
+        // already exists (opening it from My Workflows, or a just-written Duplicate & Edit /
+        // Edit-opened-copy) — falls back only when there's no workspace ref to seed from.
         _model = State(initialValue: FlowEditorModel(
             name: workspace?.flowStem ?? name,
             flowID: workspace?.workspaceID ?? flowID,
             document: document,
             workspace: workspace?.workspace ?? .shared,
             savedText: savedText,
-            savedURL: FlowEditorModel.seedSavedURL(document: document, workspace: workspace)))
+            savedURL: FlowEditorModel.seedSavedURL(document: document, workspace: workspace, fileURL: fileURL)))
     }
 
     /// The run scope for this flow — workspace-rooted when it lives in one (CFM-R17-1).
@@ -167,6 +173,15 @@ struct FlowEditorView: View {
         .onChange(of: model.document) { _, _ in
             session.clearRun(doc: model.document)
             prepareInstall()
+        }
+        // FH-7: a run that reaches the end un-cancelled, un-parked, and without a hard failure
+        // — select the last row and show its Output tab (the convenience of "go look at what
+        // just ran" without a manual click).
+        .onChange(of: session.completedRunToken) { _, _ in
+            if let last = model.document.rows.last {
+                model.selectedRowID = last.id
+                inspectorTab = .output
+            }
         }
         // CFM-R14-2: seed defaults from the derived pool, not a hand table.
         .onAppear {
@@ -441,7 +456,7 @@ struct FlowEditorView: View {
                     savedFile: selectedSavedFile,
                     savedKind: selectedSavedKind,
                     savedPresentation: selectedSavedPresentation,
-                    initialTab: .step
+                    tab: $inspectorTab
                 ) {
                     FlowRowInspectorView(model: model,
                                          rowID: model.selectedRowID ?? UUID(),

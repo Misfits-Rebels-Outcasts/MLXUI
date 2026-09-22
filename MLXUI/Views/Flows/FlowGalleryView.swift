@@ -425,7 +425,8 @@ struct FlowGalleryView: View {
         appState.editingFlow = FlowEditTarget(flowID: entry.flowID,
                                               name: entry.title,
                                               document: doc,
-                                              savedText: CatSerializer.serialize(doc))
+                                              savedText: CatSerializer.serialize(doc),
+                                              fileURL: entry.url)
     }
 
     /// One user flow's badge: title + last-modified, a ⚠ when its file no longer parses.

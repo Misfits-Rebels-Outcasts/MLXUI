@@ -79,7 +79,8 @@ struct MLXUIApp: App {
                                                name: target.name,
                                                document: target.document,
                                                savedText: target.savedText,
-                                               workspace: target.workspace)
+                                               workspace: target.workspace,
+                                               fileURL: target.fileURL)
                             }
                             // CFM-R17-3: a workspace page — the flows in it, its shared
                             // files, Reveal in Finder on the one directory they share.

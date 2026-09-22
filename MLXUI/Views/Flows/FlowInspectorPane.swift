@@ -20,11 +20,14 @@ import UniformTypeIdentifiers
 ///   (design doc §6), extracted rather than duplicated, and the standalone Run sheets are
 ///   untouched. Also surfaces the `CatalogBridge` substitution note (CFM-R2-2 rule 3) for a
 ///   row whose model is `.sameFamily`/`.substitute`.
-struct FlowInspectorPane<Properties: View>: View {
-    enum Tab: Hashable {
-        case flow, step, output
-    }
+/// FH-7: lifted out of `FlowInspectorPane` (it doesn't depend on `Properties`) so a caller can
+/// hold `@State private var inspectorTab: FlowInspectorTab` and bind to it regardless of which
+/// `Properties` view that particular `FlowInspectorPane` instance is generic over.
+enum FlowInspectorTab: Hashable {
+    case flow, step, output
+}
 
+struct FlowInspectorPane<Properties: View>: View {
     /// FH-3: the flow's own identity, shown in the Flow tab.
     let flowInfo: FlowTabInfo
     /// The selected row's cached output, or nil when nothing is selected / no run yet.
@@ -48,7 +51,10 @@ struct FlowInspectorPane<Properties: View>: View {
     /// The row-properties pane — editable in the editor, frozen in the read-only flow list.
     private let properties: () -> Properties
 
-    @State private var tab: Tab
+    /// FH-7: a binding rather than local `@State` so a run's completion can force the pane to
+    /// `.output` from outside (`FlowEditorView`/`FlowListView` own the state; selecting a
+    /// different row no longer resets it, same as before this change).
+    @Binding private var tab: FlowInspectorTab
     @State private var audio = InspectorAudioController()
     @State private var isShowingQuickLook = false
 
@@ -56,7 +62,7 @@ struct FlowInspectorPane<Properties: View>: View {
          statusNote: (text: String, isSkip: Bool)? = nil,
          savedFile: URL? = nil, savedKind: Kind? = nil,
          savedPresentation: SavedFilePresentation? = nil,
-         initialTab: Tab = .output,
+         tab: Binding<FlowInspectorTab>,
          @ViewBuilder properties: @escaping () -> Properties) {
         self.flowInfo = flowInfo
         self.output = output
@@ -67,7 +73,7 @@ struct FlowInspectorPane<Properties: View>: View {
         self.savedKind = savedKind
         self.savedPresentation = savedPresentation
         self.properties = properties
-        _tab = State(initialValue: initialTab)
+        _tab = tab
     }
 
     var body: some View {
@@ -213,7 +219,7 @@ struct FlowInspectorPane<Properties: View>: View {
         }
     }
 
-    private func tabButton(_ target: Tab, _ title: String, systemImage: String) -> some View {
+    private func tabButton(_ target: FlowInspectorTab, _ title: String, systemImage: String) -> some View {
         let isActive = tab == target
         return Button {
             tab = target
