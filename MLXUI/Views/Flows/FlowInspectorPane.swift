@@ -216,47 +216,43 @@ struct FlowInspectorPane<Properties: View>: View {
         }
     }
 
-    /// OV-5: the shared action row — Quick Look · Open in ‹app› · Export a Copy… · Show in
-    /// Finder, same order for every presentation, `.folder` getting only the last. Wrapped
-    /// across up to two lines (`.controlSize(.small)`, `spacing: 8`) rather than one fixed
-    /// `HStack`: the pane is only 260–320 pt wide (`:72`), and up to four labeled buttons — one
-    /// of them "Export a Copy…" — do not fit on one line without clipping. This is the Output
-    /// tab, not the toolbar (FH-5's adaptive collapsing doesn't apply here), so a plain
-    /// two-button-per-row wrap is the right amount of layout, not a custom flow `Layout`.
+    /// OV-5 (revised after owner feedback on the shipped four-button row reading as crowded):
+    /// one primary button plus a "···" overflow, instead of a fixed row or a two-line wrap.
+    /// Quick Look is the backlog's own "primary affordance" (OV-2 — it needs no LaunchServices
+    /// hand-off), so it stays a visible button; "Open in ‹app›", "Export a Copy…" and Show in
+    /// Finder collapse into one menu. `.folder` has no Quick Look, so Show in Finder — its only
+    /// action — is the visible button there, not tucked behind a menu for one item.
     @ViewBuilder
     private func savedFileActions(url: URL, presentation: SavedFilePresentation) -> some View {
-        let buttons = actionButtons(url: url, presentation: presentation)
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(stride(from: 0, to: buttons.count, by: 2)), id: \.self) { start in
-                HStack(spacing: 8) {
-                    buttons[start]
-                    if start + 1 < buttons.count {
-                        buttons[start + 1]
-                    }
-                }
+        HStack(spacing: 8) {
+            if presentation.allowsQuickLook {
+                quickLookButton
+                moreActionsMenu(url: url, presentation: presentation)
+            } else {
+                openInFinderButton(url)
             }
         }
     }
 
-    /// The up-to-four buttons `savedFileActions` lays out, in order, for the given
-    /// presentation — `.folder` yields just `[Show in Finder]`; everything else yields up to
-    /// all four, each gated by its own `allows*` and (for "Open in ‹app›") whether macOS has a
-    /// handler at all.
-    private func actionButtons(url: URL, presentation: SavedFilePresentation) -> [AnyView] {
-        var buttons: [AnyView] = []
-        if presentation.allowsQuickLook {
-            buttons.append(AnyView(quickLookButton))
+    /// Everything besides Quick Look, behind one "···" menu — Open in ‹app› (only when macOS
+    /// has a handler), Export a Copy…, Show in Finder, in that order.
+    @ViewBuilder
+    private func moreActionsMenu(url: URL, presentation: SavedFilePresentation) -> some View {
+        Menu {
+            if presentation.allowsOpenInApp,
+               let appURL = NSWorkspace.shared.urlForApplication(toOpen: url),
+               let label = openLabel(appDisplayName: FileManager.default.displayName(atPath: appURL.path)) {
+                openInAppButton(url: url, label: label)
+            }
+            if presentation.allowsExport {
+                exportCopyButton(url)
+            }
+            openInFinderButton(url)
+        } label: {
+            Image(systemName: "ellipsis.circle")
         }
-        if presentation.allowsOpenInApp,
-           let appURL = NSWorkspace.shared.urlForApplication(toOpen: url),
-           let label = openLabel(appDisplayName: FileManager.default.displayName(atPath: appURL.path)) {
-            buttons.append(AnyView(openInAppButton(url: url, label: label)))
-        }
-        if presentation.allowsExport {
-            buttons.append(AnyView(exportCopyButton(url)))
-        }
-        buttons.append(AnyView(openInFinderButton(url)))
-        return buttons
+        .menuStyle(.borderlessButton)
+        .help("More actions for this saved file")
     }
 
     private var quickLookButton: some View {
