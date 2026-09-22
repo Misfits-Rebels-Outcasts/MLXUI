@@ -51,6 +51,11 @@ struct FlowListView: View {
     @State private var metadata: GalleryFlowMetadata?
     /// CFM-R12-1: the user-flow shelf entry (nil for a bundled flow).
     @State private var userEntry: UserFlowStore.Entry?
+    /// WR-1: set once `loadWorkspaceFlow()` succeeds — mirrors `metadata`/`userEntry`'s
+    /// "written on load, not at init" shape, so `display` reflects a completed load the same
+    /// way for all three sources. (`workspaceRef` itself is available from init and would
+    /// resolve early; this keeps `display`'s precondition uniform.)
+    @State private var workspaceDisplayRef: WorkspaceRef?
     @State private var document: FlowDocument?
     @State private var loadError: String?
     /// A read-only `FlowEditorModel` over the loaded document — the inspector's frozen
@@ -838,11 +843,7 @@ struct FlowListView: View {
     /// CFM-R12-1: what the flow list renders about a flow, abstracted over its source
     /// (bundled gallery vs. the user's shelf) — never a faked `GalleryFlowMetadata`.
     private var display: FlowDisplay? {
-        if let metadata { return FlowDisplay(title: metadata.title,
-                                             description: metadata.description) }
-        if let userEntry { return FlowDisplay(title: userEntry.title,
-                                              description: nil) }
-        return nil
+        FlowDisplay.resolve(metadata: metadata, userEntry: userEntry, workspace: workspaceDisplayRef)
     }
 
     /// Re-read the flow from disk after the editor closes — its title, rows or
@@ -887,6 +888,9 @@ struct FlowListView: View {
             return
         }
         guard let doc = document else { return }
+        // WR-1: before the refusal early-return below — a refused workspace flow must
+        // render `notRunnableView` with its title, not fall back to the spinner.
+        workspaceDisplayRef = ref
 
         let serialized = CatSerializer.serializeLines(doc)
         serializedLines = serialized.lines
@@ -1038,4 +1042,25 @@ struct FlowListView: View {
 nonisolated struct FlowDisplay {
     let title: String
     let description: String?
+
+    /// CFM-R12-1, extended CFM-R17-3 (WR-1) — the same precedence `FlowListView.display` used
+    /// to apply inline, now reachable from a test: gallery metadata first, the user shelf
+    /// second, a workspace flow third (its title is the flow's own stem — never a faked
+    /// `GalleryFlowMetadata`, CFM-R12-1). Owner gate Q3 (`RSI/DelegateWorkspaceRunBacklog.md`)
+    /// is unanswered; this takes the recommended reading — implementer's call, pending owner
+    /// confirmation — naming the workspace in the description line.
+    static func resolve(metadata: GalleryFlowMetadata?, userEntry: UserFlowStore.Entry?,
+                        workspace: WorkspaceRef?) -> FlowDisplay? {
+        if let metadata {
+            return FlowDisplay(title: metadata.title, description: metadata.description)
+        }
+        if let userEntry {
+            return FlowDisplay(title: userEntry.title, description: nil)
+        }
+        if let workspace {
+            return FlowDisplay(title: workspace.flowStem,
+                               description: "in \(workspace.workspaceID)")
+        }
+        return nil
+    }
 }

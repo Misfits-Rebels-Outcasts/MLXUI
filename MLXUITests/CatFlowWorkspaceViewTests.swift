@@ -24,6 +24,48 @@ struct CatFlowWorkspaceViewTests {
 
     private let validCat = "mlxflow 0.8\n1. Read Text   memo.txt\n2. Save Text   out.md\n"
 
+    // MARK: - WR-1: FlowDisplay.resolve precedence across all three load paths
+
+    /// The bug (`RSI/DelegateWorkspaceRunBacklog.md`, WR-1): `FlowListView.display` used to be
+    /// computed from only `metadata`/`userEntry`, so a workspace flow's `display` was `nil` for
+    /// the life of the view and the page never left "Loading flow…". `FlowDisplay.resolve` is
+    /// the extracted decision, reachable here directly — delete the workspace branch inside it
+    /// and this test goes red (confirmed locally).
+    @Test func flowDisplayResolvesMetadataFirst() {
+        let metadata = GalleryFlowMetadata(number: 1, title: "Gallery Title", filename: "01-F.cat",
+                                           category: "Test", description: "gallery desc", tier: nil)
+        let userEntry = UserFlowStore.Entry(flowID: "f", url: URL(fileURLWithPath: "/tmp/f.cat"),
+                                            title: "User Title", modifiedAt: Date(), parseIssue: nil)
+        let workspace = WorkspaceRef(workspaceID: "ask_your_docs", flowFile: "Ingest.cat")
+        let display = FlowDisplay.resolve(metadata: metadata, userEntry: userEntry, workspace: workspace)
+        #expect(display?.title == "Gallery Title")
+        #expect(display?.description == "gallery desc")
+    }
+
+    @Test func flowDisplayResolvesUserEntrySecond() {
+        let userEntry = UserFlowStore.Entry(flowID: "f", url: URL(fileURLWithPath: "/tmp/f.cat"),
+                                            title: "User Title", modifiedAt: Date(), parseIssue: nil)
+        let workspace = WorkspaceRef(workspaceID: "ask_your_docs", flowFile: "Ingest.cat")
+        let display = FlowDisplay.resolve(metadata: nil, userEntry: userEntry, workspace: workspace)
+        #expect(display?.title == "User Title")
+        #expect(display?.description == nil)
+    }
+
+    /// The regression itself: a workspace flow with no gallery metadata and no user-shelf
+    /// entry — every workspace flow, today — must still resolve to a non-nil display so
+    /// `FlowListView.body`'s content branch is reachable.
+    @Test func flowDisplayResolvesWorkspaceThird() {
+        let workspace = WorkspaceRef(workspaceID: "ask_your_docs", flowFile: "Ingest.cat")
+        let display = FlowDisplay.resolve(metadata: nil, userEntry: nil, workspace: workspace)
+        #expect(display?.title == "Ingest")
+        #expect(display?.description == "in ask_your_docs")
+    }
+
+    @Test func flowDisplayResolvesNilWhenAllThreeSourcesAreNil() {
+        let display = FlowDisplay.resolve(metadata: nil, userEntry: nil, workspace: nil)
+        #expect(display == nil)
+    }
+
     // MARK: - WorkspaceRef → FlowScope
 
     @Test func workspaceRefBuildsAWorkspaceRootedScope() {
