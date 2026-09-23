@@ -40,15 +40,19 @@ struct FlowGalleryView: View {
             appState.reloadUserFlows()
             appState.reloadWorkspaces()
             appState.refreshGalleryBlocked()
+            appState.refreshUserFlowReadiness()
         }
         // `.onAppear` does not re-fire when the editor is popped off the navigation stack, so
         // a flow just created or renamed in it wouldn't show on the shelf until the page was
         // left and re-entered. Refresh when the editor closes (WA-5: the route's top frame
-        // stops being an editor).
+        // stops being an editor) — readiness too, so a row's model edit (or a fresh
+        // Duplicate & Edit copy) shows its download badge the moment the editor pops, not
+        // only after the gallery is left and revisited.
         .onChange(of: appState.route) { old, new in
             if old.topEditor != nil, new.topEditor == nil {
                 appState.reloadUserFlows()
                 appState.reloadWorkspaces()
+                appState.refreshUserFlowReadiness()
             }
         }
         .confirmationDialog("Remove this flow?", isPresented: Binding(
@@ -101,7 +105,7 @@ struct FlowGalleryView: View {
     private var myWorkflowsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Text("My Workflows")
+                Text("My Workflows (BETA)")
                     .font(.title3.weight(.semibold))
                 Spacer()
                 // CFM — Import copies a picked flow folder (its .cat plus fixtures) into
@@ -112,6 +116,8 @@ struct FlowGalleryView: View {
                     Label("Import Flow", systemImage: "square.and.arrow.down")
                 }
                 .help("Copy a flow folder (.cat plus its audio, text, etc.) into My Workflows")
+                .disabled(true) //comeback
+
             }
             LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
                 newFlowBadge
@@ -414,6 +420,7 @@ struct FlowGalleryView: View {
         }
         .buttonStyle(.plain)
         .contentShape(RoundedRectangle(cornerRadius: 14))
+        .disabled(true) //comeback
     }
 
     /// CFM — a click on a My Workflows flow opens it **in the editor** (Edit mode, first row
@@ -433,9 +440,12 @@ struct FlowGalleryView: View {
                                                       fileURL: entry.url)))
     }
 
-    /// One user flow's badge: title + last-modified, a ⚠ when its file no longer parses.
-    /// Opening it goes straight into the editor. The export/trash overlay (top-right) sits
-    /// on top, so each captures its own click and never also opens the flow.
+    /// One user flow's badge: title + last-modified, a ⚠ when its file no longer parses or
+    /// (CFM-R12-1 follow-up) is otherwise refused, and a download glyph when it merely needs
+    /// a model installed — the same three states `appState.userFlowBlocked` /
+    /// `userFlowNeedsInstall` drive the editor's own toolbar with. Opening it goes straight
+    /// into the editor. The export/trash overlay (top-right) sits on top, so each captures
+    /// its own click and never also opens the flow.
     private func userFlowBadge(_ entry: UserFlowStore.Entry) -> some View {
         Button {
             openUserFlow(entry)
@@ -449,6 +459,15 @@ struct FlowGalleryView: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
                             .accessibilityLabel("This flow doesn't parse")
+                    } else if appState.userFlowBlocked.contains(entry.flowID) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .accessibilityLabel("Not runnable yet")
+                    } else if appState.userFlowNeedsInstall.contains(entry.flowID) {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .foregroundStyle(.blue)
+                            .accessibilityLabel("Needs a model download")
+                            .help("This flow needs a model installed before it can run")
                     }
                 }
                 Text(entry.title)

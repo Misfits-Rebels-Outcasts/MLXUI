@@ -294,6 +294,11 @@ struct FlowEditorView: View {
     }
 
     /// Run never loses its word, at any width — the one button the backlog names explicitly.
+    /// A flow opened here needing a download (a My Workflows flow, most often one Duplicate &
+    /// Edit copied, or one whose row Properties just picked an "Available to download" model)
+    /// used to leave Run disabled with no way to reach the install sheet — `run()` only opens
+    /// it from inside the body a disabled button can't call. Install Required Models fills the
+    /// same slot instead, mirroring `FlowListView`'s header exactly.
     @ViewBuilder
     private var runOrCancelButton: some View {
         if session.isRunning {
@@ -301,6 +306,22 @@ struct FlowEditorView: View {
                 session.cancel()
             } label: {
                 Label("Cancel", systemImage: "stop.fill")
+            }
+        } else if session.isInstalling {
+            Button {} label: {
+                Label {
+                    Text("Installing Models")
+                } icon: {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+            .disabled(true)
+        } else if session.needsInstall {
+            Button {
+                showInstallSheet = true
+            } label: {
+                Label("Install Required Models", systemImage: "arrow.down.circle")
             }
         } else {
             Button {

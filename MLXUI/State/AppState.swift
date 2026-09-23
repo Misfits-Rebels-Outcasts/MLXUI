@@ -125,6 +125,19 @@ final class AppState { //appstatecomeback
     /// gallery appear (`refreshGalleryBlocked()`), never at launch.
     private(set) var galleryBlocked: Set<String> = []
 
+    /// My Workflows flows that can't run at all yet — the same hard refusal `galleryBlocked`
+    /// flags for bundled flows (language/doors/tools, an unresolvable model, a RAM overrun),
+    /// applied to the user's own flows. A flow with a `parseIssue` is excluded here — that's
+    /// already its own, more specific ⚠. Computed on gallery appear
+    /// (`refreshUserFlowReadiness()`), never at launch.
+    private(set) var userFlowBlocked: Set<String> = []
+
+    /// My Workflows flows that parse and aren't blocked, but still name at least one model
+    /// that isn't installed yet — the case a Duplicate & Edit copy (or any row's Properties
+    /// pointed at an "Available to download" model) leaves with no visible sign until the
+    /// flow is opened. Computed alongside `userFlowBlocked`.
+    private(set) var userFlowNeedsInstall: Set<String> = []
+
     var browserData: BrowserData?
     var loadError: String?
     var systemInfo = SystemInfo.detect()
@@ -310,6 +323,35 @@ final class AppState { //appstatecomeback
             }
         }
         galleryBlocked = blocked
+    }
+
+    /// The My Workflows analogue of `refreshGalleryBlocked()` — same two gates
+    /// (`FlowRunner.canRun`, then `FlowPreflight.blockedReason`), same order, applied to the
+    /// user's own saved flows instead of the bundled ones. Also captures, for a flow that
+    /// clears both gates, whether it still has a model to download — `FlowPreflight`'s
+    /// `downloadSet`, the same thing that drives the editor's "Install Required Models"
+    /// button — so the badge can show it before the flow is even opened. Called when the
+    /// gallery appears.
+    func refreshUserFlowReadiness() {
+        let catalog = browserData?.domains.flatMap { $0.allModels } ?? []
+        var blocked: Set<String> = []
+        var needsInstall: Set<String> = []
+        for entry in userFlowEntries {
+            guard entry.parseIssue == nil, let doc = try? UserFlowStore.loadDocument(entry: entry) else { continue }
+            if case .notRunnable = FlowRunner.canRun(doc) {
+                blocked.insert(entry.flowID)
+                continue
+            }
+            let preflight = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: installedModelIDs,
+                                              totalRAMGB: systemInfo.totalRAMGB, claimableModelIDs: claimableModelIDs)
+            if FlowPreflight.blockedReason(preflight, totalRAMGB: systemInfo.totalRAMGB) != nil {
+                blocked.insert(entry.flowID)
+            } else if !preflight.downloadSet.isEmpty {
+                needsInstall.insert(entry.flowID)
+            }
+        }
+        userFlowBlocked = blocked
+        userFlowNeedsInstall = needsInstall
     }
 
     // ── Visible sidebar sections ──
