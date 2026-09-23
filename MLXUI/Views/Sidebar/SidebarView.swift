@@ -41,8 +41,11 @@ struct SidebarView: View {
                 } else {
                     ForEach(Array(appState.installedModelIDs).sorted(), id: \.self) { id in
                         Button {
+                            // WA-5: a sidebar pick is a lateral jump, not a push deeper into
+                            // whatever was on the stack — replace it, matching the old
+                            // single-optional behavior of always showing this one frame.
                             if let model = installedModel(for: id) {
-                                appState.selectedModel = model
+                                appState.route = [.model(model)]
                             }
                         } label: {
                             Label(displayName(for: id),

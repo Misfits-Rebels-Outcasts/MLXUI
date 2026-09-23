@@ -1,7 +1,8 @@
 import Foundation
 
 /// CFM-R11-0 — a flow the editor is asked to edit: a fresh flow (nil document), a bundled
-/// flow's copy, or a user flow. The editor is routed to it via `AppState.editingFlow`.
+/// flow's copy, or a user flow. The editor is routed to it via an `AppState.route` `.editor`
+/// entry (WA-5; formerly `AppState.editingFlow`).
 nonisolated struct FlowEditTarget: Hashable, Identifiable {
     let flowID: String
     let name: String

@@ -102,8 +102,6 @@ final class AppState { //appstatecomeback
     /// on first launch. A directory with nothing in it at all still doesn't list. Loaded by
     /// `reloadWorkspaces()`.
     private(set) var workspaceEntries: [WorkspaceStore.Workspace] = []
-    /// A workspace whose page is pushed onto the detail stack (CFM-R17-3).
-    var selectedWorkspace: WorkspaceStore.Workspace?
     var workspaceImportError: String?
     var workspaceRemoveError: String?
 
@@ -130,9 +128,6 @@ final class AppState { //appstatecomeback
     var filterRAMLimitGB: Double
     var filterCapabilities: Set<String> = []
     var sortOrder: SortOrder = .ramLowToHigh
-
-    // Navigation
-    var selectedModel: ModelEntry?
 
     // Run / chat — non-nil presents the Run chat sheet for this model
     var runningModel: ModelEntry?
@@ -164,10 +159,6 @@ final class AppState { //appstatecomeback
     var showCommandPalette = false
     var searchQuery = ""
 
-    // Automate → AI Workflows: a gallery flow chosen from the badge grid. Non-nil pushes
-    // that flow's detail (title, rows, inspector) onto the detail NavigationStack.
-    var selectedFlow: FlowSelection?
-
     /// Non-nil surfaces a "Remove Flow" failure (unreadable / access denied) as an alert.
     var flowRemoveError: String?
 
@@ -177,9 +168,18 @@ final class AppState { //appstatecomeback
     /// Non-nil surfaces a My Workflows Export failure as an alert.
     var flowExportError: String?
 
-    /// CFM-R11-0: a flow the editor is editing — nil document = a fresh flow (the old
-    /// "New Flow" route). Non-nil pushes the editor onto the detail stack.
-    var editingFlow: FlowEditTarget?
+    /// WA-5 (owner ruling Q2, 2026-09-19 — "go with what you recommend"): the whole detail
+    /// stack over **one** path, replacing the four independently-set `selectedModel`/
+    /// `selectedFlow`/`editingFlow`/`selectedWorkspace` optionals this comment block used to
+    /// document. Each was bound to its own root-level `navigationDestination(item:)`
+    /// modifier (`MLXUIApp.swift`), and all four attached to the same root `Group` — so
+    /// pushing a workspace (`selectedWorkspace`) then a flow inside it (`editingFlow`) left
+    /// both non-nil and the stack never reached depth 2: Back from a workspace flow skipped
+    /// the workspace and landed on the gallery (`RSI/DelegateWorkspaceAdvisoryBacklog.md`,
+    /// root cause 4). `MLXUIApp.swift` now runs one `NavigationStack(path: $appState.route)`
+    /// with one `.navigationDestination(for: FlowRoute.self)`. Appending pushes; SwiftUI's
+    /// own Back button pops (as does `route.removeLast()`).
+    var route: [FlowRoute] = []
 
     /// A stable identity for the editor's navigation destination.
     struct EditorNavigation: Hashable { var id = UUID() }
@@ -243,9 +243,14 @@ final class AppState { //appstatecomeback
                 BundledWorkspaceTombstones.save(removedBundledWorkspaceIDs)
             }
             reloadWorkspaces()
-            if selectedWorkspace?.workspaceID == workspaceID { selectedWorkspace = nil }
-            if selectedFlow?.workspace?.workspaceID == workspaceID { selectedFlow = nil }
-            if editingFlow?.workspace?.workspaceID == workspaceID { editingFlow = nil }
+            route.removeAll { entry in
+                switch entry {
+                case .workspace(let w): return w.workspaceID == workspaceID
+                case .flow(let f): return f.workspace?.workspaceID == workspaceID
+                case .editor(let t): return t.workspace?.workspaceID == workspaceID
+                case .model: return false
+                }
+            }
         } catch {
             workspaceRemoveError = (error as CustomStringConvertible).description
         }
@@ -268,8 +273,13 @@ final class AppState { //appstatecomeback
         do {
             try UserFlowStore.remove(flowID: flowID, workspace: FlowWorkspace.shared)
             reloadUserFlows()
-            if selectedFlow?.flowID == flowID { selectedFlow = nil }
-            if editingFlow?.flowID == flowID { editingFlow = nil }
+            route.removeAll { entry in
+                switch entry {
+                case .flow(let f): return f.flowID == flowID
+                case .editor(let t): return t.flowID == flowID
+                default: return false
+                }
+            }
         } catch {
             flowRemoveError = (error as CustomStringConvertible).description
         }
@@ -669,6 +679,28 @@ struct FlowSelection: Hashable, Identifiable {
         let run = autoRun ? "!" : ""
         if let workspace { return "w\(run)-\(workspace.workspaceID)/\(workspace.flowFile)" }
         return "\(isUserFlow ? "u" : "g")\(run)-\(flowID)"
+    }
+}
+
+/// WA-5 — one case per detail-stack destination, replacing the four independently-toggled
+/// optionals `AppState.route`'s doc comment describes. `Hashable` for
+/// `NavigationStack(path:)`; each payload type was already `Hashable` (`ModelEntry`,
+/// `FlowSelection`, `FlowEditTarget`, `WorkspaceStore.Workspace`), so this is a pure
+/// regrouping, not a new identity scheme.
+enum FlowRoute: Hashable {
+    case model(ModelEntry)
+    case flow(FlowSelection)
+    case editor(FlowEditTarget)
+    case workspace(WorkspaceStore.Workspace)
+}
+
+extension [FlowRoute] {
+    /// WA-5 — the editor target on top of the stack, or nil. Lets a view's
+    /// `.onChange(of: appState.route)` ask "did the editor I opened just close" the same way
+    /// it used to ask `appState.editingFlow == nil`, without reaching into route internals.
+    var topEditor: FlowEditTarget? {
+        if case .editor(let target)? = last { return target }
+        return nil
     }
 }
 

@@ -10,8 +10,9 @@ struct WorkspaceListView: View {
     @Environment(AppState.self) private var appState
     /// KW-2-1-FIX: `workspace` used to be the `Workspace` value snapshotted at navigation
     /// time, so a flow added or renamed while this page stayed open never showed up here —
-    /// `appState.selectedWorkspace` is never re-synced to a fresh scan except on removal, and
-    /// `reloadWorkspaces()` only refreshed `appState.workspaceEntries`, which this view never
+    /// the `.workspace` route entry (WA-5; formerly `appState.selectedWorkspace`) is never
+    /// re-synced to a fresh scan except on removal, and `reloadWorkspaces()` only refreshed
+    /// `appState.workspaceEntries`, which this view never
     /// read. `workspace` is now computed from that array by id every time it's read, so a
     /// mutation to `workspaceEntries` (from `addFlow()`, or the appear-time rescan after
     /// popping back from the editor) is picked up live, the same way `manifest(for:)` already
@@ -305,7 +306,7 @@ struct WorkspaceListView: View {
     /// its Human Input row and is drawn by the existing `FlowHumanPromptView`).
     private func runFlow(_ file: String) {
         let ref = WorkspaceRef(workspaceID: workspace.workspaceID, flowFile: file)
-        appState.selectedFlow = FlowSelection(flowID: ref.workspaceID, workspace: ref, autoRun: true)
+        appState.route.append(.flow(FlowSelection(flowID: ref.workspaceID, workspace: ref, autoRun: true)))
     }
 
     private var flowsSection: some View {
@@ -353,8 +354,8 @@ struct WorkspaceListView: View {
             let doc = try CatParser.parse(starter)
             appState.reloadWorkspaces()
             let ref = WorkspaceRef(workspaceID: workspace.workspaceID, flowFile: filename)
-            appState.editingFlow = FlowEditTarget(flowID: ref.workspaceID, name: ref.flowStem,
-                                                  document: doc, savedText: starter, workspace: ref)
+            appState.route.append(.editor(FlowEditTarget(flowID: ref.workspaceID, name: ref.flowStem,
+                                                          document: doc, savedText: starter, workspace: ref)))
         } catch {
             appState.workspaceImportError = "Couldn't create a new flow in this workspace."
         }
@@ -372,7 +373,7 @@ struct WorkspaceListView: View {
                 workspaceID: workspace.workspaceID, workspace: workspaceFileSystem,
                 sourceDir: GalleryLoader.resourcesDirectory ?? Bundle.main.resourceURL ?? URL(fileURLWithPath: "/"))
             appState.reloadWorkspaces()
-            appState.editingFlow = target
+            appState.route.append(.editor(target))
         } catch {
             flowActionError = (error as CustomStringConvertible).description
         }
@@ -384,10 +385,10 @@ struct WorkspaceListView: View {
         let ref = WorkspaceRef(workspaceID: workspace.workspaceID, flowFile: flow.url.lastPathComponent)
         if flow.parseIssue == nil, let doc = try? WorkspaceStore.loadDocument(flow: flow),
            let text = try? String(contentsOf: flow.url, encoding: .utf8) {
-            appState.editingFlow = FlowEditTarget(flowID: ref.workspaceID, name: flow.title,
-                                                  document: doc, savedText: text, workspace: ref)
+            appState.route.append(.editor(FlowEditTarget(flowID: ref.workspaceID, name: flow.title,
+                                                          document: doc, savedText: text, workspace: ref)))
         } else {
-            appState.selectedFlow = FlowSelection(flowID: ref.workspaceID, workspace: ref)
+            appState.route.append(.flow(FlowSelection(flowID: ref.workspaceID, workspace: ref)))
         }
     }
 
@@ -488,8 +489,13 @@ struct WorkspaceListView: View {
         let isTheDeletedFlow: (WorkspaceRef?) -> Bool = { ref in
             ref?.workspaceID == workspace.workspaceID && ref?.flowFile == flow.url.lastPathComponent
         }
-        if isTheDeletedFlow(appState.editingFlow?.workspace) { appState.editingFlow = nil }
-        if isTheDeletedFlow(appState.selectedFlow?.workspace) { appState.selectedFlow = nil }
+        appState.route.removeAll { entry in
+            switch entry {
+            case .editor(let t): return isTheDeletedFlow(t.workspace)
+            case .flow(let f): return isTheDeletedFlow(f.workspace)
+            default: return false
+            }
+        }
     }
 
     /// KW-2-2 (Q3): renames the confirmed flow to `renameText`'s stem. A collision with a

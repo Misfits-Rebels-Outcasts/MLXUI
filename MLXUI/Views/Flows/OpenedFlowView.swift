@@ -59,7 +59,7 @@ struct OpenedFlowView: View {
             let target = try FlowEditRoute.editOpenedCopy(displayName: opened.displayName,
                                                           parsed: opened.parsed,
                                                           workspace: FlowWorkspace.shared)
-            appState.editingFlow = target
+            appState.route.append(.editor(target))
         } catch {
             appState.openCatFlowError = "Couldn't copy '\(opened.displayName)' into your flows folder — the flow stays read-only."
         }

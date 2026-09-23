@@ -43,9 +43,10 @@ struct FlowGalleryView: View {
         }
         // `.onAppear` does not re-fire when the editor is popped off the navigation stack, so
         // a flow just created or renamed in it wouldn't show on the shelf until the page was
-        // left and re-entered. Refresh when the editor closes.
-        .onChange(of: appState.editingFlow) { _, new in
-            if new == nil {
+        // left and re-entered. Refresh when the editor closes (WA-5: the route's top frame
+        // stops being an editor).
+        .onChange(of: appState.route) { old, new in
+            if old.topEditor != nil, new.topEditor == nil {
                 appState.reloadUserFlows()
                 appState.reloadWorkspaces()
             }
@@ -204,7 +205,7 @@ struct FlowGalleryView: View {
     /// sits on top and captures its own click.
     private func workspaceBadge(_ workspace: WorkspaceStore.Workspace) -> some View {
         Button {
-            appState.selectedWorkspace = workspace
+            appState.route.append(.workspace(workspace))
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
@@ -270,7 +271,9 @@ struct FlowGalleryView: View {
             return
         }
         appState.reloadWorkspaces()
-        appState.selectedWorkspace = appState.workspaceEntries.first { $0.workspaceID == id }
+        if let created = appState.workspaceEntries.first(where: { $0.workspaceID == id }) {
+            appState.route.append(.workspace(created))
+        }
     }
 
     /// CFM-R17-3 — Import Workspace: the user picks a directory of `.cat` files (plus shared
@@ -381,10 +384,10 @@ struct FlowGalleryView: View {
     /// text, saves it as `.cat`, and runs it.
     private var newFlowBadge: some View {
         Button {
-            appState.editingFlow = FlowEditTarget(flowID: UUID().uuidString,
-                                                  name: "Untitled Flow",
-                                                  document: nil,
-                                                  savedText: nil)
+            appState.route.append(.editor(FlowEditTarget(flowID: UUID().uuidString,
+                                                          name: "Untitled Flow",
+                                                          document: nil,
+                                                          savedText: nil)))
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
@@ -419,14 +422,15 @@ struct FlowGalleryView: View {
     private func openUserFlow(_ entry: UserFlowStore.Entry) {
         guard entry.parseIssue == nil,
               let doc = try? UserFlowStore.loadDocument(entry: entry) else {
-            appState.selectedFlow = FlowSelection(flowID: entry.flowID, isUserFlow: true)
+            appState.route.append(.flow(FlowSelection(flowID: entry.flowID, isUserFlow: true)))
             return
         }
-        appState.editingFlow = FlowEditTarget(flowID: entry.flowID,
-                                              name: entry.title,
-                                              document: doc,
-                                              savedText: CatSerializer.serialize(doc),
-                                              fileURL: entry.url)
+        // fileURL (FH-6) seeds savedURL so Run doesn't demand a pointless Save first.
+        appState.route.append(.editor(FlowEditTarget(flowID: entry.flowID,
+                                                      name: entry.title,
+                                                      document: doc,
+                                                      savedText: CatSerializer.serialize(doc),
+                                                      fileURL: entry.url)))
     }
 
     /// One user flow's badge: title + last-modified, a ⚠ when its file no longer parses.
@@ -503,7 +507,7 @@ struct FlowGalleryView: View {
     ///   `hiddenFlowNumbers` doc comment).
     private func badge(for flow: GalleryFlowMetadata, displayNumber: Int? = nil) -> some View {
         Button {
-            appState.selectedFlow = FlowSelection(flowID: flow.flowID)
+            appState.route.append(.flow(FlowSelection(flowID: flow.flowID)))
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {

@@ -43,7 +43,14 @@ struct MLXUIApp: App {
                     NavigationSplitView(columnVisibility: $columnVisibility) {
                         SidebarView()
                     } detail: {
-                        NavigationStack {
+                        // WA-5 (owner ruling Q2, 2026-09-19): one `NavigationStack` over one
+                        // `[FlowRoute]` path, replacing four sibling `navigationDestination
+                        // (item:)` modifiers that all presented from this same root — a
+                        // workspace push followed by a flow-editor push used to leave both
+                        // bindings non-nil with the stack stuck at depth 1, so Back from a
+                        // workspace flow skipped the workspace (`RSI
+                        // /DelegateWorkspaceAdvisoryBacklog.md`, root cause 4).
+                        NavigationStack(path: $appState.route) {
                             Group {
                                 if appState.selectedSection.isHome {
                                     HomeView()
@@ -58,35 +65,39 @@ struct MLXUIApp: App {
                                     BrowseView()
                                 }
                             }
-                            // Selecting a model (from the Installed sidebar list or the
-                            // command palette) pushes its detail page onto the stack.
-                            .navigationDestination(item: $appState.selectedModel) { model in
-                                ModelDetailView(model: model)
-                            }
-                            // Selecting a badge in the "AI Workflows" gallery pushes that
-                            // flow's detail (title, rows, inspector) with a back button.
-                            .navigationDestination(item: $appState.selectedFlow) { selection in
-                                FlowListView(flowID: selection.flowID,
-                                             source: selection.isUserFlow ? .user : .gallery,
-                                             workspace: selection.workspace,
-                                             autoRun: selection.autoRun)
-                                    .id(selection.id)
-                            }
-                            // CFM-R8/R11-0: the flow editor — a fresh flow (nil document) or
-                            // an edited copy of an existing one (Duplicate & Edit / Edit copy).
-                            .navigationDestination(item: $appState.editingFlow) { target in
-                                FlowEditorView(flowID: target.flowID,
-                                               name: target.name,
-                                               document: target.document,
-                                               savedText: target.savedText,
-                                               workspace: target.workspace,
-                                               fileURL: target.fileURL)
-                            }
-                            // CFM-R17-3: a workspace page — the flows in it, its shared
-                            // files, Reveal in Finder on the one directory they share.
-                            .navigationDestination(item: $appState.selectedWorkspace) { ws in
-                                WorkspaceListView(workspace: ws)
-                                    .id(ws.id)
+                            .navigationDestination(for: FlowRoute.self) { route in
+                                switch route {
+                                case .model(let model):
+                                    // Selecting a model (Installed sidebar list or the
+                                    // command palette) pushes its detail page.
+                                    ModelDetailView(model: model)
+                                case .flow(let selection):
+                                    // Selecting a badge in the "AI Workflows" gallery pushes
+                                    // that flow's detail (title, rows, inspector).
+                                    FlowListView(flowID: selection.flowID,
+                                                 source: selection.isUserFlow ? .user : .gallery,
+                                                 workspace: selection.workspace,
+                                                 autoRun: selection.autoRun)
+                                        .id(selection.id)
+                                case .editor(let target):
+                                    // CFM-R8/R11-0: the flow editor — a fresh flow (nil
+                                    // document) or an edited copy of an existing one
+                                    // (Duplicate & Edit / Edit copy). `fileURL` (FH-6) seeds
+                                    // `savedURL` for a plain My Workflows flow opened via this
+                                    // route — dropping it would resurrect the "Save the flow
+                                    // first" bug FH-6 fixed for this call site.
+                                    FlowEditorView(flowID: target.flowID,
+                                                   name: target.name,
+                                                   document: target.document,
+                                                   savedText: target.savedText,
+                                                   workspace: target.workspace,
+                                                   fileURL: target.fileURL)
+                                case .workspace(let ws):
+                                    // CFM-R17-3: a workspace page — the flows in it, its
+                                    // shared files, Reveal in Finder on the shared directory.
+                                    WorkspaceListView(workspace: ws)
+                                        .id(ws.id)
+                                }
                             }
                         }
                     }
