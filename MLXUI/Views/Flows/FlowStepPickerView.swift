@@ -33,7 +33,7 @@ struct FlowStepPickerView: View {
             Divider()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(steps, id: \.name) { task in
+                    ForEach(visibleSteps, id: \.name) { task in
                         let marker = TaskAvailability.marker(for: task, catalog: catalog,
                                                              claimableModelIDs: claimableModelIDs)
                         Button {
@@ -67,7 +67,7 @@ struct FlowStepPickerView: View {
             .frame(minHeight: 200, maxHeight: 420)
             Divider()
             HStack {
-                if steps.isEmpty {
+                if visibleSteps.isEmpty {
                     Text("No tasks fit this row's output — use Full Catalog.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -78,6 +78,21 @@ struct FlowStepPickerView: View {
             .padding(10)
         }
         .frame(width: 440)
+    }
+
+    /// `steps`, minus anything `AppState.hideNotSupportedSteps` says to hide: tasks the
+    /// picker would otherwise mark `"needs newer support"` or `"refused — …"`. `.needsSetup`
+    /// tasks (e.g. Web Search without a key) still show — they genuinely run once set up.
+    private var visibleSteps: [TaskDescriptor] {
+        guard AppState.hideNotSupportedSteps else { return steps }
+        return steps.filter { task in
+            switch TaskAvailability.state(for: task, catalog: catalog, claimableModelIDs: claimableModelIDs) {
+            case .needsNewerSupport, .refusedByChannel:
+                return false
+            case .available, .needsSetup:
+                return true
+            }
+        }
     }
 
     /// The task's `accepts → gives` signature line.

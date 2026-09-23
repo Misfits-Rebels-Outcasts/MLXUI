@@ -66,6 +66,15 @@ final class AppState { //appstatecomeback
     /// whatever it already does; this only hides the two rows from that one list.
     static let hideCodeImprovise = true
 
+    /// Set to `true` to hide steps the picker would otherwise mark `"needs newer support"`
+    /// (`TaskAvailability.State.needsNewerSupport`, e.g. "Improvise", "Edit Image") or
+    /// `"refused — …"` (`.refusedByChannel`) from the flow editor's **+ Add step** picker
+    /// (`FlowStepPickerView`). `.needsSetup` steps (e.g. Web Search without a provider key)
+    /// still show, since those genuinely run once set up. Applies everywhere the picker
+    /// appears — +New Flow, Duplicate & Edit, and plain Edit all share the same
+    /// `FlowStepPickerView` instance, so there is nothing else to gate.
+    static let hideNotSupportedSteps = true
+
     /// Hide individual gallery flows (badges) by gallery number. Numbers are the
     /// `_metadata.json` `number` field (1–76 today), stable across renames. Basic Gallery's
     /// filenames restart at `1-`/`2-` for a friendly per-shelf look, but their `number` values
