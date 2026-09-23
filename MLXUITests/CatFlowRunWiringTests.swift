@@ -187,6 +187,55 @@ struct CatFlowRunWiringTests {
         #expect(session.isRunning == false)
     }
 
+    // MARK: - FH-7: completedRunToken (the "select last row + Output tab" trigger)
+
+    /// A genuine finish — reaches the end of the stream, no cancel, no park, no hard failure
+    /// — increments the token exactly once.
+    @Test func completedRunTokenIncrementsOnAGenuineFinish() async throws {
+        let doc = try decode("01-SpokenSummary")
+        let session = FlowRunSession()
+        session.prepareInstall(FlowPreflight.Result())
+        session.start(doc: doc, runner: FlowRunner(), context: makeMockContext())
+        let deadline = Date().addingTimeInterval(10)
+        while session.isRunning && Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(session.completedRunToken == 1)
+    }
+
+    /// A cancelled run must never look like a completed one — `isRunning` alone flips false on
+    /// both, which is exactly why `completedRunToken` exists as a separate signal.
+    @Test func completedRunTokenDoesNotIncrementOnCancel() async throws {
+        let doc = try decode("01-SpokenSummary")
+        let session = FlowRunSession()
+        session.prepareInstall(FlowPreflight.Result())
+        session.start(doc: doc, runner: FlowRunner(), context: makeMockContext())
+        session.cancel()
+        // Give the run task a moment to notice the cancellation and reach its own exit path,
+        // so this isn't just "hasn't happened yet."
+        try? await Task.sleep(for: .milliseconds(200))
+        #expect(session.completedRunToken == 0)
+    }
+
+    /// A hard row failure ends the run without reaching the last row — not a "completed" run
+    /// for this purpose, even though the stream ends un-cancelled and un-parked.
+    @Test func completedRunTokenDoesNotIncrementOnAFailedRun() async throws {
+        let rows = [
+            Row(task: "Read Text", settings: "a.txt"),
+            Row(task: "Nope"),
+        ]
+        let doc = FlowDocument(version: "0.8", rows: rows)
+        let session = FlowRunSession()
+        session.prepareInstall(FlowPreflight.Result())
+        session.start(doc: doc, runner: FlowRunner(), context: makeMockContext())
+        let deadline = Date().addingTimeInterval(10)
+        while session.isRunning && Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(session.status(for: rows[0].id) == .failed)
+        #expect(session.completedRunToken == 0)
+    }
+
     // MARK: - FlowErrorDisplay mapping (exhaustive switch, no default)
 
     @Test func flowErrorSentencesNameTheProblem() {

@@ -1,25 +1,35 @@
 import SwiftUI
 import AVFoundation
 import AppKit
+import UniformTypeIdentifiers
 
 /// The inspector pane (CFM-R3-3): a right-hand pane bound to the selected row, split into
-/// two tabs.
+/// three tabs.
 ///
+/// - **Flow** (FH-3): the flow's own identity — name, header, version, extension, row count —
+///   moved here out of the editor's toolbar. Editable only in the editor (`FlowTabInfo
+///   .editable`); the My Workflows list and both gallery shelves render it read-only.
+/// - **Step** (renamed from Properties, FH-3 — a pane that showed "Properties" for both a row
+///   and the flow itself would be unreadable): the row's editable details — model, instruction,
+///   inputs, settings, decisions. The flow editor embeds a live `FlowRowInspectorView`; the
+///   read-only flow list embeds a frozen one, so a gallery flow's properties are browsable
+///   (scrollable) but never mutable.
 /// - **Output**: the selected row's cached `Asset`, or a `Save *` row's written file,
 ///   presented per modality the way the run views do — the presentation half of
 ///   `TTSRunView`/`ASRRunView`/`OCRRunView`/`ImageQARunView`/`EmbeddingRunView`
 ///   (design doc §6), extracted rather than duplicated, and the standalone Run sheets are
 ///   untouched. Also surfaces the `CatalogBridge` substitution note (CFM-R2-2 rule 3) for a
 ///   row whose model is `.sameFamily`/`.substitute`.
-/// - **Properties**: the row's editable details — model, instruction, inputs, settings,
-///   decisions. The flow editor embeds a live `FlowRowInspectorView`; the read-only flow
-///   list embeds a frozen one, so a gallery flow's properties are browsable (scrollable)
-///   but never mutable.
-struct FlowInspectorPane<Properties: View>: View {
-    enum Tab: Hashable {
-        case properties, output
-    }
+/// FH-7: lifted out of `FlowInspectorPane` (it doesn't depend on `Properties`) so a caller can
+/// hold `@State private var inspectorTab: FlowInspectorTab` and bind to it regardless of which
+/// `Properties` view that particular `FlowInspectorPane` instance is generic over.
+enum FlowInspectorTab: Hashable {
+    case flow, step, output
+}
 
+struct FlowInspectorPane<Properties: View>: View {
+    /// FH-3: the flow's own identity, shown in the Flow tab.
+    let flowInfo: FlowTabInfo
     /// The selected row's cached output, or nil when nothing is selected / no run yet.
     let output: Asset?
     /// The row's title (task name) for the output pane header.
@@ -35,25 +45,35 @@ struct FlowInspectorPane<Properties: View>: View {
     var savedFile: URL?
     /// The saved file's kind, driving the presentation.
     var savedKind: Kind?
+    /// OV-1: the saved file's presentation (by its own extension, task name as fallback) —
+    /// drives whether the Output tab offers a Quick Look button (OV-2).
+    var savedPresentation: SavedFilePresentation?
     /// The row-properties pane — editable in the editor, frozen in the read-only flow list.
     private let properties: () -> Properties
 
-    @State private var tab: Tab
+    /// FH-7: a binding rather than local `@State` so a run's completion can force the pane to
+    /// `.output` from outside (`FlowEditorView`/`FlowListView` own the state; selecting a
+    /// different row no longer resets it, same as before this change).
+    @Binding private var tab: FlowInspectorTab
     @State private var audio = InspectorAudioController()
+    @State private var isShowingQuickLook = false
 
-    init(output: Asset?, rowTitle: String, substitutionNote: String?,
+    init(flowInfo: FlowTabInfo, output: Asset?, rowTitle: String, substitutionNote: String?,
          statusNote: (text: String, isSkip: Bool)? = nil,
          savedFile: URL? = nil, savedKind: Kind? = nil,
-         initialTab: Tab = .output,
+         savedPresentation: SavedFilePresentation? = nil,
+         tab: Binding<FlowInspectorTab>,
          @ViewBuilder properties: @escaping () -> Properties) {
+        self.flowInfo = flowInfo
         self.output = output
         self.rowTitle = rowTitle
         self.substitutionNote = substitutionNote
         self.statusNote = statusNote
         self.savedFile = savedFile
         self.savedKind = savedKind
+        self.savedPresentation = savedPresentation
         self.properties = properties
-        _tab = State(initialValue: initialTab)
+        _tab = tab
     }
 
     var body: some View {
@@ -62,7 +82,9 @@ struct FlowInspectorPane<Properties: View>: View {
             Divider()
                 .padding(.bottom, 10)
             switch tab {
-            case .properties:
+            case .flow:
+                flowPane
+            case .step:
                 properties()
             case .output:
                 outputPane
@@ -75,6 +97,9 @@ struct FlowInspectorPane<Properties: View>: View {
         // when the pane goes away, so the Play/Stop button never lies about a stale player.
         .onChange(of: displayedAudioPath) { audio.stop() }
         .onDisappear { audio.stop() }
+        .sheet(isPresented: $isShowingQuickLook) {
+            if let savedFile { QuickLookSheet(url: savedFile) }
+        }
     }
 
     /// The audio file the Output tab is currently showing a Play button for, if any.
@@ -88,14 +113,113 @@ struct FlowInspectorPane<Properties: View>: View {
 
     private var tabBar: some View {
         HStack(spacing: 4) {
-            tabButton(.properties, "Properties", systemImage: "slider.horizontal.3")
+            tabButton(.flow, "Flow", systemImage: "flowchart")
+            tabButton(.step, "Step", systemImage: "slider.horizontal.3")
             tabButton(.output, "Output", systemImage: "sidebar.right")
             Spacer()
         }
         .padding(.bottom, 8)
     }
 
-    private func tabButton(_ target: Tab, _ title: String, systemImage: String) -> some View {
+    // MARK: - Flow tab (FH-3)
+
+    private var flowPane: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                TextField("Flow name", text: flowInfo.name)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(!flowInfo.editable)
+                HStack(spacing: 6) {
+                    Text("\(flowInfo.headerKeyword) \(flowInfo.version)")
+                        .font(.caption.monospaced())
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
+                    Text("." + flowInfo.fileExtension)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                Text("\(flowInfo.rowCount) row\(flowInfo.rowCount == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let savedURL = flowInfo.savedURL {
+                    Text(savedURL.lastPathComponent)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Divider()
+                Text("Capabilities")
+                    .font(.subheadline.bold())
+                flagRows
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: - Capability flags (FH-4)
+
+    /// `AppState.hideCodeImprovise`: hides the `code`/`improvise` rows from this list only —
+    /// changes nothing about what a `.cat` can declare or how `check`/`CapabilityGate` treat
+    /// those flags.
+    private var visibleCapabilityFlags: [CapabilityFlag] {
+        guard AppState.hideCodeImprovise else { return CapabilityFlag.allCases }
+        return CapabilityFlag.allCases.filter { flag -> Bool in
+            let isHidden = flag == .code || flag == .improvise
+            return !isHidden
+        }
+    }
+
+    private var flagRows: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(visibleCapabilityFlags, id: \.self) { flag in
+                flagRow(flag)
+            }
+        }
+    }
+
+    private func flagRow(_ flag: CapabilityFlag) -> some View {
+        let status = FlowFlagInventory.status(of: flag, in: flowInfo.document,
+                                              workspace: flowInfo.workspace, flowID: flowInfo.flowID)
+        let isDeclared = flowInfo.document.flags.contains(flag)
+        let disabled: Bool
+        switch status {
+        case .inherited, .refusedByChannel: disabled = true
+        default: disabled = !flowInfo.editable
+        }
+        return VStack(alignment: .leading, spacing: 2) {
+            Toggle(isOn: Binding(get: { isDeclared },
+                                  set: { flowInfo.toggleFlag(flag, $0) })) {
+                Text(flowFlagLabels[flag] ?? flag.rawValue)
+                    .font(.callout)
+            }
+            .disabled(disabled)
+            Text(flagReason(status, flag: flag))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.leading, 20)
+        }
+    }
+
+    /// §9's copy table — the five reason lines, verbatim (`requiredButMissing`'s is the
+    /// validator's own message, not rewritten here).
+    private func flagReason(_ status: FlowFlagStatus, flag: CapabilityFlag) -> String {
+        switch status {
+        case .requiredAndDeclared(let rowNumber, let task):
+            return "Required by row \(rowNumber) (\(task))."
+        case .requiredButMissing(_, let message):
+            return message
+        case .declaredNotRequired:
+            return "No row needs this. Safe to remove."
+        case .inherited(let path):
+            return "Declared in \(path), not here."
+        case .refusedByChannel:
+            return CapabilityGate.appStoreRefusal(flags: [flag.rawValue]) ?? ""
+        }
+    }
+
+    private func tabButton(_ target: FlowInspectorTab, _ title: String, systemImage: String) -> some View {
         let isActive = tab == target
         return Button {
             tab = target
@@ -176,38 +300,124 @@ struct FlowInspectorPane<Properties: View>: View {
         }
     }
 
-    /// Present a `Save *` row's written file with the same viewers as a live output, plus a
-    /// "Show in Finder" affordance.
+    /// Present a `Save *` row's written file with the same viewers as a live output, plus
+    /// (OV-5) the shared action row every branch gets alike.
     @ViewBuilder
     private func savedContent(for url: URL, kind: Kind) -> some View {
         let item = Item(kind: kind, value: nil, path: url, sourceText: nil)
+        let presentation = savedPresentation ?? .other
         switch kind {
         case .audio:
             VStack(alignment: .leading, spacing: 6) {
                 audioContent(item)
-                openInFinderButton(url)
+                savedFileActions(url: url, presentation: presentation)
             }
         case .text:
             VStack(alignment: .leading, spacing: 6) {
                 textContent(item)
-                openInFinderButton(url)
+                savedFileActions(url: url, presentation: presentation)
             }
         case .image:
             VStack(alignment: .leading, spacing: 6) {
                 imageContent(item)
-                openInFinderButton(url)
+                savedFileActions(url: url, presentation: presentation)
             }
         default:
             VStack(alignment: .leading, spacing: 6) {
-                fileContent(url)
+                fileContent(url, isFolder: presentation == .folder)
+                savedFileActions(url: url, presentation: presentation)
+            }
+        }
+    }
+
+    /// OV-5 (revised after owner feedback on the shipped four-button row reading as crowded):
+    /// one primary button plus a "···" overflow, instead of a fixed row or a two-line wrap.
+    /// Quick Look is the backlog's own "primary affordance" (OV-2 — it needs no LaunchServices
+    /// hand-off), so it stays a visible button; "Open in ‹app›", "Export a Copy…" and Show in
+    /// Finder collapse into one menu. `.folder` has no Quick Look, so Show in Finder — its only
+    /// action — is the visible button there, not tucked behind a menu for one item.
+    @ViewBuilder
+    private func savedFileActions(url: URL, presentation: SavedFilePresentation) -> some View {
+        HStack(spacing: 8) {
+            if presentation.allowsQuickLook {
+                quickLookButton
+                moreActionsMenu(url: url, presentation: presentation)
+            } else {
                 openInFinderButton(url)
             }
         }
     }
 
-    private func fileContent(_ url: URL) -> some View {
+    /// Everything besides Quick Look, behind one "···" menu — Open in ‹app› (only when macOS
+    /// has a handler), Export a Copy…, Show in Finder, in that order.
+    @ViewBuilder
+    private func moreActionsMenu(url: URL, presentation: SavedFilePresentation) -> some View {
+        Menu {
+            if presentation.allowsOpenInApp,
+               let appURL = NSWorkspace.shared.urlForApplication(toOpen: url),
+               let label = openLabel(appDisplayName: FileManager.default.displayName(atPath: appURL.path)) {
+                openInAppButton(url: url, label: label)
+            }
+            if presentation.allowsExport {
+                exportCopyButton(url)
+            }
+            openInFinderButton(url)
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .help("More actions for this saved file")
+    }
+
+    private var quickLookButton: some View {
+        Button {
+            isShowingQuickLook = true
+        } label: {
+            Label("Quick Look", systemImage: "eye")
+        }
+        .controlSize(.small)
+    }
+
+    /// OV-3's button — always rendered when called; the caller (`actionButtons`) is what
+    /// decides whether it belongs in the row at all, so hiding it for "no handler" or
+    /// `.folder` never means a disabled button, only its absence.
+    private func openInAppButton(url: URL, label: String) -> some View {
+        Button {
+            NSWorkspace.shared.open(url)
+        } label: {
+            Label(label, systemImage: "arrow.up.forward.app")
+        }
+        .controlSize(.small)
+    }
+
+    /// OV-4's button — copies the saved file to wherever the user picks, never moves the
+    /// original. `.folder` is excluded by the caller (`actionButtons`): no zip, no recursive
+    /// copy, Show in Finder is the folder's answer.
+    private func exportCopyButton(_ url: URL) -> some View {
+        Button {
+            exportCopy(of: url)
+        } label: {
+            Label("Export a Copy…", systemImage: "square.and.arrow.up")
+        }
+        .controlSize(.small)
+    }
+
+    private func exportCopy(of url: URL) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = url.lastPathComponent
+        if let type = UTType(filenameExtension: url.pathExtension) {
+            panel.allowedContentTypes = [type]
+        }
+        guard panel.runModal() == .OK, let destination = panel.url else { return }
+        try? FileManager.default.copyItem(at: url, to: destination)
+    }
+
+    /// OV-5: `.folder`'s card reads "Saved folder" (§9, mirrors the existing "Saved file")
+    /// — everything else that reaches this generic card (today, only a saved video) keeps the
+    /// existing title. Icon unchanged either way — §9 names only the title string.
+    private func fileContent(_ url: URL, isFolder: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Saved file", systemImage: "doc")
+            Label(isFolder ? "Saved folder" : "Saved file", systemImage: "doc")
                 .font(.subheadline.bold())
             Text(url.lastPathComponent)
                 .font(.caption2)
@@ -362,4 +572,43 @@ final class InspectorAudioController: NSObject, AVAudioPlayerDelegate {
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         stop()
     }
+}
+
+/// FH-4: §9's copy table — the five flags' plain-English labels, verbatim. File-scope, not a
+/// static member of `FlowInspectorPane`, because that struct is generic (`Properties: View`)
+/// and Swift doesn't allow stored static properties in a generic type.
+private let flowFlagLabels: [CapabilityFlag: String] = [
+    .network: "May fetch pages from the internet",
+    .offdevice: "May send this flow's text to a remote model or search provider",
+    .events: "May start on its own, from a trigger",
+    .improvise: "May choose and run shell commands",
+    .code: "May run a script this flow ships",
+]
+
+/// FH-3: the flow's own identity, decoupled from `FlowEditorModel` — a small value type so the
+/// read-only flow list can feed the same Flow tab the editor does (fact 3,
+/// `RSI/DelegateOutputViewerBacklog.md`). `name` is a real `Binding`, not a plain `String`: in
+/// the editor it's `$model.name` itself, so typing in the Flow tab writes straight into the
+/// same property `FlowEditorModel.save()`'s stale-sibling guard reads — never a disconnected
+/// copy that would silently stop the guard from firing (§7 trap 8). The read-only list passes
+/// `.constant(_:)`; `editable` disables the field either way.
+struct FlowTabInfo {
+    var name: Binding<String>
+    var headerKeyword: String
+    var version: String
+    var fileExtension: String
+    var savedURL: URL?
+    var rowCount: Int
+    /// FH-4: the full document (flags, `flagsOrder`, `uses`), so `FlowFlagInventory.status`
+    /// can compute each flag's status, including resolving a `uses:` sibling for `inherited`.
+    var document: FlowDocument
+    /// FH-4: what `document.uses` paths resolve against — needed for `inherited`.
+    var workspace: FlowWorkspace
+    var flowID: String
+    /// FH-4: tick/untick a flag from the Flow tab. A no-op in the read-only list (`editable
+    /// == false`, and the checkbox is disabled there anyway) — the editor's implementation
+    /// routes `true` through the existing `applyHeaderRepair` (no second repair path) and
+    /// `false` through the new mirror, `removeHeaderFlag`.
+    var toggleFlag: (CapabilityFlag, Bool) -> Void
+    var editable: Bool
 }

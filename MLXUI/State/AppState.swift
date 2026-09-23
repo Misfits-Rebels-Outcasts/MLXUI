@@ -59,6 +59,13 @@ final class AppState { //appstatecomeback
     /// left `@AppStorage("settingsPane")` pointed at a now-hidden tab.
     static let hideProvidersPrivacy = true
 
+    /// Set to `true` to hide the `code` and `improvise` rows from the flow editor's **Flow**
+    /// tab capability-flag list. The other three flags (`network`, `offdevice`, `events`)
+    /// still render. Does not change what a `.cat` can declare or how `check`/`CapabilityGate`
+    /// treat those flags — a flow that already declares `code`/`improvise` keeps doing
+    /// whatever it already does; this only hides the two rows from that one list.
+    static let hideCodeImprovise = true
+
     /// Hide individual gallery flows (badges) by gallery number. Numbers are the
     /// `_metadata.json` `number` field (1–76 today), stable across renames. Basic Gallery's
     /// filenames restart at `1-`/`2-` for a friendly per-shelf look, but their `number` values

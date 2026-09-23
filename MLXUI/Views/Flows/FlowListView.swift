@@ -95,6 +95,9 @@ struct FlowListView: View {
     /// R7-5: block rows whose children are collapsed (start expanded).
     @State private var collapsedBlocks: Set<UUID> = []
     @State private var session = FlowRunSession()
+    /// FH-7: owned here (not `FlowInspectorPane`'s local state) so a run's completion can force
+    /// it to `.output` from `flowList(_:display:)`'s completion handler below.
+    @State private var inspectorTab: FlowInspectorTab = .output
 
     var body: some View {
         Group {
@@ -344,13 +347,15 @@ struct FlowListView: View {
                 }
                 Divider()
                 FlowInspectorPane(
+                    flowInfo: flowTabInfo(doc),
                     output: session.selectedRowID.flatMap { session.outputs[$0] },
                     rowTitle: selectedRowTitle(doc),
                     substitutionNote: session.selectedRowID.flatMap { session.substitutionNotes[$0] },
                     statusNote: session.selectedRowID.flatMap { session.statusNote(for: $0) },
                     savedFile: savedFileURL(in: doc),
                     savedKind: savedFileKind(in: doc),
-                    initialTab: .output
+                    savedPresentation: savedFilePresentation(in: doc),
+                    tab: $inspectorTab
                 ) {
                     // The Properties tab is browse-only here: bundled gallery flows are
                     // frozen (dimmed + a lock), a user's own flow reads at full opacity —
@@ -394,6 +399,20 @@ struct FlowListView: View {
             outboxDisclosure
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        // FH-7: a run that reaches the end un-cancelled, un-parked, and without a hard failure
+        // — select the last row and show its Output tab.
+        //
+        // The install-landing preflight refresh flow-header shipped alongside this
+        // (`.onChange(of: installedModelIDs) { refreshPreflight() }`) is dropped here: WR-3
+        // already moved that reassessment onto the outer `Group` in `body` and folded
+        // `refreshPreflight()` into `reassess()` (which no longer exists as a standalone
+        // function on this inner view) — keeping both would double-fire and no longer compile.
+        .onChange(of: session.completedRunToken) { _, _ in
+            if let last = doc.rows.last {
+                session.selectedRowID = last.id
+                inspectorTab = .output
+            }
+        }
         .confirmationDialog("Remove this flow?", isPresented: $flowPendingRemoval,
                             titleVisibility: .visible) {
             Button("Remove", role: .destructive) {
@@ -466,6 +485,33 @@ struct FlowListView: View {
         guard let id = session.selectedRowID,
               let row = doc.rows.first(where: { $0.id == id }) else { return nil }
         return FlowSavedFile.kind(forTask: row.task)
+    }
+
+    /// OV-1: the saved file's presentation (by extension, task as fallback) — drives whether
+    /// the Output tab offers a Quick Look button (OV-2).
+    private func savedFilePresentation(in doc: FlowDocument) -> SavedFilePresentation? {
+        guard let id = session.selectedRowID,
+              let row = doc.rows.first(where: { $0.id == id }),
+              let url = savedFileURL(in: doc) else { return nil }
+        return FlowSavedFile.presentation(url: url, task: row.task)
+    }
+
+    /// FH-3: the Flow tab's identity, read-only here — `name` is `.constant(_:)` (typing is
+    /// blocked by `editable: false` anyway, matching `FlowRowInspectorView`'s own pattern),
+    /// `savedURL` is the workspace flow's file or the user flow's, nil for a bundled gallery
+    /// flow (no on-disk file of the user's own to name).
+    private func flowTabInfo(_ doc: FlowDocument) -> FlowTabInfo {
+        FlowTabInfo(name: .constant(display?.title ?? flowID),
+                    headerKeyword: doc.headerKeyword,
+                    version: doc.version,
+                    fileExtension: FlowEditorModel.fileExtension(for: doc.fileKind),
+                    savedURL: workspaceRef?.fileURL ?? userEntry?.url,
+                    rowCount: doc.rows.count,
+                    document: doc,
+                    workspace: flowWorkspace,
+                    flowID: locationID,
+                    toggleFlag: { _, _ in },
+                    editable: false)
     }
 
     /// One row's `FlowSerializedRow` — extracted so the row builder stays type-checkable.
@@ -609,7 +655,8 @@ struct FlowListView: View {
                 Button {
                     appState.editingFlow = FlowEditTarget(flowID: flowID, name: display.title,
                                                           document: doc,
-                                                          savedText: CatSerializer.serialize(doc))
+                                                          savedText: CatSerializer.serialize(doc),
+                                                          fileURL: userEntry?.url)
                 } label: {
                     Label("Edit", systemImage: "square.and.pencil")
                 }

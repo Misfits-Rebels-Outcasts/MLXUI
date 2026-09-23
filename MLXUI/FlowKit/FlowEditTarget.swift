@@ -12,6 +12,12 @@ nonisolated struct FlowEditTarget: Hashable, Identifiable {
     /// CFM-R17-3: set when the flow being edited lives inside a workspace — the editor then
     /// saves into and resolves against the shared workspace directory.
     var workspace: WorkspaceRef? = nil
+    /// FH-6: the file this (non-workspace) flow's document already lives at on disk — set when
+    /// opening an existing, already-saved `flows/<id>/` flow, or a just-written Duplicate &
+    /// Edit / Edit-opened-copy. `workspace?.fileURL` is preferred when both are set; this is
+    /// the plain-flow equivalent KW-1-1 only wired for workspace flows. nil for a brand-new
+    /// flow that has never been written.
+    var fileURL: URL? = nil
 
     var id: String {
         if let workspace { return "w-\(workspace.workspaceID)/\(workspace.flowFile)" }
@@ -46,8 +52,10 @@ nonisolated enum FlowEditRoute {
                               bundledAssets: GalleryLoader.bundledAssets(flowID: flowID))
         let text = CatSerializer.serialize(document)
         let filename = "\(FlowEditorModel.sanitizedFileName(title)).\(FlowEditorModel.fileExtension(for: document.fileKind))"
-        try text.write(to: dir.appendingPathComponent(filename), atomically: true, encoding: .utf8)
-        return FlowEditTarget(flowID: newID, name: title, document: document, savedText: text)
+        let fileURL = dir.appendingPathComponent(filename)
+        try text.write(to: fileURL, atomically: true, encoding: .utf8)
+        return FlowEditTarget(flowID: newID, name: title, document: document, savedText: text,
+                              fileURL: fileURL)
     }
 
     /// Edit for an opened `.cat` (R5-5): copy it into the user's flow folder and return the
@@ -61,8 +69,10 @@ nonisolated enum FlowEditRoute {
         let document = try CatParser.resolveDocument(parsed)
         let text = CatSerializer.serialize(document)
         let filename = "\(FlowEditorModel.sanitizedFileName(displayName)).\(FlowEditorModel.fileExtension(for: document.fileKind))"
-        try text.write(to: dir.appendingPathComponent(filename), atomically: true, encoding: .utf8)
-        return FlowEditTarget(flowID: newID, name: displayName, document: document, savedText: text)
+        let fileURL = dir.appendingPathComponent(filename)
+        try text.write(to: fileURL, atomically: true, encoding: .utf8)
+        return FlowEditTarget(flowID: newID, name: displayName, document: document, savedText: text,
+                              fileURL: fileURL)
     }
 
     /// KW-3-1 (Q1 — "Copy flow here" on the workspace page): copy a bundled gallery flow's

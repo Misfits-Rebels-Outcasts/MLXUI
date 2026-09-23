@@ -113,12 +113,17 @@ final class FlowEditorModel {
     /// KW-1-FIX-3: the production decision behind seeding `savedURL` on open, extracted out of
     /// `FlowEditorView.init` so it's testable on its own rather than only through a SwiftUI
     /// view's `@State` init. A workspace flow whose document already exists on disk (a
-    /// `WorkspaceRef` paired with a non-nil `document`) seeds from its real file URL; a plain
-    /// `flows/` flow (`workspace == nil`), or a `WorkspaceRef` with no document (the
-    /// unparseable-flow path, which routes to `FlowListView`, never the editor), seeds nothing.
-    nonisolated static func seedSavedURL(document: FlowDocument?, workspace: WorkspaceRef?) -> URL? {
+    /// `WorkspaceRef` paired with a non-nil `document`) seeds from its real file URL. FH-6
+    /// widened this: a plain `flows/` flow (`workspace == nil`) now seeds from the caller's own
+    /// `fileURL` — the on-disk location `FlowGalleryView.openUserFlow` / `FlowListView`'s Edit
+    /// button / `FlowEditRoute.duplicateAndEdit`/`.editOpenedCopy` already know, since the file
+    /// genuinely exists there. A `WorkspaceRef` with no document (the unparseable-flow path,
+    /// which routes to `FlowListView`, never the editor) still seeds nothing, and a brand-new
+    /// flow that has never been written passes `fileURL: nil` too.
+    nonisolated static func seedSavedURL(document: FlowDocument?, workspace: WorkspaceRef?,
+                                         fileURL: URL? = nil) -> URL? {
         guard document != nil else { return nil }
-        return workspace?.fileURL
+        return workspace?.fileURL ?? fileURL
     }
 
     // MARK: - Step picker (CFM-R8-1, CFM-R8-FIX-2/7)
@@ -1114,6 +1119,17 @@ final class FlowEditorModel {
     func applyHeaderRepair(_ flag: CapabilityFlag) {
         commitChange {
             document = FlowHeaderRepair.apply(flag, to: document)
+        }
+    }
+
+    /// FH-4 — the Flow tab's untick action, the mirror of `applyHeaderRepair` through the
+    /// same `commitChange` wrapper, so it joins undo/redo like any other edit. Untick is
+    /// always offered (owner ruling Q1, already recorded): it cannot make the flow *unsafe* —
+    /// at worst it fails `check` with the same defined error `applyHeaderRepair` fixes, and
+    /// Save stays blocked until it's fixed or the flag is re-added.
+    func removeHeaderFlag(_ flag: CapabilityFlag) {
+        commitChange {
+            document = FlowHeaderRepair.remove(flag, from: document)
         }
     }
 

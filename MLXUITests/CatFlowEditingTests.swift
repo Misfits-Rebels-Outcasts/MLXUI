@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftUI
 @testable import MLXUI
 
 /// CFM-R8 + CFM-R8-FIX — the editing engine's identity contract and the step picker. The
@@ -864,6 +865,36 @@ struct CatFlowEditingTests {
         #expect(try flowFiles() == ["EXTRACT TABLE DATA FROM IMAGE.cat"])
     }
 
+    /// FH-3: the Flow tab's rename field is fed a `Binding<String>` (`FlowTabInfo.name`,
+    /// production value is `$model.name`), not a plain `String` copy — writing through that
+    /// binding must reach the exact same `name` property `save()`'s stale-sibling guard reads,
+    /// the same way the old toolbar `TextField` did. `FlowEditorModel` is `@Observable` (a
+    /// class), so a `Binding` built off one of its properties can't silently diverge from the
+    /// instance itself — this pins that down explicitly rather than leaving it assumed (§7
+    /// trap 8, `RSI/DelegateOutputViewerBacklog.md`).
+    @Test func renamingThroughABindingLikeTheFlowTabUsesStillClearsTheStaleSibling() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-rename-binding-\(UUID().uuidString)")
+        let model = try editor(name: "Untitled Flow",
+                               rows: [row("Read Image", settings: "budget.png")],
+                               workspaceRoot: root)
+        try model.save()
+        let dir = model.savedURL!.deletingLastPathComponent()
+        func flowFiles() throws -> [String] {
+            try FileManager.default.contentsOfDirectory(atPath: dir.path)
+                .filter { $0.hasSuffix(".cat") || $0.hasSuffix(".catpipeline") }.sorted()
+        }
+        #expect(try flowFiles() == ["Untitled Flow.cat"])
+
+        // The exact shape `FlowEditorView.flowTabInfo` builds: a `Binding` whose setter writes
+        // straight into `model.name` (in production it's literally `$model.name`).
+        let nameBinding = Binding<String>(get: { model.name }, set: { model.name = $0 })
+        nameBinding.wrappedValue = "Renamed From The Flow Tab"
+        #expect(model.name == "Renamed From The Flow Tab")
+        try model.save()
+        #expect(try flowFiles() == ["Renamed From The Flow Tab.cat"])
+    }
+
     /// KW-1-1: `WorkspaceListView.open` builds a fresh `FlowEditorModel` from a `WorkspaceRef`
     /// every time a workspace flow is opened, so `savedURL` starts `nil` even though the file
     /// already exists on disk. Before the fix, `isSharedWorkspaceFolder` being true plus a nil
@@ -1013,6 +1044,45 @@ struct CatFlowEditingTests {
     @Test func seedSavedURLDoesNotSeedAPlainFlowsFlow() {
         let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [])
         #expect(FlowEditorModel.seedSavedURL(document: doc, workspace: nil) == nil)
+    }
+
+    /// FH-6: a plain `flows/` flow opened from disk (My Workflows, or a just-written
+    /// Duplicate & Edit / Edit-opened-copy) now seeds from the caller's own `fileURL` when
+    /// there's no workspace ref to seed from instead.
+    @Test func seedSavedURLSeedsAPlainFlowsFlowFromItsOwnFileURL() {
+        let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [])
+        let url = URL(fileURLWithPath: "/tmp/flows/abc/My Flow.cat")
+        #expect(FlowEditorModel.seedSavedURL(document: doc, workspace: nil, fileURL: url) == url)
+    }
+
+    /// A workspace ref's real file wins over a plain `fileURL` fallback when both are given
+    /// (never happens in production — `FlowEditTarget` only ever carries one or the other —
+    /// but the merge's priority should still be explicit and covered).
+    @Test func seedSavedURLPrefersTheWorkspaceRefOverAPlainFileURLFallback() {
+        let ref = WorkspaceRef(workspaceID: "docs", flowFile: "DocChat.cat")
+        let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [])
+        let fallback = URL(fileURLWithPath: "/tmp/flows/abc/DocChat.cat")
+        #expect(FlowEditorModel.seedSavedURL(document: doc, workspace: ref, fileURL: fallback) == ref.fileURL)
+    }
+
+    /// The actual bug report: opening an already-saved plain My Workflows flow — no edits made
+    /// — must not require an explicit Save before Run just to learn a URL the app already
+    /// wrote. Mirrors `aFreshlyOpenedWorkspaceFlowIsRunnableAndRevealableWithoutSavingFirst`
+    /// for the non-workspace case FH-6 fixes.
+    @Test func aFreshlyOpenedPlainFlowIsRunnableAndRevealableWithoutSavingFirst() {
+        let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow",
+                               rows: [row("Read Image", settings: "budget.png")])
+        let url = URL(fileURLWithPath: "/tmp/flows/abc/My Flow.cat")
+        // Exactly what FlowEditorView.init now produces on open of an existing plain flow:
+        // `savedText` seeded from the on-disk text (openUserFlow/the Edit button always pass
+        // `CatSerializer.serialize(doc)`), `savedURL` from `fileURL`.
+        let model = FlowEditorModel(name: "My Flow", flowID: "abc", document: doc,
+                                    savedText: CatSerializer.serialize(doc),
+                                    savedURL: FlowEditorModel.seedSavedURL(document: doc, workspace: nil, fileURL: url))
+        #expect(model.savedURL != nil)          // clears the Run/Reveal precondition
+        #expect(!model.isDirty)                 // no edits made; the "•" indicator stays off
+        #expect(model.canSave)                  // no blocking issue on this document
+        #expect(model.runnability == .runnable) // the interpreter accepts the document itself
     }
 
     // MARK: - KW-1-FIX-1: seeding savedURL also enables Run and Reveal, not only rename

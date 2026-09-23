@@ -52,6 +52,55 @@ struct CatFlowHeaderRepairTests {
         #expect(repaired.flags == [.network, .offdevice])
     }
 
+    // MARK: - `FlowHeaderRepair.remove` (FH-4)
+
+    @Test func removeIsIdempotent() {
+        let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [],
+                               flags: [.offdevice], flagsOrder: [.offdevice])
+        let once = FlowHeaderRepair.remove(.offdevice, from: doc)
+        let twice = FlowHeaderRepair.remove(.offdevice, from: once)
+        #expect(once == twice)
+        #expect(CatSerializer.serialize(once) == CatSerializer.serialize(twice))
+    }
+
+    @Test func removeOnAnUndeclaredFlagReturnsTheDocumentUnchanged() {
+        let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [],
+                               flags: [.network], flagsOrder: [.network])
+        let removed = FlowHeaderRepair.remove(.offdevice, from: doc)
+        #expect(removed == doc)
+    }
+
+    @Test func removeDropsFromBothFlagsAndFlagsOrder() {
+        let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [],
+                               flags: [.network, .offdevice], flagsOrder: [.network, .offdevice])
+        let removed = FlowHeaderRepair.remove(.network, from: doc)
+        #expect(removed.flags == [.offdevice])
+        #expect(removed.flagsOrder == [.offdevice])
+    }
+
+    /// FH-4's own byte-identical round-trip golden: `apply` then `remove` returns exactly the
+    /// original bytes, and a lone `remove` changes only line one.
+    @Test func applyThenRemoveRoundTripsByteIdentically() throws {
+        let text = """
+        mlxflow 0.8; network
+        1. Read Text    memo.txt
+        2. Save Text    out.md
+        """
+        let doc = try CatParser.parse(text)
+        let original = CatSerializer.serialize(doc)
+
+        let repaired = FlowHeaderRepair.apply(.offdevice, to: doc)
+        let roundTripped = FlowHeaderRepair.remove(.offdevice, from: repaired)
+        #expect(CatSerializer.serialize(roundTripped) == original)
+
+        let removedOnly = FlowHeaderRepair.remove(.network, from: doc)
+        let originalLines = original.split(separator: "\n", omittingEmptySubsequences: false)
+        let removedLines = CatSerializer.serialize(removedOnly).split(separator: "\n", omittingEmptySubsequences: false)
+        #expect(originalLines.count == removedLines.count)
+        #expect(originalLines[0] != removedLines[0])
+        #expect(originalLines.dropFirst().elementsEqual(removedLines.dropFirst()))
+    }
+
     // MARK: - Round trip: repair -> serialize -> reparse -> checkFlow
 
     @Test func e120RoundTripClearsTheIssueAndConfinesTheByteDiffToLineOne() throws {
@@ -125,6 +174,68 @@ struct CatFlowHeaderRepairTests {
         model.undo()
         #expect(model.catText == before)
         #expect(!model.document.flags.contains(.offdevice))
+    }
+
+    /// The mirror of the test above, for the Flow tab's untick path (FH-4) rather than the
+    /// row-level one-click repair: starting from a flow that already declares `offdevice` and
+    /// genuinely needs it, `removeHeaderFlag` — the exact function `FlowInspectorPane`'s
+    /// checkbox calls when unticked — must actually block Save, not just change the flag.
+    /// Written on direct request to confirm this end-to-end, after `FH-4-FIX-1` found the
+    /// opposite gap for `network` (a status that claimed enforcement nothing backed).
+    @Test @MainActor func removingOffdeviceFromARemoteRowFlowBlocksSaveAndUndoRestoresIt() throws {
+        let text = """
+        mlxflow 0.8; offdevice
+        1. Read Text    memo.txt
+        2. Answer       (1)  claude-sonnet @ anthropic
+        3. Save Text    out.md
+
+        models:
+          claude-sonnet @ anthropic = anthropic/claude-sonnet-4
+        """
+        let doc = try CatParser.parse(text)
+        let model = editor(doc)
+        #expect(model.canSave, "the flow is valid as declared — nothing should block Save yet")
+
+        let (workspace, cleanup) = tempFlagInventoryWorkspace()
+        defer { cleanup() }
+        let beforeStatus = FlowFlagInventory.status(of: .offdevice, in: model.document,
+                                                    workspace: workspace, flowID: "flow-1")
+        guard case .requiredAndDeclared(let rowNumber, let task) = beforeStatus else {
+            Issue.record("expected .requiredAndDeclared before removal, got \(beforeStatus)")
+            return
+        }
+        #expect(rowNumber == "2")
+        #expect(task == "Answer")
+
+        let before = model.catText
+        model.removeHeaderFlag(.offdevice)
+        #expect(!model.document.flags.contains(.offdevice))
+        #expect(model.catText != before)
+
+        // The actual gate a Flow-tab untick must trip: Save is blocked, with a real message.
+        #expect(!model.canSave, "unticking a genuinely-needed offdevice must block Save")
+        let reason = try #require(model.saveBlockReason)
+        #expect(reason.contains("offdevice"))
+
+        let afterStatus = FlowFlagInventory.status(of: .offdevice, in: model.document,
+                                                   workspace: workspace, flowID: "flow-1")
+        guard case .requiredButMissing(let code, let message) = afterStatus else {
+            Issue.record("expected .requiredButMissing after removal, got \(afterStatus)")
+            return
+        }
+        #expect(code == "E120")
+        #expect(message == reason, "the Flow tab's reason line and the real Save-block reason must be the same sentence")
+
+        model.undo()
+        #expect(model.catText == before)
+        #expect(model.document.flags.contains(.offdevice))
+        #expect(model.canSave)
+    }
+
+    private func tempFlagInventoryWorkspace() -> (workspace: FlowWorkspace, cleanup: () -> Void) {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("catflow-flaginventory-\(UUID().uuidString)")
+        return (FlowWorkspace(root: root), { try? FileManager.default.removeItem(at: root) })
     }
 
     /// Under `APPSTORE_BUILD` (the MLXUI test host — `CatFlowCapabilityGateTests` pins this),

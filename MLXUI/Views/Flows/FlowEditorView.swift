@@ -22,6 +22,9 @@ struct FlowEditorView: View {
     @State private var showFullCatalog = false
     @State private var showInstallSheet = false
     @State private var session = FlowRunSession()
+    /// FH-7: owned here (not `FlowInspectorPane`'s local state) so a run's completion can force
+    /// it to `.output` from `run()`'s completion handler below.
+    @State private var inspectorTab: FlowInspectorTab = .step
     /// FIP-2 — a `Read *` row whose file isn't there yet, or nil. Warn only (owner ruling):
     /// renders as a banner, never disables Run.
     @State private var inputAdvisory: FlowPreflight.RowAdvisory?
@@ -32,20 +35,23 @@ struct FlowEditorView: View {
 
     init(flowID: String = UUID().uuidString, name: String = "Untitled Flow",
          document: FlowDocument? = nil, savedText: String? = nil,
-         workspace: WorkspaceRef? = nil) {
+         workspace: WorkspaceRef? = nil, fileURL: URL? = nil) {
         self.workspaceRef = workspace
         // KW-1-1: a workspace flow opened from disk (a `WorkspaceRef` naming an existing
         // document) already has a file at `workspace.fileURL` — seed `savedURL` so a rename's
         // stale-sibling guard recognizes that file as this editor's own and clears it, instead
         // of leaving it behind as an untracked duplicate. KW-1-FIX-3: the decision itself is
-        // `FlowEditorModel.seedSavedURL`, tested on its own.
+        // `FlowEditorModel.seedSavedURL`, tested on its own. FH-6: the plain-`flows/`
+        // equivalent — `fileURL` is the caller's own on-disk URL for a non-workspace flow that
+        // already exists (opening it from My Workflows, or a just-written Duplicate & Edit /
+        // Edit-opened-copy) — falls back only when there's no workspace ref to seed from.
         _model = State(initialValue: FlowEditorModel(
             name: workspace?.flowStem ?? name,
             flowID: workspace?.workspaceID ?? flowID,
             document: document,
             workspace: workspace?.workspace ?? .shared,
             savedText: savedText,
-            savedURL: FlowEditorModel.seedSavedURL(document: document, workspace: workspace)))
+            savedURL: FlowEditorModel.seedSavedURL(document: document, workspace: workspace, fileURL: fileURL)))
     }
 
     /// The run scope for this flow — workspace-rooted when it lives in one (CFM-R17-1).
@@ -63,6 +69,23 @@ struct FlowEditorView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
+            // FH-1: the save/seed error, moved out of the header's fixed-width toolbar row
+            // (where it was the only unbounded child) into a banner here — same shape as the
+            // input advisory just below, red instead of blue. Shown first when both are
+            // present, since a save-blocking error outranks a non-blocking setup note.
+            if let notice = model.saveError ?? model.seedError {
+                HStack(alignment: .top, spacing: 8) {
+                    Label(notice, systemImage: "exclamationmark.circle")
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
             // FIP-2 — same non-blocking shape `FlowListView`'s setup advisory renders: names
             // the row and the missing file, never disables Run below.
             if let advisory = inputAdvisory {
@@ -154,6 +177,15 @@ struct FlowEditorView: View {
             session.clearRun(doc: model.document)
             prepareInstall()
         }
+        // FH-7: a run that reaches the end un-cancelled, un-parked, and without a hard failure
+        // — select the last row and show its Output tab (the convenience of "go look at what
+        // just ran" without a manual click).
+        .onChange(of: session.completedRunToken) { _, _ in
+            if let last = model.document.rows.last {
+                model.selectedRowID = last.id
+                inspectorTab = .output
+            }
+        }
         // CFM-R14-2: seed defaults from the derived pool, not a hand table.
         .onAppear {
             model.modelCatalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
@@ -162,115 +194,205 @@ struct FlowEditorView: View {
         }
     }
 
-    // MARK: - Header
+    // MARK: - Header (FH-5: three rungs, widest that fits — never a second row)
 
+    /// `ViewThatFits` measures each rung's ideal size and keeps the first that fits — wide,
+    /// then medium, then narrow, in priority order. Not a second row: that would spend
+    /// vertical space permanently for a problem that only exists at small widths, and would
+    /// move controls on every resize (rejected in the backlog, recorded there so it isn't
+    /// re-proposed).
     private var header: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 4) {
-                if model.isDirty {
-                    Text("•")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                }
-                TextField("Flow name", text: $model.name)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 200)
-            }
-            // CFM-R18-5: the family the document carries, not a literal — a fresh flow is
-            // `mlxflow`, an opened `.catpipeline` keeps `mlxpipeline`/`catpipeline`.
-            Text("\(model.document.headerKeyword) \(model.document.version)")
-                .font(.caption.monospaced())
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
-            // CFM-R11-3: the saved file's kind — a `.catpipeline` opened in the editor saves
-            // back as `.catpipeline` (a `.cat` as `.cat`).
-            Text("." + FlowEditorModel.fileExtension(for: model.document.fileKind))
-                .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
-            Spacer()
-            if let notice = model.saveError ?? model.seedError {
-                Text(notice)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-            Button {
-                model.undo()
-            } label: {
-                Label("Undo", systemImage: "arrow.uturn.backward")
-            }
-            .disabled(model.undoStack.isEmpty)
-            .keyboardShortcut("z", modifiers: .command)
-            .help("Undo the last edit")
-            Button {
-                model.redo()
-            } label: {
-                Label("Redo", systemImage: "arrow.uturn.forward")
-            }
-            .disabled(model.redoStack.isEmpty)
-            .keyboardShortcut("z", modifiers: [.command, .shift])
-            .help("Redo the last undo")
-            Divider().frame(height: 20)
-            // CFM-R12-2: Add/Remove in the toolbar — the visible path to building and
-            // pruning a flow without ever opening a context menu. Add targets below the
-            // selected row (or the end when nothing is selected), the same call the context
-            // menu makes.
-            Button {
-                showFullCatalog = false
-                showPicker = true
-            } label: {
-                Label(addStepLabel, systemImage: "plus")
-            }
-            .keyboardShortcut(.return, modifiers: .command)
-            .help(addStepHelp)
-            Button {
-                if let selected = model.selectedRowID {
-                    removeRow(model.row(withID: selected) ?? Row(id: selected, task: nil))
-                }
-            } label: {
-                Label("Remove", systemImage: "minus")
-            }
-            .disabled(model.selectedRowID == nil)
-            .keyboardShortcut(.delete, modifiers: [])
-            .help(model.selectedRowID == nil ? "Select a row to remove it" : "Remove the selected row")
-            if session.isRunning {
-                Button {
-                    session.cancel()
-                } label: {
-                    Label("Cancel", systemImage: "stop.fill")
-                }
-            } else {
-                Button {
-                    run()
-                } label: {
-                    Label("Run", systemImage: "play.fill")
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!canRun)
-                .help(runDisabledHelp)
-            }
-            Button {
-                save()
-            } label: {
-                Label("Save", systemImage: "square.and.arrow.down")
-            }
-            .disabled(!model.canSave)
-            .keyboardShortcut("s", modifiers: .command)
-            .help(model.saveBlockReason ?? "Save the flow as a .cat file")
-            Button {
-                reveal()
-            } label: {
-                Label("Reveal in Finder", systemImage: "folder")
-            }
-            .disabled(model.savedURL == nil)
-            // CACHE-Q: the same ⋯ menu the gallery detail carries — a working My Workflows
-            // flow opens here, and DA-5's determinism check / DA-10's skip test need a way to
-            // force a cold re-run of an *unchanged* flow. Editing a row already changes its
-            // cache key, so this is a verification affordance, not a correctness fix.
-            FlowMaintenanceMenu(session: session, doc: model.document,
-                                workspace: model.workspace, flowID: model.flowID)
+        ViewThatFits(in: .horizontal) {
+            wideHeader
+            mediumHeader
+            narrowHeader
         }
         .padding(12)
+    }
+
+    // FH-3: identity (name, header keyword/version, extension) moved to the Flow tab —
+    // renaming happens there now. What's left here is just enough to say which flow this is,
+    // truncating rather than claiming a fixed width the way the old `TextField` did.
+    private var flowTitle: some View {
+        HStack(spacing: 4) {
+            if model.isDirty {
+                Text("•")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+            }
+            Text(model.name)
+                .font(.headline)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+    }
+
+    private var undoButton: some View {
+        Button {
+            model.undo()
+        } label: {
+            Label("Undo", systemImage: "arrow.uturn.backward")
+        }
+        .disabled(model.undoStack.isEmpty)
+        .keyboardShortcut("z", modifiers: .command)
+        .help("Undo the last edit")
+    }
+
+    private var redoButton: some View {
+        Button {
+            model.redo()
+        } label: {
+            Label("Redo", systemImage: "arrow.uturn.forward")
+        }
+        .disabled(model.redoStack.isEmpty)
+        .keyboardShortcut("z", modifiers: [.command, .shift])
+        .help("Redo the last undo")
+    }
+
+    /// The dynamic Add-step label (`addStepLabel`) can read "Add step inside {block name}" —
+    /// unbounded, since a block name is free text. Reserving width off a hidden, generously
+    /// long placeholder (a `ZStack`, not a `.frame` on the visible label — a `.background`
+    /// wouldn't grow the parent) keeps the wide rung's ideal size stable across selection
+    /// changes for any realistically-named block, so `ViewThatFits` doesn't flip rungs purely
+    /// because the user selected a different row — only an extraordinarily long block name
+    /// could still do that, an accepted edge case rather than an unbounded reservation.
+    private var addStepButtonLabel: some View {
+        ZStack(alignment: .leading) {
+            Label("Add step inside a reasonably long block name", systemImage: "plus")
+                .lineLimit(1)
+                .hidden()
+            Label(addStepLabel, systemImage: "plus")
+                .lineLimit(1)
+        }
+    }
+
+    // CFM-R12-2: Add/Remove in the toolbar — the visible path to building and pruning a flow
+    // without ever opening a context menu. Add targets below the selected row (or the end
+    // when nothing is selected), the same call the context menu makes.
+    private var addStepButton: some View {
+        Button {
+            showFullCatalog = false
+            showPicker = true
+        } label: {
+            addStepButtonLabel
+        }
+        .keyboardShortcut(.return, modifiers: .command)
+        .help(addStepHelp)
+    }
+
+    private var removeButton: some View {
+        Button {
+            if let selected = model.selectedRowID {
+                removeRow(model.row(withID: selected) ?? Row(id: selected, task: nil))
+            }
+        } label: {
+            Label("Remove", systemImage: "minus")
+        }
+        .disabled(model.selectedRowID == nil)
+        .keyboardShortcut(.delete, modifiers: [])
+        .help(model.selectedRowID == nil ? "Select a row to remove it" : "Remove the selected row")
+    }
+
+    /// Run never loses its word, at any width — the one button the backlog names explicitly.
+    @ViewBuilder
+    private var runOrCancelButton: some View {
+        if session.isRunning {
+            Button {
+                session.cancel()
+            } label: {
+                Label("Cancel", systemImage: "stop.fill")
+            }
+        } else {
+            Button {
+                run()
+            } label: {
+                Label("Run", systemImage: "play.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!canRun)
+            .help(runDisabledHelp)
+        }
+    }
+
+    private var saveButton: some View {
+        Button {
+            save()
+        } label: {
+            Label("Save", systemImage: "square.and.arrow.down")
+        }
+        .disabled(!model.canSave)
+        .keyboardShortcut("s", modifiers: .command)
+        .help(model.saveBlockReason ?? "Save the flow as a .cat file")
+    }
+
+    // CACHE-Q: the same ⋯ menu the gallery detail carries — a working My Workflows flow opens
+    // here, and DA-5's determinism check / DA-10's skip test need a way to force a cold
+    // re-run of an *unchanged* flow. FH-2: Reveal in Finder joins it too. At the narrow rung
+    // (FH-5), Save folds in alongside Reveal — a file-system-adjacent action, not one of the
+    // structural edits the narrow rung's Edit menu groups.
+    private func maintenanceMenu(includeSave: Bool) -> some View {
+        FlowMaintenanceMenu(session: session, doc: model.document,
+                            workspace: model.workspace, flowID: model.flowID) {
+            Divider()
+            Button("Reveal in Finder", systemImage: "folder") {
+                reveal()
+            }
+            .disabled(model.savedURL == nil)
+            if includeSave {
+                saveButton
+            }
+        }
+    }
+
+    private var wideHeader: some View {
+        HStack(spacing: 10) {
+            flowTitle
+            Spacer()
+            undoButton
+            redoButton
+            Divider().frame(height: 20)
+            addStepButton
+            removeButton
+            runOrCancelButton
+            saveButton
+            maintenanceMenu(includeSave: false)
+        }
+    }
+
+    /// Icons only, except Run — the toolbar's second-widest rung.
+    private var mediumHeader: some View {
+        HStack(spacing: 10) {
+            flowTitle
+            Spacer()
+            undoButton.labelStyle(.iconOnly)
+            redoButton.labelStyle(.iconOnly)
+            Divider().frame(height: 20)
+            addStepButton.labelStyle(.iconOnly)
+            removeButton.labelStyle(.iconOnly)
+            runOrCancelButton
+            saveButton.labelStyle(.iconOnly)
+            maintenanceMenu(includeSave: false)
+        }
+    }
+
+    /// Undo/Redo/Add/Remove fold into one "Edit" menu; Run keeps its word; Save joins the ⋯
+    /// menu. Each button keeps its own `.help()`/`.keyboardShortcut` inside the menu — a
+    /// SwiftUI keyboard shortcut fires wherever its view sits in the active hierarchy, menu
+    /// item or not.
+    private var narrowHeader: some View {
+        HStack(spacing: 10) {
+            flowTitle
+            Spacer()
+            Menu("Edit") {
+                undoButton
+                redoButton
+                Divider()
+                addStepButton
+                removeButton
+            }
+            runOrCancelButton
+            maintenanceMenu(includeSave: true)
+        }
     }
 
     /// CFM-R8-FIX-4: Run is gated on the same integrity check as Save — a document Save
@@ -330,12 +452,14 @@ struct FlowEditorView: View {
             if model.selectedRowID != nil {
                 Divider()
                 FlowInspectorPane(
+                    flowInfo: flowTabInfo,
                     output: selectedRowOutput,
                     rowTitle: selectedRowTitle,
                     substitutionNote: selectedSubstitutionNote,
                     savedFile: selectedSavedFile,
                     savedKind: selectedSavedKind,
-                    initialTab: .properties
+                    savedPresentation: selectedSavedPresentation,
+                    tab: $inspectorTab
                 ) {
                     FlowRowInspectorView(model: model,
                                          rowID: model.selectedRowID ?? UUID(),
@@ -382,6 +506,29 @@ struct FlowEditorView: View {
         return FlowRowSummary.taskName(for: row)
     }
 
+    /// FH-3: the Flow tab's identity, bound live to the model — `name` is `$model.name`
+    /// itself, so a rename typed there reaches `FlowEditorModel.save()`'s stale-sibling guard
+    /// exactly as the old toolbar `TextField` did (§7 trap 8).
+    private var flowTabInfo: FlowTabInfo {
+        FlowTabInfo(name: $model.name,
+                    headerKeyword: model.document.headerKeyword,
+                    version: model.document.version,
+                    fileExtension: FlowEditorModel.fileExtension(for: model.document.fileKind),
+                    savedURL: model.savedURL,
+                    rowCount: model.document.rows.count,
+                    document: model.document,
+                    workspace: model.workspace,
+                    flowID: model.flowID,
+                    toggleFlag: { flag, declared in
+                        if declared {
+                            model.applyHeaderRepair(flag)
+                        } else {
+                            model.removeHeaderFlag(flag)
+                        }
+                    },
+                    editable: true)
+    }
+
     private var selectedSubstitutionNote: String? {
         model.selectedRowID.flatMap { session.substitutionNotes[$0] }
     }
@@ -396,6 +543,14 @@ struct FlowEditorView: View {
     private var selectedSavedKind: Kind? {
         guard let id = model.selectedRowID, let row = model.row(withID: id) else { return nil }
         return FlowSavedFile.kind(forTask: row.task)
+    }
+
+    /// OV-1: the saved file's presentation (by extension, task as fallback) — drives whether
+    /// the Output tab offers a Quick Look button (OV-2).
+    private var selectedSavedPresentation: SavedFilePresentation? {
+        guard let id = model.selectedRowID, let row = model.row(withID: id),
+              let url = selectedSavedFile else { return nil }
+        return FlowSavedFile.presentation(url: url, task: row.task)
     }
 
     /// R12-3: every row flattened with depth; a collapsed block hides its children.

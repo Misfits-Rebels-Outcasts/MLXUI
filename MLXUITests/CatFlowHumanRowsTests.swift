@@ -186,6 +186,11 @@ struct CatFlowHumanRowsTests {
         // A wait=forever row parks without a deadline.
         #expect(parked.deadline == nil)
 
+        // FH-7: parking must not look like a completed run — the trigger for "select the
+        // last row + show Output" would otherwise fire while the flow is still mid-run,
+        // waiting on a person.
+        #expect(session.completedRunToken == 0)
+
         session.answer(tag: "approve", for: parked, doc: doc, runner: runner, context: context)
         for _ in 0..<40 {
             if session.parked == nil, session.status(for: doc.rows[2].id) == .succeeded { break }
@@ -193,6 +198,8 @@ struct CatFlowHumanRowsTests {
         }
         #expect(session.parked == nil)
         #expect(session.status(for: doc.rows[2].id) == .succeeded)
+        // The answer resumed the run to a genuine finish.
+        #expect(session.completedRunToken == 1)
     }
 
     /// WR-6 (`RSI/DelegateWorkspaceRunBacklog.md`) — the missing neighbour of cancel-clears-
