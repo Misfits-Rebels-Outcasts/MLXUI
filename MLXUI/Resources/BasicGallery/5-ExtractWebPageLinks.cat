@@ -1,6 +1,6 @@
 mlxflow 0.8; network
 1. Template              "https://thehackernews.com/search/label/artificial%20intelligence"
-2. Human Input           "Enter a URL to summarize:" ; timeout=30s; default=unchanged
+2. Human Input           "Enter a URL to extract:" ; timeout=30s; default=unchanged
 3. Web Fetch             as=markdown
 4. Template      (2,3)   "From the news index page below, pick the 5 most
                          newsworthy AI items. For each, output exactly one

@@ -647,7 +647,7 @@ struct FlowListView: View {
                 Button {
                     duplicateAndEdit(display, doc)
                 } label: {
-                    Label("Duplicate & Edit", systemImage: "square.and.pencil")
+                    Label("Duplicate & Edit (BETA)", systemImage: "square.and.pencil")
                 }
                 .help("Copy this flow into your flows folder and open it in the editor")
                 .disabled(false) //comeback cbx
