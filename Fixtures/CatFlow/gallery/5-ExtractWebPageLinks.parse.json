@@ -1,0 +1,87 @@
+{
+ "flags": [
+  "network"
+ ],
+ "rows": [
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "\"https://thehackernews.com/search/label/artificial%20intelligence\"",
+   "task": "Template"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "\"Enter a URL to summarize:\" ; timeout=30s; default=unchanged",
+   "task": "Human Input"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "as=markdown",
+   "task": "Web Fetch"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [
+    {
+     "kind": "row",
+     "number": 2
+    },
+    {
+     "kind": "row",
+     "number": 3
+    }
+   ],
+   "settings": "\"From the news index page below, pick the 5 most newsworthy AI items. For each, output exactly one block:\\n<article><h3>TITLE</h3> <p>ONE SENTENCE, 25 words max</p> <p><a href='URL'>Read the story</a></p> </article>\\n\\nRules: copy URL verbatim from a [text](url) link in PAGE_TEXT. If it does not begin with http, join it to the origin of PAGE_URL. Never invent a URL. Skip any item you cannot link. Output HTML only, no commentary.\\n\\nPAGE_URL: {1}\\n\\nPAGE_TEXT:{2}\"",
+   "task": "Template"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": "Qwen3 8B",
+   "refs": [],
+   "settings": null,
+   "task": "Generate"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "\"<!doctype html>\\n<html><head><meta charset='utf-8'> <title>AI News</title></head>\\n<body>\\n<h1>AI News</h1>\\n {input}\\n</body></html>\\n\"",
+   "task": "Template"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "links.html",
+   "task": "Save Text"
+  }
+ ],
+ "version": "0.8"
+}

@@ -34,7 +34,7 @@ struct CatFlowNotRunnableTests {
     @Test func flowsThatRunStayRunnable() throws {
         for flowID in ["01-SpokenSummary", "02-MeetingMinutes", "18-DocChat", "51-InboxIngest",
                        "21-PhotoWebPrep", "65-VoiceoverBed", "1-TranscribeAudio", "2-SummaryFromAudio",
-                       "3-ExtractTableFromImage"] {
+                       "3-ExtractTableFromImage", "4-WebPageSummary", "5-ExtractWebPageLinks"] {
             #expect(try refusal(flowID) == nil, "\(flowID) should be runnable")
         }
     }

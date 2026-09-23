@@ -520,6 +520,22 @@
    "filename": "74-WebPageSummary.cat",
    "category": "The Web, Read-Only",
    "description": "Type a URL — or just press Enter to summarize Hacker News, the row's own default — and get one paragraph back, fetched and boiled down."
+  },
+  {
+   "number": 75,
+   "title": "Web Page Summary",
+   "filename": "4-WebPageSummary.cat",
+   "category": "Basic",
+   "description": "Enter a URL — or accept the row's own default — and get one paragraph back, fetched and boiled down.",
+   "tier": "basic"
+  },
+  {
+   "number": 76,
+   "title": "Extract Web Page Links",
+   "filename": "5-ExtractWebPageLinks.cat",
+   "category": "Basic",
+   "description": "Point it at a news index page and get back an HTML page of the top 5 headlines, each with a one-line summary and link.",
+   "tier": "basic"
   }
  ]
 }
