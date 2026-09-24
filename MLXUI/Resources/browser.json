@@ -2193,17 +2193,21 @@
           "contextWindow": 512,
           "license": "apache-2.0",
           "licenseUrl": null,
-          "description": null,
-          "architecture": null,
-          "languages": null,
-          "lastUpdated": null,
-          "taskTags": null,
+          "description": "# Laya 0.4B\n\nLaya is a 0.4B **decision encoder**, not a chat model: a ModernBERT-large encoder (28 layers, hidden 1024, 16 attention heads, sliding-window attention on two layers out of every three, global attention on the third) feeding a 2-layer decision head that scores a `[MASK]` position per option. Given a block of text plus a typed question — a declared list of choices, an ordered scale, or a yes/no — it returns one answer per question with a probability per option and a confidence score. **It never generates text**, so there is no chat surface for it.\n\nThis is an unmodified MLX FP16 conversion of Convai Innovations' `laya` model (no retraining, no quantization), ported to MLX as `aac6fef/laya-mlx`. Licensed Apache-2.0 throughout — weights, upstream code and the MLX port.\n\n**Best fit:** a fast first pass on narrow, fixed-answer decisions — ticket and email routing, intent classification, moderation, \"does this need a human?\". **Honest limits:** weak zero-shot on decision sets it wasn't tuned for (0.362 on a typed-decisions benchmark, below a 0.461 majority baseline); its ordered-scale questions are the weakest type (0.372 on SST-5); accuracy collapses past about 20 options, since the 192-token option budget leaves only 3–4 tokens per label; calibration temperatures need refitting per domain before a probability means much. 512-token context total, English only. It does not fit anything generative.",
+          "architecture": "ModernBertForMaskedLM + Laya decision head",
+          "languages": [
+            "en"
+          ],
+          "lastUpdated": "2026-09-19",
+          "taskTags": [
+            "text-classification"
+          ],
           "benchmarks": null,
           "speedTokensPerSec": null,
           "speedHardware": null,
           "speedEstimated": null,
-          "communityDownloads": null,
-          "communityLikes": null,
+          "communityDownloads": 0,
+          "communityLikes": 82,
           "variants": [
             {
               "quantization": "fp16",
@@ -2215,8 +2219,8 @@
               "recommended": true
             }
           ],
-          "descriptionSource": null,
-          "summary": null
+          "descriptionSource": "curated",
+          "summary": "A 0.4B ModernBERT decision encoder — a fast first-pass classifier for routing, intent and moderation decisions, with none of the generation ability of a chat model."
         }
       ]
     },
