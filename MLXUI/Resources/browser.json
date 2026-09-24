@@ -46,7 +46,8 @@
       "sfSymbol": "gearshape.2.fill",
       "domainIds": [
         "embedding",
-        "rerank"
+        "rerank",
+        "decision"
       ]
     }
   ],
@@ -82,6 +83,10 @@
     "rerank": {
       "icon": "arrow.up.arrow.down.square",
       "description": "Rerank"
+    },
+    "decision": {
+      "icon": "arrow.triangle.branch",
+      "description": "Decision"
     },
     "imagegen": {
       "icon": "photo.artframe",
@@ -2159,6 +2164,59 @@
           ],
           "descriptionSource": "mlx-community/Qwen3-Reranker-0.6B-4bit",
           "summary": "A 0.6B causal-LM reranker (Qwen3-Reranker) scored by a yes/no relevance question rather than a classification head; MLX 4-bit conversion, one forward pass per candidate."
+        }
+      ]
+    },
+    {
+      "id": "decision",
+      "name": "Decision",
+      "sfSymbol": "arrow.triangle.branch",
+      "children": null,
+      "models": [
+        {
+          "id": "aac6fef--laya-mlx",
+          "family": "Laya",
+          "displayName": "Laya 0.4B",
+          "paramSize": "0.4B",
+          "paramCountB": 0.4,
+          "modelType": "decision",
+          "source": "mlx",
+          "format": "mlx-fp16",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "aac6fef",
+          "hfModelId": "aac6fef/laya-mlx",
+          "ramGB": 1.3,
+          "downloadSizeGB": 0.85,
+          "contextWindow": 512,
+          "license": "apache-2.0",
+          "licenseUrl": null,
+          "description": null,
+          "architecture": null,
+          "languages": null,
+          "lastUpdated": null,
+          "taskTags": null,
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": null,
+          "communityLikes": null,
+          "variants": [
+            {
+              "quantization": "fp16",
+              "format": "mlx-fp16",
+              "ramGB": 1.3,
+              "downloadSizeGB": 0.85,
+              "qualityPercent": 100,
+              "hfModelId": "aac6fef/laya-mlx",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": null,
+          "summary": null
         }
       ]
     },

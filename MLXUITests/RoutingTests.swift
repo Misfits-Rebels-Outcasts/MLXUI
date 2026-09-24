@@ -157,6 +157,53 @@ struct RoutingTests {
         #expect(entry.ramGB == 4.5)
     }
 
+    @Test func runnerKindMapsDecisionToDecision() {
+        // LY-1: text + typed question → label + probabilities; engine lives in Modules/Laya.
+        #expect(makeEntry(modelType: .decision).runnerKind == .decision)
+    }
+
+    @Test func layaCatalogEntryDecodes() throws {
+        // LY-1: verifies the aac6fef/laya-mlx entry shape decodes and routes correctly.
+        let json = """
+        {
+            "id": "aac6fef--laya-mlx",
+            "family": "Laya",
+            "displayName": "Laya 0.4B",
+            "paramSize": "0.4B",
+            "paramCountB": 0.4,
+            "modelType": "decision",
+            "source": "mlx",
+            "format": "mlx-fp16",
+            "platforms": ["macOS 13+"],
+            "minMacOSVersion": "13.0",
+            "hfRepo": "aac6fef",
+            "hfModelId": "aac6fef/laya-mlx",
+            "ramGB": 1.3,
+            "downloadSizeGB": 0.85,
+            "contextWindow": 512,
+            "license": "apache-2.0",
+            "variants": [
+                {
+                    "quantization": "fp16",
+                    "format": "mlx-fp16",
+                    "ramGB": 1.3,
+                    "downloadSizeGB": 0.85,
+                    "qualityPercent": 100,
+                    "hfModelId": "aac6fef/laya-mlx",
+                    "recommended": true
+                }
+            ]
+        }
+        """
+        let entry = try JSONDecoder().decode(ModelEntry.self, from: Data(json.utf8))
+        #expect(entry.modelType == .decision)
+        #expect(entry.runnerKind == .decision)
+        #expect(entry.source == .mlx)
+        #expect(entry.paramCountB == 0.4)
+        #expect(entry.ramGB == 1.3)
+        #expect(entry.contextWindow == 512)
+    }
+
     // MARK: runnerKind — catalog mislabel overrides (family beats modelType)
 
     @Test func runnerKindOverridesOuteTTSFromASRToTTS() {

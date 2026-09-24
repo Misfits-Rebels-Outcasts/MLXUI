@@ -5,7 +5,7 @@ nonisolated enum ModelSource: String, Codable {
 }
 
 nonisolated enum ModelType: String, Codable {
-    case llm, asr, tts, embedding, vision, ocr, video, image, music, segmentation, upscale, rerank
+    case llm, asr, tts, embedding, vision, ocr, video, image, music, segmentation, upscale, rerank, decision
     var sfSymbol: String {
         switch self {
         case .llm: "bubble.left.and.bubble.right"
@@ -20,6 +20,7 @@ nonisolated enum ModelType: String, Codable {
         case .segmentation: "lasso"
         case .upscale: "sparkle.magnifyingglass"
         case .rerank: "arrow.up.arrow.down.square"
+        case .decision: "arrow.triangle.branch"
         }
     }
 }

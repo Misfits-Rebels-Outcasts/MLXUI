@@ -438,6 +438,11 @@ final class ModelRunner {
             // RerankUI.makeRunView is what a user actually sees (an explanation that
             // Rerank is a headless flow task, not a chat-style surface).
             showUnsupported("Rerank", model)
+        case .decision:
+            // Dead once LayaSDK is registered (LY-4, RSI/DelegateLayaBacklog.md): the
+            // registry check ahead of this entry point will claim every .decision model,
+            // the same way MoC-4-3 made the .rerank case above unreachable in practice.
+            showUnsupported("Decision", model)
         }
     }
 
