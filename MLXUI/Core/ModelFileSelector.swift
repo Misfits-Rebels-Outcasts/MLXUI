@@ -56,6 +56,10 @@ enum ModelFileSelector {
         // (MG-DL1). The engine builds the T5 encoder from it; without it the encoder's
         // dimensions default to the wrong T5 variant.
         "t5_config.json",
+        // Laya's decision head config: `head_layers`, `max_len`, `head_max_len`, `act_costs`
+        // and the per-question-type calibration temperatures (LY-3). Without it LayaEngine
+        // (LY-4) has no head weights to load and no calibration to apply.
+        "rl_agent_config.json",
     ]
 
     /// A second HF repo whose files must be bundled into an install, keyed by the catalog

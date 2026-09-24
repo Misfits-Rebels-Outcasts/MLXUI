@@ -320,4 +320,33 @@ struct ModelFileSelectorTests {
         #expect(!out.contains("README.md"))
         #expect(!out.contains(".gitattributes"))
     }
+
+    @Test func layaRepoDownloadsExactlyFiveFiles() {
+        // LY-3: aac6fef/laya-mlx's real sibling listing (fetched live from the HF API
+        // 2026-09-24, see the LY-3 journal) — 11 real files plus .gitattributes. Only the
+        // encoder weights, the decision-head config, and the tokenizer subfolder are needed
+        // at run time; mlx_config.json/manifest.json/validation.json are check-time-only
+        // (§0 of RSI/DelegateLayaBacklog.md), and LICENSE/NOTICE/README.md are docs.
+        let out = selected([
+            ".gitattributes",
+            "LICENSE",
+            "NOTICE",
+            "README.md",
+            "encoder/config.json",
+            "manifest.json",
+            "mlx_config.json",
+            "model.safetensors",
+            "rl_agent_config.json",
+            "tokenizer/tokenizer.json",
+            "tokenizer/tokenizer_config.json",
+            "validation.json",
+        ])
+        #expect(out == [
+            "model.safetensors",
+            "rl_agent_config.json",
+            "encoder/config.json",
+            "tokenizer/tokenizer.json",
+            "tokenizer/tokenizer_config.json",
+        ])
+    }
 }

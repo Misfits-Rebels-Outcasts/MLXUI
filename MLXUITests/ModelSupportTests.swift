@@ -32,4 +32,10 @@ struct ModelSupportTests {
         let entry = makeEntry(id: "mlx-community--SeedVR2-3B-mlx-int8")
         #expect(ModelSupport.unsupportedReason(for: entry) == nil)
     }
+
+    // LY-3: Laya's runner doesn't exist yet — flagged until LY-4 ports LayaEngine.
+    @Test func layaFlaggedUntilLY4() {
+        let entry = makeEntry(id: "aac6fef--laya-mlx", hfModelId: "aac6fef/laya-mlx")
+        #expect(ModelSupport.unsupportedReason(for: entry) != nil)
+    }
 }
