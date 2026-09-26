@@ -249,18 +249,29 @@ final class LayaRunModel {
         latencyMS = nil
 
         let directory = ModelStore.shared.directory(forModelID: modelID)
-        Task {
+        // `.detached`, not a plain `Task { }`: an unstructured `Task` created from this
+        // `@MainActor` method inherits the main actor, so `engine.predict(...)` — a plain
+        // synchronous, GPU-heavy forward pass, not itself `async` — would run back on the main
+        // thread the instant `await engine(for:)` returns, sharing it with SwiftUI's own
+        // Metal-backed rendering (the "Deciding…" spinner) for the whole pass. Detaching keeps
+        // every bit of MLX work off the main thread; only the final state writes hop back on.
+        Task.detached(priority: .userInitiated) {
             let start = Date()
             do {
                 let question = try definition.resolve()
                 let engine = try await LayaEngineCache.shared.engine(for: directory)
                 let answers = try engine.predict(state: state, questions: [question])
-                self.latencyMS = Date().timeIntervalSince(start) * 1000
-                self.answer = answers.first
-                self.isRunning = false
+                let elapsedMS = Date().timeIntervalSince(start) * 1000
+                await MainActor.run {
+                    self.latencyMS = elapsedMS
+                    self.answer = answers.first
+                    self.isRunning = false
+                }
             } catch {
-                self.errorText = "\(error)"
-                self.isRunning = false
+                await MainActor.run {
+                    self.errorText = "\(error)"
+                    self.isRunning = false
+                }
             }
         }
     }
