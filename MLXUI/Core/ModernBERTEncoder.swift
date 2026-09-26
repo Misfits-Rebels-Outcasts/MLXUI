@@ -69,9 +69,18 @@ nonisolated final class ModernBERTLayerNormNoBias: Module {
     }
 
     func callAsFunction(_ x: MLXArray) -> MLXArray {
-        let mean = x.mean(axis: -1, keepDims: true)
-        let variance = (x - mean).square().mean(axis: -1, keepDims: true)
-        return weight * (x - mean) * rsqrt(variance + eps)
+        // The mean/variance reduction runs in fp32 regardless of `x`'s storage dtype. In fp16
+        // (this checkpoint's format), squaring an outlier activation — routine in trained
+        // transformers, "attention sink" dimensions reaching into the hundreds — overflows
+        // fp16's ~65504 max, making `variance` (and so the whole normalized output) `inf`/`0`
+        // silently, no thrown error. `MLXFast.layerNorm`'s fused kernel avoids this the same
+        // way; this hand-written formula (needed because it has no bias, unlike `MLXNN.LayerNorm`)
+        // has to do it explicitly.
+        let xf = x.asType(.float32)
+        let mean = xf.mean(axis: -1, keepDims: true)
+        let variance = (xf - mean).square().mean(axis: -1, keepDims: true)
+        let normalized = weight.asType(.float32) * (xf - mean) * rsqrt(variance + eps)
+        return normalized.asType(x.dtype)
     }
 }
 

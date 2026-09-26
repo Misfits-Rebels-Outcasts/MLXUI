@@ -113,7 +113,13 @@ nonisolated final class LayaDecisionModel: Module {
         h = h + typeEmb(qtype).expandedDimensions(axis: 1)
         let headMask = attentionMask.asType(.bool).expandedDimensions(axes: [1, 2])
         h = head(h, mask: headMask)
-        let gatherIndex = MLX.maximum(markerPos, MLXArray(Int32(0))).expandedDimensions(axis: -1)
+        // `take_along_axis` needs `gatherIndex` to match `h`'s shape on every axis but the
+        // gather axis — an unbroadcast [B, count, 1] silently gathers the wrong (or a
+        // degenerate, identical-per-row) slice instead of throwing, so broadcast explicitly.
+        let clampedMarkerPos = MLX.maximum(markerPos, MLXArray(Int32(0)))
+        let gatherIndex = MLX.broadcast(
+            clampedMarkerPos.expandedDimensions(axis: -1),
+            to: [h.dim(0), clampedMarkerPos.dim(1), h.dim(-1)])
         let markers = takeAlong(h, gatherIndex, axis: 1)
         var logits = scorer(markers).squeezed(axis: -1).asType(.float32)
         logits = which(markerMask, logits, MLXArray(Float(-1e4)))

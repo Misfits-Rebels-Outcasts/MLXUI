@@ -1,0 +1,1006 @@
+{
+  "email": {
+    "model": "laya-rl-agent",
+    "answers": {
+      "department": {
+        "type": "choice",
+        "confidence": 0.8332,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9554,
+          "technical": 0.0152,
+          "sales": 0.0149,
+          "other": 0.0144
+        }
+      },
+      "urgency": {
+        "type": "score",
+        "confidence": 0.1588,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 1.4465,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.0956,
+          "1": 0.3624,
+          "2": 0.542
+        }
+      },
+      "refund": {
+        "type": "noul",
+        "confidence": 0.8592,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.8592
+      }
+    },
+    "usage": {
+      "input_tokens": 254,
+      "output_tokens": 0
+    }
+  },
+  "en": {
+    "model": "laya-rl-agent",
+    "answers": {
+      "department": {
+        "type": "choice",
+        "confidence": 0.8199,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9509,
+          "technical": 0.0156,
+          "sales": 0.016,
+          "other": 0.0175
+        }
+      },
+      "urgency": {
+        "type": "score",
+        "confidence": 0.1349,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 1.2859,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.1057,
+          "1": 0.5027,
+          "2": 0.3916
+        }
+      },
+      "refund": {
+        "type": "noul",
+        "confidence": 0.9082,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.9082
+      }
+    },
+    "usage": {
+      "input_tokens": 170,
+      "output_tokens": 0
+    }
+  },
+  "zh": {
+    "model": "laya-rl-agent",
+    "answers": {
+      "department": {
+        "type": "choice",
+        "confidence": 0.4663,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.789,
+          "technical": 0.0862,
+          "sales": 0.0793,
+          "other": 0.0455
+        }
+      },
+      "urgency": {
+        "type": "score",
+        "confidence": 0.036,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 1.211,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.2082,
+          "1": 0.3726,
+          "2": 0.4192
+        }
+      },
+      "refund": {
+        "type": "noul",
+        "confidence": 0.9681,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.9681
+      }
+    },
+    "usage": {
+      "input_tokens": 194,
+      "output_tokens": 0
+    }
+  },
+  "de": {
+    "model": "laya-rl-agent",
+    "answers": {
+      "department": {
+        "type": "choice",
+        "confidence": 0.7327,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9172,
+          "technical": 0.023,
+          "sales": 0.0422,
+          "other": 0.0176
+        }
+      },
+      "urgency": {
+        "type": "score",
+        "confidence": 0.0657,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 1.2577,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.1648,
+          "1": 0.4127,
+          "2": 0.4225
+        }
+      },
+      "refund": {
+        "type": "noul",
+        "confidence": 0.6972,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.3028
+      }
+    },
+    "usage": {
+      "input_tokens": 203,
+      "output_tokens": 0
+    }
+  },
+  "fr": {
+    "model": "laya-rl-agent",
+    "answers": {
+      "department": {
+        "type": "choice",
+        "confidence": 0.8371,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9566,
+          "technical": 0.014,
+          "sales": 0.0176,
+          "other": 0.0118
+        }
+      },
+      "urgency": {
+        "type": "score",
+        "confidence": 0.0295,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 1.0955,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.2326,
+          "1": 0.4393,
+          "2": 0.3281
+        }
+      },
+      "refund": {
+        "type": "noul",
+        "confidence": 0.9086,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.9086
+      }
+    },
+    "usage": {
+      "input_tokens": 218,
+      "output_tokens": 0
+    }
+  },
+  "es": {
+    "model": "laya-rl-agent",
+    "answers": {
+      "department": {
+        "type": "choice",
+        "confidence": 0.7514,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9234,
+          "technical": 0.0238,
+          "sales": 0.042,
+          "other": 0.0108
+        }
+      },
+      "urgency": {
+        "type": "score",
+        "confidence": 0.1559,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 1.4429,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.0974,
+          "1": 0.3623,
+          "2": 0.5403
+        }
+      },
+      "refund": {
+        "type": "noul",
+        "confidence": 0.8716,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.8716
+      }
+    },
+    "usage": {
+      "input_tokens": 200,
+      "output_tokens": 0
+    }
+  },
+  "hi": {
+    "model": "laya-rl-agent",
+    "answers": {
+      "department": {
+        "type": "choice",
+        "confidence": 0.2441,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.639,
+          "technical": 0.1398,
+          "sales": 0.1172,
+          "other": 0.104
+        }
+      },
+      "urgency": {
+        "type": "score",
+        "confidence": 0.0889,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 1.184,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.1554,
+          "1": 0.5052,
+          "2": 0.3394
+        }
+      },
+      "refund": {
+        "type": "noul",
+        "confidence": 0.6837,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.6837
+      }
+    },
+    "usage": {
+      "input_tokens": 332,
+      "output_tokens": 0
+    }
+  },
+  "ja": {
+    "model": "laya-rl-agent",
+    "answers": {
+      "department": {
+        "type": "choice",
+        "confidence": 0.0085,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "other",
+        "probabilities": {
+          "billing": 0.207,
+          "technical": 0.2603,
+          "sales": 0.2246,
+          "other": 0.3081
+        }
+      },
+      "urgency": {
+        "type": "score",
+        "confidence": 0.0011,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 1.0274,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.3116,
+          "1": 0.3494,
+          "2": 0.339
+        }
+      },
+      "refund": {
+        "type": "noul",
+        "confidence": 0.7741,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.7741
+      }
+    },
+    "usage": {
+      "input_tokens": 200,
+      "output_tokens": 0
+    }
+  },
+  "ru": {
+    "model": "laya-rl-agent",
+    "answers": {
+      "department": {
+        "type": "choice",
+        "confidence": 0.9259,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9833,
+          "technical": 0.0068,
+          "sales": 0.0051,
+          "other": 0.0047
+        }
+      },
+      "urgency": {
+        "type": "score",
+        "confidence": 0.1388,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 0.5812,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.5271,
+          "1": 0.3647,
+          "2": 0.1082
+        }
+      },
+      "refund": {
+        "type": "noul",
+        "confidence": 0.5845,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.5845
+      }
+    },
+    "usage": {
+      "input_tokens": 230,
+      "output_tokens": 0
+    }
+  },
+  "empty_state": {
+    "model": "laya-rl-agent",
+    "answers": {
+      "department": {
+        "type": "choice",
+        "confidence": 0.0393,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.4001,
+          "technical": 0.2045,
+          "sales": 0.1906,
+          "other": 0.2048
+        }
+      },
+      "urgency": {
+        "type": "score",
+        "confidence": 0.0526,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 1.1996,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.1833,
+          "1": 0.4338,
+          "2": 0.3829
+        }
+      },
+      "refund": {
+        "type": "noul",
+        "confidence": 0.8513,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.1487
+      }
+    },
+    "usage": {
+      "input_tokens": 113,
+      "output_tokens": 0
+    }
+  },
+  "long": {
+    "model": "laya-rl-agent",
+    "answers": {
+      "q0": {
+        "type": "choice",
+        "confidence": 0.7721,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9336,
+          "technical": 0.0247,
+          "sales": 0.0166,
+          "other": 0.0251
+        }
+      },
+      "q1": {
+        "type": "score",
+        "confidence": 0.0068,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 1.0185,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.2954,
+          "1": 0.3906,
+          "2": 0.314
+        }
+      },
+      "q2": {
+        "type": "noul",
+        "confidence": 0.7499,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.7499
+      }
+    },
+    "usage": {
+      "input_tokens": 1536,
+      "output_tokens": 0
+    }
+  },
+  "conversation": {
+    "model": "laya-rl-agent",
+    "answers": {
+      "department": {
+        "type": "choice",
+        "confidence": 0.772,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9339,
+          "technical": 0.0208,
+          "sales": 0.0233,
+          "other": 0.0221
+        }
+      },
+      "urgency": {
+        "type": "score",
+        "confidence": 0.1017,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 1.2624,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.1311,
+          "1": 0.4753,
+          "2": 0.3935
+        }
+      },
+      "refund": {
+        "type": "noul",
+        "confidence": 0.9124,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.9124
+      }
+    },
+    "usage": {
+      "input_tokens": 191,
+      "output_tokens": 0
+    }
+  },
+  "mask_literals": {
+    "model": "laya-rl-agent",
+    "answers": {
+      "department": {
+        "type": "choice",
+        "confidence": 0.0192,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "other",
+        "probabilities": {
+          "billing": 0.2739,
+          "technical": 0.2107,
+          "sales": 0.1829,
+          "other": 0.3325
+        }
+      },
+      "urgency": {
+        "type": "score",
+        "confidence": 0.0087,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 0.9675,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.3181,
+          "1": 0.3964,
+          "2": 0.2856
+        }
+      },
+      "refund": {
+        "type": "noul",
+        "confidence": 0.9999,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.0001
+      }
+    },
+    "usage": {
+      "input_tokens": 140,
+      "output_tokens": 0
+    }
+  },
+  "many_questions": {
+    "model": "laya-rl-agent",
+    "answers": {
+      "q0": {
+        "type": "choice",
+        "confidence": 0.8331,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9554,
+          "technical": 0.0152,
+          "sales": 0.0149,
+          "other": 0.0144
+        }
+      },
+      "q1": {
+        "type": "score",
+        "confidence": 0.1594,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 1.4475,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.0953,
+          "1": 0.362,
+          "2": 0.5427
+        }
+      },
+      "q2": {
+        "type": "noul",
+        "confidence": 0.8592,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.8592
+      },
+      "q3": {
+        "type": "choice",
+        "confidence": 0.8331,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9554,
+          "technical": 0.0152,
+          "sales": 0.0149,
+          "other": 0.0144
+        }
+      },
+      "q4": {
+        "type": "score",
+        "confidence": 0.1594,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 1.4475,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.0953,
+          "1": 0.362,
+          "2": 0.5427
+        }
+      },
+      "q5": {
+        "type": "noul",
+        "confidence": 0.8592,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.8592
+      },
+      "q6": {
+        "type": "choice",
+        "confidence": 0.8331,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9554,
+          "technical": 0.0152,
+          "sales": 0.0149,
+          "other": 0.0144
+        }
+      },
+      "q7": {
+        "type": "score",
+        "confidence": 0.1594,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 1.4475,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.0953,
+          "1": 0.362,
+          "2": 0.5427
+        }
+      },
+      "q8": {
+        "type": "noul",
+        "confidence": 0.8592,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.8592
+      },
+      "q9": {
+        "type": "choice",
+        "confidence": 0.8331,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9554,
+          "technical": 0.0152,
+          "sales": 0.0149,
+          "other": 0.0144
+        }
+      },
+      "q10": {
+        "type": "score",
+        "confidence": 0.1594,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 1.4475,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.0953,
+          "1": 0.362,
+          "2": 0.5427
+        }
+      },
+      "q11": {
+        "type": "noul",
+        "confidence": 0.8592,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.8592
+      },
+      "q12": {
+        "type": "choice",
+        "confidence": 0.8331,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9554,
+          "technical": 0.0152,
+          "sales": 0.0149,
+          "other": 0.0144
+        }
+      },
+      "q13": {
+        "type": "score",
+        "confidence": 0.1594,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 1.4475,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.0953,
+          "1": 0.362,
+          "2": 0.5427
+        }
+      },
+      "q14": {
+        "type": "noul",
+        "confidence": 0.8592,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.8592
+      },
+      "q15": {
+        "type": "choice",
+        "confidence": 0.8331,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9554,
+          "technical": 0.0152,
+          "sales": 0.0149,
+          "other": 0.0144
+        }
+      },
+      "q16": {
+        "type": "score",
+        "confidence": 0.1588,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 1.4465,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.0956,
+          "1": 0.3624,
+          "2": 0.542
+        }
+      },
+      "q17": {
+        "type": "noul",
+        "confidence": 0.8592,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.8592
+      },
+      "q18": {
+        "type": "choice",
+        "confidence": 0.8332,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9554,
+          "technical": 0.0152,
+          "sales": 0.0149,
+          "other": 0.0144
+        }
+      },
+      "q19": {
+        "type": "score",
+        "confidence": 0.1588,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 1.4465,
+        "legend": {
+          "0": "not urgent",
+          "1": "soon",
+          "2": "critical deadline or blocking issue"
+        },
+        "probabilities": {
+          "0": 0.0956,
+          "1": 0.3624,
+          "2": 0.542
+        }
+      }
+    },
+    "usage": {
+      "input_tokens": 1697,
+      "output_tokens": 0
+    }
+  },
+  "structured": {
+    "model": "laya-rl-agent",
+    "answers": {
+      "choice": {
+        "type": "choice",
+        "confidence": 0.8138,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 0.9716,
+          "other": 0.0284
+        }
+      },
+      "score": {
+        "type": "score",
+        "confidence": 0.1344,
+        "action": {
+          "act_probability": 1.0
+        },
+        "score": 0.7124,
+        "legend": {
+          "0": {
+            "level": "low"
+          },
+          "1": "high"
+        },
+        "probabilities": {
+          "0": 0.2876,
+          "1": 0.7124
+        }
+      },
+      "noul": {
+        "type": "noul",
+        "confidence": 0.7838,
+        "action": {
+          "act_probability": 1.0
+        },
+        "noul": 0.7838
+      }
+    },
+    "usage": {
+      "input_tokens": 226,
+      "output_tokens": 0
+    }
+  },
+  "twenty_options": {
+    "model": "laya-rl-agent",
+    "answers": {
+      "choice": {
+        "type": "choice",
+        "confidence": 1.0,
+        "action": {
+          "act_probability": 1.0
+        },
+        "choice": "billing",
+        "probabilities": {
+          "billing": 1.0,
+          "department_0": 0.0,
+          "department_1": 0.0,
+          "department_2": 0.0,
+          "department_3": 0.0,
+          "department_4": 0.0,
+          "department_5": 0.0,
+          "department_6": 0.0,
+          "department_7": 0.0,
+          "department_8": 0.0,
+          "department_9": 0.0,
+          "department_10": 0.0,
+          "department_11": 0.0,
+          "department_12": 0.0,
+          "department_13": 0.0,
+          "department_14": 0.0,
+          "department_15": 0.0,
+          "department_16": 0.0,
+          "department_17": 0.0,
+          "department_18": 0.0
+        }
+      }
+    },
+    "usage": {
+      "input_tokens": 137,
+      "output_tokens": 0
+    }
+  }
+}
