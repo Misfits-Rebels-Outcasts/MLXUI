@@ -33,9 +33,9 @@ struct ModelSupportTests {
         #expect(ModelSupport.unsupportedReason(for: entry) == nil)
     }
 
-    // LY-3: Laya's runner doesn't exist yet — flagged until LY-4 ports LayaEngine.
-    @Test func layaFlaggedUntilLY4() {
+    // LY-4: LayaEngine ported — gap removed; resolves via LayaSDK.
+    @Test func layaNowHasARunner() {
         let entry = makeEntry(id: "aac6fef--laya-mlx", hfModelId: "aac6fef/laya-mlx")
-        #expect(ModelSupport.unsupportedReason(for: entry) != nil)
+        #expect(ModelSupport.unsupportedReason(for: entry) == nil)
     }
 }

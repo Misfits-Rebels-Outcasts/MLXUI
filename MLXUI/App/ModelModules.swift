@@ -16,9 +16,9 @@ import Foundation
 ///
 /// Coverage (browser.json): chat (LLM) · ASR (Whisper, Voxtral) · TTS (Kokoro + generic) ·
 /// Vision (VLM) · OCR (MLXVLM + PaddleOCR-VL + dots.ocr + DeepSeek-OCR) · Embeddings ·
-/// Rerank (Qwen3-Reranker causal yes/no scorer, MoC-4-3) · Image generation (FLUX.1) ·
-/// Image segmentation (SAM3) · Video generation (WAN 2.1) ·
-/// Image super-resolution (SeedVR2 3B, SV-AM4).
+/// Rerank (Qwen3-Reranker causal yes/no scorer, MoC-4-3) · Decision (Laya 0.4B, a ModernBERT
+/// decision encoder, LY-4) · Image generation (FLUX.1) · Image segmentation (SAM3) ·
+/// Video generation (WAN 2.1) · Image super-resolution (SeedVR2 3B, SV-AM4).
 /// `ChatModule` is deliberately **last**: it claims `.llm`, which no other SDK claims, so
 /// appending keeps every existing claim resolution byte-identical (the CFM-R1-1 table test
 /// guards this).
@@ -37,6 +37,7 @@ let installedModules: [ModelModule.Type] = [
     OCRModule.self,
     EmbeddingModule.self,
     RerankModule.self,
+    LayaModule.self,
     SDXLTurboModule.self,
     FluxModule.self,
     SegmentAnythingModule.self,

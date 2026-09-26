@@ -1,6 +1,5 @@
 import Foundation
 import MLX
-import MLXFast
 import MLXNN
 import Tokenizers
 
@@ -55,129 +54,40 @@ nonisolated struct ModernBERTConfiguration: Decodable, Sendable {
     }
 }
 
-/// LayerNorm with a weight but **no bias** (ModernBERT's `norm_bias: false`). MLXNN's `LayerNorm`
-/// always carries a bias when affine, which wouldn't match the checkpoint's params.
-private nonisolated final class LayerNormNoBias: Module {
-    @ParameterInfo(key: "weight") var weight: MLXArray
-    let eps: Float
-
-    init(_ dimensions: Int, eps: Float) {
-        self.eps = eps
-        self._weight.wrappedValue = MLXArray.ones([dimensions])
-    }
-
-    func callAsFunction(_ x: MLXArray) -> MLXArray {
-        let mean = x.mean(axis: -1, keepDims: true)
-        let variance = (x - mean).square().mean(axis: -1, keepDims: true)
-        return weight * (x - mean) * rsqrt(variance + eps)
-    }
-}
-
-private nonisolated final class Attention: Module {
-    let numHeads: Int
-    let headDim: Int
-    let scale: Float
-    @ModuleInfo(key: "Wqkv") var wqkv: Linear
-    @ModuleInfo(key: "Wo") var wo: Linear
-    let rope: RoPE
-
-    init(_ config: ModernBERTConfiguration, ropeTheta: Float) {
-        numHeads = config.numAttentionHeads
-        headDim = config.hiddenSize / config.numAttentionHeads
-        scale = pow(Float(headDim), -0.5)
-        _wqkv.wrappedValue = Linear(config.hiddenSize, 3 * config.hiddenSize, bias: false)
-        _wo.wrappedValue = Linear(config.hiddenSize, config.hiddenSize, bias: false)
-        rope = RoPE(dimensions: headDim, traditional: false, base: ropeTheta)
-    }
-
-    func callAsFunction(_ x: MLXArray, mask: MLXArray?) -> MLXArray {
-        let (B, L) = (x.dim(0), x.dim(1))
-        let qkv = wqkv(x).reshaped(B, L, 3, numHeads, headDim).transposed(2, 0, 3, 1, 4)
-        let q = rope(qkv[0])   // [B, H, L, D]
-        let k = rope(qkv[1])
-        let v = qkv[2]
-        let out = MLXFast.scaledDotProductAttention(
-            queries: q, keys: k, values: v, scale: scale, mask: mask)
-        return wo(out.transposed(0, 2, 1, 3).reshaped(B, L, numHeads * headDim))
-    }
-}
-
-private nonisolated final class MLPBlock: Module {
-    @ModuleInfo(key: "Wi") var wi: Linear
-    @ModuleInfo(key: "Wo") var wo: Linear
-
-    init(_ config: ModernBERTConfiguration) {
-        _wi.wrappedValue = Linear(config.hiddenSize, 2 * config.intermediateSize, bias: false)
-        _wo.wrappedValue = Linear(config.intermediateSize, config.hiddenSize, bias: false)
-    }
-
-    func callAsFunction(_ x: MLXArray) -> MLXArray {
-        let parts = wi(x).split(parts: 2, axis: -1)
-        return wo(gelu(parts[0]) * parts[1])
-    }
-}
-
-private nonisolated final class EncoderLayer: Module {
-    @ModuleInfo(key: "attn_norm") var attnNorm: LayerNormNoBias?
-    @ModuleInfo(key: "attn") var attn: Attention
-    @ModuleInfo(key: "mlp_norm") var mlpNorm: LayerNormNoBias
-    @ModuleInfo(key: "mlp") var mlp: MLPBlock
-
-    init(_ config: ModernBERTConfiguration, layerIndex: Int) {
-        let isGlobal = layerIndex % config.globalAttnEveryNLayers == 0
-        let theta = isGlobal ? config.globalRopeTheta : config.localRopeTheta
-        if layerIndex != 0 {
-            _attnNorm.wrappedValue = LayerNormNoBias(config.hiddenSize, eps: config.normEps)
-        }
-        _attn.wrappedValue = Attention(config, ropeTheta: theta)
-        _mlpNorm.wrappedValue = LayerNormNoBias(config.hiddenSize, eps: config.normEps)
-        _mlp.wrappedValue = MLPBlock(config)
-    }
-
-    func callAsFunction(_ x: MLXArray, mask: MLXArray?) -> MLXArray {
-        var h = x + attn(attnNorm?(x) ?? x, mask: mask)
-        h = h + mlp(mlpNorm(h))
-        return h
-    }
-}
-
 /// The ModernBERT encoder (embeddings + layers + final norm) and a standalone embed entry point.
+/// Gate C (`RSI/DelegateLayaBacklog.md`, LY-4): built on the shared `Core/ModernBERTEncoder.swift`
+/// (extracted so Laya's decision encoder doesn't duplicate this file's ~180 lines), constructed
+/// with `slidingWindowEnabled: false` — this checkpoint has never run a local-window mask (see
+/// the header comment above), so behavior is unchanged: every layer still gets the same
+/// full-sequence mask it always did. Only the *representation* of that mask moved, from an
+/// additive float log-mask to the shared encoder's native boolean mask — mathematically the
+/// same "attend fully to valid positions, `-inf` to padding" (both feed the same
+/// `MLXFast.scaledDotProductAttention` primitive, which accepts either), not a semantic change.
 nonisolated final class ModernBERTEmbedder: Module {
-    @ModuleInfo(key: "tok_embeddings") var tokEmbeddings: Embedding
-    @ModuleInfo(key: "embeddings_norm") fileprivate var embeddingsNorm: LayerNormNoBias
-    fileprivate let layers: [EncoderLayer]
-    @ModuleInfo(key: "final_norm") fileprivate var finalNorm: LayerNormNoBias
+    @ModuleInfo(key: "encoder") var encoder: ModernBERTEncoder
 
-    init(_ config: ModernBERTConfiguration) {
-        _tokEmbeddings.wrappedValue = Embedding(
-            embeddingCount: config.vocabularySize, dimensions: config.hiddenSize)
-        _embeddingsNorm.wrappedValue = LayerNormNoBias(config.hiddenSize, eps: config.normEps)
-        layers = (0 ..< config.numHiddenLayers).map { EncoderLayer(config, layerIndex: $0) }
-        _finalNorm.wrappedValue = LayerNormNoBias(config.hiddenSize, eps: config.normEps)
+    init(_ config: ModernBERTEncoderConfig) {
+        _encoder.wrappedValue = ModernBERTEncoder(config, slidingWindowEnabled: false)
     }
 
     /// Last-layer hidden states for `inputIds` [B, L]. `attentionMask` [B, L] (1 keep / 0 pad).
     func hiddenStates(inputIds: MLXArray, attentionMask: MLXArray) -> MLXArray {
-        var h = embeddingsNorm(tokEmbeddings(inputIds))
-        // Additive mask [B,1,1,L]: 0 for real tokens, -inf for padding.
-        let mask = attentionMask.asType(h.dtype).expandedDimensions(axes: [1, 2]).log()
-        for layer in layers { h = layer(h, mask: mask) }
-        return finalNorm(h)
+        encoder(inputIds: inputIds, attentionMask: attentionMask)
     }
 
     /// Map HF ModernBERT weight names onto this module's keys, keeping only what we model.
+    /// The shared encoder's own layout (`embeddings.tok_embeddings`, `embeddings.norm`,
+    /// `layers.<n>.*`, `final_norm`) already matches this checkpoint's raw keys one-for-one
+    /// once `model.` is stripped — the only rename left is routing them under this class's
+    /// `encoder` submodule.
     func sanitize(weights: [String: MLXArray]) -> [String: MLXArray] {
         var out: [String: MLXArray] = [:]
         for (rawKey, value) in weights {
             var key = rawKey
             if key.hasPrefix("model.") { key = String(key.dropFirst("model.".count)) }
-            key = key
-                .replacingOccurrences(of: "embeddings.tok_embeddings.", with: "tok_embeddings.")
-                .replacingOccurrences(of: "embeddings.norm.", with: "embeddings_norm.")
             // Keep only encoder params; drop MLM head / position_ids / anything else.
-            if key.hasPrefix("tok_embeddings.") || key.hasPrefix("embeddings_norm.")
-                || key.hasPrefix("layers.") || key.hasPrefix("final_norm.") {
-                out[key] = value
+            if key.hasPrefix("embeddings.") || key.hasPrefix("layers.") || key.hasPrefix("final_norm.") {
+                out["encoder." + key] = value
             }
         }
         return out
@@ -186,7 +96,13 @@ nonisolated final class ModernBERTEmbedder: Module {
     /// Load config + safetensors from an installed model directory (the A2 pattern).
     static func fromDirectory(_ directory: URL) throws -> ModernBERTEmbedder {
         let configData = try Data(contentsOf: directory.appendingPathComponent("config.json"))
-        let config = try JSONDecoder().decode(ModernBERTConfiguration.self, from: configData)
+        let hfConfig = try JSONDecoder().decode(ModernBERTConfiguration.self, from: configData)
+        let config = ModernBERTEncoderConfig(
+            vocabularySize: hfConfig.vocabularySize, hiddenSize: hfConfig.hiddenSize,
+            intermediateSize: hfConfig.intermediateSize, numHiddenLayers: hfConfig.numHiddenLayers,
+            numAttentionHeads: hfConfig.numAttentionHeads, normEps: hfConfig.normEps,
+            localAttention: 128, globalAttnEveryNLayers: hfConfig.globalAttnEveryNLayers,
+            globalRopeTheta: hfConfig.globalRopeTheta, localRopeTheta: hfConfig.localRopeTheta)
         let model = ModernBERTEmbedder(config)
 
         let files = try FileManager.default.contentsOfDirectory(
