@@ -2,8 +2,10 @@ import Foundation
 
 /// One cached, loaded `LayaEngine` per installed model directory — loading re-reads and
 /// re-quantizes the checkpoint's weights, so a fresh `LayaEngine` per call would repeat that
-/// work on every row of a flow (or every keystroke of a standalone Run).
-private actor LayaEngineCache {
+/// work on every row of a flow (or every keystroke of a standalone Run). Shared with
+/// `LayaRunView` (LY-5) so a flow row and the standalone Run surface don't each keep their own
+/// copy of the same ~0.85 GB checkpoint in memory.
+actor LayaEngineCache {
     static let shared = LayaEngineCache()
     private var engines: [String: LayaEngine] = [:]
 
