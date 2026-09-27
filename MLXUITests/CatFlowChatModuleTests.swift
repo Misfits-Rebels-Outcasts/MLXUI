@@ -64,7 +64,8 @@ struct CatFlowChatModuleTests {
     @Test func catalogResolutionUnchangedByChatModuleAppend() throws {
         let entries = try loadBundledCatalogEntries()
         // LY-1: bundled catalog gained the aac6fef/laya-mlx `.decision` entry, 39 → 40.
-        #expect(entries.count == 40, "bundled catalog drifted: \(entries.count) entries")
+        // CL-1: bundled catalog gained the RealityCat/CLM-v0.1-8B-MLX-8bit `.decision` entry, 40 → 41.
+        #expect(entries.count == 41, "bundled catalog drifted: \(entries.count) entries")
 
         let withChat = registry(includingChat: true)
         let withoutChat = registry(includingChat: false)
@@ -84,7 +85,7 @@ struct CatFlowChatModuleTests {
             }
             checked += 1
         }
-        #expect(checked == 40)
+        #expect(checked == 41)
         #expect(llmChecked == 10)
     }
 

@@ -91,13 +91,14 @@ extension LayaJSON {
     }
 }
 
-/// `ModelSDK` for Laya's decision encoder. Claims every `.decision` entry backed by
-/// `source == .mlx` — mirrors `RerankSDK`/`EmbeddingSDK`'s shape.
+/// `ModelSDK` for Laya's decision encoder. Claims `.decision` entries backed by
+/// `source == .mlx` and `family == "Laya"` — the family check discriminates Laya from other
+/// decision-domain engines sharing `RunnerKind.decision` (CL-1 gate B; CLM 8B is the first).
 nonisolated struct LayaSDK: ModelSDK {
     let id = "laya"
 
     func claim(_ model: ModelEntry) -> ClaimScore {
-        guard model.runnerKind == .decision, model.source == .mlx else { return .no }
+        guard model.runnerKind == .decision, model.source == .mlx, model.family == "Laya" else { return .no }
         return .exact
     }
 

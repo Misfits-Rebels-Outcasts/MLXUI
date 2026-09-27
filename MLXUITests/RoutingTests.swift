@@ -204,6 +204,48 @@ struct RoutingTests {
         #expect(entry.contextWindow == 512)
     }
 
+    @Test func clmCatalogEntryDecodes() throws {
+        // CL-1: verifies the RealityCat/CLM-v0.1-8B-MLX-8bit entry shape decodes and routes correctly.
+        let json = """
+        {
+            "id": "RealityCat--CLM-v0.1-8B-MLX-8bit",
+            "family": "CLM",
+            "displayName": "CLM 8B",
+            "paramSize": "8B",
+            "paramCountB": 8.2,
+            "modelType": "decision",
+            "source": "mlx",
+            "format": "mlx-int8",
+            "platforms": ["macOS 13+"],
+            "minMacOSVersion": "13.0",
+            "hfRepo": "RealityCat",
+            "hfModelId": "RealityCat/CLM-v0.1-8B-MLX-8bit",
+            "ramGB": 12.2,
+            "downloadSizeGB": 8.12,
+            "contextWindow": 2048,
+            "license": "apache-2.0",
+            "variants": [
+                {
+                    "quantization": "int8",
+                    "format": "mlx-int8",
+                    "ramGB": 12.2,
+                    "downloadSizeGB": 8.12,
+                    "qualityPercent": 100,
+                    "hfModelId": "RealityCat/CLM-v0.1-8B-MLX-8bit",
+                    "recommended": true
+                }
+            ]
+        }
+        """
+        let entry = try JSONDecoder().decode(ModelEntry.self, from: Data(json.utf8))
+        #expect(entry.modelType == .decision)
+        #expect(entry.runnerKind == .decision)
+        #expect(entry.source == .mlx)
+        #expect(entry.paramCountB == 8.2)
+        #expect(entry.ramGB == 12.2)
+        #expect(entry.contextWindow == 2048)
+    }
+
     // MARK: runnerKind — catalog mislabel overrides (family beats modelType)
 
     @Test func runnerKindOverridesOuteTTSFromASRToTTS() {

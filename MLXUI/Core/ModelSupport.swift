@@ -24,6 +24,7 @@ nonisolated enum ModelSupport {
         // WAN 2.1 → WanVideoEngine ported in WAN-AM4 (journal/2026-93).
         // SeedVR2 3B → SeedVR2Engine ported in SV-AM4 (journal/2026-162).
         // Laya 0.4B (decision encoder) → LayaEngine ported in LY-4 (journal/2026-334).
+        Gap(idFragment: "clm-v0.1-8b-mlx-8bit", reason: "CLM 8B's encoder+heads runner lands in CL-4"),
     ]
 
     /// A human-readable reason this model can't run yet, or `nil` if it should run.

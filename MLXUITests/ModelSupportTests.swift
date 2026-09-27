@@ -38,4 +38,12 @@ struct ModelSupportTests {
         let entry = makeEntry(id: "aac6fef--laya-mlx", hfModelId: "aac6fef/laya-mlx")
         #expect(ModelSupport.unsupportedReason(for: entry) == nil)
     }
+
+    // CL-1: CLM 8B's encoder+heads runner lands in CL-4b — flagged until then, so Browse
+    // shows "not yet supported" instead of Laya's run view (the two share RunnerKind.decision).
+    @Test func clmHasSupportGap() {
+        let entry = makeEntry(
+            id: "RealityCat--CLM-v0.1-8B-MLX-8bit", hfModelId: "RealityCat/CLM-v0.1-8B-MLX-8bit")
+        #expect(ModelSupport.unsupportedReason(for: entry) != nil)
+    }
 }
