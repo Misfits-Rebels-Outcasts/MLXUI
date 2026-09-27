@@ -122,9 +122,15 @@ nonisolated private final class ModernBERTAttention: Module {
     func callAsFunction(_ x: MLXArray, mask: MLXArray?) -> MLXArray {
         let (b, length) = (x.dim(0), x.dim(1))
         let qkv = wqkv(x).reshaped(b, length, 3, numHeads, headDim).transposed(2, 0, 3, 1, 4)
-        let q = rope(qkv[0])
-        let k = rope(qkv[1])
-        let v = qkv[2]
+        // A bare-Int subscript (`qkv[0]`) resolves to a 0-dimensional index array and runs
+        // through MLX's `Gather` primitive; Metal's own comment in `indexing.cpp` calls
+        // `idx_ndim == 0` a supported specialization, but its API-validation layer aborts on
+        // the empty `idx_shapes` buffer that path leaves unset regardless — a real crash under
+        // a real Xcode "Run" launch. A `Range` subscript on the same axis instead compiles to
+        // `mlx_slice`, which never touches that path; `squeezed` drops the resulting size-1 axis.
+        let q = rope(qkv[0 ..< 1].squeezed(axis: 0))
+        let k = rope(qkv[1 ..< 2].squeezed(axis: 0))
+        let v = qkv[2 ..< 3].squeezed(axis: 0)
         let out = MLXFast.scaledDotProductAttention(queries: q, keys: k, values: v, scale: scale, mask: mask)
         return wo(out.transposed(0, 2, 1, 3).reshaped(b, length, numHeads * headDim))
     }

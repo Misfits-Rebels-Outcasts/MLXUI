@@ -29,9 +29,13 @@ nonisolated private final class LayaHeadAttention: Module {
     func callAsFunction(_ x: MLXArray, mask: MLXArray?) -> MLXArray {
         let (b, length) = (x.dim(0), x.dim(1))
         let qkv = inProj(x).reshaped(b, length, 3, numHeads, headDim).transposed(2, 0, 3, 1, 4)
-        let q = qkv[0]
-        let k = qkv[1]
-        let v = qkv[2]
+        // See the matching comment in `Core/ModernBERTEncoder.swift`'s `ModernBERTAttention` —
+        // a bare-Int subscript here is a 0-dim-index `Gather` that Metal API Validation aborts
+        // on for real, confirmed live via a debugger-attached crash (`axes_ = [0]` at the
+        // failing `Gather::eval_gpu` frame). Range-slice + squeeze avoids `Gather` entirely.
+        let q = qkv[0 ..< 1].squeezed(axis: 0)
+        let k = qkv[1 ..< 2].squeezed(axis: 0)
+        let v = qkv[2 ..< 3].squeezed(axis: 0)
         let out = MLXFast.scaledDotProductAttention(queries: q, keys: k, values: v, scale: scale, mask: mask)
         return outProj(out.transposed(0, 2, 1, 3).reshaped(b, length, numHeads * headDim))
     }
@@ -113,13 +117,11 @@ nonisolated final class LayaDecisionModel: Module {
         h = h + typeEmb(qtype).expandedDimensions(axis: 1)
         let headMask = attentionMask.asType(.bool).expandedDimensions(axes: [1, 2])
         h = head(h, mask: headMask)
-        // `take_along_axis` needs `gatherIndex` to match `h`'s shape on every axis but the
-        // gather axis — an unbroadcast [B, count, 1] silently gathers the wrong (or a
-        // degenerate, identical-per-row) slice instead of throwing, so broadcast explicitly.
+        // `takeAlong`'s own broadcasting handles a [B, count, 1] index against `h`'s
+        // [B, L, D] — this is the standard take_along_axis usage (NumPy and MLX both expect
+        // the non-gather axes to stay size-1 and broadcast internally). Keep this narrow.
         let clampedMarkerPos = MLX.maximum(markerPos, MLXArray(Int32(0)))
-        let gatherIndex = MLX.broadcast(
-            clampedMarkerPos.expandedDimensions(axis: -1),
-            to: [h.dim(0), clampedMarkerPos.dim(1), h.dim(-1)])
+        let gatherIndex = clampedMarkerPos.expandedDimensions(axis: -1)
         let markers = takeAlong(h, gatherIndex, axis: 1)
         var logits = scorer(markers).squeezed(axis: -1).asType(.float32)
         logits = which(markerMask, logits, MLXArray(Float(-1e4)))
@@ -128,10 +130,13 @@ nonisolated final class LayaDecisionModel: Module {
         let entropy = -(p * log(MLX.maximum(p, MLXArray(Float(1e-9))))).sum(axis: -1) / log(k)
         let sortedP = sorted(p, axis: -1)
         let width = sortedP.dim(-1)
-        let top1 = sortedP[0..., width - 1]
-        let top2 = sortedP[0..., width - 2]
+        // Bare-Int subscripts here are the same 0-dim-index `Gather` that Metal API
+        // Validation aborts on for real (see `LayaHeadAttention` above) — range-slice + squeeze
+        // instead.
+        let top1 = sortedP[0..., (width - 1) ..< width].squeezed(axis: -1)
+        let top2 = sortedP[0..., (width - 2) ..< (width - 1)].squeezed(axis: -1)
         let features = stacked([top1, top1 - top2, entropy, k / 255.0], axis: -1)
-        let pooled = concatenated([h[0..., 0].asType(.float32), features], axis: -1)
+        let pooled = concatenated([h[0..., 0 ..< 1].squeezed(axis: 1).asType(.float32), features], axis: -1)
         let actHead0Dtype = (actHead.layers[0] as? Linear)?.weight.dtype ?? pooled.dtype
         let action = actHead(pooled.asType(actHead0Dtype)).asType(.float32)
         return (logits, action)
