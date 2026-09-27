@@ -97,6 +97,26 @@ install in the catalog are the same models your workflows use — no separate se
 <!-- Items marked *(hidden in-app)* are built but switched off behind an in-app flag right
      now — pruning candidates if you don't want to announce them before they're switched on. -->
 
+### Laya 0.4B — a decision model, not a chat model
+
+A new model category. Laya answers typed multiple-choice, scored, or yes/no questions about
+a piece of text — ticket/email routing, intent, moderation, "does this need a human?" — in
+about 13ms per question, with no generated text and a confidence score on every answer. It's
+a from-reference Swift/MLX port of Laya's ModernBERT-large encoder (including the
+sliding-window attention the existing ModernBERT embedder doesn't have), plus its decision
+head, per-option `[MASK]` prompt builder, and temperature calibration. Dedicated Browse + Run
+UI now; AI Workflows wiring is next.
+
+### AI Workflows — output viewer, workspace flows, and human-input polish
+
+A batch of fixes and additions across the Flow surface: a proper output viewer (Quick Look,
+"Open in <your app>", Export a Copy), workspace flows that resume automatically after an
+install they asked for and can be stopped mid-run, a Flow tab in the row inspector with
+capability flags and Reveal in Finder, better Human Input / Ask Human rows (prefilled
+defaults, never a blank question), a Frame view for image-region tasks, an honest Row-text
+editor with a real Template pattern editor, and a concurrency-safety pass across
+FlowKit/Core/Modules.
+
 ### AI Workflows — automate your models with a visual, numbered flow
 
 A brand-new way to chain your installed models together. Reached from **Automate → AI
@@ -242,6 +262,7 @@ Prism ML's [Ternary-Bonsai-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2
   - Embeddings → text input + vector output
   - Image generation (Flux, SDXL-Turbo) → text prompt + on-device generated image
   - Music generation (MusicGen) → text description + on-device generated WAV
+  - Decision (Laya) → typed question + confidence-scored answer, no generated text
 - **Pipeline runner** — chain models together (transcribe → summarize → speak) in a
   single workflow
 - **Command palette (⌘K)** — find and run any model instantly
@@ -267,6 +288,7 @@ Every model listed here is downloadable and has a working Run UI.
 | **Embeddings** (4) | all-MiniLM-L6, embeddinggemma, ModernBERT-embed, bge-m3 | 18M – 568M |
 | **Image Generation** (2) | FLUX.1-Lite-8B, **SDXL-Turbo** | 3.5B – 8B |
 | **Music Generation** (1) | **MusicGen-small** | 615M (float32, ~2.5 GB) |
+| **Decision** (1) | **Laya 0.4B** | 0.4B |
 
 The full `browser.json` catalog tracks **~435 models** from mlx-community. New models
 and Run UIs are added with every release.
@@ -287,6 +309,7 @@ and Run UIs are added with every release.
 | Image | Diffusion (Flux) | ✅ | ✅ | ✅ | Flux (native MLX) |
 | Image | Diffusion (SDXL-Turbo) | ✅ | ✅ | ✅ | SDXL-Turbo (native MLX) |
 | Audio | Music generation (MusicGen) | ✅ | ✅ | ✅ | MusicGen (native MLX) |
+| Text | Decision / classification (Laya) | ✅ | ✅ | ✅ | Laya (native MLX ModernBERT + decision head) |
 
 ✅ = built &emsp; ⬜ = available for contribution
 
@@ -430,6 +453,11 @@ Every model in the catalog should eventually have a working Run button.
       4-step DDIM sampler, native MLX
 - [x] MusicGen Run UI — text description → on-device WAV; T5-base encoder + 24-layer causal
       transformer + GPU-accelerated EnCodec decoder, native MLX port
+- [x] Laya 0.4B Run UI — typed decision/classification questions answered with a confidence
+      score, no generated text; native MLX ModernBERT-large encoder + decision head port
+- [x] AI Workflows: output viewer (Quick Look, Open in app, Export a Copy), workspace-flow
+      auto-resume after install, Flow inspector tab, Human Input/Ask Human polish, Row-text
+      Template editor, and a concurrency-safety pass across FlowKit/Core/Modules
 
 ### In progress
 - [ ] Visual pipeline builder UI
