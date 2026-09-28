@@ -1,0 +1,76 @@
+{
+  "choice_simple": {
+    "state_text": "Customer: my invoice was charged twice. Please refund the second charge.\n\nWhich team should handle this?",
+    "option_keys": [
+      "billing",
+      "technical"
+    ],
+    "candidate_texts": [
+      "Billing and refunds team",
+      "Technical support team"
+    ]
+  },
+  "score_simple": {
+    "state_text": "The service was okay, nothing special.\n\nRate the sentiment from very negative to very positive.",
+    "option_keys": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4"
+    ],
+    "candidate_texts": [
+      "very negative",
+      "negative",
+      "neutral",
+      "positive",
+      "very positive"
+    ]
+  },
+  "noul_simple": {
+    "state_text": "The customer said the shipment arrived three days late.\n\nIs this urgent?",
+    "option_keys": [
+      "false",
+      "true"
+    ],
+    "candidate_texts": [
+      "false: No. This is false: Is this urgent?",
+      "true: Yes. This is true: Is this urgent?"
+    ]
+  },
+  "json_object_state": {
+    "state_text": "invoice_id: INV-1042\n\nsubtotal: 500.0\n\ntax: 45.0\n\ntotal: 545.0\n\nline_items:\n  -\n    desc: Widget A\n    qty: 2\n    price: 100.0\n  -\n    desc: Widget B\n    qty: 3\n    price: 100.0\n\nDoes the total match the line items and tax?",
+    "option_keys": [
+      "consistent",
+      "inconsistent"
+    ],
+    "candidate_texts": [
+      "The total matches subtotal plus tax",
+      "The total does not match"
+    ]
+  },
+  "nested_array_state": {
+    "state_text": "- Row 1: approved\n-\n  row: 2\n  status: hold\n  reason: missing PO\n-\n  - nested\n  - list\n  - item\n\nAre all rows approved?",
+    "option_keys": [
+      "false",
+      "true"
+    ],
+    "candidate_texts": [
+      "false: No. This is false: Are all rows approved?",
+      "true: Yes. This is true: Are all rows approved?"
+    ]
+  },
+  "choice_mixed_criteria": {
+    "state_text": "A short support ticket about a login issue.\n\nWhich severity?",
+    "option_keys": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "candidate_texts": [
+      "Minor annoyance, no blocker",
+      "medium",
+      "Blocks the user entirely"
+    ]
+  }
+}
