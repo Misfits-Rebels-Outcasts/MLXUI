@@ -55,11 +55,18 @@ struct CLMModuleTests {
         #expect(registry.bestModule(for: clmEntry())?.descriptor.id == "clm")
     }
 
-    /// The gap flag still holds (the owner's ruling, 2026-09-28: no real Run UI until CL-5),
-    /// so `CLMUI.makeRunView` is never actually reached in practice — but it must still
-    /// satisfy `ModelUI`'s contract without crashing.
+    /// CL-5: the real Run screen exists now, so CL-1's gap flag is removed.
     @MainActor
-    @Test func clmStillHasSupportGap() {
-        #expect(ModelSupport.unsupportedReason(for: clmEntry()) != nil)
+    @Test func clmNoLongerHasSupportGap() {
+        #expect(ModelSupport.unsupportedReason(for: clmEntry()) == nil)
+    }
+
+    /// CL-5 gate G ("a duplicate Run screen"): `CLMUI.makeRunView` returns the real
+    /// `CLMRunView`, not the generic `UnsupportedModelView`.
+    @MainActor
+    @Test func clmUIMakeRunViewReturnsCLMRunView() throws {
+        let stage = try CLMSDK().makeStage(for: clmEntry(), config: StageConfig())
+        let view = CLMUI().makeRunView(for: clmEntry(), stage: stage)
+        #expect("\(view)".contains("CLMRunView"))
     }
 }

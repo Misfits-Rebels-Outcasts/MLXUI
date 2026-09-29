@@ -39,11 +39,10 @@ struct ModelSupportTests {
         #expect(ModelSupport.unsupportedReason(for: entry) == nil)
     }
 
-    // CL-1: CLM 8B's encoder+heads runner lands in CL-4b — flagged until then, so Browse
-    // shows "not yet supported" instead of Laya's run view (the two share RunnerKind.decision).
-    @Test func clmHasSupportGap() {
+    // CL-4b/CL-5: CLMEngine ported and the real Run UI landed — gap removed; resolves via CLMSDK.
+    @Test func clmNowHasARunner() {
         let entry = makeEntry(
             id: "RealityCat--CLM-v0.1-8B-MLX-8bit", hfModelId: "RealityCat/CLM-v0.1-8B-MLX-8bit")
-        #expect(ModelSupport.unsupportedReason(for: entry) != nil)
+        #expect(ModelSupport.unsupportedReason(for: entry) == nil)
     }
 }
