@@ -29,6 +29,15 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// CFM-R10-Direct: the flow's declared `transforms:` — a row naming one runs its script
     /// fenced (never in the App Store build; `canRun` refuses there).
     var transforms: [String: TransformDef] = [:]
+    /// LY-7 — `runLayaDecider`'s only call into the actual engine, injected like
+    /// `makeModelStage` so a test can fake `LayaEngine` without loading a real checkpoint. The
+    /// default calls the real `LayaEngineCache`/`LayaEngine.predict` — CL-6's own gate C notes
+    /// this closure as the extraction point for the future `DecisionEngine` protocol, once CLM
+    /// gives it a second conformer; not built yet.
+    var askLaya: @Sendable (URL, String, [LayaQuestion]) async throws -> [LayaAnswer] = { directory, state, questions in
+        let engine = try await LayaEngineCache.shared.engine(for: directory)
+        return try await engine.predict(state: state, questions: questions)
+    }
     /// CFM-R9-5: the decider's fired tag, readable after `execute` (reference box so a value
     /// type can report it through the `FlowExecutor` existential, like `MockExecutor`).
     private let tagBox = TagBox()
@@ -36,6 +45,8 @@ nonisolated struct RealExecutor: FlowExecutor {
     private let flagBox = FlagBox()
     /// CFM-R12-8: a staged row's effect, read by the interpreter for `effect_staged`.
     private let stagedBox = StagedBox()
+    /// LY-7: a decision-encoder decider's tag/confidence/probabilities, same box shape.
+    private let deciderDetailBox = DeciderDetailBox()
 
     var lastTag: String? { tagBox.tag }
     var lastTimeoutFlag: (code: String, message: String)? { flagBox.timeout }
@@ -43,6 +54,10 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// shape as `lastTimeoutFlag`. `nil` for every non-provider row.
     var lastProviderDeciderFlag: (code: String, message: String)? { flagBox.providerDecider }
     var lastStaged: (id: String, kind: String, summary: String)? { stagedBox.staged }
+    var lastDeciderDetail: (
+        tag: String, confidence: Double, probabilities: [(label: String, probability: Double)],
+        expectedLevel: Double?, stateTruncated: Bool
+    )? { deciderDetailBox.detail }
 
     /// A reference box for the decider's fired tag.
     private nonisolated final class TagBox: @unchecked Sendable {
@@ -60,6 +75,14 @@ nonisolated struct RealExecutor: FlowExecutor {
         var staged: (id: String, kind: String, summary: String)?
     }
 
+    /// LY-7: a decision-encoder decider's tag/confidence/probabilities from its last `execute`.
+    private nonisolated final class DeciderDetailBox: @unchecked Sendable {
+        var detail: (
+            tag: String, confidence: Double, probabilities: [(label: String, probability: Double)],
+            expectedLevel: Double?, stateTruncated: Bool
+        )?
+    }
+
     func execute(path: String, row: Row, inputs: [Asset],
                  transcript: [FlowInterpreter.TranscriptEntry]?,
                  context: [(label: String, content: String)]?,
@@ -71,6 +94,7 @@ nonisolated struct RealExecutor: FlowExecutor {
         tagBox.tag = nil
         flagBox.timeout = nil
         flagBox.providerDecider = nil
+        deciderDetailBox.detail = nil
 
         // CFM-R10-Direct (FIX-2): a row naming a `transforms:` entry runs that script fenced —
         // in the Direct build only. The App Store build compiles the fence out and refuses
@@ -596,6 +620,19 @@ nonisolated struct RealExecutor: FlowExecutor {
                             transcript: [FlowInterpreter.TranscriptEntry]?,
                             context: [(label: String, content: String)]?) async throws -> Asset {
         let modelEntry = try resolveModel(display: row.model, path: path)
+        // LY-7: a `.decision` entry (a non-generative decision encoder — Laya 0.4B, CLM 8B)
+        // never builds an LLM stage. Laya 0.4B has its own real path below; any other
+        // `.decision` family (today: CLM, family "CLM") refuses here — CL-6/CL-7 (Phase CL-B)
+        // are what teach the executor to actually dispatch it, per
+        // `RSI/DelegateCLMBacklog.md`'s "Branching amended 2026-09-29" note.
+        if modelEntry.runnerKind == .decision {
+            guard modelEntry.family == "Laya" else {
+                throw FlowError.stageFailure(row: path,
+                    message: "\(modelEntry.displayName) isn't available in workflows yet — "
+                        + "pick Laya 0.4B or a language model for this row.")
+            }
+            return try await runLayaDecider(desc, row: row, inputs: inputs, modelEntry: modelEntry, path: path)
+        }
         let task = desc.name
         let (basePrompt, tags) = try Self.deciderPrompt(desc, row: row, inputs: inputs,
                                                         transcript: transcript, context: context)
@@ -617,6 +654,119 @@ nonisolated struct RealExecutor: FlowExecutor {
             return Asset(items: [Item(kind: .text, value: rawReply, path: nil, sourceText: nil)])
         }
         return inputs.first ?? Asset(items: [])
+    }
+
+    // MARK: - LY-7: Laya (decision-encoder) deciders
+
+    /// LY-7 (`RSI/DelegateLayaBacklog.md`, Phase LY-B). Laya never reads frames — no
+    /// `FramePreview.render`, no `fireTag`/F004 strict-parse — it answers a typed
+    /// choice/score question about the state directly. Kept as three separately-readable
+    /// steps, per gate C in `RSI/DelegateCLMBacklog.md` §CL-0 (CL-6 later extracts a shared
+    /// `DecisionEngine` protocol from this once CLM gets its own conformer — not built yet,
+    /// but the seam should already read as "build the question" → "call the engine" → "fire
+    /// the tag and log the detail" so that extraction is a move, not a rewrite):
+    /// 1. `Self.layaQuestion` builds the typed question purely from the row (gates E/F).
+    /// 2. `askLaya` is the one call into the actual engine (or a fake, in tests).
+    /// 3. The tag-firing + detail-logging below never touches the engine itself.
+    private func runLayaDecider(_ desc: TaskDescriptor, row: Row, inputs: [Asset],
+                                modelEntry: ModelEntry, path: String) async throws -> Asset {
+        let task = desc.name
+        // Judge, Think, Decide (and anything else reaching here) — Laya only serves the three
+        // frame-backed deciders whose answer is a typed choice/score, same shape as AFM-2's
+        // Think refusal.
+        guard task == "Classify" || task == "Gate" || task == "Score" else {
+            throw FlowError.stageFailure(row: path,
+                message: "\(modelEntry.displayName) doesn't serve \(task) — pick a language model for this row.")
+        }
+
+        let tags = Self.declaredTags(row)
+        let type: LayaQuestionType = task == "Score" ? .score : .choice
+        let state = DeciderFrame.flatTexts(inputs).joined(separator: "\n")
+
+        let question: LayaQuestion
+        do {
+            question = try Self.layaQuestion(type: type, settings: row.settings, tags: tags)
+        } catch let error as LayaPromptError {
+            throw FlowError.stageFailure(row: path, message: error.description)
+        }
+
+        let directory = ModelStore.shared.directory(forModelID: modelEntry.id)
+        let answer: LayaAnswer
+        do {
+            guard let first = try await askLaya(directory, state, [question]).first else {
+                throw FlowError.stageFailure(row: path, message: "Laya produced no answer for row \(path).")
+            }
+            answer = first
+        } catch let error as LayaPromptError {
+            // `.tooManyOptions` ("too many options for the token budget") and any other
+            // engine-side validation surface as a clear stage failure, not a crash.
+            throw FlowError.stageFailure(row: path, message: error.description)
+        }
+
+        let (tag, expectedLevel) = Self.layaFiredTag(answer: answer, type: type, tags: tags)
+        tagBox.tag = tag
+        deciderDetailBox.detail = (
+            tag: tag, confidence: answer.confidence,
+            probabilities: Array(zip(tags, answer.probabilities)),
+            expectedLevel: expectedLevel, stateTruncated: answer.stateTruncated)
+
+        // Spec §7.4 R1, same as the LLM path: Classify/Gate/Score pass the input through.
+        return inputs.first ?? Asset(items: [])
+    }
+
+    /// Step 1 — the typed question, built purely from the row: **state** is gathered upstream
+    /// (`DeciderFrame.flatTexts`); **instructions** is the criterion text exactly as
+    /// `FramePreview.render` substitutes it for `{settings}`, with a declared `tags: a, b, c`
+    /// clause stripped (`Self.layaInstructions`) — Laya reads the criterion and its tags
+    /// separately, never as one string; **criteria** is `declaredTags(row)`, in declared
+    /// order, as a bare label list (`dict.fromkeys`-shaped — no per-tag description, matching
+    /// `LayaRunView`'s own Choice criteria and `LayaQuestionDefinition.resolve()`'s array
+    /// path). `static` — reads only its arguments, same reasoning as `deciderPrompt`.
+    private static func layaQuestion(type: LayaQuestionType, settings: String?, tags: [String]) throws -> LayaQuestion {
+        let instructions = Self.layaInstructions(from: settings)
+        let criteria = LayaJSON.array(tags.map { .string($0) })
+        return try LayaQuestionDefinition(type: type, instructions: .string(instructions), criteria: criteria).resolve()
+    }
+
+    /// A declared `tags: a, b, c` clause, trailing in the criterion text — stripped for
+    /// Laya's `instructions`, which must read as the bare question. `CatParser`'s own parse-
+    /// time `extractTags` already removes this from a v0.8 row's `settings` before `runDecider`
+    /// ever sees it, so this is normally a no-op in practice; kept explicit (not assumed) per
+    /// LY-7's own instruction, and pinned by a test on the exact fixture LY-7 names:
+    /// `"Urgency? tags: act, read, ignore"` → `"Urgency?"`.
+    private static let reTagsClauseTrailing = NSRegularExpression.compiled(
+        #"\s*tags:\s*(\w+(?:\s*,\s*\w+)*)\s*$"#)
+
+    private static func layaInstructions(from settings: String?) -> String {
+        let text = settings ?? ""
+        guard let match = reTagsClauseTrailing.firstMatch(in: text),
+              let range = Range(match.range, in: text)
+        else { return text }
+        var out = text
+        out.removeSubrange(range)
+        return out.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Step 3 — Classify/Gate fire the winning label directly (`answer.choiceLabel`); Score
+    /// fires the declared tag at the **argmax** probability level (gate F: a declared band,
+    /// never an interpolation of `answer.scoreValue`) and returns that expected level
+    /// separately, for `lastDeciderDetail` to log alongside the fired tag.
+    private static func layaFiredTag(answer: LayaAnswer, type: LayaQuestionType, tags: [String])
+        -> (tag: String, expectedLevel: Double?)
+    {
+        switch type {
+        case .choice:
+            return (answer.choiceLabel ?? tags.first ?? "", nil)
+        case .score:
+            var bestIndex = 0
+            for i in 1 ..< answer.probabilities.count where answer.probabilities[i] > answer.probabilities[bestIndex] {
+                bestIndex = i
+            }
+            let tag = tags.indices.contains(bestIndex) ? tags[bestIndex] : (tags.first ?? "")
+            return (tag, answer.scoreValue)
+        case .noul:
+            return ("", nil)   // unreachable — Classify/Gate/Score never build a .noul question
+        }
     }
 
     /// The decider's prompt + declared tags, extracted from `runDecider` (AFM-2) so

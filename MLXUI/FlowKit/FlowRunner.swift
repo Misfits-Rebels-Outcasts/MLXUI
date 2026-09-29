@@ -66,6 +66,22 @@ nonisolated protocol FlowExecutor: Sendable {
 
     /// A staged row's queued outbox effect (the Python's `last_staged`), or nil.
     nonisolated var lastStaged: (id: String, kind: String, summary: String)? { get }
+
+    /// LY-7 — a decision-encoder decider's (Laya today; CL-6 adds CLM) fired tag, confidence,
+    /// and per-option probabilities from its last `execute`, or nil for any other row. Never
+    /// the payload — this is for gate E's ruling ("log confidence... on real numbers") and
+    /// general diagnosability, read separately from what the row actually passes through.
+    /// `expectedLevel` is `.score`'s weighted-average level (gate F: the *fired* tag is always
+    /// the declared band at argmax, never this interpolation — this is logged alongside it,
+    /// not used to pick the tag). `stateTruncated` folds in the non-blocking truncation signal
+    /// LY-7 asked to log as an info-code disclosure — no existing F0xx code fits "decider
+    /// input truncated to the token budget" (checked F001–F011 in `ErrorCatalog.swift`), and
+    /// this repo has no local copy of `catflow-mlx/SPEC_QUESTIONS.md` to add one to, so it's
+    /// plain data here rather than a fabricated code — see the LY-7 journal.
+    nonisolated var lastDeciderDetail: (
+        tag: String, confidence: Double, probabilities: [(label: String, probability: Double)],
+        expectedLevel: Double?, stateTruncated: Bool
+    )? { get }
 }
 
 nonisolated extension FlowExecutor {
@@ -81,6 +97,10 @@ nonisolated extension FlowExecutor {
     var lastTimeoutFlag: (code: String, message: String)? { nil }
     var lastProviderDeciderFlag: (code: String, message: String)? { nil }
     var lastStaged: (id: String, kind: String, summary: String)? { nil }
+    var lastDeciderDetail: (
+        tag: String, confidence: Double, probabilities: [(label: String, probability: Double)],
+        expectedLevel: Double?, stateTruncated: Bool
+    )? { nil }
 }
 
 /// The execution engine (CFM-R7-1): the full `FlowInterpreter` port drives every run,
