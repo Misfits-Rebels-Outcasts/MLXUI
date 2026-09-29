@@ -321,6 +321,49 @@ struct ModelFileSelectorTests {
         #expect(!out.contains(".gitattributes"))
     }
 
+    @Test func clmRepoDownloadsTenFilesNotNine() {
+        // CL-3 — §0 of DelegateCLMBacklog.md said the repo root has no config.json and
+        // expected exactly 9 files. Live listing fetched 2026-09-28 from
+        // https://huggingface.co/api/models/RealityCat/CLM-v0.1-8B-MLX-8bit (28 files, not
+        // the 27 §0 counted) now has a root config.json — the repo was pushed to after CL-0
+        // was written (see CL-2 journal's sha-drift note, 2026-338). The real selector picks
+        // it up via the existing bare "config.json" in `metadataNames`
+        // (ModelFileSelector.swift:19) — no code change, per CL-3's "no selector change
+        // expected". Owner ruling 2026-09-28: the extra root config.json is harmless bycatch
+        // (CL-4b's plan loads the encoder from `<model>/encoder/config.json` explicitly and
+        // never reads root config.json) — accepted, 10 is the correct expected count.
+        let out = selected([
+            ".gitattributes", "LICENSE", "NOTICE", "README.md", "clm_mlx.json",
+            "clm_mlx/__init__.py",
+            "clm_mlx/__pycache__/__init__.cpython-313.pyc",
+            "clm_mlx/__pycache__/encoder.cpython-313.pyc",
+            "clm_mlx/__pycache__/engine.cpython-313.pyc",
+            "clm_mlx/__pycache__/heads.cpython-313.pyc",
+            "clm_mlx/__pycache__/schema.cpython-313.pyc",
+            "clm_mlx/encoder.py", "clm_mlx/engine.py", "clm_mlx/heads.py", "clm_mlx/schema.py",
+            "config.json",
+            "encoder/chat_template.jinja", "encoder/clm_source.json", "encoder/config.json",
+            "encoder/generation_config.json",
+            "encoder/model-00001-of-00002.safetensors", "encoder/model-00002-of-00002.safetensors",
+            "encoder/model.safetensors.index.json",
+            "encoder/tokenizer.json", "encoder/tokenizer_config.json",
+            "heads/CLM_v0.1-8B.safetensors", "heads/config.json",
+            "parity.json",
+        ])
+        #expect(out == [
+            "config.json",
+            "encoder/config.json",
+            "encoder/generation_config.json",
+            "encoder/chat_template.jinja",
+            "encoder/model-00001-of-00002.safetensors",
+            "encoder/model-00002-of-00002.safetensors",
+            "encoder/tokenizer.json",
+            "encoder/tokenizer_config.json",
+            "heads/config.json",
+            "heads/CLM_v0.1-8B.safetensors",
+        ])
+    }
+
     @Test func layaRepoDownloadsExactlyFiveFiles() {
         // LY-3: aac6fef/laya-mlx's real sibling listing (fetched live from the HF API
         // 2026-09-24, see the LY-3 journal) — 11 real files plus .gitattributes. Only the

@@ -38,6 +38,7 @@ let installedModules: [ModelModule.Type] = [
     EmbeddingModule.self,
     RerankModule.self,
     LayaModule.self,
+    CLMModule.self,
     SDXLTurboModule.self,
     FluxModule.self,
     SegmentAnythingModule.self,

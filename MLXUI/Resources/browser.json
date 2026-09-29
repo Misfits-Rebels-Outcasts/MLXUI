@@ -2221,6 +2221,54 @@
           ],
           "descriptionSource": "curated",
           "summary": "A 0.4B ModernBERT decision encoder — a fast first-pass classifier for routing, intent and moderation decisions, with none of the generation ability of a chat model."
+        },
+        {
+          "id": "RealityCat--CLM-v0.1-8B-MLX-8bit",
+          "family": "CLM",
+          "displayName": "CLM 8B",
+          "paramSize": "8B",
+          "paramCountB": 8.2,
+          "modelType": "decision",
+          "source": "mlx",
+          "format": "mlx-int8",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "RealityCat",
+          "hfModelId": "RealityCat/CLM-v0.1-8B-MLX-8bit",
+          "ramGB": 12.2,
+          "downloadSizeGB": 8.12,
+          "contextWindow": 2048,
+          "license": "apache-2.0",
+          "description": "# CLM 8B\n\nCLM is an 8B **decision encoder** — Laya's big sibling, not a chat model: a frozen Qwen3-8B encoder (MLX 8-bit affine, group 64, `lm_head` removed) feeding two small projection heads (a *state* head and an *action* head) that score a state against candidate actions by cosine similarity. Given a block of text plus a typed question — a declared list of choices, an ordered scale, or a yes/no — it returns one answer per question with a probability per option and a confidence score. **It never generates text**, so there is no chat surface for it.\n\nThis is an MLX port of Contrastive-LM's CLM v0.1 heads over Qwen3-8B (`Qwen/Qwen3-8B`), packaged by the owner as `RealityCat/CLM-v0.1-8B-MLX-8bit`. Licensed Apache-2.0 throughout — the CLM heads (Contrastive-LM), the Qwen3-8B encoder (Qwen), and the MLX port.\n\n**Best fit:** the decider for inputs too long or too varied for Laya 0.4B — an invoice with its line items, a contract clause, an email thread — where the extra RAM and load time buy 2048 tokens per text (Laya's total is 512) and no option-count ceiling. **Honest limits:** it is not generative and doesn't *compute* — \"do the line items add up?\" is a pattern it may or may not have learned, not arithmetic it performs, so a `Calculate` row is the honest way to check that. About 9 GB peak RAM (16 GB Mac minimum; 18 GB+ recommended alongside another model). The quantization noise sits on the uncertain, near-50/50 calls — exactly where a human-review branch belongs anyway. 2048-token context per text, English only. Heavier and slower to load than Laya 0.4B; much longer inputs, no option ceiling.",
+          "architecture": "Qwen3ForCausalLM encoder (8-bit, no lm_head) + CLM state/action heads",
+          "languages": [
+            "en"
+          ],
+          "lastUpdated": "2026-09-27",
+          "taskTags": [
+            "text-classification"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 0,
+          "communityLikes": 2,
+          "variants": [
+            {
+              "quantization": "int8",
+              "format": "mlx-int8",
+              "ramGB": 12.2,
+              "downloadSizeGB": 8.12,
+              "qualityPercent": 100,
+              "hfModelId": "RealityCat/CLM-v0.1-8B-MLX-8bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "curated",
+          "summary": "An 8B decision encoder — Laya's heavier sibling for long or varied inputs (2048 tokens per text, no option ceiling), with none of the generation ability of a chat model."
         }
       ]
     },

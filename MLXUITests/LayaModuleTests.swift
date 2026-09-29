@@ -11,6 +11,15 @@ struct LayaModuleTests {
             hfRepo: "aac6fef", hfModelId: "aac6fef/laya-mlx")
     }
 
+    /// CL-1: a `.decision`/`.mlx` entry from a different family, to prove the gate-B
+    /// `family == "Laya"` discriminator keeps Laya from claiming it.
+    private func clmEntry() -> ModelEntry {
+        makeEntry(
+            id: "RealityCat--CLM-v0.1-8B-MLX-8bit", family: "CLM", displayName: "CLM 8B",
+            modelType: .decision, source: .mlx, ramGB: 12.2, downloadSizeGB: 8.12,
+            hfRepo: "RealityCat", hfModelId: "RealityCat/CLM-v0.1-8B-MLX-8bit")
+    }
+
     @Test func layaHasNoSupportGap() {
         #expect(ModelSupport.unsupportedReason(for: layaEntry()) == nil)
     }
@@ -28,6 +37,22 @@ struct LayaModuleTests {
         let resolved = try #require(registry.bestModule(for: layaEntry()))
         #expect(resolved.descriptor.id == "laya")
         #expect(resolved.sdk.claim(layaEntry()) == .exact)
+    }
+
+    /// CL-1 gate B: a `.decision`/`.mlx` entry from another family (CLM 8B) is refused by
+    /// both `LayaSDK` and `LayaUI` — Laya keeps claiming only its own family. CL-4b registered
+    /// `CLMModule`, so the entry now resolves to `"clm"` rather than `nil` (updated from CL-1's
+    /// original assertion, which predated that registration).
+    @MainActor
+    @Test func layaDoesNotClaimCLM() throws {
+        #expect(LayaSDK().claim(clmEntry()) == .no)
+        #expect(LayaUI().claim(clmEntry()) == .no)
+
+        let registry = ModelRegistry()
+        for module in installedModules {
+            module.register(into: registry)
+        }
+        #expect(registry.bestModule(for: clmEntry())?.descriptor.id == "clm")
     }
 
     @Test func laySDKClaimsOnlyMLXDecisionEntries() {

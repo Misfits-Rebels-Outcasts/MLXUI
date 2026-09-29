@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// `ModelUI` for Laya. `claim` mirrors `LayaSDK` so UI resolution matches SDK resolution. The
-/// real Run surface is `Views/Run/LayaRunView.swift` (LY-5) — mirrors `EmbeddingUI`/
-/// `ImageQARunView`'s split (the SDK/module file just resolves and hands off).
+/// `ModelUI` for Laya. `claim` mirrors `LayaSDK` so UI resolution matches SDK resolution
+/// (including the `family == "Laya"` discriminator, CL-1 gate B). The real Run surface is
+/// `Views/Run/LayaRunView.swift` (LY-5) — mirrors `EmbeddingUI`/`ImageQARunView`'s split (the
+/// SDK/module file just resolves and hands off).
 struct LayaUI: ModelUI {
     func claim(_ model: ModelEntry) -> ClaimScore {
-        guard model.runnerKind == .decision, model.source == .mlx else { return .no }
+        guard model.runnerKind == .decision, model.source == .mlx, model.family == "Laya" else { return .no }
         return .exact
     }
 

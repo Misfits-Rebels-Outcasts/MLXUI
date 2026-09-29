@@ -38,4 +38,11 @@ struct ModelSupportTests {
         let entry = makeEntry(id: "aac6fef--laya-mlx", hfModelId: "aac6fef/laya-mlx")
         #expect(ModelSupport.unsupportedReason(for: entry) == nil)
     }
+
+    // CL-4b/CL-5: CLMEngine ported and the real Run UI landed — gap removed; resolves via CLMSDK.
+    @Test func clmNowHasARunner() {
+        let entry = makeEntry(
+            id: "RealityCat--CLM-v0.1-8B-MLX-8bit", hfModelId: "RealityCat/CLM-v0.1-8B-MLX-8bit")
+        #expect(ModelSupport.unsupportedReason(for: entry) == nil)
+    }
 }

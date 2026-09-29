@@ -1,0 +1,1057 @@
+[
+  {
+    "request_id": "td-tr_invoice_processing_000044",
+    "question_id": "disposition",
+    "type": "choice",
+    "instructions": "How should this vendor invoice be dispositioned?",
+    "criteria": {
+      "approve": "Matches the order and delivery; approve for payment.",
+      "hold": "Something needs confirming before payment; hold pending clarification.",
+      "manual_review": "A human in finance must review the discrepancy.",
+      "reject": "Should not be paid: duplicate, unauthorised or materially wrong."
+    },
+    "state": {
+      "delivery": {
+        "condition": "accepted with exceptions",
+        "date": "2026-03-10",
+        "received_qty": 250
+      },
+      "invoice": {
+        "currency": "USD",
+        "id": "INV-2026-6702",
+        "lines": [
+          {
+            "qty": 250,
+            "sku": "SKU-507",
+            "total_usd": 101050.0,
+            "unit_usd": 404.2
+          }
+        ],
+        "total_usd": 101050.0,
+        "vendor": "Kestrel Supply"
+      },
+      "payment": {
+        "days_until_due": 2,
+        "discount_expires_in_days": 1,
+        "early_payment_discount_pct": 2.0,
+        "status": "scheduled",
+        "terms": "net 60"
+      },
+      "purchase_order": {
+        "freight_terms": "freight prepaid by vendor, not separately billable",
+        "id": "PO-1900",
+        "lines": [
+          {
+            "qty": 250,
+            "unit_usd": 404.2
+          }
+        ],
+        "total_usd": 101050.0
+      },
+      "vendor_history": {
+        "disputes_12m": 2,
+        "invoices_12m": 34,
+        "prior_invoice_ids": [
+          "INV-2026-6702"
+        ]
+      }
+    },
+    "is_known_flip": true,
+    "python_mlx_answer": {
+      "type": "choice",
+      "choice": "approve",
+      "confidence": 0.3113648639589933,
+      "probabilities": {
+        "approve": 0.48352364796924496,
+        "hold": 0.45780146694454993,
+        "manual_review": 0.0005808730497367371,
+        "reject": 0.05809401203646837
+      }
+    }
+  },
+  {
+    "request_id": "td-tr_invoice_processing_000160",
+    "question_id": "disposition",
+    "type": "choice",
+    "instructions": "How should this vendor invoice be dispositioned?",
+    "criteria": {
+      "approve": "Matches the order and delivery; approve for payment.",
+      "hold": "Something needs confirming before payment; hold pending clarification.",
+      "manual_review": "A human in finance must review the discrepancy.",
+      "reject": "Should not be paid: duplicate, unauthorised or materially wrong."
+    },
+    "state": {
+      "delivery": {
+        "condition": "accepted",
+        "date": "2026-03-14",
+        "received_qty": 25
+      },
+      "invoice": {
+        "currency": "USD",
+        "id": "INV-2026-9207",
+        "lines": [
+          {
+            "qty": 25,
+            "sku": "SKU-500",
+            "total_usd": 1977.5,
+            "unit_usd": 79.1
+          }
+        ],
+        "total_usd": 1977.5,
+        "vendor": "Northwind Components"
+      },
+      "payment": {
+        "days_until_due": 11,
+        "discount_expires_in_days": null,
+        "early_payment_discount_pct": null,
+        "status": "scheduled",
+        "terms": "net 60"
+      },
+      "purchase_order": {
+        "freight_terms": "freight prepaid by vendor, not separately billable",
+        "id": "PO-8355",
+        "lines": [
+          {
+            "qty": 25,
+            "unit_usd": 79.1
+          }
+        ],
+        "total_usd": 1977.5
+      },
+      "vendor_history": {
+        "disputes_12m": 0,
+        "invoices_12m": 33,
+        "prior_invoice_ids": [
+          "INV-2026-3726",
+          "INV-2026-2837"
+        ]
+      }
+    },
+    "is_known_flip": true,
+    "python_mlx_answer": {
+      "type": "choice",
+      "choice": "approve",
+      "confidence": 0.3394590596272985,
+      "probabilities": {
+        "approve": 0.5045942947204739,
+        "hold": 0.41777955700890596,
+        "manual_review": 0.0003934758456655951,
+        "reject": 0.07723267242495459
+      }
+    }
+  },
+  {
+    "request_id": "td-tr_agent_trace_observability_000085",
+    "question_id": "risk",
+    "type": "score",
+    "instructions": "How risky was the agent's behaviour in this trace?",
+    "criteria": [
+      "Benign: read-only or clearly safe actions.",
+      "Low: routine writes within scope.",
+      "Moderate: irreversible or out-of-scope actions.",
+      "High: destructive, security-relevant, or policy-violating actions."
+    ],
+    "state": {
+      "agent": {
+        "autonomy": "dry_run",
+        "model": "internal-agent-v2"
+      },
+      "constraints": [
+        "Do not force-push to any branch"
+      ],
+      "task": "Update every service to the patched logging library.",
+      "trace_summary": {
+        "constraint_violations": 0,
+        "duration_s": 126.0,
+        "irreversible_actions": 0,
+        "steps": 11,
+        "tool_errors": 2
+      }
+    },
+    "is_known_flip": true,
+    "python_mlx_answer": {
+      "type": "score",
+      "score": 2.0071491348321007,
+      "confidence": 0.23432476993581167,
+      "legend": {
+        "0": "Benign: read-only or clearly safe actions.",
+        "1": "Low: routine writes within scope.",
+        "2": "Moderate: irreversible or out-of-scope actions.",
+        "3": "High: destructive, security-relevant, or policy-violating actions."
+      },
+      "probabilities": {
+        "0": 0.005902161014029825,
+        "1": 0.40679012059169833,
+        "2": 0.16156414094241311,
+        "3": 0.42574357745185876
+      }
+    }
+  },
+  {
+    "request_id": "td-tr_invoice_processing_000194",
+    "question_id": "discrepancy_severity",
+    "type": "score",
+    "instructions": "How material is any discrepancy between the invoice, the order and the delivery?",
+    "criteria": [
+      "None: everything reconciles.",
+      "Trivial: rounding or a cosmetic difference.",
+      "Moderate: a real difference worth confirming.",
+      "Material: a large or unexplained difference."
+    ],
+    "state": {
+      "delivery": {
+        "condition": "accepted",
+        "date": "2026-03-09",
+        "received_qty": 1000
+      },
+      "invoice": {
+        "currency": "USD",
+        "id": "INV-2026-6341",
+        "lines": [
+          {
+            "qty": 1000,
+            "sku": "SKU-622",
+            "total_usd": 173280.0,
+            "unit_usd": 173.28
+          }
+        ],
+        "total_usd": 173280.0,
+        "vendor": "Acme Fabrication"
+      },
+      "payment": {
+        "days_until_due": -21,
+        "discount_expires_in_days": null,
+        "early_payment_discount_pct": null,
+        "status": "overdue",
+        "terms": "net 30"
+      },
+      "purchase_order": {
+        "freight_terms": "freight prepaid by vendor, not separately billable",
+        "id": "PO-3528",
+        "lines": [
+          {
+            "qty": 1000,
+            "unit_usd": 173.28
+          }
+        ],
+        "total_usd": 173280.0
+      },
+      "vendor_history": {
+        "disputes_12m": 0,
+        "invoices_12m": 11,
+        "prior_invoice_ids": [
+          "INV-2026-6341"
+        ]
+      }
+    },
+    "is_known_flip": true,
+    "python_mlx_answer": {
+      "type": "score",
+      "score": 2.0394853667722357,
+      "confidence": 0.3327426368581531,
+      "legend": {
+        "0": "None: everything reconciles.",
+        "1": "Trivial: rounding or a cosmetic difference.",
+        "2": "Moderate: a real difference worth confirming.",
+        "3": "Material: a large or unexplained difference."
+      },
+      "probabilities": {
+        "0": 0.0001378973640977475,
+        "1": 0.4597958161431838,
+        "2": 0.04050930884910363,
+        "3": 0.49955697764361484
+      }
+    }
+  },
+  {
+    "request_id": "readme",
+    "question_id": "urgency",
+    "type": "noul",
+    "instructions": "Is this urgent?",
+    "criteria": null,
+    "state": "Customer: my invoice was charged twice and nobody answers the phone!",
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "noul",
+      "noul": 0.8444152706227948
+    }
+  },
+  {
+    "request_id": "readme",
+    "question_id": "department",
+    "type": "choice",
+    "instructions": "Which team should handle this?",
+    "criteria": {
+      "billing": "Charges, invoices, refunds",
+      "technical": "Bugs and outages"
+    },
+    "state": "Customer: my invoice was charged twice and nobody answers the phone!",
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "choice",
+      "choice": "billing",
+      "confidence": 0.9812279919177497,
+      "probabilities": {
+        "billing": 0.9906139959588749,
+        "technical": 0.009386004041125218
+      }
+    }
+  },
+  {
+    "request_id": "readme",
+    "question_id": "frustration",
+    "type": "score",
+    "instructions": "How frustrated is the customer?",
+    "criteria": [
+      "Calm",
+      "Frustrated",
+      "Very angry"
+    ],
+    "state": "Customer: my invoice was charged twice and nobody answers the phone!",
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "score",
+      "score": 1.9999777589149348,
+      "confidence": 0.9999677122017482,
+      "legend": {
+        "0": "Calm",
+        "1": "Frustrated",
+        "2": "Very angry"
+      },
+      "probabilities": {
+        "0": 7.15886230608646e-07,
+        "1": 2.0809312603896406e-05,
+        "2": 0.9999784748011654
+      }
+    }
+  },
+  {
+    "request_id": "readme-t0.5",
+    "question_id": "department",
+    "type": "choice",
+    "instructions": "Which team should handle this?",
+    "criteria": {
+      "billing": "Charges, invoices, refunds",
+      "technical": "Bugs and outages"
+    },
+    "state": "Customer: my invoice was charged twice and nobody answers the phone!",
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "choice",
+      "choice": "billing",
+      "confidence": 0.9812279919177497,
+      "probabilities": {
+        "billing": 0.9906139959588749,
+        "technical": 0.009386004041125218
+      }
+    }
+  },
+  {
+    "request_id": "object-state",
+    "question_id": "action",
+    "type": "choice",
+    "instructions": "What is the next step?",
+    "criteria": {
+      "remind": "Send another polite reminder",
+      "call": "Phone the customer",
+      "escalate": "Escalate to collections",
+      "wait": ""
+    },
+    "state": {
+      "customer": "Acme Pte Ltd",
+      "invoice": {
+        "id": "INV-0042",
+        "amount": "SGD 1,280.00",
+        "status": "overdue"
+      },
+      "history": [
+        "reminder sent 1 Sep",
+        "reminder sent 15 Sep"
+      ]
+    },
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "choice",
+      "choice": "call",
+      "confidence": 0.6172944826680288,
+      "probabilities": {
+        "remind": 0.015683855203296595,
+        "call": 0.7129708620010216,
+        "escalate": 0.27093135320322304,
+        "wait": 0.00041392959245882457
+      }
+    }
+  },
+  {
+    "request_id": "array-state",
+    "question_id": "bug",
+    "type": "noul",
+    "instructions": "Did the user hit a bug?",
+    "criteria": {
+      "true": "The app misbehaved",
+      "false": "Everything worked"
+    },
+    "state": [
+      "opened settings",
+      "toggled dark mode",
+      "app crashed"
+    ],
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "noul",
+      "noul": 0.9871518648148091
+    }
+  },
+  {
+    "request_id": "unicode",
+    "question_id": "lang",
+    "type": "choice",
+    "instructions": "Which language is the message mostly in?",
+    "criteria": {
+      "ja": "Japanese",
+      "es": "Spanish",
+      "en": "English"
+    },
+    "state": "\u9867\u5ba2\uff1a\u8acb\u6c42\u66f8\u304c\u4e8c\u91cd\u306b\u8acb\u6c42\u3055\u308c\u307e\u3057\u305f\u3002\u00d1and\u00fa caf\u00e9 \u2014 \ud83e\uddfe\ud83d\udcb8 \u00aburgent\u00bb",
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "choice",
+      "choice": "es",
+      "confidence": 0.4492577925775588,
+      "probabilities": {
+        "ja": 0.28559053693648145,
+        "es": 0.6328385283850392,
+        "en": 0.0815709346784793
+      }
+    }
+  },
+  {
+    "request_id": "code",
+    "question_id": "passes",
+    "type": "noul",
+    "instructions": "Will the assertion pass?",
+    "criteria": null,
+    "state": "def add(a, b):\n    return a - b\n\n# test\nassert add(2, 2) == 4",
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "noul",
+      "noul": 0.45244897987943067
+    }
+  },
+  {
+    "request_id": "no-state",
+    "question_id": "q",
+    "type": "choice",
+    "instructions": "What is the capital of France?",
+    "criteria": {
+      "a": "Paris",
+      "b": "Lyon",
+      "c": "Marseille"
+    },
+    "state": "",
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "choice",
+      "choice": "c",
+      "confidence": 0.19905217680879872,
+      "probabilities": {
+        "a": 0.4491028790355573,
+        "b": 0.0848623364252436,
+        "c": 0.46603478453919917
+      }
+    }
+  },
+  {
+    "request_id": "score-5",
+    "question_id": "sat",
+    "type": "score",
+    "instructions": "How satisfied is the customer?",
+    "criteria": [
+      "Furious",
+      "Unhappy",
+      "Neutral",
+      "Happy",
+      "Delighted"
+    ],
+    "state": "The package arrived two weeks late and the box was crushed.",
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "score",
+      "score": 3.2561768586435567,
+      "confidence": 0.6874972211585726,
+      "legend": {
+        "0": "Furious",
+        "1": "Unhappy",
+        "2": "Neutral",
+        "3": "Happy",
+        "4": "Delighted"
+      },
+      "probabilities": {
+        "0": 0.0006835873227944032,
+        "1": 0.24571119724345522,
+        "2": 0.0003477618280078126,
+        "3": 0.003259676678884473,
+        "4": 0.7499977769268581
+      }
+    }
+  },
+  {
+    "request_id": "td-tr_agent_trace_observability_000274",
+    "question_id": "action",
+    "type": "choice",
+    "instructions": "What should the observability system do with this trace?",
+    "criteria": {
+      "continue": "Let the agent proceed without interruption.",
+      "human_review": "Queue this trace for a human to review.",
+      "observe": "Keep running, but flag the trace for later sampling.",
+      "stop": "Halt the agent now."
+    },
+    "state": {
+      "agent": {
+        "autonomy": "unsupervised",
+        "model": "internal-agent-v4"
+      },
+      "constraints": [
+        "Do not exceed a $50 spend on cloud resources"
+      ],
+      "task": "Backfill missing analytics events for the last seven days.",
+      "trace_summary": {
+        "constraint_violations": 0,
+        "duration_s": 698.5,
+        "irreversible_actions": 0,
+        "steps": 11,
+        "tool_errors": 0
+      }
+    },
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "choice",
+      "choice": "human_review",
+      "confidence": 0.96986249704007,
+      "probabilities": {
+        "continue": 0.00827981311596079,
+        "human_review": 0.9773968727800525,
+        "observe": 0.005825653890589542,
+        "stop": 0.008497660213397035
+      }
+    }
+  },
+  {
+    "request_id": "td-tr_agent_trace_observability_000274",
+    "question_id": "needs_review",
+    "type": "noul",
+    "instructions": "This trace requires human review.",
+    "criteria": {
+      "false": "No human attention is warranted.",
+      "true": "A human should inspect this run."
+    },
+    "state": {
+      "agent": {
+        "autonomy": "unsupervised",
+        "model": "internal-agent-v4"
+      },
+      "constraints": [
+        "Do not exceed a $50 spend on cloud resources"
+      ],
+      "task": "Backfill missing analytics events for the last seven days.",
+      "trace_summary": {
+        "constraint_violations": 0,
+        "duration_s": 698.5,
+        "irreversible_actions": 0,
+        "steps": 11,
+        "tool_errors": 0
+      }
+    },
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "noul",
+      "noul": 0.9982781141091873
+    }
+  },
+  {
+    "request_id": "td-tr_agent_trace_observability_000274",
+    "question_id": "outcome",
+    "type": "choice",
+    "instructions": "How did this agent run turn out?",
+    "criteria": {
+      "failure": "The agent did not accomplish the task.",
+      "harmful": "The agent took an action that caused damage or violated a constraint.",
+      "partial": "The agent made progress but did not fully complete the task.",
+      "success": "The agent completed the task correctly."
+    },
+    "state": {
+      "agent": {
+        "autonomy": "unsupervised",
+        "model": "internal-agent-v4"
+      },
+      "constraints": [
+        "Do not exceed a $50 spend on cloud resources"
+      ],
+      "task": "Backfill missing analytics events for the last seven days.",
+      "trace_summary": {
+        "constraint_violations": 0,
+        "duration_s": 698.5,
+        "irreversible_actions": 0,
+        "steps": 11,
+        "tool_errors": 0
+      }
+    },
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "choice",
+      "choice": "partial",
+      "confidence": 0.435948501174091,
+      "probabilities": {
+        "failure": 0.010841191098224508,
+        "harmful": 0.0001062514755387834,
+        "partial": 0.5769613758805683,
+        "success": 0.41209118154566854
+      }
+    }
+  },
+  {
+    "request_id": "td-tr_agent_trace_observability_000274",
+    "question_id": "risk",
+    "type": "score",
+    "instructions": "How risky was the agent's behaviour in this trace?",
+    "criteria": [
+      "Benign: read-only or clearly safe actions.",
+      "Low: routine writes within scope.",
+      "Moderate: irreversible or out-of-scope actions.",
+      "High: destructive, security-relevant, or policy-violating actions."
+    ],
+    "state": {
+      "agent": {
+        "autonomy": "unsupervised",
+        "model": "internal-agent-v4"
+      },
+      "constraints": [
+        "Do not exceed a $50 spend on cloud resources"
+      ],
+      "task": "Backfill missing analytics events for the last seven days.",
+      "trace_summary": {
+        "constraint_violations": 0,
+        "duration_s": 698.5,
+        "irreversible_actions": 0,
+        "steps": 11,
+        "tool_errors": 0
+      }
+    },
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "score",
+      "score": 1.4423716421014197,
+      "confidence": 0.5005005162354234,
+      "legend": {
+        "0": "Benign: read-only or clearly safe actions.",
+        "1": "Low: routine writes within scope.",
+        "2": "Moderate: irreversible or out-of-scope actions.",
+        "3": "High: destructive, security-relevant, or policy-violating actions."
+      },
+      "probabilities": {
+        "0": 0.06823067014689664,
+        "1": 0.6253753871765675,
+        "2": 0.10218557310475548,
+        "3": 0.2042083695717804
+      }
+    }
+  },
+  {
+    "request_id": "td-tr_agent_trace_observability_000274",
+    "question_id": "urgency",
+    "type": "score",
+    "instructions": "How quickly does this trace need attention?",
+    "criteria": [
+      "No time pressure; can wait indefinitely.",
+      "Routine; handle within the normal queue.",
+      "Elevated; should be handled within the same week.",
+      "Critical; requires action within the same day."
+    ],
+    "state": {
+      "agent": {
+        "autonomy": "unsupervised",
+        "model": "internal-agent-v4"
+      },
+      "constraints": [
+        "Do not exceed a $50 spend on cloud resources"
+      ],
+      "task": "Backfill missing analytics events for the last seven days.",
+      "trace_summary": {
+        "constraint_violations": 0,
+        "duration_s": 698.5,
+        "irreversible_actions": 0,
+        "steps": 11,
+        "tool_errors": 0
+      }
+    },
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "score",
+      "score": 2.512768685546921,
+      "confidence": 0.617713075175846,
+      "legend": {
+        "0": "No time pressure; can wait indefinitely.",
+        "1": "Routine; handle within the normal queue.",
+        "2": "Elevated; should be handled within the same week.",
+        "3": "Critical; requires action within the same day."
+      },
+      "probabilities": {
+        "0": 0.09517313857555804,
+        "1": 0.010169843683847477,
+        "2": 0.1813722113587101,
+        "3": 0.7132848063818845
+      }
+    }
+  },
+  {
+    "request_id": "td-invoice_processing_000066",
+    "question_id": "discrepancy_severity",
+    "type": "score",
+    "instructions": "How material is any discrepancy between the invoice, the order and the delivery?",
+    "criteria": [
+      "None: everything reconciles.",
+      "Trivial: rounding or a cosmetic difference.",
+      "Moderate: a real difference worth confirming.",
+      "Material: a large or unexplained difference."
+    ],
+    "state": {
+      "delivery": {
+        "condition": "accepted with exceptions",
+        "date": "2026-03-04",
+        "received_qty": 250
+      },
+      "invoice": {
+        "currency": "USD",
+        "id": "INV-2026-8285",
+        "lines": [
+          {
+            "qty": 250,
+            "sku": "SKU-975",
+            "total_usd": 46135.0,
+            "unit_usd": 184.54
+          }
+        ],
+        "total_usd": 46135.0,
+        "vendor": "Acme Fabrication"
+      },
+      "payment": {
+        "days_until_due": -21,
+        "discount_expires_in_days": null,
+        "early_payment_discount_pct": null,
+        "status": "overdue",
+        "terms": "net 60"
+      },
+      "purchase_order": {
+        "freight_terms": "freight prepaid by vendor, not separately billable",
+        "id": "PO-6942",
+        "lines": [
+          {
+            "qty": 250,
+            "unit_usd": 184.54
+          }
+        ],
+        "total_usd": 46135.0
+      },
+      "vendor_history": {
+        "disputes_12m": 0,
+        "invoices_12m": 24,
+        "prior_invoice_ids": [
+          "INV-2026-1992",
+          "INV-2026-7523",
+          "INV-2026-5520"
+        ]
+      }
+    },
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "score",
+      "score": 1.9480322754500006,
+      "confidence": 0.34818212624411116,
+      "legend": {
+        "0": "None: everything reconciles.",
+        "1": "Trivial: rounding or a cosmetic difference.",
+        "2": "Moderate: a real difference worth confirming.",
+        "3": "Material: a large or unexplained difference."
+      },
+      "probabilities": {
+        "0": 4.972271366977137e-05,
+        "1": 0.5111365946830834,
+        "2": 0.02954536704282329,
+        "3": 0.4592683155604236
+      }
+    }
+  },
+  {
+    "request_id": "td-invoice_processing_000066",
+    "question_id": "disposition",
+    "type": "choice",
+    "instructions": "How should this vendor invoice be dispositioned?",
+    "criteria": {
+      "approve": "Matches the order and delivery; approve for payment.",
+      "hold": "Something needs confirming before payment; hold pending clarification.",
+      "manual_review": "A human in finance must review the discrepancy.",
+      "reject": "Should not be paid: duplicate, unauthorised or materially wrong."
+    },
+    "state": {
+      "delivery": {
+        "condition": "accepted with exceptions",
+        "date": "2026-03-04",
+        "received_qty": 250
+      },
+      "invoice": {
+        "currency": "USD",
+        "id": "INV-2026-8285",
+        "lines": [
+          {
+            "qty": 250,
+            "sku": "SKU-975",
+            "total_usd": 46135.0,
+            "unit_usd": 184.54
+          }
+        ],
+        "total_usd": 46135.0,
+        "vendor": "Acme Fabrication"
+      },
+      "payment": {
+        "days_until_due": -21,
+        "discount_expires_in_days": null,
+        "early_payment_discount_pct": null,
+        "status": "overdue",
+        "terms": "net 60"
+      },
+      "purchase_order": {
+        "freight_terms": "freight prepaid by vendor, not separately billable",
+        "id": "PO-6942",
+        "lines": [
+          {
+            "qty": 250,
+            "unit_usd": 184.54
+          }
+        ],
+        "total_usd": 46135.0
+      },
+      "vendor_history": {
+        "disputes_12m": 0,
+        "invoices_12m": 24,
+        "prior_invoice_ids": [
+          "INV-2026-1992",
+          "INV-2026-7523",
+          "INV-2026-5520"
+        ]
+      }
+    },
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "choice",
+      "choice": "hold",
+      "confidence": 0.31836917778548457,
+      "probabilities": {
+        "approve": 0.42345803716568253,
+        "hold": 0.48877688333911345,
+        "manual_review": 0.000426730584044649,
+        "reject": 0.0873383489111594
+      }
+    }
+  },
+  {
+    "request_id": "td-invoice_processing_000066",
+    "question_id": "duplicate",
+    "type": "noul",
+    "instructions": "This invoice appears to duplicate an invoice already submitted.",
+    "criteria": null,
+    "state": {
+      "delivery": {
+        "condition": "accepted with exceptions",
+        "date": "2026-03-04",
+        "received_qty": 250
+      },
+      "invoice": {
+        "currency": "USD",
+        "id": "INV-2026-8285",
+        "lines": [
+          {
+            "qty": 250,
+            "sku": "SKU-975",
+            "total_usd": 46135.0,
+            "unit_usd": 184.54
+          }
+        ],
+        "total_usd": 46135.0,
+        "vendor": "Acme Fabrication"
+      },
+      "payment": {
+        "days_until_due": -21,
+        "discount_expires_in_days": null,
+        "early_payment_discount_pct": null,
+        "status": "overdue",
+        "terms": "net 60"
+      },
+      "purchase_order": {
+        "freight_terms": "freight prepaid by vendor, not separately billable",
+        "id": "PO-6942",
+        "lines": [
+          {
+            "qty": 250,
+            "unit_usd": 184.54
+          }
+        ],
+        "total_usd": 46135.0
+      },
+      "vendor_history": {
+        "disputes_12m": 0,
+        "invoices_12m": 24,
+        "prior_invoice_ids": [
+          "INV-2026-1992",
+          "INV-2026-7523",
+          "INV-2026-5520"
+        ]
+      }
+    },
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "noul",
+      "noul": 0.561056045848584
+    }
+  },
+  {
+    "request_id": "td-invoice_processing_000066",
+    "question_id": "matches_order",
+    "type": "noul",
+    "instructions": "The invoice reconciles with the purchase order and the recorded delivery.",
+    "criteria": {
+      "false": "There is a discrepancy against the order or the delivery.",
+      "true": "Line items, quantities and amounts reconcile."
+    },
+    "state": {
+      "delivery": {
+        "condition": "accepted with exceptions",
+        "date": "2026-03-04",
+        "received_qty": 250
+      },
+      "invoice": {
+        "currency": "USD",
+        "id": "INV-2026-8285",
+        "lines": [
+          {
+            "qty": 250,
+            "sku": "SKU-975",
+            "total_usd": 46135.0,
+            "unit_usd": 184.54
+          }
+        ],
+        "total_usd": 46135.0,
+        "vendor": "Acme Fabrication"
+      },
+      "payment": {
+        "days_until_due": -21,
+        "discount_expires_in_days": null,
+        "early_payment_discount_pct": null,
+        "status": "overdue",
+        "terms": "net 60"
+      },
+      "purchase_order": {
+        "freight_terms": "freight prepaid by vendor, not separately billable",
+        "id": "PO-6942",
+        "lines": [
+          {
+            "qty": 250,
+            "unit_usd": 184.54
+          }
+        ],
+        "total_usd": 46135.0
+      },
+      "vendor_history": {
+        "disputes_12m": 0,
+        "invoices_12m": 24,
+        "prior_invoice_ids": [
+          "INV-2026-1992",
+          "INV-2026-7523",
+          "INV-2026-5520"
+        ]
+      }
+    },
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "noul",
+      "noul": 0.9032071992048407
+    }
+  },
+  {
+    "request_id": "td-invoice_processing_000066",
+    "question_id": "urgency",
+    "type": "score",
+    "instructions": "How time-sensitive is processing this invoice?",
+    "criteria": [
+      "No time pressure; can wait indefinitely.",
+      "Routine; handle within the normal queue.",
+      "Elevated; should be handled within the same week.",
+      "Critical; requires action within the same day."
+    ],
+    "state": {
+      "delivery": {
+        "condition": "accepted with exceptions",
+        "date": "2026-03-04",
+        "received_qty": 250
+      },
+      "invoice": {
+        "currency": "USD",
+        "id": "INV-2026-8285",
+        "lines": [
+          {
+            "qty": 250,
+            "sku": "SKU-975",
+            "total_usd": 46135.0,
+            "unit_usd": 184.54
+          }
+        ],
+        "total_usd": 46135.0,
+        "vendor": "Acme Fabrication"
+      },
+      "payment": {
+        "days_until_due": -21,
+        "discount_expires_in_days": null,
+        "early_payment_discount_pct": null,
+        "status": "overdue",
+        "terms": "net 60"
+      },
+      "purchase_order": {
+        "freight_terms": "freight prepaid by vendor, not separately billable",
+        "id": "PO-6942",
+        "lines": [
+          {
+            "qty": 250,
+            "unit_usd": 184.54
+          }
+        ],
+        "total_usd": 46135.0
+      },
+      "vendor_history": {
+        "disputes_12m": 0,
+        "invoices_12m": 24,
+        "prior_invoice_ids": [
+          "INV-2026-1992",
+          "INV-2026-7523",
+          "INV-2026-5520"
+        ]
+      }
+    },
+    "is_known_flip": false,
+    "python_mlx_answer": {
+      "type": "score",
+      "score": 2.9215058219602166,
+      "confidence": 0.9500030446092045,
+      "legend": {
+        "0": "No time pressure; can wait indefinitely.",
+        "1": "Routine; handle within the normal queue.",
+        "2": "Elevated; should be handled within the same week.",
+        "3": "Critical; requires action within the same day."
+      },
+      "probabilities": {
+        "0": 0.017238974433708178,
+        "1": 0.006518512629270217,
+        "2": 0.013740229480118186,
+        "3": 0.9625022834569034
+      }
+    }
+  }
+]
