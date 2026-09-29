@@ -87,6 +87,21 @@ nonisolated enum TaskModels {
     /// today already is one, so the table stays empty until a case names itself).
     private static let taskFamilies: [String: String] = [:]
 
+    /// LY-6 (`RSI/DelegateLayaBacklog.md`, Phase LY-B) — a second, explicit capability table,
+    /// alongside `taskKinds` rather than folded into it: Classify/Gate/Score's *usual* runner
+    /// is still `.llm` (an LLM stage rendering the runtime-owned frame), but a `.decision`
+    /// catalog entry — a non-generative decider like Laya 0.4B or CLM 8B — can **also** serve
+    /// those same three tasks, with no LLM stage involved at all (`RealExecutor.runDecider`
+    /// branches on `modelEntry.runnerKind == .decision` before ever building one — LY-7).
+    /// Judge, Think, Decide, Generate and every other task have no entry here: a `.decision`
+    /// model only ever appears in the three tasks it can actually answer. Documented the way
+    /// DA-1 documented the six deciders' `taskKinds` entries: the table above is the reason a
+    /// derived pool is non-empty for `.llm`; this one is the reason it's non-empty for
+    /// `.decision` too, without changing what `.llm`-only tasks (Judge, Think, Decide) offer.
+    private static let taskExtraKinds: [String: Set<RunnerKind>] = [
+        "Classify": [.decision], "Gate": [.decision], "Score": [.decision],
+    ]
+
     /// **SPEC-Q214** (`catflow-mlx/SPEC_QUESTIONS.md`) — a `.model`-class task that runs
     /// **without** a model when none is named. `Text to Table`'s deterministic fast path
     /// (`TableTool.parseDelimitedTable`, DA-6) inverts CSV a sibling `Table to Text` row
@@ -324,9 +339,10 @@ nonisolated enum TaskModels {
                               catalog: [ModelEntry],
                               claimableModelIDs: Set<String>) -> [ModelSlot] {
         guard let kind = taskKinds[task], isServedByExecutor(task) else { return [] }
+        let extraKinds = taskExtraKinds[task] ?? []
         let family = taskFamilies[task]?.lowercased()
         let cataloged: [ModelSlot] = catalog.filter { entry in
-            guard entry.runnerKind == kind,
+            guard entry.runnerKind == kind || extraKinds.contains(entry.runnerKind),
                   claimableModelIDs.contains(entry.id),
                   ModelSupport.unsupportedReason(for: entry) == nil else { return false }
             if let family, !(entry.id + " " + entry.hfModelId).lowercased().contains(family) {
