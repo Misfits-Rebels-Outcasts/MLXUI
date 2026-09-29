@@ -1,0 +1,4 @@
+From: tom@agency.example
+Subject: Invoice needs our VAT number
+
+Could you reissue last month's invoice with our company VAT number on it? Our accounts team can't process it otherwise.

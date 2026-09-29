@@ -1,0 +1,4 @@
+From: mei@clinic.example
+Subject: Can't log in after changing my email
+
+I updated my email address yesterday and now the password reset link never arrives. Can you move my account to the new address?

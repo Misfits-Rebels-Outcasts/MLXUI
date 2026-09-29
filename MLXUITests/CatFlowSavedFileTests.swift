@@ -212,10 +212,10 @@ struct CatFlowSavedFileTests {
                 }
             }
         }
-        // Pins §0.1's count (71 + 11 + 2 + 1 + 0 = 85) so a new gallery flow's Save rows are
-        // never silently skipped by this corpus walk.
-        #expect(checkedRows == 85, """
-            Corpus row count changed from 85 — if a new Save * row shipped, confirm it \
+        // Pins §0.1's count (85, +1 for LY-9's flow 77 "Save Text routed-tickets.md" = 86) so
+        // a new gallery flow's Save rows are never silently skipped by this corpus walk.
+        #expect(checkedRows == 86, """
+            Corpus row count changed from 86 — if a new Save * row shipped, confirm it \
             resolves correctly above, then bump this count; if a row disappeared, confirm \
             that was intentional.
             """)
