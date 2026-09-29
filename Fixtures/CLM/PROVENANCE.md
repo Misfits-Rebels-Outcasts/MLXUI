@@ -66,9 +66,86 @@ KB-scale) — because CL-4a's own scope is specifically "the pure half: schema +
 encoder", and the heads are the one weight artifact small enough to make that split
 meaningfully testable without downloading the multi-GB encoder.
 
+## `numbers.json`
+
+- **Script:** an inline snippet run against the existing `MLXCLM/.venv` (`mlx==0.32.2`) — the
+  MLX version doesn't matter for this golden, since it only exercises `clm_mlx.schema.to_text`
+  on already-`json.loads`-parsed values, no tensor math.
+- **What it calls:** `clm_mlx.schema.to_text(json.loads(literal))`, unmodified, over 13 literal
+  JSON number/bool tokens (small int, 20-digit int, negative int, `0`, `-0`, `101050.0`,
+  `1.50`, `0.1`, `1e16`, `1e-05`, `-0.0`, `true`, `false`) — covering CL-4a's "Numbers:
+  corrected 2026-09-28" >= 10-case requirement.
+- Backs `MLXUITests/CLMSchemaTests.swift`'s byte-for-byte number-rendering golden test.
+
+## `tokens.json` / `embeddings.json` / `answers.json` (CL-4b)
+
+- **Script:** `python/tools/cl4b_goldens.py` (MLXCLM checkout), run from `MLXCLM/python/`.
+- **First generation** (superseded for `embeddings.json`/`answers.json` below): `MLXCLM/.venv`
+  (`mlx==0.32.2`, `mlx-lm==0.31.3`, `transformers==5.17.0`) — one version above what mlx-swift
+  0.31.4 vendors (`ml-explore/mlx` @ `ce45c52` / tag `v0.31.1`). `tokens.json` only depends on
+  the tokenizer, not the MLX version, so it is unaffected and was **not** regenerated below —
+  confirmed byte-identical before/after the venv switch.
+- **Regenerated 2026-09-28** with a like-for-like venv, `MLXCLM/python/venv-mlx0311/`:
+  - `mlx==0.31.1`, `mlx-metal==0.31.1` — the exact core mlx-swift 0.31.4 vendors.
+  - `mlx-lm==0.31.2` — `pip install "mlx==0.31.1" "mlx-lm<0.31.3" "transformers==5.17.0"
+    huggingface_hub` resolved this as the newest `mlx-lm` accepting `mlx==0.31.1` (`mlx-lm
+    0.31.3` hard-requires `mlx>=0.31.2` on Darwin, so it cannot pair with `0.31.1` at all — not
+    a resolver quirk, a real version floor).
+  - `transformers==5.17.0` — the original pin held; no relaxation needed.
+  - Confirmed via `pip list | grep -iE "mlx|transformers"` and
+    `python -c "import mlx.core as mx; print(mx.__version__)"` → `0.31.1`.
+  - Before regenerating, sanity-checked this older `mlx-lm` against the repo's own
+    `clm_mlx.encoder.Encoder` (which internally calls `mlx_lm.load(lazy=True)` then
+    `model.model(x)`, dropping `lm_head`): loaded successfully, and token ids for all 5
+    `tokens.json` texts (`short`, `medium`, `empty`, `long_over_2048`, `structured`) matched
+    the committed `tokens.json` exactly, position-for-position.
+  - `embeddings.json` and `answers.json` were regenerated with this venv and replace the
+    `mlx==0.32.2`/`mlx-lm==0.31.3` versions.
+- **Regenerated again 2026-09-28** (same `venv-mlx0311`) to add a 6th text, `repetitive_2048`:
+  `("This invoice line item was reviewed for the reported discrepancy. " * 256)[:-1]`, 2048
+  tokens after truncation — the former 0.9941-cosine outlier from the now-deleted
+  `embeddingCosineSpreadCheck`/`outlierTokenIdsAndPrefixCosine` diagnostics (see "Diagnostics
+  deleted" below). `tokens.json`/`answers.json` came out byte-identical to the prior run for
+  all pre-existing keys (confirmed).
+  - **Correction (2026-09-29):** `repetitive_2048` does **not** reach 0.9999 even in the
+    like-for-like venv — it measures **0.9997831312353592**, confirmed identical whether
+    computed via `MLXEmbedders.Qwen3Model` (batched with `long_over_2048`) or
+    `MLXLLM.Qwen3Model.model` (isolated, no padding) on the Swift side. Version skew explains
+    most of the original gap (0.9941 → 0.99978, ~25× smaller error) but not all of it; see
+    `CLMEncoderTests.swift`'s `repetitiveTextCosineFloor` and the CL-4b journal for the full
+    investigation and the owner's fallback ruling (2026-09-29): this text gets its own
+    ≥ 0.9997 blocking bar, the other 5 texts stay at ≥ 0.9999.
+- **What it calls:** `clm_mlx.encoder.Encoder`/`clm_mlx.engine.Engine`, unmodified, against
+  `models/qwen3-8b-8bit` (encoder) and `reference/clm_reference/heads/` (heads) — the same
+  checkout `heads.json`/`heads_weights/` above are pinned to.
+- **`answers.json`:** 24 questions — the 4 known `parity.json` flips
+  (`td-tr_invoice_processing_000044/disposition`, `td-tr_invoice_processing_000160/disposition`,
+  `td-tr_agent_trace_observability_000085/risk`, `td-tr_invoice_processing_000194/
+  discrepancy_severity`) plus 20 more from the real corpus, spread across `choice`/`score`/
+  `noul`.
+- Backs `MLXUITests/CLMEncoderTests.swift` (embeddings cosine) and
+  `MLXUITests/CLMEngineTests.swift` (24-question answer parity).
+
+## Diagnostics deleted (owner ruling, 2026-09-28)
+
+Three one-off diagnostic tests in `CLMEncoderTests.swift` — `mediumHeadsProjectionDownstreamEffect`,
+`embeddingCosineSpreadCheck`, `outlierTokenIdsAndPrefixCosine` — and their backing fixtures
+(`medium_projections.json`, `spread_embeddings.json`, `spread_texts.json` (MLXCLM-checkout-only,
+never committed here), `outlier_text.json`, `outlier_python_ids.json`,
+`outlier_prefix_embeddings.json`) were deleted once they'd served their purpose: identifying
+that the 0.9941-cosine outlier was mlx-lm/mlx version skew, not a Swift bug. Their one durable
+finding — the specific repetitive text that triggered it — is folded into `embeddings.json`
+as the `repetitive_2048` key above, so the permanent gate covers it; the diagnostics
+themselves would otherwise sit in the suite failing forever (`Issue.record`-only, never
+passing) with no gate value.
+
 ## Environment
 
-- Python venv at `MLXCLM/.venv` — `mlx==0.32.2`, `numpy==2.5.3`.
+- Python venv at `MLXCLM/.venv` — `mlx==0.32.2`, `numpy==2.5.3`. Still the source for
+  `schema.json`/`heads.json`/`numbers.json` above (none depend on the MLX minor version).
+- Like-for-like venv at `MLXCLM/python/venv-mlx0311/` — `mlx==0.31.1`, `mlx-metal==0.31.1`,
+  `mlx-lm==0.31.2`, `transformers==5.17.0` — source for the current `embeddings.json`/
+  `answers.json`, matching mlx-swift 0.31.4's vendored core exactly.
 - Platform: macOS, Apple Silicon (the machine this MLXUI repo also builds on).
 
 ## If the repo is re-uploaded

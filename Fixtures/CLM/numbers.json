@@ -1,0 +1,54 @@
+{
+  "small_int": {
+    "literal": "42",
+    "to_text": "42"
+  },
+  "large_int_20_digit": {
+    "literal": "12345678901234567890",
+    "to_text": "12345678901234567890"
+  },
+  "negative_int": {
+    "literal": "-7",
+    "to_text": "-7"
+  },
+  "zero_int": {
+    "literal": "0",
+    "to_text": "0"
+  },
+  "negative_zero_int": {
+    "literal": "-0",
+    "to_text": "0"
+  },
+  "float_trailing_zero": {
+    "literal": "101050.0",
+    "to_text": "101050.0"
+  },
+  "float_trimmed": {
+    "literal": "1.50",
+    "to_text": "1.5"
+  },
+  "small_float": {
+    "literal": "0.1",
+    "to_text": "0.1"
+  },
+  "exp_positive": {
+    "literal": "1e16",
+    "to_text": "1e+16"
+  },
+  "exp_negative": {
+    "literal": "1e-05",
+    "to_text": "1e-05"
+  },
+  "negative_zero_float": {
+    "literal": "-0.0",
+    "to_text": "-0.0"
+  },
+  "bool_true": {
+    "literal": "true",
+    "to_text": "true"
+  },
+  "bool_false": {
+    "literal": "false",
+    "to_text": "false"
+  }
+}

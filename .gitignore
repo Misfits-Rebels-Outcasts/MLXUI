@@ -33,3 +33,7 @@ __pycache__/
 # === App user data (never in-repo; lives in ~/Library/Application Support) ===
 # installed.json, models/, downloads/ — belt-and-suspenders in case a path is symlinked in
 installed.json
+
+# CL-4b: the real encoder checkpoint (~8GB) — downloaded locally to run parity tests
+# against the actual model, never committed (unlike the 72MB heads fixture).
+Fixtures/CLM/encoder_weights/

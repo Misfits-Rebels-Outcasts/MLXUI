@@ -4,8 +4,10 @@ import Foundation
 
 /// CL-4a golden test — `CLMSchema` against `Fixtures/CLM/schema.json` (provenance in
 /// `Fixtures/CLM/PROVENANCE.md`: the real, vendored `clm_mlx.schema.build_pairs`, run against
-/// 6 fixed requests). Byte-for-byte per CL-4a's hard gate, except `jsonObjectState`'s numeric
-/// fields — see that test's own comment for the documented `LayaJSON.number` gap.
+/// 6 fixed requests). Byte-for-byte per CL-4a's hard gate, including `jsonObjectState`'s
+/// numeric fields — `CLMJSON.number` keeps the literal JSON token (int/float classified like
+/// Python's `json` module), so there's no representational gap left to work around
+/// (`RSI/DelegateCLMBacklog.md` CL-4a, "Numbers: corrected 2026-09-28").
 struct CLMSchemaTests {
     private struct GoldenCase: Decodable {
         var state_text: String
@@ -31,8 +33,8 @@ struct CLMSchemaTests {
             type: .choice,
             instructions: .string("Which team should handle this?"),
             criteria: .object([
-                LayaJSONField(key: "billing", value: .string("Billing and refunds team")),
-                LayaJSONField(key: "technical", value: .string("Technical support team")),
+                CLMJSONField(key: "billing", value: .string("Billing and refunds team")),
+                CLMJSONField(key: "technical", value: .string("Technical support team")),
             ]))
         #expect(text == golden.state_text)
         #expect(keys == golden.option_keys)
@@ -41,7 +43,7 @@ struct CLMSchemaTests {
 
     @Test func scoreSimpleMatchesGolden() throws {
         let golden = try loadGolden()["score_simple"]!
-        let instructions = LayaJSON.string("Rate the sentiment from very negative to very positive.")
+        let instructions = CLMJSON.string("Rate the sentiment from very negative to very positive.")
         let text = CLMSchema.stateText(
             state: .string("The service was okay, nothing special."), instructions: instructions)
         let (keys, texts) = try CLMSchema.candidates(
@@ -57,7 +59,7 @@ struct CLMSchemaTests {
 
     @Test func noulSimpleMatchesGolden() throws {
         let golden = try loadGolden()["noul_simple"]!
-        let instructions = LayaJSON.string("Is this urgent?")
+        let instructions = CLMJSON.string("Is this urgent?")
         let text = CLMSchema.stateText(
             state: .string("The customer said the shipment arrived three days late."),
             instructions: instructions)
@@ -67,32 +69,28 @@ struct CLMSchemaTests {
         #expect(texts == golden.candidate_texts)
     }
 
-    /// The one golden case with numeric fields. `subtotal`/`tax`/`total`/`price` were written
-    /// as Python `float`s (`500.0` etc.), so upstream's `str()` keeps the trailing `.0`; this
-    /// port's `LayaJSON.number` is a `Double` with no int/float distinction, so
-    /// `CLMSchema.toText` renders every integral double without it (`"500"`, not `"500.0"`) —
-    /// the divergence `RSI/DelegateCLMBacklog.md` CL-4a names explicitly and asks to pin with
-    /// a test rather than "fix". `option_keys`/`candidate_texts` carry no numbers, so those
-    /// still match the golden byte-for-byte; only `state_text` differs, and only in the
-    /// `.0` suffixes.
-    @Test func jsonObjectStateMatchesGoldenModuloTheNumberGap() throws {
+    /// The one golden case with numeric fields — `subtotal`/`tax`/`total`/`price` are Python
+    /// `float`s (`500.0` etc.), `qty` is a plain `int`. `CLMJSON.number` keeps the literal
+    /// token, so this now matches byte-for-byte with no workaround (contrast the CL-4b journal,
+    /// which had to strip `.0` suffixes here before this fix).
+    @Test func jsonObjectStateMatchesGoldenByteForByte() throws {
         let golden = try loadGolden()["json_object_state"]!
-        let instructions = LayaJSON.string("Does the total match the line items and tax?")
-        let state = LayaJSON.object([
-            LayaJSONField(key: "invoice_id", value: .string("INV-1042")),
-            LayaJSONField(key: "subtotal", value: .number(500.0)),
-            LayaJSONField(key: "tax", value: .number(45.0)),
-            LayaJSONField(key: "total", value: .number(545.0)),
-            LayaJSONField(key: "line_items", value: .array([
+        let instructions = CLMJSON.string("Does the total match the line items and tax?")
+        let state = CLMJSON.object([
+            CLMJSONField(key: "invoice_id", value: .string("INV-1042")),
+            CLMJSONField(key: "subtotal", value: .number("500.0")),
+            CLMJSONField(key: "tax", value: .number("45.0")),
+            CLMJSONField(key: "total", value: .number("545.0")),
+            CLMJSONField(key: "line_items", value: .array([
                 .object([
-                    LayaJSONField(key: "desc", value: .string("Widget A")),
-                    LayaJSONField(key: "qty", value: .number(2)),
-                    LayaJSONField(key: "price", value: .number(100.0)),
+                    CLMJSONField(key: "desc", value: .string("Widget A")),
+                    CLMJSONField(key: "qty", value: .number("2")),
+                    CLMJSONField(key: "price", value: .number("100.0")),
                 ]),
                 .object([
-                    LayaJSONField(key: "desc", value: .string("Widget B")),
-                    LayaJSONField(key: "qty", value: .number(3)),
-                    LayaJSONField(key: "price", value: .number(100.0)),
+                    CLMJSONField(key: "desc", value: .string("Widget B")),
+                    CLMJSONField(key: "qty", value: .number("3")),
+                    CLMJSONField(key: "price", value: .number("100.0")),
                 ]),
             ])),
         ])
@@ -100,28 +98,23 @@ struct CLMSchemaTests {
         let (keys, texts) = try CLMSchema.candidates(
             type: .choice, instructions: instructions,
             criteria: .object([
-                LayaJSONField(key: "consistent", value: .string("The total matches subtotal plus tax")),
-                LayaJSONField(key: "inconsistent", value: .string("The total does not match")),
+                CLMJSONField(key: "consistent", value: .string("The total matches subtotal plus tax")),
+                CLMJSONField(key: "inconsistent", value: .string("The total does not match")),
             ]))
-        let expectedText = golden.state_text
-            .replacingOccurrences(of: "500.0", with: "500")
-            .replacingOccurrences(of: "45.0", with: "45")
-            .replacingOccurrences(of: "545.0", with: "545")
-            .replacingOccurrences(of: "100.0", with: "100")
-        #expect(text == expectedText)
+        #expect(text == golden.state_text)
         #expect(keys == golden.option_keys)
         #expect(texts == golden.candidate_texts)
     }
 
     @Test func nestedArrayStateMatchesGolden() throws {
         let golden = try loadGolden()["nested_array_state"]!
-        let instructions = LayaJSON.string("Are all rows approved?")
-        let state = LayaJSON.array([
+        let instructions = CLMJSON.string("Are all rows approved?")
+        let state = CLMJSON.array([
             .string("Row 1: approved"),
             .object([
-                LayaJSONField(key: "row", value: .number(2)),
-                LayaJSONField(key: "status", value: .string("hold")),
-                LayaJSONField(key: "reason", value: .string("missing PO")),
+                CLMJSONField(key: "row", value: .number("2")),
+                CLMJSONField(key: "status", value: .string("hold")),
+                CLMJSONField(key: "reason", value: .string("missing PO")),
             ]),
             .array([.string("nested"), .string("list"), .string("item")]),
         ])
@@ -134,29 +127,49 @@ struct CLMSchemaTests {
 
     @Test func choiceMixedCriteriaMatchesGolden() throws {
         let golden = try loadGolden()["choice_mixed_criteria"]!
-        let instructions = LayaJSON.string("Which severity?")
+        let instructions = CLMJSON.string("Which severity?")
         let text = CLMSchema.stateText(
             state: .string("A short support ticket about a login issue."), instructions: instructions)
         let (keys, texts) = try CLMSchema.candidates(
             type: .choice, instructions: instructions,
             criteria: .object([
-                LayaJSONField(key: "low", value: .string("Minor annoyance, no blocker")),
-                LayaJSONField(key: "medium", value: .string("")),
-                LayaJSONField(key: "high", value: .string("Blocks the user entirely")),
+                CLMJSONField(key: "low", value: .string("Minor annoyance, no blocker")),
+                CLMJSONField(key: "medium", value: .string("")),
+                CLMJSONField(key: "high", value: .string("Blocks the user entirely")),
             ]))
         #expect(text == golden.state_text)
         #expect(keys == golden.option_keys)
         #expect(texts == golden.candidate_texts)
     }
 
-    // MARK: - The representational gap itself, pinned directly (CL-4a's instruction)
+    // MARK: - Number rendering (CL-4a "Numbers: corrected 2026-09-28")
 
-    @Test func toTextRendersIntegralDoublesWithoutTrailingZero() {
-        // Python's str(500) == "500" and str(500.0) == "500.0"; LayaJSON.number is a Double
-        // with no int/float distinction, so this port always renders the former shape.
-        #expect(CLMSchema.toText(.number(500)) == "500")
-        #expect(CLMSchema.toText(.number(0)) == "0")
-        #expect(CLMSchema.toText(.number(3.5)) == "3.5")
+    /// `Fixtures/CLM/numbers.json` — 13 literal JSON tokens run through the real
+    /// `clm_mlx.schema.to_text(json.loads(literal))`, generated on-Mac (`Fixtures/CLM/
+    /// PROVENANCE.md`, "`numbers.json`"). Byte-for-byte against `CLMSchema.toText`.
+    private struct NumberGoldenCase: Decodable {
+        var literal: String
+        var to_text: String
+    }
+
+    @Test func toTextRendersNumbersLikePythonStr() throws {
+        let filePath = #filePath
+        let repoRoot = URL(fileURLWithPath: filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let url = repoRoot.appendingPathComponent("Fixtures/CLM/numbers.json")
+        let golden = try JSONDecoder().decode([String: NumberGoldenCase].self, from: Data(contentsOf: url))
+        #expect(golden.count >= 10)
+
+        for (name, testCase) in golden {
+            let parsed = try CLMJSONParser.parse(testCase.literal)
+            switch parsed {
+            case .number, .bool:
+                #expect(CLMSchema.toText(parsed) == testCase.to_text, "\(name): literal '\(testCase.literal)'")
+            default:
+                Issue.record("\(name): literal '\(testCase.literal)' did not parse as a number or bool")
+            }
+        }
     }
 
     // MARK: - Error messages (CL-4a: "errors carry the same messages as upstream's ValueErrors")
@@ -207,7 +220,7 @@ struct CLMSchemaTests {
     }
 
     @Test func answerFromLogitsProducesScoreValueAndLevels() throws {
-        let levels = LayaJSON.array([.string("low"), .string("mid"), .string("high")])
+        let levels = CLMJSON.array([.string("low"), .string("mid"), .string("high")])
         let answer = try CLMSchema.answer(
             fromLogits: [0.0, 0.0, 5.0], type: .score, criteria: levels, keys: ["0", "1", "2"],
             stateTruncated: false)

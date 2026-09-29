@@ -85,7 +85,7 @@ nonisolated private struct CLMHeadsConfigFile: Decodable {
 
 /// `heads.py::HeadPair`. State head + action head + score scale, loaded from a capture's
 /// `heads/` directory (`config.json` + `CLM_v0.1-8B.safetensors`).
-nonisolated final class CLMHeadPair {
+nonisolated final class CLMHeadPair: @unchecked Sendable {
     enum Which { case state, action }
 
     let state: CLMHead

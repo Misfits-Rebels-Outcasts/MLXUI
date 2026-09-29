@@ -4,9 +4,12 @@ import Foundation
 /// `RealityCat/CLM-v0.1-8B-MLX-8bit`, itself vendored unchanged from
 /// `Contrastive-LM/CLM/src/clm/schema.py` @ `bb42c6c5bf914fd449bed2f6ca65be80602cb1f7` — that
 /// file's own header comment: "Do not edit: the MLX port must build exactly the same state
-/// and candidate texts as upstream"). Built over `LayaJSON`/`LayaQuestionType`/
-/// `LayaPromptError` (`Modules/Laya/LayaPrompt.swift`) rather than inventing parallel types —
-/// CLM's schema is a state + typed question -> label + probabilities shape, same as Laya's.
+/// and candidate texts as upstream"). Built over `CLMJSON` (`Modules/CLM/CLMJSON.swift`) and
+/// the existing `LayaQuestionType`/`LayaPromptError`/`LayaAnswer`
+/// (`Modules/Laya/LayaPrompt.swift`) — CLM's schema is a state + typed question -> label +
+/// probabilities shape, same as Laya's, but its `number` case must keep the literal JSON
+/// token (`RSI/DelegateCLMBacklog.md` CL-4a, "Numbers: corrected 2026-09-28"), which
+/// `LayaJSON.number(Double)` can't — see `CLMJSON`'s header comment.
 ///
 /// Golden test: `MLXUITests/CLMSchemaTests.swift` against `Fixtures/CLM/schema.json`
 /// (`Fixtures/CLM/PROVENANCE.md` records how it was generated) — byte-for-byte on `toText`/
@@ -19,24 +22,13 @@ nonisolated enum CLMSchema {
     /// array as plain text: objects become `key: value` fields (a blank line between
     /// top-level fields, a newline for nested ones; key order preserved), arrays become one
     /// `- item` line per element. The heads are trained on prose, not JSON.
-    ///
-    /// **Known representational gap:** `LayaJSON.number` is a `Double`, so it can't tell `3`
-    /// from `3.0` — Python's `str()` renders them differently (`"3"` vs `"3.0"`). This renders
-    /// every integral double without the trailing `.0` (Python's `str(int)` behavior), which
-    /// diverges from Python's `str(float)` only for a `LayaJSON.number` that upstream would
-    /// have typed as a Python `float` holding a whole number. CAT Flow rows only ever pass
-    /// strings into a decider's criteria/state, so this divergence never reaches the executor
-    /// path (see `RSI/DelegateCLMBacklog.md` CL-4a and its journal). Do not change `LayaJSON`
-    /// to "fix" this.
-    static func toText(_ x: LayaJSON?, indent: Int = 0) -> String {
+    static func toText(_ x: CLMJSON?, indent: Int = 0) -> String {
         guard let x else { return "" }
         switch x {
         case .null: return ""
         case .string(let s): return s
         case .bool(let b): return b ? "true" : "false"
-        case .number(let n):
-            if n == n.rounded(), abs(n) < 1e15 { return String(Int64(n)) }
-            return String(n)
+        case .number(let token): return CLMJSON.numberText(token)
         case .object(let fields):
             let pad = String(repeating: " ", count: indent)
             let parts = fields.map { field -> String in
@@ -58,7 +50,7 @@ nonisolated enum CLMSchema {
         }
     }
 
-    private static func isNonEmptyContainer(_ x: LayaJSON) -> Bool {
+    private static func isNonEmptyContainer(_ x: CLMJSON) -> Bool {
         switch x {
         case .object(let fields): return !fields.isEmpty
         case .array(let items): return !items.isEmpty
@@ -68,14 +60,14 @@ nonisolated enum CLMSchema {
 
     /// `schema.py::state_text`. Context first, question last — the layout the heads were
     /// trained on.
-    static func stateText(state: LayaJSON, instructions: LayaJSON?) -> String {
+    static func stateText(state: CLMJSON, instructions: CLMJSON?) -> String {
         let s = toText(state).trimmingCharacters(in: .whitespacesAndNewlines)
         let i = toText(instructions).trimmingCharacters(in: .whitespacesAndNewlines)
         if !s.isEmpty, !i.isEmpty { return "\(s)\n\n\(i)" }
         return s.isEmpty ? i : s
     }
 
-    private static func isEmptyValue(_ value: LayaJSON?) -> Bool {
+    private static func isEmptyValue(_ value: CLMJSON?) -> Bool {
         guard let value else { return true }
         if case .string("") = value { return true }
         return false
@@ -85,7 +77,7 @@ nonisolated enum CLMSchema {
     /// The action head embeds the option's own text: its description when one is given, else
     /// the key. Nothing is prefixed, so a candidate reaches the encoder exactly as the caller
     /// wrote it.
-    static func candidates(type: LayaQuestionType, instructions: LayaJSON?, criteria: LayaJSON?)
+    static func candidates(type: LayaQuestionType, instructions: CLMJSON?, criteria: CLMJSON?)
         throws -> (keys: [String], texts: [String])
     {
         let ins = toText(instructions).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -104,7 +96,7 @@ nonisolated enum CLMSchema {
             let keys = (0 ..< items.count).map(String.init)
             return (keys, items.map { toText($0) })
         case .noul:
-            var crit: [String: LayaJSON] = [:]
+            var crit: [String: CLMJSON] = [:]
             if case .object(let fields) = criteria {
                 for field in fields { crit[field.key] = field.value }
             }
@@ -126,8 +118,8 @@ nonisolated enum CLMSchema {
     /// instructions are appended after a blank line. Callers put the question in
     /// `instructions`, never repeated inside the state.
     static func buildPairs(
-        state: LayaJSON,
-        questions: [(id: String, type: LayaQuestionType, instructions: LayaJSON?, criteria: LayaJSON?)]
+        state: CLMJSON,
+        questions: [(id: String, type: LayaQuestionType, instructions: CLMJSON?, criteria: CLMJSON?)]
     ) throws -> [(id: String, stateText: String, keys: [String], texts: [String])] {
         try questions.map { entry in
             let text = stateText(state: state, instructions: entry.instructions)
@@ -163,7 +155,7 @@ nonisolated enum CLMSchema {
     /// ones `candidates(...)` returned/received for this question — `score`'s legend and
     /// `choice`'s label both read from them.
     static func answer(
-        fromLogits logits: [Double], type: LayaQuestionType, criteria: LayaJSON?, keys: [String],
+        fromLogits logits: [Double], type: LayaQuestionType, criteria: CLMJSON?, keys: [String],
         stateTruncated: Bool
     ) throws -> LayaAnswer {
         try answer(
@@ -173,7 +165,7 @@ nonisolated enum CLMSchema {
 
     /// `schema.py::answer_from_probs` -> `LayaAnswer`.
     static func answer(
-        fromProbabilities probs: [Double], type: LayaQuestionType, criteria: LayaJSON?, keys: [String],
+        fromProbabilities probs: [Double], type: LayaQuestionType, criteria: CLMJSON?, keys: [String],
         stateTruncated: Bool
     ) throws -> LayaAnswer {
         var result = LayaAnswer(

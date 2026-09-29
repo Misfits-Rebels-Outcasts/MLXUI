@@ -40,8 +40,9 @@ struct LayaModuleTests {
     }
 
     /// CL-1 gate B: a `.decision`/`.mlx` entry from another family (CLM 8B) is refused by
-    /// both `LayaSDK` and `LayaUI`, and doesn't resolve to any module — Laya keeps claiming
-    /// only its own family.
+    /// both `LayaSDK` and `LayaUI` — Laya keeps claiming only its own family. CL-4b registered
+    /// `CLMModule`, so the entry now resolves to `"clm"` rather than `nil` (updated from CL-1's
+    /// original assertion, which predated that registration).
     @MainActor
     @Test func layaDoesNotClaimCLM() throws {
         #expect(LayaSDK().claim(clmEntry()) == .no)
@@ -51,7 +52,7 @@ struct LayaModuleTests {
         for module in installedModules {
             module.register(into: registry)
         }
-        #expect(registry.bestModule(for: clmEntry()) == nil)
+        #expect(registry.bestModule(for: clmEntry())?.descriptor.id == "clm")
     }
 
     @Test func laySDKClaimsOnlyMLXDecisionEntries() {
