@@ -30,6 +30,9 @@ struct CLMRunView: View {
     @State private var scoreOptions: [CLMRunOption] = [
         CLMRunOption(label: "not urgent"), CLMRunOption(label: "soon"), CLMRunOption(label: "critical"),
     ]
+    /// A validation error caught before the engine is ever called (CL-5-FIX-1) — distinct
+    /// from `model.errorText`, which is the engine's own runtime errors.
+    @State private var inlineError: String?
 
     var body: some View {
         ScrollView {
@@ -39,6 +42,7 @@ struct CLMRunView: View {
                 inputs
                 Text(license ?? "License: see model page")
                     .font(.caption).foregroundStyle(.secondary)
+                if let inlineError { errorBar(inlineError) }
                 if model.isRunning { runningRow }
                 if let answer = model.answer { resultView(answer) }
                 if let error = model.errorText { errorBar(error) }
@@ -214,18 +218,16 @@ struct CLMRunView: View {
         let trimmedInstructions = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !trimmedInstructions.isEmpty else { return }
 
+        inlineError = nil
         let criteria: CLMJSON?
-        switch questionType {
-        case .choice:
-            // A plain array of labels — bare labels, matching `LayaRunView`'s own
-            // `dict.fromkeys`-shaped criteria (no description per option).
-            let labels = choiceOptions.map { $0.label.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-            criteria = .array(labels.map { .string($0) })
-        case .score:
-            let levels = scoreOptions.map { $0.label.trimmingCharacters(in: .whitespacesAndNewlines) }
-            criteria = .array(levels.map { .string($0.isEmpty ? "—" : $0) })
-        case .noul:
-            criteria = nil
+        do {
+            criteria = try clmRunCriteria(
+                type: questionType,
+                choiceLabels: choiceOptions.map(\.label),
+                scoreLevels: scoreOptions.map(\.label))
+        } catch {
+            inlineError = "Each option needs a different name"
+            return
         }
 
         model.run(
@@ -238,6 +240,40 @@ struct CLMRunView: View {
 private struct CLMRunOption: Identifiable {
     let id = UUID()
     var label = ""
+}
+
+/// CL-5-FIX-1: screen state → `CLMJSON` criteria, pure and UI-independent (so it's directly
+/// testable without driving `CLMRunView` itself). Mirrors `CLMSchema.candidates`' shape
+/// requirements exactly: **choice** needs an **object** (`dict.fromkeys`-shaped — a key per
+/// option, "" description, so `CLMSchema.candidates`'s `isEmptyValue` fallback uses the key
+/// itself as the candidate text — the comment this replaced already said this, the code
+/// didn't); **score** stays an **array** (`schema.py` requires an ordered list there, not a
+/// dict). Blank option rows are dropped before building. Duplicate choice labels are rejected
+/// here, before the engine ever sees them — a Python `dict.fromkeys`/object literal would
+/// silently collapse them onto one key, changing option count and answer shape underneath
+/// the caller.
+enum CLMRunQuestionError: Error, Equatable {
+    case duplicateChoiceLabels
+}
+
+nonisolated func clmRunCriteria(
+    type: LayaQuestionType, choiceLabels: [String], scoreLevels: [String]
+) throws -> CLMJSON? {
+    switch type {
+    case .choice:
+        let labels = choiceLabels
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard Set(labels).count == labels.count else {
+            throw CLMRunQuestionError.duplicateChoiceLabels
+        }
+        return .object(labels.map { CLMJSONField(key: $0, value: .string("")) })
+    case .score:
+        let levels = scoreLevels.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        return .array(levels.map { .string($0.isEmpty ? "—" : $0) })
+    case .noul:
+        return nil
+    }
 }
 
 /// View-model driving one CLM decision: runs off-actor through the shared `CLMEngineCache`,
