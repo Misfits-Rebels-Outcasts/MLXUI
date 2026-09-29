@@ -184,6 +184,16 @@ nonisolated enum TaskModels {
         "Speak": ["Kokoro 82M", "Qwen3-TTS 1.7B", "Qwen3-TTS 0.6B"],
         "Rerank": ["BGE Reranker", "Qwen3 Reranker 0.6B"],
         "Text to Table": llmModels,
+        // LY-8 (RSI/DelegateLayaBacklog.md, 2026-09-27 gate D amendment, superseding LY-0's own
+        // gate D "never the default"): Classify/Gate/Score had no pool entry before this —
+        // `defaultModel(forTask:)` fell through to `derived.first?.displayName`, whichever LLM
+        // happened to sort first in the catalog (coincidentally "Ministral 3B"). `"Laya 0.4B"`
+        // is **prepended**, not appended, so it becomes these three tasks' real default; the
+        // LLMs keep their existing relative order behind it. Every *other* existing gallery row
+        // is unaffected (it names its model explicitly) — only a **new** row's seed changes.
+        "Classify": ["Laya 0.4B"] + llmModels,
+        "Gate": ["Laya 0.4B"] + llmModels,
+        "Score": ["Laya 0.4B"] + llmModels,
         // MoC-6-2 (RSI/DelegateMoCBacklog.md): appended last, same discipline as MoC-2-4 —
         // the seed ("LFM2-VL 1.6B") does not move.
         "Describe Image": ["LFM2-VL 1.6B", "Gemma 3 4B", "Qwen3.5 9B Vision"],

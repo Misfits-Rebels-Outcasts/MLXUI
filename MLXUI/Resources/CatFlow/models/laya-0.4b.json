@@ -1,0 +1,15 @@
+{
+  "id": "aac6fef/laya-mlx",
+  "display": "Laya 0.4B",
+  "kind": "local",
+  "engine": "laya-mlx",
+  "tasks": ["Classify", "Gate", "Score"],
+  "settings": {},
+  "capabilities": { "constrained_decoding": true },
+  "resources": { "disk_gb": 0.85, "ram_gb": 1.0 },
+  "source": "https://huggingface.co/aac6fef/laya-mlx",
+  "checksum": "sha256:b9c07bf14be2fa5c78a9193a3e6d840ac80e89e62fc40f425834c3d8a6eaa3de",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true
+}

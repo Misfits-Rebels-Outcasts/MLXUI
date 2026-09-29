@@ -163,7 +163,7 @@ struct CatFlowCatalogBridgeTests {
             Issue.record("SAM Base should resolve: \(reason)")
             _ = display
         }
-        #expect(CatalogBridge.entries.count == 21)
+        #expect(CatalogBridge.entries.count == 22)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
@@ -391,7 +391,7 @@ struct CatFlowCatalogBridgeTests {
         case .notRunnable(let display, let reason, _):
             Issue.record("\(display) should resolve: \(reason)")
         }
-        #expect(CatalogBridge.entries.count == 21)
+        #expect(CatalogBridge.entries.count == 22)
     }
 
     // MARK: - MoC-4-4: Qwen3 Reranker 0.6B joins the bridge, the model on MoC-3's seam
@@ -501,5 +501,55 @@ struct CatFlowCatalogBridgeTests {
         #expect(TaskModels.defaultModel(forTask: "Describe Image", catalog: catalog, claimableModelIDs: claimable) == "LFM2-VL 1.6B")
         let derived = TaskModels.derivedModels(for: "Describe Image", catalog: catalog, claimableModelIDs: claimable)
         #expect(derived.contains { $0.id == "mlx-community--Qwen3.5-9B-MLX-4bit-vision" })
+    }
+
+    // MARK: - LY-8: Laya 0.4B joins the bridge, prepended as Classify/Gate/Score's default
+
+    @Test func layaResolvesAsSame() throws {
+        let catalog = try loadCatalog()
+        let entry = try #require(CatalogBridge.entry(for: "Laya 0.4B"))
+        #expect(entry.pinnedID == "aac6fef/laya-mlx")
+        #expect(entry.candidates == ["aac6fef/laya-mlx"])
+        #expect(entry.equivalence == .same)
+        #expect(entry.manifestFile == "laya-0.4b.json")
+        switch CatalogBridge.resolve("Laya 0.4B", catalog: catalog) {
+        case .runnable(let slot, let equivalence, let note):
+            #expect(slot.modelEntry?.hfModelId == "aac6fef/laya-mlx")
+            #expect(slot.modelEntry?.runnerKind == .decision)
+            #expect(equivalence == .same)
+            #expect(note == nil)
+        case .notRunnable(let display, let reason, _):
+            Issue.record("\(display) should resolve: \(reason)")
+        }
+    }
+
+    /// The manifest, read from the built app bundle (not the repo-relative disk copy the other
+    /// `*ManifestShips` tests use) — LY-8's own verify item: `CuratedManifest.load(manifestFile:
+    /// "laya-0.4b.json") != nil`. `XcodeWrite` added the file to the synchronized
+    /// `Resources/CatFlow/models/` group, so it ships the same way every other manifest there
+    /// does (`CuratedManifest.load`'s own doc comment).
+    @Test func layaManifestLoadsFromTheAppBundle() throws {
+        let manifest = try #require(CuratedManifest.load(manifestFile: "laya-0.4b.json"))
+        #expect(manifest.id == "aac6fef/laya-mlx")
+        #expect(manifest.display == "Laya 0.4B")
+        #expect(manifest.settings.isEmpty)
+    }
+
+    /// LY-8's own verify items: `defaultModel(forTask:)` for Classify/Gate/Score is `"Laya
+    /// 0.4B"` (the 2026-09-27 gate D amendment — prepended, not appended, to those pools), and
+    /// Laya is a member of each derived pool (not just the seed by coincidence).
+    @MainActor
+    @Test func layaIsTheDefaultForClassifyGateAndScore() throws {
+        let catalog = try loadCatalog()
+        let registry = ModelRegistry()
+        for module in installedModules { module.register(into: registry) }
+        let claimable = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
+        for task in ["Classify", "Gate", "Score"] {
+            #expect(TaskModels.defaultModel(forTask: task, catalog: catalog, claimableModelIDs: claimable) == "Laya 0.4B",
+                    "\(task) should default to Laya 0.4B")
+            let derived = TaskModels.derivedModels(for: task, catalog: catalog, claimableModelIDs: claimable)
+            #expect(derived.contains { $0.modelEntry?.hfModelId == "aac6fef/laya-mlx" },
+                    "\(task)'s derived pool should contain Laya 0.4B")
+        }
     }
 }

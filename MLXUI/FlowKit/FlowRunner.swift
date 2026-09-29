@@ -74,10 +74,11 @@ nonisolated protocol FlowExecutor: Sendable {
     /// `expectedLevel` is `.score`'s weighted-average level (gate F: the *fired* tag is always
     /// the declared band at argmax, never this interpolation — this is logged alongside it,
     /// not used to pick the tag). `stateTruncated` folds in the non-blocking truncation signal
-    /// LY-7 asked to log as an info-code disclosure — no existing F0xx code fits "decider
-    /// input truncated to the token budget" (checked F001–F011 in `ErrorCatalog.swift`), and
-    /// this repo has no local copy of `catflow-mlx/SPEC_QUESTIONS.md` to add one to, so it's
-    /// plain data here rather than a fabricated code — see the LY-7 journal.
+    /// LY-7 asked to log as an info-code disclosure — no existing F0xx code fit "decider input
+    /// truncated to the token budget" (checked F001–F011 in `ErrorCatalog.swift`) when LY-7
+    /// ran. **SPEC-Q235** (`catflow-mlx/SPEC_QUESTIONS.md`, filed 2026-09-29, recommending
+    /// `F012`) is now on file but not yet ratified — this stays plain, code-less data until it
+    /// is; see LY-8's journal.
     nonisolated var lastDeciderDetail: (
         tag: String, confidence: Double, probabilities: [(label: String, probability: Double)],
         expectedLevel: Double?, stateTruncated: Bool

@@ -66,7 +66,7 @@ nonisolated enum CatalogBridgeResolution: Sendable, Equatable {
 /// the curated manifest (`Resources/CatFlow/models/`); only the *weights* are substituted.
 nonisolated enum CatalogBridge {
 
-    /// The twenty-one display names the bridge runs. **`SAM Base`** joined 2026-08-27 (CFM-R15-1):
+    /// The twenty-two display names the bridge runs. **`SAM Base`** joined 2026-08-27 (CFM-R15-1):
     /// hazard H2 / `CFM-R13-6` was **ruled option (1)** — a headless default — and the bridge
     /// maps the reference's own `SAM Base` id onto the one installable segmentation entry,
     /// `sam3-4bit`, as a `.substitute` so the substitution is shown on the row, never hidden.
@@ -261,6 +261,17 @@ nonisolated enum CatalogBridge {
             equivalence: .same,
             manifestFile: "qwen3.5-9b-vision-4bit.json",
             modelType: .vision),
+        // LY-8 (RSI/DelegateLayaBacklog.md) — Laya 0.4B, the decision encoder on the LY seam.
+        // Resolves exactly: the one catalog card and the one catflow manifest id are the same
+        // repo. "Laya 0.4B" is now prepended (not appended) to `taskModels["Classify"/"Gate"/
+        // "Score"]`, per the 2026-09-27 gate D amendment — the default for new rows of those
+        // three tasks.
+        BridgeEntry(
+            display: "Laya 0.4B",
+            pinnedID: "aac6fef/laya-mlx",
+            candidates: ["aac6fef/laya-mlx"],
+            equivalence: .same,
+            manifestFile: "laya-0.4b.json"),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {

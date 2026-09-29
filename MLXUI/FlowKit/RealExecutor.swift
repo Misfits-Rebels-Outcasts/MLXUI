@@ -668,6 +668,8 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// 1. `Self.layaQuestion` builds the typed question purely from the row (gates E/F).
     /// 2. `askLaya` is the one call into the actual engine (or a fake, in tests).
     /// 3. The tag-firing + detail-logging below never touches the engine itself.
+    // SPEC-Q234 (`catflow-mlx/SPEC_QUESTIONS.md`, filed 2026-09-29: "a decider may be served
+    // by a non-generative decision engine").
     private func runLayaDecider(_ desc: TaskDescriptor, row: Row, inputs: [Asset],
                                 modelEntry: ModelEntry, path: String) async throws -> Asset {
         let task = desc.name
@@ -705,6 +707,9 @@ nonisolated struct RealExecutor: FlowExecutor {
 
         let (tag, expectedLevel) = Self.layaFiredTag(answer: answer, type: type, tags: tags)
         tagBox.tag = tag
+        // SPEC-Q235 (`catflow-mlx/SPEC_QUESTIONS.md`, filed 2026-09-29: the truncation info
+        // code, recommended F012, not yet ratified) — stays code-less in `lastDeciderDetail`
+        // until F012 lands; see `FlowRunner.swift`'s `lastDeciderDetail` doc comment.
         deciderDetailBox.detail = (
             tag: tag, confidence: answer.confidence,
             probabilities: Array(zip(tags, answer.probabilities)),
