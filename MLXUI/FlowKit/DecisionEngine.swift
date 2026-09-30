@@ -60,6 +60,9 @@ nonisolated struct LayaDecisionEngine: DecisionEngine {
 /// `scoreLevels`. No option-count ceiling: each option is embedded on its own (CLM's action
 /// head, not a slice of a fixed token budget), so this builds no equivalent to Laya's
 /// `LayaQuestionDefinition.resolve()` validation.
+// SPEC-Q234 (`catflow-mlx/SPEC_QUESTIONS.md`, filed 2026-09-29: "a decider may be served by a
+// non-generative decision engine") — CL-7 (`RSI/DelegateCLMBacklog.md`), marked here the same
+// way LY-8 marked Laya's own path: CLM is this spec question's second conformer, not a new one.
 nonisolated struct CLMDecisionEngine: DecisionEngine {
     /// CL-6 — `CLMDecisionEngine`'s only call into the actual engine, injected like `askLaya`
     /// so a test can fake `CLMEngine` without loading a real checkpoint. The default calls the

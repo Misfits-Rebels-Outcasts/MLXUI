@@ -191,9 +191,12 @@ nonisolated enum TaskModels {
         // is **prepended**, not appended, so it becomes these three tasks' real default; the
         // LLMs keep their existing relative order behind it. Every *other* existing gallery row
         // is unaffected (it names its model explicitly) — only a **new** row's seed changes.
-        "Classify": ["Laya 0.4B"] + llmModels,
-        "Gate": ["Laya 0.4B"] + llmModels,
-        "Score": ["Laya 0.4B"] + llmModels,
+        // CL-7 (RSI/DelegateCLMBacklog.md, gate D): `"CLM 8B"` is **appended**, after the LLMs —
+        // it joins the pool but is never the default; `defaultModel(forTask:)` for all three
+        // stays `"Laya 0.4B"`, unchanged by this addition.
+        "Classify": ["Laya 0.4B"] + llmModels + ["CLM 8B"],
+        "Gate": ["Laya 0.4B"] + llmModels + ["CLM 8B"],
+        "Score": ["Laya 0.4B"] + llmModels + ["CLM 8B"],
         // MoC-6-2 (RSI/DelegateMoCBacklog.md): appended last, same discipline as MoC-2-4 —
         // the seed ("LFM2-VL 1.6B") does not move.
         "Describe Image": ["LFM2-VL 1.6B", "Gemma 3 4B", "Qwen3.5 9B Vision"],

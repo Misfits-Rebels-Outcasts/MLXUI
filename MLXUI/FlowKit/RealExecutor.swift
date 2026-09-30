@@ -676,6 +676,27 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// 3. The tag-firing + detail-logging below never touches the engine itself.
     // SPEC-Q234 (`catflow-mlx/SPEC_QUESTIONS.md`, filed 2026-09-29: "a decider may be served
     // by a non-generative decision engine").
+    //
+    /// CL-7: every family a `DecisionEngine` conformer claims — the single source of truth
+    /// `decisionEngineBoundModel(for:catalog:)` below checks against. Keep the two in sync: a
+    /// third engine needs a case in the switch below **and** an entry in this set.
+    static let decisionEngineFamilies: Set<String> = ["Laya", "CLM"]
+
+    /// CL-7: whether `row` names a `runnerKind == .decision` entry a `DecisionEngine`
+    /// actually serves — resolved the same way `resolveModel`/`runDecisionDecider` would, so
+    /// the row inspector's frame-preview special case (`FlowRowInspectorView`) can't drift
+    /// from what a real run does. `nil` when the row's model doesn't resolve, isn't
+    /// `.decision`, or is a `.decision` family no `DecisionEngine` claims.
+    static func decisionEngineBoundModel(for row: Row, catalog: [ModelEntry]) -> ModelEntry? {
+        guard let display = row.model,
+              case let .runnable(slot, _, _) = CatalogBridge.resolve(display, catalog: catalog),
+              let model = slot.modelEntry,
+              model.runnerKind == .decision,
+              decisionEngineFamilies.contains(model.family)
+        else { return nil }
+        return model
+    }
+
     private func runDecisionDecider(_ desc: TaskDescriptor, row: Row, inputs: [Asset],
                                     modelEntry: ModelEntry, path: String) async throws -> Asset {
         let task = desc.name

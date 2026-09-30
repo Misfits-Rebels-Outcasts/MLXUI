@@ -271,4 +271,36 @@ struct CLMDeciderTests {
         #expect(warm.contains { $0.kind == .cacheHit && $0.path == "2" },
                 "warm: Classify's own path should be a cache hit")
     }
+
+    // MARK: - CL-7: the inspector's frame-preview special case, generalized to both families
+
+    /// `RealExecutor.decisionEngineBoundModel(for:catalog:)` is what
+    /// `FlowRowInspectorView.framePreviewSection` calls to decide whether a decider row gets
+    /// the "no prompt frame" explanation instead of a rendered preview — folded in from CL-6's
+    /// own flag: it used to check `family == "Laya"` only. This drives the shared helper
+    /// directly (no view construction needed — it takes just a row and a catalog), covering
+    /// both families plus the two ways a row can fail to qualify.
+    @Test func decisionEngineBoundModelCoversBothFamilies() {
+        let laya = makeEntry(id: "aac6fef--laya-mlx", family: "Laya", displayName: "Laya 0.4B",
+                             modelType: .decision, source: .mlx, hfRepo: "aac6fef", hfModelId: "aac6fef/laya-mlx")
+        let clm = clmEntry()
+        let catalog = [laya, clm]
+
+        let layaRow = Row(id: UUID(), task: "Classify", model: "Laya 0.4B", settings: "x", tags: ["a", "b"])
+        let clmRow = Row(id: UUID(), task: "Classify", model: "CLM 8B", settings: "x", tags: ["a", "b"])
+        #expect(RealExecutor.decisionEngineBoundModel(for: layaRow, catalog: catalog)?.family == "Laya")
+        #expect(RealExecutor.decisionEngineBoundModel(for: clmRow, catalog: catalog)?.family == "CLM")
+
+        // A non-decision LLM row never qualifies, regardless of family.
+        let llm = makeEntry(id: "test--llm", family: "TestFamily", displayName: "Some LLM", modelType: .llm)
+        let llmRow = Row(id: UUID(), task: "Classify", model: "Some LLM", settings: "x", tags: ["a", "b"])
+        #expect(RealExecutor.decisionEngineBoundModel(for: llmRow, catalog: [llm]) == nil)
+
+        // A genuine `.decision` entry from a family no `DecisionEngine` claims doesn't either.
+        let other = makeEntry(id: "other--decision-mlx", family: "OtherDecisionFamily",
+                              displayName: "Other Decider", modelType: .decision, source: .mlx,
+                              hfRepo: "other", hfModelId: "other/decision-mlx")
+        let otherRow = Row(id: UUID(), task: "Classify", model: "Other Decider", settings: "x", tags: ["a", "b"])
+        #expect(RealExecutor.decisionEngineBoundModel(for: otherRow, catalog: [other]) == nil)
+    }
 }

@@ -1639,15 +1639,15 @@ struct FlowRowInspectorView: View {
     /// cannot diverge (§6 "drift between preview and run"). `nil` (`EmptyView`) for any task
     /// that isn't `refKind == .frame` — `Decide`'s prompt box stays SPEC-Q230, untouched (§8).
     ///
-    /// LY-7: a Laya-bound decider row never renders a frame at all — `RealExecutor.
-    /// runLayaDecider` skips `FramePreview.render` entirely — so this replaces the section
-    /// with a one-line explanation instead of previewing text the row will never actually
-    /// send.
+    /// LY-7/CL-7: a decision-encoder-bound decider row (Laya, CLM) never renders a frame at
+    /// all — `RealExecutor.runDecisionDecider` skips `FramePreview.render` entirely for every
+    /// family it serves — so this replaces the section with a one-line explanation instead of
+    /// previewing text the row will never actually send.
     @ViewBuilder
     private func framePreviewSection(_ task: String, row: Row) -> some View {
         if let desc = TaskCatalog.get(task), desc.refKind == .frame {
-            if isLayaBoundDeciderRow(row) {
-                Text("Laya reads the criterion, the tags and the input directly; there is no prompt frame.")
+            if let decisionModel = RealExecutor.decisionEngineBoundModel(for: row, catalog: catalog) {
+                Text("\(decisionModel.displayName) reads the criterion, the tags and the input directly; there is no prompt frame.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             } else {
@@ -1689,17 +1689,6 @@ struct FlowRowInspectorView: View {
                 }
             }
         }
-    }
-
-    /// LY-7: whether `row` names a `family == "Laya"`, `runnerKind == .decision` entry —
-    /// resolved the same way `modelPromptSupport` resolves a row's model, so this can't drift
-    /// from what `RealExecutor.runDecider` itself branches on.
-    private func isLayaBoundDeciderRow(_ row: Row) -> Bool {
-        guard let display = row.model,
-              case let .runnable(slot, _, _) = CatalogBridge.resolve(display, catalog: catalog),
-              let model = slot.modelEntry
-        else { return false }
-        return model.runnerKind == .decision && model.family == "Laya"
     }
 
     /// Builds `FramePreview.render`'s arguments from what is knowable at edit time (the
