@@ -11,26 +11,29 @@ import Foundation
 /// the files a flow reads are actually there — the gap `KW-4-FIX-1` hit for real (a brand-new
 /// workspace's starter named `notes.txt`/`question.txt`, neither of which existed).
 ///
-/// **The eleven `SampleSeed.readTaskNames` are not uniform about "upstream wins."** The rule
-/// documented at `ReadTools.swift:52-54` — *"an upstream item of the matching kind wins, else
-/// the settings' `path=`/first bare token"* — is what `ReadPath.resolve` implements for
-/// `Read Image`/`Read Images`/`Read Files`/`Read PDF`; `ContextTools.swift`'s `Read Context`
-/// implements the same rule inline (its own `FIX-11` comment); `RealExecutor.resolveFile`
-/// implements it for `Read CSV`/`Read JSON`. But `Read Audio`, `Read Text`, `Read Video`, and
-/// `Read Index` (`SpokenSummaryTools.swift`, `VideoTools.swift`, `IndexStoreTools.swift`)
-/// always read their own settings, regardless of what feeds them — verified by reading each
-/// tool's `run(_:progress:)` directly, not assumed. `checksUpstream` mirrors that split
-/// exactly: getting it wrong in either direction is precisely the false-positive/false-negative
-/// risk this type exists to avoid ("a check that is wrong is worse than no check").
+/// **The eleven `SampleSeed.readTaskNames` are now uniform about "upstream wins."** The rule
+/// documented at `ReadTools.swift:52-58` — *"an upstream item of the matching kind wins, else
+/// the settings' `path=`/first bare token"* (`tools/files.py::_resolve_path`, unconditional for
+/// every one of its callers) — is what `ReadPath.resolve` implements for every `Read *` tool
+/// that goes through it, which after READ-UPSTREAM-1 is all of `Read Image`/`Read Images`/
+/// `Read Files`/`Read PDF`/`Read Audio`/`Read Text`/`Read Video`/`Read Index`;
+/// `ContextTools.swift`'s `Read Context` implements the same rule inline (its own `FIX-11`
+/// comment); `RealExecutor.resolveFile` implements it for `Read CSV`/`Read JSON`. `checksUpstream`
+/// mirrors that split exactly: getting it wrong in either direction is precisely the
+/// false-positive/false-negative risk this type exists to avoid ("a check that is wrong is
+/// worse than no check").
 nonisolated enum FlowInputFile {
     private static let upstreamAwareTasks: Set<String> = [
         "Read Image", "Read Images", "Read Files", "Read PDF",
         "Read Context", "Read CSV", "Read JSON",
+        "Read Audio", "Read Text", "Read Video", "Read Index",
     ]
 
-    /// Whether `task`'s own tool checks an upstream `.file`-kind item before falling back to
-    /// its settings path. `Read Audio`/`Read Text`/`Read Video`/`Read Index` do not — they
-    /// always read their own settings.
+    /// Whether `task`'s own tool checks an upstream `.file`-kind item (`.index`-kind for
+    /// `Read Index`) before falling back to its settings path. READ-UPSTREAM-1: this is now
+    /// every `Read *` task in the list — `Read Audio`/`Read Text`/`Read Video`/`Read Index`
+    /// used to skip the check, which is exactly why an `<each>`-fanned upstream item never
+    /// reached them; see `ReadTools.swift`'s `ReadPath` doc comment.
     static func checksUpstream(_ task: String) -> Bool { upstreamAwareTasks.contains(task) }
 
     /// The file (or index directory, for `Read Index`) `row` will actually read — nil when

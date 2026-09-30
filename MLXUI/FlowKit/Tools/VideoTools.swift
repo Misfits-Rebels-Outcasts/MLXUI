@@ -59,10 +59,10 @@ nonisolated struct ReadVideoTool: AssetStage {
     var produces: Shape { .single(.video) }
 
     func run(_ input: Asset, progress: @Sendable @escaping (Double) -> Void) async throws -> Asset {
-        // FIP-3: Read Video never checked an upstream `.file` item before this — verified
-        // against the prior code, not assumed.
+        // READ-UPSTREAM-1: `tools/files.py::_resolve_path` (kind=Kind.FILE) checks the upstream
+        // item unconditionally — no settings-only special case in the reference.
         let url = try ReadPath.resolve(workspace: workspace, flowID: flowID, path: path, settings: settings,
-                                       inputs: [input], kind: .file, row: "Read Video", checksUpstream: false)
+                                       inputs: [input], kind: .file, row: "Read Video")
         progress(1.0)
         return Asset(items: [Item(kind: .video, value: nil, path: url, sourceText: nil)])
     }

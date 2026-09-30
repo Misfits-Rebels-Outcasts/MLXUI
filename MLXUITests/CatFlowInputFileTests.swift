@@ -4,8 +4,8 @@ import Foundation
 
 /// FIP-1 — the input counterpart to `FlowSavedFile`: which file (or index directory) a
 /// `Read *` row will actually read when the flow runs, honoring the upstream-wins-else
-/// -settings-path precedence documented at `ReadTools.swift:52-54`, and refusing — never
-/// probing — a path that escapes the flow directory.
+/// -settings-path precedence documented at `ReadTools.swift`'s `ReadPath` doc comment, and
+/// refusing — never probing — a path that escapes the flow directory.
 struct CatFlowInputFileTests {
 
     private func makeScope(root: URL, flowID: String = "flow-1") -> FlowScope {
@@ -94,19 +94,22 @@ struct CatFlowInputFileTests {
         #expect(!FlowInputFile.isMissing(for: pdf, document: doc, scope: scope))
     }
 
-    /// The other direction: `Read Text` never checks upstream (verified against
-    /// `SpokenSummaryTools.swift` directly, not assumed) — even auto-chained after a
-    /// `.file`-giving row, it still reads its own settings path, and a missing one is
-    /// genuinely missing. Getting this backwards would silence a real warning.
-    @Test func rowNotUpstreamAwareStillChecksItsOwnPathAfterAMatchingUpstream() throws {
+    /// READ-UPSTREAM-1: `Read Text` used to be the one exception to the precedence rule
+    /// above — even fed by a matching upstream row, it still checked its own (possibly
+    /// stale) settings path, because its tool never looked at the upstream item at all
+    /// (verified against `SpokenSummaryTools.swift` directly). That exception is gone —
+    /// `ReadTextTool` now calls `ReadPath.resolve` with the default `checksUpstream: true`,
+    /// so the advisory must agree, exactly like `Read PDF` above. This is the exact
+    /// mismatch smoke row 97 hit (`77-TicketRouter`'s `Read Text (input:1)` inside `<each>`).
+    @Test func readTextFedByAMatchingUpstreamIsNotCheckedEvenWithAStalePath() throws {
         let base = tempRoot()
         defer { try? FileManager.default.removeItem(at: base) }
         let scope = makeScope(root: base)
-        let files = row("Read Files", settings: "docs/; pattern=*.pdf")
-        let text = row("Read Text", settings: "notes.txt")
+        let files = row("Read Files", settings: "docs/; pattern=*.txt")
+        let text = row("Read Text", settings: "stale-name-nobody-wrote.txt")
         let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [files, text])
-        #expect(FlowInputFile.target(for: text, document: doc, scope: scope) != nil)
-        #expect(FlowInputFile.isMissing(for: text, document: doc, scope: scope))
+        #expect(FlowInputFile.target(for: text, document: doc, scope: scope) == nil)
+        #expect(!FlowInputFile.isMissing(for: text, document: doc, scope: scope))
     }
 
     @Test func rowWithAnExplicitRefIsNeverCheckedRegardlessOfTask() throws {
@@ -153,22 +156,14 @@ struct CatFlowInputFileTests {
     // MARK: - Every task in the canonical eleven is classified, not assumed
 
     @Test func everyReadTaskIsClassifiedForUpstreamAwareness() {
-        // Verified by reading each tool's own run(_:progress:) directly:
-        // ReadPath.resolve-backed (ReadTools.swift) + Read Context's own inline check
-        // (ContextTools.swift, "FIX-11") + Read CSV/JSON via RealExecutor.resolveFile all
-        // check upstream; Read Audio/Text (SpokenSummaryTools.swift), Read Video
-        // (VideoTools.swift), and Read Index (IndexStoreTools.swift) never do.
-        let upstreamAware: Set<String> = [
-            "Read Image", "Read Images", "Read Files", "Read PDF",
-            "Read Context", "Read CSV", "Read JSON",
-        ]
-        let notUpstreamAware: Set<String> = ["Read Audio", "Read Text", "Read Video", "Read Index"]
-        #expect(upstreamAware.union(notUpstreamAware) == Set(SampleSeed.readTaskNames))
-        for task in upstreamAware {
+        // READ-UPSTREAM-1: verified by reading each tool's own run(_:progress:) directly —
+        // ReadPath.resolve-backed (ReadTools.swift, now every one of `Read Image`/`Read
+        // Images`/`Read Files`/`Read PDF`/`Read Audio`/`Read Text`/`Read Video`/`Read Index`)
+        // + Read Context's own inline check (ContextTools.swift, "FIX-11") + Read CSV/JSON via
+        // RealExecutor.resolveFile — all eleven check upstream now. `tools/files.py::
+        // _resolve_path` never had a settings-only exception; neither does any tool anymore.
+        for task in SampleSeed.readTaskNames {
             #expect(FlowInputFile.checksUpstream(task), "\(task) should check upstream")
-        }
-        for task in notUpstreamAware {
-            #expect(!FlowInputFile.checksUpstream(task), "\(task) should not check upstream")
         }
     }
 }

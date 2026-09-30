@@ -20,10 +20,10 @@ nonisolated struct ReadAudioTool: AssetStage {
     var produces: Shape { .single(.audio) }
 
     func run(_ input: Asset, progress: @Sendable @escaping (Double) -> Void) async throws -> Asset {
-        // FIP-3: Read Audio never checked an upstream `.file` item before this — verified
-        // against the prior code, not assumed; `checksUpstream: false` keeps that unchanged.
+        // READ-UPSTREAM-1: `tools/files.py::_resolve_path` (kind=Kind.FILE) checks the upstream
+        // item unconditionally — no settings-only special case in the reference.
         let url = try ReadPath.resolve(workspace: workspace, flowID: flowID, path: path, settings: settings,
-                                       inputs: [input], kind: .file, row: "Read Audio", checksUpstream: false)
+                                       inputs: [input], kind: .file, row: "Read Audio")
         progress(0.3)
         _ = try AudioFileReader.read(url)
         progress(1.0)
@@ -118,10 +118,10 @@ nonisolated struct ReadTextTool: AssetStage {
     var produces: Shape { .single(.text) }
 
     func run(_ input: Asset, progress: @Sendable @escaping (Double) -> Void) async throws -> Asset {
-        // FIP-3: Read Text never checked an upstream `.file` item before this — verified
-        // against the prior code, not assumed.
+        // READ-UPSTREAM-1: `tools/files.py::_resolve_path` (kind=Kind.FILE) checks the upstream
+        // item unconditionally — no settings-only special case in the reference.
         let url = try ReadPath.resolve(workspace: workspace, flowID: flowID, path: path, settings: settings,
-                                       inputs: [input], kind: .file, row: "Read Text", checksUpstream: false)
+                                       inputs: [input], kind: .file, row: "Read Text")
         progress(0.3)
         do {
             let text = try String(contentsOf: url, encoding: .utf8)

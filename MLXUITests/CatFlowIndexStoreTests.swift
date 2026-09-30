@@ -190,6 +190,21 @@ struct CatFlowIndexStoreTests {
         }
     }
 
+    /// READ-UPSTREAM-1: `tools/index_store.py::read_index` calls `_resolve_path(inputs,
+    /// settings, kind=Kind.INDEX)` — an upstream `.index` item wins over (absent) settings.
+    /// `Read Index` used to skip this check entirely.
+    @Test func readIndexReadsTheUpstreamIndexWhenGiven() async throws {
+        let (ws, base) = try makeWorkspace()
+        defer { teardown(base) }
+        let idx = try goldenIndexDir()
+
+        let tool = ReadIndexTool(workspace: ws, flowID: "f", settings: "")
+        let input = Asset(items: [Item(kind: .index, value: nil, path: idx, sourceText: nil)])
+        let out = try await tool.run(input) { _ in }
+        #expect(out.items.first?.kind == .index)
+        #expect(out.items.first?.path == idx)
+    }
+
     /// R12-6's done-when: the RAG family reads `library.index` (bundled) + Retrieve. The
     /// flows whose only blockers those were are runnable now: 17/19/44. 41/42/45/20 also
     /// need Calculate (R12-7 group a), 18 needs Save Context, 46 Read Context (group b).
