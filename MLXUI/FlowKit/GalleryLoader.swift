@@ -190,6 +190,14 @@ nonisolated enum GalleryLoader {
                 ("28-TicketTrends-ticket-02.txt", "tickets/ticket-02.txt"),
                 ("28-TicketTrends-ticket-03.txt", "tickets/ticket-03.txt")
             ]
+        case "77-TicketRouter":
+            return [
+                ("77-TicketRouter-ticket-01.txt", "tickets/ticket-01.txt"),
+                ("77-TicketRouter-ticket-02.txt", "tickets/ticket-02.txt"),
+                ("77-TicketRouter-ticket-03.txt", "tickets/ticket-03.txt"),
+                ("77-TicketRouter-ticket-04.txt", "tickets/ticket-04.txt"),
+                ("77-TicketRouter-ticket-05.txt", "tickets/ticket-05.txt")
+            ]
         case "29-LogTriage":
             return [("app.log", "app.log")]
         case "30-ReceiptsExpense":
