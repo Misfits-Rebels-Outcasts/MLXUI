@@ -29,14 +29,25 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// CFM-R10-Direct: the flow's declared `transforms:` — a row naming one runs its script
     /// fenced (never in the App Store build; `canRun` refuses there).
     var transforms: [String: TransformDef] = [:]
-    /// LY-7 — `runLayaDecider`'s only call into the actual engine, injected like
+    /// LY-7/CL-6 — `LayaDecisionEngine`'s only call into the actual engine, injected like
     /// `makeModelStage` so a test can fake `LayaEngine` without loading a real checkpoint. The
-    /// default calls the real `LayaEngineCache`/`LayaEngine.predict` — CL-6's own gate C notes
-    /// this closure as the extraction point for the future `DecisionEngine` protocol, once CLM
-    /// gives it a second conformer; not built yet.
+    /// default calls the real `LayaEngineCache`/`LayaEngine.predict`.
     var askLaya: @Sendable (URL, String, [LayaQuestion]) async throws -> [LayaAnswer] = { directory, state, questions in
         let engine = try await LayaEngineCache.shared.engine(for: directory)
         return try await engine.predict(state: state, questions: questions)
+    }
+    /// CL-6 — `CLMDecisionEngine`'s only call into the actual engine, same injection shape as
+    /// `askLaya`. The default calls the real `CLMEngineCache`/`CLMEngine.answer` for a single
+    /// question.
+    var askCLM: @Sendable (URL, CLMJSON, LayaQuestionType, CLMJSON, CLMJSON) async throws -> LayaAnswer = {
+        directory, state, type, instructions, criteria in
+        let engine = try await CLMEngineCache.shared.engine(for: directory)
+        let results = try await engine.answer(
+            state: state, questions: [(id: "q", type: type, instructions: instructions, criteria: criteria)])
+        guard let first = results.first else {
+            throw LayaPromptError.invalidCriteria("CLM produced no answer")
+        }
+        return first.answer
     }
     /// CFM-R9-5: the decider's fired tag, readable after `execute` (reference box so a value
     /// type can report it through the `FlowExecutor` existential, like `MockExecutor`).
@@ -622,18 +633,11 @@ nonisolated struct RealExecutor: FlowExecutor {
                             transcript: [FlowInterpreter.TranscriptEntry]?,
                             context: [(label: String, content: String)]?) async throws -> Asset {
         let modelEntry = try resolveModel(display: row.model, path: path)
-        // LY-7: a `.decision` entry (a non-generative decision encoder — Laya 0.4B, CLM 8B)
-        // never builds an LLM stage. Laya 0.4B has its own real path below; any other
-        // `.decision` family (today: CLM, family "CLM") refuses here — CL-6/CL-7 (Phase CL-B)
-        // are what teach the executor to actually dispatch it, per
-        // `RSI/DelegateCLMBacklog.md`'s "Branching amended 2026-09-29" note.
+        // LY-7/CL-6: a `.decision` entry (a non-generative decision encoder) never builds an
+        // LLM stage — it answers through a `DecisionEngine` instead, picked by
+        // `modelEntry.family` inside `runDecisionDecider`.
         if modelEntry.runnerKind == .decision {
-            guard modelEntry.family == "Laya" else {
-                throw FlowError.stageFailure(row: path,
-                    message: "\(modelEntry.displayName) isn't available in workflows yet — "
-                        + "pick Laya 0.4B or a language model for this row.")
-            }
-            return try await runLayaDecider(desc, row: row, inputs: inputs, modelEntry: modelEntry, path: path)
+            return try await runDecisionDecider(desc, row: row, inputs: inputs, modelEntry: modelEntry, path: path)
         }
         let task = desc.name
         let (basePrompt, tags) = try Self.deciderPrompt(desc, row: row, inputs: inputs,
@@ -658,52 +662,57 @@ nonisolated struct RealExecutor: FlowExecutor {
         return inputs.first ?? Asset(items: [])
     }
 
-    // MARK: - LY-7: Laya (decision-encoder) deciders
+    // MARK: - LY-7/CL-6: decision-encoder deciders (Laya, CLM)
 
-    /// LY-7 (`RSI/DelegateLayaBacklog.md`, Phase LY-B). Laya never reads frames — no
-    /// `FramePreview.render`, no `fireTag`/F004 strict-parse — it answers a typed
-    /// choice/score question about the state directly. Kept as three separately-readable
-    /// steps, per gate C in `RSI/DelegateCLMBacklog.md` §CL-0 (CL-6 later extracts a shared
-    /// `DecisionEngine` protocol from this once CLM gets its own conformer — not built yet,
-    /// but the seam should already read as "build the question" → "call the engine" → "fire
-    /// the tag and log the detail" so that extraction is a move, not a rewrite):
-    /// 1. `Self.layaQuestion` builds the typed question purely from the row (gates E/F).
-    /// 2. `askLaya` is the one call into the actual engine (or a fake, in tests).
+    /// LY-7 (`RSI/DelegateLayaBacklog.md`, Phase LY-B), generalised by CL-6
+    /// (`RSI/DelegateCLMBacklog.md` §CL-0 gate C, ruled (1) — one shared decider path). Neither
+    /// engine reads frames — no `FramePreview.render`, no `fireTag`/F004 strict-parse — each
+    /// answers a typed choice/score question about the state directly. Three
+    /// separately-readable steps, unchanged in shape from LY-7:
+    /// 1. `DecisionAsk` bundles the plain, engine-agnostic question (gates E/F) — the shared
+    ///    part. Each conformer builds its own native question representation from it
+    ///    (`DecisionEngine.swift`).
+    /// 2. `engine.decide` is the one call into the actual engine (or a fake, in tests).
     /// 3. The tag-firing + detail-logging below never touches the engine itself.
     // SPEC-Q234 (`catflow-mlx/SPEC_QUESTIONS.md`, filed 2026-09-29: "a decider may be served
     // by a non-generative decision engine").
-    private func runLayaDecider(_ desc: TaskDescriptor, row: Row, inputs: [Asset],
-                                modelEntry: ModelEntry, path: String) async throws -> Asset {
+    private func runDecisionDecider(_ desc: TaskDescriptor, row: Row, inputs: [Asset],
+                                    modelEntry: ModelEntry, path: String) async throws -> Asset {
         let task = desc.name
-        // Judge, Think, Decide (and anything else reaching here) — Laya only serves the three
-        // frame-backed deciders whose answer is a typed choice/score, same shape as AFM-2's
-        // Think refusal.
+        // Judge, Think, Decide (and anything else reaching here) — a decision encoder only
+        // serves the three frame-backed deciders whose answer is a typed choice/score, same
+        // shape as AFM-2's Think refusal. The message names the row's own model, not a
+        // hard-coded one — this refusal is shared by every decision-encoder family.
         guard task == "Classify" || task == "Gate" || task == "Score" else {
             throw FlowError.stageFailure(row: path,
                 message: "\(modelEntry.displayName) doesn't serve \(task) — pick a language model for this row.")
         }
 
+        let engine: any DecisionEngine
+        switch modelEntry.family {
+        case "Laya": engine = LayaDecisionEngine(askLaya: askLaya)
+        case "CLM": engine = CLMDecisionEngine(askCLM: askCLM)
+        default:
+            // Any future `.decision` family neither conformer claims yet — refuse clearly
+            // rather than guess an engine, naming the row's own model.
+            throw FlowError.stageFailure(row: path,
+                message: "\(modelEntry.displayName) isn't available in workflows yet — "
+                    + "pick Laya 0.4B, CLM 8B, or a language model for this row.")
+        }
+
         let tags = Self.declaredTags(row)
         let type: LayaQuestionType = task == "Score" ? .score : .choice
         let state = DeciderFrame.flatTexts(inputs).joined(separator: "\n")
-
-        let question: LayaQuestion
-        do {
-            question = try Self.layaQuestion(type: type, settings: row.settings, tags: tags)
-        } catch let error as LayaPromptError {
-            throw FlowError.stageFailure(row: path, message: error.description)
-        }
+        let ask = DecisionAsk(type: type, instructions: Self.layaInstructions(from: row.settings), tags: tags)
 
         let directory = ModelStore.shared.directory(forModelID: modelEntry.id)
         let answer: LayaAnswer
         do {
-            guard let first = try await askLaya(directory, state, [question]).first else {
-                throw FlowError.stageFailure(row: path, message: "Laya produced no answer for row \(path).")
-            }
-            answer = first
+            answer = try await engine.decide(directory: directory, state: state, ask: ask)
         } catch let error as LayaPromptError {
-            // `.tooManyOptions` ("too many options for the token budget") and any other
-            // engine-side validation surface as a clear stage failure, not a crash.
+            // Laya's `.tooManyOptions` ("too many options for the token budget"), CLM's "no
+            // answer", and any other engine-side validation surface as a clear stage failure,
+            // not a crash.
             throw FlowError.stageFailure(row: path, message: error.description)
         }
 
@@ -719,20 +728,6 @@ nonisolated struct RealExecutor: FlowExecutor {
 
         // Spec §7.4 R1, same as the LLM path: Classify/Gate/Score pass the input through.
         return inputs.first ?? Asset(items: [])
-    }
-
-    /// Step 1 — the typed question, built purely from the row: **state** is gathered upstream
-    /// (`DeciderFrame.flatTexts`); **instructions** is the criterion text exactly as
-    /// `FramePreview.render` substitutes it for `{settings}`, with a declared `tags: a, b, c`
-    /// clause stripped (`Self.layaInstructions`) — Laya reads the criterion and its tags
-    /// separately, never as one string; **criteria** is `declaredTags(row)`, in declared
-    /// order, as a bare label list (`dict.fromkeys`-shaped — no per-tag description, matching
-    /// `LayaRunView`'s own Choice criteria and `LayaQuestionDefinition.resolve()`'s array
-    /// path). `static` — reads only its arguments, same reasoning as `deciderPrompt`.
-    private static func layaQuestion(type: LayaQuestionType, settings: String?, tags: [String]) throws -> LayaQuestion {
-        let instructions = Self.layaInstructions(from: settings)
-        let criteria = LayaJSON.array(tags.map { .string($0) })
-        return try LayaQuestionDefinition(type: type, instructions: .string(instructions), criteria: criteria).resolve()
     }
 
     /// A declared `tags: a, b, c` clause, trailing in the criterion text — stripped for

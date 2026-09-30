@@ -2,22 +2,22 @@ import Testing
 import Foundation
 @testable import MLXUI
 
-/// LY-7 (`RSI/DelegateLayaBacklog.md`, Phase LY-B) — `RealExecutor.runLayaDecider`, exercised
-/// through the real `execute(...)` entry point with a fake `askLaya` closure (never a real
-/// `LayaEngine`/checkpoint) — the seam LY-7 itself asked for so this cycle needs no real model
-/// weights. `makeModelStage` is a second fake that records whether it was ever called, so a
-/// refusal path can prove it never built an LLM stage.
+/// LY-7 (`RSI/DelegateLayaBacklog.md`, Phase LY-B) — `RealExecutor.runDecisionDecider`
+/// (renamed from `runLayaDecider` by CL-6, `RSI/DelegateCLMBacklog.md` §CL-0 gate C, once CLM
+/// gave the seam a second conformer), exercised through the real `execute(...)` entry point
+/// with a fake `askLaya` closure (never a real `LayaEngine`/checkpoint) — the seam LY-7 itself
+/// asked for so this cycle needs no real model weights. `makeModelStage` is a second fake that
+/// records whether it was ever called, so a refusal path can prove it never built an LLM
+/// stage. Every test in this file is byte-identical to LY-7's own — CL-6 moved
+/// `runLayaDecider`'s body into `LayaDecisionEngine.decide` (`FlowKit/DecisionEngine.swift`)
+/// without changing Laya's observable behavior. The one LY-7 test whose premise CL-6 retired
+/// outright — a CLM-family row refusing — moved to `CLMDeciderTests.swift`, since CLM now
+/// answers instead of refusing.
 struct LayaDeciderTests {
     private func layaEntry() -> ModelEntry {
         makeEntry(id: "aac6fef--laya-mlx", family: "Laya", displayName: "Laya 0.4B",
                  modelType: .decision, source: .mlx, ramGB: 1.3, downloadSizeGB: 0.85,
                  hfRepo: "aac6fef", hfModelId: "aac6fef/laya-mlx")
-    }
-
-    private func clmEntry() -> ModelEntry {
-        makeEntry(id: "RealityCat--CLM-v0.1-8B-MLX-8bit", family: "CLM", displayName: "CLM 8B",
-                 modelType: .decision, source: .mlx, ramGB: 12.2, downloadSizeGB: 8.12,
-                 hfRepo: "RealityCat", hfModelId: "RealityCat/CLM-v0.1-8B-MLX-8bit")
     }
 
     /// A `RealExecutor` with a fake `askLaya` (never loads a real checkpoint) and a
@@ -200,31 +200,5 @@ struct LayaDeciderTests {
 
         #expect(output.items.first?.value == "text", "truncation must not block the row")
         #expect(try #require(executor.lastDeciderDetail).stateTruncated == true)
-    }
-
-    // MARK: - A CLM-family `.decision` entry is refused, not routed to Laya or an LLM stage
-
-    @Test func clmFamilyDecisionEntryRefusesInWorkflows() async throws {
-        let stageWasBuilt = StageFlag()
-        let executor = try makeExecutor(
-            catalog: [clmEntry()], installedModelIDs: [clmEntry().id],
-            askLaya: { _, _, _ in
-                Issue.record("askLaya must never be called for a CLM-family row")
-                return []
-            },
-            stageWasBuilt: stageWasBuilt)
-
-        let row = Row(id: UUID(), task: "Classify", model: "CLM 8B", settings: "x", tags: ["a", "b"])
-        let input = Asset(items: [Item(kind: .text, value: "text", path: nil, sourceText: nil)])
-        do {
-            _ = try await executor.execute(path: "1", row: row, inputs: [input],
-                                           transcript: nil, context: nil, usedFlowContent: nil)
-            Issue.record("should have thrown")
-        } catch FlowError.stageFailure(_, let message) {
-            #expect(message == "CLM 8B isn't available in workflows yet — pick Laya 0.4B or a language model for this row.")
-        } catch {
-            Issue.record("wrong error type: \(error)")
-        }
-        #expect(!stageWasBuilt.built, "a refused CLM row must never build an LLM stage")
     }
 }
