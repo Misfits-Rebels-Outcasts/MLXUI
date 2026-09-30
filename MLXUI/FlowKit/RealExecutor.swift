@@ -48,6 +48,8 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// LY-7: a decision-encoder decider's tag/confidence/probabilities, same box shape.
     private let deciderDetailBox = DeciderDetailBox()
 
+    /// CACHE-SIGNALS-1: `RealExecutor` never serves a cache hit itself — always `false`.
+    var lastCacheHit: Bool { false }
     var lastTag: String? { tagBox.tag }
     var lastTimeoutFlag: (code: String, message: String)? { flagBox.timeout }
     /// RM-2 — the F010 disclosure from a provider decider's strict-parse tag, same box

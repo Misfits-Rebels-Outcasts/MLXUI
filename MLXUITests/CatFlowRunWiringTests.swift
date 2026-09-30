@@ -617,6 +617,16 @@ private struct RowFailingExecutor: FlowExecutor {
                                        transcript: transcript, context: context,
                                        usedFlowContent: usedFlowContent)
     }
+
+    var lastCacheHit: Bool { inner.lastCacheHit }
+    var lastTag: String? { inner.lastTag }
+    var lastTimeoutFlag: (code: String, message: String)? { inner.lastTimeoutFlag }
+    var lastProviderDeciderFlag: (code: String, message: String)? { inner.lastProviderDeciderFlag }
+    var lastStaged: (id: String, kind: String, summary: String)? { inner.lastStaged }
+    var lastDeciderDetail: (
+        tag: String, confidence: Double, probabilities: [(label: String, probability: Double)],
+        expectedLevel: Double?, stateTruncated: Bool
+    )? { inner.lastDeciderDetail }
 }
 
 /// Fails only the Nth (0-indexed) call to a named task, delegating every other call —
@@ -657,6 +667,16 @@ private final class NthCallFailingExecutor: FlowExecutor, @unchecked Sendable {
                                        transcript: transcript, context: context,
                                        usedFlowContent: usedFlowContent)
     }
+
+    var lastCacheHit: Bool { inner.lastCacheHit }
+    var lastTag: String? { inner.lastTag }
+    var lastTimeoutFlag: (code: String, message: String)? { inner.lastTimeoutFlag }
+    var lastProviderDeciderFlag: (code: String, message: String)? { inner.lastProviderDeciderFlag }
+    var lastStaged: (id: String, kind: String, summary: String)? { inner.lastStaged }
+    var lastDeciderDetail: (
+        tag: String, confidence: Double, probabilities: [(label: String, probability: Double)],
+        expectedLevel: Double?, stateTruncated: Bool
+    )? { inner.lastDeciderDetail }
 }
 
 /// A stub executor that throws a real `StageError.engineFailure` — the class of error the
@@ -668,6 +688,16 @@ private struct FailingExecutor: FlowExecutor {
                  usedFlowContent: String?) async throws -> Asset {
         throw StageError.engineFailure(stage: "Kokoro TTS", underlying: CocoaError(.fileNoSuchFile))
     }
+
+    var lastCacheHit: Bool { false }
+    var lastTag: String? { nil }
+    var lastTimeoutFlag: (code: String, message: String)? { nil }
+    var lastProviderDeciderFlag: (code: String, message: String)? { nil }
+    var lastStaged: (id: String, kind: String, summary: String)? { nil }
+    var lastDeciderDetail: (
+        tag: String, confidence: Double, probabilities: [(label: String, probability: Double)],
+        expectedLevel: Double?, stateTruncated: Bool
+    )? { nil }
 }
 
 /// Counts every `execute` it dispatches, delegating to a mock — the H7 harness: a re-run
@@ -690,6 +720,16 @@ private final class CountingExecutor: FlowExecutor, @unchecked Sendable {
         lock.withLock { _executions += 1 }
         return try await inner.execute(path: path, row: row, inputs: inputs)
     }
+
+    var lastCacheHit: Bool { inner.lastCacheHit }
+    var lastTag: String? { inner.lastTag }
+    var lastTimeoutFlag: (code: String, message: String)? { inner.lastTimeoutFlag }
+    var lastProviderDeciderFlag: (code: String, message: String)? { inner.lastProviderDeciderFlag }
+    var lastStaged: (id: String, kind: String, summary: String)? { inner.lastStaged }
+    var lastDeciderDetail: (
+        tag: String, confidence: Double, probabilities: [(label: String, probability: Double)],
+        expectedLevel: Double?, stateTruncated: Bool
+    )? { inner.lastDeciderDetail }
 }
 
 /// A stub `text → text` PipelineStage that echoes its input, so a frame-backed row's

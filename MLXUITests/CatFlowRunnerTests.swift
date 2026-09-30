@@ -326,7 +326,12 @@ private final class SlowMockExecutor: FlowExecutor, @unchecked Sendable {
     var lastCacheHit: Bool { inner.lastCacheHit }
     var lastTag: String? { inner.lastTag }
     var lastTimeoutFlag: (code: String, message: String)? { inner.lastTimeoutFlag }
+    var lastProviderDeciderFlag: (code: String, message: String)? { inner.lastProviderDeciderFlag }
     var lastStaged: (id: String, kind: String, summary: String)? { inner.lastStaged }
+    var lastDeciderDetail: (
+        tag: String, confidence: Double, probabilities: [(label: String, probability: Double)],
+        expectedLevel: Double?, stateTruncated: Bool
+    )? { inner.lastDeciderDetail }
 }
 
 /// An executor that records the inputs each row received (by path) — the B4 harness: it
@@ -346,4 +351,14 @@ private final class RecordingExecutor: FlowExecutor, @unchecked Sendable {
         let kind: Kind = row.task == "Save Text" ? .status : .text
         return Asset(items: [Item(kind: kind, value: "ok", path: nil, sourceText: nil)])
     }
+
+    var lastCacheHit: Bool { false }
+    var lastTag: String? { nil }
+    var lastTimeoutFlag: (code: String, message: String)? { nil }
+    var lastProviderDeciderFlag: (code: String, message: String)? { nil }
+    var lastStaged: (id: String, kind: String, summary: String)? { nil }
+    var lastDeciderDetail: (
+        tag: String, confidence: Double, probabilities: [(label: String, probability: Double)],
+        expectedLevel: Double?, stateTruncated: Bool
+    )? { nil }
 }

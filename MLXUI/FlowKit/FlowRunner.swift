@@ -93,15 +93,12 @@ nonisolated extension FlowExecutor {
         try await execute(path: path, row: row, inputs: inputs,
                           transcript: nil, context: nil, usedFlowContent: nil)
     }
-    var lastCacheHit: Bool { false }
-    var lastTag: String? { nil }
-    var lastTimeoutFlag: (code: String, message: String)? { nil }
-    var lastProviderDeciderFlag: (code: String, message: String)? { nil }
-    var lastStaged: (id: String, kind: String, summary: String)? { nil }
-    var lastDeciderDetail: (
-        tag: String, confidence: Double, probabilities: [(label: String, probability: Double)],
-        expectedLevel: Double?, stateTruncated: Bool
-    )? { nil }
+    // CACHE-SIGNALS-1: no default `{ nil }`/`{ false }` here anymore, deliberately — a
+    // `CachingExecutor`-shaped wrapper that forgets to override one of these six properties
+    // used to fall through to a silent default instead of a compile error, which is exactly
+    // how `lastTag` (and every other signal) went unforwarded for every real run. Every
+    // conforming executor (10 today: `RealExecutor`, `CachingExecutor`, `MockExecutor`, and
+    // 7 `MLXUITests` fakes) must now implement all six explicitly.
 }
 
 /// The execution engine (CFM-R7-1): the full `FlowInterpreter` port drives every run,
