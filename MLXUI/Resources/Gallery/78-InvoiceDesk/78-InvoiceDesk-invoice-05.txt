@@ -1,0 +1,14 @@
+INVOICE HP-1190
+From: Harbor Print Co, 51 Quay Street, Hull HU1 1RA
+To: Accounts Payable, Harbourview Studio Ltd
+Date: 2026-09-12    Due: 2026-10-12
+PO number: PO-4519
+
+Line items:
+  500 x Business cards, two-sided   @ 0.12  =   60.00
+  200 x A5 flyers, gloss            @ 0.45  =   90.00
+Subtotal: 150.00
+VAT 20%: 30.00
+Total due: GBP 180.00
+
+Pay to: Harbor Print Co, sort code 60-83-71, account 22904417 (unchanged, as on file).

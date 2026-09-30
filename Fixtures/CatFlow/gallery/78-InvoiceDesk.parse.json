@@ -1,0 +1,238 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "invoices/; pattern=*.txt",
+      "task": "Read Files"
+    },
+    {
+      "block_kind": "each",
+      "block_name": "review_one",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": null,
+          "task": "Read Text"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "edges": [
+              {
+                "tag": "approve",
+                "target": {
+                  "kind": "row",
+                  "number": 3
+                }
+              },
+              {
+                "tag": "hold",
+                "target": {
+                  "kind": "row",
+                  "number": 4
+                }
+              }
+            ],
+            "kind": "decide"
+          },
+          "model": "CLM 8B",
+          "refs": [],
+          "settings": "\"Ready to pay as-is: PO number present, line items add up to the total, bank details unchanged?\"",
+          "tags": [
+            "approve",
+            "hold"
+          ],
+          "task": "Gate"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "clause": {
+            "kind": "goto",
+            "target": {
+              "kind": "row",
+              "number": 8
+            }
+          },
+          "model": null,
+          "refs": [],
+          "settings": "\"APPROVE        {1}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "clause": {
+            "edges": [
+              {
+                "tag": "minor",
+                "target": {
+                  "kind": "row",
+                  "number": 5
+                }
+              },
+              {
+                "tag": "major",
+                "target": {
+                  "kind": "row",
+                  "number": 6
+                }
+              },
+              {
+                "tag": "blocking",
+                "target": {
+                  "kind": "row",
+                  "number": 7
+                }
+              }
+            ],
+            "kind": "decide"
+          },
+          "model": "CLM 8B",
+          "refs": [
+            {
+              "kind": "row",
+              "number": 1
+            }
+          ],
+          "settings": "\"How serious is the problem for accounts payable?\"",
+          "tags": [
+            "minor",
+            "major",
+            "blocking"
+          ],
+          "task": "Score"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "clause": {
+            "kind": "goto",
+            "target": {
+              "kind": "row",
+              "number": 8
+            }
+          },
+          "model": null,
+          "refs": [
+            {
+              "kind": "row",
+              "number": 1
+            }
+          ],
+          "settings": "\"HOLD-MINOR     {1}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "clause": {
+            "kind": "goto",
+            "target": {
+              "kind": "row",
+              "number": 8
+            }
+          },
+          "model": null,
+          "refs": [
+            {
+              "kind": "row",
+              "number": 1
+            }
+          ],
+          "settings": "\"HOLD-MAJOR     {1}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "model": null,
+          "refs": [
+            {
+              "kind": "row",
+              "number": 1
+            }
+          ],
+          "settings": "\"HOLD-BLOCKING  {1}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "\"{1}\"",
+          "task": "Template"
+        }
+      ],
+      "declared_signature": "[file] -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": "on_error=skip",
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "comment": "approvals first, then holds (blocking before major, minor)",
+      "model": null,
+      "refs": [],
+      "settings": "direction=asc",
+      "task": "Sort"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "separator=\"\\n\\n---\\n\\n\"",
+      "task": "Join Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "invoice-desk.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

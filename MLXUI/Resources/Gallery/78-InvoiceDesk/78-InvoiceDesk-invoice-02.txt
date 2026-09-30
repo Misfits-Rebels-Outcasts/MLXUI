@@ -1,0 +1,16 @@
+INVOICE BL-7782
+From: Brightline Logistics, Unit 9 Dockside Park, Bristol BS1 6XN
+To: Accounts Payable, Harbourview Studio Ltd
+Date: 2026-09-05    Due: 2026-09-19
+PO number: PO-4502
+
+Line items:
+  3 x Pallet delivery, Bristol to Leeds     @ 280.00  =  840.00
+  1 x Tail-lift surcharge                   @  95.00  =   95.00
+  1 x Weekend handling                      @ 305.00  =  305.00
+Subtotal: 1,240.00
+VAT 20%: 284.00
+Total due: GBP 1,704.00
+
+Note: the VAT line and the total do not follow from the subtotal (20% of 1,240.00 is 248.00, which would make the total 1,488.00).
+Pay to: Brightline Logistics, sort code 30-11-62, account 11820457 (unchanged, as on file).

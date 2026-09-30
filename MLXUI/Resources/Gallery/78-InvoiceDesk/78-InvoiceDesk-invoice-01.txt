@@ -1,0 +1,15 @@
+INVOICE NW-20931
+From: Northwind Office Supply, 14 Mill Lane, Leeds LS1 4AB
+To: Accounts Payable, Harbourview Studio Ltd
+Date: 2026-09-02    Due: 2026-10-02
+PO number: PO-4471
+
+Line items:
+  12 x A4 copier paper, box of 5 reams   @ 28.50  =  342.00
+   4 x Toner cartridge, black (TN-2420)  @ 61.00  =  244.00
+   1 x Desk organiser set                @ 34.00  =   34.00
+Subtotal: 620.00
+VAT 20%: 124.00
+Total due: GBP 744.00
+
+Pay to: Northwind Office Supply, sort code 20-45-77, account 43917260 (unchanged, as on file).

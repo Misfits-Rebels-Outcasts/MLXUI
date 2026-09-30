@@ -543,6 +543,13 @@
    "filename": "77-TicketRouter.cat",
    "category": "Inbox, Approvals & People",
    "description": "A folder of support tickets sorted by team in one pass — Laya picks the label, nothing is generated, so it's fast enough for a whole inbox."
+  },
+  {
+   "number": 78,
+   "title": "Invoice Desk",
+   "filename": "78-InvoiceDesk.cat",
+   "category": "Inbox, Approvals & People",
+   "description": "A folder of invoices sorted into approve or hold, and every hold graded minor, major or blocking. CLM reads each whole invoice and scores it against your own wording, so the questions are yours to edit."
   }
  ]
 }

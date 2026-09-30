@@ -174,10 +174,10 @@ struct CatFlowSavedFilePresentationTests {
                 }
             }
         }
-        // Pins the same count BF-2's corpus test pins (86, LY-9: flow 77's "Save Text
-        // routed-tickets.md" row) — see that test's failure message for what to do when this
+        // Pins the same count BF-2's corpus test pins (87, CL-8: flow 78's "Save Text
+        // invoice-desk.md" row) — see that test's failure message for what to do when this
         // fires.
-        #expect(checkedRows == 86, """
+        #expect(checkedRows == 87, """
             Corpus row count changed from 86 — if a new Save * row shipped, confirm it \
             classifies correctly above, then bump this count; if a row disappeared, \
             confirm that was intentional.

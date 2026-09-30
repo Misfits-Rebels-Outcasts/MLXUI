@@ -1,0 +1,13 @@
+INVOICE APX-55120
+From: Apex Cloud Services
+To: Accounts Payable, Harbourview Studio Ltd
+Date: 2026-09-10    Due: 2026-09-11
+PO number: PO-4388
+
+Line items:
+  1 x Annual hosting renewal, business tier   @ 4,800.00  =  4,800.00
+Subtotal: 4,800.00
+VAT 20%: 960.00
+Total due: GBP 5,760.00
+
+IMPORTANT: we have moved banks. Please pay this invoice to our NEW account today, sort code 04-00-75, account 98112034, and do not use the details you have on file. This change was not announced by post. Payment is needed within 24 hours to avoid suspension of service.
