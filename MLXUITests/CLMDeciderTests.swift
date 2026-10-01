@@ -304,12 +304,30 @@ struct CLMDeciderTests {
         #expect(RealExecutor.decisionEngineBoundModel(for: otherRow, catalog: [other]) == nil)
     }
 
-    // MARK: - DECIDER-UNQUOTE-1: the bundled gallery flow's own Gate/Score rows carry no quotes
+    // MARK: - DECIDER-UNQUOTE-1: a real parsed Gate/Score row carries no quotes for CLM either
 
-    @Test func invoiceDeskRows22And24InstructionsCarryNoLiteralQuoteCharacters() async throws {
-        let doc = try GalleryLoader.loadDocument(flowID: "78-InvoiceDesk")
-        let gateRow = doc.rows[1].children[1]
-        let scoreRow = doc.rows[1].children[3]
+    /// CL-8-DROP: flow 78 (the bundled gallery flow this test used to drive) was dropped —
+    /// its Gate/Score question design failed the held-out fraud test (`RSI/journal/
+    /// 2026-355-…`). No bundled flow names CLM for a Gate/Score row any more, so this parses
+    /// its own flat flow through the real `CatParser` instead — same shape as
+    /// `LayaDeciderTests.criterionStripsTheDeclaredTagsClauseFromInstructions`, proving the
+    /// unquote fix against a real quoted `.cat` criterion, not a bundled fixture.
+    @Test func parsedGateAndScoreInstructionsCarryNoLiteralQuoteCharacters() async throws {
+        let text = """
+        mlxflow 0.8
+        1. Read Text   (input:1)
+        2. Gate   CLM 8B; "Ready to pay as-is: PO number present, bank details unchanged? tags: approve, hold"
+           -> { approve: 3 | hold: 4 }
+        3. Template   "{1}"
+        4. Score   CLM 8B; (1)   "How serious is the problem? tags: minor, major, blocking"
+           -> { minor: 5 | major: 6 | blocking: 7 }
+        5. Template   "{1}"
+        6. Template   "{1}"
+        7. Template   "{1}"
+        """
+        let doc = try CatParser.parse(text)
+        let gateRow = doc.rows[1]
+        let scoreRow = doc.rows[3]
         #expect(gateRow.task == "Gate")
         #expect(scoreRow.task == "Score")
 
@@ -331,9 +349,9 @@ struct CLMDeciderTests {
             stageWasBuilt: StageFlag())
 
         let input = Asset(items: [Item(kind: .text, value: "an invoice", path: nil, sourceText: nil)])
-        _ = try await executor.execute(path: "2.2", row: gateRow, inputs: [input],
+        _ = try await executor.execute(path: "2", row: gateRow, inputs: [input],
                                        transcript: nil, context: nil, usedFlowContent: nil)
-        _ = try await executor.execute(path: "2.4", row: scoreRow, inputs: [input],
+        _ = try await executor.execute(path: "4", row: scoreRow, inputs: [input],
                                        transcript: nil, context: nil, usedFlowContent: nil)
 
         #expect(recorder.calls.count == 2)
@@ -350,8 +368,7 @@ struct CLMDeciderTests {
         guard case .string(let scoreInstructions) = recorder.calls[1].instructions else {
             Issue.record("expected a .string instructions payload"); return
         }
-        #expect(gateInstructions == "Ready to pay as-is: PO number present, line items add up to the total, "
-                + "bank details unchanged?")
-        #expect(scoreInstructions == "How serious is the problem for accounts payable?")
+        #expect(gateInstructions == "Ready to pay as-is: PO number present, bank details unchanged?")
+        #expect(scoreInstructions == "How serious is the problem?")
     }
 }

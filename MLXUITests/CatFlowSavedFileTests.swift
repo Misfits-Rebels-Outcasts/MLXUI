@@ -212,9 +212,10 @@ struct CatFlowSavedFileTests {
                 }
             }
         }
-        // Pins §0.1's count (86, +1 for CL-8's flow 78 "Save Text invoice-desk.md" = 87) so
-        // a new gallery flow's Save rows are never silently skipped by this corpus walk.
-        #expect(checkedRows == 87, """
+        // Pins §0.1's count (86 — CL-8's flow 78 "Save Text invoice-desk.md" bumped this to
+        // 87; CL-8-DROP reverted it) so a new gallery flow's Save rows are never silently
+        // skipped by this corpus walk.
+        #expect(checkedRows == 86, """
             Corpus row count changed from 86 — if a new Save * row shipped, confirm it \
             resolves correctly above, then bump this count; if a row disappeared, confirm \
             that was intentional.
