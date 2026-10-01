@@ -150,9 +150,20 @@ struct LayaDeciderTests {
             },
             stageWasBuilt: StageFlag())
 
-        // LY-7's own fixture: "Urgency? tags: act, read, ignore" -> "Urgency?".
-        let row = Row(id: UUID(), task: "Classify", model: "Laya 0.4B",
-                     settings: "Urgency? tags: act, read, ignore", tags: ["act", "read", "ignore"])
+        // LY-7's own fixture, through the real parser this time (DECIDER-UNQUOTE-1): a
+        // Swift-literal `Row(settings:)` never carries the surrounding `"…"` CatParser leaves
+        // on a quoted criterion, so it couldn't have caught the quote-stripping bug.
+        // `CatParser.extractTags` lifts `tags: act, read, ignore` out of the quoted span and
+        // re-wraps what's left, leaving `row.settings == "\"Urgency?\""` — quotes and all.
+        let text = """
+        mlxflow 0.8
+        1. Read Text   (input:1)
+        2. Classify   Laya 0.4B; "Urgency? tags: act, read, ignore"
+        """
+        let doc = try CatParser.parse(text)
+        let row = doc.rows[1]
+        #expect(row.settings == "\"Urgency?\"", "sanity: the parser still hands the quotes on")
+
         let input = Asset(items: [Item(kind: .text, value: "text", path: nil, sourceText: nil)])
         _ = try await executor.execute(path: "1", row: row, inputs: [input],
                                        transcript: nil, context: nil, usedFlowContent: nil)
@@ -200,5 +211,32 @@ struct LayaDeciderTests {
 
         #expect(output.items.first?.value == "text", "truncation must not block the row")
         #expect(try #require(executor.lastDeciderDetail).stateTruncated == true)
+    }
+
+    // MARK: - DECIDER-UNQUOTE-1: the bundled gallery flow's own Classify row carries no quotes
+
+    @Test func ticketRouterRow22InstructionsCarryNoLiteralQuoteCharacters() async throws {
+        let doc = try GalleryLoader.loadDocument(flowID: "77-TicketRouter")
+        let row = doc.rows[1].children[1]
+        #expect(row.task == "Classify")
+        #expect(row.model == "Laya 0.4B")
+
+        var capturedInstructions: String?
+        let executor = try makeExecutor(
+            catalog: [layaEntry()], installedModelIDs: [layaEntry().id],
+            askLaya: { _, _, questions in
+                capturedInstructions = questions.first?.instructions
+                return [self.fakeAnswer(type: .choice, confidence: 0.9, probabilities: [0.9, 0.1, 0, 0],
+                                        choiceLabel: "billing")]
+            },
+            stageWasBuilt: StageFlag())
+
+        let input = Asset(items: [Item(kind: .text, value: "a ticket", path: nil, sourceText: nil)])
+        _ = try await executor.execute(path: "2.2", row: row, inputs: [input],
+                                       transcript: nil, context: nil, usedFlowContent: nil)
+
+        let instructions = try #require(capturedInstructions)
+        #expect(!instructions.contains("\""), "the state head must never see literal quote marks: \(instructions)")
+        #expect(instructions == "Which team owns this ticket?")
     }
 }

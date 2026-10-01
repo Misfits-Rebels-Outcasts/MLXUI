@@ -303,4 +303,55 @@ struct CLMDeciderTests {
         let otherRow = Row(id: UUID(), task: "Classify", model: "Other Decider", settings: "x", tags: ["a", "b"])
         #expect(RealExecutor.decisionEngineBoundModel(for: otherRow, catalog: [other]) == nil)
     }
+
+    // MARK: - DECIDER-UNQUOTE-1: the bundled gallery flow's own Gate/Score rows carry no quotes
+
+    @Test func invoiceDeskRows22And24InstructionsCarryNoLiteralQuoteCharacters() async throws {
+        let doc = try GalleryLoader.loadDocument(flowID: "78-InvoiceDesk")
+        let gateRow = doc.rows[1].children[1]
+        let scoreRow = doc.rows[1].children[3]
+        #expect(gateRow.task == "Gate")
+        #expect(scoreRow.task == "Score")
+
+        let recorder = Recorder()
+        let executor = try makeExecutor(
+            catalog: [clmEntry()], installedModelIDs: [clmEntry().id],
+            askCLM: { _, _, type, instructions, criteria in
+                recorder.record(type: type, instructions: instructions, criteria: criteria)
+                switch type {
+                case .score:
+                    var answer = LayaAnswer(type: .score, confidence: 0.6, probabilities: [0.6, 0.3, 0.1],
+                                            optionLabels: ["minor", "major", "blocking"], stateTruncated: false)
+                    answer.choiceLabel = "minor"
+                    return answer
+                default:
+                    return self.fakeChoiceAnswer(label: "hold", tags: ["approve", "hold"])
+                }
+            },
+            stageWasBuilt: StageFlag())
+
+        let input = Asset(items: [Item(kind: .text, value: "an invoice", path: nil, sourceText: nil)])
+        _ = try await executor.execute(path: "2.2", row: gateRow, inputs: [input],
+                                       transcript: nil, context: nil, usedFlowContent: nil)
+        _ = try await executor.execute(path: "2.4", row: scoreRow, inputs: [input],
+                                       transcript: nil, context: nil, usedFlowContent: nil)
+
+        #expect(recorder.calls.count == 2)
+        for call in recorder.calls {
+            guard case .string(let instructions) = call.instructions else {
+                Issue.record("expected a .string instructions payload, got \(call.instructions)")
+                continue
+            }
+            #expect(!instructions.contains("\""), "the state head must never see literal quote marks: \(instructions)")
+        }
+        guard case .string(let gateInstructions) = recorder.calls[0].instructions else {
+            Issue.record("expected a .string instructions payload"); return
+        }
+        guard case .string(let scoreInstructions) = recorder.calls[1].instructions else {
+            Issue.record("expected a .string instructions payload"); return
+        }
+        #expect(gateInstructions == "Ready to pay as-is: PO number present, line items add up to the total, "
+                + "bank details unchanged?")
+        #expect(scoreInstructions == "How serious is the problem for accounts payable?")
+    }
 }

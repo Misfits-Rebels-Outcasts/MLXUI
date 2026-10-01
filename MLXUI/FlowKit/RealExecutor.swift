@@ -760,8 +760,21 @@ nonisolated struct RealExecutor: FlowExecutor {
     private static let reTagsClauseTrailing = NSRegularExpression.compiled(
         #"\s*tags:\s*(\w+(?:\s*,\s*\w+)*)\s*$"#)
 
+    /// DECIDER-UNQUOTE-1: `CatParser.extractTags` (`CatParser.swift`) deliberately leaves the
+    /// surrounding `"…"` on a quoted criterion in `row.settings` — it only lifts the `tags:`
+    /// clause out of the *last* quoted span and re-wraps what's left (`newQuoted =
+    /// "\"\(newInner)\""`), exactly like the reference parser's own `_extract_tags`
+    /// (`catflow-mlx/src/catflow/core/parser.py:1225`, `new_quoted = f'"{new_inner}"'`). Both
+    /// parsers hand the quotes on to the consumer on purpose — the reference's own generative
+    /// decider path unquotes before use (`catflow-mlx/src/catflow/engines/llm.py:834`, `schema
+    /// = _unquote(settings.strip())`). `layaInstructions` never did, so every decision-encoder
+    /// Gate/Classify/Score sent its state head a question wrapped in literal `"…"` characters
+    /// (found diagnosing smoke row 101, flow 78: CLM's Gate flipped `approve`/`hold` on 4 of 5
+    /// invoices relative to the same question asked without the quotes). Unquote before
+    /// stripping the tags clause — `FlowSettings.unquote` already does exactly the reference's
+    /// `_unquote` (`FlowSettings.swift:91`).
     private static func layaInstructions(from settings: String?) -> String {
-        let text = settings ?? ""
+        let text = FlowSettings.unquote((settings ?? "").trimmingCharacters(in: .whitespaces))
         guard let match = reTagsClauseTrailing.firstMatch(in: text),
               let range = Range(match.range, in: text)
         else { return text }
