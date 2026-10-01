@@ -59,7 +59,7 @@ struct ProviderCredentialRowView: View {
             }
         }
         .padding(.vertical, 4)
-        .task { hasKey = KeychainHelper.get(account: account) != nil }
+        .task { hasKey = KeychainHelper.exists(account: account) }
     }
 
     private func save() {

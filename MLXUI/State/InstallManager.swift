@@ -664,7 +664,9 @@ private final class ProgressDelegate: NSObject, URLSessionDownloadDelegate {
 /// compiles unchanged, since a `MainActor` context can always call a `nonisolated` func.
 nonisolated enum KeychainHelper {
     private static let service = "com.ai-browser"
-    private static let hfAccount = "huggingface-token"
+    /// Internal (not private) so a test can pin the wrappers' default account without ever
+    /// reading the developer's real token.
+    static let hfAccount = "huggingface-token"
 
     /// Registry §7 / M6's Swift equivalent of `$CATFLOW_KEY_<NAME>`: the Keychain account a
     /// provider manifest's `"credentials": "<name>"` reference resolves to.
@@ -682,6 +684,20 @@ nonisolated enum KeychainHelper {
         guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
               let data = item as? Data else { return nil }
         return String(data: data, encoding: .utf8)
+    }
+
+    /// KC-1: presence check that never reads the secret. Without `kSecReturnData` the legacy
+    /// login keychain answers from the item's attributes and does not raise the ACL prompt
+    /// (`RSI/DelegateKeychainBacklog.md` §0). Use this for every "is a key set?" question;
+    /// reserve `get` for the moment the secret is actually sent somewhere.
+    static func exists(account: String) -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
     }
 
     static func save(_ value: String, account: String) {
@@ -709,7 +725,10 @@ nonisolated enum KeychainHelper {
 
     // MARK: - Back-compat wrappers — every existing call site is unchanged
 
-    static func getToken() -> String? { get(account: hfAccount) }
-    static func saveToken(_ token: String) { save(token, account: hfAccount) }
-    static func deleteToken() { delete(account: hfAccount) }
+    // `account:` defaults to the HF item; it exists so tests can exercise the wrappers
+    // against a throwaway account (KC-1.3).
+    static func getToken(account: String = hfAccount) -> String? { get(account: account) }
+    static func hasToken(account: String = hfAccount) -> Bool { exists(account: account) }
+    static func saveToken(_ token: String, account: String = hfAccount) { save(token, account: account) }
+    static func deleteToken(account: String = hfAccount) { delete(account: account) }
 }

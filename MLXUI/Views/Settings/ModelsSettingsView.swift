@@ -81,7 +81,7 @@ struct ModelsSettingsView: View {
         }
         .formStyle(.grouped)
         .frame(minWidth: 520)
-        .onAppear { hasToken = KeychainHelper.getToken() != nil }
+        .onAppear { hasToken = KeychainHelper.hasToken() }
         .task { await loadStorageSize() }
         .task { await loadCacheSize() }
     }

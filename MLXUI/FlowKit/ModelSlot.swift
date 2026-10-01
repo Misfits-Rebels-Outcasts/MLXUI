@@ -202,7 +202,7 @@ nonisolated struct ProviderModelRef: Sendable, Equatable {
 nonisolated enum ProviderCredential {
     static func readiness(providerName: String) -> Readiness {
         let account = KeychainHelper.providerAccount(providerName)
-        guard KeychainHelper.get(account: account) != nil else {
+        guard KeychainHelper.exists(account: account) else {
             return .needsSetup(reason: "Add your \(providerName) key in Settings",
                                 action: .openSettings(.providers))
         }
