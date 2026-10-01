@@ -536,6 +536,13 @@
    "category": "Basic",
    "description": "Point it at a news index page and get back an HTML page of the top 5 headlines, each with a one-line summary and link.",
    "tier": "basic"
+  },
+  {
+   "number": 77,
+   "title": "Ticket Router",
+   "filename": "77-TicketRouter.cat",
+   "category": "Inbox, Approvals & People",
+   "description": "A folder of support tickets sorted by team in one pass — Laya picks the label, nothing is generated, so it's fast enough for a whole inbox."
   }
  ]
 }

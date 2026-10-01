@@ -66,6 +66,23 @@ nonisolated protocol FlowExecutor: Sendable {
 
     /// A staged row's queued outbox effect (the Python's `last_staged`), or nil.
     nonisolated var lastStaged: (id: String, kind: String, summary: String)? { get }
+
+    /// LY-7 — a decision-encoder decider's (Laya today; CL-6 adds CLM) fired tag, confidence,
+    /// and per-option probabilities from its last `execute`, or nil for any other row. Never
+    /// the payload — this is for gate E's ruling ("log confidence... on real numbers") and
+    /// general diagnosability, read separately from what the row actually passes through.
+    /// `expectedLevel` is `.score`'s weighted-average level (gate F: the *fired* tag is always
+    /// the declared band at argmax, never this interpolation — this is logged alongside it,
+    /// not used to pick the tag). `stateTruncated` folds in the non-blocking truncation signal
+    /// LY-7 asked to log as an info-code disclosure — no existing F0xx code fit "decider input
+    /// truncated to the token budget" (checked F001–F011 in `ErrorCatalog.swift`) when LY-7
+    /// ran. **SPEC-Q235** (`catflow-mlx/SPEC_QUESTIONS.md`, filed 2026-09-29, recommending
+    /// `F012`) is now on file but not yet ratified — this stays plain, code-less data until it
+    /// is; see LY-8's journal.
+    nonisolated var lastDeciderDetail: (
+        tag: String, confidence: Double, probabilities: [(label: String, probability: Double)],
+        expectedLevel: Double?, stateTruncated: Bool
+    )? { get }
 }
 
 nonisolated extension FlowExecutor {
@@ -76,11 +93,12 @@ nonisolated extension FlowExecutor {
         try await execute(path: path, row: row, inputs: inputs,
                           transcript: nil, context: nil, usedFlowContent: nil)
     }
-    var lastCacheHit: Bool { false }
-    var lastTag: String? { nil }
-    var lastTimeoutFlag: (code: String, message: String)? { nil }
-    var lastProviderDeciderFlag: (code: String, message: String)? { nil }
-    var lastStaged: (id: String, kind: String, summary: String)? { nil }
+    // CACHE-SIGNALS-1: no default `{ nil }`/`{ false }` here anymore, deliberately — a
+    // `CachingExecutor`-shaped wrapper that forgets to override one of these six properties
+    // used to fall through to a silent default instead of a compile error, which is exactly
+    // how `lastTag` (and every other signal) went unforwarded for every real run. Every
+    // conforming executor (10 today: `RealExecutor`, `CachingExecutor`, `MockExecutor`, and
+    // 7 `MLXUITests` fakes) must now implement all six explicitly.
 }
 
 /// The execution engine (CFM-R7-1): the full `FlowInterpreter` port drives every run,

@@ -37,6 +37,14 @@ final class MockExecutor: FlowExecutor, @unchecked Sendable {
     var lastTag: String? { lock.withLock { _lastTag } }
     var lastTimeoutFlag: (code: String, message: String)? { lock.withLock { _lastTimeoutFlag } }
     var lastStaged: (id: String, kind: String, summary: String)? { lock.withLock { _lastStaged } }
+    /// CACHE-SIGNALS-1: `MockExecutor` never serves a cache hit itself, and never mocks a
+    /// remote-provider decider's F010 disclosure or Laya's confidence/probabilities detail.
+    var lastCacheHit: Bool { false }
+    var lastProviderDeciderFlag: (code: String, message: String)? { nil }
+    var lastDeciderDetail: (
+        tag: String, confidence: Double, probabilities: [(label: String, probability: Double)],
+        expectedLevel: Double?, stateTruncated: Bool
+    )? { nil }
 
     init(blobDirectory: URL, deciderScript: [String: [String]] = [:]) {
         self.blobDirectory = blobDirectory

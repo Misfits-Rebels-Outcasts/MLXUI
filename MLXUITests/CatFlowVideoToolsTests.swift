@@ -78,6 +78,23 @@ struct CatFlowVideoToolsTests {
         #expect(out.items.first?.path?.lastPathComponent == "clip.mp4")
     }
 
+    /// READ-UPSTREAM-1: `tools/files.py::_resolve_path` checks the upstream `.file` item
+    /// unconditionally — `Read Video` used to skip that check entirely.
+    @Test func readVideoReadsTheUpstreamFileWhenGiven() async throws {
+        let (ws, base) = try makeWorkspace()
+        defer { teardown(base) }
+        let flowDir = ws.directory(for: "f")
+        try FileManager.default.createDirectory(at: flowDir, withIntermediateDirectories: true)
+        let video = flowDir.appendingPathComponent("clip-02.mp4")
+        try await makeVideo(at: video)
+
+        let tool = ReadVideoTool(workspace: ws, flowID: "f", settings: "")
+        let input = Asset(items: [Item(kind: .file, value: nil, path: video, sourceText: nil)])
+        let out = try await tool.run(input) { _ in }
+        #expect(out.items.first?.kind == .video)
+        #expect(out.items.first?.path == video)
+    }
+
     @Test func parseTimeHandlesHMSAndSeconds() {
         #expect(VideoTools.parseTime("00:00:05") == 5)
         #expect(VideoTools.parseTime("1:30") == 90)

@@ -87,6 +87,21 @@ nonisolated enum TaskModels {
     /// today already is one, so the table stays empty until a case names itself).
     private static let taskFamilies: [String: String] = [:]
 
+    /// LY-6 (`RSI/DelegateLayaBacklog.md`, Phase LY-B) — a second, explicit capability table,
+    /// alongside `taskKinds` rather than folded into it: Classify/Gate/Score's *usual* runner
+    /// is still `.llm` (an LLM stage rendering the runtime-owned frame), but a `.decision`
+    /// catalog entry — a non-generative decider like Laya 0.4B or CLM 8B — can **also** serve
+    /// those same three tasks, with no LLM stage involved at all (`RealExecutor.runDecider`
+    /// branches on `modelEntry.runnerKind == .decision` before ever building one — LY-7).
+    /// Judge, Think, Decide, Generate and every other task have no entry here: a `.decision`
+    /// model only ever appears in the three tasks it can actually answer. Documented the way
+    /// DA-1 documented the six deciders' `taskKinds` entries: the table above is the reason a
+    /// derived pool is non-empty for `.llm`; this one is the reason it's non-empty for
+    /// `.decision` too, without changing what `.llm`-only tasks (Judge, Think, Decide) offer.
+    private static let taskExtraKinds: [String: Set<RunnerKind>] = [
+        "Classify": [.decision], "Gate": [.decision], "Score": [.decision],
+    ]
+
     /// **SPEC-Q214** (`catflow-mlx/SPEC_QUESTIONS.md`) — a `.model`-class task that runs
     /// **without** a model when none is named. `Text to Table`'s deterministic fast path
     /// (`TableTool.parseDelimitedTable`, DA-6) inverts CSV a sibling `Table to Text` row
@@ -169,6 +184,19 @@ nonisolated enum TaskModels {
         "Speak": ["Kokoro 82M", "Qwen3-TTS 1.7B", "Qwen3-TTS 0.6B"],
         "Rerank": ["BGE Reranker", "Qwen3 Reranker 0.6B"],
         "Text to Table": llmModels,
+        // LY-8 (RSI/DelegateLayaBacklog.md, 2026-09-27 gate D amendment, superseding LY-0's own
+        // gate D "never the default"): Classify/Gate/Score had no pool entry before this —
+        // `defaultModel(forTask:)` fell through to `derived.first?.displayName`, whichever LLM
+        // happened to sort first in the catalog (coincidentally "Ministral 3B"). `"Laya 0.4B"`
+        // is **prepended**, not appended, so it becomes these three tasks' real default; the
+        // LLMs keep their existing relative order behind it. Every *other* existing gallery row
+        // is unaffected (it names its model explicitly) — only a **new** row's seed changes.
+        // CL-7 (RSI/DelegateCLMBacklog.md, gate D): `"CLM 8B"` is **appended**, after the LLMs —
+        // it joins the pool but is never the default; `defaultModel(forTask:)` for all three
+        // stays `"Laya 0.4B"`, unchanged by this addition.
+        "Classify": ["Laya 0.4B"] + llmModels + ["CLM 8B"],
+        "Gate": ["Laya 0.4B"] + llmModels + ["CLM 8B"],
+        "Score": ["Laya 0.4B"] + llmModels + ["CLM 8B"],
         // MoC-6-2 (RSI/DelegateMoCBacklog.md): appended last, same discipline as MoC-2-4 —
         // the seed ("LFM2-VL 1.6B") does not move.
         "Describe Image": ["LFM2-VL 1.6B", "Gemma 3 4B", "Qwen3.5 9B Vision"],
@@ -324,9 +352,10 @@ nonisolated enum TaskModels {
                               catalog: [ModelEntry],
                               claimableModelIDs: Set<String>) -> [ModelSlot] {
         guard let kind = taskKinds[task], isServedByExecutor(task) else { return [] }
+        let extraKinds = taskExtraKinds[task] ?? []
         let family = taskFamilies[task]?.lowercased()
         let cataloged: [ModelSlot] = catalog.filter { entry in
-            guard entry.runnerKind == kind,
+            guard entry.runnerKind == kind || extraKinds.contains(entry.runnerKind),
                   claimableModelIDs.contains(entry.id),
                   ModelSupport.unsupportedReason(for: entry) == nil else { return false }
             if let family, !(entry.id + " " + entry.hfModelId).lowercased().contains(family) {

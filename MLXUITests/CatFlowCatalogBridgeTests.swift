@@ -163,7 +163,7 @@ struct CatFlowCatalogBridgeTests {
             Issue.record("SAM Base should resolve: \(reason)")
             _ = display
         }
-        #expect(CatalogBridge.entries.count == 21)
+        #expect(CatalogBridge.entries.count == 23)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
@@ -391,7 +391,7 @@ struct CatFlowCatalogBridgeTests {
         case .notRunnable(let display, let reason, _):
             Issue.record("\(display) should resolve: \(reason)")
         }
-        #expect(CatalogBridge.entries.count == 21)
+        #expect(CatalogBridge.entries.count == 23)
     }
 
     // MARK: - MoC-4-4: Qwen3 Reranker 0.6B joins the bridge, the model on MoC-3's seam
@@ -501,5 +501,144 @@ struct CatFlowCatalogBridgeTests {
         #expect(TaskModels.defaultModel(forTask: "Describe Image", catalog: catalog, claimableModelIDs: claimable) == "LFM2-VL 1.6B")
         let derived = TaskModels.derivedModels(for: "Describe Image", catalog: catalog, claimableModelIDs: claimable)
         #expect(derived.contains { $0.id == "mlx-community--Qwen3.5-9B-MLX-4bit-vision" })
+    }
+
+    // MARK: - LY-8: Laya 0.4B joins the bridge, prepended as Classify/Gate/Score's default
+
+    @Test func layaResolvesAsSame() throws {
+        let catalog = try loadCatalog()
+        let entry = try #require(CatalogBridge.entry(for: "Laya 0.4B"))
+        #expect(entry.pinnedID == "aac6fef/laya-mlx")
+        #expect(entry.candidates == ["aac6fef/laya-mlx"])
+        #expect(entry.equivalence == .same)
+        #expect(entry.manifestFile == "laya-0.4b.json")
+        switch CatalogBridge.resolve("Laya 0.4B", catalog: catalog) {
+        case .runnable(let slot, let equivalence, let note):
+            #expect(slot.modelEntry?.hfModelId == "aac6fef/laya-mlx")
+            #expect(slot.modelEntry?.runnerKind == .decision)
+            #expect(equivalence == .same)
+            #expect(note == nil)
+        case .notRunnable(let display, let reason, _):
+            Issue.record("\(display) should resolve: \(reason)")
+        }
+    }
+
+    /// The manifest, read from the built app bundle (not the repo-relative disk copy the other
+    /// `*ManifestShips` tests use) — LY-8's own verify item: `CuratedManifest.load(manifestFile:
+    /// "laya-0.4b.json") != nil`. `XcodeWrite` added the file to the synchronized
+    /// `Resources/CatFlow/models/` group, so it ships the same way every other manifest there
+    /// does (`CuratedManifest.load`'s own doc comment).
+    @Test func layaManifestLoadsFromTheAppBundle() throws {
+        let manifest = try #require(CuratedManifest.load(manifestFile: "laya-0.4b.json"))
+        #expect(manifest.id == "aac6fef/laya-mlx")
+        #expect(manifest.display == "Laya 0.4B")
+        #expect(manifest.settings.isEmpty)
+    }
+
+    /// LY-8's own verify items: `defaultModel(forTask:)` for Classify/Gate/Score is `"Laya
+    /// 0.4B"` (the 2026-09-27 gate D amendment — prepended, not appended, to those pools), and
+    /// Laya is a member of each derived pool (not just the seed by coincidence).
+    @MainActor
+    @Test func layaIsTheDefaultForClassifyGateAndScore() throws {
+        let catalog = try loadCatalog()
+        let registry = ModelRegistry()
+        for module in installedModules { module.register(into: registry) }
+        let claimable = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
+        for task in ["Classify", "Gate", "Score"] {
+            #expect(TaskModels.defaultModel(forTask: task, catalog: catalog, claimableModelIDs: claimable) == "Laya 0.4B",
+                    "\(task) should default to Laya 0.4B")
+            let derived = TaskModels.derivedModels(for: task, catalog: catalog, claimableModelIDs: claimable)
+            #expect(derived.contains { $0.modelEntry?.hfModelId == "aac6fef/laya-mlx" },
+                    "\(task)'s derived pool should contain Laya 0.4B")
+        }
+    }
+
+    // MARK: - CL-7: CLM 8B joins the bridge, appended (never the default)
+
+    @Test func clmResolvesAsSame() throws {
+        let catalog = try loadCatalog()
+        let entry = try #require(CatalogBridge.entry(for: "CLM 8B"))
+        #expect(entry.pinnedID == "RealityCat/CLM-v0.1-8B-MLX-8bit")
+        #expect(entry.candidates == ["RealityCat/CLM-v0.1-8B-MLX-8bit"])
+        #expect(entry.equivalence == .same)
+        #expect(entry.manifestFile == "clm-v0.1-8b-8bit.json")
+        switch CatalogBridge.resolve("CLM 8B", catalog: catalog) {
+        case .runnable(let slot, let equivalence, let note):
+            #expect(slot.modelEntry?.hfModelId == "RealityCat/CLM-v0.1-8B-MLX-8bit")
+            #expect(slot.modelEntry?.runnerKind == .decision)
+            #expect(equivalence == .same)
+            #expect(note == nil)
+        case .notRunnable(let display, let reason, _):
+            Issue.record("\(display) should resolve: \(reason)")
+        }
+    }
+
+    @Test func clmManifestLoadsFromTheAppBundle() throws {
+        let manifest = try #require(CuratedManifest.load(manifestFile: "clm-v0.1-8b-8bit.json"))
+        #expect(manifest.id == "RealityCat/CLM-v0.1-8B-MLX-8bit")
+        #expect(manifest.display == "CLM 8B")
+        #expect(manifest.settings.isEmpty)
+    }
+
+    /// CL-7's own verify items: `defaultModel(forTask:)` for Classify/Gate/Score stays `"Laya
+    /// 0.4B"` (gate D — CLM joins the pool but is never the default), and CLM is a member of
+    /// each derived pool, **last**.
+    @MainActor
+    @Test func clmIsLastInEachDerivedPoolWhileLayaStaysTheDefault() throws {
+        let catalog = try loadCatalog()
+        let registry = ModelRegistry()
+        for module in installedModules { module.register(into: registry) }
+        let claimable = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
+        for task in ["Classify", "Gate", "Score"] {
+            #expect(TaskModels.defaultModel(forTask: task, catalog: catalog, claimableModelIDs: claimable) == "Laya 0.4B",
+                    "\(task) should still default to Laya 0.4B, unchanged by CLM joining")
+            let derived = TaskModels.derivedModels(for: task, catalog: catalog, claimableModelIDs: claimable)
+            #expect(derived.last?.modelEntry?.hfModelId == "RealityCat/CLM-v0.1-8B-MLX-8bit",
+                    "\(task)'s derived pool should end with CLM 8B")
+        }
+    }
+
+    /// CL-7's fourth verify item. Before this item, "CLM 8B" had no `BridgeEntry` — `resolve`
+    /// would have fallen through to the "derived pick" branch (a direct `catalog.first(where:
+    /// displayName == display)` match), which happens to succeed too, since the bundled
+    /// catalog's own `displayName` for this entry already reads "CLM 8B". The bridge row
+    /// replaces that coincidence with an explicit, reviewable `.same` equivalence — the same
+    /// discipline every other entry in this table gets (`CatalogBridge.swift`'s own header:
+    /// "never guess a substitution that isn't in the table"). This drives the real bundled
+    /// catalog + a fake `askCLM` through `CachingExecutor(RealExecutor)` — the exact
+    /// composition `AppFlowExecutorFactory.cachingContext` builds for a real Run — and
+    /// asserts the row resolves through the bridge entry and fires a tag, never the generic
+    /// "isn't in the runnable-model table" refusal.
+    @Test func clmRowResolvesAtRunThroughTheCachingWrapperNotTheRunnableTableRefusal() async throws {
+        let catalog = try loadCatalog()
+        let clm = try #require(catalog.first { $0.hfModelId == "RealityCat/CLM-v0.1-8B-MLX-8bit" })
+
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clm-bridge-run-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let ws = FlowWorkspace(root: base.appendingPathComponent("flows"))
+        let store = FlowCacheStore(root: base.appendingPathComponent("cache"))
+
+        var real = RealExecutor(
+            workspace: ws, flowID: "f", blobDirectory: base.appendingPathComponent("blobs"),
+            makeModelStage: { _, _ in throw StageError.unsupportedModel(id: "probe", kind: .llm) },
+            installedModelIDs: [clm.id], catalog: catalog)
+        real.askCLM = { _, _, _, _, _ in
+            var answer = LayaAnswer(type: .choice, confidence: 0.8, probabilities: [0.9, 0.1],
+                                    optionLabels: ["billing", "technical"], stateTruncated: false)
+            answer.choiceLabel = "billing"
+            return answer
+        }
+        let caching = CachingExecutor(inner: real, store: store, cacheTier: "real",
+                                      catalog: catalog, runSeed: 0, workspace: ws, flowID: "f")
+
+        let row = Row(id: UUID(), task: "Classify", model: "CLM 8B", settings: "Who owns this?",
+                     tags: ["billing", "technical"])
+        let input = Asset(items: [Item(kind: .text, value: "my invoice was charged twice", path: nil, sourceText: nil)])
+        let output = try await caching.execute(path: "1", row: row, inputs: [input],
+                                               transcript: nil, context: nil, usedFlowContent: nil)
+        #expect(output.items.first?.value == "my invoice was charged twice")
+        #expect(caching.lastTag == "billing")
     }
 }

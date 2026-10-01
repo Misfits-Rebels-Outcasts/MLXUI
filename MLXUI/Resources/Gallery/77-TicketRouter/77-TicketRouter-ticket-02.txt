@@ -1,0 +1,4 @@
+From: raj@studio.example
+Subject: Export keeps crashing
+
+Every time I export a project larger than 2 GB the app freezes and then quits. I'm on the latest version.

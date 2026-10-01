@@ -39,6 +39,27 @@ struct CatFlowToolTests {
         #expect(readBack.sampleRate == 24_000)
     }
 
+    /// READ-UPSTREAM-1: `tools/files.py::_resolve_path` checks the upstream `.file` item
+    /// unconditionally — this is the exact shape `<each>` hands a fanned-out file into
+    /// `Read Audio (input:1)` (e.g. `05-WeeklyDigest.cat`), which never worked before this fix.
+    @Test func readAudioReadsTheUpstreamFileWhenGiven() async throws {
+        let (ws, base) = try makeWorkspace()
+        defer { teardown(base) }
+
+        let buffer = AudioBuffer(samples: [0.3, -0.2], sampleRate: 24_000)
+        let flowDir = ws.directory(for: "05-WeeklyDigest")
+        try FileManager.default.createDirectory(at: flowDir, withIntermediateDirectories: true)
+        let wav = flowDir.appendingPathComponent("memo-02.m4a")
+        try AudioWriter.writeWAV(buffer, to: wav)
+
+        // Deliberately empty settings — nothing to fall back to but the upstream item.
+        let tool = ReadAudioTool(workspace: ws, flowID: "05-WeeklyDigest", settings: "")
+        let input = Asset(items: [Item(kind: .file, value: nil, path: wav, sourceText: nil)])
+        let out = try await tool.run(input) { _ in }
+        #expect(out.items.first?.kind == .audio)
+        #expect(out.items.first?.path == wav)
+    }
+
     // MARK: - Save Audio
 
     @Test func saveAudioWritesReadableWAVAtSameRate() async throws {
@@ -98,6 +119,25 @@ struct CatFlowToolTests {
         let item = try #require(out.items.first)
         #expect(item.kind == .text)
         #expect(item.value == "policy text")
+    }
+
+    /// READ-UPSTREAM-1: the `<each>`-fanned `.file` item wins over (absent) settings — the
+    /// exact shape `Read Text (input:1)` uses in `28-TicketTrends`/`37-InboxTriage`/
+    /// `77-TicketRouter`, which never worked before this fix.
+    @Test func readTextReadsTheUpstreamFileWhenGiven() async throws {
+        let (ws, base) = try makeWorkspace()
+        defer { teardown(base) }
+
+        let flowDir = ws.directory(for: "77-TicketRouter")
+        try FileManager.default.createDirectory(at: flowDir.appendingPathComponent("tickets"), withIntermediateDirectories: true)
+        let ticket = flowDir.appendingPathComponent("tickets/ticket-01.txt")
+        try "billing issue".write(to: ticket, atomically: true, encoding: .utf8)
+
+        let tool = ReadTextTool(workspace: ws, flowID: "77-TicketRouter", settings: "")
+        let input = Asset(items: [Item(kind: .file, value: nil, path: ticket, sourceText: nil)])
+        let out = try await tool.run(input) { _ in }
+        #expect(out.items.first?.kind == .text)
+        #expect(out.items.first?.value == "billing issue")
     }
 
     // MARK: - Path escape throws at this layer too (CFM-R1-4 boundary re-asserted)

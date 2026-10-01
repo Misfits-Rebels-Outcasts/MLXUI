@@ -29,6 +29,26 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// CFM-R10-Direct: the flow's declared `transforms:` — a row naming one runs its script
     /// fenced (never in the App Store build; `canRun` refuses there).
     var transforms: [String: TransformDef] = [:]
+    /// LY-7/CL-6 — `LayaDecisionEngine`'s only call into the actual engine, injected like
+    /// `makeModelStage` so a test can fake `LayaEngine` without loading a real checkpoint. The
+    /// default calls the real `LayaEngineCache`/`LayaEngine.predict`.
+    var askLaya: @Sendable (URL, String, [LayaQuestion]) async throws -> [LayaAnswer] = { directory, state, questions in
+        let engine = try await LayaEngineCache.shared.engine(for: directory)
+        return try await engine.predict(state: state, questions: questions)
+    }
+    /// CL-6 — `CLMDecisionEngine`'s only call into the actual engine, same injection shape as
+    /// `askLaya`. The default calls the real `CLMEngineCache`/`CLMEngine.answer` for a single
+    /// question.
+    var askCLM: @Sendable (URL, CLMJSON, LayaQuestionType, CLMJSON, CLMJSON) async throws -> LayaAnswer = {
+        directory, state, type, instructions, criteria in
+        let engine = try await CLMEngineCache.shared.engine(for: directory)
+        let results = try await engine.answer(
+            state: state, questions: [(id: "q", type: type, instructions: instructions, criteria: criteria)])
+        guard let first = results.first else {
+            throw LayaPromptError.invalidCriteria("CLM produced no answer")
+        }
+        return first.answer
+    }
     /// CFM-R9-5: the decider's fired tag, readable after `execute` (reference box so a value
     /// type can report it through the `FlowExecutor` existential, like `MockExecutor`).
     private let tagBox = TagBox()
@@ -36,13 +56,21 @@ nonisolated struct RealExecutor: FlowExecutor {
     private let flagBox = FlagBox()
     /// CFM-R12-8: a staged row's effect, read by the interpreter for `effect_staged`.
     private let stagedBox = StagedBox()
+    /// LY-7: a decision-encoder decider's tag/confidence/probabilities, same box shape.
+    private let deciderDetailBox = DeciderDetailBox()
 
+    /// CACHE-SIGNALS-1: `RealExecutor` never serves a cache hit itself — always `false`.
+    var lastCacheHit: Bool { false }
     var lastTag: String? { tagBox.tag }
     var lastTimeoutFlag: (code: String, message: String)? { flagBox.timeout }
     /// RM-2 — the F010 disclosure from a provider decider's strict-parse tag, same box
     /// shape as `lastTimeoutFlag`. `nil` for every non-provider row.
     var lastProviderDeciderFlag: (code: String, message: String)? { flagBox.providerDecider }
     var lastStaged: (id: String, kind: String, summary: String)? { stagedBox.staged }
+    var lastDeciderDetail: (
+        tag: String, confidence: Double, probabilities: [(label: String, probability: Double)],
+        expectedLevel: Double?, stateTruncated: Bool
+    )? { deciderDetailBox.detail }
 
     /// A reference box for the decider's fired tag.
     private nonisolated final class TagBox: @unchecked Sendable {
@@ -60,6 +88,14 @@ nonisolated struct RealExecutor: FlowExecutor {
         var staged: (id: String, kind: String, summary: String)?
     }
 
+    /// LY-7: a decision-encoder decider's tag/confidence/probabilities from its last `execute`.
+    private nonisolated final class DeciderDetailBox: @unchecked Sendable {
+        var detail: (
+            tag: String, confidence: Double, probabilities: [(label: String, probability: Double)],
+            expectedLevel: Double?, stateTruncated: Bool
+        )?
+    }
+
     func execute(path: String, row: Row, inputs: [Asset],
                  transcript: [FlowInterpreter.TranscriptEntry]?,
                  context: [(label: String, content: String)]?,
@@ -71,6 +107,7 @@ nonisolated struct RealExecutor: FlowExecutor {
         tagBox.tag = nil
         flagBox.timeout = nil
         flagBox.providerDecider = nil
+        deciderDetailBox.detail = nil
 
         // CFM-R10-Direct (FIX-2): a row naming a `transforms:` entry runs that script fenced —
         // in the Direct build only. The App Store build compiles the fence out and refuses
@@ -596,6 +633,12 @@ nonisolated struct RealExecutor: FlowExecutor {
                             transcript: [FlowInterpreter.TranscriptEntry]?,
                             context: [(label: String, content: String)]?) async throws -> Asset {
         let modelEntry = try resolveModel(display: row.model, path: path)
+        // LY-7/CL-6: a `.decision` entry (a non-generative decision encoder) never builds an
+        // LLM stage — it answers through a `DecisionEngine` instead, picked by
+        // `modelEntry.family` inside `runDecisionDecider`.
+        if modelEntry.runnerKind == .decision {
+            return try await runDecisionDecider(desc, row: row, inputs: inputs, modelEntry: modelEntry, path: path)
+        }
         let task = desc.name
         let (basePrompt, tags) = try Self.deciderPrompt(desc, row: row, inputs: inputs,
                                                         transcript: transcript, context: context)
@@ -617,6 +660,149 @@ nonisolated struct RealExecutor: FlowExecutor {
             return Asset(items: [Item(kind: .text, value: rawReply, path: nil, sourceText: nil)])
         }
         return inputs.first ?? Asset(items: [])
+    }
+
+    // MARK: - LY-7/CL-6: decision-encoder deciders (Laya, CLM)
+
+    /// LY-7 (`RSI/DelegateLayaBacklog.md`, Phase LY-B), generalised by CL-6
+    /// (`RSI/DelegateCLMBacklog.md` §CL-0 gate C, ruled (1) — one shared decider path). Neither
+    /// engine reads frames — no `FramePreview.render`, no `fireTag`/F004 strict-parse — each
+    /// answers a typed choice/score question about the state directly. Three
+    /// separately-readable steps, unchanged in shape from LY-7:
+    /// 1. `DecisionAsk` bundles the plain, engine-agnostic question (gates E/F) — the shared
+    ///    part. Each conformer builds its own native question representation from it
+    ///    (`DecisionEngine.swift`).
+    /// 2. `engine.decide` is the one call into the actual engine (or a fake, in tests).
+    /// 3. The tag-firing + detail-logging below never touches the engine itself.
+    // SPEC-Q234 (`catflow-mlx/SPEC_QUESTIONS.md`, filed 2026-09-29: "a decider may be served
+    // by a non-generative decision engine").
+    //
+    /// CL-7: every family a `DecisionEngine` conformer claims — the single source of truth
+    /// `decisionEngineBoundModel(for:catalog:)` below checks against. Keep the two in sync: a
+    /// third engine needs a case in the switch below **and** an entry in this set.
+    static let decisionEngineFamilies: Set<String> = ["Laya", "CLM"]
+
+    /// CL-7: whether `row` names a `runnerKind == .decision` entry a `DecisionEngine`
+    /// actually serves — resolved the same way `resolveModel`/`runDecisionDecider` would, so
+    /// the row inspector's frame-preview special case (`FlowRowInspectorView`) can't drift
+    /// from what a real run does. `nil` when the row's model doesn't resolve, isn't
+    /// `.decision`, or is a `.decision` family no `DecisionEngine` claims.
+    static func decisionEngineBoundModel(for row: Row, catalog: [ModelEntry]) -> ModelEntry? {
+        guard let display = row.model,
+              case let .runnable(slot, _, _) = CatalogBridge.resolve(display, catalog: catalog),
+              let model = slot.modelEntry,
+              model.runnerKind == .decision,
+              decisionEngineFamilies.contains(model.family)
+        else { return nil }
+        return model
+    }
+
+    private func runDecisionDecider(_ desc: TaskDescriptor, row: Row, inputs: [Asset],
+                                    modelEntry: ModelEntry, path: String) async throws -> Asset {
+        let task = desc.name
+        // Judge, Think, Decide (and anything else reaching here) — a decision encoder only
+        // serves the three frame-backed deciders whose answer is a typed choice/score, same
+        // shape as AFM-2's Think refusal. The message names the row's own model, not a
+        // hard-coded one — this refusal is shared by every decision-encoder family.
+        guard task == "Classify" || task == "Gate" || task == "Score" else {
+            throw FlowError.stageFailure(row: path,
+                message: "\(modelEntry.displayName) doesn't serve \(task) — pick a language model for this row.")
+        }
+
+        let engine: any DecisionEngine
+        switch modelEntry.family {
+        case "Laya": engine = LayaDecisionEngine(askLaya: askLaya)
+        case "CLM": engine = CLMDecisionEngine(askCLM: askCLM)
+        default:
+            // Any future `.decision` family neither conformer claims yet — refuse clearly
+            // rather than guess an engine, naming the row's own model.
+            throw FlowError.stageFailure(row: path,
+                message: "\(modelEntry.displayName) isn't available in workflows yet — "
+                    + "pick Laya 0.4B, CLM 8B, or a language model for this row.")
+        }
+
+        let tags = Self.declaredTags(row)
+        let type: LayaQuestionType = task == "Score" ? .score : .choice
+        let state = DeciderFrame.flatTexts(inputs).joined(separator: "\n")
+        let ask = DecisionAsk(type: type, instructions: Self.layaInstructions(from: row.settings), tags: tags)
+
+        let directory = ModelStore.shared.directory(forModelID: modelEntry.id)
+        let answer: LayaAnswer
+        do {
+            answer = try await engine.decide(directory: directory, state: state, ask: ask)
+        } catch let error as LayaPromptError {
+            // Laya's `.tooManyOptions` ("too many options for the token budget"), CLM's "no
+            // answer", and any other engine-side validation surface as a clear stage failure,
+            // not a crash.
+            throw FlowError.stageFailure(row: path, message: error.description)
+        }
+
+        let (tag, expectedLevel) = Self.layaFiredTag(answer: answer, type: type, tags: tags)
+        tagBox.tag = tag
+        // SPEC-Q235 (`catflow-mlx/SPEC_QUESTIONS.md`, filed 2026-09-29: the truncation info
+        // code, recommended F012, not yet ratified) — stays code-less in `lastDeciderDetail`
+        // until F012 lands; see `FlowRunner.swift`'s `lastDeciderDetail` doc comment.
+        deciderDetailBox.detail = (
+            tag: tag, confidence: answer.confidence,
+            probabilities: Array(zip(tags, answer.probabilities)),
+            expectedLevel: expectedLevel, stateTruncated: answer.stateTruncated)
+
+        // Spec §7.4 R1, same as the LLM path: Classify/Gate/Score pass the input through.
+        return inputs.first ?? Asset(items: [])
+    }
+
+    /// A declared `tags: a, b, c` clause, trailing in the criterion text — stripped for
+    /// Laya's `instructions`, which must read as the bare question. `CatParser`'s own parse-
+    /// time `extractTags` already removes this from a v0.8 row's `settings` before `runDecider`
+    /// ever sees it, so this is normally a no-op in practice; kept explicit (not assumed) per
+    /// LY-7's own instruction, and pinned by a test on the exact fixture LY-7 names:
+    /// `"Urgency? tags: act, read, ignore"` → `"Urgency?"`.
+    private static let reTagsClauseTrailing = NSRegularExpression.compiled(
+        #"\s*tags:\s*(\w+(?:\s*,\s*\w+)*)\s*$"#)
+
+    /// DECIDER-UNQUOTE-1: `CatParser.extractTags` (`CatParser.swift`) deliberately leaves the
+    /// surrounding `"…"` on a quoted criterion in `row.settings` — it only lifts the `tags:`
+    /// clause out of the *last* quoted span and re-wraps what's left (`newQuoted =
+    /// "\"\(newInner)\""`), exactly like the reference parser's own `_extract_tags`
+    /// (`catflow-mlx/src/catflow/core/parser.py:1225`, `new_quoted = f'"{new_inner}"'`). Both
+    /// parsers hand the quotes on to the consumer on purpose — the reference's own generative
+    /// decider path unquotes before use (`catflow-mlx/src/catflow/engines/llm.py:834`, `schema
+    /// = _unquote(settings.strip())`). `layaInstructions` never did, so every decision-encoder
+    /// Gate/Classify/Score sent its state head a question wrapped in literal `"…"` characters
+    /// (found diagnosing smoke row 101, flow 78: CLM's Gate flipped `approve`/`hold` on 4 of 5
+    /// invoices relative to the same question asked without the quotes). Unquote before
+    /// stripping the tags clause — `FlowSettings.unquote` already does exactly the reference's
+    /// `_unquote` (`FlowSettings.swift:91`).
+    private static func layaInstructions(from settings: String?) -> String {
+        let text = FlowSettings.unquote((settings ?? "").trimmingCharacters(in: .whitespaces))
+        guard let match = reTagsClauseTrailing.firstMatch(in: text),
+              let range = Range(match.range, in: text)
+        else { return text }
+        var out = text
+        out.removeSubrange(range)
+        return out.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Step 3 — Classify/Gate fire the winning label directly (`answer.choiceLabel`); Score
+    /// fires the declared tag at the **argmax** probability level (gate F: a declared band,
+    /// never an interpolation of `answer.scoreValue`) and returns that expected level
+    /// separately, for `lastDeciderDetail` to log alongside the fired tag.
+    private static func layaFiredTag(answer: LayaAnswer, type: LayaQuestionType, tags: [String])
+        -> (tag: String, expectedLevel: Double?)
+    {
+        switch type {
+        case .choice:
+            return (answer.choiceLabel ?? tags.first ?? "", nil)
+        case .score:
+            var bestIndex = 0
+            for i in 1 ..< answer.probabilities.count where answer.probabilities[i] > answer.probabilities[bestIndex] {
+                bestIndex = i
+            }
+            let tag = tags.indices.contains(bestIndex) ? tags[bestIndex] : (tags.first ?? "")
+            return (tag, answer.scoreValue)
+        case .noul:
+            return ("", nil)   // unreachable — Classify/Gate/Score never build a .noul question
+        }
     }
 
     /// The decider's prompt + declared tags, extracted from `runDecider` (AFM-2) so

@@ -73,7 +73,12 @@ nonisolated struct FlowCacheStore: Sendable {
     }
 
     /// Store `asset` under `key` (inline values inline, file-backed items by content hash).
-    func put(key: String, asset: Asset) throws {
+    /// `tag` (CACHE-SIGNALS-1, mirroring `cache.py::CacheStore.put`'s own `tag=` docstring): a
+    /// decider row's own fired tag, when this entry is a decider's cached payload — the
+    /// payload `Asset` is a passthrough, so it carries no trace of *which* tag actually
+    /// fired. `nil` for every non-decider row, omitted from the manifest entirely so an
+    /// existing entry with no `tag` key reads back as `nil` from `getTag`.
+    func put(key: String, asset: Asset, tag: String? = nil) throws {
         let dir = entryDirectory(forKey: key)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var entries: [ManifestItem] = []
@@ -94,9 +99,19 @@ nonisolated struct FlowCacheStore: Sendable {
         }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(Manifest(items: entries))
+        let data = try encoder.encode(Manifest(items: entries, tag: tag))
         try data.write(to: dir.appendingPathComponent("manifest.json"))
         touch(key: key)
+    }
+
+    /// The fired tag stored alongside `key`'s entry (`put(..., tag:)`), or `nil` — for a
+    /// non-decider entry, an entry written before CACHE-SIGNALS-1, or a missing key. Mirrors
+    /// `cache.py::CacheStore.get_tag`.
+    func getTag(key: String) -> String? {
+        let manifestURL = entryDirectory(forKey: key).appendingPathComponent("manifest.json")
+        guard let data = try? Data(contentsOf: manifestURL),
+              let manifest = try? JSONDecoder().decode(Manifest.self, from: data) else { return nil }
+        return manifest.tag
     }
 
     /// Touch an entry's mtime so LRU eviction sees it as recently used.
@@ -191,6 +206,13 @@ nonisolated extension FlowCacheStore {
     /// `{"kind": item.kind.value, ...}` shape.
     struct Manifest: Codable, Sendable {
         var items: [ManifestItem]
+        /// CACHE-SIGNALS-1: a decider row's fired tag, `nil`/absent for every other row.
+        var tag: String?
+
+        init(items: [ManifestItem], tag: String? = nil) {
+            self.items = items
+            self.tag = tag
+        }
     }
 
     struct ManifestItem: Codable, Sendable {

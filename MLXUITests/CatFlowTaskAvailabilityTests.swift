@@ -373,6 +373,51 @@ struct CatFlowTaskAvailabilityTests {
                                           claimableModelIDs: claimable).isEmpty)
     }
 
+    // MARK: - LY-6: the availability seam — `.decision` joins Classify/Gate/Score, nowhere else
+
+    /// LY-6 (`RSI/DelegateLayaBacklog.md`, Phase LY-B) — `taskExtraKinds` lets a `.decision`
+    /// catalog entry join Classify/Gate/Score's derived pool alongside the usual `.llm` one,
+    /// without changing what any other task offers. `main` already carries **two** `.decision`
+    /// entries (Laya 0.4B from Phase LY-A, CLM 8B from `add-clm`, merged 2026-09-29 before this
+    /// phase started — see `RSI/DelegateCLMBacklog.md`'s "Branching amended 2026-09-29" note),
+    /// so both must appear in the three tasks and neither anywhere else — Judge, Think and
+    /// Decide are `.llm`-only deciders (LY-7 hasn't taught `RealExecutor` a `.decision` path
+    /// for them, and never will — they don't fit a choice/score answer shape), and Generate is
+    /// a plain `.llm` task with no `taskExtraKinds` entry at all.
+    ///
+    /// CLM 8B is only *listed* here, not yet *runnable* from a flow — `RealExecutor.runDecider`
+    /// doesn't branch on `.decision` until LY-7, and even then only for Laya; CL-6/CL-7 (Phase
+    /// CL-B, blocked on this phase merging first) are what teach it to actually dispatch a CLM
+    /// row. That gap is expected and is exactly why `laya-workflows` doesn't merge to `main`
+    /// alone (the branching note above).
+    @Test func decisionEntriesJoinClassifyGateScoreAndNoOtherTaskLY6() throws {
+        let catalog = try bundledCatalog()
+        let claimable = claimableIDs(catalog: catalog)
+
+        let laya = try #require(catalog.first { $0.hfModelId == "aac6fef/laya-mlx" },
+                                "Laya 0.4B must be in the bundled catalog")
+        let clm = try #require(catalog.first { $0.hfModelId == "RealityCat/CLM-v0.1-8B-MLX-8bit" },
+                               "CLM 8B must be in the bundled catalog")
+        #expect(claimable.contains(laya.id), "Laya 0.4B must be claimable — check the registry, not just the catalog")
+        #expect(claimable.contains(clm.id), "CLM 8B must be claimable — check the registry, not just the catalog")
+
+        func poolIDs(_ task: String) -> Set<String> {
+            Set(TaskModels.derivedModels(for: task, catalog: catalog, claimableModelIDs: claimable)
+                .compactMap(\.modelEntry?.id))
+        }
+
+        for task in ["Classify", "Gate", "Score"] {
+            let pool = poolIDs(task)
+            #expect(pool.contains(laya.id), "\(task) must offer Laya 0.4B")
+            #expect(pool.contains(clm.id), "\(task) must offer CLM 8B")
+        }
+        for task in ["Judge", "Think", "Decide", "Generate"] {
+            let pool = poolIDs(task)
+            #expect(!pool.contains(laya.id), "\(task) must NOT offer Laya 0.4B")
+            #expect(!pool.contains(clm.id), "\(task) must NOT offer CLM 8B")
+        }
+    }
+
     /// CFM-R14-FIX-2 — the executor-served allow-list is the authority: a model task is
     /// offerable only when `RealExecutor` genuinely has a path for it, not merely because a
     /// catalog model exists for its kind. This pins the FIX-2 decision and why, so a future

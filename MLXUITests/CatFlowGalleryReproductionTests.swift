@@ -61,7 +61,7 @@ struct CatFlowGalleryReproductionTests {
 
     @Test func everyGalleryFlowParses() throws {
         let files = try allGalleryFiles()
-        #expect(files.count == 76, "the gallery drifted — expected 76 flows, found \(files.count)")
+        #expect(files.count == 77, "the gallery drifted — expected 77 flows, found \(files.count)")
 
         var checked = 0
         for f in files {
@@ -102,7 +102,7 @@ struct CatFlowGalleryReproductionTests {
     /// in `Fixtures/CatFlow/gallery/`, byte-for-byte on the canonical JSON.
     @Test func everyGalleryFlowMatchesPythonParseTree() throws {
         let files = try allGalleryFiles()
-        #expect(files.count == 76)
+        #expect(files.count == 77)
 
         var checked = 0
         for f in files {

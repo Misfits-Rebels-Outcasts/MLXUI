@@ -1,0 +1,193 @@
+{
+  "rows": [
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "tickets/; pattern=*.txt",
+      "task": "Read Files"
+    },
+    {
+      "block_kind": "each",
+      "block_name": "route_one",
+      "chain_break": false,
+      "children": [
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [
+            {
+              "kind": "input",
+              "position": 1
+            }
+          ],
+          "settings": null,
+          "task": "Read Text"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "clause": {
+            "edges": [
+              {
+                "tag": "billing",
+                "target": {
+                  "kind": "row",
+                  "number": 3
+                }
+              },
+              {
+                "tag": "technical",
+                "target": {
+                  "kind": "row",
+                  "number": 4
+                }
+              },
+              {
+                "tag": "account",
+                "target": {
+                  "kind": "row",
+                  "number": 5
+                }
+              },
+              {
+                "tag": "other",
+                "target": {
+                  "kind": "row",
+                  "number": 6
+                }
+              }
+            ],
+            "kind": "decide"
+          },
+          "model": "Laya 0.4B",
+          "refs": [],
+          "settings": "\"Which team owns this ticket?\"",
+          "tags": [
+            "billing",
+            "technical",
+            "account",
+            "other"
+          ],
+          "task": "Classify"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "clause": {
+            "kind": "goto",
+            "target": {
+              "kind": "row",
+              "number": 7
+            }
+          },
+          "model": null,
+          "refs": [],
+          "settings": "\"BILLING    {1}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "clause": {
+            "kind": "goto",
+            "target": {
+              "kind": "row",
+              "number": 7
+            }
+          },
+          "model": null,
+          "refs": [],
+          "settings": "\"TECHNICAL  {1}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "clause": {
+            "kind": "goto",
+            "target": {
+              "kind": "row",
+              "number": 7
+            }
+          },
+          "model": null,
+          "refs": [],
+          "settings": "\"ACCOUNT    {1}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": true,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "\"OTHER      {1}\"",
+          "task": "Template"
+        },
+        {
+          "block_kind": null,
+          "block_name": null,
+          "chain_break": false,
+          "children": [],
+          "model": null,
+          "refs": [],
+          "settings": "\"{1}\"",
+          "task": "Template"
+        }
+      ],
+      "declared_signature": "[file] -> [text]",
+      "model": null,
+      "refs": [],
+      "settings": "on_error=skip",
+      "task": null
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "comment": "the team prefix groups the tickets",
+      "model": null,
+      "refs": [],
+      "settings": "direction=asc",
+      "task": "Sort"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "separator=\"\\n\\n---\\n\\n\"",
+      "task": "Join Text"
+    },
+    {
+      "block_kind": null,
+      "block_name": null,
+      "chain_break": false,
+      "children": [],
+      "model": null,
+      "refs": [],
+      "settings": "routed-tickets.md",
+      "task": "Save Text"
+    }
+  ],
+  "version": "0.8"
+}

@@ -1638,44 +1638,55 @@ struct FlowRowInspectorView: View {
     /// the same function `RealExecutor` calls to run the row, so this view and a real run
     /// cannot diverge (§6 "drift between preview and run"). `nil` (`EmptyView`) for any task
     /// that isn't `refKind == .frame` — `Decide`'s prompt box stays SPEC-Q230, untouched (§8).
+    ///
+    /// LY-7/CL-7: a decision-encoder-bound decider row (Laya, CLM) never renders a frame at
+    /// all — `RealExecutor.runDecisionDecider` skips `FramePreview.render` entirely for every
+    /// family it serves — so this replaces the section with a one-line explanation instead of
+    /// previewing text the row will never actually send.
     @ViewBuilder
     private func framePreviewSection(_ task: String, row: Row) -> some View {
         if let desc = TaskCatalog.get(task), desc.refKind == .frame {
-            switch Result(catching: { try renderedFramePreview(task: task, desc: desc, row: row) }) {
-            case .success(let rendered):
-                DisclosureGroup("Prompt frame") {
-                    VStack(alignment: .leading, spacing: 4) {
-                        // §7 copy, verbatim.
-                        Text("Fixed by the task and shared with every runtime — your text above goes where {settings} is. To write a whole prompt yourself, use Template + Generate.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        ScrollView {
-                            Text(rendered)
-                                .font(.caption.monospaced())
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .frame(maxHeight: 160)
-                        // §7 copy (Q6), verbatim — names the source without the pane pretending
-                        // to have invented the wording.
-                        Text("From \(FramePreview.frameFileName(refName: desc.refName)).frame.txt, published in the catalog.")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .padding(.top, 4)
-                }
-                .font(.caption)
-            case .failure:
-                // FV-4-1: a render failure used to vanish behind `try?` — silently no section
-                // at all, which is exactly how the `Revise`/`Verify` slot-count bug shipped
-                // and passed its own tests. Say so instead; the row itself is unaffected — a
-                // real run passes the full reference bundle (B1), never the preview's
-                // edit-time stand-ins.
-                Label("This row's frame couldn't be rendered for preview. The row itself is unaffected.",
-                      systemImage: "exclamationmark.triangle")
+            if let decisionModel = RealExecutor.decisionEngineBoundModel(for: row, catalog: catalog) {
+                Text("\(decisionModel.displayName) reads the criterion, the tags and the input directly; there is no prompt frame.")
                     .font(.caption2)
-                    .foregroundStyle(.orange)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .foregroundStyle(.secondary)
+            } else {
+                switch Result(catching: { try renderedFramePreview(task: task, desc: desc, row: row) }) {
+                case .success(let rendered):
+                    DisclosureGroup("Prompt frame") {
+                        VStack(alignment: .leading, spacing: 4) {
+                            // §7 copy, verbatim.
+                            Text("Fixed by the task and shared with every runtime — your text above goes where {settings} is. To write a whole prompt yourself, use Template + Generate.")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            ScrollView {
+                                Text(rendered)
+                                    .font(.caption.monospaced())
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 160)
+                            // §7 copy (Q6), verbatim — names the source without the pane pretending
+                            // to have invented the wording.
+                            Text("From \(FramePreview.frameFileName(refName: desc.refName)).frame.txt, published in the catalog.")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.top, 4)
+                    }
+                    .font(.caption)
+                case .failure:
+                    // FV-4-1: a render failure used to vanish behind `try?` — silently no section
+                    // at all, which is exactly how the `Revise`/`Verify` slot-count bug shipped
+                    // and passed its own tests. Say so instead; the row itself is unaffected — a
+                    // real run passes the full reference bundle (B1), never the preview's
+                    // edit-time stand-ins.
+                    Label("This row's frame couldn't be rendered for preview. The row itself is unaffected.",
+                          systemImage: "exclamationmark.triangle")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
     }

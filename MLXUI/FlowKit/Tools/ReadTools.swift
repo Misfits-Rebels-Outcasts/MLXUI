@@ -51,7 +51,14 @@ nonisolated enum SampleSeed {
 
 /// Shared path resolution for the `Read *` tools — mirrors `tools/files.py::_resolve_path`:
 /// an upstream item of the matching kind wins, else the settings' `path=`/first bare token,
-/// resolved through the flow's working directory (the CFM-R1-4 security boundary).
+/// resolved through the flow's working directory (the CFM-R1-4 security boundary). There is
+/// no settings-only reader in the reference — `_resolve_path`'s upstream-first check is
+/// unconditional for every one of its callers (`read_text`/`read_audio`/`read_video` at
+/// `kind=Kind.FILE`, `tools/index_store.py::read_index` at `kind=Kind.INDEX`), so
+/// `checksUpstream` defaults `true` and no caller should override it to `false`
+/// (READ-UPSTREAM-1 — `Read Audio`/`Read Text`/`Read Video`/`Read Index` used to, which is
+/// exactly why `<each>`-fanned `.file` items never reached them; see `FlowInputFile`, updated
+/// to match).
 ///
 /// FIP-3: also the one place a missing input is reported, so all eleven `Read *` tasks report
 /// identically instead of each tool inventing its own sentence — `ErrorCatalog`'s R903 ("file
@@ -61,9 +68,6 @@ nonisolated enum SampleSeed {
 /// with no `ErrorSpec` formatting, and this Swift port's tools each threw their own
 /// `FlowError.fileReadFailed`/`missingInlineValue` sentence, or (`Read Audio`/`Read Video`/
 /// `Read CSV`/`Read JSON`) let the underlying reader's raw error escape uncaught.
-/// `checksUpstream: false` is `Read Audio`/`Read Text`/`Read Video`/`Read Index` — verified
-/// against each tool's own prior code, not assumed (see `FlowInputFile`'s identical
-/// classification, arrived at independently for the preflight advisory).
 nonisolated enum ReadPath {
     static func resolve(workspace: FlowWorkspace, flowID: String, path: String, settings: String,
                         inputs: [Asset], kind: Kind, row: String,

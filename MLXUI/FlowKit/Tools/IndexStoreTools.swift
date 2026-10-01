@@ -257,10 +257,13 @@ nonisolated struct ReadIndexTool: AssetStage {
     var produces: Shape { .single(.index) }
 
     func run(_ input: Asset, progress: @Sendable @escaping (Double) -> Void) async throws -> Asset {
-        guard let raw = FlowSettings(settings).pathValue() else {
-            throw FlowError.missingInlineValue(row: "Read Index", kind: .file)
-        }
-        let dir = try workspace.resolve(raw, flowID: flowID)
+        // READ-UPSTREAM-1: `tools/index_store.py::read_index` calls `_resolve_path(inputs,
+        // settings, kind=Kind.INDEX)` — an upstream `.index` item's path wins, else settings.
+        let dir = try ReadPath.resolve(workspace: workspace, flowID: flowID, path: path, settings: settings,
+                                       inputs: [input], kind: .index, row: "Read Index")
+        // The settings' own raw value, when there is one, reads better in the R903 sentence
+        // than the resolved absolute directory (the fallback for an upstream-supplied index).
+        let raw = FlowSettings(settings).pathValue() ?? dir.path
         // FIP-3: an index is a directory carrying manifest.json — checking that file (rather
         // than the directory itself) is what's actually missing when the index hasn't been
         // built yet, or the directory doesn't exist at all (fileExists on a path inside a

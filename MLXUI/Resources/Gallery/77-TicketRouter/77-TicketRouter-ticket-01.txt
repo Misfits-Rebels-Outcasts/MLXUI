@@ -1,0 +1,4 @@
+From: dana@shop.example
+Subject: Charged twice for order #4471
+
+Hi, my card was charged twice for the same order this morning. Please refund the duplicate charge.
