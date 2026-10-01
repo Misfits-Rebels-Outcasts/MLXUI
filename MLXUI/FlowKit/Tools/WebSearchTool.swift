@@ -22,8 +22,8 @@ nonisolated enum WebSearchProvider: String, Sendable, CaseIterable {
         if let explicit, !explicit.isEmpty {
             return WebSearchProvider(rawValue: explicit.lowercased())
         }
-        if KeychainHelper.exists(account: KeychainHelper.providerAccount(tavily.credentialName)) { return .tavily }
-        if KeychainHelper.exists(account: KeychainHelper.providerAccount(brave.credentialName)) { return .brave }
+        if CredentialPresence.shared.isPresent(account: KeychainHelper.providerAccount(tavily.credentialName)) { return .tavily }
+        if CredentialPresence.shared.isPresent(account: KeychainHelper.providerAccount(brave.credentialName)) { return .brave }
         return nil
     }
 }

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 
 enum InstallState: Equatable {
     case idle
@@ -711,7 +712,8 @@ nonisolated enum KeychainHelper {
             kSecValueData as String: data,
         ]
         SecItemDelete(query as CFDictionary)
-        SecItemAdd(query as CFDictionary, nil)
+        let added = SecItemAdd(query as CFDictionary, nil) == errSecSuccess
+        CredentialPresence.shared.record(account: account, present: added)
     }
 
     static func delete(account: String) {
@@ -721,6 +723,7 @@ nonisolated enum KeychainHelper {
             kSecAttrAccount as String: account,
         ]
         SecItemDelete(query as CFDictionary)
+        CredentialPresence.shared.record(account: account, present: false)
     }
 
     // MARK: - Back-compat wrappers — every existing call site is unchanged
@@ -728,7 +731,45 @@ nonisolated enum KeychainHelper {
     // `account:` defaults to the HF item; it exists so tests can exercise the wrappers
     // against a throwaway account (KC-1.3).
     static func getToken(account: String = hfAccount) -> String? { get(account: account) }
-    static func hasToken(account: String = hfAccount) -> Bool { exists(account: account) }
+    static func hasToken(account: String = hfAccount) -> Bool { CredentialPresence.shared.isPresent(account: account) }
     static func saveToken(_ token: String, account: String = hfAccount) { save(token, account: account) }
     static func deleteToken(account: String = hfAccount) { delete(account: account) }
+}
+
+// MARK: - Credential presence cache
+
+/// KC-2 (`RSI/DelegateKeychainBacklog.md`): an in-memory answer to "is a key set?", so render
+/// paths (`TaskModels.providerModels` → `ProviderCredential.readiness`, `WebSearchProvider.resolve`,
+/// the Settings rows) cost a set lookup instead of a Keychain call on every evaluation.
+///
+/// Populated lazily per account via `KeychainHelper.exists` (never reads the secret), and kept
+/// current by `KeychainHelper.save`/`delete` — the only writers — so a key added mid-session
+/// still flips the model picker. A key changed outside the app (Keychain Access) is not seen
+/// until relaunch or `invalidate`.
+nonisolated final class CredentialPresence: Sendable {
+    static let shared = CredentialPresence(probe: { KeychainHelper.exists(account: $0) })
+
+    private let probe: @Sendable (String) -> Bool
+    private let known = OSAllocatedUnfairLock<[String: Bool]>(initialState: [:])
+
+    /// `probe` is the Keychain query; injectable so a test can count how often it is hit.
+    init(probe: @escaping @Sendable (String) -> Bool) { self.probe = probe }
+
+    func isPresent(account: String) -> Bool {
+        if let cached = known.withLock({ $0[account] }) { return cached }
+        let present = probe(account)
+        known.withLock { $0[account] = present }
+        return present
+    }
+
+    func record(account: String, present: Bool) {
+        known.withLock { $0[account] = present }
+    }
+
+    /// Forget one account (or all) so the next `isPresent` re-queries.
+    func invalidate(account: String? = nil) {
+        known.withLock { state in
+            if let account { state[account] = nil } else { state.removeAll() }
+        }
+    }
 }
