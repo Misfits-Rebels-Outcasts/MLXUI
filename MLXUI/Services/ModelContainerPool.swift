@@ -9,22 +9,21 @@ import MLXLMCommon
 /// Now chat (`ModelRunner`), flow rows (`LLMEngine`) and — from S1-3 — the Local Server all
 /// ask this pool. It is **not** gated by `LocalServerGate`: it is an internal speed/memory fix.
 ///
-/// **Budget (T5, `RSI/DelegateServeReadme.md`).** The pool owns LLM bytes; `EngineCache.shared`
-/// stops counting them (`countsLLMWeights: false`) so one model is never counted twice. Both
-/// budgets use `EngineCache.defaultBudget`, so in the worst case the pool and the cache each
-/// fill their own `max(4 GB, RAM × 0.6)` — see journal 2026-363 for the trade-off.
+/// **Budget (S1-1b).** The pool and `EngineCache` reserve from **one** `MemoryBudget`
+/// (`max(4 GB, RAM × 0.6)`); the pool owns LLM bytes (`EngineCache.shared` counts LLM stages as 0).
+/// A reservation that doesn't fit evicts this pool's LRU first, then asks the other cache.
 ///
 /// The LRU / single-flight logic lives in `ResidentPool` (generic) because a real
 /// `ModelContainer` cannot be fabricated in a unit test.
-actor ResidentPool<Value: Sendable> {
+actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
     private struct Entry {
         let value: Value
         let bytes: Int64
+        let reservation: MemoryBudget.Reservation
     }
 
     private struct Loading {
         let token: UUID
-        let bytes: Int64
         let task: Task<Value, Error>
     }
 
@@ -32,15 +31,22 @@ actor ResidentPool<Value: Sendable> {
     /// Most-recently-used first. Eviction pops from the end.
     private var recency: [String] = []
     private var loading: [String: Loading] = [:]
-    private let budgetBytes: Int64
+    private let budget: MemoryBudget
 
-    init(budgetBytes: Int64) {
-        self.budgetBytes = budgetBytes
+    /// Reserve from a shared budget (the app's: `MemoryBudget.shared`).
+    init(budget: MemoryBudget) {
+        self.budget = budget
+        budget.register(self)
     }
 
-    /// The resident value for `key`; else await the load already in flight; else make room
-    /// (evicting least-recently-used entries until `bytes` fits) and start **one** load.
-    /// Concurrent callers for one key share that load. A failed load is not cached.
+    /// A pool with its own private budget (tests; standalone use).
+    convenience init(budgetBytes: Int64) {
+        self.init(budget: MemoryBudget(capacityBytes: budgetBytes))
+    }
+
+    /// The resident value for `key`; else await the load already in flight; else reserve
+    /// `bytes` (evicting per the shared-budget rules) and start **one** load. Concurrent callers
+    /// for one key share that load. A failed load is not cached and releases its reservation.
     func value(for key: String, bytes: Int64,
                load: @escaping @Sendable () async throws -> Value) async throws -> Value {
         if let entry = entries[key] {
@@ -51,26 +57,23 @@ actor ResidentPool<Value: Sendable> {
             return try await inFlight.task.value
         }
 
-        // Evict *before* loading so peak memory doesn't briefly hold both. In-flight loads
-        // count against the budget so two different models loading at once don't both assume
-        // the same free room.
-        while residentBytes + loadingBytes + bytes > budgetBytes, let oldest = recency.last {
-            recency.removeLast()
-            entries[oldest] = nil
-        }
-
+        // Install the in-flight marker *before* the first suspension, so a concurrent caller for
+        // this key joins this load instead of starting a second one while we wait for room.
         let token = UUID()
+        let budget = self.budget
         let task = Task {
+            let reservation = await budget.reserve(bytes: bytes, for: self, label: key)
             do {
                 let value = try await load()
-                self.finish(key: key, token: token, value: value, bytes: bytes)
+                self.finish(key: key, token: token, value: value, bytes: bytes, reservation: reservation)
                 return value
             } catch {
+                budget.release(reservation)
                 self.fail(key: key, token: token)
                 throw error
             }
         }
-        loading[key] = Loading(token: token, bytes: bytes, task: task)
+        loading[key] = Loading(token: token, task: task)
         return try await task.value
     }
 
@@ -79,8 +82,9 @@ actor ResidentPool<Value: Sendable> {
     @discardableResult
     func evict(key: String) -> Bool {
         var dropped = false
-        if entries.removeValue(forKey: key) != nil {
+        if let entry = entries.removeValue(forKey: key) {
             recency.removeAll { $0 == key }
+            budget.release(entry.reservation)
             dropped = true
         }
         if loading.removeValue(forKey: key) != nil { dropped = true }
@@ -89,32 +93,45 @@ actor ResidentPool<Value: Sendable> {
 
     /// Drop everything resident, and stop retaining anything still loading.
     func clear() {
+        let reservations = entries.values.map(\.reservation)
         entries.removeAll()
         recency.removeAll()
         loading.removeAll()
+        reservations.forEach { budget.release($0) }
+    }
+
+    /// `MemoryBudgetParticipant`: evict the least-recently-used resident entry that holds memory.
+    func evictLeastRecentlyUsed() -> Bool {
+        guard let key = recency.last(where: { (entries[$0]?.bytes ?? 0) > 0 }),
+              let entry = entries.removeValue(forKey: key) else { return false }
+        recency.removeAll { $0 == key }
+        budget.release(entry.reservation)
+        return true
     }
 
     /// Resident keys, most-recently-used first.
     var residentKeys: [String] { recency }
-    var totalBytes: Int64 { residentBytes }
+    var totalBytes: Int64 { entries.values.reduce(0) { $0 + $1.bytes } }
     var count: Int { entries.count }
 
     // MARK: - Private
-
-    private var residentBytes: Int64 { entries.values.reduce(0) { $0 + $1.bytes } }
-    private var loadingBytes: Int64 { loading.values.reduce(0) { $0 + $1.bytes } }
 
     private func touch(_ key: String) {
         recency.removeAll { $0 == key }
         recency.insert(key, at: 0)
     }
 
-    private func finish(key: String, token: UUID, value: Value, bytes: Int64) {
+    private func finish(key: String, token: UUID, value: Value, bytes: Int64,
+                        reservation: MemoryBudget.Reservation) {
         // Only retain if this load is still the current one (not evicted/cleared meanwhile).
-        guard loading[key]?.token == token else { return }
+        guard loading[key]?.token == token else {
+            budget.release(reservation)
+            return
+        }
         loading[key] = nil
-        entries[key] = Entry(value: value, bytes: bytes)
+        entries[key] = Entry(value: value, bytes: bytes, reservation: reservation)
         touch(key)
+        budget.commit(reservation)
     }
 
     private func fail(key: String, token: UUID) {
@@ -130,12 +147,18 @@ actor ModelContainerPool {
     /// real model.
     typealias Loader = @Sendable (_ directory: URL, _ architecture: String?) async throws -> ModelContainer
 
-    static let shared = ModelContainerPool(
-        budgetBytes: EngineCache.defaultBudget(totalRAMGB: SystemInfo.detect().totalRAMGB))
+    static let shared = ModelContainerPool(budget: .shared)
 
     private let pool: ResidentPool<ModelContainer>
     private let loader: Loader
 
+    /// Reserve from a shared budget (the app's: `MemoryBudget.shared`).
+    init(budget: MemoryBudget, loader: @escaping Loader = ModelContainerPool.loadFromDisk) {
+        self.pool = ResidentPool(budget: budget)
+        self.loader = loader
+    }
+
+    /// A pool with its own private budget (tests).
     init(budgetBytes: Int64, loader: @escaping Loader = ModelContainerPool.loadFromDisk) {
         self.pool = ResidentPool(budgetBytes: budgetBytes)
         self.loader = loader
