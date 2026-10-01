@@ -59,6 +59,13 @@ final class AppState { //appstatecomeback
     /// left `@AppStorage("settingsPane")` pointed at a now-hidden tab.
     static let hideProvidersPrivacy = false
 
+    /// Set to `true` to hide **every** Local Server capability (RSI/plan-local-server-2026-09.md):
+    /// no Serve toggles, no Connect sheet, no Settings → Local Server pane, no menu-bar item, and
+    /// the server never listens — even if an earlier launch left models marked as served. Flip to
+    /// `false` to ship it. Persisted serve settings are kept, not deleted, so flipping back restores
+    /// them. Every surface asks `LocalServerGate.isAvailable`, never this flag directly.
+    static let hideLocalServer = true
+
     /// Set to `true` to hide the `code` and `improvise` rows from the flow editor's **Flow**
     /// tab capability-flag list. The other three flags (`network`, `offdevice`, `events`)
     /// still render. Does not change what a `.cat` can declare or how `check`/`CapabilityGate`

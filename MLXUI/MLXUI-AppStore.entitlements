@@ -8,6 +8,9 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- Local Server (RSI/plan-local-server-2026-09.md) — loopback only until S6. Owner approval 2026-09-27. -->
+	<key>com.apple.security.network.server</key>
+	<true/>
 	<key>keychain-access-groups</key>
 	<array>
 		<string>$(AppIdentifierPrefix)net.connectcode.mlxui</string>
