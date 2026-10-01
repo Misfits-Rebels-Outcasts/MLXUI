@@ -62,13 +62,15 @@ extension LLMStage {
         let dir = LLMEngine.modelDirectory(for: model.id)
         let maxTokens = config.maxTokens
         let temperature = config.temperature   // DA-5: was dropped, so every row sampled at 0.7
+        let footprint = Int64(model.ramGB * 1_073_741_824)
         self.init(
             id: model.id,
             name: model.displayName,
             systemPrompt: config.systemPrompt,
             generate: { prompt in
                 try await LLMEngine.generate(prompt: prompt, modelDir: dir,
-                                             maxTokens: maxTokens, temperature: temperature)
+                                             maxTokens: maxTokens, temperature: temperature,
+                                             footprintBytes: footprint)
             }
         )
     }

@@ -25,13 +25,15 @@ nonisolated struct ChatSDK: ModelSDK {
         // same omission — `config.temperature` never reached `LLMEngine.generate`, so every
         // flow-row completion, decider gate included, ran sampled at 0.7.
         let temperature = config.temperature
+        let footprint = Int64(model.ramGB * 1_073_741_824)
         return LLMStage(
             id: model.id,
             name: model.displayName,
             systemPrompt: config.systemPrompt,
             generate: { prompt in
                 try await LLMEngine.generate(prompt: prompt, modelDir: dir,
-                                             maxTokens: maxTokens, temperature: temperature)
+                                             maxTokens: maxTokens, temperature: temperature,
+                                             footprintBytes: footprint)
             }
         )
     }

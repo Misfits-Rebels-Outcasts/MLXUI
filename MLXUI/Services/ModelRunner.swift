@@ -77,9 +77,14 @@ final class ModelRunner {
 
     private var currentTask: Task<Void, Never>?
 
-    // Cache the loaded model so repeated sends in one session don't reload weights.
-    private var loadedContainer: ModelContainer?
-    private var loadedModelID: String?
+    /// S1-1: loaded weights live in the shared `ModelContainerPool` (chat, flow rows and the
+    /// Local Server share one owner), so repeated sends — and a flow row using the same model —
+    /// don't reload.
+    @ObservationIgnored private let pool: ModelContainerPool
+
+    init(pool: ModelContainerPool = .shared) {
+        self.pool = pool
+    }
 
     /// Tools that ship in this build. `fetch_url` (AG2), the AG3 compute tools, and the AG4 in-app
     /// MLX tools (`embed_text`, `summarize`, `semantic_search`, `transcribe_audio`, `ocr_image`)
@@ -130,14 +135,11 @@ final class ModelRunner {
         return names
     }
 
-    /// Called when the chat sheet opens. Frees the previous model's weights when switching
-    /// models and loads the new model's persisted conversations (most recent selected, or a
-    /// fresh empty one). Reopening the same model keeps everything in place.
+    /// Called when the chat sheet opens. Loads the new model's persisted conversations (most
+    /// recent selected, or a fresh empty one). Reopening the same model keeps everything in
+    /// place. Switching models no longer frees the old weights here — the `ModelContainerPool`'s
+    /// LRU budget decides (S1-1).
     func prepare(for model: ModelEntry) {
-        if loadedModelID != model.id {
-            loadedContainer = nil
-            loadedModelID = nil
-        }
         if preparedModelID != model.id {
             preparedModelID = model.id
             conversations = ConversationStore.conversations(forModelID: model.id)
@@ -446,34 +448,9 @@ final class ModelRunner {
         }
     }
 
-    private func containerForModel(_ model: ModelEntry, dir: URL) async throws -> ModelContainer {
-        if let cached = loadedContainer, loadedModelID == model.id {
-            return cached
-        }
-        let loader = HFTokenizerLoader()
-        let container = try await LLMModelFactory.shared.loadContainer(from: dir, using: loader)
-
-        // Wire the tool-call parser to match the model family. Qwen3.5 emits the XML
-        // `<tool_call><function=…>` form (`ToolCallFormat.xmlFunction`); without this the
-        // generate path parses tool calls as `.json` and never fires them (AG0 finding).
-        if let format = AgentSession.toolCallFormat(forModelType: Self.modelTypeString(model, dir: dir)) {
-            await container.update { $0.configuration.toolCallFormat = format }
-        }
-
-        loadedContainer = container
-        loadedModelID = model.id
-        return container
-    }
-
-    /// The checkpoint's `model_type` (from `config.json`), falling back to the catalog
-    /// architecture string. Used to pick the tool-call format.
-    nonisolated private static func modelTypeString(_ model: ModelEntry, dir: URL) -> String {
-        if let data = try? Data(contentsOf: dir.appendingPathComponent("config.json")),
-           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let modelType = obj["model_type"] as? String {
-            return modelType
-        }
-        return model.architecture ?? ""
+    /// The container for `model`, from the shared pool (which also wires the tool-call format).
+    func containerForModel(_ model: ModelEntry, dir: URL) async throws -> ModelContainer {
+        try await pool.container(for: model, directory: dir)
     }
 
     private func showUnsupported(_ type: String, _ model: ModelEntry) {

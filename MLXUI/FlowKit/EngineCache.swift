@@ -38,6 +38,10 @@ nonisolated final class EngineCache: @unchecked Sendable {
     /// Most-recently-used first (index 0). Eviction pops from the end.
     private var recency: [Key] = []
     private let budgetBytes: Int64
+    /// S1-1 (T5): when `false`, an LLM stage counts **0** bytes here — `ModelContainerPool` owns
+    /// LLM weights, and an LLM stage is now just a closure. Default `true` keeps this cache's
+    /// standalone budget policy (and its tests) unchanged; only `shared` opts out.
+    private let countsLLMWeights: Bool
 
     /// `lock`/`unlock` are `noasync` — the SDK's push toward async-safe scoped locking.
     /// Wrapping the critical section in this synchronous helper keeps the lock/unlock pair
@@ -50,10 +54,13 @@ nonisolated final class EngineCache: @unchecked Sendable {
 
     /// The app-wide cache. Its budget is fixed from system RAM at first access; the builder
     /// is passed per call (the registry isn't available at static-init time).
-    static let shared = EngineCache(budgetBytes: EngineCache.defaultBudget(totalRAMGB: SystemInfo.detect().totalRAMGB))
+    static let shared = EngineCache(
+        budgetBytes: EngineCache.defaultBudget(totalRAMGB: SystemInfo.detect().totalRAMGB),
+        countsLLMWeights: false)
 
-    init(budgetBytes: Int64) {
+    init(budgetBytes: Int64, countsLLMWeights: Bool = true) {
         self.budgetBytes = budgetBytes
+        self.countsLLMWeights = countsLLMWeights
         Memory.cacheLimit = Int(budgetBytes)
     }
 
@@ -74,7 +81,7 @@ nonisolated final class EngineCache: @unchecked Sendable {
             }
             // Make room for this model's footprint before building. Evict immediately so
             // the running total reflects each removal (deferring them over-evicts).
-            let newBytes = Int64(model.ramGB * 1_073_741_824)
+            let newBytes = footprint(of: model)
             while totalBytesLocked() + newBytes > budgetBytes, let oldest = recency.last {
                 recency.removeLast()
                 entries[oldest] = nil
@@ -113,8 +120,13 @@ nonisolated final class EngineCache: @unchecked Sendable {
 
     // MARK: - Lock-held helpers
 
+    private func footprint(of model: ModelEntry) -> Int64 {
+        if !countsLLMWeights && model.runnerKind == .llm { return 0 }
+        return Int64(model.ramGB * 1_073_741_824)
+    }
+
     private func totalBytesLocked() -> Int64 {
-        entries.values.reduce(0) { $0 + Int64($1.model.ramGB * 1_073_741_824) }
+        entries.values.reduce(0) { $0 + footprint(of: $1.model) }
     }
 
     private func touchLocked(_ key: Key) {
