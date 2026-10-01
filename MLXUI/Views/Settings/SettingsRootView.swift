@@ -15,8 +15,10 @@ import SwiftUI
 /// actually selected (`TabView` on macOS otherwise builds every tab's view up front regardless of
 /// which one is selected — see `ProviderCredentialRowView`'s note), but that gate broke `TabView`'s
 /// own tag-to-content matching outright: **every** tab, including the unconditional Models and
-/// Tools ones, rendered blank. Reverted; the Keychain-burst concern is moot in practice now that
-/// `hideProvidersPrivacy` keeps `ProvidersSettingsView` out of the tab bar for most builds.
+/// Tools ones, rendered blank. Reverted. The Keychain-burst concern is handled at the source instead
+/// (KC-1/KC-2): opening Providers or Models asks `CredentialPresence` "is a key set?", which
+/// never reads a secret, so building every tab up front raises no prompt. (`hideProvidersPrivacy`
+/// is `false`, so the Providers tab ships.)
 struct SettingsRootView: View {
     @AppStorage("settingsPane") private var selectedPane: SettingsPane = .models
 

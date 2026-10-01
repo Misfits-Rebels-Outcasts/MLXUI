@@ -645,6 +645,22 @@ nonisolated extension CuratedManifest {
         Set(installedManifests(manifestURLs: urls).compactMap(\.credentials)).sorted()
     }
 
+    /// KC-5.2 — the credential names split by manifest `kind` for the Providers pane:
+    /// `search` manifests (Brave, Tavily) vs everything else (`provider`: Anthropic, OpenAI,
+    /// DeepSeek). A name two manifests share lands under `search` if any of them is a search one.
+    static func credentialGroups(manifests: [CuratedManifest]) -> (search: [String], provider: [String]) {
+        var search = Set<String>(), provider = Set<String>()
+        for manifest in manifests {
+            guard let name = manifest.credentials else { continue }
+            if manifest.kind == "search" { search.insert(name) } else { provider.insert(name) }
+        }
+        return (search.sorted(), provider.subtracting(search).sorted())
+    }
+
+    static func credentialGroups(bundle: Bundle = .main) -> (search: [String], provider: [String]) {
+        credentialGroups(manifests: installedManifests(bundle: bundle))
+    }
+
     /// Phase KEY's original entry point, now built on `installedManifests(bundle:)` (RM-4b
     /// needed the same bundle scan for `TaskModels.providerEgress(forDisplay:)`, so the
     /// decode is shared rather than duplicated). As of RM, `claude-sonnet-4.json` / `gpt-5.6-
