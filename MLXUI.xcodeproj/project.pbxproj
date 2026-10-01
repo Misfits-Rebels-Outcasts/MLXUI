@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0718A3D6A9E337B70A0A4ACC /* FlyingFox in Frameworks */ = {isa = PBXBuildFile; productRef = 7581BDCDEF9D6AC66DEB05B6 /* FlyingFox */; };
 		2032034F301B7DB30003B32E /* MLXAudioTTS in Frameworks */ = {isa = PBXBuildFile; productRef = 20320349301B7DB30003B32E /* MLXAudioTTS */; };
 		20320350301B7DB30003B32E /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 20320345301B7DB30003B32E /* WhisperKit */; };
 		20320351301B7DB30003B32E /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = 2032034A301B7DB30003B32E /* MLXVLM */; };
@@ -23,6 +24,7 @@
 		20ED052A2FF2A3C6009036F2 /* MLXAudioSTT in Frameworks */ = {isa = PBXBuildFile; productRef = 20ED05292FF2A3C6009036F2 /* MLXAudioSTT */; };
 		20F5D7BF2FF61BCF005F7423 /* PaddleOCRVL in Frameworks */ = {isa = PBXBuildFile; productRef = 20F5D7BE2FF61BCF005F7423 /* PaddleOCRVL */; };
 		20FAFC272FF4866E00DC6CCD /* MLXEmbedders in Frameworks */ = {isa = PBXBuildFile; productRef = 20FAFC262FF4866E00DC6CCD /* MLXEmbedders */; };
+		C468348EB515C71477067511 /* FlyingFox in Frameworks */ = {isa = PBXBuildFile; productRef = 1B6BACEF19D0F63DEF97E9B2 /* FlyingFox */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -45,31 +47,43 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		2041A3A22FECB7DD0090F7DA /* MLXUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = MLXUITests;
 			sourceTree = "<group>";
 		};
 		207EF2A52FEB616500A0AC5F /* MLXUI */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = MLXUI;
 			sourceTree = "<group>";
 		};
 		2087814E2FECF603004B3FBE /* RSI */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = RSI;
 			sourceTree = "<group>";
 		};
 		2098BCAB301B835900CA4BBC /* Apps */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = Apps;
 			sourceTree = "<group>";
 		};
 		2098BCB2301B850B00CA4BBC /* Config */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = Config;
 			sourceTree = "<group>";
 		};
 		20AACD812FEBC4E10098B372 /* Design */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = Design;
 			sourceTree = "<group>";
 		};
@@ -88,6 +102,7 @@
 				20320354301B7DB30003B32E /* MLXAudioSTT in Frameworks */,
 				20320355301B7DB30003B32E /* MLXLLM in Frameworks */,
 				20320356301B7DB30003B32E /* MLX in Frameworks */,
+				0718A3D6A9E337B70A0A4ACC /* FlyingFox in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -110,6 +125,7 @@
 				20ED052A2FF2A3C6009036F2 /* MLXAudioSTT in Frameworks */,
 				20AACD452FEBC4C50098B372 /* MLXLLM in Frameworks */,
 				20AACD442FEBC4C50098B372 /* MLX in Frameworks */,
+				C468348EB515C71477067511 /* FlyingFox in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -177,6 +193,7 @@
 				2032034A301B7DB30003B32E /* MLXVLM */,
 				2032034B301B7DB30003B32E /* MLXEmbedders */,
 				2032034C301B7DB30003B32E /* PaddleOCRVL */,
+				7581BDCDEF9D6AC66DEB05B6 /* FlyingFox */,
 			);
 			productName = MLXUI;
 			productReference = 2032035B301B7DB30003B32E /* MLXUI Pro.app */;
@@ -228,6 +245,7 @@
 				20913E342FF390DC0005E86D /* MLXVLM */,
 				20FAFC262FF4866E00DC6CCD /* MLXEmbedders */,
 				20F5D7BE2FF61BCF005F7423 /* PaddleOCRVL */,
+				1B6BACEF19D0F63DEF97E9B2 /* FlyingFox */,
 			);
 			productName = MLXUI;
 			productReference = 207EF2A32FEB616500A0AC5F /* MLXUI.app */;
@@ -266,7 +284,8 @@
 				B00000020001FEB616500 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
 				203CC0132FF0DFAA007A6D30 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 				20ED05282FF2A3C6009036F2 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */,
-				20F5D7BD2FF61BCF005F7423 /* XCLocalSwiftPackageReference "Vendor/PaddleOCRVL" */,
+				20F5D7BD2FF61BCF005F7423 /* XCLocalSwiftPackageReference "PaddleOCRVL" */,
+				E9F5B8A1FB68ED44DDCDC445 /* XCRemoteSwiftPackageReference "FlyingFox" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 207EF2A42FEB616500A0AC5F /* Products */;
@@ -589,7 +608,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		20F5D7BD2FF61BCF005F7423 /* XCLocalSwiftPackageReference "Vendor/PaddleOCRVL" */ = {
+		20F5D7BD2FF61BCF005F7423 /* XCLocalSwiftPackageReference "PaddleOCRVL" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Vendor/PaddleOCRVL;
 		};
@@ -660,9 +679,22 @@
 				minimumVersion = 3.31.3;
 			};
 		};
+		E9F5B8A1FB68ED44DDCDC445 /* XCRemoteSwiftPackageReference "FlyingFox" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/swhitty/FlyingFox";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.26.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		1B6BACEF19D0F63DEF97E9B2 /* FlyingFox */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E9F5B8A1FB68ED44DDCDC445 /* XCRemoteSwiftPackageReference "FlyingFox" */;
+			productName = FlyingFox;
+		};
 		20320341301B7DB30003B32E /* MLX */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 20320342301B7DB30003B32E /* XCRemoteSwiftPackageReference "mlx-swift" */;
@@ -730,6 +762,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B00000020001FEB616500 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
 			productName = MLXEmbedders;
+		};
+		7581BDCDEF9D6AC66DEB05B6 /* FlyingFox */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E9F5B8A1FB68ED44DDCDC445 /* XCRemoteSwiftPackageReference "FlyingFox" */;
+			productName = FlyingFox;
 		};
 		B00000030001FEB616500 /* MLX */ = {
 			isa = XCSwiftPackageProductDependency;
