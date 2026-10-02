@@ -74,6 +74,22 @@ enum LocalServerPolicy {
     }
 }
 
+/// When the model detail page shows its **Serve** toggle — a pure function so the rule has one
+/// home and one test (S1-5b: the toggle had been built into only one of the page's two "installed"
+/// branches). Shown iff the Local Server is available (gate), the model is an MLX chat model, and
+/// the model is installed — in the `.installed` state, or idle with files on disk.
+enum ServeToggleVisibility {
+    static func shouldShow(state: InstallState, isInstalledOnDisk: Bool, runnerKind: RunnerKind,
+                           gateAvailable: Bool) -> Bool {
+        guard gateAvailable, runnerKind == .llm else { return false }
+        switch state {
+        case .installed: return true
+        case .idle: return isInstalledOnDisk
+        case .resolving, .downloading, .verifying, .error, .needsAuth: return false
+        }
+    }
+}
+
 /// S1-5's view-model: owns the `LocalServer`, turns "serve this model" into settings + a start/stop,
 /// remembers whether the Connect sheet has ever been shown, and answers the launch / quit questions.
 /// Everything is gated by `LocalServerGate.isAvailable`.

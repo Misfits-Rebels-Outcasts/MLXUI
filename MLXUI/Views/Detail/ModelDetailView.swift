@@ -166,18 +166,7 @@ struct ModelDetailView: View {
                         .foregroundStyle(.red)
                 }
             case .installed:
-                HStack(spacing: 12) {
-                    Button { appState.runModel(model) } label: {
-                        Label("Run", systemImage: "play.fill").frame(minWidth: 100)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    Button {
-                        appState.uninstallModel(model)
-                    } label: {
-                        Label("Uninstall", systemImage: "trash").frame(minWidth: 100)
-                    }
-                    .buttonStyle(.bordered)
-                }
+                installedControls(state: state)
             case .error(let msg, let canRetry):
                 VStack(alignment: .leading, spacing: 4) {
                     Text(msg).font(.caption).foregroundStyle(.red)
@@ -203,26 +192,8 @@ struct ModelDetailView: View {
             case .verifying:
                 Text("Verifying...").font(.caption).foregroundStyle(.secondary)
             default:
-                if appState.installedModelIDs.contains(model.id) || appState.installManager.isInstalled(model) {
-                    HStack(spacing: 12) {
-                        Button { appState.runModel(model) } label: {
-                            Label("Run", systemImage: "play.fill").frame(minWidth: 100)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        Button { appState.uninstallModel(model) } label: {
-                            Label("Uninstall", systemImage: "trash").frame(minWidth: 100)
-                        }
-                        .buttonStyle(.bordered)
-                        // S1-5 — only an installed MLX chat model can be served, and only while the
-                        // Local Server is available (rule 14: through the gate, never the flag).
-                        if LocalServerGate.isAvailable, model.runnerKind == .llm {
-                            Toggle("Serve", isOn: Binding(
-                                get: { appState.localServer.isServing(model.hfModelId) },
-                                set: { on in Task { await appState.localServer.setServed(model.hfModelId, on) } }))
-                                .toggleStyle(.switch)
-                                .help("Let other apps on this Mac use this model.")
-                        }
-                    }
+                if isInstalledOnDisk {
+                    installedControls(state: state)
                 } else if model.exceedsRAM(appState.systemInfo.totalRAMGB) {
                     Button {} label: {
                         Label("Needs \(String(format: "%.0f", model.ramGB)) GB RAM", systemImage: "xmark.circle")
@@ -237,6 +208,44 @@ struct ModelDetailView: View {
                 }
             }
             Spacer(minLength: 0)
+        }
+    }
+
+    /// `appState.installedModelIDs` / the on-disk marker — what the `default:` (idle) branch uses to
+    /// decide a model is installed.
+    private var isInstalledOnDisk: Bool {
+        appState.installedModelIDs.contains(model.id) || appState.installManager.isInstalled(model)
+    }
+
+    /// Run · Uninstall · Serve — **the one place** an installed model's controls are built, used by
+    /// both the `.installed` and the idle-but-installed branches of `actionButtons`. S1-5 added the
+    /// Serve toggle to only one of them, so a model in the `.installed` state never showed it
+    /// (S1-B hand check, S1-5b); keeping a single copy means the branches can't drift again.
+    @ViewBuilder private func installedControls(state: InstallState) -> some View {
+        HStack(spacing: 12) {
+            Button { appState.runModel(model) } label: {
+                Label("Run", systemImage: "play.fill").frame(minWidth: 100)
+            }
+            .buttonStyle(.borderedProminent)
+            Button { appState.uninstallModel(model) } label: {
+                Label("Uninstall", systemImage: "trash").frame(minWidth: 100)
+            }
+            .buttonStyle(.bordered)
+            serveToggle(state: state)
+        }
+    }
+
+    /// S1-5 — only an installed MLX chat model can be served, and only while the Local Server is
+    /// available. The rule is `ServeToggleVisibility.shouldShow` (pure, tested); the gate is read
+    /// through `LocalServerGate`, never the flag (rule 14).
+    @ViewBuilder private func serveToggle(state: InstallState) -> some View {
+        if ServeToggleVisibility.shouldShow(state: state, isInstalledOnDisk: isInstalledOnDisk,
+                                            runnerKind: model.runnerKind, gateAvailable: LocalServerGate.isAvailable) {
+            Toggle("Serve", isOn: Binding(
+                get: { appState.localServer.isServing(model.hfModelId) },
+                set: { on in Task { await appState.localServer.setServed(model.hfModelId, on) } }))
+                .toggleStyle(.switch)
+                .help("Let other apps on this Mac use this model.")
         }
     }
 

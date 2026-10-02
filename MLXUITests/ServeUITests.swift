@@ -305,3 +305,40 @@ struct LiveMLXBackendWiringTests {
         #expect(backend.footprintBytes == Int64(3 * 1_073_741_824))
     }
 }
+
+// MARK: - The detail page's Serve toggle (S1-5b)
+
+struct ServeToggleVisibilityTests {
+    private func show(_ state: InstallState, disk: Bool = false, kind: RunnerKind = .llm, gate: Bool = true) -> Bool {
+        ServeToggleVisibility.shouldShow(state: state, isInstalledOnDisk: disk, runnerKind: kind, gateAvailable: gate)
+    }
+
+    @Test func aModelInTheInstalledStateShowsTheToggle() {
+        // The S1-B hand-check bug: `.installed` is a different branch of the page than "idle but on disk".
+        #expect(show(.installed))
+        #expect(show(.installed, disk: true))
+    }
+
+    @Test func anIdleModelShowsItOnlyWhenItsFilesAreOnDisk() {
+        #expect(show(.idle, disk: true))
+        #expect(!show(.idle, disk: false))
+    }
+
+    @Test func nothingShowsWhileInstallingOrFailedOrGated() {
+        for state in [InstallState.resolving, .downloading(progress: 0.5, downloaded: 1, total: 2), .verifying,
+                      .error("x", canRetry: true), .needsAuth("x")] {
+            #expect(!show(state, disk: true))
+        }
+    }
+
+    @Test func onlyMLXChatModelsCanBeServed() {
+        for kind in [RunnerKind.asr, .tts, .vision, .embedding, .ocr, .image, .unsupported] {
+            #expect(!show(.installed, kind: kind), "\(kind)")
+        }
+    }
+
+    @Test func aClosedGateHidesItInEveryState() {
+        #expect(!show(.installed, gate: false))
+        #expect(!show(.idle, disk: true, gate: false))
+    }
+}
