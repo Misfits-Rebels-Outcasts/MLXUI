@@ -342,3 +342,173 @@ struct ServeToggleVisibilityTests {
         #expect(!show(.idle, disk: true, gate: false))
     }
 }
+
+// MARK: - S1-5c: "reachable now" (owner ruling 1)
+
+struct ServeReachTests {
+    @Test(arguments: [(true, true, true), (true, false, false), (false, true, false), (false, false, false)])
+    func reachableNeedsTheListAndTheMasterSwitch(inList: Bool, master: Bool, reachable: Bool) {
+        let served: Set<String> = inList ? ["m"] : []
+        #expect(ServeReach.isReachable(id: "m", served: served, masterEnabled: master) == reachable)
+    }
+
+    @Test func theRuleIsTheSameForAppleFoundationModels() {
+        #expect(ServeReach.isReachable(id: ServedModels.appleFoundationID, served: [ServedModels.appleFoundationID], masterEnabled: true))
+        #expect(!ServeReach.isReachable(id: ServedModels.appleFoundationID, served: [ServedModels.appleFoundationID], masterEnabled: false))
+    }
+}
+
+@Suite(.serialized)
+@MainActor
+struct ServeReachControllerTests {
+    @Test func switchingTheMasterOffKeepsTheListButNothingIsReachableAndOnRestoresEverything() async {
+        LocalServerGate.overrideForTesting = true
+        defer { LocalServerGate.overrideForTesting = nil }
+        let controller = makeController(served: [sampleModel, ServedModels.appleFoundationID, "mlx-community/other"])
+        defer { Task { await controller.server.stop() } }
+        await controller.setServerEnabled(true)
+        #expect(controller.isReachable(sampleModel) && controller.isReachable(ServedModels.appleFoundationID))
+
+        await controller.setServerEnabled(false)
+        #expect(controller.servedIDs.count == 3)                                    // the list is kept
+        #expect(!controller.isReachable(sampleModel))                               // …but none is reachable now
+        #expect(!controller.isReachable(ServedModels.appleFoundationID))
+        #expect(controller.isServing(sampleModel))                                  // still "in the list"
+
+        await controller.setServerEnabled(true)                                     // restores every one
+        #expect(["mlx-community/other", sampleModel, ServedModels.appleFoundationID].allSatisfy(controller.isReachable))
+    }
+
+    @Test func switchingServeOnFromAModelPageTurnsTheMasterSwitchOn() async {
+        LocalServerGate.overrideForTesting = true
+        defer { LocalServerGate.overrideForTesting = nil }
+        let controller = makeController(served: ["mlx-community/other"])
+        defer { Task { await controller.server.stop() } }
+        await controller.setServerEnabled(false)
+        #expect(!controller.isReachable(sampleModel))
+        await controller.setServed(sampleModel, true)                               // R24
+        #expect(controller.enabled && controller.isRunning)
+        #expect(controller.isReachable(sampleModel))
+        #expect(controller.isReachable("mlx-community/other"))                      // the earlier one is back too
+    }
+}
+
+// MARK: - S1-5c: the memory guard (owner ruling 2)
+
+struct ServeMemoryTests {
+    @Test func aModelThatExceedsThisMacsRAMBlocksServeWithTheReason() throws {
+        let reason = try #require(ServeMemory.blockedReason(modelRAMGB: 24, systemRAMGB: 16))
+        #expect(reason.contains("Needs 24 GB RAM") && reason.contains("16 GB"))
+        #expect(ServeMemory.blockedReason(modelRAMGB: 16, systemRAMGB: 16) == nil)         // equal fits (ModelEntry.exceedsRAM is `>`)
+        #expect(ServeMemory.blockedReason(modelRAMGB: 6.75, systemRAMGB: 18) == nil)
+    }
+
+    @Test func theBlockMatchesTheRuleThatReplacesRunWithNeedsNGB() {
+        for ram in [8.0, 16.0, 16.5, 24.0] {
+            let model = makeEntry(ramGB: ram)
+            #expect((ServeMemory.blockedReason(modelRAMGB: model.ramGB, systemRAMGB: 16) != nil) == model.exceedsRAM(16), "\(ram)")
+        }
+    }
+
+    @Test func aBlockedToggleIsDisabledUnlessTheModelIsAlreadyReachable() {
+        #expect(ServeMemory.isToggleDisabled(blockedReason: "x", isReachable: false))
+        #expect(!ServeMemory.isToggleDisabled(blockedReason: "x", isReachable: true))       // you can always turn it off
+        #expect(!ServeMemory.isToggleDisabled(blockedReason: nil, isReachable: false))
+    }
+
+    @Test func theTooLargeSentenceNamesTheModelItsSizeAndTheBudget() {
+        #expect(ServeMemory.tooLargeSentence(model: "mlx-community/Big-70B", modelRAMGB: 42, capacityBytes: Int64(10.8 * 1_073_741_824))
+                == "mlx-community/Big-70B needs 42.0 GB; the Local Server can use 10.8 GB on this Mac.")
+    }
+
+    @Test func exceedsBudgetIsStrictlyLargerThanTheWholeBudget() {
+        let ten = Int64(10 * 1_073_741_824)
+        #expect(ServeMemory.exceedsBudget(modelRAMGB: 10.5, capacityBytes: ten))
+        #expect(!ServeMemory.exceedsBudget(modelRAMGB: 10, capacityBytes: ten))
+        #expect(!ServeMemory.exceedsBudget(modelRAMGB: 3, capacityBytes: ten))
+    }
+
+    private func index(_ entries: [(String, Double, RunnerKind)]) -> InstalledModelIndex {
+        InstalledModelIndex(entries: entries.map { .init(id: $0.0.replacingOccurrences(of: "/", with: "--"), hfModelId: $0.0, kind: $0.2, ramGB: $0.1) })
+    }
+
+    @Test func theNoteAppearsOnlyWhenTheServedModelsTogetherExceedTheBudget() {
+        let ten = Int64(10 * 1_073_741_824)
+        let installed = index([("a/one", 6, .llm), ("a/two", 6, .llm), ("a/three", 3, .llm)])
+        #expect(ServeMemory.note(servedIDs: ["a/one", "a/two"], installed: installed, capacityBytes: ten) == ServeMemory.doesNotAllFitNote)
+        #expect(ServeMemory.note(servedIDs: ["a/one"], installed: installed, capacityBytes: ten) == nil)
+        #expect(ServeMemory.note(servedIDs: ["a/one", "a/three"], installed: installed, capacityBytes: ten) == nil)   // 6 + 3 = 9 GB fits in 10
+        #expect(ServeMemory.note(servedIDs: ["a/one", "a/two", "a/three"], installed: installed, capacityBytes: ten) == ServeMemory.doesNotAllFitNote)
+    }
+
+    @Test func theNoteCountsOnlyServedInstalledMLXChatModels() {
+        let ten = Int64(10 * 1_073_741_824)
+        let installed = index([("a/one", 6, .llm), ("a/embed", 8, .embedding), ("a/unserved", 8, .llm)])
+        // an installed-but-unserved model, a non-chat model, a served-but-not-installed id and Apple Foundation Models don't count
+        let served: Set<String> = ["a/one", "a/embed", "a/gone", ServedModels.appleFoundationID]
+        #expect(ServeMemory.note(servedIDs: served, installed: installed, capacityBytes: ten) == nil)
+    }
+
+    @MainActor
+    @Test func theControllerShowsTheNoteFromItsInjectedCatalogAndBudget() {
+        let installed = index([("a/one", 6, .llm), ("a/two", 6, .llm)])
+        let server = LocalServer(settings: ServeSettings(servedModelIDs: ["a/one", "a/two"]), defaults: nil, listenPort: 0,
+                                 environment: environment())
+        let tight = LocalServerController(server: server, defaults: freshDefaults(), installed: { installed },
+                                          budgetBytes: Int64(10 * 1_073_741_824))
+        #expect(tight.memoryNote == "These models don't all fit in memory at once — switching between them reloads each one.")
+        let roomy = LocalServerController(server: server, defaults: freshDefaults(), installed: { installed },
+                                          budgetBytes: Int64(32 * 1_073_741_824))
+        #expect(roomy.memoryNote == nil)
+    }
+}
+
+// The 503 for a served model larger than the whole budget (route, no socket).
+struct ServeMemoryRouteTests {
+    private static let body = #"{"model":"a/big","messages":[{"role":"user","content":"hi"}]}"#
+
+    private func env(ramGB: Double, capacityGB: Double, backend: FakeBackend, kind: RunnerKind = .llm) -> ServeEnvironment {
+        var env = ServeEnvironment(
+            servedModelIDs: { ["a/big"] },
+            installed: { InstalledModelIndex(entries: [.init(id: "a--big", hfModelId: "a/big", kind: kind, ramGB: ramGB)]) },
+            appleFoundationReadiness: { nil }, created: 1,
+            backendFor: { _ in backend })
+        env.memoryCapacityBytes = Int64(capacityGB * 1_073_741_824)
+        return env
+    }
+
+    private func call(_ env: ServeEnvironment) async -> ServeResponse? {
+        let data = Data(Self.body.utf8)
+        let head = ServeRequestHead(method: "POST", path: "/v1/chat/completions", host: "127.0.0.1:1212", origin: nil,
+                                    transferEncoding: nil, contentLength: String(data.count), userAgent: nil)
+        if case .full(let response) = await ServeAPI.handle(head: head, guard: RequestGuard(port: 1212), environment: env, body: { data }) {
+            return response
+        }
+        return nil
+    }
+
+    @Test func aModelLargerThanTheWholeBudgetIs503WithTheSentenceAndIsNeverLoaded() async throws {
+        let backend = FakeBackend([.text("never"), .finish(.stop)])
+        let response = try #require(await call(env(ramGB: 42, capacityGB: 10.8, backend: backend)))
+        #expect(response.status == 503)
+        let error = try #require((try JSONSerialization.jsonObject(with: response.body) as? [String: Any])?["error"] as? [String: Any])
+        #expect(error["message"] as? String == "a/big needs 42.0 GB; the Local Server can use 10.8 GB on this Mac.")
+        #expect(error["code"] as? String == "model_too_large")
+        #expect(response.headers["Retry-After"] == nil)                       // waiting won't make it fit
+        #expect(backend.requests.isEmpty)                                     // refused before loading
+    }
+
+    @Test func aModelThatFitsTheBudgetIsServedNormally() async throws {
+        let backend = FakeBackend([.text("ok"), .finish(.stop)])
+        let response = try #require(await call(env(ramGB: 6.75, capacityGB: 10.8, backend: backend)))
+        #expect(response.status == 200)
+        #expect(backend.requests.count == 1)
+    }
+
+    @Test func theBoundaryIsTheWholeBudget() async throws {
+        let at = try #require(await call(env(ramGB: 10, capacityGB: 10, backend: FakeBackend([.finish(.stop)]))))
+        #expect(at.status == 200)
+        let over = try #require(await call(env(ramGB: 10.01, capacityGB: 10, backend: FakeBackend([.finish(.stop)]))))
+        #expect(over.status == 503)
+    }
+}

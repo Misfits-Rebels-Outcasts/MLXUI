@@ -19,6 +19,9 @@ nonisolated struct ServeEnvironment: Sendable {
     var requestLog: RequestLog = RequestLog()
     /// S1-A ruling 2: a `: keep-alive` comment whenever nothing was written for this long.
     var keepAliveSeconds: Double = 1.0
+    /// S1-5c: the whole shared memory budget (`MemoryBudget.shared`). A served model larger than this
+    /// is refused with a 503 rather than loaded to thrash.
+    var memoryCapacityBytes: Int64 = MemoryBudget.shared.capacityBytes
     var now: @Sendable () -> Date = { Date() }
 
     /// The app's real environment: the served set from `served`, the live install markers, the

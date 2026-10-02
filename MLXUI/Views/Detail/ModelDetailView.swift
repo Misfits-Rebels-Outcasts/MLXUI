@@ -241,11 +241,17 @@ struct ModelDetailView: View {
     @ViewBuilder private func serveToggle(state: InstallState) -> some View {
         if ServeToggleVisibility.shouldShow(state: state, isInstalledOnDisk: isInstalledOnDisk,
                                             runnerKind: model.runnerKind, gateAvailable: LocalServerGate.isAvailable) {
+            // "Reachable now" = in the served list AND the master switch on (S1-5c, `ServeReach`); a
+            // model too big for this Mac can't be switched on (the same rule that swaps Run for
+            // "Needs N GB RAM"), but a reachable one can always be switched off.
+            let blocked = ServeMemory.blockedReason(modelRAMGB: model.ramGB, systemRAMGB: appState.systemInfo.totalRAMGB)
+            let reachable = appState.localServer.isReachable(model.hfModelId)
             Toggle("Serve", isOn: Binding(
-                get: { appState.localServer.isServing(model.hfModelId) },
+                get: { reachable },
                 set: { on in Task { await appState.localServer.setServed(model.hfModelId, on) } }))
                 .toggleStyle(.switch)
-                .help("Let other apps on this Mac use this model.")
+                .disabled(ServeMemory.isToggleDisabled(blockedReason: blocked, isReachable: reachable))
+                .help(blocked ?? "Let other apps on this Mac use this model.")
         }
     }
 

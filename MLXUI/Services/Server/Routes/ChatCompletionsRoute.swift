@@ -47,6 +47,16 @@ nonisolated enum ChatCompletionsRoute {
             return tracker.fail(ServeError(status: 404, message: "The model '\(request.model)' is not served.",
                                            code: "model_not_found"))
         }
+        // S1-5c: a model bigger than the whole shared budget would load anyway and thrash — say so.
+        // (The catalog size of an installed MLX model; Apple Foundation Models isn't in the index.)
+        if let entry = environment.installed().entries.first(where: { $0.kind == .llm && $0.hfModelId == request.model }),
+           ServeMemory.exceedsBudget(modelRAMGB: entry.ramGB, capacityBytes: environment.memoryCapacityBytes) {
+            return tracker.fail(ServeError(
+                status: 503,
+                message: ServeMemory.tooLargeSentence(model: request.model, modelRAMGB: entry.ramGB,
+                                                      capacityBytes: environment.memoryCapacityBytes),
+                type: "server_error", code: "model_too_large"))
+        }
         guard let backend = environment.backendFor(request.model) else {
             return tracker.fail(ServeError(status: 501, message: "The model '\(request.model)' can't be served by this build yet.",
                                            type: "server_error", code: "not_implemented"))

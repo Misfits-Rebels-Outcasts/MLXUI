@@ -90,6 +90,55 @@ enum ServeToggleVisibility {
     }
 }
 
+/// Which models a Mac can actually serve, and what the user is told (S1-5c, owner rulings 2026-10-02).
+nonisolated enum ServeMemory {
+    /// "Needs 24 GB RAM" — the same rule that already swaps Run for "Needs N GB RAM" on the detail
+    /// page (`ModelEntry.exceedsRAM`). `nil` = the model fits this Mac.
+    static func blockedReason(modelRAMGB: Double, systemRAMGB: Double) -> String? {
+        guard modelRAMGB > systemRAMGB else { return nil }
+        return "Needs \(String(format: "%.0f", modelRAMGB)) GB RAM — this Mac has \(String(format: "%.0f", systemRAMGB)) GB, so it can't be served."
+    }
+
+    /// The toggle is disabled for a model that doesn't fit — **unless it is currently reachable**, so
+    /// a user can always turn a served model off.
+    static func isToggleDisabled(blockedReason: String?, isReachable: Bool) -> Bool {
+        blockedReason != nil && !isReachable
+    }
+
+    /// The `503` sentence for a request naming a served model that is larger than the whole shared
+    /// memory budget (it would load anyway and thrash): "<model> needs N GB; the Local Server can
+    /// use M GB on this Mac."
+    static func tooLargeSentence(model: String, modelRAMGB: Double, capacityBytes: Int64) -> String {
+        "\(model) needs \(String(format: "%.1f", modelRAMGB)) GB; the Local Server can use \(gigabytes(capacityBytes)) GB on this Mac."
+    }
+
+    /// True when a model's catalog size is larger than the entire shared budget.
+    static func exceedsBudget(modelRAMGB: Double, capacityBytes: Int64) -> Bool {
+        Int64(modelRAMGB * 1_073_741_824) > capacityBytes
+    }
+
+    /// One honest line when the served MLX models together exceed the budget (pane, S1-5c). Apple
+    /// Foundation Models is the OS's and isn't counted.
+    static let doesNotAllFitNote = "These models don't all fit in memory at once — switching between them reloads each one."
+
+    static func note(servedIDs: Set<String>, installed: InstalledModelIndex, capacityBytes: Int64) -> String? {
+        let total = installed.entries.filter { $0.kind == .llm && servedIDs.contains($0.hfModelId) }
+            .reduce(0.0) { $0 + $1.ramGB }
+        return Int64(total * 1_073_741_824) > capacityBytes ? doesNotAllFitNote : nil
+    }
+
+    private static func gigabytes(_ bytes: Int64) -> String { String(format: "%.1f", Double(bytes) / 1_073_741_824) }
+}
+
+/// "Reachable now" (S1-5c, owner ruling 1): a model is reachable by other apps only if it is in the
+/// served list **and** the master switch is on. The list is kept when the switch is off; turning the
+/// switch on restores every previously served model; serving from a model page turns it on (R24).
+nonisolated enum ServeReach {
+    static func isReachable(id: String, served: Set<String>, masterEnabled: Bool) -> Bool {
+        masterEnabled && served.contains(id)
+    }
+}
+
 /// S1-5's view-model: owns the `LocalServer`, turns "serve this model" into settings + a start/stop,
 /// remembers whether the Connect sheet has ever been shown, and answers the launch / quit questions.
 /// Everything is gated by `LocalServerGate.isAvailable`.
@@ -111,15 +160,32 @@ final class LocalServerController {
     var showConnect = false
     private(set) var connectModelID: String?
 
-    init(server: LocalServer = LocalServer(), defaults: UserDefaults = .standard) {
+    @ObservationIgnored private let installedIndex: () -> InstalledModelIndex
+    @ObservationIgnored private let budgetBytes: Int64
+
+    /// - Parameters: `installed` / `budgetBytes` default to the live catalog + `MemoryBudget.shared`;
+    ///   tests inject their own.
+    init(server: LocalServer = LocalServer(), defaults: UserDefaults = .standard,
+         installed: @escaping () -> InstalledModelIndex = { InstalledModelIndex.loadInstalled() },
+         budgetBytes: Int64 = MemoryBudget.shared.capacityBytes) {
         self.server = server
         self.defaults = defaults
+        self.installedIndex = installed
+        self.budgetBytes = budgetBytes
         self.enabled = defaults.object(forKey: Self.enabledKey) as? Bool ?? true
         self.hasShownConnect = defaults.bool(forKey: Self.connectShownKey)
     }
 
     var servedIDs: Set<String> { server.settings.servedModelIDs }
     func isServing(_ id: String) -> Bool { server.settings.isServing(id) }
+    /// What the Serve toggles show: in the list **and** the master switch on (`ServeReach`).
+    func isReachable(_ id: String) -> Bool {
+        ServeReach.isReachable(id: id, served: servedIDs, masterEnabled: enabled)
+    }
+    /// The pane's "these don't all fit" line, or `nil`.
+    var memoryNote: String? {
+        ServeMemory.note(servedIDs: servedIDs, installed: installedIndex(), capacityBytes: budgetBytes)
+    }
     var statusSentence: String {
         LocalServerPolicy.statusSentence(status: server.status, servedCount: servedIDs.count, enabled: enabled)
     }

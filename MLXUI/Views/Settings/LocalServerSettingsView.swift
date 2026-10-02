@@ -41,6 +41,11 @@ struct LocalServerSettingsView: View {
                     Text("Nothing is being served. Turn on Serve on a model's page, or below.")
                         .foregroundStyle(.secondary)
                 }
+                if let note = controller.memoryNote {
+                    Label(note, systemImage: "memorychip")
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                }
                 ForEach(controller.servedIDs.sorted(), id: \.self) { id in
                     HStack {
                         Text(id).font(.system(.body, design: .monospaced))
@@ -50,7 +55,7 @@ struct LocalServerSettingsView: View {
                 }
                 if let readiness = AppleFoundationAvailability.currentReadiness() {
                     Toggle(isOn: Binding(
-                        get: { controller.isServing(ServedModels.appleFoundationID) },
+                        get: { controller.isReachable(ServedModels.appleFoundationID) },
                         set: { on in Task { await controller.setServed(ServedModels.appleFoundationID, on) } })) {
                         VStack(alignment: .leading) {
                             Text("Apple Foundation Models (on this Mac)")
