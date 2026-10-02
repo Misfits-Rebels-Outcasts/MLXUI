@@ -29,8 +29,9 @@ nonisolated enum OpenAIChatDialect {
         }
 
         var messages: [ServeMessage] = []
+        var toolNames: [String: String] = [:]          // tool_call id → function name, for later `tool` results
         for (index, raw) in rawMessages.enumerated() {
-            messages.append(try decodeMessage(raw, at: index))
+            messages.append(try decodeMessage(raw, at: index, toolNames: &toolNames))
         }
 
         var request = ServeRequest(model: model, messages: messages)
@@ -58,21 +59,45 @@ nonisolated enum OpenAIChatDialect {
         return request
     }
 
-    private static func decodeMessage(_ raw: Any, at index: Int) throws -> ServeMessage {
+    /// Tool traffic in the history is **flattened to plain text** (owner ruling R20, 2026-10-02: don't
+    /// 400 — S1 ignores `tools`, but a harness replays its whole conversation, tool turns included):
+    ///
+    /// - an assistant turn's `tool_calls` become lines `[called <name> with <arguments>]` after any
+    ///   text it had;
+    /// - a `tool` message becomes a **user** turn `[tool result for <name>: <content>]`, where
+    ///   `<name>` is the message's `name`, else the name of the call with that `tool_call_id`,
+    ///   else `tool`.
+    ///
+    /// Wording is the implementer's call, pending owner confirmation; S2 replaces it with real tool
+    /// messages for models that have a tool template.
+    private static func decodeMessage(_ raw: Any, at index: Int, toolNames: inout [String: String]) throws -> ServeMessage {
         let param = "messages[\(index)]"
         guard let message = raw as? [String: Any], let roleName = message["role"] as? String else {
             throw invalid("Each message needs a 'role'.", code: "invalid_message", param: param)
         }
-        let role: ServeMessage.Role
+        let content = try decodeContent(message["content"], param: "\(param).content")
         switch roleName {
-        case "system", "developer": role = .system       // OpenAI renamed system → developer for newer models
-        case "user": role = .user
-        case "assistant": role = .assistant
+        case "system", "developer":                      // OpenAI renamed system → developer for newer models
+            return ServeMessage(role: .system, text: content)
+        case "user":
+            return ServeMessage(role: .user, text: content)
+        case "assistant":
+            var lines: [String] = content.isEmpty ? [] : [content]
+            for call in (message["tool_calls"] as? [[String: Any]]) ?? [] {
+                let function = call["function"] as? [String: Any]
+                let name = (function?["name"] as? String) ?? "tool"
+                if let id = call["id"] as? String { toolNames[id] = name }
+                lines.append("[called \(name) with \((function?["arguments"] as? String) ?? "{}")]")
+            }
+            return ServeMessage(role: .assistant, text: lines.joined(separator: "\n"))
+        case "tool":
+            let name = (message["name"] as? String)
+                ?? (message["tool_call_id"] as? String).flatMap { toolNames[$0] } ?? "tool"
+            return ServeMessage(role: .user, text: "[tool result for \(name): \(content)]")
         default:
-            throw invalid("Message role '\(roleName)' isn't supported; use system, user or assistant.",
+            throw invalid("Message role '\(roleName)' isn't supported; use system, user, assistant or tool.",
                           code: "unsupported_role", param: "\(param).role")
         }
-        return ServeMessage(role: role, text: try decodeContent(message["content"], param: "\(param).content"))
     }
 
     /// A string, `null` (an assistant turn with no text), or an array of `{type:"text"}` parts.

@@ -158,7 +158,7 @@ struct OpenAIChatDialectTests {
         #"{"messages":[{"role":"user","content":"x"}]}"#,
         #"{"model":"m"}"#,
         #"{"model":"m","messages":[]}"#,
-        #"{"model":"m","messages":[{"role":"tool","content":"x"}]}"#,
+        #"{"model":"m","messages":[{"role":"critic","content":"x"}]}"#,
         #"{"model":"m","messages":[{"role":"user","content":5}]}"#,
         #"{"model":"m","messages":[{"role":"user","content":"x"}],"stream":"yes"}"#,
         #"{"model":"m","messages":[{"role":"user","content":"x"}],"max_tokens":0}"#,
@@ -166,6 +166,30 @@ struct OpenAIChatDialectTests {
     ])
     func malformedRequestsAre400(json: String) {
         #expect(rejection(json)?.status == 400)
+    }
+
+    private static let toolConversation = #"""
+    {"model":"m","messages":[
+      {"role":"user","content":"Read a.txt"},
+      {"role":"assistant","content":null,"tool_calls":[
+        {"id":"call_1","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"a.txt\"}"}},
+        {"id":"call_2","type":"function","function":{"name":"list_dir","arguments":"{}"}}]},
+      {"role":"tool","tool_call_id":"call_1","content":"hello"},
+      {"role":"tool","tool_call_id":"call_2","name":"explicit","content":[{"type":"text","text":"x"},{"type":"text","text":"y"}]},
+      {"role":"tool","tool_call_id":"unknown","content":"z"},
+      {"role":"assistant","content":"Done.","tool_calls":[{"id":"c3","type":"function","function":{"name":"f"}}]}
+    ]}
+    """#
+
+    @Test func toolTrafficInTheHistoryIsFlattenedToPlainText() throws {
+        let r = try decode(Self.toolConversation)
+        #expect(r.messages.map(\.role) == [.user, .assistant, .user, .user, .user, .assistant])
+        #expect(r.messages[1].text == #"[called read_file with {"path":"a.txt"}]"# + "\n[called list_dir with {}]")
+        #expect(r.messages[2].text == "[tool result for read_file: hello]")        // name found via tool_call_id
+        #expect(r.messages[3].text == "[tool result for explicit: xy]")            // `name` wins; parts joined
+        #expect(r.messages[4].text == "[tool result for tool: z]")                 // unknown id → "tool"
+        #expect(r.messages[5].text == "Done.\n[called f with {}]")                 // text kept, call appended
+        #expect(!r.toolsIgnored)                                                   // only a `tools` field sets that
     }
 
     @Test func completionBodyMatchesTheOpenAIShape() throws {
@@ -283,6 +307,48 @@ struct ServeTextPipelineTests {
         let result = run([12, 14], stop: ["STOP"])                  // "STx"
         #expect(result.deltas.joined() == "STx")
         #expect(!result.stopped)
+    }
+}
+
+// MARK: - Sampling defaults (R20)
+
+struct SamplingDefaultsTests {
+    private func parse(_ json: String?) -> SamplingDefaults { SamplingDefaults.parse(json.map { Data($0.utf8) }) }
+
+    @Test func theCheckpointsGenerationConfigSuppliesBoth() {
+        #expect(parse(#"{"temperature":0.6,"top_p":0.95,"top_k":20}"#) == SamplingDefaults(temperature: 0.6, topP: 0.95))
+    }
+
+    @Test func noFileMeansPointSevenAndOne() {
+        #expect(parse(nil) == SamplingDefaults(temperature: 0.7, topP: 1.0))
+        #expect(SamplingDefaults.fallback == SamplingDefaults(temperature: 0.7, topP: 1.0))
+    }
+
+    @Test func eachKeyFallsBackOnItsOwn() {
+        #expect(parse(#"{"top_p":0.8}"#) == SamplingDefaults(temperature: 0.7, topP: 0.8))
+        #expect(parse(#"{"temperature":0.3}"#) == SamplingDefaults(temperature: 0.3, topP: 1.0))
+    }
+
+    @Test(arguments: ["not json", "[]", #"{"temperature":"hot","top_p":true}"#, #"{"temperature":-1,"top_p":0}"#, #"{"top_p":5}"#])
+    func anUnusableFileFallsBack(json: String) {
+        #expect(parse(json) == .fallback)
+    }
+
+    @Test func loadReadsTheFileFromTheModelDirectory() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("sampling-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        #expect(SamplingDefaults.load(directory: dir) == .fallback)                // file absent
+        try Data(#"{"temperature":0.6,"top_p":0.95}"#.utf8).write(to: dir.appendingPathComponent("generation_config.json"))
+        #expect(SamplingDefaults.load(directory: dir) == SamplingDefaults(temperature: 0.6, topP: 0.95))   // file present
+    }
+
+    @Test func anExplicitRequestValueAlwaysWins() {
+        let config = SamplingDefaults(temperature: 0.6, topP: 0.95)
+        #expect(config.applying(temperature: 0.0, topP: nil) == SamplingDefaults(temperature: 0.0, topP: 0.95))   // 0 is explicit, not "missing"
+        #expect(config.applying(temperature: nil, topP: 0.5) == SamplingDefaults(temperature: 0.6, topP: 0.5))
+        #expect(config.applying(temperature: 1.2, topP: 0.4) == SamplingDefaults(temperature: 1.2, topP: 0.4))
+        #expect(config.applying(temperature: nil, topP: nil) == config)
     }
 }
 
@@ -441,6 +507,22 @@ struct ChatCompletionsRouteTests {
         #expect(response.status == 200)
         #expect(backend.requests.first?.tools.isEmpty == true)
         #expect(log.entries.last?.toolsIgnored == true)
+    }
+
+    @Test func aConversationWithToolTrafficAnswers200AndTheFlattenedTextReachesTheBackend() async throws {
+        let backend = FakeBackend([.text("ok"), .usage(prompt: 1, completion: 1), .finish(.stop)])
+        let log = RequestLog()
+        let request = #"""
+        {"model":"mlx-community/Qwen3-4B-4bit","tools":[{"type":"function","function":{"name":"read_file"}}],
+         "messages":[{"role":"user","content":"Read a.txt"},
+          {"role":"assistant","content":null,"tool_calls":[{"id":"c1","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"a.txt\"}"}}]},
+          {"role":"tool","tool_call_id":"c1","content":"FILE-BODY"}]}
+        """#
+        let response = try #require(full(await call(request, chatEnvironment(backend: backend, log: log))))
+        #expect(response.status == 200)
+        let texts = try #require(backend.requests.first).messages.map(\.text)
+        #expect(texts == ["Read a.txt", #"[called read_file with {"path":"a.txt"}]"#, "[tool result for read_file: FILE-BODY]"])
+        #expect(log.entries.last?.toolsIgnored == true)                            // `tools` was present
     }
 
     @Test func anUnservedModelIs404() async throws {

@@ -158,6 +158,41 @@ nonisolated struct ServeTextPipeline {
     }
 }
 
+// MARK: - Sampling defaults
+
+/// What a request that omits `temperature` / `top_p` samples with (owner ruling R20, 2026-10-02):
+/// the checkpoint's own `generation_config.json` when it has the key, else **0.7 / 1.0**. An
+/// explicit request value always wins (the backend only consults this for the missing ones).
+nonisolated struct SamplingDefaults: Equatable {
+    var temperature: Double
+    var topP: Double
+
+    static let fallback = SamplingDefaults(temperature: 0.7, topP: 1.0)
+
+    /// Each key falls back independently, so a config with only `top_p` still gets 0.7.
+    static func parse(_ data: Data?) -> SamplingDefaults {
+        guard let data, let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            return fallback
+        }
+        func value(_ key: String) -> Double? {
+            guard let number = object[key] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+            let double = number.doubleValue
+            return double.isFinite ? double : nil
+        }
+        return SamplingDefaults(temperature: value("temperature").flatMap { $0 >= 0 ? $0 : nil } ?? fallback.temperature,
+                                topP: value("top_p").flatMap { $0 > 0 && $0 <= 1 ? $0 : nil } ?? fallback.topP)
+    }
+
+    /// The values to sample with: the request's own when given, these defaults otherwise.
+    func applying(temperature: Double?, topP: Double?) -> SamplingDefaults {
+        SamplingDefaults(temperature: temperature ?? self.temperature, topP: topP ?? self.topP)
+    }
+
+    static func load(directory: URL) -> SamplingDefaults {
+        parse(try? Data(contentsOf: directory.appendingPathComponent("generation_config.json")))
+    }
+}
+
 // MARK: - Backend
 
 /// Serves an installed MLX chat model: container from `ModelContainerPool`, `UserInput(chat:)`
@@ -213,10 +248,12 @@ nonisolated struct MLXChatBackend: ServeBackend {
             let promptTokens = input.text.tokens.size
 
             if let seed = request.seed { MLXRandom.seed(UInt64(truncatingIfNeeded: seed)) }
+            let sampling = SamplingDefaults.load(directory: directory)
+                .applying(temperature: request.temperature, topP: request.topP)
             let parameters = GenerateParameters(
                 maxTokens: request.effectiveMaxTokens,
-                temperature: Float(request.temperature ?? Self.defaultTemperature),
-                topP: Float(request.topP ?? 1.0))
+                temperature: Float(sampling.temperature),
+                topP: Float(sampling.topP))
             let stream = try MLXLMCommon.generateTokens(input: input, parameters: parameters, context: context)
 
             var pipeline = ServeTextPipeline(decode: { context.tokenizer.decode(tokenIds: $0) }, stop: request.stop)
@@ -244,10 +281,6 @@ nonisolated struct MLXChatBackend: ServeBackend {
             continuation.yield(.finish(hitLimit && !pipeline.stopped ? .length : .stop))
         }
     }
-
-    /// OpenAI's documented default is 1.0. Implementer's call, pending owner confirmation: follow it
-    /// rather than the 0.7 `LLMEngine` uses for flow rows — a client that wants less sets it.
-    nonisolated static let defaultTemperature = 1.0
 
     nonisolated private static func role(_ role: ServeMessage.Role) -> Chat.Message.Role {
         switch role {
