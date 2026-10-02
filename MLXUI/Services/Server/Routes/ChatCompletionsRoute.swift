@@ -31,6 +31,15 @@ nonisolated enum ChatCompletionsRoute {
         tracker.toolsIgnored = request.toolsIgnored
         if request.toolsIgnored { log.notice("tools ignored") }
 
+        // Apple Foundation Models that is served but not ready is a 503 with the readiness sentence
+        // (S1-4), not a 404: `/v1/models` omits it until ready, but the client named a model the
+        // user *is* serving. Readiness comes only through the injected checker (readme T8).
+        if request.model == ServedModels.appleFoundationID,
+           environment.servedModelIDs().contains(request.model),
+           let state = environment.appleFoundationReadiness(), state != .ready {
+            return tracker.fail(ReadinessSentence.error(for: state), headers: ["Retry-After": "2"])
+        }
+
         let servable = ServedModels.ids(served: environment.servedModelIDs(),
                                         installed: environment.installed(),
                                         appleFoundation: environment.appleFoundationReadiness())

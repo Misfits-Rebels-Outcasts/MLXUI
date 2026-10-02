@@ -30,8 +30,11 @@ nonisolated struct ServeEnvironment: Sendable {
             appleFoundationReadiness: { AppleFoundationAvailability.currentReadiness() },
             created: created,
             backendFor: { id in
-                // Only an installed MLX chat model has a backend; `apple-foundation` arrives with S1-4,
-                // and a remote-provider model never does (design P3).
+                // An installed MLX chat model, or on-device Apple Foundation Models (S1-4). A
+                // remote-provider model never has a backend (design P3).
+                if id == ServedModels.appleFoundationID {
+                    return AppleFoundationAvailability.makeChatStreamer().map { AFMBackend(streamer: $0) }
+                }
                 guard let entry = InstalledModelIndex.loadInstalled().entries.first(where: {
                     $0.kind == .llm && $0.hfModelId == id
                 }) else { return nil }
