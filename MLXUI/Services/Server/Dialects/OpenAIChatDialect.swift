@@ -34,7 +34,7 @@ nonisolated enum OpenAIChatDialect {
             messages.append(try decodeMessage(raw, at: index, toolNames: &toolNames))
         }
 
-        var request = ServeRequest(model: model, messages: messages)
+        var request = ServeRequest(model: model, messages: mergingAdjacentRoles(messages))
         request.temperature = try number(object["temperature"], "temperature")
         request.topP = try number(object["top_p"], "top_p")
         // `max_completion_tokens` is the newer name; either one limits the reply.
@@ -57,6 +57,23 @@ nonisolated enum OpenAIChatDialect {
         request.toolsIgnored = (object["tools"] != nil && !(object["tools"] is NSNull))
             || (object["tool_choice"] != nil && !(object["tool_choice"] is NSNull))
         return request
+    }
+
+    /// Adjacent messages with the same role become one, joined by a blank line (owner ruling R21,
+    /// 2026-10-02). Flattening turns each tool result into a user turn, and strict-alternation
+    /// templates — the Mistral family, which includes the catalog's Ministral 3B — reject two user
+    /// turns in a row; a client may also send consecutive same-role messages itself. Applies to every
+    /// role; an empty side adds no stray blank line.
+    static func mergingAdjacentRoles(_ messages: [ServeMessage]) -> [ServeMessage] {
+        var merged: [ServeMessage] = []
+        for message in messages {
+            if let last = merged.last, last.role == message.role {
+                merged[merged.count - 1].text = [last.text, message.text].filter { !$0.isEmpty }.joined(separator: "\n\n")
+            } else {
+                merged.append(message)
+            }
+        }
+        return merged
     }
 
     /// Tool traffic in the history is **flattened to plain text** (owner ruling R20, 2026-10-02: don't

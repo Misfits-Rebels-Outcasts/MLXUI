@@ -183,13 +183,38 @@ struct OpenAIChatDialectTests {
 
     @Test func toolTrafficInTheHistoryIsFlattenedToPlainText() throws {
         let r = try decode(Self.toolConversation)
-        #expect(r.messages.map(\.role) == [.user, .assistant, .user, .user, .user, .assistant])
+        // Flattened first, then adjacent same-role turns merged (R21): the three tool results are one user turn.
+        #expect(r.messages.map(\.role) == [.user, .assistant, .user, .assistant])
         #expect(r.messages[1].text == #"[called read_file with {"path":"a.txt"}]"# + "\n[called list_dir with {}]")
-        #expect(r.messages[2].text == "[tool result for read_file: hello]")        // name found via tool_call_id
-        #expect(r.messages[3].text == "[tool result for explicit: xy]")            // `name` wins; parts joined
-        #expect(r.messages[4].text == "[tool result for tool: z]")                 // unknown id → "tool"
-        #expect(r.messages[5].text == "Done.\n[called f with {}]")                 // text kept, call appended
+        // name found via tool_call_id; `name` wins and parts are joined; unknown id → "tool"
+        #expect(r.messages[2].text == "[tool result for read_file: hello]\n\n[tool result for explicit: xy]\n\n[tool result for tool: z]")
+        #expect(r.messages[3].text == "Done.\n[called f with {}]")                 // text kept, call appended
         #expect(!r.toolsIgnored)                                                   // only a `tools` field sets that
+    }
+
+    @Test func twoConsecutiveToolResultsBecomeOneUserTurn() throws {
+        let r = try decode(#"{"model":"m","messages":[{"role":"user","content":"go"},{"role":"assistant","tool_calls":[{"id":"a","function":{"name":"f","arguments":"{}"}},{"id":"b","function":{"name":"g","arguments":"{}"}}]},{"role":"tool","tool_call_id":"a","content":"one"},{"role":"tool","tool_call_id":"b","content":"two"}]}"#)
+        #expect(r.messages.map(\.role) == [.user, .assistant, .user])
+        #expect(r.messages[2].text == "[tool result for f: one]\n\n[tool result for g: two]")
+    }
+
+    @Test func aToolResultFollowedByAUserMessageIsOneUserTurn() throws {
+        let r = try decode(#"{"model":"m","messages":[{"role":"assistant","tool_calls":[{"id":"a","function":{"name":"f","arguments":"{}"}}]},{"role":"tool","tool_call_id":"a","content":"result"},{"role":"user","content":"now summarise"}]}"#)
+        #expect(r.messages.map(\.role) == [.assistant, .user])
+        #expect(r.messages[1].text == "[tool result for f: result]\n\nnow summarise")
+    }
+
+    @Test func twoPlainConsecutiveUserMessagesFromTheClientAreMerged() throws {
+        let r = try decode(#"{"model":"m","messages":[{"role":"system","content":"s"},{"role":"user","content":"first"},{"role":"user","content":"second"},{"role":"assistant","content":"a"},{"role":"user","content":"third"}]}"#)
+        #expect(r.messages.map(\.role) == [.system, .user, .assistant, .user])
+        #expect(r.messages[1].text == "first\n\nsecond")
+        #expect(r.messages[3].text == "third")                                     // alternation left alone
+    }
+
+    @Test func mergingNeverAddsABlankLineForAnEmptySide() {
+        let merged = OpenAIChatDialect.mergingAdjacentRoles([ServeMessage(role: .assistant, text: ""),
+                                                             ServeMessage(role: .assistant, text: "x")])
+        #expect(merged == [ServeMessage(role: .assistant, text: "x")])
     }
 
     @Test func completionBodyMatchesTheOpenAIShape() throws {
