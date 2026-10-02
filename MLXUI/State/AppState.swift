@@ -170,6 +170,8 @@ final class AppState { //appstatecomeback
     // Installation
     var installManager = InstallManager()
     var modelRunner = ModelRunner()
+    /// S1-5 — the Local Server's view-model. Only ever used through `LocalServerGate`.
+    let localServer = LocalServerController.shared
 
     // Model module registry — resolves non-LLM models (e.g. Whisper ASR) to their run UI.
     let registry = ModelRegistry()

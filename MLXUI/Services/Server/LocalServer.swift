@@ -30,6 +30,8 @@ final class LocalServer {
     /// Whether the `[::1]` listener is up (`false` while stopped, or when only IPv4 bound).
     private(set) var ipv6Active = false
     private(set) var settings: ServeSettings
+    /// The in-memory request log (last 200, metadata only) — Settings → Local Server shows it.
+    var requestLog: RequestLog { environment.requestLog }
 
     @ObservationIgnored private let defaults: UserDefaults?
     @ObservationIgnored private let listenPortOverride: UInt16?

@@ -213,6 +213,15 @@ struct ModelDetailView: View {
                             Label("Uninstall", systemImage: "trash").frame(minWidth: 100)
                         }
                         .buttonStyle(.bordered)
+                        // S1-5 — only an installed MLX chat model can be served, and only while the
+                        // Local Server is available (rule 14: through the gate, never the flag).
+                        if LocalServerGate.isAvailable, model.runnerKind == .llm {
+                            Toggle("Serve", isOn: Binding(
+                                get: { appState.localServer.isServing(model.hfModelId) },
+                                set: { on in Task { await appState.localServer.setServed(model.hfModelId, on) } }))
+                                .toggleStyle(.switch)
+                                .help("Let other apps on this Mac use this model.")
+                        }
                     }
                 } else if model.exceedsRAM(appState.systemInfo.totalRAMGB) {
                     Button {} label: {

@@ -29,7 +29,7 @@ struct SettingsPaneTests {
     }
 
     @Test func allCasesOrderIsTheTabOrder() {
-        #expect(SettingsPane.allCases == [.models, .providers, .agentTools, .privacy])
+        #expect(SettingsPane.allCases == [.models, .providers, .agentTools, .privacy, .localServer])   // S1-5: the fifth pane is last
     }
 
     @Test func existingSetupActionEqualityStillHolds() {

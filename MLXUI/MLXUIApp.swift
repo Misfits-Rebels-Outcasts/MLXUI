@@ -7,7 +7,10 @@ struct MLXUIApp: App {
     //https://developer.apple.com/forums/thread/710376
     class AppDelegate: NSObject, NSApplicationDelegate {
         func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-            return true
+            // S1-5 (design F6): stay running while the Local Server is serving; otherwise — and
+            // always while the feature is hidden — quit with the last window, as before.
+            LocalServerPolicy.shouldTerminateAfterLastWindowClosed(
+                gateAvailable: LocalServerGate.isAvailable, status: LocalServerController.shared.server.status)
         }
     }
     @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
@@ -104,10 +107,22 @@ struct MLXUIApp: App {
                 }
             }
             .environment(appState)
+            // S1-5 — resume serving if the user left models served (gate permitting; a no-op
+            // while hidden and under test).
+            .task {
+                if !TestEnvironment.isRunningTests { await appState.localServer.autoStart() }
+            }
             // Sheets present in a fresh environment, so re-inject AppState into each
             // content closure — otherwise @Environment(AppState.self) lookups crash (B1).
             .sheet(isPresented: $appState.showCommandPalette) {
                 CommandPaletteView()
+                    .environment(appState)
+            }
+            .sheet(isPresented: Binding(
+                get: { LocalServerGate.isAvailable && appState.localServer.showConnect },
+                set: { appState.localServer.showConnect = $0 }
+            )) {
+                ConnectAppSheet(controller: appState.localServer, initialModelID: appState.localServer.connectModelID)
                     .environment(appState)
             }
             .sheet(item: $appState.runningModel) { model in

@@ -38,9 +38,16 @@ nonisolated struct ServeEnvironment: Sendable {
                 guard let entry = InstalledModelIndex.loadInstalled().entries.first(where: {
                     $0.kind == .llm && $0.hfModelId == id
                 }) else { return nil }
-                return MLXChatBackend(directory: ModelStore.shared.directory(forModelID: entry.hfModelId),
-                                      footprintBytes: Int64(entry.ramGB * 1_073_741_824))
+                return mlxBackend(for: entry)
             })
+    }
+
+    /// The backend for an installed MLX chat model. The directory is keyed by the **HF repo**
+    /// (`directory(forHFModelID:)`, `/` → `--`), which is where `InstallManager` put the files — S1-5's
+    /// first by-hand run found the unslugged id nesting a `mlx-community/` folder that doesn't exist.
+    static func mlxBackend(for entry: InstalledModelIndex.Entry) -> MLXChatBackend {
+        MLXChatBackend(directory: ModelStore.shared.directory(forHFModelID: entry.hfModelId),
+                       footprintBytes: Int64(entry.ramGB * 1_073_741_824))
     }
 }
 
