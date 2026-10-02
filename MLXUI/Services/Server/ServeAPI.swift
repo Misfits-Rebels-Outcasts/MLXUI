@@ -1,5 +1,6 @@
 import Foundation
 import FlyingFox
+import FlyingSocks
 
 /// What the server can look at when answering — injected, so tests never touch the disk, the
 /// catalog, or Apple Intelligence.
@@ -11,6 +12,14 @@ nonisolated struct ServeEnvironment: Sendable {
     var appleFoundationReadiness: @Sendable () -> Readiness?
     /// Epoch seconds reported as each model's `created`.
     var created: Int
+    /// S1-3: the backend that serves a model id (`nil` = no backend for it in this build).
+    var backendFor: @Sendable (String) -> ServeBackend? = { _ in nil }
+    /// S1-3: one generation per model, global cap 1, depth 4 (design §3).
+    var queue: ServeQueue = ServeQueue()
+    var requestLog: RequestLog = RequestLog()
+    /// S1-A ruling 2: a `: keep-alive` comment whenever nothing was written for this long.
+    var keepAliveSeconds: Double = 1.0
+    var now: @Sendable () -> Date = { Date() }
 
     /// The app's real environment: the served set from `served`, the live install markers, the
     /// real AFM checker.
@@ -19,7 +28,16 @@ nonisolated struct ServeEnvironment: Sendable {
             servedModelIDs: { served.value },
             installed: { InstalledModelIndex.loadInstalled() },
             appleFoundationReadiness: { AppleFoundationAvailability.currentReadiness() },
-            created: created)
+            created: created,
+            backendFor: { id in
+                // Only an installed MLX chat model has a backend; `apple-foundation` arrives with S1-4,
+                // and a remote-provider model never does (design P3).
+                guard let entry = InstalledModelIndex.loadInstalled().entries.first(where: {
+                    $0.kind == .llm && $0.hfModelId == id
+                }) else { return nil }
+                return MLXChatBackend(directory: ModelStore.shared.directory(forModelID: entry.hfModelId),
+                                      footprintBytes: Int64(entry.ramGB * 1_073_741_824))
+            })
     }
 }
 
@@ -43,13 +61,32 @@ nonisolated struct ServeResponse: Sendable, Equatable {
     var headers: [String: String] = [:]
 }
 
-/// The whole S1-2 decision layer as a pure function: guard first (every request, before
-/// routing), then route. Nothing here logs request content; there is none to log.
+/// The decision layer: guard first (every request, before routing), then route. Nothing here
+/// logs request content.
 nonisolated enum ServeAPI {
+    /// The endpoints that need no request body — a pure function over the head (S1-2).
     static func respond(to head: ServeRequestHead, guard requestGuard: RequestGuard,
                         environment: ServeEnvironment) -> ServeResponse {
         if let rejection = requestGuard.check(head) { return error(rejection) }
+        return route(head, environment: environment)
+    }
 
+    /// The full path (S1-3): the guard still runs first, then `POST /v1/chat/completions` (which
+    /// reads the body and may stream), else the body-less routes.
+    static func handle(head: ServeRequestHead, guard requestGuard: RequestGuard, environment: ServeEnvironment,
+                       body: @Sendable () async throws -> Data) async -> ServeReply {
+        if let rejection = requestGuard.check(head) { return .full(error(rejection)) }
+        guard head.path == "/v1/chat/completions" else { return .full(route(head, environment: environment)) }
+        guard head.method == "POST" else { return .full(methodNotAllowed(["POST"])) }
+        let data: Data
+        do { data = try await body() } catch {
+            return .full(Self.error(ServeError(status: 400, message: "The request body couldn't be read.",
+                                               code: "invalid_body")))
+        }
+        return await ChatCompletionsRoute.handle(head: head, body: data, environment: environment)
+    }
+
+    private static func route(_ head: ServeRequestHead, environment: ServeEnvironment) -> ServeResponse {
         switch head.path {
         case "/health":
             return head.method == "GET" ? json(200, Data(#"{"status":"ok"}"#.utf8)) : methodNotAllowed(["GET"])
@@ -94,14 +131,29 @@ nonisolated struct LocalServerHandler: HTTPHandler {
             host: request.headers[.host],
             origin: request.headers[HTTPHeader("Origin")],
             transferEncoding: request.headers[.transferEncoding],
-            contentLength: request.headers[.contentLength])
-        let response = ServeAPI.respond(to: head, guard: RequestGuard(port: port()), environment: environment)
+            contentLength: request.headers[.contentLength],
+            userAgent: request.headers[HTTPHeader("User-Agent")])
+        let reply = await ServeAPI.handle(head: head, guard: RequestGuard(port: port()), environment: environment,
+                                          body: { try await request.bodyData })
 
+        switch reply {
+        case .full(let response):
+            return HTTPResponse(statusCode: HTTPStatusCode(response.status, phrase: Self.phrase(for: response.status)),
+                                headers: Self.headers(response.headers),
+                                body: response.body)
+        case .stream(let status, let headers, let bytes):
+            // The spike's finding (S1-0): one `nextBuffer` call is one write, so SSE events arrive
+            // as they are produced instead of in 4 KB lumps.
+            return HTTPResponse(statusCode: HTTPStatusCode(status, phrase: Self.phrase(for: status)),
+                                headers: Self.headers(headers),
+                                body: HTTPBodySequence(from: SSEByteSequence(stream: bytes)))
+        }
+    }
+
+    private static func headers(_ values: [String: String]) -> HTTPHeaders {
         var headers = HTTPHeaders()
-        for (name, value) in response.headers { headers[HTTPHeader(name)] = value }
-        return HTTPResponse(statusCode: HTTPStatusCode(response.status, phrase: Self.phrase(for: response.status)),
-                            headers: headers,
-                            body: response.body)
+        for (name, value) in values { headers[HTTPHeader(name)] = value }
+        return headers
     }
 
     static func phrase(for status: Int) -> String {
@@ -113,8 +165,27 @@ nonisolated struct LocalServerHandler: HTTPHandler {
         case 405: return "Method Not Allowed"
         case 411: return "Length Required"
         case 413: return "Content Too Large"
+        case 499: return "Client Closed Request"
+        case 500: return "Internal Server Error"
+        case 501: return "Not Implemented"
         case 503: return "Service Unavailable"
         default:  return "Error"
         }
+    }
+}
+
+/// One element of the stream == one chunk written to the socket (S1-0, journal 2026-362): a custom
+/// `AsyncBufferedSequence` whose `nextBuffer` returns exactly what was produced, never waiting to
+/// fill a buffer — which is what makes tokens (and heartbeats) reach the client as they happen.
+nonisolated struct SSEByteSequence: AsyncBufferedSequence, Sendable {
+    typealias Element = UInt8
+    let stream: AsyncStream<[UInt8]>
+
+    func makeAsyncIterator() -> Iterator { Iterator(iterator: stream.makeAsyncIterator()) }
+
+    struct Iterator: AsyncBufferedIteratorProtocol {
+        var iterator: AsyncStream<[UInt8]>.AsyncIterator
+        mutating func next() async throws -> UInt8? { fatalError("FlyingFox reads this through nextBuffer") }
+        mutating func nextBuffer(suggested count: Int) async throws -> [UInt8]? { await iterator.next() }
     }
 }

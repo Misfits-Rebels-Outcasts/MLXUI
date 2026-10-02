@@ -35,6 +35,7 @@ nonisolated struct ServeRequestHead: Sendable, Equatable {
     var origin: String?
     var transferEncoding: String?
     var contentLength: String?
+    var userAgent: String?
 }
 
 /// The browser guard and size cap — design §4, run on **every** request, before routing.
