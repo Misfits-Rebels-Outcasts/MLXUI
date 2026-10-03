@@ -32,11 +32,12 @@ private func makeController(listenPort: UInt16 = 0, served: Set<String> = [], de
                             installed: @escaping () -> InstalledModelIndex = {
                                 installedIndex([sampleModel, "b", "mlx-community/other"])
                             },
+                            catalogLoaded: @escaping () -> Bool = { true },
                             evict: @escaping (String) async -> Void = { _ in }) -> LocalServerController {
     let server = LocalServer(settings: ServeSettings(servedModelIDs: served), defaults: nil,
                              listenPort: listenPort, environment: environment())
     return LocalServerController(server: server, defaults: defaults, installed: installed,
-                                 appleFoundation: { .ready }, evict: evict)
+                                 appleFoundation: { .ready }, catalogLoaded: catalogLoaded, evict: evict)
 }
 
 private actor Evicted {
@@ -594,7 +595,8 @@ struct ServeReachableSetTests {
                                  defaults: nil, listenPort: 0, environment: environment())
         let controller = LocalServerController(server: server, defaults: freshDefaults(),
                                                installed: { installedIndex([sampleModel]) },
-                                               appleFoundation: { .needsSetup(reason: "off", action: nil) }, evict: { _ in })
+                                               appleFoundation: { .needsSetup(reason: "off", action: nil) },
+                                               catalogLoaded: { true }, evict: { _ in })
         defer { Task { await controller.server.stop() } }
         #expect(controller.servedIDs.count == 3)
         #expect(controller.reachableIDs == [sampleModel])                           // == what /v1/models lists
@@ -636,6 +638,44 @@ struct ServeReachableSetTests {
         await controller.autoStart()
         await controller.modelUninstalled("gone/model")
         #expect(controller.servedIDs == ["gone/model"])
+        #expect(controller.server.status == .stopped)
+    }
+
+    // S1-5e (R26): an unreadable / empty catalog makes every model look uninstalled — that must
+    // never be read as "the user deleted them all".
+    @Test func anUnloadedCatalogLeavesTheServedListAndEvictsNothingAtLaunchAndOnUninstall() async {
+        LocalServerGate.overrideForTesting = true
+        defer { LocalServerGate.overrideForTesting = nil }
+        let evicted = Evicted()
+        let controller = makeController(served: [sampleModel, "gone/model"], installed: { installedIndex([]) },
+                                        catalogLoaded: { false }, evict: { await evicted.add($0) })
+        defer { Task { await controller.server.stop() } }
+        await controller.autoStart()
+        await controller.modelUninstalled("gone/model")
+        #expect(controller.servedIDs == [sampleModel, "gone/model"])
+        #expect(await evicted.ids.isEmpty)
+    }
+
+    @Test func theLiveCatalogCheckIsTrueWhenTheBundledCatalogDecodes() {
+        #expect(InstalledModelIndex.catalogLoaded)                                   // browser.json ships non-empty
+    }
+
+    @Test func anUnloadedCatalogNeverEvictsAnUnservedModelOnUninstall() async {
+        LocalServerGate.overrideForTesting = true
+        defer { LocalServerGate.overrideForTesting = nil }
+        let evicted = Evicted()
+        let controller = makeController(installed: { installedIndex([]) }, catalogLoaded: { false },
+                                        evict: { await evicted.add($0) })
+        await controller.modelUninstalled(sampleModel)                              // never served; can't tell it's gone
+        #expect(await evicted.ids.isEmpty)
+    }
+
+    @Test func servingAModelThatIsNotInstalledDoesNotStartTheServer() async {
+        LocalServerGate.overrideForTesting = true
+        defer { LocalServerGate.overrideForTesting = nil }
+        let controller = makeController(installed: { installedIndex([]) })
+        defer { Task { await controller.server.stop() } }
+        await controller.setServed("gone/model", true)                              // stored 1, reachable 0
         #expect(controller.server.status == .stopped)
     }
 }

@@ -162,15 +162,17 @@ final class LocalServerController {
 
     @ObservationIgnored private let installedIndex: () -> InstalledModelIndex
     @ObservationIgnored private let appleFoundation: () -> Readiness?
+    @ObservationIgnored private let catalogLoaded: () -> Bool
     @ObservationIgnored private let evictModel: (String) async -> Void
     @ObservationIgnored private let budgetBytes: Int64
 
     /// - Parameters: `installed` / `appleFoundation` / `evict` / `budgetBytes` default to the live
-    ///   catalog, the AFM checker, `ModelContainerPool.shared` and `MemoryBudget.shared`; tests
+    ///   catalog (`catalogLoaded`: did it decode non-empty), the AFM checker, `ModelContainerPool.shared` and `MemoryBudget.shared`; tests
     ///   inject their own. `evict` takes an HF repo id.
     init(server: LocalServer = LocalServer(), defaults: UserDefaults = .standard,
          installed: @escaping () -> InstalledModelIndex = { InstalledModelIndex.loadInstalled() },
          appleFoundation: @escaping () -> Readiness? = { AppleFoundationAvailability.currentReadiness() },
+         catalogLoaded: @escaping () -> Bool = { InstalledModelIndex.catalogLoaded },
          evict: @escaping (String) async -> Void = { hfModelID in
              await ModelContainerPool.shared.evict(modelID: ModelStore.repoSlug(for: hfModelID))
          },
@@ -179,6 +181,7 @@ final class LocalServerController {
         self.defaults = defaults
         self.installedIndex = installed
         self.appleFoundation = appleFoundation
+        self.catalogLoaded = catalogLoaded
         self.evictModel = evict
         self.budgetBytes = budgetBytes
         self.enabled = defaults.object(forKey: Self.enabledKey) as? Bool ?? true
@@ -255,7 +258,7 @@ final class LocalServerController {
     /// stop the server if it was the last reachable model. A model whose repo is still installed
     /// (another card shares it) is left alone.
     func modelUninstalled(_ hfModelID: String) async {
-        guard LocalServerGate.isAvailable else { return }
+        guard LocalServerGate.isAvailable, catalogLoaded() else { return }
         guard !isInstalledLLM(hfModelID) else { return }
         let wasServed = isServing(hfModelID)
         await reconcileServed()                          // un-serves + evicts it when it was served
@@ -265,8 +268,10 @@ final class LocalServerController {
     /// Drops every served MLX id that is no longer an installed chat model — evicting its weights —
     /// then applies start/stop. `apple-foundation` is never dropped (its readiness can change; it
     /// is just not reachable meanwhile). Gated: while hidden the persisted list is left untouched.
+    /// Also skipped unless the catalog actually loaded non-empty (S1-5e, R26): an unreadable
+    /// `browser.json` makes everything look uninstalled and must not wipe the user's list.
     func reconcileServed() async {
-        guard LocalServerGate.isAvailable else { return }
+        guard LocalServerGate.isAvailable, catalogLoaded() else { return }
         let gone = servedIDs.filter { $0 != ServedModels.appleFoundationID && !isInstalledLLM($0) }
         for id in gone {
             server.update(settings: server.settings.serving(id, false))

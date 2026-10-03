@@ -59,6 +59,10 @@ nonisolated struct InstalledModelIndex: Sendable {
     /// All catalog models flattened to `(id, kind, ramGB)`. Decoded through a local
     /// `nonisolated` DTO rather than the MainActor-isolated `BrowserData`/`ModelEntry`, keeping
     /// the resolver off the MainActor (the same boundary the nonisolated engines observe).
+    /// Whether the bundled catalog decoded to at least one model. An unreadable or empty
+    /// `browser.json` yields an empty index that means "can't tell", not "nothing installed".
+    static var catalogLoaded: Bool { !catalogEntries().isEmpty }
+
     private static func catalogEntries() -> [Entry] {
         guard let url = Bundle.main.url(forResource: "browser", withExtension: "json"),
               let data = try? Data(contentsOf: url),
