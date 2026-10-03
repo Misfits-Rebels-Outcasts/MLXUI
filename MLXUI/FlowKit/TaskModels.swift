@@ -232,7 +232,11 @@ nonisolated enum TaskModels {
     // task rows and three gallery flows actually run.
     private static let llmModels = ["Ministral 3B", "Llama 3.1 8B", "Qwen3 8B",
                                     "Qwen2.5 14B", "Ternary-Bonsai 4B", "Ternary-Bonsai 8B",
-                                    "Qwen3.5 9B"]
+                                    "Qwen3.5 9B",
+                                    // Q38-3 (RSI/DelegateQwen38Backlog.md): the 3-bit Qwen3.8 27B
+                                    // card, appended **last** per rule 8 / MoC-2-4 D -- the seed
+                                    // ("Ministral 3B") walks this array in order and must not move.
+                                    "Qwen3.8 27B 3-bit"]
 
     /// A task's model pool (display names) — preference ordering for the seed, nothing more.
     static func models(forTask task: String) -> [String] {

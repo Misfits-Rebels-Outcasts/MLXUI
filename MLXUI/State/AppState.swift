@@ -48,6 +48,15 @@ final class AppState { //appstatecomeback
     /// entry and is unaffected. Mirrors `hideVideoGeneration`.
     static let hideQwen359B = false
 
+    /// Set to `true` to hide the "Qwen3.8-27B" (4-bit) model badge from Browse → Chat & Text.
+    /// **Only the 4-bit card is hidden** — the community 3-bit card (`Qwen3.8-27B (3-bit)`,
+    /// `lukaskremla--Qwen3.8-27B-3bit-MLX`) is a different `id` and is never filtered by this
+    /// flag; it is the version an 18–24 GB Mac can actually run and the one Q38-S1…S4 were run
+    /// on. Owner ruling D1 (2026-10-03, `RSI/DelegateQwen38Backlog.md` Q38-0): committed `true`
+    /// until smoke row Q38-S5 passes on a 32 GB+ Mac, then the owner flips it. Mirrors
+    /// `hideQwen359B`.
+    static let hideQwen3827B = true
+
     /// Set to `true` to hide the "Advance Gallery" shelf (every bundled flow that isn't
     /// basic) on the Automate → AI Workflows page. My Workflows and Basic Gallery still
     /// render.
@@ -418,6 +427,9 @@ final class AppState { //appstatecomeback
             }
             if Self.hideQwen359B {
                 models.removeAll { $0.id == "mlx-community--Qwen3.5-9B-MLX-4bit" }
+            }
+            if Self.hideQwen3827B {
+                models.removeAll { $0.id == "mlx-community--Qwen3.8-27B-4bit" }
             }
         }
         if let source = filterSource {

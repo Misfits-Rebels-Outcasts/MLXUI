@@ -163,7 +163,9 @@ struct CatFlowCatalogBridgeTests {
             Issue.record("SAM Base should resolve: \(reason)")
             _ = display
         }
-        #expect(CatalogBridge.entries.count == 23)
+        // Q38-3: the bridge table gained "Qwen3.8 27B 3-bit"
+        // (`lukaskremla--Qwen3.8-27B-3bit-MLX`), 23 -> 24.
+        #expect(CatalogBridge.entries.count == 24)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
@@ -391,7 +393,9 @@ struct CatFlowCatalogBridgeTests {
         case .notRunnable(let display, let reason, _):
             Issue.record("\(display) should resolve: \(reason)")
         }
-        #expect(CatalogBridge.entries.count == 23)
+        // Q38-3: the bridge table gained "Qwen3.8 27B 3-bit"
+        // (`lukaskremla--Qwen3.8-27B-3bit-MLX`), 23 -> 24.
+        #expect(CatalogBridge.entries.count == 24)
     }
 
     // MARK: - MoC-4-4: Qwen3 Reranker 0.6B joins the bridge, the model on MoC-3's seam
@@ -640,5 +644,89 @@ struct CatFlowCatalogBridgeTests {
                                                transcript: nil, context: nil, usedFlowContent: nil)
         #expect(output.items.first?.value == "my invoice was charged twice")
         #expect(caching.lastTag == "billing")
+    }
+
+    // MARK: - Q38-3: Qwen3.8 27B 3-bit joins the bridge, llmModels' last slot
+
+    /// Q38-0 B1 as ruled by the owner 2026-10-03: the 3-bit card gets its **own** display name
+    /// with `.same` equivalence, resolving to exactly the one catalog entry Q38-2 added. The
+    /// display name is what a `.cat` writes, so this is the string every flow row must use.
+    @Test func qwen38TwentySevenBThreeBitResolvesAsSame() throws {
+        let catalog = try loadCatalog()
+        let entry = try #require(CatalogBridge.entry(for: "Qwen3.8 27B 3-bit"))
+        #expect(entry.pinnedID == "lukaskremla/Qwen3.8-27B-3bit-MLX")
+        #expect(entry.candidates == ["lukaskremla/Qwen3.8-27B-3bit-MLX"])
+        #expect(entry.equivalence == .same)
+        #expect(entry.manifestFile == "qwen3.8-27b-3bit.json")
+        // Explicit `.llm` so the 4-bit card (Q38-5/Q38-6), which shares this architecture string,
+        // can never be picked by an ambiguous hfModelId match.
+        #expect(entry.modelType == .llm)
+        switch CatalogBridge.resolve("Qwen3.8 27B 3-bit", catalog: catalog) {
+        case .runnable(let slot, let equivalence, let note):
+            #expect(slot.modelEntry?.hfModelId == "lukaskremla/Qwen3.8-27B-3bit-MLX")
+            #expect(slot.modelEntry?.runnerKind == .llm)
+            #expect(slot.modelEntry?.ramGB == 19.08)
+            #expect(equivalence == .same)
+            #expect(note == nil)
+        case .notRunnable(let display, let reason, _):
+            Issue.record("\(display) should resolve: \(reason)")
+        }
+    }
+
+    /// rule 16 / add-model.md AM-W step 6: the manifest must be in the **app bundle**, not just
+    /// in `Resources/`. `Bundle.main` is `MLXUI.app` here (host-app-hosted tests; the precedent is
+    /// `GLMOCRResolutionTests.glmOCRManifestLoadsFromTheBundle`), so this fails if the
+    /// file-system-synchronized group did not carry the new file into the target.
+    @Test func qwen38TwentySevenBThreeBitManifestLoadsFromTheAppBundle() throws {
+        let manifest = try #require(CuratedManifest.load(manifestFile: "qwen3.8-27b-3bit.json"))
+        #expect(manifest.id == "lukaskremla/Qwen3.8-27B-3bit-MLX")
+        #expect(manifest.display == "Qwen3.8 27B 3-bit")
+        let temperature = try #require(manifest.settings["temperature"])
+        #expect(temperature.min == 0.0)
+        #expect(temperature.max == 2.0)
+        #expect(temperature.defaultValue == .number(0.6))
+        let maxTokens = try #require(manifest.settings["max_tokens"])
+        #expect(maxTokens.min == 1)
+        #expect(maxTokens.max == 32768)
+        #expect(maxTokens.defaultValue == .number(2048))
+    }
+
+    /// Rule 8 / MoC-2-4 D: "Qwen3.8 27B 3-bit" is appended **last** to `llmModels`, so every
+    /// llmModels-keyed task still seeds "Ministral 3B" and the new name is menu-reachable (it is
+    /// a member of the derived pool) without ever becoming the default.
+    @MainActor
+    @Test func qwen38TwentySevenBThreeBitIsLastInTheLLMPool() throws {
+        let catalog = try loadCatalog()
+        let registry = ModelRegistry()
+        for module in installedModules { module.register(into: registry) }
+        let claimable = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
+
+        let llmModelsKeyedTasks = ["Generate", "Summarize", "Translate", "Answer", "Rewrite",
+                                   "Draft", "Ask", "Title", "Critique", "Verify", "Revise",
+                                   "Merge", "Text to Table"]
+        for task in llmModelsKeyedTasks {
+            #expect(TaskModels.defaultModel(forTask: task, catalog: catalog, claimableModelIDs: claimable) == "Ministral 3B",
+                    "\(task) should still seed Ministral 3B after Qwen3.8 27B 3-bit was appended")
+            #expect(TaskModels.models(forTask: task).last == "Qwen3.8 27B 3-bit",
+                    "\(task): Qwen3.8 27B 3-bit should be the last pool name")
+        }
+
+        let derived = TaskModels.derivedModels(for: "Generate", catalog: catalog, claimableModelIDs: claimable)
+        #expect(derived.contains { $0.displayName == "Qwen3.8 27B 3-bit" },
+                "the Generate menu should offer Qwen3.8 27B 3-bit")
+    }
+
+    /// The `llmModels` append must not change what Classify/Gate/Score offer either — those three
+    /// are keyed on the same array, and their seed is Laya 0.4B (LY/CL gate D).
+    @MainActor
+    @Test func qwen38TwentySevenBThreeBitLeavesTheDeciderSeedsAlone() throws {
+        let catalog = try loadCatalog()
+        let registry = ModelRegistry()
+        for module in installedModules { module.register(into: registry) }
+        let claimable = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
+        for task in ["Classify", "Gate", "Score"] {
+            #expect(TaskModels.defaultModel(forTask: task, catalog: catalog, claimableModelIDs: claimable) == "Laya 0.4B",
+                    "\(task) should still seed Laya 0.4B")
+        }
     }
 }

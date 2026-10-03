@@ -1,0 +1,36 @@
+{
+  "id": "lukaskremla/Qwen3.8-27B-3bit-MLX",
+  "display": "Qwen3.8 27B 3-bit",
+  "kind": "local",
+  "engine": "mlx-lm",
+  "tasks": [
+    "Generate",
+    "Decide"
+  ],
+  "settings": {
+    "temperature": {
+      "type": "number",
+      "min": 0.0,
+      "max": 2.0,
+      "default": 0.6,
+      "maps_to": "temp"
+    },
+    "max_tokens": {
+      "type": "number",
+      "min": 1,
+      "max": 32768,
+      "default": 2048,
+      "maps_to": "max_tokens"
+    }
+  },
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 12.72,
+    "ram_gb": 19.08
+  },
+  "source": "https://huggingface.co/lukaskremla/Qwen3.8-27B-3bit-MLX",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true,
+  "notes": "MLXUI-authored for Q38-3 (RSI/DelegateQwen38Backlog.md; Q38-0 ruled A1/B1/C1/D1 by the owner 2026-10-03) -- catflow-mlx has no Qwen3.8 27B manifest to port, so this is copied from qwen3.5-9b-4bit.json's shape exactly, which the backlog's contract names: engine mlx-lm, tasks Generate + Decide, temperature default 0.6, max_tokens default 2048 with ceiling 32768. max_tokens is NOT seeded from the checkpoint's 262144-token context window (the same reason the 9B's is not: that ceiling is not reachable on a typical Mac, and the flow path caps generation per row). resources.disk_gb is browser.json's downloadSizeGB (12.72) and resources.ram_gb its ramGB (19.08, the 1.5x-heuristic gate figure) -- both from the HF tree API at Q38-2, not Python-measured. Verified against lukaskremla/Qwen3.8-27B-3bit-MLX revision b3503b31b36125107e12a2b57fbe690c37bfc053 (2026-10-03)."
+}
