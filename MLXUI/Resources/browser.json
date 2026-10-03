@@ -288,7 +288,7 @@
               "format": "mlx-4bit",
               "ramGB": 26.0,
               "downloadSizeGB": 16.08,
-              "qualityPercent": 80,
+              "qualityPercent": 90,
               "hfModelId": "mlx-community/Qwen3.8-27B-4bit",
               "recommended": true
             }
