@@ -8,22 +8,36 @@ import Foundation
 /// asserts on a key's *contents* in a way that would need one logged to debug a failure.
 struct KeychainHelperTests {
 
-    /// The existing HF-token wrappers still round-trip, and restore whatever was there
-    /// before the test ran (a developer's real token, or nothing) rather than clobbering it.
-    @Test func hfTokenStillRoundTrips() {
-        let original = KeychainHelper.getToken()
-        defer {
-            if let original {
-                KeychainHelper.saveToken(original)
-            } else {
-                KeychainHelper.deleteToken()
-            }
-        }
+    /// The HF-token wrappers round-trip. KC-1.3: this runs against a throwaway account via the
+    /// wrappers' `account:` seam, so it never reads, overwrites or deletes the developer's
+    /// real `huggingface-token` item (which itself raised a Keychain prompt in `xcodebuild test`).
+    @Test func hfTokenWrappersRoundTrip() {
+        let account = KeychainHelper.providerAccount("test-hf-\(UUID().uuidString)")
+        defer { KeychainHelper.deleteToken(account: account) }
         let probe = "test-\(UUID().uuidString)"
-        KeychainHelper.saveToken(probe)
-        #expect(KeychainHelper.getToken() == probe)
-        KeychainHelper.deleteToken()
-        #expect(KeychainHelper.getToken() == nil)
+        #expect(!KeychainHelper.hasToken(account: account))
+        KeychainHelper.saveToken(probe, account: account)
+        #expect(KeychainHelper.hasToken(account: account))
+        #expect(KeychainHelper.getToken(account: account) == probe)
+        KeychainHelper.deleteToken(account: account)
+        #expect(!KeychainHelper.hasToken(account: account))
+        #expect(KeychainHelper.getToken(account: account) == nil)
+    }
+
+    /// The wrappers' default account is still the HF item — pinned by name, no Keychain access.
+    @Test func hfWrappersDefaultToTheHuggingFaceAccount() {
+        #expect(KeychainHelper.hfAccount == "huggingface-token")
+    }
+
+    /// KC-1.1: `exists` tracks save/delete and is false for a never-set account.
+    @Test func existsTracksSaveAndDelete() {
+        let account = KeychainHelper.providerAccount("test-exists-\(UUID().uuidString)")
+        defer { KeychainHelper.delete(account: account) }
+        #expect(!KeychainHelper.exists(account: account))
+        KeychainHelper.save("value", account: account)
+        #expect(KeychainHelper.exists(account: account))
+        KeychainHelper.delete(account: account)
+        #expect(!KeychainHelper.exists(account: account))
     }
 
     /// Two provider accounts (KEY-1's actual reason for existing) don't collide, and

@@ -124,6 +124,9 @@ nonisolated enum SettingsPane: String, CaseIterable, Sendable, Equatable {
     /// SET-5 — what leaves this Mac, rendered from `RM-6-privacy-disclosure.md` §1. No tab
     /// yet; the case exists now so `SettingsPane.allCases`' order is settled ahead of it.
     case privacy
+    /// S1-5 — the Local Server pane (owner ruling R12: a fifth pane). Only offered while
+    /// `LocalServerGate.isAvailable`; its raw value is a new persisted key, so it stays stable.
+    case localServer
 
     /// The tab title, and the pane's own heading inside the window.
     var title: String {
@@ -132,6 +135,7 @@ nonisolated enum SettingsPane: String, CaseIterable, Sendable, Equatable {
         case .providers: return "Providers"
         case .agentTools: return "Tools"
         case .privacy: return "Privacy"
+        case .localServer: return "Local Server"
         }
     }
 
@@ -142,6 +146,7 @@ nonisolated enum SettingsPane: String, CaseIterable, Sendable, Equatable {
         case .providers: return "key"
         case .agentTools: return "wrench.and.screwdriver"
         case .privacy: return "hand.raised"
+        case .localServer: return "network"
         }
     }
 }
@@ -202,7 +207,7 @@ nonisolated struct ProviderModelRef: Sendable, Equatable {
 nonisolated enum ProviderCredential {
     static func readiness(providerName: String) -> Readiness {
         let account = KeychainHelper.providerAccount(providerName)
-        guard KeychainHelper.get(account: account) != nil else {
+        guard CredentialPresence.shared.isPresent(account: account) else {
             return .needsSetup(reason: "Add your \(providerName) key in Settings",
                                 action: .openSettings(.providers))
         }

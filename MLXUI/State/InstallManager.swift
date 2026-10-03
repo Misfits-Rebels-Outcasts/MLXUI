@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 
 enum InstallState: Equatable {
     case idle
@@ -664,52 +665,192 @@ private final class ProgressDelegate: NSObject, URLSessionDownloadDelegate {
 /// compiles unchanged, since a `MainActor` context can always call a `nonisolated` func.
 nonisolated enum KeychainHelper {
     private static let service = "com.ai-browser"
-    private static let hfAccount = "huggingface-token"
+    /// Internal (not private) so a test can pin the wrappers' default account without ever
+    /// reading the developer's real token.
+    static let hfAccount = "huggingface-token"
 
     /// Registry §7 / M6's Swift equivalent of `$CATFLOW_KEY_<NAME>`: the Keychain account a
     /// provider manifest's `"credentials": "<name>"` reference resolves to.
     static func providerAccount(_ name: String) -> String { "provider-\(name)" }
 
-    static func get(account: String) -> String? {
-        let query: [String: Any] = [
+    // MARK: - Data-protection keychain (KC-3)
+
+    /// `errSecMissingEntitlement`: the binary isn't signed with what the data-protection
+    /// keychain needs (an ad-hoc "Sign to Run Locally" build hits this).
+    static let missingEntitlementStatus: OSStatus = -34018
+    private static let sawMissingEntitlement = OSAllocatedUnfairLock(initialState: false)
+
+    /// True once any query has failed with `errSecMissingEntitlement` this launch. Settings
+    /// surfaces it once — it must never read as "no key set".
+    static var hasEntitlementFailure: Bool { sawMissingEntitlement.withLock { $0 } }
+
+    private static func note(_ status: OSStatus) {
+        if status == missingEntitlementStatus { sawMissingEntitlement.withLock { $0 = true } }
+    }
+
+    /// The item's identity in the data-protection keychain (no per-item ACL, so no prompt and
+    /// nothing for a rebuild to invalidate).
+    private static func dpQuery(_ account: String) -> [String: Any] {
+        [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecUseDataProtectionKeychain as String: true,
         ]
+    }
+
+    /// The same item in the legacy file-based login keychain — read only to migrate. The flag
+    /// must be an explicit `false`: a query that omits it also matches data-protection items,
+    /// so "delete the legacy copy" would delete the item we just stored.
+    private static func legacyQuery(_ account: String) -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecUseDataProtectionKeychain as String: false,
+        ]
+    }
+
+    // Per-account "legacy lookup is finished" flag (G-KC-A (a): lazy migration).
+    private static func migratedKey(_ account: String) -> String { "keychain.migrated.\(account)" }
+    private static func isMigrated(_ account: String) -> Bool {
+        UserDefaults.standard.bool(forKey: migratedKey(account))
+    }
+    private static func markMigrated(_ account: String) {
+        UserDefaults.standard.set(true, forKey: migratedKey(account))
+    }
+
+    /// Reads the secret. This is the only call that can raise a prompt, and only once per
+    /// account: on a data-protection miss it checks the legacy keychain, moves the value across
+    /// and deletes the legacy item.
+    static func get(account: String) -> String? {
+        var query = dpQuery(account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        note(status)
+        if status == errSecSuccess, let data = item as? Data {
+            return String(data: data, encoding: .utf8)
+        }
+        guard status == errSecItemNotFound, !isMigrated(account) else { return nil }
+        return migrateFromLegacy(account)
+    }
+
+    private static func migrateFromLegacy(_ account: String) -> String? {
+        var query = legacyQuery(account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        if status == errSecItemNotFound { markMigrated(account); return nil }
+        guard status == errSecSuccess, let data = item as? Data,
+              let value = String(data: data, encoding: .utf8) else { return nil }   // denied: retry next time
+        guard store(data, account: account) else { return value }   // keep the legacy copy if the move failed
+        SecItemDelete(legacyQuery(account) as CFDictionary)
+        markMigrated(account)
+        CredentialPresence.shared.record(account: account, present: true)
+        return value
+    }
+
+    /// KC-1: presence check that never reads the secret, so it can never raise the ACL prompt
+    /// (`RSI/DelegateKeychainBacklog.md` §0). Use this for every "is a key set?" question;
+    /// reserve `get` for the moment the secret is actually sent somewhere. Before an account
+    /// is migrated, a data-protection miss also asks the legacy keychain — without data — so
+    /// the UI still shows "key set".
+    static func exists(account: String) -> Bool {
+        var query = dpQuery(account)
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        let status = SecItemCopyMatching(query as CFDictionary, nil)
+        note(status)
+        if status == errSecSuccess { return true }
+        guard status == errSecItemNotFound, !isMigrated(account) else { return false }
+        var legacy = legacyQuery(account)
+        legacy[kSecMatchLimit as String] = kSecMatchLimitOne
+        return SecItemCopyMatching(legacy as CFDictionary, nil) == errSecSuccess
+    }
+
+    /// Update-then-add, so an existing item is overwritten in place (no delete in between).
+    private static func store(_ data: Data, account: String) -> Bool {
+        let update = SecItemUpdate(dpQuery(account) as CFDictionary,
+                                   [kSecValueData as String: data] as CFDictionary)
+        note(update)
+        if update == errSecSuccess { return true }
+        guard update == errSecItemNotFound else { return false }
+        var add = dpQuery(account)
+        add[kSecValueData as String] = data
+        let status = SecItemAdd(add as CFDictionary, nil)
+        note(status)
+        return status == errSecSuccess
     }
 
     static func save(_ value: String, account: String) {
         // No force-unwrap on the UTF-8 conversion (project convention) — a value that
         // somehow fails to encode is simply not saved, rather than crashing.
         guard let data = value.data(using: .utf8) else { return }
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecValueData as String: data,
-        ]
-        SecItemDelete(query as CFDictionary)
-        SecItemAdd(query as CFDictionary, nil)
+        let stored = store(data, account: account)
+        if stored, !isMigrated(account) {
+            // The new value supersedes any legacy copy; drop it so it can't resurface.
+            SecItemDelete(legacyQuery(account) as CFDictionary)
+            markMigrated(account)
+        }
+        CredentialPresence.shared.record(account: account, present: stored)
     }
 
     static func delete(account: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        SecItemDelete(query as CFDictionary)
+        let status = SecItemDelete(dpQuery(account) as CFDictionary)
+        note(status)
+        if !isMigrated(account) {
+            SecItemDelete(legacyQuery(account) as CFDictionary)
+            markMigrated(account)
+        }
+        CredentialPresence.shared.record(account: account, present: false)
     }
 
     // MARK: - Back-compat wrappers — every existing call site is unchanged
 
-    static func getToken() -> String? { get(account: hfAccount) }
-    static func saveToken(_ token: String) { save(token, account: hfAccount) }
-    static func deleteToken() { delete(account: hfAccount) }
+    // `account:` defaults to the HF item; it exists so tests can exercise the wrappers
+    // against a throwaway account (KC-1.3).
+    static func getToken(account: String = hfAccount) -> String? { get(account: account) }
+    static func hasToken(account: String = hfAccount) -> Bool { CredentialPresence.shared.isPresent(account: account) }
+    static func saveToken(_ token: String, account: String = hfAccount) { save(token, account: account) }
+    static func deleteToken(account: String = hfAccount) { delete(account: account) }
+}
+
+// MARK: - Credential presence cache
+
+/// KC-2 (`RSI/DelegateKeychainBacklog.md`): an in-memory answer to "is a key set?", so render
+/// paths (`TaskModels.providerModels` → `ProviderCredential.readiness`, `WebSearchProvider.resolve`,
+/// the Settings rows) cost a set lookup instead of a Keychain call on every evaluation.
+///
+/// Populated lazily per account via `KeychainHelper.exists` (never reads the secret), and kept
+/// current by `KeychainHelper.save`/`delete` — the only writers — so a key added mid-session
+/// still flips the model picker. A key changed outside the app (Keychain Access) is not seen
+/// until relaunch or `invalidate`.
+nonisolated final class CredentialPresence: Sendable {
+    static let shared = CredentialPresence(probe: { KeychainHelper.exists(account: $0) })
+
+    private let probe: @Sendable (String) -> Bool
+    private let known = OSAllocatedUnfairLock<[String: Bool]>(initialState: [:])
+
+    /// `probe` is the Keychain query; injectable so a test can count how often it is hit.
+    init(probe: @escaping @Sendable (String) -> Bool) { self.probe = probe }
+
+    func isPresent(account: String) -> Bool {
+        if let cached = known.withLock({ $0[account] }) { return cached }
+        let present = probe(account)
+        known.withLock { $0[account] = present }
+        return present
+    }
+
+    func record(account: String, present: Bool) {
+        known.withLock { $0[account] = present }
+    }
+
+    /// Forget one account (or all) so the next `isPresent` re-queries.
+    func invalidate(account: String? = nil) {
+        known.withLock { state in
+            if let account { state[account] = nil } else { state.removeAll() }
+        }
+    }
 }

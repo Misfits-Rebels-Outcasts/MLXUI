@@ -6,7 +6,7 @@ import AppKit
 /// size (+ Reveal in Finder), and the app-wide flow cache size (+ Clear Cache, per OG-6 —
 /// `FlowMaintenanceMenu`'s per-flow clearing stays exactly as it is).
 struct ModelsSettingsView: View {
-    @State private var tokenInput: String = ""
+    @State private var showingTokenSheet = false
     // Read on .task, matching ProviderCredentialRowView — a stored-property initializer runs
     // as soon as the view is built, which for a TabView pane can be before it's ever shown.
     @State private var hasToken: Bool = false
@@ -24,30 +24,24 @@ struct ModelsSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                SecureField("Paste your HuggingFace token", text: $tokenInput)
-                    .textFieldStyle(.roundedBorder)
-
                 HStack {
-                    Button("Save") { save() }
-                        .disabled(!HFTokenValidator.isPlausible(tokenInput))
-                    Button("Clear", role: .destructive) { clear() }
-                        .disabled(!hasToken)
+                    Label(hasToken ? "A token is saved." : "No token saved.",
+                          systemImage: hasToken ? "checkmark.seal.fill" : "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(hasToken ? Color.green : Color.secondary)
                     Spacer()
                     if !status.isEmpty {
                         Text(status)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    if hasToken {
+                        Button("Change…") { showingTokenSheet = true }
+                        Button("Remove", role: .destructive) { clear() }
+                    } else {
+                        Button("Set Up…") { showingTokenSheet = true }
+                    }
                 }
-
-                Label(hasToken ? "A token is saved." : "No token saved.",
-                      systemImage: hasToken ? "checkmark.seal.fill" : "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundStyle(hasToken ? Color.green : Color.secondary)
-
-                Link("Get a token on huggingface.co",
-                     destination: URL(string: "https://huggingface.co/settings/tokens")!)
-                    .font(.caption)
             }
 
             Section("Storage") {
@@ -81,7 +75,20 @@ struct ModelsSettingsView: View {
         }
         .formStyle(.grouped)
         .frame(minWidth: 520)
-        .onAppear { hasToken = KeychainHelper.getToken() != nil }
+        .onAppear { hasToken = KeychainHelper.hasToken() }
+        .sheet(isPresented: $showingTokenSheet) {
+            CredentialKeySheet(
+                title: "HuggingFace Access Token",
+                choices: ["huggingface"],
+                placeholder: { _ in "Paste your HuggingFace token" },
+                isValid: { HFTokenValidator.isPlausible($0) },
+                signupLink: { _ in
+                    URL(string: "https://huggingface.co/settings/tokens").map {
+                        ("Get a token on huggingface.co", $0)
+                    }
+                },
+                onSave: { _, token in save(token) })
+        }
         .task { await loadStorageSize() }
         .task { await loadCacheSize() }
     }
@@ -94,17 +101,15 @@ struct ModelsSettingsView: View {
 
     // MARK: - HuggingFace token
 
-    private func save() {
-        KeychainHelper.saveToken(HFTokenValidator.normalized(tokenInput))
+    private func save(_ token: String) {
+        KeychainHelper.saveToken(HFTokenValidator.normalized(token))
         hasToken = true
-        tokenInput = ""
         status = "Saved."
     }
 
     private func clear() {
         KeychainHelper.deleteToken()
         hasToken = false
-        tokenInput = ""
         status = "Cleared."
     }
 

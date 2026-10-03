@@ -166,18 +166,7 @@ struct ModelDetailView: View {
                         .foregroundStyle(.red)
                 }
             case .installed:
-                HStack(spacing: 12) {
-                    Button { appState.runModel(model) } label: {
-                        Label("Run", systemImage: "play.fill").frame(minWidth: 100)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    Button {
-                        appState.uninstallModel(model)
-                    } label: {
-                        Label("Uninstall", systemImage: "trash").frame(minWidth: 100)
-                    }
-                    .buttonStyle(.bordered)
-                }
+                installedControls(state: state)
             case .error(let msg, let canRetry):
                 VStack(alignment: .leading, spacing: 4) {
                     Text(msg).font(.caption).foregroundStyle(.red)
@@ -203,17 +192,8 @@ struct ModelDetailView: View {
             case .verifying:
                 Text("Verifying...").font(.caption).foregroundStyle(.secondary)
             default:
-                if appState.installedModelIDs.contains(model.id) || appState.installManager.isInstalled(model) {
-                    HStack(spacing: 12) {
-                        Button { appState.runModel(model) } label: {
-                            Label("Run", systemImage: "play.fill").frame(minWidth: 100)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        Button { appState.uninstallModel(model) } label: {
-                            Label("Uninstall", systemImage: "trash").frame(minWidth: 100)
-                        }
-                        .buttonStyle(.bordered)
-                    }
+                if isInstalledOnDisk {
+                    installedControls(state: state)
                 } else if model.exceedsRAM(appState.systemInfo.totalRAMGB) {
                     Button {} label: {
                         Label("Needs \(String(format: "%.0f", model.ramGB)) GB RAM", systemImage: "xmark.circle")
@@ -228,6 +208,50 @@ struct ModelDetailView: View {
                 }
             }
             Spacer(minLength: 0)
+        }
+    }
+
+    /// `appState.installedModelIDs` / the on-disk marker — what the `default:` (idle) branch uses to
+    /// decide a model is installed.
+    private var isInstalledOnDisk: Bool {
+        appState.installedModelIDs.contains(model.id) || appState.installManager.isInstalled(model)
+    }
+
+    /// Run · Uninstall · Serve — **the one place** an installed model's controls are built, used by
+    /// both the `.installed` and the idle-but-installed branches of `actionButtons`. S1-5 added the
+    /// Serve toggle to only one of them, so a model in the `.installed` state never showed it
+    /// (S1-B hand check, S1-5b); keeping a single copy means the branches can't drift again.
+    @ViewBuilder private func installedControls(state: InstallState) -> some View {
+        HStack(spacing: 12) {
+            Button { appState.runModel(model) } label: {
+                Label("Run", systemImage: "play.fill").frame(minWidth: 100)
+            }
+            .buttonStyle(.borderedProminent)
+            Button { appState.uninstallModel(model) } label: {
+                Label("Uninstall", systemImage: "trash").frame(minWidth: 100)
+            }
+            .buttonStyle(.bordered)
+            serveToggle(state: state)
+        }
+    }
+
+    /// S1-5 — only an installed MLX chat model can be served, and only while the Local Server is
+    /// available. The rule is `ServeToggleVisibility.shouldShow` (pure, tested); the gate is read
+    /// through `LocalServerGate`, never the flag (rule 14).
+    @ViewBuilder private func serveToggle(state: InstallState) -> some View {
+        if ServeToggleVisibility.shouldShow(state: state, isInstalledOnDisk: isInstalledOnDisk,
+                                            runnerKind: model.runnerKind, gateAvailable: LocalServerGate.isAvailable) {
+            // "Reachable now" = in the served list AND the master switch on (S1-5c, `ServeReach`); a
+            // model too big for this Mac can't be switched on (the same rule that swaps Run for
+            // "Needs N GB RAM"), but a reachable one can always be switched off.
+            let blocked = ServeMemory.blockedReason(modelRAMGB: model.ramGB, systemRAMGB: appState.systemInfo.totalRAMGB)
+            let reachable = appState.localServer.isReachable(model.hfModelId)
+            Toggle("Serve", isOn: Binding(
+                get: { reachable },
+                set: { on in Task { await appState.localServer.setServed(model.hfModelId, on) } }))
+                .toggleStyle(.switch)
+                .disabled(ServeMemory.isToggleDisabled(blockedReason: blocked, isReachable: reachable))
+                .help(blocked ?? "Let other apps on this Mac use this model.")
         }
     }
 

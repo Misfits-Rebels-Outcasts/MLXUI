@@ -579,9 +579,10 @@ struct FlowListView: View {
         } else {
             parts.append("cache empty")
         }
-        let engineCount = EngineCache.shared.count
+        // S1-1b: the combined total — LLM containers (pool) + the other engines (cache).
+        let engineCount = MemoryBudget.shared.heldCount
         if engineCount > 0 {
-            let bytes = mb(EngineCache.shared.totalCachedBytes)
+            let bytes = mb(MemoryBudget.shared.usedBytes)
             parts.append("\(engineCount) engine\(engineCount == 1 ? "" : "s") warm (\(bytes))")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")

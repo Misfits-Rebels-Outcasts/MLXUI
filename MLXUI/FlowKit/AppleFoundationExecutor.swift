@@ -41,6 +41,44 @@ nonisolated protocol AppleFoundationAvailabilityChecking: Sendable {
     var readiness: Readiness { get }
 }
 
+/// S1-4 — **streaming** chat for the Local Server. Same rule as the two protocols above: nothing
+/// here carries `@available`, so `Server/Backends/AFMBackend.swift` never touches the macOS 26
+/// floor. Verified against the installed SDK (journal `2026-369`): `LanguageModelSession`,
+/// `streamResponse(to:options:)` and `GenerationOptions(temperature:maximumResponseTokens:)` all
+/// type-check for macOS 26.0.
+///
+/// **Multi-turn history is NOT passed as a `Transcript`.** `Transcript(entries:)` /
+/// `LanguageModelSession(model:transcript:)` type-check, but on a real Mac (macOS 27, Apple
+/// Intelligence on) a session built from *constructed* entries ignores the assistant turns in it —
+/// "My name is Sam." / "Nice to meet you, Sam." / "What is my name?" is answered "I'm a foundation
+/// model developed by Apple" — while a copy of a *live* session's own transcript is honoured. The
+/// model only trusts responses it generated. So the backend folds earlier turns into the prompt text
+/// instead (journal `2026-369`, finding 1).
+nonisolated enum AppleFoundationChatEvent: Sendable, Equatable {
+    /// The **whole reply so far** — Apple Foundation Models streams snapshots, not deltas (readme
+    /// T7). The consumer diffs consecutive snapshots.
+    case snapshot(String)
+    /// Token counts, when the OS can report them (`SystemLanguageModel.tokenCount`, macOS 26.4+).
+    case usage(promptTokens: Int, completionTokens: Int)
+}
+
+/// The failures the server maps to HTTP statuses, lifted out of `FoundationModels`' own error
+/// types (which differ by OS: `LanguageModelSession.GenerationError` on 26.x, `LanguageModelError`
+/// on 27) so the backend never sees either.
+nonisolated enum AppleFoundationChatError: Error, Sendable, Equatable {
+    case contextWindowExceeded(limit: Int?, tokenCount: Int?)
+    case guardrailViolation
+    case unsupportedLanguage
+    case failed
+}
+
+nonisolated protocol AppleFoundationChatStreaming: Sendable {
+    /// `instructions` = the session's system prompt; `prompt` = the user turn (earlier turns already
+    /// folded in by the caller). Unset sampling params are the model's own.
+    func streamChat(instructions: String, prompt: String,
+                    temperature: Double?, maximumResponseTokens: Int?) -> AsyncThrowingStream<AppleFoundationChatEvent, Error>
+}
+
 /// The real executor. `@available(macOS 26, *)` because `LanguageModelSession` and
 /// `DynamicGenerationSchema` are — confined to this one type so nothing else in the app
 /// carries the annotation.
@@ -63,6 +101,74 @@ nonisolated struct AppleFoundationModelExecutor: AppleFoundationExecuting {
         let schema = try GenerationSchema(root: root, dependencies: [])
         let response = try await session.respond(to: prompt, schema: schema)
         return try response.content.value(String.self)
+    }
+}
+
+@available(macOS 26, *)
+extension AppleFoundationModelExecutor: AppleFoundationChatStreaming {
+    func streamChat(instructions: String, prompt: String,
+                    temperature: Double?, maximumResponseTokens: Int?) -> AsyncThrowingStream<AppleFoundationChatEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    let session = instructions.isEmpty ? LanguageModelSession() : LanguageModelSession(instructions: instructions)
+                    let options = GenerationOptions(temperature: temperature, maximumResponseTokens: maximumResponseTokens)
+                    for try await snapshot in session.streamResponse(to: prompt, options: options) {
+                        let text: String = snapshot.content           // the whole reply so far
+                        continuation.yield(.snapshot(text))
+                    }
+                    if !Task.isCancelled, let usage = await Self.usage(of: session) { continuation.yield(usage) }
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: AppleFoundationErrorMapper.map(error))
+                }
+            }
+            // The consumer going away (client disconnect) cancels the generation.
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// Prompt = everything before the reply; completion = the reply entry. `tokenCount(for:)` is
+    /// macOS 26.4+, so older systems report no usage and the backend estimates.
+    private static func usage(of session: LanguageModelSession) async -> AppleFoundationChatEvent? {
+        guard #available(macOS 26.4, *) else { return nil }
+        let entries = Array(session.transcript)
+        guard let reply = entries.last, case .response = reply else { return nil }
+        let model = SystemLanguageModel.default
+        guard let prompt = try? await model.tokenCount(for: Array(entries.dropLast())),
+              let completion = try? await model.tokenCount(for: [reply]) else { return nil }
+        return .usage(promptTokens: prompt, completionTokens: completion)
+    }
+}
+
+/// `FoundationModels`' errors → `AppleFoundationChatError`. Two generations of error type exist:
+/// macOS 26.x throws `LanguageModelSession.GenerationError`; **macOS 27 throws `LanguageModelError`**
+/// (observed for a context overflow on this Mac — journal `2026-369`), so both are mapped.
+@available(macOS 26, *)
+nonisolated enum AppleFoundationErrorMapper {
+    static func map(_ error: Error) -> AppleFoundationChatError {
+        if let error = error as? LanguageModelSession.GenerationError {
+            switch error {
+            case .exceededContextWindowSize:
+                // 26.x's error carries no size; the model's own `contextSize` is the limit.
+                return .contextWindowExceeded(limit: SystemLanguageModel.default.contextSize, tokenCount: nil)
+            case .guardrailViolation: return .guardrailViolation
+            case .unsupportedLanguageOrLocale: return .unsupportedLanguage
+            default: return .failed
+            }
+        }
+        if #available(macOS 27, *), let error = error as? LanguageModelError {
+            switch error {
+            case .contextSizeExceeded(let exceeded):
+                return .contextWindowExceeded(limit: exceeded.contextSize, tokenCount: exceeded.tokenCount)
+            case .guardrailViolation: return .guardrailViolation
+            case .unsupportedLanguageOrLocale: return .unsupportedLanguage
+            default: return .failed
+            }
+        }
+        return .failed
     }
 }
 
@@ -104,6 +210,8 @@ nonisolated enum AppleFoundationAvailability {
     /// device, regardless of `useRealSystem`. Production code never sets this.
     static var checkerOverride: (any AppleFoundationAvailabilityChecking)?
     static var executorOverride: (any AppleFoundationExecuting)?
+    /// Test-only, as above — for the Local Server's streaming chat seam (S1-4).
+    static var chatStreamerOverride: (any AppleFoundationChatStreaming)?
 
     /// The current machine's Apple Intelligence state, mapped to `Readiness`, or `nil` when
     /// `useRealSystem` is off or the OS is below macOS 26 — a slot simply **absent** from the
@@ -120,6 +228,14 @@ nonisolated enum AppleFoundationAvailability {
     /// stage failure naming the row, never a crash).
     static func makeExecutor() -> (any AppleFoundationExecuting)? {
         if let executorOverride { return executorOverride }
+        guard useRealSystem else { return nil }
+        guard #available(macOS 26, *) else { return nil }
+        return AppleFoundationModelExecutor()
+    }
+
+    /// The real streaming-chat seam, or `nil` on the same conditions as `makeExecutor()` (S1-4).
+    static func makeChatStreamer() -> (any AppleFoundationChatStreaming)? {
+        if let chatStreamerOverride { return chatStreamerOverride }
         guard useRealSystem else { return nil }
         guard #available(macOS 26, *) else { return nil }
         return AppleFoundationModelExecutor()

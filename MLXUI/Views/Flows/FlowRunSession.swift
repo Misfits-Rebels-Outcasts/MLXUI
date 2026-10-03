@@ -507,8 +507,9 @@ nonisolated struct RunMetrics: Equatable {
     /// the engine-cache state (R11-2) so a run reveals at a glance whether warm engines are
     /// being held.
     func summary() -> String {
-        let engines = EngineCache.shared.count
-        let warm = String(format: "%.1f GB", Double(EngineCache.shared.totalCachedBytes) / 1_073_741_824)
+        // S1-1b: the combined total — LLM containers (pool) + the other engines (cache).
+        let engines = MemoryBudget.shared.heldCount
+        let warm = String(format: "%.1f GB", Double(MemoryBudget.shared.usedBytes) / 1_073_741_824)
         return "peak GPU \(mb(peakGPU)) (active \(mb(rowSamples.values.map(\.gpuActive).max() ?? 0)) / cache \(mb(rowSamples.values.map(\.gpuCache).max() ?? 0))) · peak RSS \(mb(peakRSS)) · warm engines \(engines) (\(warm))"
     }
 

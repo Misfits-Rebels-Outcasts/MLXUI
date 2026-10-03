@@ -4,7 +4,7 @@ import SwiftUI
 /// 460×560 unresizable sheet `SettingsView` used to be. A `TabView` is the macOS-14-budget way
 /// to switch panes (`Tab`/`.sidebarAdaptable` are 15.0+ and out of budget — see backlog §3.1).
 ///
-/// Four tabs: Models, Providers, Tools, Privacy (SET-5) — Providers and Privacy omitted from
+/// Five tabs: Models, Providers, Tools, Privacy (SET-5), Local Server (S1-5, gate only) — Providers and Privacy omitted from
 /// the tab bar entirely when `AppState.hideProvidersPrivacy` is `true`; Models and Tools always
 /// render. `selectedPane` is `SettingsPane`'s own `String` raw value under
 /// `@AppStorage("settingsPane")`, the same key every `SettingsOpener` writes to before it opens
@@ -15,8 +15,10 @@ import SwiftUI
 /// actually selected (`TabView` on macOS otherwise builds every tab's view up front regardless of
 /// which one is selected — see `ProviderCredentialRowView`'s note), but that gate broke `TabView`'s
 /// own tag-to-content matching outright: **every** tab, including the unconditional Models and
-/// Tools ones, rendered blank. Reverted; the Keychain-burst concern is moot in practice now that
-/// `hideProvidersPrivacy` keeps `ProvidersSettingsView` out of the tab bar for most builds.
+/// Tools ones, rendered blank. Reverted. The Keychain-burst concern is handled at the source instead
+/// (KC-1/KC-2): opening Providers or Models asks `CredentialPresence` "is a key set?", which
+/// never reads a secret, so building every tab up front raises no prompt. (`hideProvidersPrivacy`
+/// is `false`, so the Providers tab ships.)
 struct SettingsRootView: View {
     @AppStorage("settingsPane") private var selectedPane: SettingsPane = .models
 
@@ -41,15 +43,21 @@ struct SettingsRootView: View {
                     .tabItem { Label(SettingsPane.privacy.title, systemImage: SettingsPane.privacy.systemImage) }
                     .tag(SettingsPane.privacy)
             }
+
+            // S1-5 — a fifth pane, behind `LocalServerGate` only (not `hideProvidersPrivacy`).
+            if LocalServerGate.isAvailable {
+                LocalServerSettingsView()
+                    .tabItem { Label(SettingsPane.localServer.title, systemImage: SettingsPane.localServer.systemImage) }
+                    .tag(SettingsPane.localServer)
+            }
         }
         .onAppear {
             // A prior launch (before this flag was set, or with it toggled back) may have left
             // `selectedPane` pointed at a tab that's hidden now — land on Models instead of a
             // pane the TabView no longer offers.
-            if AppState.hideProvidersPrivacy,
-               selectedPane == .providers || selectedPane == .privacy {
-                selectedPane = .models
-            }
+            let visible = LocalServerPolicy.visibleSettingsPanes(
+                gateAvailable: LocalServerGate.isAvailable, hideProvidersPrivacy: AppState.hideProvidersPrivacy)
+            selectedPane = LocalServerPolicy.resolvedPane(selectedPane, visible: visible)
         }
     }
 }

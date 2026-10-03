@@ -13,19 +13,24 @@ enum LLMEngine {
         ModelStore.shared.directory(forModelID: modelID)
     }
 
-    /// Load the model at `modelDir` and generate a reply to `prompt`.
+    /// Generate a reply to `prompt` with the model at `modelDir` (loaded via `ModelContainerPool`).
     nonisolated static func generate(
         prompt: String,
         modelDir: URL,
         maxTokens: Int,
-        temperature: Float = 0.7
+        temperature: Float = 0.7,
+        footprintBytes: Int64? = nil,
+        pool: ModelContainerPool = .shared
     ) async throws -> String {
         guard FileManager.default.fileExists(atPath: modelDir.path) else {
             throw StageError.modelNotInstalled(id: modelDir.lastPathComponent)
         }
         do {
-            let loader = HFTokenizerLoader()
-            let container = try await LLMModelFactory.shared.loadContainer(from: modelDir, using: loader)
+            // S1-1: weights come from the shared pool — loaded once, reused across rows, the
+            // chat sheet and the Local Server — instead of a fresh `loadContainer` per call.
+            // `footprintBytes` is the catalog `ramGB` when the caller has a `ModelEntry`; nil
+            // falls back to the model directory's on-disk size.
+            let container = try await pool.container(directory: modelDir, footprintBytes: footprintBytes)
             return try await container.perform { context in
                 // DA-11: ask a hybrid-reasoning template (Qwen3's) to skip its visible
                 // `<think>…</think>` preamble — none of the flow-row LLM primitives

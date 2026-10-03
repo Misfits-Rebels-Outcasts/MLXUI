@@ -23,7 +23,7 @@ can run — see "CAT Flow" below.
 
   | Target | Product | Distribution | Sandbox | Flag |
   |---|---|---|---|---|
-  | `MLXUI` | "AI Browser" | Mac App Store | **yes** — app-sandbox, network.client, user-selected read-write | `APPSTORE_BUILD` |
+  | `MLXUI` | "AI Browser" | Mac App Store | **yes** — app-sandbox, network.client, **network.server** (Local Server, loopback only), user-selected read-write, keychain-access-groups | `APPSTORE_BUILD` |
   | `MLXUI-Direct` | "AI Browser Pro" | Developer ID + notarized | **no** — Hardened Runtime only | `DIRECT_BUILD` |
 
   The Direct edition compiles in the shell / filesystem / subprocess agent tools; the App Store
@@ -52,6 +52,9 @@ can run — see "CAT Flow" below.
   **Before any App Store submission with remote enabled, read
   `RSI/RM-6-privacy-disclosure.md`** — the nutrition-label decision lives there.
 
+  The **Local Server** (opt-in, loopback only) *receives* requests from this Mac and replies to the
+  caller; it adds no outbound traffic and never serves a remote-provider model.
+
 ### Mission
 
 The app supports a **growing list of MLX models**, and a model isn't "done" until it can be
@@ -76,6 +79,8 @@ Work is driven from `RSI/`, one reviewable cycle at a time. Not ad hoc.
 | `RSI/policies.md` | **Read first, every cycle.** Current autonomy level (**L2** — one task per cycle, scorecard-first review; promoted from L1 on 2026-09-04, journal `2026-172`) and the standing guardrails. |
 | `RSI/backlog.md` | The owner's backlog. `/add-mlxui` appends `AM-*` intake groups here. |
 | `RSI/DelegateMergeBacklog.md` | The CAT Flow merge phases (R1…R16), delegated for external implementation. |
+| `RSI/DelegateServeBacklog.md` | The Local Server stream (S1…S6): task contracts, implementer rules (rule 14: the hide switch; rule 15: never `git stash`), owner rulings, status table. |
+| `RSI/DelegateServeReadme.md` | Measured facts, traps, gates, smoke rows SV-0…SV-10 and the Connect-sheet copy table for the Local Server. |
 | `RSI/journal/` | One entry per task — what was done, what the gates said, what was found. |
 | `RSI/evals/smoke-checklist.md` | Human-run smoke rows. A model or flow isn't verified until one passes. |
 | `RSI/prompts/add-model.md` | The add-a-model intake (`/add-mlxui`), Steps A–D. |
@@ -200,6 +205,32 @@ The Python runtime in the sibling **`catflow-mlx`** repo is the **parity referen
   whose `locationID` is a workspace id (CFM-R17-1). `FlowKit/WorkspaceKnowledge.swift` derives
   the builder/querier pairing that `WorkspaceListView`'s knowledge-base card renders.
 
+## Local Server (`MLXUI/Services/Server/`)
+
+An opt-in, loopback-only OpenAI-compatible HTTP server (`/v1/chat/completions`, `/v1/models`,
+`/health`) so other apps on the same Mac can use the user's local MLX models and Apple Foundation
+Models. Built on FlyingFox; S1 of six releases (S2 agent-ready tools, S3 Anthropic/Responses,
+S4 MCP + served flows, S5 embeddings/audio, S6 LAN). Design and rulings:
+`RSI/plan-local-server-2026-09.md` (§0 rulings, §4 security); task contracts:
+`RSI/DelegateServeBacklog.md`; measured facts and traps: `RSI/DelegateServeReadme.md`.
+
+- **The hide switch.** `AppState.hideLocalServer` hides every Local Server capability. **Every
+  Local Server surface asks `LocalServerGate.isAvailable`, never the flag** (Serve toggle, Connect
+  sheet, Settings → Local Server tab, auto-start, stay-running). Persisted serve settings survive
+  the flag.
+- Binds `127.0.0.1` (required) and `[::1]` (best-effort), port 1212. A request guard rejects any
+  non-loopback `Host`, any `Origin`, `OPTIONS`, and bodies over 8 MB, before routing.
+  Remote-provider models are never served. **Request and response content is never logged** — the
+  in-memory request log (last 200) is metadata only.
+- Backends: `MLXChatBackend` (loads weights through `ModelContainerPool`, decodes **raw token ids**
+  — TCP-1) and `AFMBackend` (only sees the untagged seam in `FlowKit/AppleFoundationExecutor.swift`;
+  history is folded into the prompt, because a constructed `Transcript` is ignored by the model).
+  One generation per model, global cap 1, depth 4, `503` + `Retry-After: 2` beyond it. A model
+  larger than the shared `MemoryBudget` is refused with `503 model_too_large`.
+- A model's directory is `ModelStore.directory(forModelID:)` for a **slug** (`mlx-community--X`);
+  from an HF id use `directory(forHFModelID:)` — the unslugged id builds a path that doesn't exist.
+- The app stays running (no window) while serving; otherwise closing the last window quits, as before.
+
 ## How the data flows
 
 1. `AppState.loadBrowserData()` decodes `browser.json` (in the app bundle) into `BrowserData`.
@@ -267,6 +298,7 @@ Remote Swift Packages (Xcode-managed):
 | `ml-explore/mlx-swift-lm` | 3.31.3 | provides `MLX`, `MLXLLM`, `MLXVLM`, `MLXEmbedders` |
 | `Blaizzy/mlx-audio-swift` | branch `main` | `MLXAudioSTT`, `MLXAudioTTS` — tags ≤ v0.1.2 pin mlx-swift-lm 2.x |
 | `argmaxinc/WhisperKit` | 1.0.0 | CoreML ASR, **superseded** by the MLX path; still linked |
+| `swhitty/FlyingFox` | 0.26.2 | HTTP server for the Local Server (MIT, no external deps; approved 2026-09-27, see `RSI/policies.md`). Wired into both app targets. |
 
 Local package: **`Vendor/PaddleOCRVL`** — MIT, vendored rather than added remotely because every
 upstream version hard-pins conflicting `mlx-swift` / `swift-transformers` versions
