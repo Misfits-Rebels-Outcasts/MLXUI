@@ -64,7 +64,7 @@ final class AppState { //appstatecomeback
     /// the server never listens — even if an earlier launch left models marked as served. Flip to
     /// `false` to ship it. Persisted serve settings are kept, not deleted, so flipping back restores
     /// them. Every surface asks `LocalServerGate.isAvailable`, never this flag directly.
-    static let hideLocalServer = true
+    static let hideLocalServer = false
 
     /// Set to `true` to hide the `code` and `improvise` rows from the flow editor's **Flow**
     /// tab capability-flag list. The other three flags (`network`, `offdevice`, `events`)
