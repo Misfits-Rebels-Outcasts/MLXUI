@@ -11,17 +11,19 @@ import MLX
 /// through it, and checks cosine similarity against Python's projections — cosine ≥ 0.99999
 /// per CL-4a's hard gate. Skips cleanly when the weights aren't present (a fresh clone) —
 /// the two `curl` lines in `PROVENANCE.md` fetch them.
-@Suite(.serialized, .enabled(if: CLMHeadsTests.headsWeightsPresent))
-struct CLMHeadsTests {
-    static let headsWeightsPresent: Bool = {
-        let repoRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let weights = repoRoot.appendingPathComponent(
-            "Fixtures/CLM/heads_weights/CLM_v0.1-8B.safetensors")
-        return FileManager.default.fileExists(atPath: weights.path)
-    }()
+/// A file-level constant, not a static on the suite: `@Suite`'s own trait can't refer to a member
+/// of the type it is attached to (circular macro reference).
+private let clmHeadsWeightsPresent: Bool = {
+    let repoRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let weights = repoRoot.appendingPathComponent(
+        "Fixtures/CLM/heads_weights/CLM_v0.1-8B.safetensors")
+    return FileManager.default.fileExists(atPath: weights.path)
+}()
 
+@Suite(.serialized, .enabled(if: clmHeadsWeightsPresent))
+struct CLMHeadsTests {
     private struct GoldenVector: Decodable {
         var input: [Double]
         var state_projection: [Double]
