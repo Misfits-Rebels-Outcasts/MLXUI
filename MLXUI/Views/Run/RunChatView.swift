@@ -12,6 +12,8 @@ struct RunChatView: View {
     @State private var prompt = ""
     @State private var showAuditLog = false
     @State private var conversationToDelete: Conversation?
+    /// CX-2: a failed export. Its own message — `runner.errorMessage` belongs to model runs.
+    @State private var exportError: String?
 
     private var runner: ModelRunner { appState.modelRunner }
 
@@ -24,6 +26,9 @@ struct RunChatView: View {
                 header
                 Divider()
                 transcript
+                if let error = exportError {
+                    errorBar(error)
+                }
                 if let error = runner.errorMessage {
                     errorBar(error)
                 }
@@ -93,6 +98,16 @@ struct RunChatView: View {
                     }
                     .tag(conversation.id)
                     .contextMenu {
+                        // CX-2 (D4b): export this row's conversation, not the active one.
+                        Menu("Export") {
+                            Button("Save as Markdown…") {
+                                export(conversation, as: .markdown)
+                            }
+                            Button("Save as JSON…") {
+                                export(conversation, as: .json)
+                            }
+                        }
+                        .disabled(isExportDisabled(conversation))
                         Button("Delete…", role: .destructive) {
                             conversationToDelete = conversation
                         }
@@ -126,6 +141,7 @@ struct RunChatView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            exportMenu
             if !runner.availableTools.isEmpty {
                 toolsMenu
             }
@@ -136,6 +152,41 @@ struct RunChatView: View {
             .keyboardShortcut(.cancelAction)
         }
         .padding(12)
+    }
+
+    /// CX-2 (D4a): export the **active** conversation. Placed before the tools menu and Done so
+    /// the download affordance sits with the other view-level actions, not with the model's
+    /// tools. The button is always drawn — D5 says the controls are **disabled**, not hidden,
+    /// while a reply is streaming or when there is nothing to export — and its items act on the
+    /// conversation that exists at click time.
+    @ViewBuilder
+    private var exportMenu: some View {
+        Menu {
+            Button("Save as Markdown…") { exportActive(as: .markdown) }
+            Button("Save as JSON…") { exportActive(as: .json) }
+            Divider()
+            Button("Copy as Markdown") {
+                guard let conversation = activeConversationSnapshot else { return }
+                ConversationExportPanel.copyMarkdown(conversation, context: exportContext)
+            }
+        } label: {
+            Image(systemName: "square.and.arrow.down")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Download this chat")
+        .disabled(runner.isRunning || activeConversationSnapshot == nil)
+    }
+
+    /// What the header button would export right now: the live transcript of the active
+    /// conversation, or `nil` when there is nothing to export (D5).
+    private var activeConversationSnapshot: Conversation? {
+        guard let id = runner.activeConversationID else { return nil }
+        return runner.exportSnapshot(for: id)
+    }
+
+    private var exportContext: ConversationExportContext {
+        ConversationExportPanel.context(modelDisplayName: model.displayName)
     }
 
     /// SET-4 (D4, `RSI/DelegateSettingsBacklog.md`) — the wrench is the in-session switch:
@@ -337,6 +388,47 @@ struct RunChatView: View {
         guard let data = try? JSONEncoder().encode(arguments),
               let string = String(data: data, encoding: .utf8) else { return nil }
         return string
+    }
+
+    // MARK: - Export (CX-2)
+
+    /// The two file exports a menu offers.
+    private enum ExportFormat {
+        case markdown
+        case json
+    }
+
+    /// The header button's export: resolve the active conversation **when the item is clicked**,
+    /// so the live transcript at that moment is what's written.
+    private func exportActive(as format: ExportFormat) {
+        guard let conversation = activeConversationSnapshot else { return }
+        export(conversation, as: format)
+    }
+
+    /// Run one export off the *next* main-loop turn. The panel must not open while the `Menu`
+    /// that started it is still tracking, or it comes up behind this sheet — see the CX-2 traps.
+    private func export(_ conversation: Conversation, as format: ExportFormat) {
+        exportError = nil
+        Task { @MainActor in
+            await Task.yield()
+            let context = exportContext
+            do {
+                switch format {
+                case .markdown:
+                    try ConversationExportPanel.saveMarkdown(conversation, context: context)
+                case .json:
+                    try ConversationExportPanel.saveJSON(conversation, context: context)
+                }
+            } catch {
+                exportError = error.localizedDescription
+            }
+        }
+    }
+
+    /// D5: no export while a reply is streaming, and none for a conversation with no items.
+    private func isExportDisabled(_ conversation: Conversation) -> Bool {
+        if conversation.id == runner.activeConversationID, runner.isRunning { return true }
+        return conversation.items.isEmpty
     }
 
     private func scrollToEnd(_ proxy: ScrollViewProxy) {

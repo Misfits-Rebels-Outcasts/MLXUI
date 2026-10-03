@@ -139,10 +139,16 @@ final class ModelRunner {
     /// recent selected, or a fresh empty one). Reopening the same model keeps everything in
     /// place. Switching models no longer frees the old weights here — the `ModelContainerPool`'s
     /// LRU budget decides (S1-1).
-    func prepare(for model: ModelEntry) {
+    ///
+    /// `directory` is injected like `ConversationStore`'s own entry points so a test can pin the
+    /// store it reads; the app always takes the default.
+    func prepare(
+        for model: ModelEntry, in directory: URL = ConversationStore.defaultDirectory()
+    ) {
         if preparedModelID != model.id {
             preparedModelID = model.id
-            conversations = ConversationStore.conversations(forModelID: model.id)
+            conversations = ConversationStore.conversations(
+                forModelID: model.id, in: directory)
             if let mostRecent = conversations.first {
                 activeConversationID = mostRecent.id
                 transcript.load(mostRecent.items)
@@ -178,6 +184,35 @@ final class ModelRunner {
         saveActiveConversation()
         activeConversationID = id
         transcript.load(conversation.items)
+    }
+
+    /// Append a user prompt to the working transcript without a model — the test seam for
+    /// `exportSnapshot`. `transcript` is `private(set)` so nothing outside the runner can
+    /// replace the working copy wholesale; these two hand out the same mutation `send` performs.
+    /// The app never calls them.
+    func appendUserMessageForTesting(_ text: String) {
+        transcript.addUserMessage(text)
+    }
+
+    /// Append a streamed assistant chunk without a model — see `appendUserMessageForTesting`.
+    func appendAssistantChunkForTesting(_ chunk: String) {
+        transcript.appendAssistantChunk(chunk)
+    }
+
+    /// A conversation to export (CX-2). For the conversation on screen the **live** transcript
+    /// wins, because it can be ahead of the saved copy mid-turn — `saveActiveConversation` only
+    /// runs when a turn ends, so exporting the stored copy can miss the last turn. Any other
+    /// conversation has no working copy, so its stored items are the truth.
+    ///
+    /// `nil` when there is no such conversation, or when it has no items (D5: nothing to export).
+    func exportSnapshot(for id: UUID) -> Conversation? {
+        guard let stored = conversations.first(where: { $0.id == id }) else { return nil }
+        guard id == activeConversationID else {
+            return stored.items.isEmpty ? nil : stored
+        }
+        var live = stored
+        live.items = transcript.items
+        return live.items.isEmpty ? nil : live
     }
 
     /// Delete a conversation from the list and from disk. Deleting the one on screen moves
