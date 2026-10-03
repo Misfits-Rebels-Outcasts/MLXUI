@@ -361,9 +361,9 @@
 			baseConfigurationReferenceAnchor = 2098BCB2301B850B00CA4BBC /* Config */;
 			baseConfigurationReferenceRelativePath = Direct.xcconfig;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				DEAD_CODE_STRIPPING = YES;
-				MARKETING_VERSION = 0.19;
+				MARKETING_VERSION = 0.20;
 			};
 			name = Debug;
 		};
@@ -372,9 +372,9 @@
 			baseConfigurationReferenceAnchor = 2098BCB2301B850B00CA4BBC /* Config */;
 			baseConfigurationReferenceRelativePath = Direct.xcconfig;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				DEAD_CODE_STRIPPING = YES;
-				MARKETING_VERSION = 0.19;
+				MARKETING_VERSION = 0.20;
 			};
 			name = Release;
 		};
@@ -549,9 +549,9 @@
 			baseConfigurationReferenceAnchor = 2098BCB2301B850B00CA4BBC /* Config */;
 			baseConfigurationReferenceRelativePath = AppStore.xcconfig;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				DEAD_CODE_STRIPPING = YES;
-				MARKETING_VERSION = 0.19;
+				MARKETING_VERSION = 0.20;
 			};
 			name = Debug;
 		};
@@ -560,9 +560,9 @@
 			baseConfigurationReferenceAnchor = 2098BCB2301B850B00CA4BBC /* Config */;
 			baseConfigurationReferenceRelativePath = AppStore.xcconfig;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				DEAD_CODE_STRIPPING = YES;
-				MARKETING_VERSION = 0.19;
+				MARKETING_VERSION = 0.20;
 			};
 			name = Release;
 		};
