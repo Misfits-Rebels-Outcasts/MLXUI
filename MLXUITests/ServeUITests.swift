@@ -49,6 +49,12 @@ private actor Evicted {
 
 @MainActor
 struct LocalServerPolicyTests {
+    @Test func theChatOnlyNoteIsThePlainSentenceWithNoBetaWording() {
+        #expect(LocalServerPolicy.chatOnlyNote
+                == "Chat only for now — tool calling for coding agents (OpenCode, Claude Code, Codex) is coming in a later update.")
+        #expect(!LocalServerPolicy.chatOnlyNote.localizedCaseInsensitiveContains("beta"))
+    }
+
     @Test func servingAModelStartsAStoppedServerAndUnservingTheLastStopsIt() {
         let go = { (served: Int, status: LocalServer.Status) in
             LocalServerPolicy.action(gateAvailable: true, enabled: true, servedCount: served, status: status)

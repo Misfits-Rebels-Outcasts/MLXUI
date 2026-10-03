@@ -57,6 +57,10 @@ enum LocalServerPolicy {
         visible.contains(selected) ? selected : .models
     }
 
+    /// The plain scope line under the status sentence, in Settings → Local Server and the Connect
+    /// sheet (S1-5g). Both surfaces are only built when the gate is open. Keep the wording plain.
+    static let chatOnlyNote = "Chat only for now — tool calling for coding agents (OpenCode, Claude Code, Codex) is coming in a later update."
+
     /// The one-line status ("Serving 2 models at 127.0.0.1:1212").
     static func statusSentence(status: LocalServer.Status, servedCount: Int, enabled: Bool) -> String {
         switch status {

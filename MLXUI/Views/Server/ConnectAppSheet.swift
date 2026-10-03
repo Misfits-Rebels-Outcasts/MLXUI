@@ -25,6 +25,8 @@ struct ConnectAppSheet: View {
             Text(controller.statusSentence)
                 .font(.callout)
                 .foregroundStyle(controller.isRunning ? Color.secondary : Color.orange)
+            Text(LocalServerPolicy.chatOnlyNote)
+                .font(.caption).foregroundStyle(.secondary)
 
             row("Base URL", ConnectSnippets.baseURL(port: port))
             if models.isEmpty {

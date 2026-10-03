@@ -24,6 +24,8 @@ struct LocalServerSettingsView: View {
                     Spacer()
                     Button("Connect your app…") { showConnect = true }
                 }
+                Text(LocalServerPolicy.chatOnlyNote)
+                    .font(.caption).foregroundStyle(.secondary)
                 HStack {
                     Text("Port")
                     TextField("1212", text: $portText)
