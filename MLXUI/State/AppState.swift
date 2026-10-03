@@ -51,7 +51,7 @@ final class AppState { //appstatecomeback
     /// Set to `true` to hide the "Advance Gallery" shelf (every bundled flow that isn't
     /// basic) on the Automate → AI Workflows page. My Workflows and Basic Gallery still
     /// render.
-    static let hideAdvanceGallery = false //comeback
+    static let hideAdvanceGallery = true //comeback
 
     /// Set to `true` to hide **Settings → Providers** and **Settings → Privacy** from the
     /// `SettingsRootView` tab bar. Models and Tools always render regardless of this flag.

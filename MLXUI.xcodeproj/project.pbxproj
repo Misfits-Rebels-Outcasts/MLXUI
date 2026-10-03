@@ -47,43 +47,31 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		2041A3A22FECB7DD0090F7DA /* MLXUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = MLXUITests;
 			sourceTree = "<group>";
 		};
 		207EF2A52FEB616500A0AC5F /* MLXUI */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = MLXUI;
 			sourceTree = "<group>";
 		};
 		2087814E2FECF603004B3FBE /* RSI */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = RSI;
 			sourceTree = "<group>";
 		};
 		2098BCAB301B835900CA4BBC /* Apps */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = Apps;
 			sourceTree = "<group>";
 		};
 		2098BCB2301B850B00CA4BBC /* Config */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = Config;
 			sourceTree = "<group>";
 		};
 		20AACD812FEBC4E10098B372 /* Design */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = Design;
 			sourceTree = "<group>";
 		};
@@ -284,7 +272,7 @@
 				B00000020001FEB616500 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
 				203CC0132FF0DFAA007A6D30 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 				20ED05282FF2A3C6009036F2 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */,
-				20F5D7BD2FF61BCF005F7423 /* XCLocalSwiftPackageReference "PaddleOCRVL" */,
+				20F5D7BD2FF61BCF005F7423 /* XCLocalSwiftPackageReference "Vendor/PaddleOCRVL" */,
 				E9F5B8A1FB68ED44DDCDC445 /* XCRemoteSwiftPackageReference "FlyingFox" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -361,7 +349,7 @@
 			baseConfigurationReferenceAnchor = 2098BCB2301B850B00CA4BBC /* Config */;
 			baseConfigurationReferenceRelativePath = Direct.xcconfig;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 22;
 				DEAD_CODE_STRIPPING = YES;
 				MARKETING_VERSION = 0.20;
 			};
@@ -372,7 +360,7 @@
 			baseConfigurationReferenceAnchor = 2098BCB2301B850B00CA4BBC /* Config */;
 			baseConfigurationReferenceRelativePath = Direct.xcconfig;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 22;
 				DEAD_CODE_STRIPPING = YES;
 				MARKETING_VERSION = 0.20;
 			};
@@ -549,7 +537,7 @@
 			baseConfigurationReferenceAnchor = 2098BCB2301B850B00CA4BBC /* Config */;
 			baseConfigurationReferenceRelativePath = AppStore.xcconfig;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 22;
 				DEAD_CODE_STRIPPING = YES;
 				MARKETING_VERSION = 0.20;
 			};
@@ -560,7 +548,7 @@
 			baseConfigurationReferenceAnchor = 2098BCB2301B850B00CA4BBC /* Config */;
 			baseConfigurationReferenceRelativePath = AppStore.xcconfig;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 22;
 				DEAD_CODE_STRIPPING = YES;
 				MARKETING_VERSION = 0.20;
 			};
@@ -608,7 +596,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		20F5D7BD2FF61BCF005F7423 /* XCLocalSwiftPackageReference "PaddleOCRVL" */ = {
+		20F5D7BD2FF61BCF005F7423 /* XCLocalSwiftPackageReference "Vendor/PaddleOCRVL" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Vendor/PaddleOCRVL;
 		};
