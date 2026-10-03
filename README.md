@@ -97,6 +97,49 @@ install in the catalog are the same models your workflows use — no separate se
 <!-- Items marked *(hidden in-app)* are built but switched off behind an in-app flag right
      now — pruning candidates if you don't want to announce them before they're switched on. -->
 
+### Local Server — let other apps on your Mac use your models
+
+Turn on **Serve** on any installed chat model's page and other apps on the same Mac can talk to
+it through an OpenAI-compatible endpoint (`/v1/chat/completions`, `/v1/models`, `/health`) at
+`http://127.0.0.1:1212/v1`. Point Xcode's locally hosted provider, OpenCode, a Python client, or
+plain `curl` at it. The **Connect your app** sheet gives a copy-paste setup for each, and
+**Settings → Local Server** has the on/off switch, the port, the list of served models, and a
+metadata-only log of recent requests.
+
+- **Loopback only, opt-in.** It listens on `127.0.0.1` / `[::1]` and rejects any request that
+  isn't addressed to localhost. It adds no outbound traffic.
+- **Your local models only.** Installed MLX chat models, plus Apple Foundation Models where
+  available. A remote-provider model (Claude, GPT, …) is never served, so your API keys are
+  never exposed through localhost.
+- **Content is never logged.** The request log keeps time, status, model, token counts and
+  duration — not prompts or replies.
+- **Keeps running with the window closed** while it is serving; un-serve everything and the
+  app quits as usual. A served model that doesn't fit in memory is flagged, and uninstalling a
+  served model removes it from the list and frees its weights.
+- **Chat only for now** — tool calling for coding agents (OpenCode, Claude Code, Codex) is
+  coming in a later update.
+
+### Keychain — fewer prompts, clearer consent
+
+Provider keys and your HuggingFace token now live in the **data-protection keychain**, so
+rebuilding or updating the app no longer re-prompts for access, and an old login-keychain item
+is migrated once the first time it is read. Checking whether a key exists never reads the
+secret, which ends the burst of Keychain prompts when opening Settings. **Settings** has
+a one-row HuggingFace token (Set Up… / Change… / Remove) and **Providers** is split into
+*Search Providers* and *AI Model Providers*, listing only the ones you have configured. Before a
+key for a third-party provider is saved you are asked to **Agree and Save** to a plain sentence
+saying what will be sent, to whom, and under whose account; Remove deletes the key and stops it.
+
+### CLM 8B — a bigger decision model for long, varied text
+
+CLM 8B is Laya's big sibling: an 8B **decision encoder** (a frozen Qwen3-8B encoder with two small
+heads) that answers typed multiple-choice, scored, or yes/no questions about a block of text, with
+a probability per option and a confidence score — and never generates text. Where Laya 0.4B tops
+out at 512 tokens, CLM takes 2048 per text with no cap on the number of options, which suits an
+invoice with its line items, a contract clause, or an email thread. It has its own Run UI and
+joins the **Classify**, **Gate**, and **Score** rows in AI Workflows (Laya stays the default).
+About 9 GB peak RAM; English only; Apache-2.0.
+
 ### Laya 0.4B — a decision model, not a chat model
 
 A new model category. Laya answers typed multiple-choice, scored, or yes/no questions about
@@ -133,7 +176,6 @@ gallery of ready-made sample flows, plus save, open, import and export for your 
 - **Remote model providers** — a row can call Claude, GPT, DeepSeek, or a LAN endpoint using
   your own API key (stored in Keychain), or run certain tasks fully on-device via Apple
   Intelligence; every remote row is clearly marked before it can send anything off-device
-  *(the Settings tab for entering provider keys is hidden in-app right now)*
 - **Web Search row** — search the web from inside a flow with your own Tavily or Brave key
 - **Workspaces** — group related flows in one folder that share files; pair a "build" flow
   (indexes your documents) with an "ask" flow (queries them) for a one-card document-Q&A
@@ -144,7 +186,7 @@ gallery of ready-made sample flows, plus save, open, import and export for your 
   folder, instead of a bare system file dialog
 - **A real Settings window** — tabs for Models (storage usage, clear cache), Providers,
   Tools (every agent capability, with an audit log), and Privacy (a plain-language summary
-  of what can leave your Mac) *(the Providers and Privacy tabs are hidden in-app right now)*
+  of what can leave your Mac), plus **Local Server**
 
 ### SAM3 — image segmentation
 
@@ -455,11 +497,17 @@ Every model in the catalog should eventually have a working Run button.
       transformer + GPU-accelerated EnCodec decoder, native MLX port
 - [x] Laya 0.4B Run UI — typed decision/classification questions answered with a confidence
       score, no generated text; native MLX ModernBERT-large encoder + decision head port
+- [x] Local Server — OpenAI-compatible, loopback-only endpoint for your installed chat models
+      and Apple Foundation Models, with a Connect-your-app sheet and a metadata-only request log
+- [x] Keychain: data-protection keychain with lazy migration, no secret reads for existence
+      checks, and explicit consent before a provider key is saved
+- [x] CLM 8B — a second, larger decision-encoder model; answers Classify / Gate / Score rows
 - [x] AI Workflows: output viewer (Quick Look, Open in app, Export a Copy), workspace-flow
       auto-resume after install, Flow inspector tab, Human Input/Ask Human polish, Row-text
       Template editor, and a concurrency-safety pass across FlowKit/Core/Modules
 
 ### In progress
+- [ ] Local Server: tool calling for coding agents (OpenCode, Claude Code, Codex)
 - [ ] Visual pipeline builder UI
 - [ ] Improved gated-model auth flow
 
