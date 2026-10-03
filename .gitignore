@@ -35,5 +35,8 @@ __pycache__/
 installed.json
 
 # CL-4b: the real encoder checkpoint (~8GB) — downloaded locally to run parity tests
-# against the actual model, never committed (unlike the 72MB heads fixture).
+# against the actual model, never committed.
 Fixtures/CLM/encoder_weights/
+# CL-4a's heads (72MB) — same rule. Byte-identical to the public HF upload; fetch per
+# Fixtures/CLM/PROVENANCE.md. Removed from history 2026-10-03; CLMHeadsTests skips without it.
+Fixtures/CLM/heads_weights/

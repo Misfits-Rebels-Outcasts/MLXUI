@@ -4,14 +4,24 @@ import MLX
 @testable import MLXUI
 
 /// CL-4a golden test — `CLMHeadPair` against `Fixtures/CLM/heads.json` (provenance in
-/// `Fixtures/CLM/PROVENANCE.md`). Loads the real, shipped heads weights committed at
-/// `Fixtures/CLM/heads_weights/` (downloaded from `RealityCat/CLM-v0.1-8B-MLX-8bit`'s public
+/// `Fixtures/CLM/PROVENANCE.md`). Loads the real, shipped heads weights from
+/// `Fixtures/CLM/heads_weights/` (gitignored, not committed — downloaded from `RealityCat/CLM-v0.1-8B-MLX-8bit`'s public
 /// `heads/` folder, sha256 `293646f3dca1900ac4038a1afcdee769ce64687c1636b7b311774b0663539523`
 /// — matches §0 of `RSI/DelegateCLMBacklog.md` exactly), runs the same 3 fixed input vectors
 /// through it, and checks cosine similarity against Python's projections — cosine ≥ 0.99999
-/// per CL-4a's hard gate.
-@Suite(.serialized)
+/// per CL-4a's hard gate. Skips cleanly when the weights aren't present (a fresh clone) —
+/// the two `curl` lines in `PROVENANCE.md` fetch them.
+@Suite(.serialized, .enabled(if: CLMHeadsTests.headsWeightsPresent))
 struct CLMHeadsTests {
+    static let headsWeightsPresent: Bool = {
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let weights = repoRoot.appendingPathComponent(
+            "Fixtures/CLM/heads_weights/CLM_v0.1-8B.safetensors")
+        return FileManager.default.fileExists(atPath: weights.path)
+    }()
+
     private struct GoldenVector: Decodable {
         var input: [Double]
         var state_projection: [Double]

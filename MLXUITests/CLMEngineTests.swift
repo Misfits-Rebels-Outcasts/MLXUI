@@ -5,8 +5,8 @@ import Foundation
 /// CL-4b golden test — `CLMEngine.answer` against `Fixtures/CLM/answers.json` (provenance in
 /// `Fixtures/CLM/PROVENANCE.md`): 24 real questions from the owner's MLXCLM parity corpus,
 /// including 4 of the 8 `parity.json` flips. Needs the real encoder + heads weights at
-/// `Fixtures/CLM/{encoder_weights,heads_weights}/` — `encoder_weights/` is gitignored (~8GB,
-/// see `CLMEncoderTests.swift`'s header comment for how to re-download it).
+/// `Fixtures/CLM/{encoder_weights,heads_weights}/` — both are gitignored (~8GB encoder: see
+/// `CLMEncoderTests.swift`'s header comment; 72MB heads: see `PROVENANCE.md`).
 ///
 /// CL-4b's hard gate, per the owner's 2026-09-28 ruling: Swift agrees with Python MLX on
 /// 24/24 argmax (unchanged); per-question probability difference ≤ 0.03, AND at least 18/24
