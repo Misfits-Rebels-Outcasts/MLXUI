@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Run surface for CLM's decision encoder. **A copy of `Views/Run/LayaRunView.swift`** (278
-/// lines at commit `22e0314`, per `RSI/DelegateCLMBacklog.md` CL-0 gate G, "overridden: a
+/// lines at commit `f7084ea`, per `RSI/DelegateCLMBacklog.md` CL-0 gate G, "overridden: a
 /// duplicate Run screen" — the owner's own words: "G. Make it a duplicate Run screen.") — a
 /// later fix to one should be carried to the other by diffing against that commit, not by
 /// re-deriving. `LayaRunView.swift` itself is not touched by this file.
