@@ -283,6 +283,24 @@ nonisolated enum CatalogBridge {
             candidates: ["RealityCat/CLM-v0.1-8B-MLX-8bit"],
             equivalence: .same,
             manifestFile: "clm-v0.1-8b-8bit.json"),
+        // Q38-3 (RSI/DelegateQwen38Backlog.md) -- the 3-bit Qwen3.8 27B card from Q38-2. B1 as
+        // ruled by the owner 2026-10-03: its **own** display name ("Qwen3.8 27B 3-bit"), `.same`
+        // equivalence, resolving to exactly the one catalog card, which is byte-identical to this
+        // manifest's `id` (`lukaskremla/Qwen3.8-27B-3bit-MLX`). It is a separate name from the
+        // 4-bit `Qwen3.8 27B` B1 also rules (Q38-6) precisely so a flow says which build it runs
+        // and `FlowPreflight` judges each one's `ramGB` honestly: this one is 19.08 GB, the 4-bit
+        // is not runnable below 32 GB. `modelType: .llm` is explicit because the 4-bit card will
+        // carry the same architecture string and a `nil` here would fall back to the ambiguous
+        // hfModelId match (`BridgeEntry.modelType`'s doc comment) once Phase B lands.
+        // "Qwen3.8 27B 3-bit" is appended **last** to `TaskModels.llmModels`, so the seed
+        // ("Ministral 3B") does not move -- same discipline as Qwen3.5 9B (MoC-2-4 D) and CLM 8B.
+        BridgeEntry(
+            display: "Qwen3.8 27B 3-bit",
+            pinnedID: "lukaskremla/Qwen3.8-27B-3bit-MLX",
+            candidates: ["lukaskremla/Qwen3.8-27B-3bit-MLX"],
+            equivalence: .same,
+            manifestFile: "qwen3.8-27b-3bit.json",
+            modelType: .llm),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {
