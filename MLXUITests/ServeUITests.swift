@@ -20,11 +20,28 @@ private func environment() -> ServeEnvironment {
         created: 1)
 }
 
+/// An index with these HF ids installed as chat models.
+private func installedIndex(_ ids: [String]) -> InstalledModelIndex {
+    InstalledModelIndex(entries: ids.map { .init(id: $0, hfModelId: $0, kind: .llm, ramGB: 4) })
+}
+
+/// Since S1-5d the controller counts *reachable* models (served AND installed), so the helper's
+/// default Mac has the ids these tests serve installed, and AFM ready.
 @MainActor
-private func makeController(listenPort: UInt16 = 0, served: Set<String> = [], defaults: UserDefaults = freshDefaults()) -> LocalServerController {
+private func makeController(listenPort: UInt16 = 0, served: Set<String> = [], defaults: UserDefaults = freshDefaults(),
+                            installed: @escaping () -> InstalledModelIndex = {
+                                installedIndex([sampleModel, "b", "mlx-community/other"])
+                            },
+                            evict: @escaping (String) async -> Void = { _ in }) -> LocalServerController {
     let server = LocalServer(settings: ServeSettings(servedModelIDs: served), defaults: nil,
                              listenPort: listenPort, environment: environment())
-    return LocalServerController(server: server, defaults: defaults)
+    return LocalServerController(server: server, defaults: defaults, installed: installed,
+                                 appleFoundation: { .ready }, evict: evict)
+}
+
+private actor Evicted {
+    private(set) var ids: [String] = []
+    func add(_ id: String) { ids.append(id) }
 }
 
 // MARK: - Pure policy
@@ -510,5 +527,115 @@ struct ServeMemoryRouteTests {
         #expect(at.status == 200)
         let over = try #require(await call(env(ramGB: 10.01, capacityGB: 10, backend: FakeBackend([.finish(.stop)]))))
         #expect(over.status == 503)
+    }
+}
+
+
+// MARK: - S1-5d: uninstall, one reachable set, launch reconcile
+
+@Suite(.serialized)
+@MainActor
+struct ServeReachableSetTests {
+    private final class Disk: @unchecked Sendable {
+        var ids: [String]
+        init(_ ids: [String]) { self.ids = ids }
+    }
+
+    @Test func uninstallingAServedModelUnservesItEvictsItAndLeavesTheOthersServing() async {
+        LocalServerGate.overrideForTesting = true
+        defer { LocalServerGate.overrideForTesting = nil }
+        let disk = Disk(["mlx-community/Ministral", "mlx-community/Qwen3-8B"])
+        let evicted = Evicted()
+        let controller = makeController(installed: { installedIndex(disk.ids) }, evict: { await evicted.add($0) })
+        defer { Task { await controller.server.stop() } }
+        await controller.setServed("mlx-community/Ministral", true)
+        await controller.setServed("mlx-community/Qwen3-8B", true)
+        #expect(controller.statusSentence.hasPrefix("Serving 2 models"))
+
+        disk.ids = ["mlx-community/Qwen3-8B"]                                       // Ministral deleted
+        await controller.modelUninstalled("mlx-community/Ministral")
+        #expect(controller.servedIDs == ["mlx-community/Qwen3-8B"])
+        #expect(controller.reachableIDs == ["mlx-community/Qwen3-8B"])
+        #expect(controller.statusSentence.hasPrefix("Serving 1 model at"))
+        #expect(await evicted.ids == ["mlx-community/Ministral"])
+        #expect(controller.isRunning)
+    }
+
+    @Test func uninstallingTheLastServedModelStopsTheServer() async {
+        LocalServerGate.overrideForTesting = true
+        defer { LocalServerGate.overrideForTesting = nil }
+        let disk = Disk([sampleModel])
+        let controller = makeController(installed: { installedIndex(disk.ids) })
+        await controller.setServed(sampleModel, true)
+        #expect(controller.isRunning)
+        disk.ids = []
+        await controller.modelUninstalled(sampleModel)
+        #expect(controller.servedIDs.isEmpty)
+        #expect(controller.server.status == .stopped)
+    }
+
+    @Test func aRepoStillInstalledUnderAnotherCardIsLeftServed() async {
+        LocalServerGate.overrideForTesting = true
+        defer { LocalServerGate.overrideForTesting = nil }
+        let evicted = Evicted()
+        let controller = makeController(installed: { installedIndex([sampleModel]) }, evict: { await evicted.add($0) })
+        defer { Task { await controller.server.stop() } }
+        await controller.setServed(sampleModel, true)
+        await controller.modelUninstalled(sampleModel)                              // directory was kept
+        #expect(controller.isServing(sampleModel))
+        #expect(await evicted.ids.isEmpty)
+    }
+
+    @Test func theStatusSentenceListAndPolicyAllCountReachableNotStored() async {
+        LocalServerGate.overrideForTesting = true
+        defer { LocalServerGate.overrideForTesting = nil }
+        // Stored: an installed model, a deleted one, and AFM while Apple Intelligence isn't ready.
+        let server = LocalServer(settings: ServeSettings(servedModelIDs: [sampleModel, "gone/model", ServedModels.appleFoundationID]),
+                                 defaults: nil, listenPort: 0, environment: environment())
+        let controller = LocalServerController(server: server, defaults: freshDefaults(),
+                                               installed: { installedIndex([sampleModel]) },
+                                               appleFoundation: { .needsSetup(reason: "off", action: nil) }, evict: { _ in })
+        defer { Task { await controller.server.stop() } }
+        #expect(controller.servedIDs.count == 3)
+        #expect(controller.reachableIDs == [sampleModel])                           // == what /v1/models lists
+        #expect(controller.reachableIDs == Set(ServedModels.ids(served: controller.servedIDs, installed: installedIndex([sampleModel]),
+                                                                 appleFoundation: .needsSetup(reason: "off", action: nil))))
+        #expect(controller.statusSentence == "Not serving — turn on Serve for a model to start."
+                || controller.statusSentence == "The server is stopped.")
+        await controller.autoStart()
+        #expect(controller.statusSentence.hasPrefix("Serving 1 model at"))
+        #expect(!controller.isReachable("gone/model"))
+        #expect(!controller.isReachable(ServedModels.appleFoundationID))
+    }
+
+    @Test func nothingReachableMeansNoAutoStartEvenWithAStoredList() async {
+        LocalServerGate.overrideForTesting = true
+        defer { LocalServerGate.overrideForTesting = nil }
+        let controller = makeController(served: ["gone/model"], installed: { installedIndex([]) })
+        await controller.autoStart()
+        #expect(controller.server.status == .stopped)
+    }
+
+    @Test func launchDropsServedIdsThatAreNoLongerInstalledAndEvictsThem() async {
+        LocalServerGate.overrideForTesting = true
+        defer { LocalServerGate.overrideForTesting = nil }
+        let evicted = Evicted()
+        let controller = makeController(served: [sampleModel, "gone/model", ServedModels.appleFoundationID],
+                                        installed: { installedIndex([sampleModel]) }, evict: { await evicted.add($0) })
+        defer { Task { await controller.server.stop() } }
+        await controller.autoStart()
+        #expect(controller.servedIDs == [sampleModel, ServedModels.appleFoundationID])   // AFM is kept
+        #expect(await evicted.ids == ["gone/model"])
+        #expect(controller.isRunning)
+    }
+
+    @Test func withTheGateClosedLaunchLeavesThePersistedListAlone() async {
+        LocalServerGate.overrideForTesting = false
+        defer { LocalServerGate.overrideForTesting = nil }
+        let controller = makeController(served: ["gone/model"], installed: { installedIndex([]) })
+        await controller.autoStart()
+        await controller.modelUninstalled("gone/model")
+        #expect(controller.servedIDs == ["gone/model"])
+        #expect(controller.server.status == .stopped)
     }
 }

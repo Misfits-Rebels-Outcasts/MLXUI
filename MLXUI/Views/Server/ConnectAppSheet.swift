@@ -17,7 +17,7 @@ struct ConnectAppSheet: View {
         if case .running(let port) = controller.server.status { return Int(port) }
         return controller.server.settings.port
     }
-    private var models: [String] { controller.servedIDs.sorted() }
+    private var models: [String] { controller.reachableIDs.sorted() }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {

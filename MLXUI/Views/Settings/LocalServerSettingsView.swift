@@ -37,7 +37,7 @@ struct LocalServerSettingsView: View {
             }
 
             Section("Served models") {
-                if controller.servedIDs.isEmpty {
+                if controller.reachableIDs.isEmpty {
                     Text("Nothing is being served. Turn on Serve on a model's page, or below.")
                         .foregroundStyle(.secondary)
                 }
@@ -46,7 +46,7 @@ struct LocalServerSettingsView: View {
                         .font(.callout)
                         .foregroundStyle(.orange)
                 }
-                ForEach(controller.servedIDs.sorted(), id: \.self) { id in
+                ForEach(controller.reachableIDs.sorted(), id: \.self) { id in
                     HStack {
                         Text(id).font(.system(.body, design: .monospaced))
                         Spacer()

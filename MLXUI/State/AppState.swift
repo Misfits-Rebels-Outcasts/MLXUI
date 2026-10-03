@@ -570,6 +570,9 @@ final class AppState { //appstatecomeback
         installManager.uninstall(model, catalog: catalog, installedModelIDs: installedModelIDs)
         installedModelIDs.remove(model.id)
         saveInstalledModels()
+        // S1-5d: an uninstalled model is no longer served (nor loaded).
+        let hfModelID = model.hfModelId
+        Task { await localServer.modelUninstalled(hfModelID) }
     }
 
     func runModel(_ model: ModelEntry) {

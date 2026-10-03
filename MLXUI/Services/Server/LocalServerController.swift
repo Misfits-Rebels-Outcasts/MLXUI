@@ -22,7 +22,7 @@ enum LocalServerPolicy {
         return running ? .stop : .none
     }
 
-    /// Launch: "if `servedModelIDs` is non-empty at launch, start the server (the user left it
+    /// Launch: "if the reachable set is non-empty at launch, start the server (the user left it
     /// serving)" — and the user hasn't switched it off, and the gate is open. Implementer's call,
     /// pending owner confirmation.
     static func shouldAutoStart(gateAvailable: Bool, enabled: Bool, servedCount: Int) -> Bool {
@@ -161,33 +161,48 @@ final class LocalServerController {
     private(set) var connectModelID: String?
 
     @ObservationIgnored private let installedIndex: () -> InstalledModelIndex
+    @ObservationIgnored private let appleFoundation: () -> Readiness?
+    @ObservationIgnored private let evictModel: (String) async -> Void
     @ObservationIgnored private let budgetBytes: Int64
 
-    /// - Parameters: `installed` / `budgetBytes` default to the live catalog + `MemoryBudget.shared`;
-    ///   tests inject their own.
+    /// - Parameters: `installed` / `appleFoundation` / `evict` / `budgetBytes` default to the live
+    ///   catalog, the AFM checker, `ModelContainerPool.shared` and `MemoryBudget.shared`; tests
+    ///   inject their own. `evict` takes an HF repo id.
     init(server: LocalServer = LocalServer(), defaults: UserDefaults = .standard,
          installed: @escaping () -> InstalledModelIndex = { InstalledModelIndex.loadInstalled() },
+         appleFoundation: @escaping () -> Readiness? = { AppleFoundationAvailability.currentReadiness() },
+         evict: @escaping (String) async -> Void = { hfModelID in
+             await ModelContainerPool.shared.evict(modelID: ModelStore.repoSlug(for: hfModelID))
+         },
          budgetBytes: Int64 = MemoryBudget.shared.capacityBytes) {
         self.server = server
         self.defaults = defaults
         self.installedIndex = installed
+        self.appleFoundation = appleFoundation
+        self.evictModel = evict
         self.budgetBytes = budgetBytes
         self.enabled = defaults.object(forKey: Self.enabledKey) as? Bool ?? true
         self.hasShownConnect = defaults.bool(forKey: Self.connectShownKey)
     }
 
+    /// The stored list — what the user chose. Not what other apps can reach: use `reachableIDs`.
     var servedIDs: Set<String> { server.settings.servedModelIDs }
     func isServing(_ id: String) -> Bool { server.settings.isServing(id) }
-    /// What the Serve toggles show: in the list **and** the master switch on (`ServeReach`).
+    /// **The** reachable set (S1-5d): served AND installed (AFM: served AND ready) — exactly what
+    /// `/v1/models` lists. The pane, the status sentence, start/stop and auto-start all count this.
+    var reachableIDs: Set<String> {
+        Set(ServedModels.ids(served: servedIDs, installed: installedIndex(), appleFoundation: appleFoundation()))
+    }
+    /// What the Serve toggles show: reachable **and** the master switch on (`ServeReach`).
     func isReachable(_ id: String) -> Bool {
-        ServeReach.isReachable(id: id, served: servedIDs, masterEnabled: enabled)
+        ServeReach.isReachable(id: id, served: reachableIDs, masterEnabled: enabled)
     }
     /// The pane's "these don't all fit" line, or `nil`.
     var memoryNote: String? {
-        ServeMemory.note(servedIDs: servedIDs, installed: installedIndex(), capacityBytes: budgetBytes)
+        ServeMemory.note(servedIDs: reachableIDs, installed: installedIndex(), capacityBytes: budgetBytes)
     }
     var statusSentence: String {
-        LocalServerPolicy.statusSentence(status: server.status, servedCount: servedIDs.count, enabled: enabled)
+        LocalServerPolicy.statusSentence(status: server.status, servedCount: reachableIDs.count, enabled: enabled)
     }
     var isRunning: Bool {
         if case .running = server.status { return true }
@@ -227,16 +242,46 @@ final class LocalServerController {
         }
     }
 
-    /// Launch: resume serving if the user left models served (gate permitting).
+    /// Launch: drop served models that are no longer installed (deleted outside the app), then
+    /// resume serving if any reachable model was left served (gate permitting).
     func autoStart() async {
+        await reconcileServed()
         guard LocalServerPolicy.shouldAutoStart(gateAvailable: LocalServerGate.isAvailable, enabled: enabled,
-                                                servedCount: servedIDs.count) else { return }
+                                                servedCount: reachableIDs.count) else { return }
         await server.start()
+    }
+
+    /// Uninstall hook (S1-5d): once `hfModelID`'s files are gone, un-serve it, free its weights, and
+    /// stop the server if it was the last reachable model. A model whose repo is still installed
+    /// (another card shares it) is left alone.
+    func modelUninstalled(_ hfModelID: String) async {
+        guard LocalServerGate.isAvailable else { return }
+        guard !isInstalledLLM(hfModelID) else { return }
+        let wasServed = isServing(hfModelID)
+        await reconcileServed()                          // un-serves + evicts it when it was served
+        if !wasServed { await evictModel(hfModelID) }    // loaded by chat / a flow, never served
+    }
+
+    /// Drops every served MLX id that is no longer an installed chat model — evicting its weights —
+    /// then applies start/stop. `apple-foundation` is never dropped (its readiness can change; it
+    /// is just not reachable meanwhile). Gated: while hidden the persisted list is left untouched.
+    func reconcileServed() async {
+        guard LocalServerGate.isAvailable else { return }
+        let gone = servedIDs.filter { $0 != ServedModels.appleFoundationID && !isInstalledLLM($0) }
+        for id in gone {
+            server.update(settings: server.settings.serving(id, false))
+            await evictModel(id)
+        }
+        await apply()
+    }
+
+    private func isInstalledLLM(_ hfModelID: String) -> Bool {
+        installedIndex().entries.contains { $0.kind == .llm && $0.hfModelId == hfModelID }
     }
 
     func presentConnect(for id: String?) {
         guard LocalServerGate.isAvailable else { return }
-        connectModelID = id ?? servedIDs.sorted().first
+        connectModelID = id ?? reachableIDs.sorted().first
         showConnect = true
     }
 
@@ -247,7 +292,7 @@ final class LocalServerController {
 
     private func apply() async {
         switch LocalServerPolicy.action(gateAvailable: LocalServerGate.isAvailable, enabled: enabled,
-                                        servedCount: servedIDs.count, status: server.status) {
+                                        servedCount: reachableIDs.count, status: server.status) {
         case .start: await server.start()
         case .stop: await server.stop()
         case .none: break
