@@ -67,7 +67,9 @@ struct CatFlowChatModuleTests {
         // CL-1: bundled catalog gained the RealityCat/CLM-v0.1-8B-MLX-8bit `.decision` entry, 40 → 41.
         // Q38-2: bundled catalog gained the lukaskremla/Qwen3.8-27B-3bit-MLX `.llm` entry
         //        (RSI/DelegateQwen38Backlog.md Q38-2, ruled 2026-10-03 A1/B1/C1/D1), 41 → 42.
-        #expect(entries.count == 42, "bundled catalog drifted: \(entries.count) entries")
+        // Q38-5: bundled catalog gained the mlx-community/Qwen3.8-27B-4bit `.llm` entry (Phase B,
+        //        same ruling — C1 sets its ramGB to 26.0; D1 hides it in Browse), 42 → 43.
+        #expect(entries.count == 43, "bundled catalog drifted: \(entries.count) entries")
 
         let withChat = registry(includingChat: true)
         let withoutChat = registry(includingChat: false)
@@ -87,8 +89,8 @@ struct CatFlowChatModuleTests {
             }
             checked += 1
         }
-        #expect(checked == 42)
-        #expect(llmChecked == 11)
+        #expect(checked == 43)
+        #expect(llmChecked == 12)   // Q38-5: the 4-bit card is the 12th .llm entry
     }
 
     // MARK: - Helpers
