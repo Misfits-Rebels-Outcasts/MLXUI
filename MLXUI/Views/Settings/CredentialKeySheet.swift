@@ -13,6 +13,11 @@ struct CredentialKeySheet: View {
     let placeholder: (String) -> String
     let isValid: (String) -> Bool
     let signupLink: (String) -> (label: String, url: URL)?
+    /// Apple guideline 5.1.2(i) — explicit consent before personal data goes to a third party.
+    /// When non-nil, the sheet shows this sentence for the selected provider and the Save button
+    /// reads "Agree and Save": saving the key *is* the user's agreement, and removing the key
+    /// withdraws it. `nil` (the HuggingFace token) keeps the plain Save.
+    let consent: ((String) -> String)?
     let onSave: (_ choice: String, _ key: String) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -23,6 +28,7 @@ struct CredentialKeySheet: View {
          placeholder: @escaping (String) -> String,
          isValid: @escaping (String) -> Bool = { !$0.isEmpty },
          signupLink: @escaping (String) -> (label: String, url: URL)?,
+         consent: ((String) -> String)? = nil,
          onSave: @escaping (_ choice: String, _ key: String) -> Void) {
         self.title = title
         self.choices = choices
@@ -30,6 +36,7 @@ struct CredentialKeySheet: View {
         self.placeholder = placeholder
         self.isValid = isValid
         self.signupLink = signupLink
+        self.consent = consent
         self.onSave = onSave
         _selected = State(initialValue: choices.first ?? "")
     }
@@ -54,11 +61,17 @@ struct CredentialKeySheet: View {
                 Link(link.label, destination: link.url).font(.caption)
             }
 
+            if let consent, !selected.isEmpty {
+                Text(consent(selected))
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Save") {
+                Button(consent == nil ? "Save" : "Agree and Save") {
                     onSave(selected, keyInput)
                     keyInput = ""
                     dismiss()

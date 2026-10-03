@@ -32,6 +32,7 @@ struct ProviderCredentialRowView: View {
                 .disabled(isTesting)
             Button("Change…") { onChange() }
             Button("Remove", role: .destructive) { onRemove() }
+                .help("Delete this key. Workflow steps that name this provider stop sending anything to it.")
         }
         .padding(.vertical, 2)
     }

@@ -14,7 +14,7 @@ struct ProvidersSettingsView: View {
     @State private var configured: Set<String> = []
     @State private var sheet: KeySheetTarget?
 
-    private enum Kind { case search, provider }
+    enum Kind { case search, provider }
 
     private struct KeySheetTarget: Identifiable {
         let kind: Kind
@@ -83,10 +83,24 @@ struct ProvidersSettingsView: View {
                     ("Get a \(name) key (\($0.freeTierNote))", $0.signupURL)
                 }
             },
+            consent: { name in Self.consentSentence(kind: target.kind, provider: name) },
             onSave: { name, key in
                 KeychainHelper.save(key, account: KeychainHelper.providerAccount(name))
                 configured.insert(name)
             })
+    }
+
+    /// Apple guideline 5.1.2(i): the explicit-consent sentence shown in the Add / Change sheet.
+    /// "Agree and Save" records agreement; Remove (which deletes the key) withdraws it, because
+    /// a step naming a provider with no key refuses to run.
+    static func consentSentence(kind: Kind, provider: String) -> String {
+        let name = provider.capitalized
+        switch kind {
+        case .provider:
+            return "Workflow steps that name \(name) will send that step's content — which can include text from your documents — to \(name), under your own \(name) account. Nothing is sent until such a step runs. Remove the key at any time to stop."
+        case .search:
+            return "Web Search steps that use \(name) will send your search text to \(name), under your own \(name) account. Nothing is sent until such a step runs. Remove the key at any time to stop."
+        }
     }
 
     private func remove(_ name: String) {
