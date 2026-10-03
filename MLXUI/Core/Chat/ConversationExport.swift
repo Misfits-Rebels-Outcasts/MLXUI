@@ -115,18 +115,19 @@ nonisolated enum ConversationExporter {
                     assistantHeadingOpen = false
 
                 case .assistant:
-                    let (reasoning, answer) = splitReasoning(message.text)
-                    guard reasoning != nil || !answer.isEmpty else {
-                        // Nothing to show in this bubble; it still ends the open turn.
-                        assistantHeadingOpen = false
+                    let reasoning = splitReasoning(message.text)
+                    guard reasoning.reasoning != nil || !reasoning.answer.isEmpty else {
+                        // Nothing to show in this bubble. It does **not** close the assistant
+                        // turn: only a user message does, so an empty bubble between two tool
+                        // cards can't open a second heading for the same turn.
                         continue
                     }
                     openAssistantHeading()
-                    if let reasoning {
-                        blocks.append(reasoningBlock(reasoning, answerIsEmpty: answer.isEmpty))
+                    if let text = reasoning.reasoning {
+                        blocks.append(reasoningBlock(text, isTruncated: reasoning.isTruncated))
                     }
-                    if !answer.isEmpty {
-                        blocks.append(verbatim(answer))
+                    if !reasoning.answer.isEmpty {
+                        blocks.append(verbatim(reasoning.answer))
                     }
                 }
 
@@ -140,7 +141,11 @@ nonisolated enum ConversationExporter {
 
     /// Reasoning folded above the answer (D2). `<details>` is HTML inside Markdown, so no fence
     /// is needed and the raw `<think>` text stays readable.
-    private static func reasoningBlock(_ reasoning: String, answerIsEmpty: Bool) -> String {
+    ///
+    /// The "cut off" note is added on `isTruncated` alone — **not** whenever the answer is
+    /// empty. A *closed* think block with no answer is the normal shape right before a tool
+    /// call, and saying the reply was cut off there is wrong (CX-A F1).
+    private static func reasoningBlock(_ reasoning: String, isTruncated: Bool) -> String {
         var block = """
         <details><summary>Reasoning</summary>
 
@@ -148,8 +153,7 @@ nonisolated enum ConversationExporter {
 
         </details>
         """
-        if answerIsEmpty {
-            // Shape 3: cut off mid-thought, so say so rather than showing an empty answer.
+        if isTruncated {
             block += "\n\n_(reply ended before the reasoning finished)_"
         }
         return block
@@ -189,7 +193,16 @@ nonisolated enum ConversationExporter {
 
     // MARK: - Reasoning
 
-    /// Split an assistant bubble into `(reasoning, answer)`.
+    /// A bubble's reasoning split out from its answer. `isTruncated` is true **only** for shape 3
+    /// (an opening tag with no closing tag) — it means the reply stopped mid-thought, which is
+    /// the only case that earns the "ended before the reasoning finished" note (CX-A F1).
+    struct ReasoningSplit: Sendable, Equatable {
+        let reasoning: String?
+        let answer: String
+        let isTruncated: Bool
+    }
+
+    /// Split an assistant bubble into its reasoning and answer.
     ///
     /// Three shapes occur, and all three must be handled:
     /// 1. `<think>…</think>answer` — the normal case;
@@ -198,30 +211,34 @@ nonisolated enum ConversationExporter {
     /// 3. `<think>…` with no closing tag — a reply cut off at the token limit; all of it is
     ///    reasoning and the answer is empty.
     ///
-    /// No tags at all → `(nil, text)`, rendered as a plain answer.
-    static func splitReasoning(_ text: String) -> (reasoning: String?, answer: String) {
+    /// `answer` is trimmed, so a whitespace-only bubble reads as empty and is skipped rather
+    /// than appended as a blank block. No tags at all → `(nil, text, false)`.
+    static func splitReasoning(_ text: String) -> ReasoningSplit {
         let open = "<think>"
         let close = "</think>"
 
         if let openRange = text.range(of: open) {
             let afterOpen = text[openRange.upperBound...]
             if let closeRange = afterOpen.range(of: close) {
-                return (
-                    trimmed(String(afterOpen[..<closeRange.lowerBound])),
-                    trimmed(String(afterOpen[closeRange.upperBound...]))
+                return ReasoningSplit(
+                    reasoning: trimmed(String(afterOpen[..<closeRange.lowerBound])),
+                    answer: trimmed(String(afterOpen[closeRange.upperBound...])),
+                    isTruncated: false
                 )
             }
             // Shape 3 — never closed.
-            return (trimmed(String(afterOpen)), "")
+            return ReasoningSplit(
+                reasoning: trimmed(String(afterOpen)), answer: "", isTruncated: true)
         }
         if let closeRange = text.range(of: close) {
             // Shape 2 — the opening tag was in the prompt.
-            return (
-                trimmed(String(text[..<closeRange.lowerBound])),
-                trimmed(String(text[closeRange.upperBound...]))
+            return ReasoningSplit(
+                reasoning: trimmed(String(text[..<closeRange.lowerBound])),
+                answer: trimmed(String(text[closeRange.upperBound...])),
+                isTruncated: false
             )
         }
-        return (nil, text)
+        return ReasoningSplit(reasoning: nil, answer: trimmed(text), isTruncated: false)
     }
 
     // MARK: - JSON

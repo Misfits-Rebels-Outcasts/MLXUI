@@ -100,32 +100,66 @@ struct ConversationExportTests {
     // MARK: - Reasoning shapes
 
     @Test func thinkBlockWithBothTagsIsFoldedIntoReasoning() {
-        let (reasoning, answer) = ConversationExporter.splitReasoning(
+        let split = ConversationExporter.splitReasoning(
             "<think>2 + 2 is 4.</think>The answer is 4.")
-        #expect(reasoning == "2 + 2 is 4.")
-        #expect(answer == "The answer is 4.")
+        #expect(split.reasoning == "2 + 2 is 4.")
+        #expect(split.answer == "The answer is 4.")
+        #expect(!split.isTruncated)
     }
 
     @Test func closingTagWithoutAnOpeningTagIsTheCommonQwen3Shape() {
         // Qwen3 templates put `<think>` in the generation prompt, so the stream starts inside
         // the block. A naive open…close match would leave all of this in the answer.
-        let (reasoning, answer) = ConversationExporter.splitReasoning(
+        let split = ConversationExporter.splitReasoning(
             "The user wants a sum.\nLet me add them.\n</think>\n\n\n\nIt's 17797.")
-        #expect(reasoning == "The user wants a sum.\nLet me add them.")
-        #expect(answer == "It's 17797.")
+        #expect(split.reasoning == "The user wants a sum.\nLet me add them.")
+        #expect(split.answer == "It's 17797.")
+        #expect(!split.isTruncated)
     }
 
     @Test func unclosedThinkBlockIsAllReasoningAndNoAnswer() {
-        let (reasoning, answer) = ConversationExporter.splitReasoning(
+        let split = ConversationExporter.splitReasoning(
             "<think>Let me check the datetime first")
-        #expect(reasoning == "Let me check the datetime first")
-        #expect(answer == "")
+        #expect(split.reasoning == "Let me check the datetime first")
+        #expect(split.answer == "")
+        #expect(split.isTruncated)
     }
 
     @Test func textWithoutThinkTagsIsAPlainAnswer() {
-        let (reasoning, answer) = ConversationExporter.splitReasoning("Just an answer.")
-        #expect(reasoning == nil)
-        #expect(answer == "Just an answer.")
+        let split = ConversationExporter.splitReasoning("Just an answer.")
+        #expect(split.reasoning == nil)
+        #expect(split.answer == "Just an answer.")
+        #expect(!split.isTruncated)
+    }
+
+    /// CX-A F1: a **closed** think block with an empty answer is the normal shape right before a
+    /// tool call, so it must not claim the reply was cut off. Only shape 3 may.
+    @Test func aClosedThinkBlockWithNoAnswerIsNotTruncated() {
+        let shape1 = ConversationExporter.splitReasoning("<think>All done thinking.</think>")
+        #expect(shape1.reasoning == "All done thinking.")
+        #expect(shape1.answer == "")
+        #expect(!shape1.isTruncated)
+
+        let shape2 = ConversationExporter.splitReasoning("All done thinking.\n</think>\n\n\n\n")
+        #expect(shape2.reasoning == "All done thinking.")
+        #expect(shape2.answer == "")
+        #expect(!shape2.isTruncated)
+    }
+
+    @Test func closedEmptyAnswerBubbleBeforeAToolCallCarriesNoCutOffNote() {
+        // The owner's real conversation shape: `…\n</think>\n\n\n\n` then a fetch_url card.
+        let items: [TranscriptItem] = [
+            .message(ChatMessage(role: .user, text: "search for it")),
+            .message(ChatMessage(
+                role: .assistant, text: "The user is asking me to search.\n</think>\n\n\n\n")),
+            .tool(ToolActivity(
+                name: "fetch_url", arguments: [:], status: .finished, result: "HTTP 200")),
+        ]
+        let markdown = ConversationExporter.markdown(
+            Self.conversation(items: items), context: Self.context())
+
+        #expect(markdown.contains("<details><summary>Reasoning</summary>\n\nThe user is asking me to search.\n\n</details>"))
+        #expect(!markdown.contains("reply ended before the reasoning finished"))
     }
 
     @Test func markdownFoldsReasoningAboveTheAnswer() {
@@ -160,6 +194,27 @@ struct ConversationExportTests {
 
         #expect(markdown.contains("So the story starts with"))
         #expect(markdown.contains("_(reply ended before the reasoning finished)_"))
+    }
+
+    /// CX-A F2: a whitespace-only bubble renders as nothing at all, and it must not close the
+    /// assistant turn — only a user message does, so the turn keeps one heading.
+    @Test func whitespaceOnlyBubbleBetweenToolCardsKeepsOneHeading() {
+        let items: [TranscriptItem] = [
+            .message(ChatMessage(role: .user, text: "go")),
+            .tool(ToolActivity(name: "one", arguments: [:], status: .finished, result: "1")),
+            .message(ChatMessage(role: .assistant, text: "\n\n")),
+            .tool(ToolActivity(name: "two", arguments: [:], status: .finished, result: "2")),
+            .message(ChatMessage(role: .assistant, text: "Both done.")),
+        ]
+        let markdown = ConversationExporter.markdown(
+            Self.conversation(items: items), context: Self.context())
+
+        let heading = "### Qwen3.8 27B 3-bit"
+        #expect(markdown.components(separatedBy: heading).count - 1 == 1)
+        #expect(!markdown.contains("\n\n\n"), "extra blank lines — got:\n\(markdown)")
+        #expect(markdown.contains("> **Tool · one · Done**"))
+        #expect(markdown.contains("> **Tool · two · Done**"))
+        #expect(markdown.contains("Both done."))
     }
 
     // MARK: - Tool cards
@@ -363,15 +418,18 @@ struct ConversationExportTests {
         #expect(conversation.items.count == 4)
 
         // Shape 2: no opening tag, so the reasoning is everything before `</think>`.
-        let (reasoning, answer) = ConversationExporter.splitReasoning(
+        let split = ConversationExporter.splitReasoning(
             "The user is asking me to search.\n</think>\n\n\n\n")
-        #expect(reasoning == "The user is asking me to search.")
-        #expect(answer == "")
+        #expect(split.reasoning == "The user is asking me to search.")
+        #expect(split.answer == "")
+        #expect(!split.isTruncated)
 
         let markdown = ConversationExporter.markdown(conversation, context: Self.context())
         #expect(markdown.contains("<details><summary>Reasoning</summary>\n\nThe user is asking me to search.\n\n</details>"))
         #expect(markdown.contains("> **Tool · fetch_url · Done**"))
         #expect(markdown.contains("Here are the top models."))
+        // CX-A F1: the reasoning finished and the model called a tool — it was not cut off.
+        #expect(!markdown.contains("reply ended before the reasoning finished"))
     }
 
     // MARK: - Filenames
