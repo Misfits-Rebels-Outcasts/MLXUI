@@ -52,10 +52,12 @@ final class AppState { //appstatecomeback
     /// **Only the 4-bit card is hidden** — the community 3-bit card (`Qwen3.8-27B (3-bit)`,
     /// `lukaskremla--Qwen3.8-27B-3bit-MLX`) is a different `id` and is never filtered by this
     /// flag; it is the version an 18–24 GB Mac can actually run and the one Q38-S1…S4 were run
-    /// on. Owner ruling D1 (2026-10-03, `RSI/DelegateQwen38Backlog.md` Q38-0): committed `true`
-    /// until smoke row Q38-S5 passes on a 32 GB+ Mac, then the owner flips it. Mirrors
-    /// `hideQwen359B`.
-    static let hideQwen3827B = true
+    /// on. Owner ruling D1 (2026-10-03, `RSI/DelegateQwen38Backlog.md` Q38-0) committed it `true`
+    /// until smoke row Q38-S5 passed on a 32 GB+ Mac. **Flipped to `false` by the owner on
+    /// 2026-10-05 without that smoke**: the owner has no 32 GB+ Mac, the 4-bit differs from the
+    /// smoked 3-bit only in `quantization.bits`, and the `ramGB` 26.0 gate keeps it off smaller
+    /// Macs. Q38-S5 stays open for the first 32 GB+ user report. Mirrors `hideQwen359B`.
+    static let hideQwen3827B = false
 
     /// Set to `true` to hide the "Advance Gallery" shelf (every bundled flow that isn't
     /// basic) on the Automate → AI Workflows page. My Workflows and Basic Gallery still

@@ -5,12 +5,11 @@ import Testing
 /// Q38-5 — the official `mlx-community/Qwen3.8-27B-4bit` catalog entry (Phase B of
 /// `RSI/DelegateQwen38Backlog.md`), ruled by the owner 2026-10-03 at Q38-A: **C1** (`ramGB` 26.0
 /// rather than the 1.5× formula's 24.12, so a 24 GB Mac is blocked deliberately) and **D1**
-/// (`AppState.hideQwen3827B = true` until smoke row Q38-S5 passes on a 32 GB+ Mac).
+/// (`AppState.hideQwen3827B = true` until smoke row Q38-S5 passed on a 32 GB+ Mac; flipped to
+/// `false` by the owner on 2026-10-05 without that smoke).
 ///
 /// Modelled on `Qwen38TwentySevenBResolutionTests` (the 3-bit card, Q38-2). The architecture is
-/// SUPPORTED, so this entry carries no `ModelSupport` gap and routes through `ChatModule`; the
-/// **difference that matters** is that it must stay invisible in Browse while its 3-bit sibling
-/// stays visible.
+/// SUPPORTED, so this entry carries no `ModelSupport` gap and routes through `ChatModule`.
 @MainActor
 struct Qwen38FourBitResolutionTests {
 
@@ -104,16 +103,15 @@ struct Qwen38FourBitResolutionTests {
         #expect(stage.produces == .text)
     }
 
-    /// D1's committed value. If the owner flips this after Q38-S5, this test is the place the
-    /// flip is recorded (and `hideRemovesOnlyTheFourBit` below is written so it stays correct
-    /// either way — it asserts the *sibling* is never hidden, which is the part that must hold).
-    @Test func hideFlagIsCommittedTrue() {
-        #expect(AppState.hideQwen3827B == true)
+    /// D1 was committed `true`; the owner flipped it to `false` on 2026-10-05 without Q38-S5
+    /// (no 32 GB+ test Mac). This test records the flip.
+    @Test func hideFlagIsOff() {
+        #expect(AppState.hideQwen3827B == false)
     }
 
-    /// The two cards are separate `id`s, so the flag can hide exactly one of them. The 3-bit card
-    /// is the one the whole of Phase A was smoked on (Q38-S1…S4) and must keep showing.
-    @Test func hideRemovesOnlyTheFourBitFromBrowse() throws {
+    /// With the flag off, both cards show in Browse. The 3-bit card is the one the whole of
+    /// Phase A was smoked on (Q38-S1…S4) and must always show, whatever the flag says.
+    @Test func bothCardsShowInBrowse() throws {
         let state = AppState()
         state.loadBrowserData()
         #expect(state.loadError == nil, "browser.json must decode: \(state.loadError ?? "")")
@@ -123,8 +121,8 @@ struct Qwen38FourBitResolutionTests {
         let ids = Set(visible.map(\.id))
         #expect(ids.contains("lukaskremla--Qwen3.8-27B-3bit-MLX"),
                 "the 3-bit card must never be hidden by hideQwen3827B")
-        #expect(!ids.contains("mlx-community--Qwen3.8-27B-4bit"),
-                "hideQwen3827B is committed true (D1), so the 4-bit card must not appear in Browse")
+        #expect(ids.contains("mlx-community--Qwen3.8-27B-4bit"),
+                "hideQwen3827B is false (owner, 2026-10-05), so the 4-bit card must appear in Browse")
 
         // The catalog itself still holds it — the flag filters the *view*, it does not delete the
         // entry, so a flow that names the 4-bit card can still resolve it (Q38-6's check).
