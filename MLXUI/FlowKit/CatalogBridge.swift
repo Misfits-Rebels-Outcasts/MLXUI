@@ -301,6 +301,21 @@ nonisolated enum CatalogBridge {
             equivalence: .same,
             manifestFile: "qwen3.8-27b-3bit.json",
             modelType: .llm),
+        // Q38-6 (RSI/DelegateQwen38Backlog.md) -- the official 4-bit Qwen3.8 27B card from Q38-5.
+        // Q38-0 B1: the bare display name "Qwen3.8 27B" is the 4-bit build, `.same` onto the one
+        // `mlx-community/Qwen3.8-27B-4bit` card. The Q38-6 precondition ("waits for Q38-S5") was
+        // waived by the owner 2026-10-05 (no 32 GB+ Mac; the card was turned on in 9d12896,
+        // `hideQwen3827B = false`); Q38-S5 / smoke row 107 stays open for the first 32 GB+ report.
+        // `modelType: .llm` is explicit, as for the 3-bit, so the shared `qwen3_5` architecture can
+        // never resolve through the ambiguous hfModelId match. `ramGB` is 26.0 (ruling C1), so
+        // `FlowPreflight` refuses it below 32 GB. Appended after the 3-bit in `llmModels`.
+        BridgeEntry(
+            display: "Qwen3.8 27B",
+            pinnedID: "mlx-community/Qwen3.8-27B-4bit",
+            candidates: ["mlx-community/Qwen3.8-27B-4bit"],
+            equivalence: .same,
+            manifestFile: "qwen3.8-27b-4bit.json",
+            modelType: .llm),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {
