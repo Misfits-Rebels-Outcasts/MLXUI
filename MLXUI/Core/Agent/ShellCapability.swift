@@ -11,8 +11,16 @@
 //
 //   1. Target membership. `Apps/Direct/` is a file-system synchronized group on
 //      the MLXUI-Direct target only, so the App Store binary cannot contain the
-//      subprocess code — verifiable with `nm -u | grep posix_spawn`, which is a
-//      much better answer in review than "it's behind a flag".
+//      subprocess code — verifiable with the type-symbol probe below, which is a
+//      much better answer in review than "it's behind a flag":
+//
+//        nm "<app>/Contents/MacOS/<app>.debug.dylib" | grep -cE 'ProcessShell|ShellTool'
+//
+//      0 in the App Store product, 145 in the Direct product at EF-2. A Release
+//      build links the code into the main executable, so probe that instead. The
+//      `posix_spawn` probe these comments used to cite does not discriminate:
+//      `ProcessShell` spawns through Foundation's `Process`, and a Debug build
+//      keeps the app's own code in `*.debug.dylib`.
 //   2. `#if DIRECT_BUILD` around the three-line registration in
 //      `ModelRunner.defaultTools()`, where the excluded branch names a type that
 //      doesn't exist in the App Store target.

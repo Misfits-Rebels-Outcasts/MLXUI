@@ -85,6 +85,14 @@ struct AgentToolSettingsTests {
         #expect(roundTripped == AgentToolSettings())
     }
 
+    @Test func editFileIsOffByDefaultOnAFreshInstall() {
+        // AG6b-2 stores only deviations from the build default, so a newly shipped tool is
+        // off for existing users too: `edit_file` must not be in the fresh-default set.
+        let enabled = ModelRunner.defaultEnabledToolNames()
+        #expect(!enabled.contains("edit_file"))
+        #expect(enabled.contains("read_file"))   // the read side stays on
+    }
+
     // MARK: - Tool-call limit (AG6b-2)
 
     @Test func toolCallLimitDefaultsAndClamps() {

@@ -452,7 +452,10 @@ struct RunChatView: View {
     // MARK: - Approval sheet
 
     private func approvalSheet(_ pending: PendingApproval) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        let sections = ApprovalPreview.sections(
+            toolName: pending.toolName,
+            arguments: pending.arguments)
+        return VStack(alignment: .leading, spacing: 14) {
             Label("Allow tool call?", systemImage: "wrench.and.screwdriver")
                 .font(.headline)
             VStack(alignment: .leading, spacing: 4) {
@@ -462,9 +465,25 @@ struct RunChatView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Text("The model wants to run this tool. Allow it to proceed?")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if sections.isEmpty {
+                Text("The model wants to run this tool. Allow it to proceed?")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                // D10: the same arguments the old sheet hid — bounded, coloured, selectable.
+                Text("The model wants to run this tool with the arguments below.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(sections.indices, id: \.self) { index in
+                            approvalSection(sections[index])
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 320)
+            }
             HStack {
                 Spacer()
                 Button("Deny") { runner.resolveApproval(false) }
@@ -475,7 +494,30 @@ struct RunChatView: View {
             }
         }
         .padding(20)
-        .frame(width: 360)
+        .frame(width: sections.isEmpty ? 360 : 560)
+    }
+
+    /// One labelled argument block: monospaced and selectable, red for a removal and green for an
+    /// addition (D10).
+    private func approvalSection(_ section: ApprovalPreview.Section) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(section.title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(section.body)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(tint(for: section.style))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func tint(for style: ApprovalPreview.Style) -> Color {
+        switch style {
+        case .removed: return .red
+        case .added: return .green
+        case .plain, .code: return .primary
+        }
     }
 
     // MARK: - Error

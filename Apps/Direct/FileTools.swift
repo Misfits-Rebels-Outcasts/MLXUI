@@ -92,6 +92,56 @@ nonisolated struct WriteFileTool: AgentTool {
     }
 }
 
+// MARK: - Edit
+
+/// Exact-substring edit of an existing file. The matching + writing logic is EF-1's
+/// `TextEdit` (shared code, so both editions behave identically); this is the direct
+/// edition's path policy around it.
+nonisolated struct EditFileTool: AgentTool {
+    let name = "edit_file"
+    let toolDescription = """
+        Replace exact text in an existing UTF-8 file on the user's Mac. old_string must match \
+        the file exactly, including spaces and indentation, and must appear once unless \
+        replace_all is true. Copy it from read_file. Use this instead of write_file to change \
+        part of a file. The user must approve each edit.
+        """
+    var parameters: [ToolParameter] {
+        [
+            .required("path", type: .string, description: "Absolute path to the file to edit."),
+            .required(
+                "old_string", type: .string,
+                description: "Exact text to replace, copied from read_file."),
+            .required(
+                "new_string", type: .string,
+                description: "Text to put in its place; \"\" deletes it."),
+            .optional(
+                "replace_all", type: .bool,
+                description: "Replace every occurrence instead of requiring a unique one."),
+        ]
+    }
+    var requiresApproval: Bool { true }
+
+    func execute(arguments: [String: JSONValue]) async throws -> String {
+        guard let old = arguments.string("old_string") else {
+            return "Error: 'old_string' is required."
+        }
+        guard let new = arguments.string("new_string") else {
+            return "Error: 'new_string' is required."
+        }
+        switch PathPolicy.resolve(arguments.string("path")) {
+        case .rejected(let message):
+            return message
+        case .allowed(let url):
+            // `editFile` never throws: every refusal comes back as a model-facing string.
+            return TextEdit.editFile(
+                at: url,
+                old: old,
+                new: new,
+                replaceAll: arguments.bool("replace_all") ?? false)
+        }
+    }
+}
+
 // MARK: - List
 
 nonisolated struct ListDirectoryTool: AgentTool {

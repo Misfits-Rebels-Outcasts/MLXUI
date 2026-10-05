@@ -122,9 +122,9 @@ final class ModelRunner {
     }
 
     /// Which tools start enabled. Everything except the ones a user should have to
-    /// opt into: `run_shell` and `write_file` are visible in the tool list but
-    /// unticked, so a model can never propose a shell command on first launch.
-    /// Per-call approval still gates them once enabled.
+    /// opt into: `run_shell`, `write_file` and `edit_file` are visible in the tool
+    /// list but unticked, so a model can never propose a shell command or a write on
+    /// first launch. Per-call approval still gates them once enabled.
     static func defaultEnabledToolNames() -> Set<String> {
         var names = Set(defaultTools().map(\.name))
         #if DIRECT_BUILD
@@ -311,10 +311,11 @@ final class ModelRunner {
                     // chose not to call a tool" — reasoning text, then nothing.
                     parameters: GenerateParameters(maxTokens: 2048, temperature: 0.7),
                     maxToolCalls: self.agentToolSettings.toolCallLimit,
-                    approve: { [weak self] _, tool in
+                    approve: { [weak self] call, tool in
                         switch await self?.approvalDecision(for: tool) {
                         case .autoApprove:     return true
-                        case .prompt:          return await self?.requestApproval(for: tool) ?? false
+                        case .prompt:
+                            return await self?.requestApproval(for: tool, call: call) ?? false
                         case .autoDeny, .none: return false
                         }
                     },
@@ -426,13 +427,14 @@ final class ModelRunner {
     }
 
     /// Present the approval sheet and await the user's decision. Called by `AgentSession` for
-    /// tools whose `requiresApproval` is true.
-    private func requestApproval(for tool: any AgentTool) async -> Bool {
+    /// tools whose `requiresApproval` is true. The call's arguments ride along so the sheet can
+    /// show what is being approved (EF-3, D10); nothing else about the gate changes.
+    private func requestApproval(for tool: any AgentTool, call: ToolCall) async -> Bool {
         await withCheckedContinuation { continuation in
             self.pendingApproval = PendingApproval(
                 toolName: tool.name,
                 toolDescription: tool.toolDescription,
-                arguments: [:],
+                arguments: call.function.arguments,
                 respond: { continuation.resume(returning: $0) }
             )
         }

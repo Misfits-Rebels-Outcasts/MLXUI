@@ -49,6 +49,7 @@ nonisolated enum AgentToolGroup: String, CaseIterable, Hashable, Sendable {
         "ocr_image": .inAppModels,
         "read_file": .files,
         "write_file": .files,
+        "edit_file": .files,
         "list_directory": .files,
         "search_files": .files,
         "run_shell": .shell,
