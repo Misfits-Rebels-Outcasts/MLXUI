@@ -140,7 +140,9 @@ struct ScopedFileToolsTests {
         let readProps = readParams?["properties"] as? [String: any Sendable]
         let path = readProps?["path"] as? [String: any Sendable]
         #expect(path?["description"] as? String == ScopedFileTools.relativePathDescription)
-        #expect(ScopedFileTools.relativePathDescription.contains("relative to the working folder"))
+        #expect(ScopedFileTools.relativePathDescription
+            == "File path. Relative paths start in the working folder (e.g. notes/todo.md);"
+                + " full paths and ~/ also work.")
 
         // list_directory: `path` becomes optional, and says what omitting it means.
         let list = ScopedListDirectoryTool().toolSpec["function"] as? [String: any Sendable]
@@ -148,7 +150,8 @@ struct ScopedFileToolsTests {
         #expect((listParams?["required"] as? [String] ?? []).isEmpty)
         let listProps = listParams?["properties"] as? [String: any Sendable]
         let listPath = listProps?["path"] as? [String: any Sendable]
-        #expect((listPath?["description"] as? String)?.contains("omit for the working folder") == true)
+        #expect(listPath?["description"] as? String == ScopedFileTools.optionalPathDescription)
+        #expect(ScopedFileTools.optionalPathDescription.hasPrefix("Optional; omit for the working folder."))
     }
 
     // MARK: edit_file argument + path checks (EF-2)

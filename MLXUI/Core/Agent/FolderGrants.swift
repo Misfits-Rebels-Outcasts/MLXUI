@@ -119,14 +119,16 @@ nonisolated enum FolderGrants {
             .max { $0.path.count < $1.path.count }
     }
 
-    /// Run `body` while holding security-scoped access to the grant covering `url`. Paths under
-    /// the app container need no scope and run directly. Returns the model-facing error string
-    /// when no grant covers the path or the bookmark no longer resolves (folder moved/deleted).
+    /// Run `body` while holding security-scoped access to the grant covering `url`.
     ///
-    /// `roots`, when given, **is** the containment test: a path under one of them already carries
-    /// the caller's permission, so no grant lookup happens and the body reads it directly. `nil`
-    /// keeps the original behaviour — the container fast path, then the covering grant. A caller
-    /// whose scope is not the grant store (a narrowed `FileScope`) passes its own roots.
+    /// `roots`, when given, is an **extra gate** — a path under none of them is refused. It is
+    /// never a way past the grant lookup: a path inside a granted folder still resolves its
+    /// bookmark and calls `startAccessingSecurityScopedResource`, or a grant would work only in
+    /// the launch where the open panel handed out its implicit extension (CW-1-FIX-1 F1).
+    ///
+    /// After the gate, the original order is unchanged: the app container needs no scope, every
+    /// other path needs the covering grant's bookmark. Returns the model-facing error string when
+    /// the gate refuses, no grant covers the path, or the bookmark no longer resolves.
     static func withAccess(
         to url: URL,
         grants: [FolderGrant],
@@ -136,19 +138,16 @@ nonisolated enum FolderGrants {
     ) -> String {
         let target = url.standardizedFileURL.resolvingSymlinksInPath().path
         let containerPath = container.standardizedFileURL.resolvingSymlinksInPath().path
-        do {
-            if let roots {
-                let permitted = roots.contains { root in
-                    let base = root.standardizedFileURL.resolvingSymlinksInPath().path
-                    return target == base || target.hasPrefix("\(base)/")
-                }
-                guard permitted else {
-                    return "Error: no granted folder covers \(url.path)."
-                }
-                // The caller's roots already authorized this path; `url` itself is the container
-                // copy, so there is no bookmark to resolve.
-                return try body(url)
+        if let roots {
+            let permitted = roots.contains { root in
+                let base = root.standardizedFileURL.resolvingSymlinksInPath().path
+                return target == base || target.hasPrefix("\(base)/")
             }
+            guard permitted else {
+                return "Error: no granted folder covers \(url.path)."
+            }
+        }
+        do {
             if target == containerPath || target.hasPrefix("\(containerPath)/") {
                 return try body(url)  // app container: no security scope needed
             }

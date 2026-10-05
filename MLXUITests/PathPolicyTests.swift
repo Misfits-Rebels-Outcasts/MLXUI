@@ -219,6 +219,20 @@ struct PathPolicyTests {
             == .rejected("Error: 'path' is required."))
     }
 
+    /// The Direct edition's denylist gate (CW-1-FIX-1 nit) leans on this: a path is refused when
+    /// it matches a denied subpath and no root allows it, and allowed when the caller has a root.
+    @Test func resolveWithNoRootsRefusesEvenAnAllowedLookingPath() throws {
+        let s = try makeSandbox()
+        guard case .rejected = PathPolicy.resolve(s.inside.path, roots: []) else {
+            Issue.record("expected an empty root list to reject")
+            return
+        }
+        guard case .allowed = PathPolicy.resolve(s.inside.path, roots: [s.root]) else {
+            Issue.record("expected the root to allow the path")
+            return
+        }
+    }
+
     /// Frozen behaviour: without a base, a relative path is rejected with today's exact message.
     @Test func resolveRelativeWithoutBaseKeepsTodaysMessage() {
         #expect(PathPolicy.resolve("notes.txt")

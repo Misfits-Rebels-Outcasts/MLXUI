@@ -32,10 +32,15 @@ nonisolated enum ScopedFileTools {
     /// matching `DirectTools`.
     static let disabledByDefault: Set<String> = ["write_file", "edit_file"]
 
-    /// CW-1 (D4) — the `path` description both editions now use, now that relative paths work.
-    /// One short line is all a 4-bit model reliably reads.
+    /// CW-1-FIX-1 W3 — the one `path` description both editions use. It lives here (shared code)
+    /// so `Apps/Direct/FileTools.swift` cannot drift from its copies of the literal.
     static let relativePathDescription =
-        "Path relative to the working folder, or absolute (or starting with ~)."
+        "File path. Relative paths start in the working folder (e.g. notes/todo.md);"
+        + " full paths and ~/ also work."
+
+    /// The same sentence when the parameter may be left out.
+    static let optionalPathDescription =
+        "Optional; omit for the working folder. " + ScopedFileTools.relativePathDescription
 
     /// The base a relative path resolves against: the conversation's working folder, or `nil`.
     static func workingFolderBase() -> URL? {
@@ -44,11 +49,14 @@ nonisolated enum ScopedFileTools {
     }
 
     /// An explicit scope for one tool call. Production passes nothing (`nil`) and the tool reads
-    /// the live grant store; a unit test passes temp roots so it never touches `~/Library`. A nil
-    /// `roots` means "use the container path alone" — the same rule `withAccess` applies.
+    /// the live grant store; a unit test passes temp roots so it never touches `~/Library`.
+    ///
+    /// `roots` is the policy roots **and** an extra gate in `withAccess` — never a substitute for
+    /// the covering grant, which is what re-opens a granted folder's security scope after a
+    /// relaunch (CW-1-FIX-1 F1).
     struct ScopeSelection {
         let container: URL
-        let roots: [URL]?
+        let roots: [URL]
     }
 
     /// One resolved call: the path vetoed by the policy, the grants for the security scope, and
@@ -60,7 +68,8 @@ nonisolated enum ScopedFileTools {
     }
 
     /// The container and roots a tool call should use: the injected test scope, or the live
-    /// grant store through `FileScope.current`.
+    /// grant store through `FileScope.current`. Production always takes the grant-store branch
+    /// (`injected` is nil, and nothing in the app can set it).
     static func selection(_ injected: ScopeSelection?) -> ScopeSelection {
         injected ?? ScopeSelection(
             container: ModelStore.shared.baseDirectory,
@@ -103,7 +112,11 @@ nonisolated enum ScopedFileTools {
                 grants: grants, scope: scope, container: container, overrides: overrideRoots)
             let base = workingFolderBase()
             guard let asked = (path?.isEmpty ?? true) ? base?.path : path else {
-                return FileScope.noFolderMessage   // no path and no working folder to mean
+                // No path and no working folder. With folders in scope this is not "nothing is
+                // attached", it is "say which folder" (F2).
+                return scope.folders.isEmpty
+                    ? FileScope.noFolderMessage
+                    : "\(FileScope.noPathMessage) It can use: \(FileScope.folderList(scope.folders))."
             }
             guard case .rejected(let message) = PathPolicy.resolve(asked, roots: roots, base: base)
             else {
@@ -290,8 +303,7 @@ nonisolated struct ScopedListDirectoryTool: AgentTool {
         [
             .optional(
                 "path", type: .string,
-                description: "Optional — omit for the working folder. "
-                    + ScopedFileTools.relativePathDescription)
+                description: ScopedFileTools.optionalPathDescription)
         ]
     }
 
@@ -343,8 +355,7 @@ nonisolated struct ScopedSearchFilesTool: AgentTool {
         [
             .optional(
                 "path", type: .string,
-                description: "Optional — omit for the working folder. "
-                    + ScopedFileTools.relativePathDescription),
+                description: ScopedFileTools.optionalPathDescription),
             .required("query", type: .string, description: "Text the file name must contain."),
         ]
     }

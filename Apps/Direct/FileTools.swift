@@ -17,21 +17,43 @@
 import Foundation
 import MLXLMCommon
 
-/// The base a relative path resolves against: the conversation's working folder, or `nil`.
-/// In Direct this is guidance and a sensible default, not a boundary — `run_shell` can reach
-/// anything, and the UI says so (G4).
-nonisolated func workingFolderBase() -> URL? {
-    guard let folder = FileScope.current?.workingFolder else { return nil }
-    return URL(fileURLWithPath: folder, isDirectory: true)
+/// The Direct edition's file scope. No bookmarks are involved: the working folder is a sensible
+/// default and a hint, **not** a boundary (`run_shell` can reach anything). A separate enum rather
+/// than free functions so it does not sit in the global namespace beside
+/// `ScopedFileTools.workingFolderBase()`.
+nonisolated enum DirectFileScope {
+
+    /// The folder relative paths resolve against: the conversation's working folder, or `nil`.
+    static func workingFolderBase() -> URL? {
+        guard let folder = FileScope.current?.workingFolder else { return nil }
+        return URL(fileURLWithPath: folder, isDirectory: true)
+    }
+
+    /// The roots the policy checks against: home, plus the working folder so a relative path into
+    /// an attached folder outside home still resolves. (CW-2 widens this to every attached folder.)
+    static func toolRoots() -> [URL] {
+        guard let base = workingFolderBase() else { return PathPolicy.defaultRoots }
+        return PathPolicy.defaultRoots + [base]
+    }
+
+    /// Refuse a path that is off the denylist even when the user attached it. `run_shell` has
+    /// always done this through `allowedRoots`; a folder attached by hand must not be a way around
+    /// it (CW-1-FIX-1 nit).
+    static func denial(for url: URL) -> String? {
+        let refused = PathPolicy.resolve(url.path, roots: [])
+        guard case .rejected = refused else { return nil }   // not listed: the user may attach it
+        return "Error: \(url.path) is not a path these tools may use."
+    }
+
+    /// Told when a tool needs a path and there is no working folder to default to. Direct can
+    /// still reach home, so this is "give one", never "nothing is attached" (F2).
+    static let noPathMessage = "Give a path, for example ~/Documents."
 }
 
-/// The roots a Direct file tool checks against: the policy's default home root, or the scope's
-/// working folder when the conversation has one, so a mounted volume or a folder outside home
-/// still works exactly as before when no scope is bound.
-nonisolated func fileToolRoots() -> [URL] {
-    guard let base = workingFolderBase() else { return PathPolicy.defaultRoots }
-    return PathPolicy.defaultRoots + [base]
-}
+/// The one `path` description both editions use (W3). Re-exported so this file names a single
+/// string rather than four copies of the literal.
+nonisolated let filePathParameterDescription = ScopedFileTools.relativePathDescription
+nonisolated let optionalFilePathParameterDescription = ScopedFileTools.optionalPathDescription
 
 // MARK: - Read
 
@@ -45,18 +67,19 @@ nonisolated struct ReadFileTool: AgentTool {
         truncated at 256 KB.
         """
     var parameters: [ToolParameter] {
-        [
-            .required(
-                "path", type: .string,
-                description: "Path relative to the working folder, or absolute (or starting with ~).")
-        ]
+        [.required("path", type: .string, description: filePathParameterDescription)]
     }
 
     func execute(arguments: [String: JSONValue]) async throws -> String {
-        switch PathPolicy.resolve(arguments.string("path"), roots: fileToolRoots(), base: workingFolderBase()) {
+        switch PathPolicy.resolve(
+            arguments.string("path"),
+            roots: DirectFileScope.toolRoots(),
+            base: DirectFileScope.workingFolderBase()
+        ) {
         case .rejected(let message):
             return message
         case .allowed(let url):
+            if let denial = DirectFileScope.denial(for: url) { return denial }
             do {
                 let data = try Data(contentsOf: url)
                 let clipped = data.prefix(Self.maxBytes)
@@ -81,9 +104,7 @@ nonisolated struct WriteFileTool: AgentTool {
         """
     var parameters: [ToolParameter] {
         [
-            .required(
-                "path", type: .string,
-                description: "Path relative to the working folder, or absolute (or starting with ~)."),
+            .required("path", type: .string, description: filePathParameterDescription),
             .required("contents", type: .string, description: "Text to write."),
         ]
     }
@@ -93,10 +114,15 @@ nonisolated struct WriteFileTool: AgentTool {
         guard let contents = arguments.string("contents") else {
             return "Error: 'contents' is required."
         }
-        switch PathPolicy.resolve(arguments.string("path"), roots: fileToolRoots(), base: workingFolderBase()) {
+        switch PathPolicy.resolve(
+            arguments.string("path"),
+            roots: DirectFileScope.toolRoots(),
+            base: DirectFileScope.workingFolderBase()
+        ) {
         case .rejected(let message):
             return message
         case .allowed(let url):
+            if let denial = DirectFileScope.denial(for: url) { return denial }
             do {
                 try FileManager.default.createDirectory(
                     at: url.deletingLastPathComponent(),
@@ -129,9 +155,7 @@ nonisolated struct EditFileTool: AgentTool {
         """
     var parameters: [ToolParameter] {
         [
-            .required(
-                "path", type: .string,
-                description: "Path relative to the working folder, or absolute (or starting with ~)."),
+            .required("path", type: .string, description: filePathParameterDescription),
             .required(
                 "old_string", type: .string,
                 description: "Exact text to replace, copied from read_file."),
@@ -152,10 +176,15 @@ nonisolated struct EditFileTool: AgentTool {
         guard let new = arguments.string("new_string") else {
             return "Error: 'new_string' is required."
         }
-        switch PathPolicy.resolve(arguments.string("path"), roots: fileToolRoots(), base: workingFolderBase()) {
+        switch PathPolicy.resolve(
+            arguments.string("path"),
+            roots: DirectFileScope.toolRoots(),
+            base: DirectFileScope.workingFolderBase()
+        ) {
         case .rejected(let message):
             return message
         case .allowed(let url):
+            if let denial = DirectFileScope.denial(for: url) { return denial }
             // `editFile` never throws: every refusal comes back as a model-facing string.
             return TextEdit.editFile(
                 at: url,
@@ -174,26 +203,28 @@ nonisolated struct ListDirectoryTool: AgentTool {
     let name = "list_directory"
     let toolDescription = "List the files and folders in a directory on the user's Mac."
     var parameters: [ToolParameter] {
-        [
-            .optional(
-                "path", type: .string,
-                description: "Optional — omit for the working folder. "
-                    + "Path relative to the working folder, or absolute (or starting with ~).")
-        ]
+        [.optional("path", type: .string, description: optionalFilePathParameterDescription)]
     }
 
     func execute(arguments: [String: JSONValue]) async throws -> String {
-        // `path` is optional (CW-1 D4): without it, list the conversation's working folder — or
-        // explain how to get one. In Direct the working folder is guidance, not a boundary.
+        // `path` is optional (CW-1 D4): without it, list the conversation's working folder. With no
+        // working folder either, ask for a path — Direct can still reach home, so this is never
+        // "nothing is attached" (F2).
         let argument = arguments.string("path")
         if argument?.isEmpty ?? true {
-            guard let base = workingFolderBase() else { return FileScope.noFolderMessage }
+            guard let base = DirectFileScope.workingFolderBase() else {
+                return DirectFileScope.noPathMessage
+            }
+            if let denial = DirectFileScope.denial(for: base) { return denial }
             return list(base, path: FileScope.current?.workingFolder ?? base.path)
         }
-        switch PathPolicy.resolve(argument, roots: fileToolRoots(), base: workingFolderBase()) {
+        switch PathPolicy.resolve(
+            argument, roots: DirectFileScope.toolRoots(), base: DirectFileScope.workingFolderBase()
+        ) {
         case .rejected(let message):
             return message
         case .allowed(let url):
+            if let denial = DirectFileScope.denial(for: url) { return denial }
             return list(url, path: url.path)
         }
     }

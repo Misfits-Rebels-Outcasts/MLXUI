@@ -87,7 +87,7 @@ nonisolated struct ShellTool: AgentTool {
         // scoped to a folder runs commands there without the model retyping the path), otherwise
         // the home directory: an app launched from Finder has cwd `/`, so a relative command like
         // `ls` would silently list the filesystem root and look like a bug in the tool.
-        var workingDirectory: URL? = workingFolderBase()
+        var workingDirectory: URL? = DirectFileScope.workingFolderBase()
             ?? FileManager.default.homeDirectoryForCurrentUser
         if let path = arguments.string("working_directory") {
             let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
@@ -95,6 +95,11 @@ nonisolated struct ShellTool: AgentTool {
                 return "Error: \(url.path) is outside the directories this app may use."
             }
             workingDirectory = url
+        }
+        // The default skips the allowlist check above because the user attached the folder, but the
+        // denylist still applies: attaching ~/.ssh must not make it a shell cwd (CW-1-FIX-1 nit).
+        if let directory = workingDirectory, let denial = DirectFileScope.denial(for: directory) {
+            return denial
         }
 
         let timeout = min(max(TimeInterval(arguments.int("timeout_seconds") ?? Int(defaultTimeout)), 1), 600)

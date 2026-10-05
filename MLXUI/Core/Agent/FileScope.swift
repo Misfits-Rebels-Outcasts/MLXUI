@@ -89,4 +89,11 @@ nonisolated struct FileScope: Sendable, Equatable {
     /// what to do next.
     static let noFolderMessage =
         "No folder is attached to this chat. Ask the user to add one with the + button next to the message box."
+
+    /// Told when the tool needs a path, some folders *are* in scope, but none of them is the
+    /// working folder — so a relative path has nothing to resolve against. Deliberately never
+    /// worded as "no folder is attached": that would be false, and the model would repeat it to
+    /// the user (CW-1-FIX-1 F2). The caller appends the folder list.
+    static let noPathMessage =
+        "Error: give a path. This chat has no working folder."
 }
