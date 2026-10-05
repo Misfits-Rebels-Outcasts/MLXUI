@@ -164,8 +164,8 @@ struct CatFlowCatalogBridgeTests {
             _ = display
         }
         // Q38-3: the bridge table gained "Qwen3.8 27B 3-bit"
-        // (`lukaskremla--Qwen3.8-27B-3bit-MLX`), 23 -> 24.
-        #expect(CatalogBridge.entries.count == 24)
+        // (`lukaskremla--Qwen3.8-27B-3bit-MLX`), 23 -> 24; Q38-6 added "Qwen3.8 27B", 24 -> 25.
+        #expect(CatalogBridge.entries.count == 25)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
@@ -394,8 +394,8 @@ struct CatFlowCatalogBridgeTests {
             Issue.record("\(display) should resolve: \(reason)")
         }
         // Q38-3: the bridge table gained "Qwen3.8 27B 3-bit"
-        // (`lukaskremla--Qwen3.8-27B-3bit-MLX`), 23 -> 24.
-        #expect(CatalogBridge.entries.count == 24)
+        // (`lukaskremla--Qwen3.8-27B-3bit-MLX`), 23 -> 24; Q38-6 added "Qwen3.8 27B", 24 -> 25.
+        #expect(CatalogBridge.entries.count == 25)
     }
 
     // MARK: - MoC-4-4: Qwen3 Reranker 0.6B joins the bridge, the model on MoC-3's seam
@@ -707,8 +707,9 @@ struct CatFlowCatalogBridgeTests {
         for task in llmModelsKeyedTasks {
             #expect(TaskModels.defaultModel(forTask: task, catalog: catalog, claimableModelIDs: claimable) == "Ministral 3B",
                     "\(task) should still seed Ministral 3B after Qwen3.8 27B 3-bit was appended")
-            #expect(TaskModels.models(forTask: task).last == "Qwen3.8 27B 3-bit",
-                    "\(task): Qwen3.8 27B 3-bit should be the last pool name")
+            // Q38-6 appended "Qwen3.8 27B" after it, so the 3-bit is now second-to-last.
+            #expect(TaskModels.models(forTask: task).dropLast().last == "Qwen3.8 27B 3-bit",
+                    "\(task): Qwen3.8 27B 3-bit should directly precede the 4-bit in the pool")
         }
 
         let derived = TaskModels.derivedModels(for: "Generate", catalog: catalog, claimableModelIDs: claimable)
@@ -720,6 +721,86 @@ struct CatFlowCatalogBridgeTests {
     /// are keyed on the same array, and their seed is Laya 0.4B (LY/CL gate D).
     @MainActor
     @Test func qwen38TwentySevenBThreeBitLeavesTheDeciderSeedsAlone() throws {
+        let catalog = try loadCatalog()
+        let registry = ModelRegistry()
+        for module in installedModules { module.register(into: registry) }
+        let claimable = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
+        for task in ["Classify", "Gate", "Score"] {
+            #expect(TaskModels.defaultModel(forTask: task, catalog: catalog, claimableModelIDs: claimable) == "Laya 0.4B",
+                    "\(task) should still seed Laya 0.4B")
+        }
+    }
+
+    // MARK: - Q38-6: Qwen3.8 27B (4-bit) joins the bridge, llmModels' last slot
+
+    /// Q38-0 B1: the bare display name "Qwen3.8 27B" is the official 4-bit build, `.same` onto the
+    /// one catalog card Q38-5 added. Q38-6's "waits for Q38-S5" precondition was waived by the owner
+    /// 2026-10-05; Q38-S5 stays open, so this proves wiring and resolution, not a run on a 32 GB Mac.
+    @Test func qwen38TwentySevenBFourBitResolvesAsSame() throws {
+        let catalog = try loadCatalog()
+        let entry = try #require(CatalogBridge.entry(for: "Qwen3.8 27B"))
+        #expect(entry.pinnedID == "mlx-community/Qwen3.8-27B-4bit")
+        #expect(entry.candidates == ["mlx-community/Qwen3.8-27B-4bit"])
+        #expect(entry.equivalence == .same)
+        #expect(entry.manifestFile == "qwen3.8-27b-4bit.json")
+        #expect(entry.modelType == .llm)
+        switch CatalogBridge.resolve("Qwen3.8 27B", catalog: catalog) {
+        case .runnable(let slot, let equivalence, let note):
+            #expect(slot.modelEntry?.hfModelId == "mlx-community/Qwen3.8-27B-4bit")
+            #expect(slot.modelEntry?.runnerKind == .llm)
+            // Ruling C1: 26.0, not the 1.5x formula's 24.12.
+            #expect(slot.modelEntry?.ramGB == 26.0)
+            #expect(equivalence == .same)
+            #expect(note == nil)
+        case .notRunnable(let display, let reason, _):
+            Issue.record("\(display) should resolve: \(reason)")
+        }
+    }
+
+    /// rule 16 / AM-W step 6: the manifest must be in the **app bundle**.
+    @Test func qwen38TwentySevenBFourBitManifestLoadsFromTheAppBundle() throws {
+        let manifest = try #require(CuratedManifest.load(manifestFile: "qwen3.8-27b-4bit.json"))
+        #expect(manifest.id == "mlx-community/Qwen3.8-27B-4bit")
+        #expect(manifest.display == "Qwen3.8 27B")
+        let temperature = try #require(manifest.settings["temperature"])
+        #expect(temperature.min == 0.0)
+        #expect(temperature.max == 2.0)
+        #expect(temperature.defaultValue == .number(0.6))
+        let maxTokens = try #require(manifest.settings["max_tokens"])
+        #expect(maxTokens.min == 1)
+        #expect(maxTokens.max == 32768)
+        #expect(maxTokens.defaultValue == .number(2048))
+    }
+
+    /// Rule 8 / MoC-2-4 D: "Qwen3.8 27B" is appended **last** (after the 3-bit), so every
+    /// llmModels-keyed task still seeds "Ministral 3B".
+    @MainActor
+    @Test func qwen38TwentySevenBFourBitIsLastInTheLLMPool() throws {
+        let catalog = try loadCatalog()
+        let registry = ModelRegistry()
+        for module in installedModules { module.register(into: registry) }
+        let claimable = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
+
+        let llmModelsKeyedTasks = ["Generate", "Summarize", "Translate", "Answer", "Rewrite",
+                                   "Draft", "Ask", "Title", "Critique", "Verify", "Revise",
+                                   "Merge", "Text to Table"]
+        for task in llmModelsKeyedTasks {
+            #expect(TaskModels.defaultModel(forTask: task, catalog: catalog, claimableModelIDs: claimable) == "Ministral 3B",
+                    "\(task) should still seed Ministral 3B after Qwen3.8 27B was appended")
+            let pool = TaskModels.models(forTask: task)
+            #expect(pool.last == "Qwen3.8 27B", "\(task): Qwen3.8 27B should be the last pool name")
+            #expect(pool.dropLast().last == "Qwen3.8 27B 3-bit",
+                    "\(task): Qwen3.8 27B should come after the 3-bit")
+        }
+
+        let derived = TaskModels.derivedModels(for: "Generate", catalog: catalog, claimableModelIDs: claimable)
+        #expect(derived.contains { $0.displayName == "Qwen3.8 27B" },
+                "the Generate menu should offer Qwen3.8 27B")
+    }
+
+    /// The append must not change what Classify/Gate/Score seed (Laya 0.4B).
+    @MainActor
+    @Test func qwen38TwentySevenBFourBitLeavesTheDeciderSeedsAlone() throws {
         let catalog = try loadCatalog()
         let registry = ModelRegistry()
         for module in installedModules { module.register(into: registry) }

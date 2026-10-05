@@ -1,0 +1,36 @@
+{
+  "id": "mlx-community/Qwen3.8-27B-4bit",
+  "display": "Qwen3.8 27B",
+  "kind": "local",
+  "engine": "mlx-lm",
+  "tasks": [
+    "Generate",
+    "Decide"
+  ],
+  "settings": {
+    "temperature": {
+      "type": "number",
+      "min": 0.0,
+      "max": 2.0,
+      "default": 0.6,
+      "maps_to": "temp"
+    },
+    "max_tokens": {
+      "type": "number",
+      "min": 1,
+      "max": 32768,
+      "default": 2048,
+      "maps_to": "max_tokens"
+    }
+  },
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 16.08,
+    "ram_gb": 26.0
+  },
+  "source": "https://huggingface.co/mlx-community/Qwen3.8-27B-4bit",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true,
+  "notes": "MLXUI-authored for Q38-6 (RSI/DelegateQwen38Backlog.md; Q38-0 ruled A1/B1/C1/D1 by the owner 2026-10-03; the Q38-6 precondition waived by the owner 2026-10-05, Q38-S5 still open) -- catflow-mlx has no Qwen3.8 27B manifest to port, so this copies qwen3.8-27b-3bit.json (itself qwen3.5-9b-4bit.json's shape): engine mlx-lm, tasks Generate + Decide, temperature default 0.6, max_tokens default 2048 with ceiling 32768 (not seeded from the 262144-token context window). resources.disk_gb is browser.json's downloadSizeGB (16.08, HF tree API); resources.ram_gb is 26.0 by ruling C1, the same as browser.json's ramGB -- deliberately NOT the 1.5x formula value (24.12), so a 24 GB Mac is blocked on purpose and a 32 GB Mac clears. Verified against mlx-community/Qwen3.8-27B-4bit revision 10c35caafbb80f7dc6a7a432cdd11af10a6d4818 (2026-10-05 ruling)."
+}
