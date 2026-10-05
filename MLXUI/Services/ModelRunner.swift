@@ -53,6 +53,10 @@ final class ModelRunner {
     /// loading, which happens lazily on the first send).
     private var preparedModelID: String?
 
+    /// Where this runner persists conversations. `prepare(for:in:)` sets it, so a test's temp
+    /// directory and the app's real one both flow through the same save/delete path (CW-2).
+    private var conversationDirectory = ConversationStore.defaultDirectory()
+
     /// A tool call currently blocked on user approval (drives the approval sheet).
     var pendingApproval: PendingApproval?
 
@@ -145,6 +149,7 @@ final class ModelRunner {
     func prepare(
         for model: ModelEntry, in directory: URL = ConversationStore.defaultDirectory()
     ) {
+        conversationDirectory = directory
         if preparedModelID != model.id {
             preparedModelID = model.id
             conversations = ConversationStore.conversations(
@@ -223,7 +228,7 @@ final class ModelRunner {
     func deleteConversation(_ id: UUID) {
         guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
         if id == activeConversationID, isRunning { stop() }
-        ConversationStore.delete(id: id)
+        ConversationStore.delete(id: id, in: conversationDirectory)
         conversations.remove(at: index)
         guard id == activeConversationID else { return }
         if let next = conversations.first {
@@ -236,6 +241,109 @@ final class ModelRunner {
             transcript.reset()
         }
     }
+
+    // MARK: - Attached folders (CW-2, D1/D2/D5)
+
+    /// The active conversation's attached folders, in attach order. What the composer's chips and
+    /// the "+" menu render.
+    var activeAttachedFolders: [String] {
+        conversations.first { $0.id == activeConversationID }?.attachedFolders ?? []
+    }
+
+    /// The active conversation's working folder, or its first attached folder (C8).
+    var activeWorkingFolder: String? {
+        conversations.first { $0.id == activeConversationID }?.effectiveWorkingFolder
+    }
+
+    /// Attach a folder to the active chat.
+    ///
+    /// App Store: **grants it first** when no grant covers the path, so "+" → Add folder is granting
+    /// and attaching in one step (D1). Direct: records the path and bumps the C9 MRU. In both, the
+    /// first folder attached becomes the working folder (C8).
+    func attachFolder(_ url: URL) {
+        let path = url.path
+        guard let index = conversations.firstIndex(where: { $0.id == activeConversationID })
+        else { return }
+        #if !DIRECT_BUILD
+        if FolderGrants.grant(covering: path, in: FolderGrants.load()) == nil {
+            grantFolderAccess(to: url)
+        }
+        #endif
+        if !conversations[index].attachedFolders.contains(path) {
+            conversations[index].attachedFolders.append(path)
+        }
+        if conversations[index].workingFolder == nil {
+            conversations[index].workingFolder = conversations[index].attachedFolders.first
+        }
+        persistConversation(at: index)
+        #if DIRECT_BUILD
+        Self.recordRecentFolder(path)
+        #endif
+    }
+
+    /// Attach a path that is already granted (the "+" menu's one-click list, or a test).
+    func attachFolder(path: String) {
+        guard let index = conversations.firstIndex(where: { $0.id == activeConversationID })
+        else { return }
+        if !conversations[index].attachedFolders.contains(path) {
+            conversations[index].attachedFolders.append(path)
+        }
+        if conversations[index].workingFolder == nil {
+            conversations[index].workingFolder = conversations[index].attachedFolders.first
+        }
+        persistConversation(at: index)
+        #if DIRECT_BUILD
+        Self.recordRecentFolder(path)
+        #endif
+    }
+
+    /// Detach a folder. Removing the working folder promotes the next attached one, or clears it
+    /// (C8).
+    func detachFolder(path: String) {
+        guard let index = conversations.firstIndex(where: { $0.id == activeConversationID })
+        else { return }
+        conversations[index].attachedFolders.removeAll { $0 == path }
+        if conversations[index].workingFolder == path {
+            conversations[index].workingFolder = conversations[index].attachedFolders.first
+        }
+        persistConversation(at: index)
+    }
+
+    /// Choose which attached folder relative paths resolve against. A path that is not attached is
+    /// ignored.
+    func setWorkingFolder(path: String) {
+        guard let index = conversations.firstIndex(where: { $0.id == activeConversationID }),
+              conversations[index].attachedFolders.contains(path)
+        else { return }
+        conversations[index].workingFolder = path
+        persistConversation(at: index)
+    }
+
+    /// Save an attach/detach/working-folder change straight to disk.
+    ///
+    /// Deliberately **not** `saveActiveConversation()`: that returns early unless `items` changed,
+    /// so a folder attached to a chat with history would never be written (CW-2 trap). A blank
+    /// conversation stays memory-only, exactly as before — it is persisted by the first send.
+    private func persistConversation(at index: Int) {
+        conversations[index].updatedAt = Date()
+        guard !conversations[index].items.isEmpty else { return }
+        ConversationStore.save(conversations[index], in: conversationDirectory)
+    }
+
+    #if DIRECT_BUILD
+    private static let recentFoldersKey = "chatRecentFolders"
+
+    /// Direct has no grants, so "+" lists a most-recently-used set instead (C9, ≤ 8 paths).
+    static func recentFolders(from defaults: UserDefaults = .standard) -> [String] {
+        defaults.stringArray(forKey: recentFoldersKey) ?? []
+    }
+
+    static func recordRecentFolder(_ path: String, in defaults: UserDefaults = .standard) {
+        var recent = recentFolders(from: defaults).filter { $0 != path }
+        recent.insert(path, at: 0)
+        defaults.set(Array(recent.prefix(8)), forKey: recentFoldersKey)
+    }
+    #endif
 
     private func startNewConversation(modelID: String) {
         let conversation = Conversation(modelID: modelID)
@@ -254,7 +362,7 @@ final class ModelRunner {
         conversations[index].items = transcript.items
         conversations[index].updatedAt = Date()
         if !transcript.items.isEmpty {
-            ConversationStore.save(conversations[index])
+            ConversationStore.save(conversations[index], in: conversationDirectory)
         }
         if index != 0 {
             let conversation = conversations.remove(at: index)
@@ -295,9 +403,9 @@ final class ModelRunner {
         // Snapshot the enabled tools for this turn (Sendable to hand to the nonisolated session).
         let registry = ToolRegistry(availableTools.filter { enabledToolNames.contains($0.name) })
 
-        // CW-1: the folder scope and the environment block are rebuilt on *every* turn, so a
-        // revoke or a change of grants takes effect on the next message. App Store: every grant,
-        // as today, until CW-2 narrows this to the folders the conversation is attached to (G1).
+        // CW-2: the scope is the conversation's attached folders (G1), rebuilt on *every* turn so a
+        // revoke or a detach takes effect on the next message.
+        let conversation = conversations.first { $0.id == activeConversationID }
         #if DIRECT_BUILD
         let edition = FileScope.Edition.direct
         let grants: [FolderGrant] = []
@@ -307,7 +415,11 @@ final class ModelRunner {
         let grants = FolderGrants.load()
         let homePath: String? = nil
         #endif
-        let fileScope = FileScope.interim(grants: grants, edition: edition)
+        let fileScope = FileScope.forConversation(
+            attached: conversation?.attachedFolders ?? [],
+            workingFolder: conversation?.effectiveWorkingFolder,
+            grants: grants,
+            edition: edition)
         let instructions = ChatEnvironment.instructions(
             scope: fileScope,
             edition: edition,

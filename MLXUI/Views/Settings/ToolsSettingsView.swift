@@ -39,7 +39,9 @@ struct ToolsSettingsView: View {
 
             #if !DIRECT_BUILD
             Section("File access") {
-                Text("These tools can only reach folders you grant below.")
+                // CW-2 copy: granting here or from the chat's "+" are the same act, and a chat
+                // only sees the folders added to it.
+                Text("Grant a folder here or with + in a chat. A chat can only use the folders added to it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 ForEach(runner.folderGrantPaths, id: \.self) { path in

@@ -34,6 +34,54 @@ struct ConversationsTests {
         #expect(decoded == conversation)
     }
 
+    // MARK: - Attached folders (CW-2, C7/C8)
+
+    /// A conversation written **before** the CW-2 keys existed must still decode, with nothing
+    /// attached — `decodeIfPresent`, never `decode`, or every saved chat would vanish.
+    @Test func anOldConversationJSONDecodesWithNothingAttached() throws {
+        let old = """
+        {
+          "id": "6B29FC40-CA47-1067-B31D-00DD010662DA",
+          "modelID": "mlx-community--Qwen3-4B-4bit",
+          "title": "An old chat",
+          "createdAt": "2026-01-02T03:04:05Z",
+          "updatedAt": "2026-01-02T03:04:05Z",
+          "items": []
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let conversation = try decoder.decode(Conversation.self, from: Data(old.utf8))
+        #expect(conversation.attachedFolders.isEmpty)
+        #expect(conversation.workingFolder == nil)
+        #expect(conversation.title == "An old chat")
+    }
+
+    @Test func foldersRoundTripThroughJSON() throws {
+        let conversation = Conversation(
+            modelID: "m",
+            attachedFolders: ["/Users/me/a", "/Users/me/b"],
+            workingFolder: "/Users/me/b")
+        let data = try JSONEncoder().encode(conversation)
+        let decoded = try JSONDecoder().decode(Conversation.self, from: data)
+        #expect(decoded.attachedFolders == ["/Users/me/a", "/Users/me/b"])
+        #expect(decoded.workingFolder == "/Users/me/b")
+        #expect(decoded.effectiveWorkingFolder == "/Users/me/b")
+    }
+
+    /// C8: with no chosen working folder the first attached one is it.
+    @Test func effectiveWorkingFolderFallsBackToTheFirstAttached() {
+        let conversation = Conversation(modelID: "m", attachedFolders: ["/a", "/b"])
+        #expect(conversation.effectiveWorkingFolder == "/a")
+    }
+
+    /// C8: a working folder that is no longer attached is ignored, not returned.
+    @Test func effectiveWorkingFolderIgnoresADetachedChosenFolder() {
+        let conversation = Conversation(
+            modelID: "m", attachedFolders: ["/a"], workingFolder: "/b")
+        #expect(conversation.effectiveWorkingFolder == "/a")
+    }
+
     // MARK: - Store
 
     @Test func storeSavesLoadsPerModelAndDeletes() throws {

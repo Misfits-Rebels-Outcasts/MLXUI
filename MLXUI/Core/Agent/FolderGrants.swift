@@ -161,8 +161,7 @@ nonisolated enum FolderGrants {
                 relativeTo: nil,
                 bookmarkDataIsStale: &isStale)
             else {
-                return "Error: access to \(grant.path) could not be restored — "
-                    + "the folder may have moved. Re-grant it from the tools menu."
+                return staleBookmarkMessage(for: grant.path)
             }
             let accessed = scoped.startAccessingSecurityScopedResource()
             defer { if accessed { scoped.stopAccessingSecurityScopedResource() } }
@@ -170,6 +169,15 @@ nonisolated enum FolderGrants {
         } catch {
             return "Error: \(error.localizedDescription)"
         }
+    }
+
+    /// The refusal when a grant's bookmark no longer resolves (the folder moved or was deleted).
+    /// Model-facing: it says where the user can fix it, and the road to the wrench menu is gone
+    /// (CW-1-FIX-1 N2 — the same stale instruction as `grantHint`).
+    static func staleBookmarkMessage(for path: String) -> String {
+        "Error: access to \(path) could not be restored;"
+            + " the folder may have moved. The user can grant it again in Settings > Tools,"
+            + " or add it to this chat with the + button."
     }
 
     /// The hint appended to rejections so the model can tell the user how to widen access.

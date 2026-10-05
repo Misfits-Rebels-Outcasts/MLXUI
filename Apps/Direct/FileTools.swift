@@ -29,11 +29,19 @@ nonisolated enum DirectFileScope {
         return URL(fileURLWithPath: folder, isDirectory: true)
     }
 
-    /// The roots the policy checks against: home, plus the working folder so a relative path into
-    /// an attached folder outside home still resolves. (CW-2 widens this to every attached folder.)
+    /// The roots the policy checks against: home **plus every folder attached to this chat**
+    /// (CW-2 ruling 5). An attached folder on an external volume must be readable by its full path,
+    /// which a working-folder-only list would refuse. In Direct this is guidance, not a boundary —
+    /// `run_shell` can reach anything, and the composer says so (G4).
     static func toolRoots() -> [URL] {
-        guard let base = workingFolderBase() else { return PathPolicy.defaultRoots }
-        return PathPolicy.defaultRoots + [base]
+        var roots = PathPolicy.defaultRoots
+        var seen = Set(roots.map(\.standardizedFileURL.path))
+        for folder in FileScope.current?.folders ?? [] {
+            let url = URL(fileURLWithPath: folder, isDirectory: true)
+            guard seen.insert(url.standardizedFileURL.path).inserted else { continue }
+            roots.append(url)
+        }
+        return roots
     }
 
     /// Refuse a path that is off the denylist even when the user attached it. `run_shell` has

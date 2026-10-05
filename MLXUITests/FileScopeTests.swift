@@ -72,33 +72,67 @@ struct FileScopeTests {
         FolderGrant(path: path, bookmark: Data())
     }
 
-    // MARK: FileScope.interim (C6)
+    // MARK: FileScope.forConversation (CW-2, C7/G1)
 
-    @Test func interimWithNoGrantsHasNoFoldersOrWorkingFolder() {
-        let scope = FileScope.interim(grants: [], edition: .appStore)
-        #expect(scope.folders.isEmpty)
-        #expect(scope.workingFolder == nil)
-    }
-
-    @Test func interimWithOneGrantMakesItTheWorkingFolder() {
-        let scope = FileScope.interim(
-            grants: [grant("/Users/me/workfolder")], edition: .appStore)
-        #expect(scope.folders == ["/Users/me/workfolder"])
-        #expect(scope.workingFolder == "/Users/me/workfolder")
-    }
-
-    @Test func interimWithTwoGrantsHasNoWorkingFolder() {
-        let scope = FileScope.interim(
-            grants: [grant("/Users/me/a"), grant("/Users/me/b")], edition: .appStore)
+    @Test func forConversationKeepsAttachedAndGrantedFolders() {
+        let scope = FileScope.forConversation(
+            attached: ["/Users/me/a", "/Users/me/b"],
+            workingFolder: "/Users/me/b",
+            grants: [grant("/Users/me/a"), grant("/Users/me/b")],
+            edition: .appStore)
         #expect(scope.folders == ["/Users/me/a", "/Users/me/b"])
+        #expect(scope.workingFolder == "/Users/me/b")
+    }
+
+    /// G1: a grant this chat never attached is not in scope, and the C5 text must not name it.
+    @Test func forConversationExcludesAnUnattachedGrant() {
+        let scope = FileScope.forConversation(
+            attached: ["/Users/me/a"], workingFolder: "/Users/me/a",
+            grants: [grant("/Users/me/a"), grant("/Users/me/secret")],
+            edition: .appStore)
+        #expect(scope.folders == ["/Users/me/a"])
+        #expect(!scope.folders.contains("/Users/me/secret"))
+    }
+
+    /// A grant revoked in Settings drops out on the next turn, working folder included.
+    @Test func forConversationDropsARevokedGrant() {
+        let scope = FileScope.forConversation(
+            attached: ["/Users/me/a", "/Users/me/b"],
+            workingFolder: "/Users/me/b",
+            grants: [grant("/Users/me/a")],
+            edition: .appStore)
+        #expect(scope.folders == ["/Users/me/a"])
+        #expect(scope.workingFolder == "/Users/me/a")   // promoted, not left dangling
+    }
+
+    /// A conversation saved before CW-2 has no folders at all: nothing is attached (G2).
+    @Test func forConversationWithNothingAttachedIsEmpty() {
+        let scope = FileScope.forConversation(
+            attached: [], workingFolder: nil,
+            grants: [grant("/Users/me/a")], edition: .appStore)
+        #expect(scope.folders.isEmpty)
         #expect(scope.workingFolder == nil)
     }
 
-    @Test func interimDirectCarriesNoFolders() {
-        let scope = FileScope.interim(
-            grants: [grant("/Users/me/workfolder")], edition: .direct)
-        #expect(scope.folders.isEmpty)
-        #expect(scope.workingFolder == nil)
+    /// Direct has no grants, so attached paths pass through untouched and the first one is the
+    /// working folder (C9/C8).
+    @Test func forConversationDirectPassesAttachedThrough() {
+        let scope = FileScope.forConversation(
+            attached: ["/Volumes/Backup/notes", "/Users/me/proj"],
+            workingFolder: nil,
+            grants: [],
+            edition: .direct)
+        #expect(scope.folders == ["/Volumes/Backup/notes", "/Users/me/proj"])
+        #expect(scope.workingFolder == "/Volumes/Backup/notes")
+    }
+
+    @Test func forConversationDirectHonoursTheChosenWorkingFolder() {
+        let scope = FileScope.forConversation(
+            attached: ["/Users/me/a", "/Users/me/b"],
+            workingFolder: "/Users/me/b",
+            grants: [],
+            edition: .direct)
+        #expect(scope.workingFolder == "/Users/me/b")
     }
 
     // MARK: root selection from a scope
@@ -286,6 +320,26 @@ struct FileScopeTests {
         ) { _ in ran.set(); return "read" }
         #expect(result == "Error: no granted folder covers \(s.notes.path).")
         #expect(!ran.isSet)
+    }
+
+    /// (c2, N2) A grant with an unresolvable bookmark is refused with the re-grant text, and the
+    /// body never runs. A `Data()` bookmark is enough: resolution must fail, and `withAccess`'s
+    /// `try?` turns that into the model-facing refusal without throwing.
+    @Test func anUnresolvableBookmarkIsRefusedWithTheRegrantText() async throws {
+        let s = try makeSandbox()
+        defer { cleanup(s) }
+        let ran = Flag()
+        let result = FolderGrants.withAccess(
+            to: s.notes, grants: [grant(s.root.path)],
+            container: URL(fileURLWithPath: "/no-such-container", isDirectory: true)
+        ) { _ in ran.set(); return "read" }
+        #expect(!ran.isSet)
+        #expect(result == FolderGrants.staleBookmarkMessage(for: s.root.path))
+        #expect(result.contains("could not be restored"))
+        #expect(result.contains("Settings > Tools"))
+        #expect(result.contains("+ button"))
+        #expect(!result.contains("wrench"))
+        #expect(!result.contains("tools menu"))
     }
 
     /// (d) The production selection's roots are the container plus the live grant store — never a

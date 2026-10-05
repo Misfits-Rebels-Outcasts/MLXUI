@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import MLXLMCommon
 
 /// Chat sheet for running an installed LLM locally via MLX. Surfaces the streaming
@@ -538,37 +539,181 @@ struct RunChatView: View {
     // MARK: - Input
 
     private var inputBar: some View {
-        HStack(spacing: 8) {
-            TextField("Message \(model.displayName)…", text: $prompt, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(1...4)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
-                .onSubmit(send)
-                .disabled(runner.isRunning)
-
-            if runner.isRunning {
-                Button {
-                    appState.stopModel()
-                } label: {
-                    Image(systemName: "stop.fill")
-                        .frame(width: 28, height: 28)
-                }
-                .buttonStyle(.bordered)
-                .help("Stop generating")
-            } else {
-                Button {
-                    send()
-                } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 22))
-                }
-                .buttonStyle(.plain)
-                .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        VStack(alignment: .leading, spacing: 6) {
+            if !runner.activeAttachedFolders.isEmpty {
+                attachedFolderChips
             }
+            HStack(spacing: 8) {
+                attachMenu
+                TextField("Message \(model.displayName)…", text: $prompt, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...4)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                    .onSubmit(send)
+                    .disabled(runner.isRunning)
+
+                if runner.isRunning {
+                    Button {
+                        appState.stopModel()
+                    } label: {
+                        Image(systemName: "stop.fill")
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.bordered)
+                    .help("Stop generating")
+                } else {
+                    Button {
+                        send()
+                    } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 22))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            #if DIRECT_BUILD
+            shellReachNote
+            #endif
         }
         .padding(12)
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            // A folder attaches (D5); a file is CW-3's "Add files…" and is ignored here.
+            guard !runner.isRunning else { return false }
+            for provider in providers {
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                    guard let url, url.hasDirectoryPath else { return }
+                    Task { @MainActor in runner.attachFolder(url) }
+                }
+            }
+            return true
+        }
+    }
+
+    // MARK: - Composer: folders (CW-2, D1/D5)
+
+    /// "+" — Add folder… and the folders this chat can use, one click to attach or detach (D5).
+    /// **Add files…** arrives in CW-3; the v1 menu is deliberately this short.
+    private var attachMenu: some View {
+        Menu {
+            Button("Add folder…") {
+                FolderAccessPanel.presentAndGrant(using: runner)
+            }
+            Divider()
+            #if DIRECT_BUILD
+            let candidates = Self.recentFolderCandidates(attached: runner.activeAttachedFolders)
+            if candidates.isEmpty {
+                Text("No recently used folders")
+            } else {
+                ForEach(candidates, id: \.self) { path in
+                    Toggle(isOn: attachBinding(path)) { Text(Self.folderLabel(path)) }
+                }
+            }
+            #else
+            let candidates = Self.grantCandidates(attached: runner.activeAttachedFolders)
+            if candidates.isEmpty {
+                Text("No folders granted yet")
+            } else {
+                ForEach(candidates, id: \.self) { path in
+                    Toggle(isOn: attachBinding(path)) { Text(Self.folderLabel(path)) }
+                }
+            }
+            #endif
+        } label: {
+            Image(systemName: "plus")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Add a folder to this chat")
+        .disabled(runner.isRunning)
+    }
+
+    private func attachBinding(_ path: String) -> Binding<Bool> {
+        Binding(
+            get: { runner.activeAttachedFolders.contains(path) },
+            set: { attached in
+                if attached { runner.attachFolder(path: path) }
+                else { runner.detachFolder(path: path) }
+            }
+        )
+    }
+
+    /// Attached folders above the composer: name, a star on the working folder, an × to detach.
+    private var attachedFolderChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(runner.activeAttachedFolders, id: \.self) { path in
+                    HStack(spacing: 4) {
+                        if path == runner.activeWorkingFolder {
+                            Image(systemName: "star.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.yellow)
+                        }
+                        Image(systemName: "folder")
+                            .font(.caption2)
+                        Text(Self.folderLabel(path))
+                            .font(.caption)
+                            .lineLimit(1)
+                        Button {
+                            runner.detachFolder(path: path)
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.caption2)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Remove from this chat")
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(.quaternary.opacity(0.6), in: Capsule())
+                    .contextMenu {
+                        Button("Set as working folder") { runner.setWorkingFolder(path: path) }
+                        Button("Reveal in Finder") {
+                            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+                        }
+                        Button("Remove from this chat") { runner.detachFolder(path: path) }
+                    }
+                }
+            }
+        }
+        .disabled(runner.isRunning)
+    }
+
+    #if DIRECT_BUILD
+    /// G4 — Direct's shell can reach anywhere, so the scope is guidance. Say so plainly rather than
+    /// letting the chips imply a boundary that isn't there.
+    @ViewBuilder
+    private var shellReachNote: some View {
+        if runner.enabledToolNames.contains("run_shell"), !runner.activeAttachedFolders.isEmpty {
+            Text("The shell can reach outside these folders.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+    #endif
+
+    /// The "+" list: every granted folder (App Store), attached ones first.
+    #if !DIRECT_BUILD
+    static func grantCandidates(attached: [String]) -> [String] {
+        let granted = FolderGrants.grantedPaths()
+        let rest = granted.filter { !attached.contains($0) }
+        return attached.filter { granted.contains($0) } + rest
+    }
+    #else
+    /// The "+" list in Direct (C9): the recent-folders MRU, attached ones first.
+    static func recentFolderCandidates(attached: [String]) -> [String] {
+        let recent = ModelRunner.recentFolders()
+        let rest = recent.filter { !attached.contains($0) }
+        return attached + rest
+    }
+    #endif
+
+    /// A folder's display name (its last path component).
+    static func folderLabel(_ path: String) -> String {
+        let name = URL(fileURLWithPath: path).lastPathComponent
+        return name.isEmpty ? path : name
     }
 
     private func send() {

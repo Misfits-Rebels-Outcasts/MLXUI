@@ -30,6 +30,12 @@ struct Conversation: Identifiable, Codable, Sendable, Equatable {
     /// Bumped on every completed turn; the list is sorted by this, newest first.
     var updatedAt: Date
     var items: [TranscriptItem]
+    /// Folder paths this chat may use, in the order the user attached them (CW-2, C7). Empty by
+    /// default: G2 says a new chat starts with nothing attached.
+    var attachedFolders: [String]
+    /// The folder relative paths resolve against. Normally `attachedFolders.first`; stored
+    /// separately so the user can pick another without reordering (CW-2, C8).
+    var workingFolder: String?
 
     init(
         id: UUID = UUID(),
@@ -37,7 +43,9 @@ struct Conversation: Identifiable, Codable, Sendable, Equatable {
         title: String = Conversation.untitled,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
-        items: [TranscriptItem] = []
+        items: [TranscriptItem] = [],
+        attachedFolders: [String] = [],
+        workingFolder: String? = nil
     ) {
         self.id = id
         self.modelID = modelID
@@ -45,12 +53,14 @@ struct Conversation: Identifiable, Codable, Sendable, Equatable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.items = items
+        self.attachedFolders = attachedFolders
+        self.workingFolder = workingFolder
     }
 
     static let untitled = "New Chat"
 
     private enum CodingKeys: String, CodingKey {
-        case id, modelID, title, createdAt, updatedAt, items
+        case id, modelID, title, createdAt, updatedAt, items, attachedFolders, workingFolder
     }
 
     nonisolated init(from decoder: Decoder) throws {
@@ -61,6 +71,10 @@ struct Conversation: Identifiable, Codable, Sendable, Equatable {
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         updatedAt = try c.decode(Date.self, forKey: .updatedAt)
         items = try c.decode([TranscriptItem].self, forKey: .items)
+        // CW-2: a conversation saved before these keys existed opens with nothing attached, which
+        // is what G2 says a new chat starts with. Never `decode` — that would drop the old chats.
+        attachedFolders = try c.decodeIfPresent([String].self, forKey: .attachedFolders) ?? []
+        workingFolder = try c.decodeIfPresent(String.self, forKey: .workingFolder)
     }
 
     nonisolated func encode(to encoder: Encoder) throws {
@@ -71,6 +85,15 @@ struct Conversation: Identifiable, Codable, Sendable, Equatable {
         try c.encode(createdAt, forKey: .createdAt)
         try c.encode(updatedAt, forKey: .updatedAt)
         try c.encode(items, forKey: .items)
+        try c.encode(attachedFolders, forKey: .attachedFolders)
+        try c.encodeIfPresent(workingFolder, forKey: .workingFolder)
+    }
+
+    /// The working folder, or the first attached folder when none was chosen — after a detach the
+    /// two can differ until the runner promotes one (C8).
+    var effectiveWorkingFolder: String? {
+        if let workingFolder, attachedFolders.contains(workingFolder) { return workingFolder }
+        return attachedFolders.first
     }
 
     /// A list title from the first prompt: first line, trimmed, capped.

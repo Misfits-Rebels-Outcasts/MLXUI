@@ -33,17 +33,37 @@ nonisolated struct FileScope: Sendable, Equatable {
     /// The scope bound for the current tool dispatch, when one is bound.
     @TaskLocal static var current: FileScope?
 
-    /// CW-1's provisional scope (C6). App Store: every grant is in scope — today's behaviour — and
-    /// the working folder is that grant only when there is exactly one (two folders means there is
-    /// no obvious default). Direct: `grants` is always empty, so the scope carries no folders, and
-    /// the home-folder guidance comes from `ChatEnvironment` instead.
-    static func interim(grants: [FolderGrant], edition: Edition) -> FileScope {
+    /// The scope for one conversation (CW-2, C7).
+    ///
+    /// **App Store:** only attached folders that are **still granted** survive, so revoking a grant
+    /// in Settings, or a grant that went stale, drops the folder out of the next turn (G1). The
+    /// working folder follows the same filter.
+    ///
+    /// **Direct:** there are no grants, so the attached paths pass through as they are — the scope
+    /// is the default for relative paths and the set of roots the tools may reach, not a boundary.
+    static func forConversation(
+        attached: [String],
+        workingFolder: String?,
+        grants: [FolderGrant],
+        edition: Edition
+    ) -> FileScope {
         switch edition {
         case .appStore:
-            let folders = grants.map(\.path)
-            return FileScope(folders: folders, workingFolder: folders.count == 1 ? folders[0] : nil)
+            let granted = Set(grants.compactMap { FolderGrants.canonicalPath($0.path) })
+            let folders = attached.filter { path in
+                guard let canonical = FolderGrants.canonicalPath(path) else { return false }
+                return granted.contains(canonical)
+            }
+            let working = folders.first { path in
+                guard let canonical = FolderGrants.canonicalPath(path),
+                      let wanted = workingFolder.flatMap({ FolderGrants.canonicalPath($0) })
+                else { return false }
+                return canonical == wanted
+            }
+            return FileScope(folders: folders, workingFolder: working ?? folders.first)
         case .direct:
-            return FileScope(folders: [])
+            let working = attached.first { $0 == workingFolder } ?? attached.first
+            return FileScope(folders: attached, workingFolder: working)
         }
     }
 
