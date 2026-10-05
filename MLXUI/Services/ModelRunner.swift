@@ -186,6 +186,8 @@ final class ModelRunner {
         transcript.load(conversation.items)
     }
 
+    // CX-2-FIX-1 (N3): test-only seams must not ship in the Release binary.
+    #if DEBUG
     /// Append a user prompt to the working transcript without a model — the test seam for
     /// `exportSnapshot`. `transcript` is `private(set)` so nothing outside the runner can
     /// replace the working copy wholesale; these two hand out the same mutation `send` performs.
@@ -198,6 +200,7 @@ final class ModelRunner {
     func appendAssistantChunkForTesting(_ chunk: String) {
         transcript.appendAssistantChunk(chunk)
     }
+    #endif
 
     /// A conversation to export (CX-2). For the conversation on screen the **live** transcript
     /// wins, because it can be ahead of the saved copy mid-turn — `saveActiveConversation` only

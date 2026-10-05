@@ -98,13 +98,15 @@ struct RunChatView: View {
                     }
                     .tag(conversation.id)
                     .contextMenu {
-                        // CX-2 (D4b): export this row's conversation, not the active one.
+                        // CX-2-FIX-1 (N1): resolve through exportSnapshot, not the ForEach's
+                        // stored value — the backlog's "live vs saved copy" trap means a raw
+                        // `conversation` can go stale if save timing ever changes.
                         Menu("Export") {
                             Button("Save as Markdown…") {
-                                export(conversation, as: .markdown)
+                                exportRow(conversation.id, as: .markdown)
                             }
                             Button("Save as JSON…") {
-                                export(conversation, as: .json)
+                                exportRow(conversation.id, as: .json)
                             }
                         }
                         .disabled(isExportDisabled(conversation))
@@ -405,6 +407,13 @@ struct RunChatView: View {
         export(conversation, as: format)
     }
 
+    /// The sidebar row's export: resolve **through `exportSnapshot`** when the item is clicked,
+    /// never the `ForEach`'s stored value. CX-2-FIX-1 (N1) — see the "live vs saved copy" trap.
+    private func exportRow(_ id: UUID, as format: ExportFormat) {
+        guard let conversation = runner.exportSnapshot(for: id) else { return }
+        export(conversation, as: format)
+    }
+
     /// Run one export off the *next* main-loop turn. The panel must not open while the `Menu`
     /// that started it is still tracking, or it comes up behind this sheet — see the CX-2 traps.
     private func export(_ conversation: Conversation, as format: ExportFormat) {
@@ -425,10 +434,11 @@ struct RunChatView: View {
         }
     }
 
-    /// D5: no export while a reply is streaming, and none for a conversation with no items.
+    /// D5: no export while a reply is streaming, and none when `exportSnapshot` has nothing to
+    /// give. CX-2-FIX-1 (N1) — never read the row's stored `items` directly; that's the trap.
     private func isExportDisabled(_ conversation: Conversation) -> Bool {
         if conversation.id == runner.activeConversationID, runner.isRunning { return true }
-        return conversation.items.isEmpty
+        return runner.exportSnapshot(for: conversation.id) == nil
     }
 
     private func scrollToEnd(_ proxy: ScrollViewProxy) {
