@@ -122,9 +122,9 @@ final class ModelRunner {
     }
 
     /// Which tools start enabled. Everything except the ones a user should have to
-    /// opt into: `run_shell` and `write_file` are visible in the tool list but
-    /// unticked, so a model can never propose a shell command on first launch.
-    /// Per-call approval still gates them once enabled.
+    /// opt into: `run_shell`, `write_file` and `edit_file` are visible in the tool
+    /// list but unticked, so a model can never propose a shell command or a write on
+    /// first launch. Per-call approval still gates them once enabled.
     static func defaultEnabledToolNames() -> Set<String> {
         var names = Set(defaultTools().map(\.name))
         #if DIRECT_BUILD

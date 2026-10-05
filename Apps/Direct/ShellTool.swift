@@ -119,13 +119,14 @@ nonisolated enum DirectTools {
             ShellTool(shell: shell),
             ReadFileTool(),
             WriteFileTool(),
+            EditFileTool(),
             ListDirectoryTool(),
         ]
     }
 
     /// Present in the tool list but unticked until the user opts in. Reading is
-    /// enabled by default; running a command or overwriting a file is not — a
-    /// model shouldn't be able to propose either on first launch. Per-call
-    /// approval still applies once they're on.
-    static let disabledByDefault: Set<String> = ["run_shell", "write_file"]
+    /// enabled by default; running a command, overwriting a file or editing one is
+    /// not — a model shouldn't be able to propose any of those on first launch.
+    /// Per-call approval still applies once they're on.
+    static let disabledByDefault: Set<String> = ["run_shell", "write_file", "edit_file"]
 }

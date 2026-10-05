@@ -10,8 +10,8 @@
 //
 //  Every path goes through `PathPolicy.resolve` with `roots:` = the granted folders + container
 //  (escape + denylist guards, symlink-resolved), then I/O runs inside the covering grant's
-//  security scope (`FolderGrants.withAccess`). `write_file` is side-effecting ⇒ approval-gated
-//  and disabled by default, mirroring the direct edition.
+//  security scope (`FolderGrants.withAccess`). `write_file` and `edit_file` are side-effecting
+//  ⇒ approval-gated and disabled by default, mirroring the direct edition.
 //
 
 import Foundation
@@ -22,13 +22,15 @@ nonisolated enum ScopedFileTools {
         [
             ScopedReadFileTool(),
             ScopedWriteFileTool(),
+            ScopedEditFileTool(),
             ScopedListDirectoryTool(),
             ScopedSearchFilesTool(),
         ]
     }
 
-    /// `write_file` starts unticked (visible, but the user opts in), matching `DirectTools`.
-    static let disabledByDefault: Set<String> = ["write_file"]
+    /// `write_file` and `edit_file` start unticked (visible, but the user opts in),
+    /// matching `DirectTools`.
+    static let disabledByDefault: Set<String> = ["write_file", "edit_file"]
 
     /// Shared front half of every tool: load grants, apply the path policy against them.
     static func resolve(_ path: String?) -> (url: URL, grants: [FolderGrant])? {
@@ -117,6 +119,53 @@ nonisolated struct ScopedWriteFileTool: AgentTool {
             // Atomic, matching the direct edition: a half-written file is worse than no file.
             try contents.write(to: url, atomically: true, encoding: .utf8)
             return "Wrote \(contents.utf8.count) bytes to \(url.path)."
+        }
+    }
+}
+
+// MARK: - Edit
+
+nonisolated struct ScopedEditFileTool: AgentTool {
+    let name = "edit_file"
+    let toolDescription = """
+        Replace exact text in an existing UTF-8 file inside a folder the user has granted \
+        access to. old_string must match the file exactly, including spaces and indentation, \
+        and must appear once unless replace_all is true. Copy it from read_file. Use this \
+        instead of write_file to change part of a file. The user must approve each edit.
+        """
+    var parameters: [ToolParameter] {
+        [
+            .required("path", type: .string, description: "Absolute path to the file to edit."),
+            .required(
+                "old_string", type: .string,
+                description: "Exact text to replace, copied from read_file."),
+            .required(
+                "new_string", type: .string,
+                description: "Text to put in its place; \"\" deletes it."),
+            .optional(
+                "replace_all", type: .bool,
+                description: "Replace every occurrence instead of requiring a unique one."),
+        ]
+    }
+    var requiresApproval: Bool { true }
+
+    func execute(arguments: [String: JSONValue]) async throws -> String {
+        guard let old = arguments.string("old_string") else {
+            return "Error: 'old_string' is required."
+        }
+        guard let new = arguments.string("new_string") else {
+            return "Error: 'new_string' is required."
+        }
+        let path = arguments.string("path")
+        guard let (url, grants) = ScopedFileTools.resolve(path) else {
+            return ScopedFileTools.rejection(for: path)
+        }
+        return FolderGrants.withAccess(to: url, grants: grants) { url in
+            TextEdit.editFile(
+                at: url,
+                old: old,
+                new: new,
+                replaceAll: arguments.bool("replace_all") ?? false)
         }
     }
 }

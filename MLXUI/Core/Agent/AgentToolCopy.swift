@@ -20,6 +20,7 @@ nonisolated enum AgentToolCopy {
         "ocr_image": "Read text in an image",
         "read_file": "Read a file",
         "write_file": "Write a file",
+        "edit_file": "Edit a file",
         "list_directory": "List a folder",
         "search_files": "Search files",
         "run_shell": "Run a shell command",
