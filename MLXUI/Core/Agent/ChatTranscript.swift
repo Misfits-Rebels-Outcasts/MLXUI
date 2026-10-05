@@ -91,8 +91,9 @@ struct TranscriptBuilder {
     }
 
     /// Append a user prompt; closes any open assistant bubble.
-    mutating func addUserMessage(_ text: String) {
-        items.append(.message(ChatMessage(role: .user, text: text)))
+    mutating func addUserMessage(_ text: String, attachments: [ChatAttachment] = []) {
+        items.append(.message(
+            ChatMessage(role: .user, text: text, attachments: attachments)))
         openAssistantIndex = nil
     }
 

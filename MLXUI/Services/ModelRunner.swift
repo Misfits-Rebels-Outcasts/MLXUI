@@ -11,16 +11,43 @@ import MLXLMCommon
 
 // MARK: - Chat Message
 
-struct ChatMessage: Identifiable, Codable, Sendable, Equatable {
+struct ChatMessage: Identifiable, Sendable, Equatable {
     enum Role: String, Codable, Sendable { case user, assistant }
     let id: UUID
     let role: Role
     var text: String
+    /// CW-3: files this turn carried. The bubble shows `text` plus chips; the model sees
+    /// `ChatAttachment.modelFacing(text:attachments:)`.
+    var attachments: [ChatAttachment]
 
-    init(id: UUID = UUID(), role: Role, text: String) {
+    init(id: UUID = UUID(), role: Role, text: String, attachments: [ChatAttachment] = []) {
         self.id = id
         self.role = role
         self.text = text
+        self.attachments = attachments
+    }
+}
+
+/// Hand-written Codable: `attachments` must be `decodeIfPresent`, or every conversation saved
+/// before CW-3 would fail to decode and `ConversationStore` would silently skip it — the user's
+/// chat history would vanish (the backlog's trap).
+extension ChatMessage: Codable {
+    private enum CodingKeys: String, CodingKey { case id, role, text, attachments }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        role = try c.decode(Role.self, forKey: .role)
+        text = try c.decode(String.self, forKey: .text)
+        attachments = try c.decodeIfPresent([ChatAttachment].self, forKey: .attachments) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(role, forKey: .role)
+        try c.encode(text, forKey: .text)
+        try c.encode(attachments, forKey: .attachments)
     }
 }
 
@@ -370,9 +397,44 @@ final class ModelRunner {
         }
     }
 
+    /// Import the files this message carries (CW-3): copy into the conversation's attachments
+    /// folder, extract text, apply the C11 budget. Returns those that made it — a refusal is
+    /// reported and skipped, never a reason to lose the message. `async` because the image branch
+    /// awaits OCR.
+    private func prepareAttachments(
+        _ urls: [URL], for model: ModelEntry, in modelDirectory: URL, of conversationID: UUID
+    ) async -> [ChatAttachment] {
+        guard !urls.isEmpty else { return [] }
+        var chosen = urls
+        if chosen.count > ChatAttachment.maxFilesPerMessage {
+            errorMessage = AttachmentImporter.Failure.tooMany(
+                ChatAttachment.maxFilesPerMessage).message
+            chosen = Array(chosen.prefix(ChatAttachment.maxFilesPerMessage))
+        }
+        let window = ContextWindow.tokens(for: model, modelDirectory: modelDirectory)
+        let directory = ConversationStore.attachmentsDirectory(for: conversationID)
+        var result: [ChatAttachment] = []
+        var inlineBytes = 0
+        for (index, url) in chosen.enumerated() {
+            do {
+                let attachment = try await AttachmentImporter.importAttachment(
+                    from: url, into: directory, ordinal: index, window: window,
+                    inlineBytesSoFar: inlineBytes,
+                    ocr: { stored in await OCRImageTool.recognizeText(in: stored) })
+                inlineBytes += attachment.inlineText?.utf8.count ?? 0
+                result.append(attachment)
+            } catch let failure as AttachmentImporter.Failure {
+                errorMessage = failure.message
+            } catch {
+                errorMessage = "Could not attach \(url.lastPathComponent): \(error.localizedDescription)"
+            }
+        }
+        return result
+    }
+
     /// Generate a reply to `prompt`, running the agent tool loop via `AgentSession` and
     /// streaming assistant text + tool-call cards into the transcript as they arrive.
-    func send(_ prompt: String, for model: ModelEntry) {
+    func send(_ prompt: String, attachments: [URL] = [], for model: ModelEntry) async {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isRunning else { return }
 
@@ -397,7 +459,15 @@ final class ModelRunner {
         }
         let turnConversationID = activeConversationID
 
-        transcript.addUserMessage(trimmed)
+        // CW-3: copy + extract the attachments **before** the transcript append, so the bubble and
+        // the persisted turn both carry the final result. A file that cannot be attached reports
+        // and drops out; the message still sends.
+        var readyAttachments: [ChatAttachment] = []
+        if !attachments.isEmpty, let conversationID = activeConversationID {
+            readyAttachments = await prepareAttachments(
+                attachments, for: model, in: modelDir, of: conversationID)
+        }
+        transcript.addUserMessage(trimmed, attachments: readyAttachments)
         isRunning = true
 
         // Snapshot the enabled tools for this turn (Sendable to hand to the nonisolated session).
@@ -420,13 +490,15 @@ final class ModelRunner {
             workingFolder: conversation?.effectiveWorkingFolder,
             grants: grants,
             edition: edition)
+        let attachmentsNote = ChatAttachment.environmentNote(for: readyAttachments)
         let instructions = ChatEnvironment.instructions(
             scope: fileScope,
             edition: edition,
             fileToolsEnabled: enabledToolNames,
             writeEnabled: enabledToolNames.contains("write_file")
                 || enabledToolNames.contains("edit_file"),
-            homePath: homePath)
+            homePath: homePath,
+            attachmentsNote: attachmentsNote)
 
         currentTask = Task { [weak self] in
             guard let self else { return }

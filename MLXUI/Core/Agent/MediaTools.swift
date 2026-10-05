@@ -152,35 +152,54 @@ nonisolated struct OCRImageTool: AgentTool {
         }
 
         do {
-            let text: String
-            switch Self.backend(forModelID: modelID) {
-            case .paddle:
-                text = try await PaddleOCREngine.generate(
-                    image: image,
-                    modelDir: PaddleOCREngine.installedModelDirectory(id: modelID),
-                    maxTokens: OCRSDK.ocrMaxTokens)
-            case .deepseek:
-                text = try await DeepSeekOCREngine.generate(
-                    image: image,
-                    modelDir: DeepSeekOCREngine.installedModelDirectory(id: modelID),
-                    maxTokens: OCRSDK.ocrMaxTokens)
-            case .dots:
-                text = try await DotsOCREngine.generate(
-                    image: image,
-                    modelDir: DotsOCREngine.installedModelDirectory(id: modelID),
-                    maxTokens: OCRSDK.ocrMaxTokens)
-            case .vlm:
-                text = try await VLMEngine.generate(
-                    prompt: OCRSDK.ocrPrompt,
-                    image: image,
-                    modelDir: VLMEngine.installedModelDirectory(hfModelID: entry.hfModelId),
-                    maxTokens: OCRSDK.ocrMaxTokens)
-            }
+            let text = try await Self.run(image: image, modelID: modelID, hfModelID: entry.hfModelId)
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? "(no text found in the image)" : trimmed
         } catch {
             return "Error: could not read text from the image: \(error.localizedDescription)"
         }
+    }
+
+    /// The engine dispatch, shared by `execute` (above) and CW-3's attachment importer. Behaviour
+    /// is identical — this only moved the `switch` out of `execute`.
+    static func run(image: CGImage, modelID: String, hfModelID: String) async throws -> String {
+        switch backend(forModelID: modelID) {
+        case .paddle:
+            return try await PaddleOCREngine.generate(
+                image: image,
+                modelDir: PaddleOCREngine.installedModelDirectory(id: modelID),
+                maxTokens: OCRSDK.ocrMaxTokens)
+        case .deepseek:
+            return try await DeepSeekOCREngine.generate(
+                image: image,
+                modelDir: DeepSeekOCREngine.installedModelDirectory(id: modelID),
+                maxTokens: OCRSDK.ocrMaxTokens)
+        case .dots:
+            return try await DotsOCREngine.generate(
+                image: image,
+                modelDir: DotsOCREngine.installedModelDirectory(id: modelID),
+                maxTokens: OCRSDK.ocrMaxTokens)
+        case .vlm:
+            return try await VLMEngine.generate(
+                prompt: OCRSDK.ocrPrompt,
+                image: image,
+                modelDir: VLMEngine.installedModelDirectory(hfModelID: hfModelID),
+                maxTokens: OCRSDK.ocrMaxTokens)
+        }
+    }
+
+    /// CW-3's entry point for the attachment importer: OCR **a local file** (the container copy),
+    /// picking the same backend as `execute` and returning `nil` when no OCR/vision model is
+    /// installed. `execute`'s behaviour, schema and description are unchanged.
+    static func recognizeText(in file: URL) async -> String? {
+        let index = InstalledModelIndex.loadInstalled()
+        guard let entry = index.bestEntry(kind: .ocr) ?? index.bestEntry(kind: .vision) else {
+            return nil
+        }
+        guard let data = try? Data(contentsOf: file),
+              let image = ImageLoader.decodedCGImage(from: data)
+        else { return nil }
+        return try? await run(image: image, modelID: entry.id, hfModelID: entry.hfModelId)
     }
 
     /// Which engine runs a given OCR/vision model, mirroring the per-module `ModelSDK.claim`

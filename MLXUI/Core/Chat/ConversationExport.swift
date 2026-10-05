@@ -112,6 +112,11 @@ nonisolated enum ConversationExporter {
                 case .user:
                     blocks.append("### You")
                     blocks.append(verbatim(message.text))
+                    // CW-3: attachments by name + mode, so an exported transcript says what the
+                    // model was actually given (the contents are in the bubble's text for inline).
+                    for attachment in message.attachments {
+                        blocks.append("📎 \(attachment.name) (\(attachment.mode.rawValue))")
+                    }
                     assistantHeadingOpen = false
 
                 case .assistant:

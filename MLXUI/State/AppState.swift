@@ -603,9 +603,9 @@ final class AppState { //appstatecomeback
         }
     }
 
-    func sendPrompt(_ text: String) {
+    func sendPrompt(_ text: String, attachments: [URL] = []) async {
         guard let model = runningModel else { return }
-        modelRunner.send(text, for: model)
+        await modelRunner.send(text, attachments: attachments, for: model)
     }
 
     func stopModel() {

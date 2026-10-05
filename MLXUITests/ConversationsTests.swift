@@ -82,6 +82,87 @@ struct ConversationsTests {
         #expect(conversation.effectiveWorkingFolder == "/a")
     }
 
+    // MARK: - Attachments (CW-3)
+
+    private func attachment(
+        _ name: String, mode: ChatAttachmentMode = .inline
+    ) -> ChatAttachment {
+        ChatAttachment(
+            name: name, storedPath: "/container/attachments/\(name)", mode: mode,
+            byteCount: 8, inlineText: mode == .reference ? nil : "contents")
+    }
+
+    /// `chatHistory` must replay **exactly** what the model was given (C13) — that is why
+    /// `inlineText` is stored rather than re-read from disk.
+    @Test func chatHistoryRendersAttachmentsIntoTheUserTurn() {
+        let message = ChatMessage(
+            role: .user, text: "Summarise this.",
+            attachments: [attachment("rates.csv")])
+        let history = Conversation.chatHistory(from: [.message(message)])
+        #expect(history.count == 1)
+        #expect(history[0].content == """
+        Summarise this.
+
+        <attachment name="rates.csv">
+        contents
+        </attachment>
+        """)
+    }
+
+    @Test func chatHistoryRendersAReferenceWithoutContents() {
+        let message = ChatMessage(
+            role: .user, text: "Look at this.",
+            attachments: [attachment("big.txt", mode: .reference)])
+        let history = Conversation.chatHistory(from: [.message(message)])
+        #expect(history[0].content.contains("mode=\"reference\"/>"))
+        #expect(!history[0].content.contains("contents"))
+    }
+
+    /// A conversation saved before CW-3 has no `attachments` key on its messages: it must decode
+    /// (and not vanish from the list).
+    @Test func anOldChatMessageJSONDecodesWithoutAttachments() throws {
+        let old = """
+        {
+          "id": "6B29FC40-CA47-1067-B31D-00DD010662DA",
+          "modelID": "mlx-community--Qwen3-4B-4bit",
+          "title": "An old chat",
+          "createdAt": "2026-01-02T03:04:05Z",
+          "updatedAt": "2026-01-02T03:04:05Z",
+          "items": [
+            {"message": {"_0": {"id": "6B29FC40-CA47-1067-B31D-00DD010662DB",
+                                "role": "user", "text": "hello"}}}
+          ]
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let conversation = try decoder.decode(Conversation.self, from: Data(old.utf8))
+        #expect(conversation.items.count == 1)
+        guard case .message(let message) = conversation.items[0] else {
+            Issue.record("expected a message")
+            return
+        }
+        #expect(message.text == "hello")
+        #expect(message.attachments.isEmpty)
+    }
+
+    @Test func attachmentsRoundTripThroughJSON() throws {
+        let message = ChatMessage(
+            role: .user, text: "see attached",
+            attachments: [attachment("a.csv"), attachment("b.txt", mode: .reference)])
+        let conversation = Conversation(modelID: "m", items: [.message(message)])
+        let data = try JSONEncoder().encode(conversation)
+        let decoded = try JSONDecoder().decode(Conversation.self, from: data)
+        guard case .message(let restored) = decoded.items[0] else {
+            Issue.record("expected a message")
+            return
+        }
+        #expect(restored.attachments.count == 2)
+        #expect(restored.attachments.map(\.name) == ["a.csv", "b.txt"])
+        #expect(restored.attachments[1].mode == .reference)
+        #expect(restored.attachments[1].inlineText == nil)
+    }
+
     // MARK: - Store
 
     @Test func storeSavesLoadsPerModelAndDeletes() throws {
@@ -129,6 +210,30 @@ struct ConversationsTests {
     }
 
     // MARK: - Titles
+
+    /// CW-3: `delete` removes `conversations/<uuid>/` too, so the attachment copies go with the
+    /// chat (privacy: they are the user's own files, copied only to be readable after a relaunch).
+    @Test func deleteRemovesTheConversationFolder() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("conversations-delete-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let id = UUID()
+        let conversation = Conversation(id: id, modelID: "m", items: Self.sampleItems())
+        ConversationStore.save(conversation, in: dir)
+        let attachments = ConversationStore.attachmentsDirectory(for: id, in: dir)
+        try FileManager.default.createDirectory(at: attachments, withIntermediateDirectories: true)
+        try "a,b\n".write(
+            to: attachments.appendingPathComponent("1-rates.csv"),
+            atomically: true, encoding: .utf8)
+        #expect(FileManager.default.fileExists(atPath: attachments.path))
+
+        ConversationStore.delete(id: id, in: dir)
+        #expect(!FileManager.default.fileExists(
+            atPath: ConversationStore.fileURL(for: id, in: dir).path))
+        #expect(!FileManager.default.fileExists(
+            atPath: ConversationStore.folderURL(for: id, in: dir).path))
+    }
 
     @Test func titleUsesTheFirstLineTrimmedAndCapped() {
         #expect(Conversation.title(forFirstPrompt: "  What is MLX?  ") == "What is MLX?")

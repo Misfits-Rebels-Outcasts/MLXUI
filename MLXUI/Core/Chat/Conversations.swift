@@ -116,9 +116,13 @@ struct Conversation: Identifiable, Codable, Sendable, Equatable {
         for item in items {
             switch item {
             case .message(let message):
-                guard !message.text.isEmpty else { continue }
+                // CW-3: a user turn is its text **plus** whatever it attached. Rendering from the
+                // stored `inlineText` keeps this pure, so a replay after a relaunch is identical.
+                let userText = ChatAttachment.modelFacing(
+                    text: message.text, attachments: message.attachments)
+                guard !userText.isEmpty else { continue }
                 switch message.role {
-                case .user: history.append(.user(message.text))
+                case .user: history.append(.user(userText))
                 case .assistant:
                     // A tool card can open an assistant turn; subsequent text belongs to it.
                     if let last = history.last, last.role == .assistant {
@@ -179,8 +183,23 @@ nonisolated enum ConversationStore {
         try? data.write(to: fileURL(for: conversation.id, in: directory), options: .atomic)
     }
 
+    /// Delete a conversation **and everything it owns** — CW-3's attachment copies live under
+    /// `conversations/<uuid>/`, so removing only the JSON would leave user files behind.
     static func delete(id: UUID, in directory: URL = defaultDirectory()) {
         try? FileManager.default.removeItem(at: fileURL(for: id, in: directory))
+        try? FileManager.default.removeItem(at: folderURL(for: id, in: directory))
+    }
+
+    /// `conversations/<uuid>/` — the per-conversation folder (CW-3 attachments).
+    static func folderURL(for id: UUID, in directory: URL = defaultDirectory()) -> URL {
+        directory.appendingPathComponent(id.uuidString, isDirectory: true)
+    }
+
+    /// `conversations/<uuid>/attachments/` — where CW-3 copies attached files (C10).
+    static func attachmentsDirectory(
+        for id: UUID, in directory: URL = defaultDirectory()
+    ) -> URL {
+        folderURL(for: id, in: directory).appendingPathComponent("attachments", isDirectory: true)
     }
 
     static func fileURL(for id: UUID, in directory: URL) -> URL {

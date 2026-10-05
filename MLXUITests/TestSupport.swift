@@ -21,7 +21,9 @@ func makeEntry(
     hfRepo: String = "mlx-community/Test",
     // Defaults to the shared fixture repo so existing callers keep their "two cards, one
     // repo" behaviour; MoC-5-FIX tests pass a distinct value to exercise repo-keyed paths.
-    hfModelId: String = "mlx-community/Test-4bit"
+    hfModelId: String = "mlx-community/Test-4bit",
+    // CW-3 needs the catalog's context window set and unset; every existing caller keeps `nil`.
+    contextWindow: Int? = nil
 ) -> ModelEntry {
     ModelEntry(
         id: id,
@@ -38,7 +40,7 @@ func makeEntry(
         hfModelId: hfModelId,
         ramGB: ramGB,
         downloadSizeGB: downloadSizeGB,
-        contextWindow: 4096,
+        contextWindow: contextWindow,
         license: nil,
         licenseUrl: nil,
         description: nil,

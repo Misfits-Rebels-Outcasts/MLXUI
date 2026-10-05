@@ -79,6 +79,49 @@ struct ConversationExportTests {
         #expect(actual == expected + "\n")
     }
 
+    /// CW-3: each attachment is one line under the user turn — its name and how the model got it.
+    @Test func markdownListsAttachmentsWithTheirMode() {
+        let items: [TranscriptItem] = [
+            .message(ChatMessage(
+                role: .user, text: "Summarise these.",
+                attachments: [
+                    ChatAttachment(
+                        name: "rates.csv", storedPath: "/container/1-rates.csv", mode: .inline,
+                        byteCount: 12, inlineText: "a,b"),
+                    ChatAttachment(
+                        name: "big.txt", storedPath: "/container/2-big.txt", mode: .reference,
+                        byteCount: 90_000),
+                    ChatAttachment(
+                        name: "shot.png", storedPath: "/container/3-shot.png", mode: .ocr,
+                        byteCount: 500, inlineText: "text in the image"),
+                ])),
+        ]
+        let markdown = ConversationExporter.markdown(
+            Self.conversation(items: items), context: Self.context())
+        #expect(markdown.contains("### You"))
+        #expect(markdown.contains("Summarise these."))
+        #expect(markdown.contains("\u{1F4CE} rates.csv (inline)"))
+        #expect(markdown.contains("\u{1F4CE} big.txt (reference)"))
+        #expect(markdown.contains("\u{1F4CE} shot.png (ocr)"))
+    }
+
+    /// The JSON export carries the field, so an export round-trips the attachments.
+    @Test func jsonIncludesAttachments() throws {
+        let items: [TranscriptItem] = [
+            .message(ChatMessage(
+                role: .user, text: "see attached",
+                attachments: [ChatAttachment(
+                    name: "rates.csv", storedPath: "/container/1-rates.csv", mode: .inline,
+                    byteCount: 12, inlineText: "a,b")])),
+        ]
+        let data = try ConversationExporter.json(
+            Self.conversation(items: items), context: Self.context())
+        let json = try #require(String(data: data, encoding: .utf8))
+        #expect(json.contains("rates.csv"))
+        #expect(json.contains("attachments"))
+        #expect(json.contains("inline"))
+    }
+
     @Test func emptyConversationStillExportsTheHeader() {
         let conversation = Self.conversation(items: [])
         let markdown = ConversationExporter.markdown(conversation, context: Self.context())

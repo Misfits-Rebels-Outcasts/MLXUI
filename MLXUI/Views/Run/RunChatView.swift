@@ -11,6 +11,8 @@ struct RunChatView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @State private var prompt = ""
+    /// CW-3: files chosen (or dropped) for the **next** message. Cleared when it sends.
+    @State private var pendingFiles: [URL] = []
     @State private var showAuditLog = false
     @State private var conversationToDelete: Conversation?
     /// CX-2: a failed export. Its own message — `runner.errorMessage` belongs to model runs.
@@ -297,16 +299,43 @@ struct RunChatView: View {
         let isUser = message.role == .user
         return HStack {
             if isUser { Spacer(minLength: 40) }
-            Text(message.text)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    isUser ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.12),
-                    in: RoundedRectangle(cornerRadius: 10)
-                )
+            VStack(alignment: .leading, spacing: 6) {
+                Text(message.text)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                // CW-3: the bubble shows what was attached; the model saw the contents.
+                if !message.attachments.isEmpty {
+                    attachmentChips(message.attachments)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                isUser ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.12),
+                in: RoundedRectangle(cornerRadius: 10)
+            )
             if !isUser { Spacer(minLength: 40) }
+        }
+    }
+
+    /// Attachment chips inside a sent bubble: name plus its mode (C13).
+    private func attachmentChips(_ attachments: [ChatAttachment]) -> some View {
+        HStack(spacing: 6) {
+            ForEach(attachments) { attachment in
+                HStack(spacing: 4) {
+                    Image(systemName: attachment.mode == .ocr ? "text.viewfinder" : "paperclip")
+                        .font(.caption2)
+                    Text(attachment.name)
+                        .font(.caption2)
+                        .lineLimit(1)
+                    Text(attachment.mode.label)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(.quaternary.opacity(0.6), in: Capsule())
+            }
         }
     }
 
@@ -543,6 +572,9 @@ struct RunChatView: View {
             if !runner.activeAttachedFolders.isEmpty {
                 attachedFolderChips
             }
+            if !pendingFiles.isEmpty {
+                pendingFileChips
+            }
             HStack(spacing: 8) {
                 attachMenu
                 TextField("Message \(model.displayName)…", text: $prompt, axis: .vertical)
@@ -580,12 +612,18 @@ struct RunChatView: View {
         }
         .padding(12)
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-            // A folder attaches (D5); a file is CW-3's "Add files…" and is ignored here.
+            // A folder attaches to the chat (CW-2); a file waits for the next message (CW-3).
             guard !runner.isRunning else { return false }
             for provider in providers {
                 _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                    guard let url, url.hasDirectoryPath else { return }
-                    Task { @MainActor in runner.attachFolder(url) }
+                    guard let url else { return }
+                    Task { @MainActor in
+                        if url.hasDirectoryPath {
+                            runner.attachFolder(url)
+                        } else if !pendingFiles.contains(url) {
+                            pendingFiles.append(url)
+                        }
+                    }
                 }
             }
             return true
@@ -598,6 +636,9 @@ struct RunChatView: View {
     /// **Add files…** arrives in CW-3; the v1 menu is deliberately this short.
     private var attachMenu: some View {
         Menu {
+            Button("Add files…") {
+                pickFiles()
+            }
             Button("Add folder…") {
                 FolderAccessPanel.presentAndGrant(using: runner)
             }
@@ -627,6 +668,47 @@ struct RunChatView: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .help("Add a folder to this chat")
+        .disabled(runner.isRunning)
+    }
+
+    /// CW-3's file picker: several files at once, no folders (Add folder… is the folder route).
+    private func pickFiles() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.message = "Choose files to send with the next message."
+        panel.prompt = "Attach"
+        guard panel.runModal() == .OK else { return }
+        pendingFiles += panel.urls
+    }
+
+    /// Files waiting to go with the next message, each with an × (CW-3).
+    private var pendingFileChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(Array(pendingFiles.enumerated()), id: \.offset) { index, url in
+                    HStack(spacing: 4) {
+                        Image(systemName: "paperclip")
+                            .font(.caption2)
+                        Text(url.lastPathComponent)
+                            .font(.caption)
+                            .lineLimit(1)
+                        Button {
+                            pendingFiles.remove(at: index)
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.caption2)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Do not attach this file")
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(.quaternary.opacity(0.6), in: Capsule())
+                }
+            }
+        }
         .disabled(runner.isRunning)
     }
 
@@ -719,8 +801,10 @@ struct RunChatView: View {
     private func send() {
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !runner.isRunning else { return }
+        let files = pendingFiles
         prompt = ""
-        appState.sendPrompt(text)
+        pendingFiles = []
+        Task { await appState.sendPrompt(text, attachments: files) }
     }
 }
 
