@@ -72,15 +72,27 @@ nonisolated enum PathPolicy {
 
     /// Shared argument handling for the file tools: expand `~`, require an
     /// absolute path, apply the policy.
-    static func resolve(_ path: String?, roots: [URL] = defaultRoots) -> Resolution {
+    ///
+    /// `base` (CW-1, `RSI/DelegateChatWorkspaceBacklog.md` C2) is the conversation's working
+    /// folder. A relative path is joined to it **first**, then goes through the very same
+    /// `isAllowed` check — the denylist and the escape/symlink guards see the joined result, never
+    /// the raw string. With `base == nil` the behaviour is byte-identical to before: a relative
+    /// path is rejected outright.
+    static func resolve(_ path: String?, roots: [URL] = defaultRoots, base: URL? = nil) -> Resolution {
         guard let path, !path.isEmpty else {
             return .rejected("Error: 'path' is required.")
         }
         let expanded = (path as NSString).expandingTildeInPath
-        guard expanded.hasPrefix("/") else {
+        let url: URL
+        if expanded.hasPrefix("/") {
+            url = URL(fileURLWithPath: expanded)
+        } else if let base {
+            // Join before checking. `..` is collapsed by `isAllowed`'s
+            // `standardizedFileURL`, so `../outside` cannot escape that way.
+            url = base.appendingPathComponent(expanded)
+        } else {
             return .rejected("Error: 'path' must be absolute (got \"\(path)\").")
         }
-        let url = URL(fileURLWithPath: expanded)
         guard isAllowed(url, roots: roots) else {
             return .rejected("Error: access to \(url.path) is not permitted.")
         }

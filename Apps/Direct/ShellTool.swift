@@ -60,8 +60,9 @@ nonisolated struct ShellTool: AgentTool {
                 type: .string,
                 description: """
                     Optional — omit this unless the command must run somewhere \
-                    specific. Defaults to the user's home directory. If given, an \
-                    absolute path inside the home directory.
+                    specific. Defaults to this chat's working folder when it has one, \
+                    otherwise the user's home directory. If given, an absolute path \
+                    inside the home directory.
                     """
             ),
             .optional(
@@ -82,10 +83,12 @@ nonisolated struct ShellTool: AgentTool {
             return "Error: 'command' is required."
         }
 
-        // Default to the home directory rather than leaving it nil: an app launched
-        // from Finder has cwd `/`, so a relative command like `ls` would silently
-        // list the filesystem root and look like a bug in the tool.
-        var workingDirectory: URL? = FileManager.default.homeDirectoryForCurrentUser
+        // Default to the conversation's working folder when it has one (CW-1 D4 — so a chat
+        // scoped to a folder runs commands there without the model retyping the path), otherwise
+        // the home directory: an app launched from Finder has cwd `/`, so a relative command like
+        // `ls` would silently list the filesystem root and look like a bug in the tool.
+        var workingDirectory: URL? = workingFolderBase()
+            ?? FileManager.default.homeDirectoryForCurrentUser
         if let path = arguments.string("working_directory") {
             let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
             guard PathPolicy.isAllowed(url, roots: allowedRoots) else {

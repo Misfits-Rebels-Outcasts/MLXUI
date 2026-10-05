@@ -108,7 +108,8 @@ struct ScopedFileToolsTests {
 
         let search = ScopedSearchFilesTool().toolSpec["function"] as? [String: any Sendable]
         let searchParams = search?["parameters"] as? [String: any Sendable]
-        #expect(Set(searchParams?["required"] as? [String] ?? []) == ["path", "query"])
+        // CW-1 D4: `path` is optional on search_files — omitted means the working folder.
+        #expect(Set(searchParams?["required"] as? [String] ?? []) == ["query"])
 
         // edit_file: three required strings plus the optional boolean (D1).
         let edit = ScopedEditFileTool().toolSpec["function"] as? [String: any Sendable]
@@ -122,10 +123,32 @@ struct ScopedFileToolsTests {
     // MARK: rejection message guides the user to the grant UI
 
     @Test func rejectionMentionsGrantingWhenNoGrantsExist() {
-        // No grant covers /nonexistent-root; the message should teach the model about the menu.
+        // No scope is bound, so you get the unscoped wording: where grants are managed now
+        // (SET-3 moved them to Settings → Tools; CW-1 D4 also points at the + button).
         let message = ScopedFileTools.rejection(for: "/nonexistent-root/file.txt")
         #expect(message.hasPrefix("Error:"))
-        #expect(message.contains("wrench"))
+        #expect(message.contains("Settings"))
+        #expect(message.contains("+ button"))
+        #expect(!message.contains("wrench"))
+    }
+
+    // MARK: CW-1 wording
+
+    @Test func pathParametersOfferRelativePaths() {
+        let read = ScopedReadFileTool().toolSpec["function"] as? [String: any Sendable]
+        let readParams = read?["parameters"] as? [String: any Sendable]
+        let readProps = readParams?["properties"] as? [String: any Sendable]
+        let path = readProps?["path"] as? [String: any Sendable]
+        #expect(path?["description"] as? String == ScopedFileTools.relativePathDescription)
+        #expect(ScopedFileTools.relativePathDescription.contains("relative to the working folder"))
+
+        // list_directory: `path` becomes optional, and says what omitting it means.
+        let list = ScopedListDirectoryTool().toolSpec["function"] as? [String: any Sendable]
+        let listParams = list?["parameters"] as? [String: any Sendable]
+        #expect((listParams?["required"] as? [String] ?? []).isEmpty)
+        let listProps = listParams?["properties"] as? [String: any Sendable]
+        let listPath = listProps?["path"] as? [String: any Sendable]
+        #expect((listPath?["description"] as? String)?.contains("omit for the working folder") == true)
     }
 
     // MARK: edit_file argument + path checks (EF-2)

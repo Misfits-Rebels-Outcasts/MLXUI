@@ -27,6 +27,8 @@ nonisolated struct FolderGrant: Codable, Sendable, Equatable {
 
 nonisolated enum FolderGrants {
 
+
+
     private static let defaultsKey = "agentFolderGrants"
 
     // MARK: - Store
@@ -73,6 +75,37 @@ nonisolated enum FolderGrants {
         grants.map { URL(fileURLWithPath: $0.path, isDirectory: true) } + [container]
     }
 
+    /// The allowlist roots for one conversation's `FileScope`: only the granted folders named in
+    /// `scope.folders`, plus the app container. A grant the conversation is not attached to is not
+    /// a root — CW-1 C6 passes every grant to the interim scope; CW-2 narrows this to the attached
+    /// ones (G1).
+    ///
+    /// `withAccess` is still handed the *full* grant list, but it only looks up the security scope
+    /// of a path `PathPolicy` has already allowed, so a larger list there cannot widen access.
+    static func rootURLs(
+        grants: [FolderGrant],
+        scope: FileScope,
+        container: URL = ModelStore.shared.baseDirectory
+    ) -> [URL] {
+        // Compare canonically: `scope.folders` holds whatever the conversation stored, which is
+        // not always byte-identical to the grant's path (a trailing "/" is the obvious case), and
+        // silently dropping the user's folder because of it would look like "access denied".
+        let allowed = Set(scope.folders.compactMap { Self.canonicalPath($0) })
+        return grants
+            .filter { grant in
+                guard let canonical = Self.canonicalPath(grant.path) else { return false }
+                return allowed.contains(canonical)
+            }
+            .map { URL(fileURLWithPath: $0.path, isDirectory: true) } + [container]
+    }
+
+    /// The path in the form `PathPolicy.isAllowed` compares in: standardized, with symlinks
+    /// resolved. `URL.path` already drops a trailing slash, even for a directory URL.
+    static func canonicalPath(_ path: String) -> String? {
+        guard !path.isEmpty else { return nil }
+        return URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
     /// The grant covering `path` (longest matching root wins, so a grant for a subfolder beats
     /// one for its parent). Pure, so it is unit-testable.
     static func grant(covering path: String, in grants: [FolderGrant]) -> FolderGrant? {
@@ -89,15 +122,33 @@ nonisolated enum FolderGrants {
     /// Run `body` while holding security-scoped access to the grant covering `url`. Paths under
     /// the app container need no scope and run directly. Returns the model-facing error string
     /// when no grant covers the path or the bookmark no longer resolves (folder moved/deleted).
+    ///
+    /// `roots`, when given, **is** the containment test: a path under one of them already carries
+    /// the caller's permission, so no grant lookup happens and the body reads it directly. `nil`
+    /// keeps the original behaviour — the container fast path, then the covering grant. A caller
+    /// whose scope is not the grant store (a narrowed `FileScope`) passes its own roots.
     static func withAccess(
         to url: URL,
         grants: [FolderGrant],
         container: URL = ModelStore.shared.baseDirectory,
+        roots: [URL]? = nil,
         body: (URL) throws -> String
     ) -> String {
         let target = url.standardizedFileURL.resolvingSymlinksInPath().path
         let containerPath = container.standardizedFileURL.resolvingSymlinksInPath().path
         do {
+            if let roots {
+                let permitted = roots.contains { root in
+                    let base = root.standardizedFileURL.resolvingSymlinksInPath().path
+                    return target == base || target.hasPrefix("\(base)/")
+                }
+                guard permitted else {
+                    return "Error: no granted folder covers \(url.path)."
+                }
+                // The caller's roots already authorized this path; `url` itself is the container
+                // copy, so there is no bookmark to resolve.
+                return try body(url)
+            }
             if target == containerPath || target.hasPrefix("\(containerPath)/") {
                 return try body(url)  // app container: no security scope needed
             }
@@ -123,6 +174,9 @@ nonisolated enum FolderGrants {
     }
 
     /// The hint appended to rejections so the model can tell the user how to widen access.
+    ///
+    /// SET-3 moved folder grants out of the chat's wrench menu into Settings → Tools, so the old
+    /// wording sent the model to a menu that no longer lists them (CW-1 D4).
     static let grantHint =
-        "The user can grant folder access from the tools (wrench) menu in the chat window."
+        "The user can grant folder access in Settings, Tools, or with the + button in the chat."
 }

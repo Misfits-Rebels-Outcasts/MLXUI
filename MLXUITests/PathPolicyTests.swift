@@ -154,4 +154,74 @@ struct PathPolicyTests {
             return
         }
     }
+
+    // MARK: resolve(base:) — CW-1 (C2). With `base == nil` the cases above are unchanged.
+
+    /// A relative path joins its base *before* the policy runs.
+    @Test func resolveJoinsRelativePathToBase() throws {
+        let s = try makeSandbox()
+        guard case .allowed(let url) = PathPolicy.resolve("notes.txt", roots: [s.root], base: s.root) else {
+            Issue.record("expected a relative path inside the base to resolve")
+            return
+        }
+        #expect(url.path == s.inside.path)
+    }
+
+    @Test func resolveRejectsRelativePathEscapingTheBase() throws {
+        let s = try makeSandbox()
+        guard case .rejected(let message) = PathPolicy.resolve(
+            "../outside/secret.txt", roots: [s.root], base: s.root)
+        else {
+            Issue.record("expected ../ to be refused")
+            return
+        }
+        #expect(message.contains("not permitted"))
+    }
+
+    /// The trap the backlog calls out: join first, *then* run the denylist. Checking the raw
+    /// string would let `.ssh/id_rsa` through as "a relative path".
+    @Test func resolveAppliesTheDenylistAfterJoiningTheBase() {
+        guard case .rejected(let message) = PathPolicy.resolve(
+            ".ssh/id_rsa", roots: [home], base: home)
+        else {
+            Issue.record("expected .ssh/id_rsa to be refused even with base = home")
+            return
+        }
+        #expect(message.contains("not permitted"))
+    }
+
+    @Test func resolveRejectsARelativeSymlinkEscapingTheBase() throws {
+        let s = try makeSandbox()
+        try FileManager.default.createSymbolicLink(
+            at: s.root.appendingPathComponent("innocent.txt"), withDestinationURL: s.secret)
+        guard case .rejected = PathPolicy.resolve(
+            "innocent.txt", roots: [s.root], base: s.root)
+        else {
+            Issue.record("expected the escaping symlink to be refused")
+            return
+        }
+    }
+
+    @Test func resolveStillExpandsTildeWithABase() {
+        guard case .allowed(let url) = PathPolicy.resolve(
+            "~/Documents/report.md", roots: [home], base: URL(fileURLWithPath: "/tmp"))
+        else {
+            Issue.record("expected ~ to expand from home, not from the base")
+            return
+        }
+        #expect(url.path == home.appendingPathComponent("Documents/report.md").path)
+    }
+
+    @Test func resolveStillRequiresAPathWithABase() {
+        #expect(PathPolicy.resolve(nil, roots: [home], base: home)
+            == .rejected("Error: 'path' is required."))
+        #expect(PathPolicy.resolve("", roots: [home], base: home)
+            == .rejected("Error: 'path' is required."))
+    }
+
+    /// Frozen behaviour: without a base, a relative path is rejected with today's exact message.
+    @Test func resolveRelativeWithoutBaseKeepsTodaysMessage() {
+        #expect(PathPolicy.resolve("notes.txt")
+            == .rejected("Error: 'path' must be absolute (got \"notes.txt\")."))
+    }
 }

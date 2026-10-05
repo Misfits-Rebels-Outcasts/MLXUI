@@ -295,6 +295,27 @@ final class ModelRunner {
         // Snapshot the enabled tools for this turn (Sendable to hand to the nonisolated session).
         let registry = ToolRegistry(availableTools.filter { enabledToolNames.contains($0.name) })
 
+        // CW-1: the folder scope and the environment block are rebuilt on *every* turn, so a
+        // revoke or a change of grants takes effect on the next message. App Store: every grant,
+        // as today, until CW-2 narrows this to the folders the conversation is attached to (G1).
+        #if DIRECT_BUILD
+        let edition = FileScope.Edition.direct
+        let grants: [FolderGrant] = []
+        let homePath: String? = FileManager.default.homeDirectoryForCurrentUser.path
+        #else
+        let edition = FileScope.Edition.appStore
+        let grants = FolderGrants.load()
+        let homePath: String? = nil
+        #endif
+        let fileScope = FileScope.interim(grants: grants, edition: edition)
+        let instructions = ChatEnvironment.instructions(
+            scope: fileScope,
+            edition: edition,
+            fileToolsEnabled: enabledToolNames,
+            writeEnabled: enabledToolNames.contains("write_file")
+                || enabledToolNames.contains("edit_file"),
+            homePath: homePath)
+
         currentTask = Task { [weak self] in
             guard let self else { return }
             do {
@@ -302,8 +323,10 @@ final class ModelRunner {
 
                 let session = AgentSession(
                     model: container,
+                    instructions: instructions,
                     history: history,
                     registry: registry,
+                    fileScope: fileScope,
                     // 512 was too tight once reasoning models entered the picture:
                     // Qwen3's <think> block alone can run 250–500 tokens, so the
                     // generation was being truncated *before* the tool call was

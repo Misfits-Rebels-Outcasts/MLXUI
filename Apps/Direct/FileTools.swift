@@ -17,6 +17,22 @@
 import Foundation
 import MLXLMCommon
 
+/// The base a relative path resolves against: the conversation's working folder, or `nil`.
+/// In Direct this is guidance and a sensible default, not a boundary — `run_shell` can reach
+/// anything, and the UI says so (G4).
+nonisolated func workingFolderBase() -> URL? {
+    guard let folder = FileScope.current?.workingFolder else { return nil }
+    return URL(fileURLWithPath: folder, isDirectory: true)
+}
+
+/// The roots a Direct file tool checks against: the policy's default home root, or the scope's
+/// working folder when the conversation has one, so a mounted volume or a folder outside home
+/// still works exactly as before when no scope is bound.
+nonisolated func fileToolRoots() -> [URL] {
+    guard let base = workingFolderBase() else { return PathPolicy.defaultRoots }
+    return PathPolicy.defaultRoots + [base]
+}
+
 // MARK: - Read
 
 nonisolated struct ReadFileTool: AgentTool {
@@ -29,11 +45,15 @@ nonisolated struct ReadFileTool: AgentTool {
         truncated at 256 KB.
         """
     var parameters: [ToolParameter] {
-        [.required("path", type: .string, description: "Absolute path to the file.")]
+        [
+            .required(
+                "path", type: .string,
+                description: "Path relative to the working folder, or absolute (or starting with ~).")
+        ]
     }
 
     func execute(arguments: [String: JSONValue]) async throws -> String {
-        switch PathPolicy.resolve(arguments.string("path")) {
+        switch PathPolicy.resolve(arguments.string("path"), roots: fileToolRoots(), base: workingFolderBase()) {
         case .rejected(let message):
             return message
         case .allowed(let url):
@@ -61,7 +81,9 @@ nonisolated struct WriteFileTool: AgentTool {
         """
     var parameters: [ToolParameter] {
         [
-            .required("path", type: .string, description: "Absolute path to write."),
+            .required(
+                "path", type: .string,
+                description: "Path relative to the working folder, or absolute (or starting with ~)."),
             .required("contents", type: .string, description: "Text to write."),
         ]
     }
@@ -71,7 +93,7 @@ nonisolated struct WriteFileTool: AgentTool {
         guard let contents = arguments.string("contents") else {
             return "Error: 'contents' is required."
         }
-        switch PathPolicy.resolve(arguments.string("path")) {
+        switch PathPolicy.resolve(arguments.string("path"), roots: fileToolRoots(), base: workingFolderBase()) {
         case .rejected(let message):
             return message
         case .allowed(let url):
@@ -107,7 +129,9 @@ nonisolated struct EditFileTool: AgentTool {
         """
     var parameters: [ToolParameter] {
         [
-            .required("path", type: .string, description: "Absolute path to the file to edit."),
+            .required(
+                "path", type: .string,
+                description: "Path relative to the working folder, or absolute (or starting with ~)."),
             .required(
                 "old_string", type: .string,
                 description: "Exact text to replace, copied from read_file."),
@@ -128,7 +152,7 @@ nonisolated struct EditFileTool: AgentTool {
         guard let new = arguments.string("new_string") else {
             return "Error: 'new_string' is required."
         }
-        switch PathPolicy.resolve(arguments.string("path")) {
+        switch PathPolicy.resolve(arguments.string("path"), roots: fileToolRoots(), base: workingFolderBase()) {
         case .rejected(let message):
             return message
         case .allowed(let url):
@@ -150,32 +174,48 @@ nonisolated struct ListDirectoryTool: AgentTool {
     let name = "list_directory"
     let toolDescription = "List the files and folders in a directory on the user's Mac."
     var parameters: [ToolParameter] {
-        [.required("path", type: .string, description: "Absolute path to the directory.")]
+        [
+            .optional(
+                "path", type: .string,
+                description: "Optional — omit for the working folder. "
+                    + "Path relative to the working folder, or absolute (or starting with ~).")
+        ]
     }
 
     func execute(arguments: [String: JSONValue]) async throws -> String {
-        switch PathPolicy.resolve(arguments.string("path")) {
+        // `path` is optional (CW-1 D4): without it, list the conversation's working folder — or
+        // explain how to get one. In Direct the working folder is guidance, not a boundary.
+        let argument = arguments.string("path")
+        if argument?.isEmpty ?? true {
+            guard let base = workingFolderBase() else { return FileScope.noFolderMessage }
+            return list(base, path: FileScope.current?.workingFolder ?? base.path)
+        }
+        switch PathPolicy.resolve(argument, roots: fileToolRoots(), base: workingFolderBase()) {
         case .rejected(let message):
             return message
         case .allowed(let url):
-            do {
-                let names = try FileManager.default.contentsOfDirectory(atPath: url.path).sorted()
-                guard !names.isEmpty else { return "(empty directory)" }
-                let shown = names.prefix(Self.maxEntries).map { name -> String in
-                    var isDirectory: ObjCBool = false
-                    _ = FileManager.default.fileExists(
-                        atPath: url.appendingPathComponent(name).path,
-                        isDirectory: &isDirectory
-                    )
-                    return isDirectory.boolValue ? "\(name)/" : name
-                }
-                let suffix = names.count > Self.maxEntries
-                    ? "\n… \(names.count - Self.maxEntries) more"
-                    : ""
-                return shown.joined(separator: "\n") + suffix
-            } catch {
-                return "Error listing \(url.path): \(error.localizedDescription)"
+            return list(url, path: url.path)
+        }
+    }
+
+    private func list(_ url: URL, path: String) -> String {
+        do {
+            let names = try FileManager.default.contentsOfDirectory(atPath: url.path).sorted()
+            guard !names.isEmpty else { return "(empty directory)" }
+            let shown = names.prefix(Self.maxEntries).map { name -> String in
+                var isDirectory: ObjCBool = false
+                _ = FileManager.default.fileExists(
+                    atPath: url.appendingPathComponent(name).path,
+                    isDirectory: &isDirectory
+                )
+                return isDirectory.boolValue ? "\(name)/" : name
             }
+            let suffix = names.count > Self.maxEntries
+                ? "\n… \(names.count - Self.maxEntries) more"
+                : ""
+            return shown.joined(separator: "\n") + suffix
+        } catch {
+            return "Error listing \(path): \(error.localizedDescription)"
         }
     }
 }

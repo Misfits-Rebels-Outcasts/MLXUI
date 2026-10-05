@@ -26,6 +26,9 @@ nonisolated final class AgentSession {
     private let instructions: String?
     private let history: [Chat.Message]
     private let registry: ToolRegistry
+    /// The conversation's folder scope, bound as a `@TaskLocal` for every dispatch (CW-1 C1).
+    /// `nil` — flows, the Local Server, tests — means the tools behave exactly as before.
+    private let fileScope: FileScope?
     private let parameters: GenerateParameters
     private let maxToolCalls: Int
     private let approve: @Sendable (ToolCall, any AgentTool) async -> Bool
@@ -35,6 +38,7 @@ nonisolated final class AgentSession {
     ///   - model: a loaded `ModelContainer` (caller loads via the existing LLM path).
     ///   - history: prior turns to rehydrate the chat with (persistent conversations).
     ///   - registry: tools available this session (empty → plain chat, no tools advertised).
+    ///   - fileScope: folders this conversation's file tools may use (CW-1). `nil` = no scope.
     ///   - maxToolCalls: cap on tool invocations per response (runaway-loop guard).
     ///   - approve: gate invoked for `requiresApproval` tools; return false to decline.
     ///   - onEvent: tool lifecycle callbacks for the chat UI / audit log.
@@ -43,6 +47,7 @@ nonisolated final class AgentSession {
         instructions: String? = nil,
         history: [Chat.Message] = [],
         registry: ToolRegistry = ToolRegistry(),
+        fileScope: FileScope? = nil,
         parameters: GenerateParameters = .init(),
         maxToolCalls: Int = 8,
         approve: @escaping @Sendable (ToolCall, any AgentTool) async -> Bool = { _, _ in true },
@@ -52,6 +57,7 @@ nonisolated final class AgentSession {
         self.instructions = instructions
         self.history = history
         self.registry = registry
+        self.fileScope = fileScope
         self.parameters = parameters
         self.maxToolCalls = maxToolCalls
         self.approve = approve
@@ -72,11 +78,18 @@ nonisolated final class AgentSession {
         let registry = registry
         let approve = approve
         let onEvent = onEvent
+        let fileScope = fileScope
         let budget = ToolBudget(limit: maxToolCalls)
 
+        // The scope is bound *inside* the dispatch closure, not around `streamResponse`:
+        // `ChatSession` may hop tasks to run the loop, and a `@TaskLocal` only flows down through
+        // structured concurrency. Bound here it reaches `tool.execute` on both the untimed path
+        // and the `withTimeout` task-group path (CW-1's propagation test is the guard).
         let dispatch: @Sendable (ToolCall) async throws -> String = { call in
-            let result = await AgentSession.dispatch(
-                call, registry: registry, budget: budget, approve: approve, onEvent: onEvent)
+            let result = await FileScope.$current.withValue(fileScope) {
+                await AgentSession.dispatch(
+                    call, registry: registry, budget: budget, approve: approve, onEvent: onEvent)
+            }
             return result.modelResult
         }
         // ChatSession's history initializer rehydrates prior turns for persistent

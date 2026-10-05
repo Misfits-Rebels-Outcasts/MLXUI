@@ -32,21 +32,93 @@ nonisolated enum ScopedFileTools {
     /// matching `DirectTools`.
     static let disabledByDefault: Set<String> = ["write_file", "edit_file"]
 
-    /// Shared front half of every tool: load grants, apply the path policy against them.
-    static func resolve(_ path: String?) -> (url: URL, grants: [FolderGrant])? {
+    /// CW-1 (D4) — the `path` description both editions now use, now that relative paths work.
+    /// One short line is all a 4-bit model reliably reads.
+    static let relativePathDescription =
+        "Path relative to the working folder, or absolute (or starting with ~)."
+
+    /// The base a relative path resolves against: the conversation's working folder, or `nil`.
+    static func workingFolderBase() -> URL? {
+        guard let folder = FileScope.current?.workingFolder else { return nil }
+        return URL(fileURLWithPath: folder, isDirectory: true)
+    }
+
+    /// An explicit scope for one tool call. Production passes nothing (`nil`) and the tool reads
+    /// the live grant store; a unit test passes temp roots so it never touches `~/Library`. A nil
+    /// `roots` means "use the container path alone" — the same rule `withAccess` applies.
+    struct ScopeSelection {
+        let container: URL
+        let roots: [URL]?
+    }
+
+    /// One resolved call: the path vetoed by the policy, the grants for the security scope, and
+    /// the roots both used.
+    struct Access {
+        let url: URL
+        let grants: [FolderGrant]
+        let roots: [URL]
+    }
+
+    /// The container and roots a tool call should use: the injected test scope, or the live
+    /// grant store through `FileScope.current`.
+    static func selection(_ injected: ScopeSelection?) -> ScopeSelection {
+        injected ?? ScopeSelection(
+            container: ModelStore.shared.baseDirectory,
+            roots: FileScope.roots(container: ModelStore.shared.baseDirectory))
+    }
+
+    /// Shared front half of every tool: find the conversation's scope, apply the path policy
+    /// against it — then hand the same roots to `withAccess` so the security-scope half cannot
+    /// disagree with the policy half. `container` and `roots` are injectable for tests.
+    ///
+    /// A missing `path` means the working folder, which is what `list_directory` /
+    /// `search_files` with no argument mean (D4).
+    static func access(
+        _ path: String?,
+        container: URL = ModelStore.shared.baseDirectory,
+        roots overrideRoots: [URL]? = nil
+    ) -> Access? {
+        let scope = FileScope.current
         let grants = FolderGrants.load()
-        switch PathPolicy.resolve(path, roots: FolderGrants.rootURLs(grants: grants)) {
-        case .allowed(let url): return (url, grants)
+        let roots = FileScope.roots(
+            grants: grants, scope: scope, container: container, overrides: overrideRoots)
+        let asked = (path?.isEmpty ?? true) ? workingFolderBase()?.path : path
+        switch PathPolicy.resolve(asked, roots: roots, base: workingFolderBase()) {
+        case .allowed(let url): return Access(url: url, grants: grants, roots: roots)
         case .rejected: return nil
         }
     }
 
-    /// The model-facing rejection for a path outside every grant.
-    static func rejection(for path: String?) -> String {
+    /// The model-facing rejection for a path the scope does not permit. Names only the folders in
+    /// scope — never a grant this conversation cannot use, and never one it is not attached to.
+    /// Resolution is repeated here rather than kept, so the message cannot drift from `access`.
+    static func rejection(
+        for path: String?,
+        container: URL = ModelStore.shared.baseDirectory,
+        roots overrideRoots: [URL]? = nil
+    ) -> String {
+        if let scope = FileScope.current {
+            let grants = FolderGrants.load()
+            let roots = FileScope.roots(
+                grants: grants, scope: scope, container: container, overrides: overrideRoots)
+            let base = workingFolderBase()
+            guard let asked = (path?.isEmpty ?? true) ? base?.path : path else {
+                return FileScope.noFolderMessage   // no path and no working folder to mean
+            }
+            guard case .rejected(let message) = PathPolicy.resolve(asked, roots: roots, base: base)
+            else {
+                return "Error: unexpected."        // callers only ask after `access` returned nil
+            }
+            guard !scope.folders.isEmpty else { return FileScope.noFolderMessage }
+            return "\(message) This chat can use: \(FileScope.folderList(scope.folders))."
+                + " The user can add a folder to this chat with the + button next to the message box."
+        }
         let grants = FolderGrants.load()
-        switch PathPolicy.resolve(path, roots: FolderGrants.rootURLs(grants: grants)) {
+        let roots = FileScope.roots(
+            grants: grants, scope: nil, container: container, overrides: overrideRoots)
+        switch PathPolicy.resolve(path, roots: roots) {
         case .allowed:
-            return "Error: unexpected."  // callers only ask after resolve() returned nil
+            return "Error: unexpected."            // callers only ask after `access` returned nil
         case .rejected(let message):
             return grants.isEmpty
                 ? "\(message) No folders are granted yet. \(FolderGrants.grantHint)"
@@ -58,6 +130,10 @@ nonisolated enum ScopedFileTools {
 // MARK: - Read
 
 nonisolated struct ScopedReadFileTool: AgentTool {
+    /// Test seam: when set, the policy and the security scope use these roots instead of the
+    /// live grant store. Production passes nothing.
+    var injected: ScopedFileTools.ScopeSelection?
+
     /// Matches the direct edition's cap: plenty for source files, short of a context blowout.
     static let maxBytes = 256 * 1024
 
@@ -68,16 +144,23 @@ nonisolated struct ScopedReadFileTool: AgentTool {
         """
     var parameters: [ToolParameter] {
         [
-            .required("path", type: .string, description: "Absolute path to the file.")
+            .required("path", type: .string, description: ScopedFileTools.relativePathDescription)
         ]
     }
 
     func execute(arguments: [String: JSONValue]) async throws -> String {
         let path = arguments.string("path")
-        guard let (url, grants) = ScopedFileTools.resolve(path) else {
-            return ScopedFileTools.rejection(for: path)
+        let selection = ScopedFileTools.selection(injected)
+        guard let access = ScopedFileTools.access(
+            path, container: selection.container, roots: selection.roots)
+        else {
+            return ScopedFileTools.rejection(
+                for: path, container: selection.container, roots: selection.roots)
         }
-        return FolderGrants.withAccess(to: url, grants: grants) { url in
+        return FolderGrants.withAccess(
+            to: access.url, grants: access.grants,
+            container: selection.container, roots: access.roots
+        ) { url in
             let data = try Data(contentsOf: url)
             let clipped = data.prefix(Self.maxBytes)
             guard let text = String(data: clipped, encoding: .utf8) else {
@@ -91,6 +174,10 @@ nonisolated struct ScopedReadFileTool: AgentTool {
 // MARK: - Write
 
 nonisolated struct ScopedWriteFileTool: AgentTool {
+    /// Test seam: when set, the policy and the security scope use these roots instead of the
+    /// live grant store. Production passes nothing.
+    var injected: ScopedFileTools.ScopeSelection?
+
     let name = "write_file"
     let toolDescription = """
         Write UTF-8 text to a file inside a folder the user has granted access to, creating or \
@@ -98,7 +185,7 @@ nonisolated struct ScopedWriteFileTool: AgentTool {
         """
     var parameters: [ToolParameter] {
         [
-            .required("path", type: .string, description: "Absolute path to write."),
+            .required("path", type: .string, description: ScopedFileTools.relativePathDescription),
             .required("contents", type: .string, description: "Text to write."),
         ]
     }
@@ -109,10 +196,17 @@ nonisolated struct ScopedWriteFileTool: AgentTool {
             return "Error: 'contents' is required."
         }
         let path = arguments.string("path")
-        guard let (url, grants) = ScopedFileTools.resolve(path) else {
-            return ScopedFileTools.rejection(for: path)
+        let selection = ScopedFileTools.selection(injected)
+        guard let access = ScopedFileTools.access(
+            path, container: selection.container, roots: selection.roots)
+        else {
+            return ScopedFileTools.rejection(
+                for: path, container: selection.container, roots: selection.roots)
         }
-        return FolderGrants.withAccess(to: url, grants: grants) { url in
+        return FolderGrants.withAccess(
+            to: access.url, grants: access.grants,
+            container: selection.container, roots: access.roots
+        ) { url in
             try FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(),
                 withIntermediateDirectories: true)
@@ -126,6 +220,10 @@ nonisolated struct ScopedWriteFileTool: AgentTool {
 // MARK: - Edit
 
 nonisolated struct ScopedEditFileTool: AgentTool {
+    /// Test seam: when set, the policy and the security scope use these roots instead of the
+    /// live grant store. Production passes nothing.
+    var injected: ScopedFileTools.ScopeSelection?
+
     let name = "edit_file"
     let toolDescription = """
         Replace exact text in an existing UTF-8 file inside a folder the user has granted \
@@ -135,7 +233,7 @@ nonisolated struct ScopedEditFileTool: AgentTool {
         """
     var parameters: [ToolParameter] {
         [
-            .required("path", type: .string, description: "Absolute path to the file to edit."),
+            .required("path", type: .string, description: ScopedFileTools.relativePathDescription),
             .required(
                 "old_string", type: .string,
                 description: "Exact text to replace, copied from read_file."),
@@ -157,10 +255,17 @@ nonisolated struct ScopedEditFileTool: AgentTool {
             return "Error: 'new_string' is required."
         }
         let path = arguments.string("path")
-        guard let (url, grants) = ScopedFileTools.resolve(path) else {
-            return ScopedFileTools.rejection(for: path)
+        let selection = ScopedFileTools.selection(injected)
+        guard let access = ScopedFileTools.access(
+            path, container: selection.container, roots: selection.roots)
+        else {
+            return ScopedFileTools.rejection(
+                for: path, container: selection.container, roots: selection.roots)
         }
-        return FolderGrants.withAccess(to: url, grants: grants) { url in
+        return FolderGrants.withAccess(
+            to: access.url, grants: access.grants,
+            container: selection.container, roots: access.roots
+        ) { url in
             TextEdit.editFile(
                 at: url,
                 old: old,
@@ -173,22 +278,36 @@ nonisolated struct ScopedEditFileTool: AgentTool {
 // MARK: - List
 
 nonisolated struct ScopedListDirectoryTool: AgentTool {
+    /// Test seam: when set, the policy and the security scope use these roots instead of the
+    /// live grant store. Production passes nothing.
+    var injected: ScopedFileTools.ScopeSelection?
+
     static let maxEntries = 200
 
     let name = "list_directory"
     let toolDescription = "List the files and folders in a directory the user has granted access to."
     var parameters: [ToolParameter] {
         [
-            .required("path", type: .string, description: "Absolute path to the directory.")
+            .optional(
+                "path", type: .string,
+                description: "Optional — omit for the working folder. "
+                    + ScopedFileTools.relativePathDescription)
         ]
     }
 
     func execute(arguments: [String: JSONValue]) async throws -> String {
         let path = arguments.string("path")
-        guard let (url, grants) = ScopedFileTools.resolve(path) else {
-            return ScopedFileTools.rejection(for: path)
+        let selection = ScopedFileTools.selection(injected)
+        guard let access = ScopedFileTools.access(
+            path, container: selection.container, roots: selection.roots)
+        else {
+            return ScopedFileTools.rejection(
+                for: path, container: selection.container, roots: selection.roots)
         }
-        return FolderGrants.withAccess(to: url, grants: grants) { url in
+        return FolderGrants.withAccess(
+            to: access.url, grants: access.grants,
+            container: selection.container, roots: access.roots
+        ) { url in
             let names = try FileManager.default.contentsOfDirectory(atPath: url.path).sorted()
             guard !names.isEmpty else { return "(empty directory)" }
             let shown = names.prefix(Self.maxEntries).map { name -> String in
@@ -209,6 +328,10 @@ nonisolated struct ScopedListDirectoryTool: AgentTool {
 // MARK: - Search
 
 nonisolated struct ScopedSearchFilesTool: AgentTool {
+    /// Test seam: when set, the policy and the security scope use these roots instead of the
+    /// live grant store. Production passes nothing.
+    var injected: ScopedFileTools.ScopeSelection?
+
     static let maxResults = 100
 
     let name = "search_files"
@@ -218,7 +341,10 @@ nonisolated struct ScopedSearchFilesTool: AgentTool {
         """
     var parameters: [ToolParameter] {
         [
-            .required("path", type: .string, description: "Absolute path of the directory to search."),
+            .optional(
+                "path", type: .string,
+                description: "Optional — omit for the working folder. "
+                    + ScopedFileTools.relativePathDescription),
             .required("query", type: .string, description: "Text the file name must contain."),
         ]
     }
@@ -227,10 +353,17 @@ nonisolated struct ScopedSearchFilesTool: AgentTool {
         let query = (arguments.string("query") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return "Error: 'query' is required." }
         let path = arguments.string("path")
-        guard let (url, grants) = ScopedFileTools.resolve(path) else {
-            return ScopedFileTools.rejection(for: path)
+        let selection = ScopedFileTools.selection(injected)
+        guard let access = ScopedFileTools.access(
+            path, container: selection.container, roots: selection.roots)
+        else {
+            return ScopedFileTools.rejection(
+                for: path, container: selection.container, roots: selection.roots)
         }
-        return FolderGrants.withAccess(to: url, grants: grants) { url in
+        return FolderGrants.withAccess(
+            to: access.url, grants: access.grants,
+            container: selection.container, roots: access.roots
+        ) { url in
             Self.format(matches: Self.search(root: url, query: query), query: query)
         }
     }
