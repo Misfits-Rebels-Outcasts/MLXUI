@@ -453,12 +453,19 @@ final class ModelRunner {
         let directory = ConversationStore.attachmentsDirectory(for: conversationID)
         var result: [ChatAttachment] = []
         var inlineBytes = 0
+        // R1 (CW-3-FIX-2): the seam only exists in DEBUG, so the reference must be inside an `#if`
+        // too — otherwise the Release configuration does not compile at all.
+        #if DEBUG
+        let ocrOverride = attachmentOCRForTesting
+        #else
+        let ocrOverride: (@Sendable (URL) async -> String?)? = nil
+        #endif
         for (index, url) in chosen.enumerated() {
             do {
                 let attachment = try await AttachmentImporter.importAttachment(
                     from: url, into: directory, ordinal: index, window: window,
                     inlineBytesSoFar: inlineBytes,
-                    ocr: Self.ocrForAttachment(override: attachmentOCRForTesting))
+                    ocr: Self.ocrForAttachment(override: ocrOverride))
                 inlineBytes += attachment.inlineText?.utf8.count ?? 0
                 result.append(attachment)
             } catch let failure as AttachmentImporter.Failure {
