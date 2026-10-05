@@ -42,11 +42,17 @@ struct TextEditTests {
         result.components(separatedBy: "\n").dropFirst().joined(separator: "\n")
     }
 
+    /// The path a success message reports: `editFile` resolves symlinks at the top (N1), and
+    /// the temp directory is reached through `/var` -> `/private/var` on macOS.
+    private func reportedPath(of url: URL) -> String {
+        url.resolvingSymlinksInPath().path
+    }
+
     // MARK: - Layer 1: pure replacement
 
     @Test func replaceEditsOneMatchAndReportsItsLine() {
         #expect(TextEdit.replace(in: "alpha\nbeta\ngamma\n", old: "beta", new: "BETA", replaceAll: false)
-            == .edited(newText: "alpha\nBETA\ngamma\n", lines: [2]))
+            == .edited(newText: "alpha\nBETA\ngamma\n", count: 1, lines: [2]))
     }
 
     @Test func replaceIsPureAndNonOverlapping() {
@@ -54,12 +60,12 @@ struct TextEditTests {
         let second = TextEdit.replace(in: "aaa", old: "aa", new: "b", replaceAll: true)
         // "aa" in "aaa" is ONE non-overlapping match, not two.
         #expect(first == second)
-        #expect(first == .edited(newText: "ba", lines: [1]))
+        #expect(first == .edited(newText: "ba", count: 1, lines: [1]))
     }
 
     @Test func replaceCountsEveryMatchWithLinesInTheOriginalText() {
         #expect(TextEdit.replace(in: "x\ny\nx\n", old: "x", new: "X", replaceAll: true)
-            == .edited(newText: "X\ny\nX\n", lines: [1, 3]))
+            == .edited(newText: "X\ny\nX\n", count: 2, lines: [1, 3]))
         #expect(TextEdit.replace(in: "same\nsame\nsame\n", old: "same", new: "SAME", replaceAll: false)
             == .ambiguous(count: 3, lines: [1, 2, 3]))
     }
@@ -86,7 +92,7 @@ struct TextEditTests {
             in: "    return 1\n",
             old: "  return 1",
             new: "  return 2",
-            replaceAll: false) == .edited(newText: "    return 2\n", lines: [1]))
+            replaceAll: false) == .edited(newText: "    return 2\n", count: 1, lines: [1]))
     }
 
     @Test func replaceRejectsDegenerateInput() {
@@ -115,11 +121,12 @@ struct TextEditTests {
             old: precomposed,
             new: decomposed,
             replaceAll: false)
-        guard case .edited(let newText, let lines) = outcome else {
+        guard case .edited(let newText, let count, let lines) = outcome else {
             Issue.record("expected an edit, got \(outcome)")
             return
         }
         #expect(Array(newText.utf8) == Array("\(decomposed)\n".utf8))
+        #expect(count == 1)
         #expect(lines == [1])
     }
 
@@ -134,7 +141,8 @@ struct TextEditTests {
         let result = TextEdit.editFile(at: file, old: "beta", new: "BETA", replaceAll: false)
         let after = try bytes(of: file)
 
-        #expect(result.hasPrefix("Edited \(file.path): replaced 1 occurrence (line 2)."))
+        #expect(result.hasPrefix(
+            "Edited \(reportedPath(of: file)): replaced 1 occurrence (line 2)."))
         #expect(after == Data("alpha\nBETA\ngamma\n".utf8))
     }
 
@@ -194,7 +202,8 @@ struct TextEditTests {
         let applied = TextEdit.editFile(at: file, old: "same", new: "SAME", replaceAll: true)
         let after = try bytes(of: file)
 
-        #expect(applied.hasPrefix("Edited \(file.path): replaced 3 occurrences (lines 1, 2, 3)."))
+        #expect(applied.hasPrefix(
+            "Edited \(reportedPath(of: file)): replaced 3 occurrences (lines 1, 2, 3)."))
         #expect(after == Data("SAME\nSAME\nSAME\n".utf8))
     }
 
@@ -360,5 +369,91 @@ struct TextEditTests {
         #expect(block.utf8.count <= TextEdit.maxSnippetBytes)
         #expect(block.contains("snippet clipped"))
         #expect(block.contains("HEAD"))
+    }
+
+    // MARK: - EF-A fixes (F1, F2, N1, N2)
+
+    @Test func replaceAllOnALargeFileFinishesWellUnderTwoSeconds() throws {
+        let directory = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("large.txt")
+        let lineCount = 450_000                        // "x\n" x 450_000 = 900 KB
+        try write(String(repeating: "x\n", count: lineCount), to: file)
+
+        let start = ContinuousClock.now
+        let result = TextEdit.editFile(at: file, old: "x", new: "y", replaceAll: true)
+        let elapsed = ContinuousClock.now - start
+        print("EF-A F1: 900 KB replace_all took \(elapsed)")
+
+        #expect(elapsed < .seconds(2))
+        #expect(result.contains("replaced \(lineCount) occurrences"))
+        let after = try bytes(of: file)
+        #expect(after.count == lineCount * 2)
+        #expect(Array(after.prefix(4)) == Array("y\ny\n".utf8))
+    }
+
+    @Test func mixedLineEndingsTakeTheExactLfTextAsSent() throws {
+        let directory = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("mixed.txt")
+        try write("a\r\nb\nc\n", to: file)
+
+        let result = TextEdit.editFile(at: file, old: "b\nc", new: "B\nC", replaceAll: false)
+        let after = try bytes(of: file)
+
+        #expect(result.contains("replaced 1 occurrence (line 2)"))
+        #expect(after == Data("a\r\nB\nC\n".utf8))
+    }
+
+    @Test func mixedLineEndingsUseTheCrlfFallbackOnlyWhenTheExactTextIsAbsent() throws {
+        let directory = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("mixed.txt")
+        // "b\nc" is not in this file; "b\r\nc" is, so only the CRLF fallback can match.
+        try write("a\r\nb\r\nc\n", to: file)
+
+        let result = TextEdit.editFile(at: file, old: "b\nc", new: "B\nC", replaceAll: false)
+        let after = try bytes(of: file)
+
+        #expect(result.contains("replaced 1 occurrence (line 2)"))
+        #expect(after == Data("a\r\nB\r\nC\n".utf8))
+    }
+
+    @Test func editingThroughASymlinkChangesTheTargetAndKeepsTheLink() throws {
+        let directory = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let target = directory.appendingPathComponent("target.txt")
+        let link = directory.appendingPathComponent("link.txt")
+        try write("alpha\nbeta\n", to: target)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+        let result = TextEdit.editFile(at: link, old: "beta", new: "BETA", replaceAll: false)
+
+        #expect(result.contains("replaced 1 occurrence (line 2)"))
+        let targetAfter = try bytes(of: target)
+        #expect(targetAfter == Data("alpha\nBETA\n".utf8))
+        // The link survived the atomic write and still points at the target.
+        let type = try FileManager.default.attributesOfItem(atPath: link.path)[.type]
+            as? FileAttributeType
+        #expect(type == .typeSymbolicLink)
+        let destination = try FileManager.default.destinationOfSymbolicLink(atPath: link.path)
+        #expect(destination == target.path)
+    }
+
+    @Test func indentHintDropsATrailingNewlineFromOldString() throws {
+        let directory = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("code.swift")
+        try write("func a() {\n\treturn 1\n}\n", to: file)
+        let before = try bytes(of: file)
+
+        // A tab indents line 2 and `old_string` ends with its newline, as models often send.
+        let result = TextEdit.editFile(
+            at: file, old: "    return 1\n", new: "    return 2\n", replaceAll: false)
+        let after = try bytes(of: file)
+
+        #expect(result.hasPrefix("Error:"))
+        #expect(result.contains("A match ignoring indentation exists at line 2"))
+        #expect(after == before)
     }
 }

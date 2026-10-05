@@ -41,17 +41,20 @@ nonisolated enum TextEdit {
     /// back into the model's context, so the list is summarised rather than clipped.
     static let maxReportedLines = 10
 
-    /// Layer-1 result. `lines` is 1-based and refers to the **original** text, so the
-    /// caller can report where the change landed without re-scanning.
+    /// How many match lines the D4 "matches N places" error names: the first five.
+    static let maxAmbiguousLines = 5
+
+    /// Layer-1 result. `lines` is 1-based and refers to the **original** text. `lines` holds
+    /// at most `maxReportedLines` entries — the first replacements, which is all the D8
+    /// sentence prints — while `count` is the true number of replacements (EF-A F1).
     enum Outcome: Equatable, Sendable {
-        /// `newText` is the whole text after the change; `lines` holds one entry per
-        /// replacement (ascending).
-        case edited(newText: String, lines: [Int])
+        /// `newText` is the whole text after the change.
+        case edited(newText: String, count: Int, lines: [Int])
         /// Nothing matched. When a whitespace-tolerant comparison would have matched,
         /// this is the 1-based line where it starts (D3).
         case notFound(indentTolerantLine: Int?)
         /// More than one match and `replace_all` was false. `lines` holds the first five
-        /// match lines (D4).
+        /// match lines (D4), `count` the true total.
         case ambiguous(count: Int, lines: [Int])
         /// Degenerate input the caller can never apply (D5). The string is model-facing.
         case invalid(String)
@@ -95,7 +98,7 @@ nonisolated enum TextEdit {
         guard offsets.count == 1 || replaceAll else {
             return .ambiguous(
                 count: offsets.count,
-                lines: offsets.prefix(5).map { lineNumber(at: $0, in: textBytes) })
+                lines: lineNumbers(for: offsets.prefix(maxAmbiguousLines), in: textBytes))
         }
 
         let chosen = replaceAll ? offsets : [offsets[0]]
@@ -110,7 +113,8 @@ nonisolated enum TextEdit {
         output.append(contentsOf: textBytes[cursor...])
         return .edited(
             newText: String(decoding: output, as: UTF8.self),
-            lines: chosen.map { lineNumber(at: $0, in: textBytes) })
+            count: offsets.count,
+            lines: lineNumbers(for: offsets.prefix(maxReportedLines), in: textBytes))
     }
 
     // MARK: - Layer 2: file round-trip
@@ -118,7 +122,13 @@ nonisolated enum TextEdit {
     /// Edit the UTF-8 file at `url`. Returns the model-facing result: the D8 success
     /// sentence plus a numbered context snippet, or an `"Error: …"` sentence. Never
     /// throws and never modifies the file on a non-`.edited` outcome.
+    ///
+    /// A symbolic link is followed once, at the top: the **target** is the file that gets
+    /// edited and the link stays a link (N1). `PathPolicy`/`FolderGrants` have already
+    /// resolved the same link before allowing the path, so this changes no policy.
     static func editFile(at url: URL, old: String, new: String, replaceAll: Bool) -> String {
+        let url = url.resolvingSymlinksInPath()
+
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
             return "Error: \(url.path) does not exist. Use write_file to create it."
@@ -151,18 +161,23 @@ nonisolated enum TextEdit {
             return "Error: \(url.lastPathComponent) is not UTF-8 text (\(data.count) bytes)."
         }
 
-        // D6: adapt LF-only edits to a CRLF file. Detect the ending from the file, never
-        // from `old`, and leave a string that already carries a CR alone so we can never
-        // produce "\r\r\n". A file with mixed endings is not adapted at all.
-        var searchOld = old
-        var replacement = new
-        if text.contains("\r\n") {
-            if !old.contains("\r") { searchOld = old.replacingOccurrences(of: "\n", with: "\r\n") }
-            if !new.contains("\r") { replacement = new.replacingOccurrences(of: "\n", with: "\r\n") }
+        // D6: the text the model sent wins, exactly as sent. Only when that matches nothing,
+        // the file contains a CRLF pair and `old` carries no CR of its own do we retry with
+        // both strings adapted to CRLF. So a file with mixed endings still takes an exact LF
+        // match, and a pure-CRLF file still takes LF-only input (F2).
+        var outcome = replace(in: text, old: old, new: new, replaceAll: replaceAll)
+        if case .notFound = outcome, text.contains("\r\n"), !old.contains("\r") {
+            // A `new` that already carries a CR is left alone, so the fallback can never
+            // write "\r\r\n".
+            let adaptedOld = old.replacingOccurrences(of: "\n", with: "\r\n")
+            let adaptedNew = new.contains("\r")
+                ? new
+                : new.replacingOccurrences(of: "\n", with: "\r\n")
+            outcome = replace(in: text, old: adaptedOld, new: adaptedNew, replaceAll: replaceAll)
         }
 
-        switch replace(in: text, old: searchOld, new: replacement, replaceAll: replaceAll) {
-        case .edited(let newText, let lines):
+        switch outcome {
+        case .edited(let newText, let count, let lines):
             var output = Data()
             if hasBOM { output.append(contentsOf: bom) }
             output.append(Data(newText.utf8))
@@ -177,7 +192,7 @@ nonisolated enum TextEdit {
                     [.posixPermissions: permissions],
                     ofItemAtPath: url.path)
             }
-            return resultText(for: newText, lines: lines, path: url.path)
+            return resultText(for: newText, count: count, lines: lines, path: url.path)
 
         case .notFound(let indentTolerantLine):
             if let indentTolerantLine {
@@ -207,8 +222,11 @@ nonisolated enum TextEdit {
             value.components(separatedBy: "\n")
                 .map { Array($0.trimmingCharacters(in: .whitespacesAndNewlines).utf8) }
         }
-        let oldLines = trimmedLines(of: old)
-        guard oldLines.contains(where: { !$0.isEmpty }) else { return nil }
+        // N2: models often end `old_string` with the line's newline. A trailing empty line is
+        // not something the file has to contain, so it is dropped before matching.
+        var oldLines = trimmedLines(of: old)
+        while oldLines.last?.isEmpty == true { oldLines.removeLast() }
+        guard !oldLines.isEmpty else { return nil }
         let fileLines = trimmedLines(of: text)
         guard fileLines.count >= oldLines.count else { return nil }
         for start in 0...(fileLines.count - oldLines.count) {
@@ -217,28 +235,40 @@ nonisolated enum TextEdit {
         return nil
     }
 
-    /// 1-based line of the byte at `offset`, counting LF bytes in the same view we
-    /// searched (`\r\n` therefore counts once, which the `Character` view would not).
-    private static func lineNumber(at offset: Int, in bytes: [UInt8]) -> Int {
+    /// 1-based lines for `offsets` (ascending, inside `bytes`) in ONE forward pass: the cursor
+    /// only moves forward, so the call is O(bytes + offsets) however many offsets there are.
+    /// Callers pass just the offsets they report; the old per-offset rescan from byte 0 made
+    /// `replace_all` quadratic (EF-A F1). LF bytes are counted in the same view that was
+    /// searched, so a `\r\n` pair counts once (the `Character` view would not).
+    private static func lineNumbers<S: Sequence>(for offsets: S, in bytes: [UInt8]) -> [Int]
+    where S.Element == Int {
+        var lines: [Int] = []
         var line = 1
-        for index in 0..<offset where bytes[index] == 0x0A { line += 1 }
-        return line
+        var cursor = 0
+        for offset in offsets {
+            while cursor < offset {
+                if bytes[cursor] == 0x0A { line += 1 }
+                cursor += 1
+            }
+            lines.append(line)
+        }
+        return lines
     }
 
     /// D8: the success sentence, then the numbered lines around the first edit as they
-    /// read *after* the change.
-    private static func resultText(for text: String, lines: [Int], path: String) -> String {
+    /// read *after* the change. The sentence's count is the true replacement count; `lines`
+    /// only carries the first `maxReportedLines` of them.
+    private static func resultText(for text: String, count: Int, lines: [Int], path: String) -> String {
         let header: String
-        if lines.count == 1 {
-            header = "Edited \(path): replaced 1 occurrence (line \(lines[0]))."
-        } else if lines.count <= maxReportedLines {
+        if count == 1 {
+            header = "Edited \(path): replaced 1 occurrence (line \(lines.first ?? 1))."
+        } else if count <= maxReportedLines {
             let list = lines.map(String.init).joined(separator: ", ")
-            header = "Edited \(path): replaced \(lines.count) occurrences (lines \(list))."
+            header = "Edited \(path): replaced \(count) occurrences (lines \(list))."
         } else {
-            let list = lines.prefix(maxReportedLines).map(String.init).joined(separator: ", ")
-            let more = lines.count - maxReportedLines
-            header = "Edited \(path): replaced \(lines.count) occurrences (lines \(list); "
-                + "\(more) more)."
+            let list = lines.map(String.init).joined(separator: ", ")
+            header = "Edited \(path): replaced \(count) occurrences (lines \(list); "
+                + "\(count - maxReportedLines) more)."
         }
         return header + "\n" + snippet(of: text, around: lines.first ?? 1)
     }
