@@ -115,7 +115,7 @@ nonisolated enum ConversationExporter {
                     // CW-3: attachments by name + mode, so an exported transcript says what the
                     // model was actually given (the contents are in the bubble's text for inline).
                     for attachment in message.attachments {
-                        blocks.append("📎 \(attachment.name) (\(attachment.mode.rawValue))")
+                        blocks.append("📎 \(attachment.name) (\(attachment.badgeLabel))")
                     }
                     assistantHeadingOpen = false
 

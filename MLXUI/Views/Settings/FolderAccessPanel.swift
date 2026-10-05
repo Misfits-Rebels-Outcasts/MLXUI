@@ -34,10 +34,10 @@ enum FolderAccessPanel {
         runner.grantFolderAccess(to: url)
     }
     #else
-    /// Direct's counterpart (CW-2). Kept so the chat's "+" menu is one call site in both editions;
-    /// with no bookmarks, choosing a folder is all there is to do.
+    /// Direct's counterpart (CW-2). Named for what it does — there is nothing to grant without a
+    /// sandbox, so it **attaches**; one name with two meanings is how D4 happened (B6).
     @MainActor
-    static func presentAndGrant(using runner: ModelRunner) {
+    static func presentAndAttach(using runner: ModelRunner) {
         guard let url = presentPicker(
             message: "Choose a folder this chat may use.",
             prompt: "Use Folder")

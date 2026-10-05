@@ -47,6 +47,31 @@ struct ChatAttachmentTests {
         #expect(ChatAttachment.mode(byteCount: 9_000, window: 2_000, inlineBytesSoFar: 0) == .reference)
     }
 
+    // MARK: - the absolute caps (B2)
+
+    /// The reviewer's own correction: a 262 144-token window would otherwise inline ~256 KB.
+    @Test func a60KbFileGoesByReferenceEvenWithA262144Window() {
+        #expect(ChatAttachment.maxInlineBytesPerFile == 48 * 1024)
+        #expect(ChatAttachment.mode(byteCount: 60 * 1024, window: 262_144, inlineBytesSoFar: 0)
+            == .reference)
+    }
+
+    /// …while a window whose own share is already the smaller number still inlines.
+    @Test func a30KbFileIsInlinedWithA40960Window() {
+        #expect(ChatAttachment.maxInlineBytesPerMessage == 96 * 1024)
+        #expect(ChatAttachment.mode(byteCount: 30 * 1024, window: 40_960, inlineBytesSoFar: 0)
+            == .inline)
+    }
+
+    /// The per-message cap binds before the window's own share would.
+    @Test func thePerMessageCapStopsTheSecondBigFile() {
+        // 40 KB each: each is under the 48 KB per-file cap, but two exceed the 96 KB message cap.
+        #expect(ChatAttachment.mode(byteCount: 40 * 1024, window: 262_144, inlineBytesSoFar: 0)
+            == .inline)
+        #expect(ChatAttachment.mode(byteCount: 40 * 1024, window: 262_144, inlineBytesSoFar: 60 * 1024)
+            == .reference)
+    }
+
     @Test func limitsAreTheContract() {
         #expect(ChatAttachment.maxFileBytes == 50 * 1024 * 1024)
         #expect(ChatAttachment.maxFilesPerMessage == 10)
@@ -100,6 +125,49 @@ struct ChatAttachmentTests {
         #expect(note?.contains("small.csv") == false)
         #expect(note?.contains("shot.png") == false)
         #expect(note?.contains("read it with read_file") == true)
+    }
+
+    /// B3: an image with no OCR model must not be described as readable — `read_file` on a PNG
+    /// only ever answers "not UTF-8 text".
+    @Test func aReferenceImageGetsTheNoOCRNote() {
+        let note = ChatAttachment.environmentNote(for: [
+            attachment("shot.png", mode: .reference, text: nil),
+        ])
+        #expect(note == "Attached image shot.png could not be read: no OCR model is installed."
+            + " Tell the user to install one from Browse.")
+        #expect(note?.contains("read_file") == false)
+    }
+
+    @Test func aReferenceDocumentStillSaysToReadIt() {
+        let note = ChatAttachment.environmentNote(for: [
+            attachment("big.txt", mode: .reference, text: nil),
+        ])
+        #expect(note?.contains("read it with read_file") == true)
+        #expect(note?.contains("could not be read") == false)
+    }
+
+    /// The chip badge: a reference image that failed OCR reads "no OCR", not "reference".
+    @Test func aReferenceImageBadgesAsNoOCR() {
+        #expect(attachment("shot.png", mode: .reference, text: nil).badgeLabel == "no OCR")
+        #expect(attachment("shot.png", mode: .reference, text: nil).isUnreadImage)
+        #expect(attachment("big.txt", mode: .reference, text: nil).badgeLabel == "reference")
+        #expect(!attachment("big.txt", mode: .reference, text: nil).isUnreadImage)
+        #expect(attachment("shot.png", mode: .ocr, text: "x").badgeLabel == "ocr")
+        #expect(!attachment("shot.png", mode: .ocr, text: "x").isUnreadImage)
+    }
+
+    /// B6: a quote in the file name must not close the tag early.
+    @Test func aQuoteInTheNameIsEscaped() {
+        let rendered = ChatAttachment.modelFacing(
+            text: "see this", attachments: [attachment("a\"b.txt")])
+        #expect(rendered.contains("<attachment name=\"a&quot;b.txt\">"))
+        #expect(!rendered.contains("name=\"a\"b.txt\""))
+    }
+
+    @Test func anAmpersandInTheNameIsEscapedFirst() {
+        #expect(ChatAttachment.escapedAttribute("a&b") == "a&amp;b")
+        #expect(ChatAttachment.escapedAttribute("a\"b") == "a&quot;b")
+        #expect(ChatAttachment.escapedAttribute("&\"") == "&amp;&quot;")
     }
 
     @Test func environmentNoteIsNilWithNothingByReference() {

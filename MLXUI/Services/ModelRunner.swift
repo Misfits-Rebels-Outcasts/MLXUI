@@ -108,6 +108,31 @@ final class ModelRunner {
 
     private var currentTask: Task<Void, Never>?
 
+    /// Bumped by every `send` and by `stop()`. A turn captures it before its attachment import and
+    /// re-checks it after, so a `stop()` during the import invalidates the turn even though there
+    /// is no `currentTask` to cancel yet (CW-3-FIX-1 B1).
+    private var turnGeneration = 0
+
+    #if DEBUG
+    /// Test seam only (CW-3-FIX-1 B1). Replaces the OCR step of the attachment import, which is the
+    /// one part of `send` that can take seconds with no model loaded. `nil` in the app.
+    @ObservationIgnored var attachmentOCRForTesting: (@Sendable (URL) async -> String?)?
+
+    /// Test seam only. Runs inside `send`, right after the import and the transcript append, before
+    /// the weights are touched — so a test can observe the runner mid-turn (busy, generation
+    /// claimed, message appended) and then fail the turn on purpose rather than loading a model.
+    /// `nil` in the app, which is the only thing that makes the `try` below a no-op.
+    @ObservationIgnored var afterImportForTesting: (@Sendable () async throws -> Void)?
+
+    /// Test seam only. Where `send` looks for a model's files; the app always uses `ModelStore`.
+    @ObservationIgnored var modelDirectoryForTesting: (@Sendable (String) -> URL)?
+
+    /// Test seam only. Lets `send`'s turn end on purpose (a throw) instead of loading weights —
+    /// that is what makes a B1 test able to run the *whole* turn, past the append and the save,
+    /// with no model. `nil` in the app.
+    @ObservationIgnored var containerForTesting: (@Sendable () async throws -> ModelContainer)?
+    #endif
+
     /// S1-1: loaded weights live in the shared `ModelContainerPool` (chat, flow rows and the
     /// Local Server share one owner), so repeated sends — and a flow row using the same model —
     /// don't reload.
@@ -294,6 +319,10 @@ final class ModelRunner {
         #if !DIRECT_BUILD
         if FolderGrants.grant(covering: path, in: FolderGrants.load()) == nil {
             grantFolderAccess(to: url)
+            // B5: if the grant did not take (the panel's bookmark could not be created, say),
+            // attaching would put a chip on a folder every tool then filters out. Refuse instead;
+            // `grantFolderAccess` has already set `errorMessage`.
+            guard FolderGrants.grant(covering: path, in: FolderGrants.load()) != nil else { return }
         }
         #endif
         if !conversations[index].attachedFolders.contains(path) {
@@ -397,6 +426,15 @@ final class ModelRunner {
         }
     }
 
+    /// The OCR step for one attachment copy: the test override when there is one, else the real
+    /// `OCRImageTool` entry point.
+    private static func ocrForAttachment(
+        override: (@Sendable (URL) async -> String?)?
+    ) -> @Sendable (URL) async -> String? {
+        if let override { return override }
+        return { stored in await OCRImageTool.recognizeText(in: stored) }
+    }
+
     /// Import the files this message carries (CW-3): copy into the conversation's attachments
     /// folder, extract text, apply the C11 budget. Returns those that made it — a refusal is
     /// reported and skipped, never a reason to lose the message. `async` because the image branch
@@ -407,8 +445,8 @@ final class ModelRunner {
         guard !urls.isEmpty else { return [] }
         var chosen = urls
         if chosen.count > ChatAttachment.maxFilesPerMessage {
-            errorMessage = AttachmentImporter.Failure.tooMany(
-                ChatAttachment.maxFilesPerMessage).message
+            errorMessage = "Only the first \(ChatAttachment.maxFilesPerMessage) files were"
+                + " attached; the rest were left out."
             chosen = Array(chosen.prefix(ChatAttachment.maxFilesPerMessage))
         }
         let window = ContextWindow.tokens(for: model, modelDirectory: modelDirectory)
@@ -420,7 +458,7 @@ final class ModelRunner {
                 let attachment = try await AttachmentImporter.importAttachment(
                     from: url, into: directory, ordinal: index, window: window,
                     inlineBytesSoFar: inlineBytes,
-                    ocr: { stored in await OCRImageTool.recognizeText(in: stored) })
+                    ocr: Self.ocrForAttachment(override: attachmentOCRForTesting))
                 inlineBytes += attachment.inlineText?.utf8.count ?? 0
                 result.append(attachment)
             } catch let failure as AttachmentImporter.Failure {
@@ -438,7 +476,12 @@ final class ModelRunner {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isRunning else { return }
 
+        #if DEBUG
+        let modelDir = modelDirectoryForTesting?(model.id)
+            ?? ModelStore.shared.directory(forModelID: model.id)
+        #else
         let modelDir = ModelStore.shared.directory(forModelID: model.id)
+        #endif
 
         guard FileManager.default.fileExists(atPath: modelDir.path) else {
             errorMessage = "Model files not found. Please reinstall."
@@ -457,18 +500,38 @@ final class ModelRunner {
            conversations[index].items.isEmpty, conversations[index].title == Conversation.untitled {
             conversations[index].title = Conversation.title(forFirstPrompt: trimmed)
         }
+
+        // B1: the turn is claimed **before** the import. `isRunning` is what the composer and the
+        // Send button read, so a second send during a slow OCR import is a no-op rather than a
+        // second turn against one model; the existing spinner covers the import.
+        isRunning = true
+        turnGeneration += 1
+        let generation = turnGeneration
         let turnConversationID = activeConversationID
 
-        // CW-3: copy + extract the attachments **before** the transcript append, so the bubble and
-        // the persisted turn both carry the final result. A file that cannot be attached reports
-        // and drops out; the message still sends.
+        // CW-3: copy + extract the attachments before the append, so the bubble and the persisted
+        // turn both carry the final result. A file that cannot be attached reports and drops out;
+        // the message still sends.
         var readyAttachments: [ChatAttachment] = []
-        if !attachments.isEmpty, let conversationID = activeConversationID {
+        if !attachments.isEmpty, let conversationID = turnConversationID {
             readyAttachments = await prepareAttachments(
                 attachments, for: model, in: modelDir, of: conversationID)
         }
+
+        // B1: the import can take seconds, so re-check what it was started for. A `stop()` bumps
+        // the generation and a conversation switch moves `activeConversationID`.
+        #if DEBUG
+        // B1's test seam sits **before** the append: a test can move the conversation or stop the
+        // runner while the turn is parked, which is exactly the window the fix is about. Without
+        // the seam this is a no-op and the re-check below runs immediately after the import.
+        if let hook = afterImportForTesting { try? await hook() }
+        #endif
+        guard generation == turnGeneration,
+              activeConversationID == turnConversationID,
+              isRunning
+        else { return }
+
         transcript.addUserMessage(trimmed, attachments: readyAttachments)
-        isRunning = true
 
         // Snapshot the enabled tools for this turn (Sendable to hand to the nonisolated session).
         let registry = ToolRegistry(availableTools.filter { enabledToolNames.contains($0.name) })
@@ -565,6 +628,9 @@ final class ModelRunner {
     }
 
     func stop() {
+        // B1: bump before anything else, so an in-flight attachment import (which has no
+        // `currentTask` yet) is invalidated too.
+        turnGeneration += 1
         currentTask?.cancel()
         currentTask = nil
         isRunning = false
@@ -697,7 +763,10 @@ final class ModelRunner {
 
     /// The container for `model`, from the shared pool (which also wires the tool-call format).
     func containerForModel(_ model: ModelEntry, dir: URL) async throws -> ModelContainer {
-        try await pool.container(for: model, directory: dir)
+        #if DEBUG
+        if let injected = containerForTesting { return try await injected() }
+        #endif
+        return try await pool.container(for: model, directory: dir)
     }
 
     private func showUnsupported(_ type: String, _ model: ModelEntry) {

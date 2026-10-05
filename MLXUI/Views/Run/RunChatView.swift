@@ -328,7 +328,7 @@ struct RunChatView: View {
                     Text(attachment.name)
                         .font(.caption2)
                         .lineLimit(1)
-                    Text(attachment.mode.label)
+                    Text(attachment.badgeLabel)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -640,7 +640,11 @@ struct RunChatView: View {
                 pickFiles()
             }
             Button("Add folder…") {
+                #if DIRECT_BUILD
+                FolderAccessPanel.presentAndAttach(using: runner)
+                #else
                 FolderAccessPanel.presentAndGrant(using: runner)
+                #endif
             }
             Divider()
             #if DIRECT_BUILD

@@ -22,8 +22,9 @@ func makeEntry(
     // Defaults to the shared fixture repo so existing callers keep their "two cards, one
     // repo" behaviour; MoC-5-FIX tests pass a distinct value to exercise repo-keyed paths.
     hfModelId: String = "mlx-community/Test-4bit",
-    // CW-3 needs the catalog's context window set and unset; every existing caller keeps `nil`.
-    contextWindow: Int? = nil
+    // Restored to the pre-CW-3 default (CW-3-FIX-1 B4): every existing caller relies on 4096.
+    // CW-3's fallback tests pass `nil` explicitly.
+    contextWindow: Int? = 4096
 ) -> ModelEntry {
     ModelEntry(
         id: id,

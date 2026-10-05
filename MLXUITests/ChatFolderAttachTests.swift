@@ -9,12 +9,176 @@ import Testing
 @MainActor
 struct ChatFolderAttachTests {
 
+    private let entry = makeEntry(id: "model-a", displayName: "Test Model")
+
     private func makeRunner() -> (ModelRunner, URL) {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("chat-folders-\(UUID().uuidString)")
         let runner = ModelRunner()
-        runner.prepare(for: makeEntry(id: "model-a", displayName: "Test Model"), in: directory)
+        runner.prepare(for: entry, in: directory)
         return (runner, directory)
+    }
+
+    /// A temp folder to hold the "attached" files themselves (not the conversation store).
+    private func makeWork() throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("chat-work-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    // MARK: - B1: one turn at a time, across the attachment import
+
+    /// A model directory that exists, so `send` gets past its "files not found" guard without
+    /// weights. The turn is then ended by `afterImportForTesting`, so nothing ever loads.
+    private func makeModelDirectory() throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("chat-model-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    private func imageFile(in directory: URL, named name: String) throws -> URL {
+        let url = directory.appendingPathComponent(name)
+        try Data([0x89, 0x50, 0x4E, 0x47]).write(to: url)
+        return url
+    }
+
+    /// A one-shot async gate: `wait` suspends until `raise` runs, and stays raised after that.
+    private actor Signal {
+        private var raised = false
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+
+        func raise() {
+            raised = true
+            let pending = waiters
+            waiters = []
+            for continuation in pending { continuation.resume() }
+        }
+
+        func wait() async {
+            if raised { return }
+            await withCheckedContinuation { continuation in
+                waiters.append(continuation)
+            }
+        }
+    }
+
+    /// Every user message in every **conversation**. B1 is about what lands in a chat, and the
+    /// live transcript is allowed to keep a turn the re-check abandoned (`saveActiveConversation`
+    /// only writes from the transcript when the turn completes).
+    private func storedUserTexts(_ runner: ModelRunner) -> [String] {
+        runner.conversations.flatMap { conversation in
+            conversation.items.compactMap { item in
+                guard case .message(let message) = item, message.role == .user else { return nil }
+                return message.text
+            }
+        }
+    }
+
+    /// Installs a hook that parks the turn until the test releases it, so the runner can be
+    /// observed mid-send with no model and no timing luck. The turn then ends on the injected
+    /// container (which throws), so the whole `send` body runs and finishes deterministically.
+    private func parkAfterImport(
+        _ runner: ModelRunner
+    ) -> (reached: @Sendable () async -> Void, release: @Sendable () -> Void) {
+        let reachedSignal = Signal()
+        let releaseSignal = Signal()
+        runner.containerForTesting = { throw AttachmentImporter.Failure.tooLarge(1) }
+        runner.afterImportForTesting = {
+            await reachedSignal.raise()
+            await releaseSignal.wait()
+        }
+        return (
+            reached: { await reachedSignal.wait() },
+            release: { Task { await releaseSignal.raise() } }
+        )
+    }
+
+    /// (a) A second `send` while the first is importing is a no-op, not a second turn.
+    @Test func aSecondSendDuringTheImportIsANoOp() async throws {
+        let (runner, directory) = makeRunner()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let work = try makeWork()
+        defer { try? FileManager.default.removeItem(at: work) }
+        let modelDir = try makeModelDirectory()
+        defer { try? FileManager.default.removeItem(at: modelDir) }
+        runner.modelDirectoryForTesting = { _ in modelDir }
+        let image = try imageFile(in: work, named: "shot.png")
+
+        let gate = parkAfterImport(runner)
+        let first = Task { await runner.send("first", attachments: [image], for: self.entry) }
+        await gate.reached()                       // the turn is fully set up
+        #expect(runner.isRunning)
+
+        await runner.send("second", for: entry)    // must return immediately
+        gate.release()
+        await first.value
+
+        // The live transcript is where the one accepted turn lives; the second send added nothing.
+        let live = runner.transcript.items.compactMap { item -> String? in
+            guard case .message(let message) = item, message.role == .user else { return nil }
+            return message.text
+        }
+        #expect(live == ["first"])
+    }
+
+    /// (b) Switching conversation during the import appends to **neither** chat.
+    @Test func switchingChatsDuringTheImportAppendsToNeither() async throws {
+        let (runner, directory) = makeRunner()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let work = try makeWork()
+        defer { try? FileManager.default.removeItem(at: work) }
+        let modelDir = try makeModelDirectory()
+        defer { try? FileManager.default.removeItem(at: modelDir) }
+        runner.modelDirectoryForTesting = { _ in modelDir }
+        let image = try imageFile(in: work, named: "shot.png")
+
+        // A first chat with history, then a second one, and go back to the first.
+        runner.appendUserMessageForTesting("earlier")
+        runner.newConversation()
+        let secondID = try #require(runner.activeConversationID)
+        let firstID = try #require(runner.conversations.first { !$0.items.isEmpty }?.id)
+        runner.selectConversation(firstID)
+
+        let gate = parkAfterImport(runner)
+        let send = Task { await runner.send("mid-import", attachments: [image], for: self.entry) }
+        await gate.reached()
+        // Move away and **back** while the turn is parked. With the re-check missing, the append
+        // then lands in the live transcript of the conversation the user returned to, and the
+        // turn's own `saveActiveConversation` writes it there — the leak B1 describes.
+        runner.selectConversation(secondID)
+        runner.selectConversation(firstID)
+        gate.release()
+        await send.value
+
+        #expect(!storedUserTexts(runner).contains("mid-import"))
+        let first = try #require(runner.conversations.first { $0.id == firstID })
+        #expect(first.items.count == 1)                 // only its own history, no mid-import turn
+        let second = try #require(runner.conversations.first { $0.id == secondID })
+        #expect(second.items.isEmpty)
+    }
+
+    /// (c) `stop()` during the import: nothing is appended and the runner is idle again.
+    @Test func stopDuringTheImportAppendsNothing() async throws {
+        let (runner, directory) = makeRunner()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let work = try makeWork()
+        defer { try? FileManager.default.removeItem(at: work) }
+        let modelDir = try makeModelDirectory()
+        defer { try? FileManager.default.removeItem(at: modelDir) }
+        runner.modelDirectoryForTesting = { _ in modelDir }
+        let image = try imageFile(in: work, named: "shot.png")
+
+        let gate = parkAfterImport(runner)
+        let send = Task { await runner.send("stopped", attachments: [image], for: self.entry) }
+        await gate.reached()
+        runner.stop()
+        gate.release()
+        await send.value
+
+        #expect(!runner.isRunning)
+        #expect(!storedUserTexts(runner).contains("stopped"))
     }
 
     // MARK: attach / detach / working folder
@@ -142,6 +306,27 @@ struct ChatFolderAttachTests {
         // …and a brand-new chat in the same model still starts empty (G2).
         second.newConversation()
         #expect(second.activeAttachedFolders.isEmpty)
+    }
+
+    /// Call 5's added case: A and B are both granted, only A is attached, and the model asks for a
+    /// path in a **third** folder C. The C5 text echoes the path it asked for (its own input), and
+    /// must still not name B — the unattached grant.
+    @Test func theRejectionTextEchoesTheAskedPathButNeverAnUnattachedGrant() {
+        let grants = [
+            FolderGrant(path: "/Users/me/grant-a", bookmark: Data()),
+            FolderGrant(path: "/Users/me/grant-b", bookmark: Data()),
+        ]
+        let scope = FileScope.forConversation(
+            attached: ["/Users/me/grant-a"], workingFolder: "/Users/me/grant-a",
+            grants: grants, edition: .appStore)
+        let message = FileScope.$current.withValue(scope) {
+            ScopedFileTools.rejection(
+                for: "/Users/me/grant-c/file.txt",
+                roots: [URL(fileURLWithPath: "/Users/me/grant-a", isDirectory: true)])
+        }
+        #expect(message.contains("/Users/me/grant-c/file.txt"))   // the echoed request
+        #expect(message.contains("/Users/me/grant-a"))            // the attached folder
+        #expect(!message.contains("/Users/me/grant-b"))           // never the unattached grant
     }
 
     // MARK: C5 names only attached + granted folders
