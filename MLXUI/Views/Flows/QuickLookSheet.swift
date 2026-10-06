@@ -34,7 +34,9 @@ struct QuickLookSheet: View {
 /// `QLPreviewView`'s only initializer, `init?(frame:style:)`, is failable — represented as
 /// plain `NSView` (rather than `QLPreviewView`) so the vanishingly rare nil case degrades to a
 /// blank view instead of needing a force-unwrap (no force-unwraps, project convention).
-private struct QuickLookPreview: NSViewRepresentable {
+/// CW-5: `internal` (was `private`) so the chat inspector can embed the same preview view rather
+/// than keeping a second copy. No behaviour change.
+struct QuickLookPreview: NSViewRepresentable {
     let url: URL
 
     func makeNSView(context: Context) -> NSView {

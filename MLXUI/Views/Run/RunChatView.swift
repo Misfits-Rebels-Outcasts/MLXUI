@@ -53,7 +53,8 @@ struct RunChatView: View {
                 pendingAttachments: pendingFiles.map(\.lastPathComponent),
                 attachFile: { url in
                     if !pendingFiles.contains(url) { pendingFiles.append(url) }
-                })
+                },
+                showInTranscript: $scrollTarget)
                 .inspectorColumnWidth(min: 220, ideal: 240, max: 320)
         }
         .onAppear { appState.modelRunner.prepare(for: model) }

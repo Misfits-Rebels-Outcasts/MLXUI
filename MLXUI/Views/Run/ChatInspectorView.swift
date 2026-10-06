@@ -22,9 +22,16 @@ struct ChatInspectorView: View {
     let pendingAttachments: [String]
     /// Hands a folder to the composer's attachment list (CW-3's importer).
     let attachFile: (URL) -> Void
+    /// CW-5: set to a tool card's id to ask the transcript to scroll to it.
+    @Binding var showInTranscript: UUID?
 
     @State private var expanded: Set<String> = []
     @State private var levels: [String: FolderListing.Result] = [:]
+    /// CW-5: the file whose preview is open, and its loaded content.
+    @State private var selectedPath: String?
+    @State private var preview: ChatFilePreview.Content?
+    /// Held while a Quick Look preview is on screen: the viewer reads lazily (sandbox trap).
+    @State private var quickLookScope: FilePreviewScope?
 
     private var canWrite: Bool {
         ChatInspectorModel.canWrite(enabledToolNames: runner.enabledToolNames)
@@ -34,6 +41,8 @@ struct ChatInspectorView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 contextSection
+                Divider()
+                filesSection
                 Divider()
                 sessionSection
             }
@@ -239,6 +248,184 @@ struct ChatInspectorView: View {
         Text(ChatInspectorModel.toolsOnLabel(enabled: on, available: available))
             .font(.caption2)
             .foregroundStyle(.secondary)
+    }
+
+    // MARK: - Files in this chat (CW-5, C14)
+
+    private var touches: FileTouchIndex.Evaluation {
+        FileTouchIndex.entries(
+            items: runner.transcript.items,
+            workingFolder: runner.activeWorkingFolder)
+    }
+
+    private var filesSection: some View {
+        let evaluation = touches
+        return VStack(alignment: .leading, spacing: 8) {
+            sectionTitle("Files in this chat")
+            if evaluation.entries.isEmpty {
+                Text("Nothing yet. Tool calls that touch files show up here.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else {
+                if !evaluation.changes.isEmpty {
+                    group("New · Edited", entries: evaluation.changes)
+                }
+                if !evaluation.reads.isEmpty {
+                    group("Read", entries: evaluation.reads, collapsedLabel: "\(evaluation.reads.count) files read")
+                }
+                if !evaluation.declined.isEmpty {
+                    group("Declined", entries: evaluation.declined)
+                }
+            }
+            if selectedPath != nil {
+                previewPane
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func group(_ title: String, entries: [FileTouchIndex.Entry], collapsedLabel: String? = nil) -> some View {
+        if let collapsedLabel {
+            DisclosureGroup {
+                ForEach(entries) { entry in touchRow(entry) }
+            } label: {
+                Text(collapsedLabel).font(.caption2).foregroundStyle(.secondary)
+            }
+        } else {
+            Text(title).font(.caption2).foregroundStyle(.secondary)
+            ForEach(entries) { entry in touchRow(entry) }
+        }
+    }
+
+    private func touchRow(_ entry: FileTouchIndex.Entry) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: entry.kind == .declined ? "xmark.circle" : "doc.text")
+                .font(.caption2)
+                .foregroundStyle(entry.kind == .declined ? .secondary : .primary)
+            Text(entry.name.isEmpty ? entry.path : entry.name)
+                .font(.caption)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            Text(entry.kind.label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { select(entry.path) }
+        .contextMenu {
+            Button("Open") { open(entry.path) }
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: entry.path)])
+            }
+            Button("Show in transcript") { showInTranscript = entry.activities.last?.id }
+        }
+        .help(entry.path)
+    }
+
+    @ViewBuilder
+    private var previewPane: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Divider()
+            switch preview {
+            case .markdown(let text):
+                ScrollView {
+                    Text((try? AttributedString(markdown: text)) ?? AttributedString(text))
+                        .font(.caption)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 220)
+            case .text(let text):
+                ScrollView {
+                    Text(text)
+                        .font(.system(.caption2, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 220)
+            case .truncatedText(let text, let shown, let total):
+                ScrollView {
+                    Text(text)
+                        .font(.system(.caption2, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 220)
+                Text(ChatFilePreview.truncationNotice(shownBytes: shown, totalBytes: total))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            case .image:
+                if let path = selectedPath, let image = NSImage(contentsOfFile: path) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxHeight: 200)
+                }
+            case .quickLook:
+                if let scope = quickLookScope {
+                    QuickLookPreview(url: scope.scopedURL)
+                        .frame(height: 220)
+                }
+            case .unavailable(let message):
+                Text(message).font(.caption2).foregroundStyle(.secondary)
+            case nil:
+                EmptyView()
+            }
+            previewButtons
+        }
+    }
+
+    @ViewBuilder
+    private var previewButtons: some View {
+        if let path = selectedPath {
+            HStack(spacing: 8) {
+                Button("Open") { open(path) }
+                Button("Reveal in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+                }
+                Button("Show in transcript") {
+                    showInTranscript = touches.entry(for: path)?.activities.last?.id
+                }
+                Spacer()
+                Button("Close") { clearPreview() }
+            }
+            .buttonStyle(.link)
+            .font(.caption2)
+        }
+    }
+
+    /// Load the preview for a path: presentation from the file itself (OV-1's rule), bytes through
+    /// the scoped read, and a scope held for Quick Look when it is the reader.
+    private func select(_ path: String) {
+        selectedPath = path
+        let url = URL(fileURLWithPath: path)
+        let presentation = FlowSavedFile.presentation(url: url, task: nil)
+        if presentation.allowsQuickLook, presentation != .image,
+           presentation != .text, presentation != .web, presentation != .table {
+            quickLookScope = FilePreviewScope(path: path)
+            preview = .quickLook
+            return
+        }
+        quickLookScope = nil
+        let data = FolderListing.scopedData(at: url)
+        preview = ChatFilePreview.content(
+            for: url,
+            presentation: presentation,
+            data: data,
+            error: data == nil ? "This file could not be read." : nil)
+    }
+
+    private func clearPreview() {
+        selectedPath = nil
+        preview = nil
+        quickLookScope = nil
+    }
+
+    private func open(_ path: String) {
+        // The scope must be live for the hand-off: `NSWorkspace.open` starts the app, which then
+        // needs the sandbox extension to still be held.
+        guard let scope = FilePreviewScope(path: path) else { return }
+        NSWorkspace.shared.open(scope.scopedURL)
     }
 
     // MARK: - Session

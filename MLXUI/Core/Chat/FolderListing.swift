@@ -89,6 +89,21 @@ nonisolated enum FolderListing {
     /// `injected` is nil in the app; a test passes one so a temp root stands in for a grant. The
     /// parameter exists in release too — it is a value, not a `#if DEBUG` seam — but nothing in the
     /// app ever passes one.
+    /// Read a file's bytes through the same scope handling as a listing. `nil` means the read was
+    /// refused or failed — the preview says so rather than showing nothing.
+    static func scopedData(at url: URL, injected: ((URL) -> Data?)? = nil) -> Data? {
+        if let injected { return injected(url) }
+        #if DIRECT_BUILD
+        return try? Data(contentsOf: url)
+        #else
+        return FolderGrants.withScopedRead(
+            to: url,
+            grants: FolderGrants.load(),
+            container: ModelStore.shared.baseDirectory
+        ) { try Data(contentsOf: $0) }
+        #endif
+    }
+
     static func listing(
         for directory: URL,
         limit: Int = maxEntries,
@@ -112,6 +127,37 @@ nonisolated enum FolderListing {
 
 #if !DIRECT_BUILD
 private extension FolderGrants {
+    /// The same scope handling for any other read the inspector needs (CW-5's preview pane reads
+    /// `Data`). `nil` when the folder is not covered by the container or a grant, or the bookmark
+    /// no longer resolves.
+    static func withScopedRead<T>(
+        to url: URL,
+        grants: [FolderGrant],
+        container: URL,
+        body: (URL) throws -> T
+    ) -> T? {
+        let target = url.standardizedFileURL.resolvingSymlinksInPath().path
+        let containerPath = container.standardizedFileURL.resolvingSymlinksInPath().path
+        do {
+            if target == containerPath || target.hasPrefix("\(containerPath)/") {
+                return try body(url)
+            }
+            guard let grant = grant(covering: url.path, in: grants) else { return nil }
+            var isStale = false
+            guard let scoped = try? URL(
+                resolvingBookmarkData: grant.bookmark,
+                options: .withSecurityScope,
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale)
+            else { return nil }
+            let accessed = scoped.startAccessingSecurityScopedResource()
+            defer { if accessed { scoped.stopAccessingSecurityScopedResource() } }
+            return try body(url)
+        } catch {
+            return nil
+        }
+    }
+
     /// `withAccess` is generic over its body's return type only by being `(URL) throws -> String`,
     /// so the directory read gets its own small wrapper that keeps the same scope handling.
     static func withAccess(
