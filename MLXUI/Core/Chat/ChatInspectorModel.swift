@@ -76,6 +76,44 @@ nonisolated struct ChatInspectorModel: Sendable, Equatable {
         "\(used) / \(limit)"
     }
 
+    // MARK: - The review pane (CW-6)
+
+    /// The red/green sections for one path's edits, newest first (CW-6). Each entry is one
+    /// `edit_file` call rendered through `ApprovalPreview`, so the inspector shows the same
+    /// removed/added blocks the approval sheet does — one formatter, two places.
+    struct EditSpec: Equatable, Sendable, Identifiable {
+        let id: UUID
+        let callNumber: Int
+        let sections: [ApprovalPreview.Section]
+    }
+
+    static func editSpecs(_ activities: [ToolActivity]) -> [EditSpec] {
+        activities.enumerated().map { index, activity in
+            EditSpec(
+                id: activity.id,
+                callNumber: index + 1,
+                sections: ApprovalPreview.sections(
+                    toolName: activity.name, arguments: activity.arguments))
+        }
+    }
+
+    /// A tool call the runner is blocked on. A plain snapshot of `PendingApproval`: the sheet's own
+    /// type carries a `respond` closure, so it is not `Equatable` and not what a pure derivation
+    /// should depend on.
+    struct Waiting: Equatable, Sendable {
+        let toolName: String
+        let path: String?
+
+        var label: String {
+            if let path { return "Waiting for your approval: \(toolName) \(path)" }
+            return "Waiting for your approval: \(toolName)"
+        }
+    }
+
+    static func waiting(toolName: String, path: String?) -> Waiting {
+        Waiting(toolName: toolName, path: path)
+    }
+
     // MARK: - Attached folders (Context)
 
     /// Whether an attached folder is writable by the current build's file tools — C3's rule, from

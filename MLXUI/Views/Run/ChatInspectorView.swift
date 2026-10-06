@@ -258,10 +258,27 @@ struct ChatInspectorView: View {
             workingFolder: runner.activeWorkingFolder)
     }
 
+    /// CW-6: the row shown while the runner is blocked on the approval sheet. The sheet itself is
+    /// unchanged — this only says what it is waiting for.
+    private var waitingForApproval: ChatInspectorModel.Waiting? {
+        guard let pending = runner.pendingApproval else { return nil }
+        return ChatInspectorModel.waiting(
+            toolName: pending.toolName,
+            path: pending.arguments.string("path"))
+    }
+
     private var filesSection: some View {
         let evaluation = touches
         return VStack(alignment: .leading, spacing: 8) {
             sectionTitle("Files in this chat")
+            if let waiting = waitingForApproval {
+                HStack(spacing: 4) {
+                    ProgressView().controlSize(.small)
+                    Text(waiting.label)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
             if evaluation.entries.isEmpty {
                 Text("Nothing yet. Tool calls that touch files show up here.")
                     .font(.caption2)
@@ -371,7 +388,52 @@ struct ChatInspectorView: View {
             case nil:
                 EmptyView()
             }
+            editDiffs
             previewButtons
+        }
+    }
+
+    /// CW-6: every edit of the selected path, newest first, as red/green sections. **No Revert**
+    /// (the owner's G3 ruling: no snapshots, no revert until it is ruled on).
+    @ViewBuilder
+    private var editDiffs: some View {
+        let specs = selectedPath.map { touches.editActivities(for: $0) } ?? []
+        if !specs.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(specs.count == 1 ? "Edit" : "Edits (newest first)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                ForEach(ChatInspectorModel.editSpecs(specs)) { spec in
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(spec.sections.enumerated()), id: \.offset) { _, section in
+                            diffSection(section)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func diffSection(_ section: ApprovalPreview.Section) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(section.title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(section.body)
+                .font(.system(.caption2, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(4)
+                .background(diffTint(section.style), in: RoundedRectangle(cornerRadius: 4))
+        }
+    }
+
+    private func diffTint(_ style: ApprovalPreview.Style) -> Color {
+        switch style {
+        case .removed: return Color.red.opacity(0.12)
+        case .added: return Color.green.opacity(0.12)
+        case .plain, .code: return Color.secondary.opacity(0.08)
         }
     }
 

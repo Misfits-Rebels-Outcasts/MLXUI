@@ -86,6 +86,69 @@ struct ChatInspectorModelTests {
         #expect(ChatInspectorModel.canWrite(enabledToolNames: ["edit_file"]))
     }
 
+    // MARK: - The review pane (CW-6)
+
+    private func edit(_ old: String, _ new: String, result: String) -> ToolActivity {
+        ToolActivity(
+            name: "edit_file",
+            arguments: ["path": .string("/a/report.md"),
+                        "old_string": .string(old),
+                        "new_string": .string(new)],
+            status: .finished, result: result)
+    }
+
+    /// The edits arrive newest-first, so the specs keep that order and number the calls from the
+    /// newest. Each spec is one `edit_file` rendered through the approval sheet's own formatter.
+    @Test func editSpecsKeepTheNewestFirstAndUseTheSheetsFormatter() {
+        let newest = edit("second line", "SECOND LINE", result: "Edited /a/report.md: second")
+        let older = edit("first line", "FIRST LINE", result: "Edited /a/report.md: first")
+
+        let specs = ChatInspectorModel.editSpecs([newest, older])
+        #expect(specs.count == 2)
+        #expect(specs.map(\.callNumber) == [1, 2])
+        #expect(specs.map(\.id) == [newest.id, older.id])
+        // The sheet's own sections for that call, verbatim.
+        #expect(specs[0].sections == ApprovalPreview.sections(
+            toolName: "edit_file", arguments: newest.arguments))
+        #expect(specs[0].sections.contains { $0.title == "Replace" && $0.style == .removed })
+        #expect(specs[0].sections.contains { $0.title == "With" && $0.style == .added })
+    }
+
+    @Test func editSpecsAreEmptyWithoutEdits() {
+        #expect(ChatInspectorModel.editSpecs([]).isEmpty)
+    }
+
+    /// CW-6's marker: it exists exactly while the runner is blocked, and names the tool and path.
+    @Test func theWaitingLabelNamesTheToolAndPath() {
+        let waiting = ChatInspectorModel.waiting(toolName: "edit_file", path: "/a/report.md")
+        #expect(waiting.label == "Waiting for your approval: edit_file /a/report.md")
+
+        let withoutPath = ChatInspectorModel.waiting(toolName: "run_shell", path: nil)
+        #expect(withoutPath.label == "Waiting for your approval: run_shell")
+    }
+
+    /// The row appears and disappears with `pendingApproval` (the closure means the sheet's own
+    /// type cannot be compared, so the snapshot is what carries the state into the derivation).
+    @Test func awaitingMarkerTracksTheRunnersPendingApproval() {
+        let runner = ModelRunner()
+        func marker() -> ChatInspectorModel.Waiting? {
+            guard let pending = runner.pendingApproval else { return nil }
+            return ChatInspectorModel.waiting(
+                toolName: pending.toolName, path: pending.arguments.string("path"))
+        }
+        #expect(marker() == nil)
+
+        runner.pendingApproval = PendingApproval(
+            toolName: "edit_file",
+            toolDescription: "Edits a file.",
+            arguments: ["path": .string("/a/report.md")],
+            respond: { _ in })
+        #expect(marker()?.label == "Waiting for your approval: edit_file /a/report.md")
+
+        runner.pendingApproval = nil
+        #expect(marker() == nil)
+    }
+
     @Test func toolsOnLabelCountsBothSides() {
         #expect(ChatInspectorModel.toolsOnLabel(enabled: 4, available: 12) == "4 of 12 tools on")
     }
