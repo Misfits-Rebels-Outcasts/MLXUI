@@ -23,13 +23,17 @@ nonisolated enum ChatCompletionsRoute {
         let started = environment.now()
         let tracker = RequestTracker(head: head, started: started, environment: environment)
 
-        let request: ServeRequest
-        do { request = try OpenAIChatDialect.decode(body) } catch {
+        let decoded: ServeRequest
+        do { decoded = try OpenAIChatDialect.decode(body) } catch {
             return tracker.fail(error as? ServeError ?? Self.internalError)
         }
+        // The route reshapes the request below (tool traffic, `system` placement), so it works on a
+        // mutable copy of what the dialect decoded.
+        var request = decoded
         tracker.model = request.model
-        tracker.toolsIgnored = request.toolsIgnored
-        if request.toolsIgnored { log.notice("tools ignored") }
+        // S1's shape, provisional: a request that carried `tools` is "ignored" until the model is
+        // resolved below and says otherwise (an early 404/503 still logs what the client sent).
+        tracker.toolsIgnored = request.toolsRequested
 
         // Apple Foundation Models that is served but not ready is a 503 with the readiness sentence
         // (S1-4), not a 404: `/v1/models` omits it until ready, but the client named a model the
@@ -61,6 +65,23 @@ nonisolated enum ChatCompletionsRoute {
             return tracker.fail(ServeError(status: 501, message: "The model '\(request.model)' can't be served by this build yet.",
                                            type: "server_error", code: "not_implemented"))
         }
+
+        // S2-2: the client's `tools` are honoured only for a family whose template renders them and
+        // whose output a parser reads (`ToolCallFormatTable`). Otherwise S1 exactly: the history's
+        // tool traffic is flattened back to plain text (owner ruling R20, 2026-10-02) and the log
+        // says "tools ignored" — the same answer the backend reaches on its own `modelType`, since
+        // both ask the same table.
+        let modelType = backend.modelType ?? ""
+        let acceptsTools = ToolCallFormatTable.acceptsTools(forModelType: modelType)
+        tracker.toolsIgnored = request.toolsRequested && !acceptsTools
+        if tracker.toolsIgnored { log.notice("tools ignored") }
+        if !acceptsTools { request.tools = [] }
+        // The request's final shape, in the order the assembly takes: tool traffic settled, then
+        // the family's `system` placement (S2-1, owner ruling R22).
+        request.messages = ServeMessageAssembly.assembling(
+            request.messages, acceptsTools: acceptsTools,
+            placement: ToolCallFormatTable.systemPlacement(forModelType: modelType))
+
         guard let ticket = await environment.queue.reserve(model: request.model) else {
             return tracker.fail(ServeError(status: 503, message: "The server is busy with other requests for this model. Try again shortly.",
                                            type: "server_error", code: "server_busy"),
@@ -85,6 +106,7 @@ nonisolated enum ChatCompletionsRoute {
         var finish = ServeFinishReason.stop
         var usage = ServeUsage(promptTokens: 0, completionTokens: 0)
         var failure: ServeError?
+        var calls: [ServeToolCall] = []
         do {
             for try await event in backend.generate(request) {
                 switch event {
@@ -92,7 +114,8 @@ nonisolated enum ChatCompletionsRoute {
                 case .usage(let value): usage = value
                 case .finish(let reason): finish = reason
                 case .error(let error): failure = error
-                case .reasoningDelta, .toolCallDelta: break         // S2
+                case .toolCallDelta(let delta): Self.append(delta, to: &calls)
+                case .reasoningDelta: break                         // S2-3
                 }
             }
         } catch {
@@ -103,11 +126,22 @@ nonisolated enum ChatCompletionsRoute {
         if let failure { return tracker.fail(failure) }
 
         tracker.usage = usage
+        tracker.toolCalls = calls.count
         let body = OpenAIChatDialect.completionBody(
             id: OpenAIChatDialect.makeCompletionID(), created: Int(environment.now().timeIntervalSince1970),
-            model: request.model, text: text, finish: finish, usage: usage)
+            model: request.model, text: text, toolCalls: calls, finish: finish, usage: usage)
         return tracker.succeed(.full(ServeResponse(status: 200, body: body,
                                                    headers: ["Content-Type": "application/json"])))
+    }
+
+    /// Fold one `delta.tool_calls` fragment into the running call list. The parsers hand back a
+    /// finished call, so today each event is a whole call; keying on `index` keeps this right if a
+    /// format ever fragments.
+    static func append(_ delta: ServeToolCallDelta, to calls: inout [ServeToolCall]) {
+        while calls.count <= delta.index { calls.append(ServeToolCall(id: nil, name: "", argumentsJSON: "")) }
+        if let id = delta.id { calls[delta.index].id = id }
+        if let name = delta.name { calls[delta.index].name = name }
+        calls[delta.index].argumentsJSON += delta.argumentsFragment ?? ""
     }
 
     // MARK: - Streaming
@@ -134,6 +168,7 @@ nonisolated enum ChatCompletionsRoute {
             var usage: ServeUsage?
             var finish: ServeFinishReason?
             var failure: ServeError?
+            var toolCallCount = 0
             func ensureRole() {
                 guard !wroteRole else { return }
                 wroteRole = true
@@ -147,10 +182,15 @@ nonisolated enum ChatCompletionsRoute {
                         ensureRole()
                         write(OpenAIChatDialect.sse(OpenAIChatDialect.contentChunk(
                             id: id, created: created, model: model, text: piece, includeUsage: includeUsage)))
+                    case .toolCallDelta(let delta):
+                        ensureRole()
+                        if delta.id != nil { toolCallCount += 1 }
+                        write(OpenAIChatDialect.sse(OpenAIChatDialect.toolCallChunk(
+                            id: id, created: created, model: model, call: delta, includeUsage: includeUsage)))
                     case .usage(let value): usage = value
                     case .finish(let reason): finish = reason
                     case .error(let error): failure = error
-                    case .reasoningDelta, .toolCallDelta: break          // S2
+                    case .reasoningDelta: break                         // S2-3
                     }
                 }
             } catch {
@@ -177,6 +217,7 @@ nonisolated enum ChatCompletionsRoute {
             }
             write(OpenAIChatDialect.done)
             tracker.usage = usage
+            tracker.toolCalls = toolCallCount
             _ = tracker.succeed(nil)
         }
 
@@ -232,6 +273,9 @@ nonisolated final class RequestTracker: @unchecked Sendable {
     var model: String?
     var toolsIgnored = false
     var usage: ServeUsage?
+    /// How many tool calls the model produced — **a count only** (rule 13: no tool names, no
+    /// arguments, no results).
+    var toolCalls = 0
 
     init(head: ServeRequestHead, started: Date, environment: ServeEnvironment) {
         self.head = head
@@ -264,6 +308,7 @@ nonisolated final class RequestTracker: @unchecked Sendable {
         environment.requestLog.record(RequestLogEntry(
             time: started, userAgent: head.userAgent, model: model,
             promptTokens: usage?.promptTokens, completionTokens: usage?.completionTokens,
-            durationSeconds: finished.timeIntervalSince(started), status: status, toolsIgnored: toolsIgnored))
+            durationSeconds: finished.timeIntervalSince(started), status: status, toolsIgnored: toolsIgnored,
+            toolCalls: toolCalls))
     }
 }

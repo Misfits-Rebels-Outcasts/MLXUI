@@ -143,6 +143,9 @@ struct RequestLogList: View {
         parts.append(String(format: "%.1fs", entry.durationSeconds))
         if let agent = entry.userAgent { parts.append(agent) }
         if entry.toolsIgnored { parts.append("tools ignored") }
+        // S2-2: how many tool calls the model made — a count only, never a name, an argument or a
+        // result (rule 13). This line is the request log's only consumer.
+        if entry.toolCalls > 0 { parts.append(entry.toolCalls == 1 ? "1 tool call" : "\(entry.toolCalls) tool calls") }
         return parts.joined(separator: "  ")
     }
 }

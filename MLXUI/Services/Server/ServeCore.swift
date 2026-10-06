@@ -17,7 +17,9 @@ nonisolated struct ServeUsage: Sendable, Equatable {
     var totalTokens: Int { promptTokens + completionTokens }
 }
 
-/// One incremental piece of a tool call (S2). Unused in S1.
+/// One incremental piece of a tool call, as it goes out on the wire (S2-2). `argumentsFragment`
+/// carries the whole JSON string in one piece today — the parsers hand back a finished call — and
+/// the field name keeps the door open for real fragmentation.
 nonisolated struct ServeToolCallDelta: Sendable, Equatable {
     var index: Int
     var id: String?
@@ -25,10 +27,48 @@ nonisolated struct ServeToolCallDelta: Sendable, Equatable {
     var argumentsFragment: String?
 }
 
+/// One complete tool call (S2-2): history that came back from a harness, and the non-streaming
+/// response's `message.tool_calls[]`.
+nonisolated struct ServeToolCall: Sendable, Equatable {
+    /// The client's `call_…` id when it sent one; `nil` only if it omitted it.
+    var id: String?
+    /// The function name. Never logged (rule 13).
+    var name: String
+    /// The arguments as a JSON **string**, which is what the OpenAI wire format carries.
+    var argumentsJSON: String
+}
+
+/// One `tools[]` entry a client sent, kept **verbatim** (S2-2).
+///
+/// The raw JSON is what the chat template renders and what `ToolCallFormat`'s parsers use for
+/// type-aware arguments, so nothing is reconstructed from a field list — a client key we don't
+/// model still reaches the template. `name` is pulled out for `tool_choice`'s named form only.
+nonisolated struct ServeToolSpec: Sendable, Equatable {
+    var name: String
+    var rawJSON: String
+
+    /// The object, for `UserInput(tools:)` and `parse(content:tools:)`.
+    var object: [String: any Sendable]? {
+        guard let data = rawJSON.data(using: .utf8),
+              let decoded = try? JSONSerialization.jsonObject(with: data) as? [String: any Sendable]
+        else { return nil }
+        return decoded
+    }
+}
+
+/// What the client asked for in `tool_choice` (S2-2). Only `auto` / `none` are honoured exactly;
+/// `required` and a named function are best effort (the journal records what actually happens).
+nonisolated enum ServeToolChoice: Sendable, Equatable {
+    case auto
+    case none
+    case required
+    case function(String)
+}
+
 nonisolated enum ServeEvent: Sendable, Equatable {
     case textDelta(String)
-    case reasoningDelta(String)                 // S2 — never produced in S1
-    case toolCallDelta(ServeToolCallDelta)      // S2 — never produced in S1
+    case reasoningDelta(String)                 // S2-3 — never produced yet
+    case toolCallDelta(ServeToolCallDelta)      // S2-2
     case usage(ServeUsage)
     case finish(ServeFinishReason)
     case error(ServeError)
@@ -38,14 +78,12 @@ nonisolated struct ServeMessage: Sendable, Equatable {
     enum Role: String, Sendable, Equatable { case system, user, assistant, tool }
     var role: Role
     var text: String
-    var toolCalls: [ServeToolCallDelta] = []    // S2 — unset
-    var toolCallID: String?                     // S2 — unset
-}
-
-nonisolated struct ServeToolSpec: Sendable, Equatable {   // S2 — unset
-    var name: String
-    var descriptionText: String?
-    var parametersJSON: String?
+    /// An assistant turn's `tool_calls` (S2-2). Empty for every other role.
+    var toolCalls: [ServeToolCall] = []
+    /// A `tool` turn's `tool_call_id` (S2-2).
+    var toolCallID: String? = nil
+    /// A `tool` turn's optional `name`.
+    var toolName: String? = nil
 }
 
 nonisolated struct ServeRequest: Sendable, Equatable {
@@ -53,8 +91,9 @@ nonisolated struct ServeRequest: Sendable, Equatable {
 
     var model: String
     var messages: [ServeMessage]
-    var tools: [ServeToolSpec] = []             // S2 — unset
-    var toolChoice: String?                     // S2 — unset
+    /// The client's `tools[]`, verbatim and in order (S2-2).
+    var tools: [ServeToolSpec] = []
+    var toolChoice: ServeToolChoice = .auto
     var temperature: Double?
     var topP: Double?
     var maxTokens: Int?
@@ -62,18 +101,47 @@ nonisolated struct ServeRequest: Sendable, Equatable {
     var stream: Bool = false
     var includeUsage: Bool = false
     var seed: Int?
-    var reasoning: Bool?                        // S2 — unset
-    /// The client sent `tools`/`tool_choice` and S1 ignored them (R9). Drives the request log's
-    /// "tools ignored" note; never changes behaviour.
-    var toolsIgnored: Bool = false
+    var reasoning: Bool?                        // S2-3 — unset
+    /// The client sent a non-empty `tools[]`. Whether that array is *honoured* depends on the
+    /// model (`ToolCallFormatTable.acceptsTools`) and is decided by the route, which is the only
+    /// place that knows both; `RequestLogEntry.toolsIgnored` carries the outcome.
+    var toolsRequested: Bool = false
 
     var effectiveMaxTokens: Int { maxTokens ?? Self.defaultMaxTokens }
+
+    /// The tools to put in the prompt, after `tool_choice` (S2-2):
+    ///
+    /// - `.none` renders none (the client asked for no tool use), so the caller also stops
+    ///   scanning for calls;
+    /// - `.function(name)` renders just that tool when the client sent it, else every tool
+    ///   (best effort — the model has no way to be *forced*);
+    /// - `.auto` / `.required` render every tool.
+    var renderedTools: [ServeToolSpec] {
+        switch toolChoice {
+        case .none: return []
+        case .function(let name):
+            let named = tools.filter { $0.name == name }
+            return named.isEmpty ? tools : named
+        case .auto, .required: return tools
+        }
+    }
 }
+
 
 /// A model backend: turns one request into a stream of events. The queue and the transport live
 /// outside it, so a fake backend can stand in for MLX in tests.
 nonisolated protocol ServeBackend: Sendable {
     func generate(_ request: ServeRequest) -> AsyncThrowingStream<ServeEvent, Error>
+
+    /// The checkpoint's `model_type`, when the backend knows it. The route asks this to decide
+    /// whether a client's `tools` are honoured (S2-2) — the same value the backend itself uses to
+    /// pick the parser, so the two answers can't disagree.
+    var modelType: String? { get }
+}
+
+extension ServeBackend {
+    /// Backends with no checkpoint behind them (Apple Foundation Models) answer `nil`.
+    var modelType: String? { nil }
 }
 
 // MARK: - Queue
@@ -186,7 +254,11 @@ nonisolated struct RequestLogEntry: Sendable, Equatable {
     var completionTokens: Int?
     var durationSeconds: Double
     var status: Int
+    /// The client sent a `tools[]` and this model can't use it (S1's "tools ignored" note).
     var toolsIgnored: Bool
+    /// How many tool calls the model produced (S2-2). **A count only** — rule 13: no tool names,
+    /// no arguments, no results, ever.
+    var toolCalls: Int = 0
 }
 
 /// A bounded in-memory log the Connect sheet / Settings pane will read (S1-5).

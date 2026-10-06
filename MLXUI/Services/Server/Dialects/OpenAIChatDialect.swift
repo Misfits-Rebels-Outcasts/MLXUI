@@ -29,12 +29,14 @@ nonisolated enum OpenAIChatDialect {
         }
 
         var messages: [ServeMessage] = []
-        var toolNames: [String: String] = [:]          // tool_call id → function name, for later `tool` results
         for (index, raw) in rawMessages.enumerated() {
-            messages.append(try decodeMessage(raw, at: index, toolNames: &toolNames))
+            messages.append(try decodeMessage(raw, at: index))
         }
 
         var request = ServeRequest(model: model, messages: mergingAdjacentRoles(messages))
+        request.tools = try decodeTools(object["tools"])
+        request.toolChoice = try decodeToolChoice(object["tool_choice"])
+        request.toolsRequested = !request.tools.isEmpty
         request.temperature = try number(object["temperature"], "temperature")
         request.topP = try number(object["top_p"], "top_p")
         // `max_completion_tokens` is the newer name; either one limits the reply.
@@ -54,9 +56,68 @@ nonisolated enum OpenAIChatDialect {
         if let options = object["stream_options"] as? [String: Any] {
             request.includeUsage = (options["include_usage"] as? Bool) ?? false
         }
-        request.toolsIgnored = (object["tools"] != nil && !(object["tools"] is NSNull))
-            || (object["tool_choice"] != nil && !(object["tool_choice"] is NSNull))
         return request
+    }
+
+    // MARK: - Tools (S2-2)
+
+    /// `tools[]` — each entry kept **verbatim** so the template and the parsers see exactly what
+    /// the client sent (https://platform.openai.com/docs/api-reference/chat/create, the `tools`
+    /// parameter: an array of `{"type": "function", "function": {name, description, parameters}}`).
+    /// Only `function` tools exist in the Chat Completions API; anything else is a `400` naming it
+    /// rather than a silent drop.
+    private static func decodeTools(_ value: Any?) throws -> [ServeToolSpec] {
+        switch value {
+        case nil, is NSNull: return []
+        case let entries as [Any]:
+            return try entries.enumerated().map { index, entry in
+                let param = "tools[\(index)]"
+                guard let object = entry as? [String: Any] else {
+                    throw invalid("Each entry of 'tools' must be an object.", code: "invalid_tools", param: param)
+                }
+                if let type = object["type"] as? String, type != "function" {
+                    throw invalid("Tool type '\(type)' isn't supported; only 'function' is.",
+                                  code: "unsupported_tool_type", param: "\(param).type")
+                }
+                guard let function = object["function"] as? [String: Any],
+                      let name = function["name"] as? String, !name.isEmpty else {
+                    throw invalid("Each tool needs a 'function.name'.", code: "invalid_tools", param: "\(param).function.name")
+                }
+                guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+                      let json = String(data: data, encoding: .utf8) else {
+                    throw invalid("That tool couldn't be read.", code: "invalid_tools", param: param)
+                }
+                return ServeToolSpec(name: name, rawJSON: json)
+            }
+        default:
+            throw invalid("'tools' must be an array.", code: "invalid_tools", param: "tools")
+        }
+    }
+
+    /// `tool_choice` — `"auto"` / `"none"` / `"required"`, or `{"type":"function","function":{"name":…}}`.
+    private static func decodeToolChoice(_ value: Any?) throws -> ServeToolChoice {
+        switch value {
+        case nil, is NSNull: return .auto
+        case let name as String:
+            switch name {
+            case "auto": return .auto
+            case "none": return .none
+            case "required": return .required
+            default:
+                throw invalid("'tool_choice' must be 'auto', 'none', 'required', or a named function.",
+                              code: "invalid_tool_choice", param: "tool_choice")
+            }
+        case let object as [String: Any]:
+            guard let function = object["function"] as? [String: Any],
+                  let name = function["name"] as? String, !name.isEmpty else {
+                throw invalid("A named 'tool_choice' needs a 'function.name'.",
+                              code: "invalid_tool_choice", param: "tool_choice.function.name")
+            }
+            return .function(name)
+        default:
+            throw invalid("'tool_choice' must be a string or a function object.",
+                          code: "invalid_tool_choice", param: "tool_choice")
+        }
     }
 
     /// Adjacent messages with the same role become one, joined by a blank line (owner ruling R21,
@@ -65,24 +126,22 @@ nonisolated enum OpenAIChatDialect {
     /// turns in a row; a client may also send consecutive same-role messages itself. Applies to every
     /// role; an empty side adds no stray blank line.
     ///
-    /// The rule itself lives in `ServeMessageAssembly` (S2-1), beside the `system` hoisting that
-    /// has to re-apply it; this entry point stays as the dialect's own name for it.
+    /// **S2-2 adds two exceptions**, because text is no longer all a message carries: a `tool` turn
+    /// is its own result — gluing two of them into one string would feed the template one result
+    /// where the client sent two — and an assistant turn carrying `tool_calls` must keep them as a
+    /// separate structured turn rather than being folded into plain text.
+    ///
+    /// The rule itself lives in `ServeMessageAssembly`, beside the `system` hoisting that has to
+    /// re-apply it; this entry point stays as the dialect's own name for it.
     static func mergingAdjacentRoles(_ messages: [ServeMessage]) -> [ServeMessage] {
         ServeMessageAssembly.mergingAdjacentRoles(messages)
     }
 
-    /// Tool traffic in the history is **flattened to plain text** (owner ruling R20, 2026-10-02: don't
-    /// 400 — S1 ignores `tools`, but a harness replays its whole conversation, tool turns included):
-    ///
-    /// - an assistant turn's `tool_calls` become lines `[called <name> with <arguments>]` after any
-    ///   text it had;
-    /// - a `tool` message becomes a **user** turn `[tool result for <name>: <content>]`, where
-    ///   `<name>` is the message's `name`, else the name of the call with that `tool_call_id`,
-    ///   else `tool`.
-    ///
-    /// Wording is the implementer's call, pending owner confirmation; S2 replaces it with real tool
-    /// messages for models that have a tool template.
-    private static func decodeMessage(_ raw: Any, at index: Int, toolNames: inout [String: String]) throws -> ServeMessage {
+    /// Tool traffic in the history stays **structured** (S2-2). For a model that can't use tools —
+    /// and for the deferral in S1 (owner ruling R20, 2026-10-02) — the route runs the same messages
+    /// through `ServeMessageAssembly.flatteningToolTraffic`, which is where S1's `[called …]` /
+    /// `[tool result for …]` wording now lives.
+    private static func decodeMessage(_ raw: Any, at index: Int) throws -> ServeMessage {
         let param = "messages[\(index)]"
         guard let message = raw as? [String: Any], let roleName = message["role"] as? String else {
             throw invalid("Each message needs a 'role'.", code: "invalid_message", param: param)
@@ -94,21 +153,55 @@ nonisolated enum OpenAIChatDialect {
         case "user":
             return ServeMessage(role: .user, text: content)
         case "assistant":
-            var lines: [String] = content.isEmpty ? [] : [content]
-            for call in (message["tool_calls"] as? [[String: Any]]) ?? [] {
-                let function = call["function"] as? [String: Any]
-                let name = (function?["name"] as? String) ?? "tool"
-                if let id = call["id"] as? String { toolNames[id] = name }
-                lines.append("[called \(name) with \((function?["arguments"] as? String) ?? "{}")]")
-            }
-            return ServeMessage(role: .assistant, text: lines.joined(separator: "\n"))
+            return ServeMessage(role: .assistant, text: content,
+                                toolCalls: try decodeToolCalls(message["tool_calls"], param: "\(param).tool_calls"))
         case "tool":
-            let name = (message["name"] as? String)
-                ?? (message["tool_call_id"] as? String).flatMap { toolNames[$0] } ?? "tool"
-            return ServeMessage(role: .user, text: "[tool result for \(name): \(content)]")
+            return ServeMessage(role: .tool, text: content,
+                                toolCallID: message["tool_call_id"] as? String,
+                                toolName: message["name"] as? String)
         default:
             throw invalid("Message role '\(roleName)' isn't supported; use system, user, assistant or tool.",
                           code: "unsupported_role", param: "\(param).role")
+        }
+    }
+
+    /// An assistant turn's `tool_calls[]`: `{id, type: "function", function: {name, arguments}}`,
+    /// where `arguments` is a JSON **string** (an object is accepted and re-serialized, since some
+    /// clients send one).
+    private static func decodeToolCalls(_ value: Any?, param: String) throws -> [ServeToolCall] {
+        switch value {
+        case nil, is NSNull: return []
+        case let entries as [Any]:
+            return try entries.enumerated().map { index, entry in
+                let callParam = "\(param)[\(index)]"
+                guard let object = entry as? [String: Any],
+                      let function = object["function"] as? [String: Any],
+                      let name = function["name"] as? String, !name.isEmpty else {
+                    throw invalid("Each tool call needs a 'function.name'.", code: "invalid_tool_call", param: callParam)
+                }
+                return ServeToolCall(id: object["id"] as? String, name: name,
+                                     argumentsJSON: try argumentsString(function["arguments"], param: "\(callParam).function.arguments"))
+            }
+        default:
+            throw invalid("'tool_calls' must be an array.", code: "invalid_tool_call", param: param)
+        }
+    }
+
+    /// `function.arguments` as a JSON string: passed through when it already is one, encoded when
+    /// the client sent an object, `"{}"` when absent (which is what S1's flattening printed).
+    private static func argumentsString(_ value: Any?, param: String) throws -> String {
+        switch value {
+        case nil, is NSNull: return "{}"
+        case let text as String: return text.isEmpty ? "{}" : text
+        case let object as [String: Any]:
+            guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+                  let json = String(data: data, encoding: .utf8) else {
+                throw invalid("That tool call's arguments couldn't be read.", code: "invalid_tool_call", param: param)
+            }
+            return json
+        default:
+            throw invalid("'function.arguments' must be a JSON string or object.",
+                          code: "invalid_tool_call", param: param)
         }
     }
 
@@ -182,30 +275,52 @@ nonisolated enum OpenAIChatDialect {
         "chatcmpl-" + String(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased().prefix(24))
     }
 
-    /// The non-streaming `chat.completion` object.
+    /// The non-streaming `chat.completion` object. `tool_calls` is present only when the model
+    /// produced one (S2-2); `content` stays a string (empty when the turn was only calls), which
+    /// is what S1 already sent.
     static func completionBody(id: String, created: Int, model: String, text: String,
+                               toolCalls: [ServeToolCall] = [],
                                finish: ServeFinishReason, usage: ServeUsage) -> Data {
         encode(Completion(id: id, created: created, model: model,
-                          choices: [.init(index: 0, message: .init(role: "assistant", content: text),
+                          choices: [.init(index: 0, message: .init(role: "assistant", content: text,
+                                                                   tool_calls: toolCalls.isEmpty ? nil
+                                                                       : toolCalls.map(ToolCallWire.init)),
                                           finish_reason: finish.rawValue)],
                           usage: .init(usage)))
+    }
+
+    /// One `delta.tool_calls[]` event: `index` on every fragment, `id` and `name` on the first
+    /// (S2-2). The parsers hand back a finished call, so today the arguments arrive in one
+    /// fragment — the field stays a fragment because that is the shape the wire format uses.
+    static func toolCallChunk(id: String, created: Int, model: String,
+                              call: ServeToolCallDelta, includeUsage: Bool) -> Data {
+        chunk(id: id, created: created, model: model,
+              delta: .init(role: nil, content: nil,
+                           tool_calls: [.init(index: call.index, id: call.id, name: call.name,
+                                              arguments: call.argumentsFragment)]),
+              finish: nil, usage: includeUsage ? .some(nil) : nil)
+    }
+
+    /// A fresh `call_…` id for a tool call the model produced.
+    static func makeToolCallID() -> String {
+        "call_" + String(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased().prefix(24))
     }
 
     /// The SSE chunk events. `includeUsage` makes every chunk carry `"usage": null` until the last,
     /// as OpenAI's `stream_options.include_usage` does.
     static func roleChunk(id: String, created: Int, model: String, includeUsage: Bool) -> Data {
-        chunk(id: id, created: created, model: model, delta: .init(role: "assistant", content: ""),
+        chunk(id: id, created: created, model: model, delta: .init(role: "assistant", content: "", tool_calls: nil),
               finish: nil, usage: includeUsage ? .some(nil) : nil)
     }
 
     static func contentChunk(id: String, created: Int, model: String, text: String, includeUsage: Bool) -> Data {
-        chunk(id: id, created: created, model: model, delta: .init(role: nil, content: text),
+        chunk(id: id, created: created, model: model, delta: .init(role: nil, content: text, tool_calls: nil),
               finish: nil, usage: includeUsage ? .some(nil) : nil)
     }
 
     static func finishChunk(id: String, created: Int, model: String, finish: ServeFinishReason,
                             includeUsage: Bool) -> Data {
-        chunk(id: id, created: created, model: model, delta: .init(role: nil, content: nil),
+        chunk(id: id, created: created, model: model, delta: .init(role: nil, content: nil, tool_calls: nil),
               finish: finish.rawValue, usage: includeUsage ? .some(nil) : nil)
     }
 
@@ -239,8 +354,33 @@ nonisolated enum OpenAIChatDialect {
         }
     }
 
+    /// One tool call as the wire carries it (S2-2): `{id, type: "function", function: {name, arguments}}`
+    /// with `arguments` a JSON **string**, per the Chat Completions reference.
+    private struct ToolCallWire: Encodable {
+        struct Function: Encodable { let name: String; let arguments: String }
+        let id: String
+        let type = "function"
+        let function: Function
+
+        init(_ call: ServeToolCall) {
+            id = call.id ?? OpenAIChatDialect.makeToolCallID()
+            function = Function(name: call.name, arguments: call.argumentsJSON)
+        }
+    }
+
     private struct Completion: Encodable {
-        struct Message: Encodable { let role: String; let content: String }
+        struct Message: Encodable {
+            let role: String
+            let content: String
+            let tool_calls: [ToolCallWire]?
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.container(keyedBy: Keys.self)
+                try c.encode(role, forKey: .role)
+                try c.encode(content, forKey: .content)
+                try c.encodeIfPresent(tool_calls, forKey: .tool_calls)
+            }
+            private enum Keys: String, CodingKey { case role, content, tool_calls }
+        }
         struct Choice: Encodable { let index: Int; let message: Message; let finish_reason: String }
         let id: String
         let object = "chat.completion"
@@ -251,14 +391,37 @@ nonisolated enum OpenAIChatDialect {
     }
 
     private struct Delta: Encodable {
+        struct ToolCall: Encodable {
+            let index: Int
+            let id: String?
+            let name: String?
+            let arguments: String?
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.container(keyedBy: Keys.self)
+                try c.encode(index, forKey: .index)
+                try c.encodeIfPresent(id, forKey: .id)
+                // `type` and `function.name` ride along on the fragment that carries the id, the
+                // way OpenAI's first fragment does; later fragments are arguments-only.
+                if id != nil { try c.encode("function", forKey: .type) }
+                if arguments != nil {
+                    var f = c.nestedContainer(keyedBy: FunctionKeys.self, forKey: .function)
+                    try f.encodeIfPresent(name, forKey: .name)
+                    try f.encodeIfPresent(arguments, forKey: .arguments)
+                }
+            }
+            private enum Keys: String, CodingKey { case index, id, type, function }
+            private enum FunctionKeys: String, CodingKey { case name, arguments }
+        }
         let role: String?
         let content: String?
+        let tool_calls: [ToolCall]?
         func encode(to encoder: Encoder) throws {
             var c = encoder.container(keyedBy: Keys.self)
             try c.encodeIfPresent(role, forKey: .role)
             try c.encodeIfPresent(content, forKey: .content)
+            try c.encodeIfPresent(tool_calls, forKey: .tool_calls)
         }
-        private enum Keys: String, CodingKey { case role, content }
+        private enum Keys: String, CodingKey { case role, content, tool_calls }
     }
 
     private struct Chunk: Encodable {

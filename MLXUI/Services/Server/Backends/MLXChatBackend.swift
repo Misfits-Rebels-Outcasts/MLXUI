@@ -195,9 +195,10 @@ nonisolated struct SamplingDefaults: Equatable {
 
 // MARK: - Backend
 
-/// Serves an installed MLX chat model: container from `ModelContainerPool`, `UserInput(chat:)`
-/// from the messages, `enable_thinking=false` as `LLMEngine` passes it (reasoning passthrough is
-/// S2), raw token ids through `ServeTextPipeline`. Never logs request or response content.
+/// Serves an installed MLX chat model: container from `ModelContainerPool`, `UserInput` from the
+/// messages (structured when the history carries tool traffic — S2-2), `enable_thinking=false` as
+/// `LLMEngine` passes it (reasoning passthrough is S2-3), raw token ids through `ServeTextPipeline`
+/// and `ServeToolCallScanner`. Never logs request or response content.
 nonisolated struct MLXChatBackend: ServeBackend {
     let directory: URL
     /// The catalog `ramGB` in bytes when known; `nil` falls back to the directory's on-disk size.
@@ -205,13 +206,25 @@ nonisolated struct MLXChatBackend: ServeBackend {
     let architecture: String?
     let pool: ModelContainerPool
 
+    /// The checkpoint's `model_type`, read once when the backend is built. It picks the tool-call
+    /// format, the `system` placement, and — through `ServeBackend.modelType` — whether the route
+    /// honours a client's `tools`.
+    let checkpointModelType: String
+
+    var modelType: String? { checkpointModelType.isEmpty ? nil : checkpointModelType }
+
     init(directory: URL, footprintBytes: Int64? = nil, architecture: String? = nil,
          pool: ModelContainerPool = .shared) {
         self.directory = directory
         self.footprintBytes = footprintBytes
         self.architecture = architecture
         self.pool = pool
+        self.checkpointModelType = ModelContainerPool.modelTypeString(directory: directory,
+                                                                     architecture: architecture)
     }
+
+    /// Whether this checkpoint's family can take tools at all (S2-1's table).
+    var acceptsTools: Bool { ToolCallFormatTable.acceptsTools(forModelType: checkpointModelType) }
 
     func generate(_ request: ServeRequest) -> AsyncThrowingStream<ServeEvent, Error> {
         AsyncThrowingStream { continuation in
@@ -234,24 +247,46 @@ nonisolated struct MLXChatBackend: ServeBackend {
                      into continuation: AsyncThrowingStream<ServeEvent, Error>.Continuation) async throws {
         let container = try await pool.container(directory: directory, footprintBytes: footprintBytes,
                                                  architecture: architecture)
-        // S2-1 (owner ruling R22): the family's own chat template decides where a `system`
-        // message may sit, and only the backend knows the checkpoint's `model_type`. This runs
-        // after S1-3c's flatten + same-role merge, on the decoded `ServeRequest`.
-        // Implementer's call, pending owner confirmation — the placement table is
-        // `ToolCallFormatTable.systemPlacement(forModelType:)`.
-        let modelType = ModelContainerPool.modelTypeString(directory: directory, architecture: architecture)
-        let messages = ServeMessageAssembly.hoistingSystemMessages(
-            request.messages, placement: ToolCallFormatTable.systemPlacement(forModelType: modelType))
+        // S2-2: S2-1's `system` hoisting and the flatten-or-keep decision for tool traffic now
+        // happen in the route, which reads this backend's `modelType` and so has the one fact both
+        // need. The backend stays a renderer: messages in, prompt out.
+        let acceptsTools = self.acceptsTools
+        let messages = request.messages
+        // S2-2 gate: `tools` are honoured only for a family whose template renders them *and* whose
+        // output a parser reads. `tool_choice: "none"` renders none at all; a named function
+        // renders just that tool when the client sent it (`renderedTools`), since a model can't be
+        // forced — best effort, implementer's call, pending owner confirmation.
+        let tools: [[String: any Sendable]] = acceptsTools
+            ? request.renderedTools.compactMap(\.object) : []
+        let format = ToolCallFormatTable.resolved(forModelType: checkpointModelType,
+                                                 configData: ModelContainerPool.configData(directory: directory)) ?? .json
+        let hasToolHistory = messages.contains { $0.role == .tool || !$0.toolCalls.isEmpty }
+        let noThinking = LLMEngine.noThinkingContext
         try await container.perform { context in
-            let chat = messages.map { message in
-                Chat.Message(role: Self.role(message.role), content: message.text)
-            }
             let input: LMInput
-            do {
-                input = try await context.processor.prepare(
-                    input: UserInput(chat: chat, additionalContext: LLMEngine.noThinkingContext))
-            } catch {
-                input = try await context.processor.prepare(input: UserInput(chat: chat))
+            if hasToolHistory {
+                // `.messages` carries the raw template dictionaries, which is the only way to hand
+                // mlx-swift-lm an assistant `tool_calls` array or a `tool_call_id`: `Chat.Message`
+                // has no field for either (3.31.3).
+                let raw = Self.rawMessages(messages)
+                do {
+                    input = try await context.processor.prepare(
+                        input: UserInput(prompt: .messages(raw), tools: tools.isEmpty ? nil : tools,
+                                         additionalContext: noThinking))
+                } catch {
+                    input = try await context.processor.prepare(
+                        input: UserInput(prompt: .messages(raw), tools: tools.isEmpty ? nil : tools))
+                }
+            } else {
+                let chat = messages.map { Chat.Message(role: Self.role($0.role), content: $0.text) }
+                do {
+                    input = try await context.processor.prepare(
+                        input: UserInput(chat: chat, tools: tools.isEmpty ? nil : tools,
+                                         additionalContext: noThinking))
+                } catch {
+                    input = try await context.processor.prepare(
+                        input: UserInput(chat: chat, tools: tools.isEmpty ? nil : tools))
+                }
             }
             let promptTokens = input.text.tokens.size
 
@@ -265,6 +300,25 @@ nonisolated struct MLXChatBackend: ServeBackend {
             let stream = try MLXLMCommon.generateTokens(input: input, parameters: parameters, context: context)
 
             var pipeline = ServeTextPipeline(decode: { context.tokenizer.decode(tokenIds: $0) }, stop: request.stop)
+            // The scanner exists only when a tool call could actually be produced; `tools` empty
+            // means the family can't use them or the client asked for `tool_choice: "none"`.
+            var scanner: ServeToolCallScanner? = tools.isEmpty
+                ? nil : ServeToolCallScanner(format: format, tools: tools)
+            var callIndex = 0
+
+            /// Text goes through the scanner (when there is one) and out; any call it completed is
+            /// yielded as its own event.
+            func route(_ text: String) {
+                guard !text.isEmpty else { return }
+                if scanner != nil {
+                    let safe = scanner?.push(text) ?? text
+                    if !safe.isEmpty { continuation.yield(.textDelta(safe)) }
+                    Self.yieldCalls(from: &scanner, into: continuation, index: &callIndex)
+                } else {
+                    continuation.yield(.textDelta(text))
+                }
+            }
+
             var completionTokens = 0
             var libraryReason: GenerateStopReason?
             for await generation in stream {
@@ -272,8 +326,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 switch generation {
                 case .token(let id):
                     completionTokens += 1
-                    let output = pipeline.push(id)
-                    if !output.text.isEmpty { continuation.yield(.textDelta(output.text)) }
+                    route(pipeline.push(id).text)
                 case .info(let info):
                     libraryReason = info.stopReason
                 }
@@ -281,13 +334,76 @@ nonisolated struct MLXChatBackend: ServeBackend {
             }
             if Task.isCancelled { throw CancellationError() }
 
-            let tail = pipeline.finish()
-            if !tail.isEmpty { continuation.yield(.textDelta(tail)) }
+            route(pipeline.finish())
+            // Whatever the scanner still held: a call the stream ended inside, or plain text.
+            route(scanner?.finish() ?? "")
+            Self.yieldCalls(from: &scanner, into: continuation, index: &callIndex)
+
             let hitLimit = libraryReason == .length
                 || (libraryReason == nil && !pipeline.stopped && completionTokens >= request.effectiveMaxTokens)
             continuation.yield(.usage(ServeUsage(promptTokens: promptTokens, completionTokens: completionTokens)))
-            continuation.yield(.finish(hitLimit && !pipeline.stopped ? .length : .stop))
+            // S2-2: a turn that produced calls ends as `tool_calls`, whatever the sampler said.
+            let finish: ServeFinishReason = callIndex > 0 ? .toolCalls
+                : (hitLimit && !pipeline.stopped ? .length : .stop)
+            continuation.yield(.finish(finish))
         }
+    }
+
+    /// Emit every call the scanner has completed since the last drain.
+    private static func yieldCalls(from scanner: inout ServeToolCallScanner?,
+                                   into continuation: AsyncThrowingStream<ServeEvent, Error>.Continuation,
+                                   index: inout Int) {
+        for call in scanner?.takeCalls() ?? [] {
+            continuation.yield(.toolCallDelta(ServeToolCallDelta(
+                index: index, id: OpenAIChatDialect.makeToolCallID(), name: call.function.name,
+                argumentsFragment: argumentsJSON(call.function.arguments))))
+            index += 1
+        }
+    }
+
+    /// The parser's argument dictionary as the JSON **string** the wire carries.
+    nonisolated static func argumentsJSON(_ arguments: [String: JSONValue]) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        guard let data = try? encoder.encode(arguments), let json = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+        return json
+    }
+
+    /// The raw template dictionaries for a history that carries tool traffic (S2-2).
+    ///
+    /// `Chat.Message` can express a role and text and nothing else, so an assistant `tool_calls`
+    /// array and a `tool` turn's `tool_call_id` have to go in as dictionaries —
+    /// `UserInput.Prompt.messages` passes them straight through to the Jinja template, which is
+    /// where every family reads them.
+    nonisolated static func rawMessages(_ messages: [ServeMessage]) -> [[String: any Sendable]] {
+        messages.map { message in
+            var dictionary: [String: any Sendable] = ["role": message.role.rawValue, "content": message.text]
+            if !message.toolCalls.isEmpty {
+                dictionary["tool_calls"] = message.toolCalls.map { call -> [String: any Sendable] in
+                    var function: [String: any Sendable] = ["name": call.name]
+                    function["arguments"] = argumentsValue(call.argumentsJSON)
+                    var entry: [String: any Sendable] = ["type": "function", "function": function]
+                    if let id = call.id { entry["id"] = id }
+                    return entry
+                }
+            }
+            if let id = message.toolCallID { dictionary["tool_call_id"] = id }
+            if let name = message.toolName { dictionary["name"] = name }
+            return dictionary
+        }
+    }
+
+    /// `function.arguments` for the template: the JSON **object** when the string parses as one,
+    /// else the string. Qwen3.5's and Llama 3.1's templates iterate it (`arguments|items`), so a
+    /// string there would raise; Qwen3's and Mistral's accept either (`is string` → as-is, else
+    /// `|tojson`).
+    nonisolated static func argumentsValue(_ json: String) -> any Sendable {
+        guard let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: any Sendable]
+        else { return json }
+        return object
     }
 
     nonisolated private static func role(_ role: ServeMessage.Role) -> Chat.Message.Role {

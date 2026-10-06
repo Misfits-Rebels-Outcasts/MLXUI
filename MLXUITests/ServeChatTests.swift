@@ -13,6 +13,7 @@ nonisolated final class FakeBackend: ServeBackend, @unchecked Sendable {
         case text(String)
         case usage(prompt: Int, completion: Int)
         case finish(ServeFinishReason)
+        case toolCall(index: Int, id: String?, name: String?, arguments: String?)
         case fail
     }
 
@@ -22,8 +23,14 @@ nonisolated final class FakeBackend: ServeBackend, @unchecked Sendable {
     private var _active = 0
     private var _maxActive = 0
     let script: [Step]
+    /// What the checkpoint reports as its `model_type` (S2-2): the route asks this to decide
+    /// whether the client's `tools` are honoured. `nil` stands in for Apple Foundation Models.
+    var modelType: String?
 
-    init(_ script: [Step]) { self.script = script }
+    init(_ script: [Step], modelType: String? = nil) {
+        self.script = script
+        self.modelType = modelType
+    }
 
     var requests: [ServeRequest] { lock.lock(); defer { lock.unlock() }; return _requests }
     var cancelled: Int { lock.lock(); defer { lock.unlock() }; return _cancelled }
@@ -40,6 +47,9 @@ nonisolated final class FakeBackend: ServeBackend, @unchecked Sendable {
                     case .text(let text): continuation.yield(.textDelta(text))
                     case .usage(let p, let c): continuation.yield(.usage(ServeUsage(promptTokens: p, completionTokens: c)))
                     case .finish(let reason): continuation.yield(.finish(reason))
+                    case .toolCall(let index, let id, let name, let arguments):
+                        continuation.yield(.toolCallDelta(ServeToolCallDelta(
+                            index: index, id: id, name: name, argumentsFragment: arguments)))
                     case .fail: continuation.finish(throwing: ServeError(status: 500, message: "boom", code: "boom")); return
                     }
                 }
@@ -116,7 +126,7 @@ struct OpenAIChatDialectTests {
         #expect(r.model == "m")
         #expect(r.messages == [ServeMessage(role: .system, text: "be brief"), ServeMessage(role: .user, text: "hi")])
         #expect(r.temperature == 0.2 && r.topP == 0.9 && r.maxTokens == 64 && r.seed == 7)
-        #expect(r.stop == ["END"] && r.stream && r.includeUsage && !r.toolsIgnored)
+        #expect(r.stop == ["END"] && r.stream && r.includeUsage && !r.toolsRequested)
     }
 
     @Test func aContentArrayOfTextPartsIsJoined() throws {
@@ -130,10 +140,14 @@ struct OpenAIChatDialectTests {
         #expect(error?.message.contains("image_url") == true)
     }
 
-    @Test func toolsAreIgnoredAndFlagged() throws {
+    @Test func toolsAreDecodedAndTheRouteDecidesWhetherTheyAreHonoured() throws {
         let r = try decode(#"{"model":"m","messages":[{"role":"user","content":"x"}],"tools":[{"type":"function","function":{"name":"f"}}],"tool_choice":"auto"}"#)
-        #expect(r.toolsIgnored)
-        #expect(r.tools.isEmpty && r.toolChoice == nil)          // S2's fields stay unset
+        // S2-2: the dialect reports what the client sent; whether it is honoured depends on the
+        // model, which only the route (through the backend's `modelType`) knows. `toolsIgnored` is
+        // a request-log outcome now, not a decode result.
+        #expect(r.toolsRequested)
+        #expect(r.tools.map(\.name) == ["f"])
+        #expect(r.toolChoice == .auto)
     }
 
     @Test func maxCompletionTokensIsAnAliasAndTheDefaultIs4096() throws {
@@ -182,26 +196,37 @@ struct OpenAIChatDialectTests {
     """#
 
     @Test func toolTrafficInTheHistoryIsFlattenedToPlainText() throws {
-        let r = try decode(Self.toolConversation)
+        // S2-2: `decode` keeps tool traffic structured (the tool-capable path); the flattening S1
+        // shipped now lives in `ServeMessageAssembly.flatteningToolTraffic`, which the route runs
+        // for a model that can't take tools. The wording below is S1's, unchanged.
+        let decoded = try decode(Self.toolConversation)
+        #expect(decoded.messages.map(\.role) == [.user, .assistant, .tool, .tool, .tool, .assistant])
+        let r = ServeMessageAssembly.flatteningToolTraffic(decoded.messages)
         // Flattened first, then adjacent same-role turns merged (R21): the three tool results are one user turn.
-        #expect(r.messages.map(\.role) == [.user, .assistant, .user, .assistant])
-        #expect(r.messages[1].text == #"[called read_file with {"path":"a.txt"}]"# + "\n[called list_dir with {}]")
+        #expect(r.map(\.role) == [.user, .assistant, .user, .assistant])
+        #expect(r[1].text == #"[called read_file with {"path":"a.txt"}]"# + "\n[called list_dir with {}]")
         // name found via tool_call_id; `name` wins and parts are joined; unknown id → "tool"
-        #expect(r.messages[2].text == "[tool result for read_file: hello]\n\n[tool result for explicit: xy]\n\n[tool result for tool: z]")
-        #expect(r.messages[3].text == "Done.\n[called f with {}]")                 // text kept, call appended
-        #expect(!r.toolsIgnored)                                                   // only a `tools` field sets that
+        #expect(r[2].text == "[tool result for read_file: hello]\n\n[tool result for explicit: xy]\n\n[tool result for tool: z]")
+        #expect(r[3].text == "Done.\n[called f with {}]")                         // text kept, call appended
+        #expect(!decoded.toolsRequested)                                           // only a `tools` field sets that
     }
 
     @Test func twoConsecutiveToolResultsBecomeOneUserTurn() throws {
-        let r = try decode(#"{"model":"m","messages":[{"role":"user","content":"go"},{"role":"assistant","tool_calls":[{"id":"a","function":{"name":"f","arguments":"{}"}},{"id":"b","function":{"name":"g","arguments":"{}"}}]},{"role":"tool","tool_call_id":"a","content":"one"},{"role":"tool","tool_call_id":"b","content":"two"}]}"#)
-        #expect(r.messages.map(\.role) == [.user, .assistant, .user])
-        #expect(r.messages[2].text == "[tool result for f: one]\n\n[tool result for g: two]")
+        let decoded = try decode(#"{"model":"m","messages":[{"role":"user","content":"go"},{"role":"assistant","tool_calls":[{"id":"a","function":{"name":"f","arguments":"{}"}},{"id":"b","function":{"name":"g","arguments":"{}"}}]},{"role":"tool","tool_call_id":"a","content":"one"},{"role":"tool","tool_call_id":"b","content":"two"}]}"#)
+        // Two results stay two turns for a tool-capable model (S2-2)…
+        #expect(decoded.messages.map(\.role) == [.user, .assistant, .tool, .tool])
+        // …and flatten into the single user turn S1 shipped for one that can't take tools.
+        let r = ServeMessageAssembly.flatteningToolTraffic(decoded.messages)
+        #expect(r.map(\.role) == [.user, .assistant, .user])
+        #expect(r[2].text == "[tool result for f: one]\n\n[tool result for g: two]")
     }
 
     @Test func aToolResultFollowedByAUserMessageIsOneUserTurn() throws {
-        let r = try decode(#"{"model":"m","messages":[{"role":"assistant","tool_calls":[{"id":"a","function":{"name":"f","arguments":"{}"}}]},{"role":"tool","tool_call_id":"a","content":"result"},{"role":"user","content":"now summarise"}]}"#)
-        #expect(r.messages.map(\.role) == [.assistant, .user])
-        #expect(r.messages[1].text == "[tool result for f: result]\n\nnow summarise")
+        let decoded = try decode(#"{"model":"m","messages":[{"role":"assistant","tool_calls":[{"id":"a","function":{"name":"f","arguments":"{}"}}]},{"role":"tool","tool_call_id":"a","content":"result"},{"role":"user","content":"now summarise"}]}"#)
+        #expect(decoded.messages.map(\.role) == [.assistant, .tool, .user])
+        let r = ServeMessageAssembly.flatteningToolTraffic(decoded.messages)
+        #expect(r.map(\.role) == [.assistant, .user])
+        #expect(r[1].text == "[tool result for f: result]\n\nnow summarise")
     }
 
     @Test func twoPlainConsecutiveUserMessagesFromTheClientAreMerged() throws {
@@ -277,7 +302,7 @@ struct ServeTextPipelineTests {
     @Test func divSpanStaysIntactWhenToolsWerePresentInTheRequest() throws {
         // The request's `tools` are ignored in S1 (R9) and the pipeline never sees them; S2 keeps this test.
         let request = try OpenAIChatDialect.decode(Data(#"{"model":"m","messages":[{"role":"user","content":"x"}],"tools":[{"type":"function","function":{"name":"f"}}]}"#.utf8))
-        #expect(request.toolsIgnored)
+        #expect(request.toolsRequested)
         #expect(run([1, 2, 3, 4]).deltas.joined() == "<div><span>")
     }
 
@@ -634,6 +659,144 @@ struct ChatCompletionsRouteTests {
         #expect(await queue.runningCount == 0)
     }
 
+    // MARK: - S2-2 tool calls
+
+    /// A model whose family can't take tools keeps S1 exactly: the client's `tools` never reach the
+    /// backend, the history's tool traffic is flattened (R20) and the log says "tools ignored".
+    @Test func anUnsupportedFamilyKeepsS1sIgnoreAndFlatten() async throws {
+        let backend = FakeBackend([.text("ok"), .finish(.stop)], modelType: "gemma2")
+        let log = RequestLog()
+        let request = #"""
+        {"model":"mlx-community/Qwen3-4B-4bit","tools":[{"type":"function","function":{"name":"read_file"}}],
+         "messages":[{"role":"user","content":"Read a.txt"},
+          {"role":"assistant","content":null,"tool_calls":[{"id":"c1","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"a.txt\"}"}}]},
+          {"role":"tool","tool_call_id":"c1","content":"FILE-BODY"}]}
+        """#
+        let response = try #require(full(await call(request, chatEnvironment(backend: backend, log: log))))
+        #expect(response.status == 200)
+        let seen = try #require(backend.requests.first)
+        #expect(seen.tools.isEmpty)                                                   // not rendered at all
+        #expect(seen.messages.map(\.role) == [.user, .assistant, .user])              // flattened (R20)
+        #expect(seen.messages[2].text == "[tool result for read_file: FILE-BODY]")
+        #expect(log.entries.last?.toolsIgnored == true)
+        #expect(log.entries.last?.toolCalls == 0)
+    }
+
+    /// A tool-capable family gets the client's `tools` and the history's structured turns.
+    @Test func aSupportedFamilyGetsToolsAndStructuredHistory() async throws {
+        let backend = FakeBackend([.text("ok"), .finish(.stop)], modelType: "qwen3")
+        let log = RequestLog()
+        let request = #"""
+        {"model":"mlx-community/Qwen3-4B-4bit","tools":[{"type":"function","function":{"name":"read_file"}}],
+         "messages":[{"role":"user","content":"Read a.txt"},
+          {"role":"assistant","content":null,"tool_calls":[{"id":"c1","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"a.txt\"}"}}]},
+          {"role":"tool","tool_call_id":"c1","content":"FILE-BODY"}]}
+        """#
+        _ = await call(request, chatEnvironment(backend: backend, log: log))
+        let seen = try #require(backend.requests.first)
+        #expect(seen.tools.map(\.name) == ["read_file"])
+        #expect(seen.messages.map(\.role) == [.user, .assistant, .tool])
+        #expect(seen.messages[1].toolCalls.map(\.name) == ["read_file"])
+        #expect(seen.messages[2].toolCallID == "c1")
+        #expect(log.entries.last?.toolsIgnored == false)
+    }
+
+    /// `tool_choice: "none"` (S2-2 requirement 7): the array is still the client's, but nothing is
+    /// rendered into the prompt — which is also what stops the backend scanning for calls.
+    @Test func toolChoiceNoneRendersNothing() async throws {
+        let backend = FakeBackend([.text("ok"), .finish(.stop)], modelType: "qwen3")
+        let request = #"{"model":"mlx-community/Qwen3-4B-4bit","messages":[{"role":"user","content":"x"}],"tools":[{"type":"function","function":{"name":"f"}}],"tool_choice":"none"}"#
+        _ = await call(request, chatEnvironment(backend: backend))
+        let seen = try #require(backend.requests.first)
+        #expect(seen.renderedTools.isEmpty)
+        #expect(seen.tools.map(\.name) == ["f"])                                      // still logged as requested
+    }
+
+    /// Non-streaming: the calls a backend reports become `message.tool_calls` with
+    /// `finish_reason: "tool_calls"`.
+    @Test func toolCallsAreEncodedNonStreaming() async throws {
+        let backend = FakeBackend([
+            .text("Checking. "),
+            .toolCall(index: 0, id: "call_a", name: "get_weather", arguments: #"{"location":"Paris"}"#),
+            .usage(prompt: 5, completion: 6), .finish(.toolCalls),
+        ], modelType: "qwen3")
+        let request = #"{"model":"mlx-community/Qwen3-4B-4bit","messages":[{"role":"user","content":"weather?"}],"tools":[{"type":"function","function":{"name":"get_weather"}}]}"#
+        let response = try #require(full(await call(request, chatEnvironment(backend: backend))))
+        let object = try #require(jsonObject(response.body))
+        let choice = try #require((object["choices"] as? [[String: Any]])?.first)
+        #expect(choice["finish_reason"] as? String == "tool_calls")
+        let message = try #require(choice["message"] as? [String: Any])
+        #expect(message["content"] as? String == "Checking. ")
+        let calls = try #require(message["tool_calls"] as? [[String: Any]])
+        #expect(calls[0]["id"] as? String == "call_a")
+        #expect(calls[0]["type"] as? String == "function")
+        #expect((calls[0]["function"] as? [String: Any])?["name"] as? String == "get_weather")
+        #expect((calls[0]["function"] as? [String: Any])?["arguments"] as? String == #"{"location":"Paris"}"#)
+    }
+
+    /// Streaming: `delta.tool_calls[]` fragments, then the finish chunk.
+    @Test func toolCallsAreEncodedStreaming() async throws {
+        let backend = FakeBackend([
+            .toolCall(index: 0, id: "call_a", name: "get_weather", arguments: #"{"location":"Paris"}"#),
+            .usage(prompt: 5, completion: 6), .finish(.toolCalls),
+        ], modelType: "qwen3")
+        let request = #"{"model":"mlx-community/Qwen3-4B-4bit","messages":[{"role":"user","content":"weather?"}],"stream":true,"tools":[{"type":"function","function":{"name":"get_weather"}}]}"#
+        let streamed = try #require(await collect(await call(request, chatEnvironment(backend: backend))))
+        let events = streamed.text.components(separatedBy: "\n\n").filter { !$0.isEmpty }
+        #expect(events.last == "data: [DONE]")
+        let chunks = try events.dropLast().map { try #require(jsonObject(Data($0.dropFirst(6).utf8))) }
+        func delta(_ c: [String: Any]) -> [String: Any]? { ((c["choices"] as? [[String: Any]])?.first)?["delta"] as? [String: Any] }
+        let calls = try #require(delta(chunks[1])?["tool_calls"] as? [[String: Any]])
+        #expect(calls[0]["index"] as? Int == 0)
+        #expect(calls[0]["id"] as? String == "call_a")
+        #expect((calls[0]["function"] as? [String: Any])?["name"] as? String == "get_weather")
+        let finishes = chunks.compactMap { ($0["choices"] as? [[String: Any]])?.first?["finish_reason"] as? String }
+        #expect(finishes == ["tool_calls"])
+    }
+
+    /// Two calls in one turn keep their indices, in both wire shapes (S2-2 requirement 5).
+    @Test func twoToolCallsKeepTheirIndices() async throws {
+        let backend = FakeBackend([
+            .toolCall(index: 0, id: "call_a", name: "first", arguments: "{}"),
+            .toolCall(index: 1, id: "call_b", name: "second", arguments: "{}"),
+            .finish(.toolCalls),
+        ], modelType: "qwen3")
+        let tools = #""tools":[{"type":"function","function":{"name":"first"}},{"type":"function","function":{"name":"second"}}]"#
+
+        // Non-streaming: two entries, in order.
+        let plain = #"{"model":"mlx-community/Qwen3-4B-4bit","messages":[{"role":"user","content":"x"}],\#(tools)}"#
+        let response = try #require(full(await call(plain, chatEnvironment(backend: backend))))
+        let message = try #require(((jsonObject(response.body)?["choices"] as? [[String: Any]])?.first)?["message"] as? [String: Any])
+        #expect((message["tool_calls"] as? [[String: Any]])?.compactMap { $0["id"] as? String } == ["call_a", "call_b"])
+
+        // Streaming: `index` 0 then 1.
+        let streaming = #"{"model":"mlx-community/Qwen3-4B-4bit","messages":[{"role":"user","content":"x"}],"stream":true,\#(tools)}"#
+        let streamed = try #require(await collect(await call(streaming, chatEnvironment(backend: backend))))
+        let events = streamed.text.components(separatedBy: "\n\n").filter { $0.hasPrefix("data: {") }
+        let indices = events.compactMap { event -> Int? in
+            guard let chunk = jsonObject(Data(event.dropFirst(6).utf8)) else { return nil }
+            let delta = ((chunk["choices"] as? [[String: Any]])?.first)?["delta"] as? [String: Any]
+            return (delta?["tool_calls"] as? [[String: Any]])?.first?["index"] as? Int
+        }
+        #expect(indices == [0, 1])
+    }
+
+    /// Rule 13: the log records **how many** tool calls, never a name, an argument or a result.
+    @Test func theLogCountsToolCallsAndNothingElse() async throws {
+        let backend = FakeBackend([
+            .toolCall(index: 0, id: "call_a", name: "SECRET-TOOL-NAME", arguments: #"{"secret":"ARG-VALUE"}"#),
+            .toolCall(index: 1, id: "call_b", name: "b", arguments: "{}"),
+            .finish(.toolCalls),
+        ], modelType: "qwen3")
+        let log = RequestLog()
+        let request = #"{"model":"mlx-community/Qwen3-4B-4bit","messages":[{"role":"user","content":"SECRET-PROMPT-TEXT"}],"tools":[{"type":"function","function":{"name":"f"}}]}"#
+        _ = await call(request, chatEnvironment(backend: backend, log: log))
+        let entry = try #require(log.entries.last)
+        #expect(entry.toolCalls == 2)
+        let dump = String(describing: log.entries)
+        #expect(!dump.contains("SECRET-TOOL-NAME") && !dump.contains("ARG-VALUE") && !dump.contains("SECRET-PROMPT-TEXT"))
+    }
+
     @Test func theRequestLogHoldsMetadataAndNeverContent() async throws {
         let backend = FakeBackend([.text("SECRET-REPLY-TEXT"), .usage(prompt: 4, completion: 3), .finish(.stop)])
         let log = RequestLog()
@@ -740,5 +903,58 @@ struct MLXChatBackendRealModelTests {
         #expect(!text.contains("<div<span"))
         #expect((usage?.completionTokens ?? 0) > 0 && (usage?.promptTokens ?? 0) > 0)
         #expect(finish != nil)
+    }
+
+    /// S2-2 on a real checkpoint: the model calls `get_weather`, and the turn that carries the call
+    /// plus its result back through the template renders and answers.
+    ///
+    /// Two generations, because that is the round trip a harness makes. The first pins the parse
+    /// (`.json` on Qwen3-8B) and the second pins the structured-history path — the `tool_calls`
+    /// array and the `tool_call_id` that `Chat.Message` cannot carry, which goes to the template as
+    /// raw dictionaries.
+    @Test(.enabled(if: MLXChatBackendRealModelTests.modelDir != nil))
+    func aToolCallAndItsResultRoundTrip() async throws {
+        let dir = URL(fileURLWithPath: try #require(Self.modelDir))
+        let backend = MLXChatBackend(directory: dir, pool: ModelContainerPool(budgetBytes: 40 << 30))
+        let toolJSON = #"{"type":"function","function":{"name":"get_weather","description":"Get the current weather for a location","parameters":{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}}}"#
+        let tools = [ServeToolSpec(name: "get_weather", rawJSON: toolJSON)]
+        func request(_ messages: [ServeMessage]) -> ServeRequest {
+            var request = ServeRequest(model: "m", messages: messages)
+            request.tools = tools
+            request.temperature = 0
+            request.maxTokens = 160
+            return request
+        }
+
+        // Turn 1 — the ask. The model should call the tool.
+        var calls: [ServeToolCall] = []
+        var text = ""
+        var finish: ServeFinishReason?
+        for try await event in backend.generate(request([
+            ServeMessage(role: .user, text: "What is the weather in Paris? Use the get_weather tool.")
+        ])) {
+            switch event {
+            case .textDelta(let piece): text += piece
+            case .toolCallDelta(let delta): ChatCompletionsRoute.append(delta, to: &calls)
+            case .finish(let reason): finish = reason
+            default: break
+            }
+        }
+        print("S2-2 MEASURE tool call: finish=\(String(describing: finish)) calls=\(calls.map(\.name)) text chars=\(text.count)")
+        #expect(finish == .toolCalls)
+        #expect(calls.first?.name == "get_weather")
+        #expect(calls.first?.argumentsJSON.contains("Paris") == true)
+        let call = try #require(calls.first)
+
+        // Turn 2 — the result goes back through the template, structured.
+        var answer = ""
+        for try await event in backend.generate(request([
+            ServeMessage(role: .user, text: "What is the weather in Paris? Use the get_weather tool."),
+            ServeMessage(role: .assistant, text: "", toolCalls: [call]),
+            ServeMessage(role: .tool, text: "18 degrees and sunny", toolCallID: call.id, toolName: "get_weather"),
+        ])) {
+            if case .textDelta(let piece) = event { answer += piece }
+        }
+        #expect(!answer.isEmpty)
     }
 }

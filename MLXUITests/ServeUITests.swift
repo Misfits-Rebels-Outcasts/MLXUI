@@ -313,6 +313,22 @@ struct ConnectSnippetsTests {
         let line = RequestLogList.line(entry)
         #expect(line.contains("200") && line.contains("m") && line.contains("3→4 tok") && line.contains("1.2s") || line.contains("1.3s"))
         #expect(line.contains("ua/1") && line.contains("tools ignored"))
+        #expect(!line.contains("tool call"))                       // a plain chat says nothing about tools
+    }
+
+    /// S2-2: a served tool call shows up as a count. Names and arguments have nowhere to go — the
+    /// log entry has no field for them (rule 13).
+    @Test func theRequestLogLineCountsToolCallsButNeverNamesThem() {
+        let entry = RequestLogEntry(time: Date(timeIntervalSince1970: 0), userAgent: "ua/1", model: "m", promptTokens: 3,
+                                    completionTokens: 4, durationSeconds: 1.25, status: 200, toolsIgnored: false,
+                                    toolCalls: 2)
+        let line = RequestLogList.line(entry)
+        #expect(line.contains("2 tool calls"))
+
+        let one = RequestLogEntry(time: Date(timeIntervalSince1970: 0), userAgent: nil, model: "m", promptTokens: nil,
+                                  completionTokens: nil, durationSeconds: 0.5, status: 200, toolsIgnored: false,
+                                  toolCalls: 1)
+        #expect(RequestLogList.line(one).contains("1 tool call"))
     }
 }
 
