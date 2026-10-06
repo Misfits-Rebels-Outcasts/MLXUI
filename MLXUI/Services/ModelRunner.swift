@@ -426,6 +426,32 @@ final class ModelRunner {
         }
     }
 
+    /// K1's copier: `AttachmentImporter.copy` inside the covering grant's security scope when
+    /// there is one, and the plain call when there is not.
+    static func scopedCopier() -> (URL, URL, Int) throws -> URL {
+        { source, directory, ordinal in
+            #if DIRECT_BUILD
+            return try AttachmentImporter.copy(source, into: directory, ordinal: ordinal)
+            #else
+            let grants = FolderGrants.load()
+            guard FolderGrants.grant(covering: source.path, in: grants) != nil else {
+                return try AttachmentImporter.copy(source, into: directory, ordinal: ordinal)
+            }
+            guard let copied = FolderGrants.withScopedRead(
+                to: source,
+                grants: grants,
+                container: ModelStore.shared.baseDirectory,
+                body: { scoped in
+                    try AttachmentImporter.copy(scoped, into: directory, ordinal: ordinal)
+                }
+            ) else {
+                throw CocoaError(.fileReadNoPermission)
+            }
+            return copied
+            #endif
+        }
+    }
+
     /// The OCR step for one attachment copy: the test override when there is one, else the real
     /// `OCRImageTool` entry point.
     private static func ocrForAttachment(
@@ -495,6 +521,12 @@ final class ModelRunner {
         let directory = ConversationStore.attachmentsDirectory(for: conversationID)
         var result: [ChatAttachment] = []
         var inlineBytes = 0
+        // K1: a file inside a granted folder is only readable inside that grant's security scope.
+        // A panel-picked file and a dropped file carry the extension the panel/drop handed out, but
+        // "Attach to message" from the sidebar tree hands over a plain path — so after a relaunch
+        // the copy would fail with "Operation not permitted". Same class as CW-A F1. Only the
+        // **copy** needs the scope: extraction and OCR read the container copy.
+        let copier = Self.scopedCopier()
         // R1 (CW-3-FIX-2): the seam only exists in DEBUG, so the reference must be inside an `#if`
         // too — otherwise the Release configuration does not compile at all.
         #if DEBUG
@@ -507,7 +539,8 @@ final class ModelRunner {
                 let attachment = try await AttachmentImporter.importAttachment(
                     from: url, into: directory, ordinal: index, window: window,
                     inlineBytesSoFar: inlineBytes,
-                    ocr: Self.ocrForAttachment(override: ocrOverride))
+                    ocr: Self.ocrForAttachment(override: ocrOverride),
+                    copier: copier)
                 inlineBytes += attachment.inlineText?.utf8.count ?? 0
                 result.append(attachment)
             } catch let failure as AttachmentImporter.Failure {

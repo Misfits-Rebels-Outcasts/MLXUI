@@ -90,13 +90,24 @@ nonisolated enum AttachmentImporter {
         ordinal: Int,
         window: Int,
         inlineBytesSoFar: Int,
-        ocr: (@Sendable (URL) async -> String?)? = nil
+        ocr: (@Sendable (URL) async -> String?)? = nil,
+        /// K1: how to copy. The default is `copy(_:into:ordinal:)`; a caller whose source needs a
+        /// security scope passes a copier that wraps it (see `ModelRunner`).
+        copier: ((URL, URL, Int) throws -> URL)? = nil
     ) async throws -> ChatAttachment {
         let byteCount = fileSize(at: source)
         guard byteCount <= ChatAttachment.maxFileBytes else {
             throw Failure.tooLarge(ChatAttachment.maxFileBytes)
         }
-        let stored = try copy(source, into: directory, ordinal: ordinal)
+        let stored: URL
+        if let copier {
+            let fm = FileManager.default
+            let destinationDirectory = directory
+            try fm.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
+            stored = try copier(source, destinationDirectory, ordinal)
+        } else {
+            stored = try copy(source, into: directory, ordinal: ordinal)
+        }
         let name = source.lastPathComponent
 
         if isImage(source), let ocr {

@@ -19,6 +19,8 @@ nonisolated enum ChatFilePreview {
     /// The pane's content.
     enum Content: Equatable {
         case markdown(String)
+        /// Markdown longer than the cap: clipped, and the view shows the same notice as text.
+        case truncatedMarkdown(String, shownBytes: Int, totalBytes: Int)
         case text(String)
         /// Text longer than the cap, with what was shown so the view can say so.
         case truncatedText(String, shownBytes: Int, totalBytes: Int)
@@ -31,35 +33,93 @@ nonisolated enum ChatFilePreview {
     /// The cap on inlined text: 64 KB, with a notice rather than a silent cut.
     static let textCap = 64 * 1024
 
-    /// Decide the pane's content for `url`. `data` is read by the caller through the scoped read so
-    /// this stays pure and testable; `nil` means the read failed and `error` says why.
+    /// The most the preview ever reads: one byte past the cap, so "there is more" is knowable
+    /// without reading the rest of a 300 MB log.
+    static let readLimit = textCap + 1
+
+    /// One bounded read.
+    struct FileRead {
+        /// At most `readLimit` bytes, or empty when the read failed.
+        let data: Data
+        /// The file's real size, from `.fileSizeKey` — not `data.count`.
+        let fileSize: Int
+        /// A user-facing reason the read failed, if it did.
+        let error: String?
+    }
+
+    /// Read at most `readLimit` bytes with a `FileHandle`, so clicking a row in a folder the model
+    /// listed never loads the whole file. `injected` is the test seam (nil in the app); the real
+    /// read runs through the grant's scope.
+    ///
+    /// `nonisolated` and `static` on purpose: the view calls it from a detached task, so a big file
+    /// never blocks the main actor.
+    nonisolated static func read(
+        path: String,
+        injected: ((URL, Int) -> FileRead)? = nil
+    ) -> FileRead {
+        let url = URL(fileURLWithPath: path)
+        if let injected { return injected(url, readLimit) }
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+        let data = FolderListing.scopedData(at: url, limit: readLimit)
+        guard let data else {
+            return FileRead(data: Data(), fileSize: size,
+                            error: "This file could not be read.")
+        }
+        return FileRead(data: data, fileSize: max(size, data.count), error: nil)
+    }
+
+    /// Decide the pane's content. `read` is what `read(path:)` returned, so this stays pure.
     static func content(
         for url: URL,
         presentation: SavedFilePresentation,
-        data: Data?,
-        error: String?
+        read: FileRead
     ) -> Content {
-        if let error { return .unavailable(error) }
-        guard let data else { return .unavailable("This file could not be read.") }
+        if let error = read.error { return .unavailable(error) }
 
         switch presentation {
         case .image:
             return .image
         case .text, .web, .table:
-            guard let text = String(data: data, encoding: .utf8) else {
-                return .quickLook
+            guard let text = decodedText(read.data) else { return .quickLook }
+            let clipped = clip(read.data)
+            guard let clippedText = decodedText(clipped) else { return .quickLook }
+            let isClipped = read.fileSize > textCap || read.data.count > textCap
+            if isMarkdown(url) {
+                return isClipped
+                    ? .truncatedMarkdown(clippedText, shownBytes: clipped.count,
+                                         totalBytes: read.fileSize)
+                    : .markdown(clippedText)
             }
-            if isMarkdown(url) { return .markdown(text) }
-            let clipped = data.prefix(textCap)
-            guard let clippedText = String(data: clipped, encoding: .utf8) else {
-                return .quickLook
-            }
-            return data.count > textCap
-                ? .truncatedText(clippedText, shownBytes: clipped.count, totalBytes: data.count)
+            _ = text
+            return isClipped
+                ? .truncatedText(clippedText, shownBytes: clipped.count, totalBytes: read.fileSize)
                 : .text(clippedText)
         case .pdf, .audio, .video, .other, .folder:
             return .quickLook
         }
+    }
+
+    /// The first `textCap` bytes, backed off to a UTF-8 boundary so a cut multi-byte character does
+    /// not make the whole preview fall back to Quick Look. At most 3 bytes are dropped — a UTF-8
+    /// sequence is at most 4 bytes long.
+    static func clip(_ data: Data) -> Data {
+        guard data.count > textCap else { return data }
+        var end = textCap
+        var backedOff = 0
+        while end > 0, backedOff < 3, isContinuationByte(data[data.startIndex + end]) {
+            end -= 1
+            backedOff += 1
+        }
+        return data.prefix(end)
+    }
+
+    /// A UTF-8 continuation byte is `10xxxxxx`.
+    static func isContinuationByte(_ byte: UInt8) -> Bool {
+        byte & 0b1100_0000 == 0b1000_0000
+    }
+
+    static func decodedText(_ data: Data) -> String? {
+        String(data: data, encoding: .utf8)
     }
 
     static func isMarkdown(_ url: URL) -> Bool {

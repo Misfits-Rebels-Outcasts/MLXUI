@@ -21,25 +21,37 @@ nonisolated enum FileTouchIndex {
         case created
         /// `edit_file` that ran.
         case edited
-        /// `read_file` / `list_directory` / `search_files`.
+        /// `read_file` / `list_directory` / `search_files` that returned a result.
         case read
-        /// A write or an edit the user refused (or that failed).
+        /// The user refused the call.
         case declined
+        /// The tool ran and answered with an `"Error…"` string — every tool reports its errors as a
+        /// returned string with status `.finished`, so the result is the only signal there is.
+        case failed
 
         var isChange: Bool {
             switch self {
             case .created, .edited: return true
-            case .read, .declined: return false
+            case .read, .declined, .failed: return false
             }
         }
 
-        /// The row's grouping title.
+        /// The row's own label.
         var label: String {
             switch self {
             case .created: return "New"
             case .edited: return "Edited"
             case .read: return "Read"
             case .declined: return "Declined"
+            case .failed: return "Not done"
+            }
+        }
+
+        /// Nothing happened to the file, so there is nothing to preview or diff.
+        var hasResult: Bool {
+            switch self {
+            case .created, .edited, .read: return true
+            case .declined, .failed: return false
             }
         }
     }
@@ -70,21 +82,21 @@ nonisolated enum FileTouchIndex {
         var changes: [Entry] { entries.filter { $0.kind.isChange } }
         /// Read-only touches, collapsed in the UI as "N files read".
         var reads: [Entry] { entries.filter { $0.kind == .read } }
-        /// Refused edits and writes.
-        var declined: [Entry] { entries.filter { $0.kind == .declined } }
+        /// Refused calls and calls whose tool answered with an error — one group in the UI, each
+        /// row showing its own label.
+        var notDone: [Entry] {
+            entries.filter { $0.kind == .declined || $0.kind == .failed }
+        }
 
         func entry(for path: String) -> Entry? { entries.first { $0.path == path } }
 
-        /// The edits of one path, newest first — what CW-6 renders as red/green diffs.
+        /// The edits of one path that actually landed, newest first — what CW-6 renders as
+        /// red/green diffs. A call whose result starts with `"Error"` never changed the file, so it
+        /// is excluded rather than shown as a diff of a change that did not happen.
         func editActivities(for path: String) -> [ToolActivity] {
             (entry(for: path)?.activities ?? [])
-                .filter { $0.name == "edit_file" && isFinished($0) }
+                .filter { $0.name == "edit_file" && FileTouchIndex.isSuccess($0) }
                 .reversed()
-        }
-
-        private func isFinished(_ activity: ToolActivity) -> Bool {
-            if case .finished = activity.status { return true }
-            return false
         }
     }
 
@@ -138,34 +150,34 @@ nonisolated enum FileTouchIndex {
         }
     }
 
-    /// What one card did.
+    /// What one card did. One rule for all five file tools: a `.finished` card whose result
+    /// **starts with** `"Error"` is `.failed`. Every tool answers a refusal or a failure as a
+    /// returned string, so without this a refused read would read as Read and a failed edit as
+    /// Edited (with a diff of a change that never happened).
     static func kind(of activity: ToolActivity) -> Kind {
         switch activity.status {
         case .denied:
-            // The user's refusal is the fact worth showing for a write or an edit.
             return .declined
         case .finished:
-            if activity.name == "write_file" { return writeOutcome(activity) }
+            guard isSuccess(activity) else { return .failed }
+            if activity.name == "write_file" { return .created }
             if activity.name == "edit_file" { return .edited }
             return .read
         case .failed, .unknownTool, .budgetExceeded:
-            return writeTools.contains(activity.name) ? .declined : .read
+            // A dispatch-level failure carries no result string at all.
+            return .failed
         case .running:
-            return writeTools.contains(activity.name) ? .declined : .read
+            return .failed
         }
     }
 
-    /// Both editions answer a **failed** write with a string that contains "Error" (the App Store
-    /// tool's `withAccess` wrapper, Direct's `catch`, and EF-2's `editFile` all do), and no success
-    /// path mentions the word. That is the whole rule — no invented sentinel.
-    ///
-    /// The result does not say whether the file already existed (the tools write either way), so
-    /// there is no "overwritten" distinction: the row is **New**, and the preview shows what was
-    /// written. Worth a tool wording change if the reviewer wants the distinction — it would need
-    /// the tool to report it, not this index to guess it.
-    static func writeOutcome(_ activity: ToolActivity) -> Kind {
-        guard let result = activity.result, !result.contains("Error") else { return .declined }
-        return .created
+    /// A `.finished` card whose result does not start with `"Error"`. `hasPrefix`, not `contains`:
+    /// a successful write to `Error-log.txt` says `Wrote … to /path/Error-log.txt.`, and a
+    /// substring test would call that a failure.
+    static func isSuccess(_ activity: ToolActivity) -> Bool {
+        guard case .finished = activity.status else { return false }
+        guard let result = activity.result else { return false }
+        return !result.hasPrefix("Error")
     }
 
     /// Resolve a tool argument the way the tools do: `~` first, then relative against the working

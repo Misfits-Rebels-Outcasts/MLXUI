@@ -89,19 +89,38 @@ nonisolated enum FolderListing {
     /// `injected` is nil in the app; a test passes one so a temp root stands in for a grant. The
     /// parameter exists in release too — it is a value, not a `#if DEBUG` seam — but nothing in the
     /// app ever passes one.
-    /// Read a file's bytes through the same scope handling as a listing. `nil` means the read was
-    /// refused or failed — the preview says so rather than showing nothing.
-    static func scopedData(at url: URL, injected: ((URL) -> Data?)? = nil) -> Data? {
-        if let injected { return injected(url) }
+    /// Read **at most `limit` bytes** of a file through the same scope handling as a listing.
+    /// `nil` means the read was refused or failed — the preview says so rather than showing
+    /// nothing. Bounded on purpose: a folder the model listed can hold a 300 MB log, and the
+    /// preview pane must not read it to show 64 KB.
+    static func scopedData(
+        at url: URL,
+        limit: Int,
+        injected: ((URL, Int) -> Data?)? = nil
+    ) -> Data? {
+        if let injected { return injected(url, limit) }
+        return readBounded(url, limit: limit)
+    }
+
+    /// The actual bounded read: `FileHandle` so only `limit + 1` bytes are ever pulled in.
+    nonisolated static func readBounded(_ url: URL, limit: Int) -> Data? {
         #if DIRECT_BUILD
-        return try? Data(contentsOf: url)
+        return boundedRead(url, limit: limit)
         #else
         return FolderGrants.withScopedRead(
             to: url,
             grants: FolderGrants.load(),
             container: ModelStore.shared.baseDirectory
-        ) { try Data(contentsOf: $0) }
+        ) { boundedRead($0, limit: limit) } ?? nil
         #endif
+    }
+
+    /// `FileHandle.read(upToCount:)` (macOS 10.15+) returns at most `count` bytes and throws at
+    /// EOF, which is exactly one bounded read. Used unchanged in both editions.
+    nonisolated static func boundedRead(_ url: URL, limit: Int) -> Data? {
+        guard limit > 0, let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        return try? handle.read(upToCount: limit)
     }
 
     static func listing(
@@ -117,82 +136,13 @@ nonisolated enum FolderListing {
         // whether the read happened, so an error string is mapped to the tree's own message.
         let container = ModelStore.shared.baseDirectory
         let grants = FolderGrants.load()
-        let outcome = FolderGrants.withAccess(to: directory, grants: grants, container: container) {
-            children(of: $0, limit: limit)
+        let outcome = FolderGrants.withScopedRead(
+            to: directory, grants: grants, container: container
+        ) { children(of: $0, limit: limit) }
+        guard let outcome else {
+            return Result(entries: [], total: 0, error: "This folder is not attached to this chat.")
         }
-        return Result(entries: outcome.entries, total: outcome.total, error: outcome.error)
+        return outcome
         #endif
     }
 }
-
-#if !DIRECT_BUILD
-private extension FolderGrants {
-    /// The same scope handling for any other read the inspector needs (CW-5's preview pane reads
-    /// `Data`). `nil` when the folder is not covered by the container or a grant, or the bookmark
-    /// no longer resolves.
-    static func withScopedRead<T>(
-        to url: URL,
-        grants: [FolderGrant],
-        container: URL,
-        body: (URL) throws -> T
-    ) -> T? {
-        let target = url.standardizedFileURL.resolvingSymlinksInPath().path
-        let containerPath = container.standardizedFileURL.resolvingSymlinksInPath().path
-        do {
-            if target == containerPath || target.hasPrefix("\(containerPath)/") {
-                return try body(url)
-            }
-            guard let grant = grant(covering: url.path, in: grants) else { return nil }
-            var isStale = false
-            guard let scoped = try? URL(
-                resolvingBookmarkData: grant.bookmark,
-                options: .withSecurityScope,
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale)
-            else { return nil }
-            let accessed = scoped.startAccessingSecurityScopedResource()
-            defer { if accessed { scoped.stopAccessingSecurityScopedResource() } }
-            return try body(url)
-        } catch {
-            return nil
-        }
-    }
-
-    /// `withAccess` is generic over its body's return type only by being `(URL) throws -> String`,
-    /// so the directory read gets its own small wrapper that keeps the same scope handling.
-    static func withAccess(
-        to url: URL,
-        grants: [FolderGrant],
-        container: URL,
-        body: (URL) throws -> FolderListing.Result
-    ) -> FolderListing.Result {
-        let target = url.standardizedFileURL.resolvingSymlinksInPath().path
-        let containerPath = container.standardizedFileURL.resolvingSymlinksInPath().path
-        do {
-            if target == containerPath || target.hasPrefix("\(containerPath)/") {
-                return try body(url)
-            }
-            guard let grant = grant(covering: url.path, in: grants) else {
-                return FolderListing.Result(
-                    entries: [], total: 0, error: "This folder is not attached to this chat.")
-            }
-            var isStale = false
-            guard let scoped = try? URL(
-                resolvingBookmarkData: grant.bookmark,
-                options: .withSecurityScope,
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale)
-            else {
-                return FolderListing.Result(
-                    entries: [], total: 0, error: staleBookmarkMessage(for: grant.path))
-            }
-            let accessed = scoped.startAccessingSecurityScopedResource()
-            defer { if accessed { scoped.stopAccessingSecurityScopedResource() } }
-            return try body(url)
-        } catch {
-            return FolderListing.Result(
-                entries: [], total: 0, error: "Error: \(error.localizedDescription)")
-        }
-    }
-}
-#endif

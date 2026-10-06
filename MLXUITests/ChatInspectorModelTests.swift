@@ -38,6 +38,91 @@ struct ChatInspectorModelTests {
         #expect(!meter.isAmber)
     }
 
+    // MARK: - K3: the bounded preview read
+
+    private func markdown(_ bytes: Int) -> String { String(repeating: "x", count: bytes) }
+
+    @Test func aOneMegabyteTextFileIsClippedAndTheReadIsBounded() throws {
+        let url = URL(fileURLWithPath: "/tmp/big.txt")
+        var requested = 0
+        let read = ChatFilePreview.read(path: url.path) { _, limit in
+            requested = limit
+            return ChatFilePreview.FileRead(
+                data: Data(repeating: 0x78, count: min(limit, 1_048_576)),
+                fileSize: 1_048_576, error: nil)
+        }
+        #expect(requested == ChatFilePreview.readLimit)          // never more than cap + 1
+        #expect(requested <= ChatFilePreview.textCap + 1)
+
+        let content = ChatFilePreview.content(
+            for: url, presentation: .text, read: read)
+        guard case .truncatedText(let text, let shown, let total) = content else {
+            Issue.record("expected truncatedText, got \(content)")
+            return
+        }
+        #expect(shown <= ChatFilePreview.textCap)
+        #expect(shown == text.utf8.count)
+        #expect(total == 1_048_576)
+        #expect(text.count == ChatFilePreview.textCap)
+    }
+
+    /// Markdown is clipped like text — CW-6 rendered it unclipped.
+    @Test func aOneMegabyteMarkdownFileIsClippedWithTheSameNotice() {
+        let url = URL(fileURLWithPath: "/tmp/big.md")
+        let read = ChatFilePreview.FileRead(
+            data: Data(repeating: 0x78, count: ChatFilePreview.readLimit),
+            fileSize: 1_048_576, error: nil)
+        let content = ChatFilePreview.content(for: url, presentation: .text, read: read)
+        guard case .truncatedMarkdown(let text, let shown, let total) = content else {
+            Issue.record("expected truncatedMarkdown, got \(content)")
+            return
+        }
+        #expect(text.count == ChatFilePreview.textCap)
+        #expect(shown == ChatFilePreview.textCap)
+        #expect(total == 1_048_576)
+        #expect(ChatFilePreview.truncationNotice(shownBytes: shown, totalBytes: total)
+            .contains("of"))
+    }
+
+    /// The clip backs off to a UTF-8 boundary: a 4-byte character straddling the cap is dropped
+    /// whole rather than turned into invalid text (which used to fall back to Quick Look).
+    @Test func theClipBacksOffToAUTF8Boundary() throws {
+        let character = "😀".data(using: .utf8) ?? Data()          // 4 bytes
+        #expect(character.count == 4)
+        // 65_535 ASCII bytes, then an emoji straddling the cap: 2 bytes inside, 2 outside.
+        var data = Data(repeating: 0x78, count: ChatFilePreview.textCap - 2)
+        data.append(character)
+        data.append(Data(repeating: 0x79, count: 100))
+        #expect(data.count > ChatFilePreview.textCap)
+
+        let clipped = ChatFilePreview.clip(data)
+        #expect(clipped.count <= ChatFilePreview.textCap)
+        // The clip is valid UTF-8 and no partial emoji survived.
+        #expect(String(data: clipped, encoding: .utf8) != nil)
+        #expect(!String(data: clipped, encoding: .utf8)!.contains("😀"))
+    }
+
+    @Test func theClipLeavesAShortFileAlone() {
+        let data = Data(repeating: 0x61, count: 10)
+        #expect(ChatFilePreview.clip(data) == data)
+    }
+
+    @Test func aReadErrorBecomesUnavailable() {
+        let read = ChatFilePreview.FileRead(
+            data: Data(), fileSize: 0, error: "This file could not be read.")
+        let content = ChatFilePreview.content(
+            for: URL(fileURLWithPath: "/a/x.txt"), presentation: .text, read: read)
+        #expect(content == .unavailable("This file could not be read."))
+    }
+
+    @Test func anImageAndAPDFAreNotReadAtAll() {
+        let empty = ChatFilePreview.FileRead(data: Data(), fileSize: 0, error: nil)
+        #expect(ChatFilePreview.content(
+            for: URL(fileURLWithPath: "/a/x.png"), presentation: .image, read: empty) == .image)
+        #expect(ChatFilePreview.content(
+            for: URL(fileURLWithPath: "/a/x.pdf"), presentation: .pdf, read: empty) == .quickLook)
+    }
+
     // MARK: - tool calls
 
     @Test func toolCallsCountOnlyTheCurrentReply() {

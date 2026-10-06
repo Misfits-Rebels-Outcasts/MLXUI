@@ -187,3 +187,42 @@ nonisolated enum FolderGrants {
     static let grantHint =
         "The user can grant folder access in Settings, Tools, or with the + button in the chat."
 }
+
+
+// MARK: - Scope helpers for readers that are not `String`
+
+#if !DIRECT_BUILD
+extension FolderGrants {
+    /// The same scope handling as `withAccess`, for a read that returns something other than a
+    /// model-facing string — CW-4's folder listing and CW-5's preview both need it.
+    /// `nil` when the path is covered by neither the container nor a grant, or the bookmark no
+    /// longer resolves.
+    static func withScopedRead<T>(
+        to url: URL,
+        grants: [FolderGrant],
+        container: URL,
+        body: (URL) throws -> T
+    ) -> T? {
+        let target = url.standardizedFileURL.resolvingSymlinksInPath().path
+        let containerPath = container.standardizedFileURL.resolvingSymlinksInPath().path
+        do {
+            if target == containerPath || target.hasPrefix("\(containerPath)/") {
+                return try body(url)
+            }
+            guard let grant = grant(covering: url.path, in: grants) else { return nil }
+            var isStale = false
+            guard let scoped = try? URL(
+                resolvingBookmarkData: grant.bookmark,
+                options: .withSecurityScope,
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale)
+            else { return nil }
+            let accessed = scoped.startAccessingSecurityScopedResource()
+            defer { if accessed { scoped.stopAccessingSecurityScopedResource() } }
+            return try body(url)
+        } catch {
+            return nil
+        }
+    }
+}
+#endif

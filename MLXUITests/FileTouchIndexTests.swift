@@ -44,16 +44,94 @@ struct FileTouchIndexTests {
         #expect(evaluation.changes.count == 2)
     }
 
-    /// A write the tools refused answers with "Error …"; the row is Declined, not New.
-    @Test func aFailedWriteIsDeclined() {
+    /// A write the tools refused answers with "Error …"; the row is Not done, not New.
+    @Test func aFailedWriteIsNotDone() {
         let items: [TranscriptItem] = [
             tool("write_file", path: "/a/nope.txt",
                  result: "Error: access to /a/nope.txt is not permitted. This chat can use: …"),
         ]
         let evaluation = FileTouchIndex.entries(items: items)
-        #expect(evaluation.entry(for: "/a/nope.txt")?.kind == .declined)
-        #expect(evaluation.declined.count == 1)
+        #expect(evaluation.entry(for: "/a/nope.txt")?.kind == .failed)
+        #expect(evaluation.notDone.count == 1)
         #expect(evaluation.changes.isEmpty)
+    }
+
+    // MARK: - K2: a returned "Error…" is Not done, whatever the tool
+
+    /// The C5 refusal case: the model asked for a file in an unattached folder and got the refusal
+    /// text back with status `.finished`. The row must be Not done, not Read.
+    @Test func aRefusedReadIsFailedNotRead() {
+        let items: [TranscriptItem] = [
+            tool("read_file", path: "/Users/me/grant-b/secret.txt",
+                 result: "Error: access to /Users/me/grant-b/secret.txt is not permitted."
+                     + " This chat can use: grant-a (/Users/me/grant-a)."),
+        ]
+        let evaluation = FileTouchIndex.entries(items: items)
+        #expect(evaluation.entry(for: "/Users/me/grant-b/secret.txt")?.kind == .failed)
+        #expect(evaluation.reads.isEmpty)
+        #expect(evaluation.notDone.count == 1)
+    }
+
+    /// A failed edit must not offer a diff of a change that never happened.
+    @Test func aFailedEditIsFailedAndHasNoDiff() {
+        let items: [TranscriptItem] = [
+            tool("edit_file", path: "/a/report.md",
+                 result: "Error: old_string not found. Copy the exact text from read_file."),
+        ]
+        let evaluation = FileTouchIndex.entries(items: items)
+        #expect(evaluation.entry(for: "/a/report.md")?.kind == .failed)
+        #expect(evaluation.changes.isEmpty)
+        #expect(evaluation.editActivities(for: "/a/report.md").isEmpty)
+    }
+
+    /// A successful edit still offers its diff.
+    @Test func aSuccessfulEditStillHasADiff() {
+        let items: [TranscriptItem] = [
+            tool("edit_file", path: "/a/report.md", result: "Edited /a/report.md: 1 occurrence"),
+        ]
+        let evaluation = FileTouchIndex.entries(items: items)
+        #expect(evaluation.entry(for: "/a/report.md")?.kind == .edited)
+        #expect(evaluation.editActivities(for: "/a/report.md").count == 1)
+    }
+
+    /// `hasPrefix`, not `contains`: the *path* may contain the word.
+    @Test func aSuccessfulWriteToAnErrorNamedFileIsNew() {
+        let items: [TranscriptItem] = [
+            tool("write_file", path: "/a/Error-log.txt",
+                 result: "Wrote 12 bytes to /a/Error-log.txt."),
+        ]
+        let evaluation = FileTouchIndex.entries(items: items)
+        #expect(evaluation.entry(for: "/a/Error-log.txt")?.kind == .created)
+        #expect(evaluation.notDone.isEmpty)
+    }
+
+    /// Read, then a refused read of the same path: the latest kind wins and both are kept.
+    @Test func theLatestKindWinsAndBothActivitiesAreKept() {
+        let items: [TranscriptItem] = [
+            tool("read_file", path: "/a/f.txt", result: "contents"),
+            tool("read_file", path: "/a/f.txt", result: "Error: access is not permitted."),
+        ]
+        let evaluation = FileTouchIndex.entries(items: items)
+        let entry = evaluation.entry(for: "/a/f.txt")
+        #expect(entry?.kind == .failed)
+        #expect(entry?.activities.count == 2)
+        #expect(evaluation.reads.isEmpty)
+    }
+
+    /// A dispatch-level failure (no result string at all) is Not done too.
+    @Test func aFailedStatusWithNoResultIsFailed() {
+        let items: [TranscriptItem] = [
+            tool("read_file", path: "/a/f.txt", status: .failed("timed out"), result: nil),
+        ]
+        #expect(FileTouchIndex.entries(items: items).entry(for: "/a/f.txt")?.kind == .failed)
+    }
+
+    @Test func theNotDoneLabelAndResultRule() {
+        #expect(FileTouchIndex.Kind.failed.label == "Not done")
+        #expect(FileTouchIndex.Kind.declined.label == "Declined")
+        #expect(!FileTouchIndex.Kind.failed.hasResult)
+        #expect(!FileTouchIndex.Kind.declined.hasResult)
+        #expect(FileTouchIndex.Kind.read.hasResult)
     }
 
     // MARK: - unfinished and denied
@@ -75,15 +153,19 @@ struct FileTouchIndexTests {
         ]
         let evaluation = FileTouchIndex.entries(items: items)
         #expect(evaluation.entry(for: "/a/secret.txt")?.kind == .declined)
-        #expect(evaluation.declined.count == 1)
+        #expect(evaluation.notDone.count == 1)
     }
 
-    @Test func aFailedReadIsStillARead() {
-        // A read that failed still tells the user what the chat reached for.
+    /// A read that failed still gets a row — the user wants to know what the chat reached for —
+    /// but under "Not done", never as a Read (K2).
+    @Test func aFailedReadGetsANotDoneRow() {
         let items: [TranscriptItem] = [
             tool("read_file", path: "/a/missing.txt", status: .failed("no such file"), result: nil),
         ]
-        #expect(FileTouchIndex.entries(items: items).entry(for: "/a/missing.txt")?.kind == .read)
+        let evaluation = FileTouchIndex.entries(items: items)
+        #expect(evaluation.entry(for: "/a/missing.txt")?.kind == .failed)
+        #expect(evaluation.reads.isEmpty)
+        #expect(evaluation.notDone.count == 1)
     }
 
     // MARK: - paths

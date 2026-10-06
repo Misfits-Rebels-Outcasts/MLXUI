@@ -106,9 +106,7 @@ struct ChatInspectorView: View {
         }
         .contextMenu {
             Button("Set as working folder") { runner.setWorkingFolder(path: path) }
-            Button("Reveal in Finder") {
-                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
-            }
+            Button("Reveal in Finder") { reveal(path) }
             Button("Remove from this chat") { runner.detachFolder(path: path) }
         }
         .help(path)
@@ -174,9 +172,7 @@ struct ChatInspectorView: View {
             if !entry.isDirectory {
                 Button("Attach to message") { attachFile(URL(fileURLWithPath: entry.path)) }
             }
-            Button("Reveal in Finder") {
-                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: entry.path)])
-            }
+            Button("Reveal in Finder") { reveal(entry.path) }
         }
         .help(entry.path)
 
@@ -241,13 +237,18 @@ struct ChatInspectorView: View {
         }
     }
 
-    @ViewBuilder
+    /// Ruling 2: the count is a link into Settings → Tools. That pane is the standing
+    /// configuration (SET-4's own comment), so this duplicates no menu — and it does not move the
+    /// wrench, which stays the in-session switch where SET-4 put it.
     private var toolsSummary: some View {
         let on = runner.enabledToolNames.count
         let available = runner.availableTools.count
-        Text(ChatInspectorModel.toolsOnLabel(enabled: on, available: available))
-            .font(.caption2)
-            .foregroundStyle(.secondary)
+        return SettingsOpener(pane: .agentTools) {
+            Text(ChatInspectorModel.toolsOnLabel(enabled: on, available: available))
+                .font(.caption2)
+        }
+        .buttonStyle(.link)
+        .help("Open Tool Settings")
     }
 
     // MARK: - Files in this chat (CW-5, C14)
@@ -290,8 +291,8 @@ struct ChatInspectorView: View {
                 if !evaluation.reads.isEmpty {
                     group("Read", entries: evaluation.reads, collapsedLabel: "\(evaluation.reads.count) files read")
                 }
-                if !evaluation.declined.isEmpty {
-                    group("Declined", entries: evaluation.declined)
+                if !evaluation.notDone.isEmpty {
+                    group("Declined or not done", entries: evaluation.notDone)
                 }
             }
             if selectedPath != nil {
@@ -316,9 +317,9 @@ struct ChatInspectorView: View {
 
     private func touchRow(_ entry: FileTouchIndex.Entry) -> some View {
         HStack(spacing: 4) {
-            Image(systemName: entry.kind == .declined ? "xmark.circle" : "doc.text")
+            Image(systemName: entry.kind.hasResult ? "doc.text" : "xmark.circle")
                 .font(.caption2)
-                .foregroundStyle(entry.kind == .declined ? .secondary : .primary)
+                .foregroundStyle(entry.kind.hasResult ? .primary : .secondary)
             Text(entry.name.isEmpty ? entry.path : entry.name)
                 .font(.caption)
                 .lineLimit(1)
@@ -328,11 +329,16 @@ struct ChatInspectorView: View {
                 .foregroundStyle(.secondary)
         }
         .contentShape(Rectangle())
-        .onTapGesture { select(entry.path) }
+        .onTapGesture {
+            // K2: a refused or failed call has nothing to preview.
+            if entry.kind.hasResult { select(entry.path) } else { clearPreview() }
+        }
         .contextMenu {
-            Button("Open") { open(entry.path) }
-            Button("Reveal in Finder") {
-                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: entry.path)])
+            if entry.kind.hasResult {
+                Button("Open") { open(entry.path) }
+            }
+            if FileManager.default.fileExists(atPath: entry.path) {
+                Button("Reveal in Finder") { reveal(entry.path) }
             }
             Button("Show in transcript") { showInTranscript = entry.activities.last?.id }
         }
@@ -352,6 +358,17 @@ struct ChatInspectorView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 220)
+            case .truncatedMarkdown(let text, let shown, let total):
+                ScrollView {
+                    Text((try? AttributedString(markdown: text)) ?? AttributedString(text))
+                        .font(.caption)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 220)
+                Text(ChatFilePreview.truncationNotice(shownBytes: shown, totalBytes: total))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             case .text(let text):
                 ScrollView {
                     Text(text)
@@ -442,9 +459,7 @@ struct ChatInspectorView: View {
         if let path = selectedPath {
             HStack(spacing: 8) {
                 Button("Open") { open(path) }
-                Button("Reveal in Finder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
-                }
+                Button("Reveal in Finder") { reveal(path) }
                 Button("Show in transcript") {
                     showInTranscript = touches.entry(for: path)?.activities.last?.id
                 }
@@ -469,18 +484,36 @@ struct ChatInspectorView: View {
             return
         }
         quickLookScope = nil
-        let data = FolderListing.scopedData(at: url)
-        preview = ChatFilePreview.content(
-            for: url,
-            presentation: presentation,
-            data: data,
-            error: data == nil ? "This file could not be read." : nil)
+        preview = nil
+        // K3: the read runs off the main actor and is bounded, so a 300 MB log in a folder the
+        // model listed cannot freeze the window. The scope lookup inside `read` is main-actor
+        // state, so the read itself is detached while the decision stays here.
+        Task.detached(priority: .userInitiated) {
+            let read = ChatFilePreview.read(path: path)
+            let content = ChatFilePreview.content(
+                for: url, presentation: presentation, read: read)
+            await MainActor.run {
+                guard self.selectedPath == path else { return }   // a newer selection wins
+                self.preview = content
+            }
+        }
     }
 
     private func clearPreview() {
         selectedPath = nil
         preview = nil
         quickLookScope = nil
+    }
+
+    /// K4: one reveal, holding the grant's scope for the hand-off — the same reason `open(_:)`
+    /// holds it. `FilePreviewScope` returns nil when nothing covers the path, and the plain URL is
+    /// then the best that can be done (Finder will show what it can).
+    private func reveal(_ path: String) {
+        if let scope = FilePreviewScope(path: path) {
+            NSWorkspace.shared.activateFileViewerSelecting([scope.scopedURL])
+        } else {
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        }
     }
 
     private func open(_ path: String) {
