@@ -30,6 +30,16 @@ nonisolated struct ServeToolCallScanner {
     /// Text held because it might still turn out to be a call.
     private var buffer = ""
     private var calls: [ToolCall] = []
+    /// Inline (Llama 3) only: whether the turn's opening has been decided. Until it has, only the
+    /// first non-whitespace text can be a call; from then on every character streams immediately.
+    private var inlineDecided = false
+    /// Inline only: the turn opened with `<|python_tag|>`, which is consumed and never emitted.
+    private var inlineSawMarker = false
+
+    /// Llama 3's template writes a tool call as the whole assistant turn, preceded by this special
+    /// token. `Llama3ToolCallParser` strips it; the scanner must too, so it never reaches a client
+    /// as content.
+    private static let pythonTag = "<|python_tag|>"
 
     init(format: ToolCallFormat, tools: [[String: any Sendable]]?) {
         let parser = format.createParser()
@@ -104,26 +114,60 @@ nonisolated struct ServeToolCallScanner {
     }
 
     /// A `{`-delimited format with no wrapper (Llama 3, whose template renders
-    /// `{"name": …, "parameters": …}` straight after the assistant header).
+    /// `{"name": …, "parameters": …}` as the whole assistant turn, optionally behind
+    /// `<|python_tag|>`).
     ///
-    /// Detection is by balanced braces, so a JSON object the model writes in prose is held until it
-    /// closes and then — if the parser doesn't recognise it as a call — handed straight back. Only
-    /// the JSON form is detected: the template we serve renders that one, and the parser's
-    /// pythonic fallback has no delimiter to scan for.
+    /// **Only the opening of the turn can be a call** (review call 3): the first non-whitespace text
+    /// of the assistant turn, or a `{` immediately after the `<|python_tag|>` marker. Anywhere else
+    /// a `{` is prose and streams **immediately** — no brace counting, no delay, and a JSON example
+    /// in an answer stays an answer. That matches the template, which puts the call where a
+    /// generation prompt expects it, and the parser's own limitation (Llama 3.1 takes one call per
+    /// turn).
+    ///
+    /// The marker is consumed rather than emitted, so it never reaches a client as content. Only
+    /// the JSON form is detected: the parser's pythonic fallback has no delimiter to scan for.
     private mutating func drainInline() -> String {
         var out = ""
         while true {
-            guard let brace = buffer.firstIndex(of: "{") else {
+            if inlineDecided {
                 out += buffer
                 buffer = ""
                 return out
             }
-            out += buffer[buffer.startIndex ..< brace]
-            buffer = String(buffer[brace...])
-            guard let end = Self.endOfBalancedObject(buffer) else { return out }   // still arriving
-            let segment = String(buffer[buffer.startIndex ..< end])
-            buffer = String(buffer[end...])
-            out += emit(segment)
+            // Undecided: hold the whitespace too — a call-only turn's content is null, not spaces.
+            let trimmed = buffer.drop(while: \.isWhitespace)
+            let leading = String(buffer.prefix(buffer.count - trimmed.count))
+            if trimmed.isEmpty { return out }                       // all whitespace so far: hold
+
+            if !inlineSawMarker {
+                if trimmed.hasPrefix(Self.pythonTag) {
+                    buffer = String(trimmed.dropFirst(Self.pythonTag.count))
+                    inlineSawMarker = true
+                    continue
+                }
+                if Self.pythonTag.hasPrefix(trimmed) { return out }  // a partial marker: hold
+            }
+
+            guard trimmed.hasPrefix("{") else {
+                // Ordinary text: it goes out, and nothing later in the turn is a candidate.
+                inlineDecided = true
+                out += buffer
+                buffer = ""
+                return out
+            }
+            let candidate = String(trimmed)
+            guard let end = Self.endOfBalancedObject(candidate) else { return out }   // still arriving
+            let segment = String(candidate[candidate.startIndex ..< end])
+            buffer = String(candidate[end...])
+            if let call = parser.parse(content: segment, tools: tools) {
+                calls.append(call)
+                inlineDecided = true                                // one call per turn is the format's rule
+                continue                                            // `leading` whitespace goes with it
+            }
+            // Not a call — an example in prose. The whitespace before it is text again, and the
+            // rest of the turn streams from here.
+            inlineDecided = true
+            out += leading + segment
         }
     }
 
@@ -138,22 +182,25 @@ nonisolated struct ServeToolCallScanner {
     /// Hold back only a genuine prefix of the start tag at the very end of the buffer — for
     /// `<div><span>` that is the single `<` when a delta ends there, and nothing at all once the
     /// next character arrives. Everything else goes out now, byte for byte.
+    ///
+    /// Every path clears the buffer: this is the one function whose whole job is deciding what is
+    /// still held, and returning without clearing would re-emit it on the next push.
     private mutating func holdPartialTag() -> String {
-        guard let startTag, !buffer.isEmpty else {
-            defer { buffer = "" }
-            return buffer
+        guard let startTag, startTag.count > 1, !buffer.isEmpty else {
+            let held = buffer
+            buffer = ""
+            return held
         }
-        let most = min(startTag.count - 1, buffer.count)
-        guard most > 0 else { return buffer }
-        for length in stride(from: most, through: 1, by: -1) {
+        for length in stride(from: min(startTag.count - 1, buffer.count), through: 1, by: -1) {
             let suffix = buffer.suffix(length)
             guard suffix == startTag.prefix(length) else { continue }
             let safe = String(buffer.dropLast(length))
             buffer = String(suffix)
             return safe
         }
-        defer { buffer = "" }
-        return buffer
+        let held = buffer
+        buffer = ""
+        return held
     }
 
     /// The index just past the `}` that closes the object starting at `buffer.first`, or `nil`

@@ -170,7 +170,8 @@ struct ServeToolCallsEncodeTests {
         #expect(choice["finish_reason"] as? String == "tool_calls")
         let message = try #require(choice["message"] as? [String: Any])
         #expect(message["role"] as? String == "assistant")
-        #expect(message["content"] as? String == "")
+        #expect(message["content"] is NSNull)                      // calls only → null (S2-2b)
+        #expect(message.keys.contains("content"))                  // the key is present, as OpenAI sends it
         let calls = try #require(message["tool_calls"] as? [[String: Any]])
         #expect(calls.count == 1)
         #expect(calls[0]["id"] as? String == "call_1")
@@ -180,12 +181,33 @@ struct ServeToolCallsEncodeTests {
         #expect(function["arguments"] as? String == #"{"location":"Paris"}"#)
     }
 
-    /// A turn with no calls keeps S1's body exactly: no `tool_calls` key at all.
+    /// A turn with no calls keeps S1's body exactly: no `tool_calls` key at all, and `content` is
+    /// always a string — including the empty one.
     @Test func aPlainBodyHasNoToolCallsKey() throws {
         let body = OpenAIChatDialect.completionBody(id: "i", created: 1, model: "m", text: "hi",
                                                     finish: .stop, usage: ServeUsage(promptTokens: 1, completionTokens: 1))
         let message = try #require(((try object(body))["choices"] as? [[String: Any]])?.first?["message"] as? [String: Any])
         #expect(message["tool_calls"] == nil)
+        #expect(message["content"] as? String == "hi")
+
+        let empty = OpenAIChatDialect.completionBody(id: "i", created: 1, model: "m", text: "",
+                                                     finish: .stop, usage: ServeUsage(promptTokens: 1, completionTokens: 0))
+        let emptyMessage = try #require(((try object(empty))["choices"] as? [[String: Any]])?.first?["message"] as? [String: Any])
+        #expect(emptyMessage["content"] as? String == "")           // S1 shape: a string, not null
+    }
+
+    /// Text and a call together keep the text (S2-2b); whitespace alone next to a call does not
+    /// count as text.
+    @Test func contentKeepsTextThatCameWithACall() throws {
+        let call = ServeToolCall(id: "call_1", name: "f", argumentsJSON: "{}")
+        func message(_ text: String) throws -> [String: Any] {
+            let body = OpenAIChatDialect.completionBody(id: "i", created: 1, model: "m", text: text,
+                                                        toolCalls: [call], finish: .toolCalls,
+                                                        usage: ServeUsage(promptTokens: 1, completionTokens: 1))
+            return try #require(((try object(body))["choices"] as? [[String: Any]])?.first?["message"] as? [String: Any])
+        }
+        #expect(try message("Checking. ")["content"] as? String == "Checking. ")
+        #expect(try message("\n")["content"] is NSNull)
     }
 
     /// The streaming fragment: `index`, `id`, `type` and `function.name` on the first fragment,

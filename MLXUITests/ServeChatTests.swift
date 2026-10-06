@@ -728,6 +728,7 @@ struct ChatCompletionsRouteTests {
         let message = try #require(choice["message"] as? [String: Any])
         #expect(message["content"] as? String == "Checking. ")
         let calls = try #require(message["tool_calls"] as? [[String: Any]])
+        #expect(message["content"] as? String == "Checking. ")      // text came with the call, so it stays
         #expect(calls[0]["id"] as? String == "call_a")
         #expect(calls[0]["type"] as? String == "function")
         #expect((calls[0]["function"] as? [String: Any])?["name"] as? String == "get_weather")
@@ -752,6 +753,21 @@ struct ChatCompletionsRouteTests {
         #expect((calls[0]["function"] as? [String: Any])?["name"] as? String == "get_weather")
         let finishes = chunks.compactMap { ($0["choices"] as? [[String: Any]])?.first?["finish_reason"] as? String }
         #expect(finishes == ["tool_calls"])
+    }
+
+    /// A turn that is **only** tool calls answers `"content": null` (S2-2b, review call 7), which
+    /// is what the reference shows; a turn with text keeps the text.
+    @Test func aCallsOnlyTurnHasNullContent() async throws {
+        let backend = FakeBackend([
+            .toolCall(index: 0, id: "call_a", name: "get_weather", arguments: "{}"),
+            .finish(.toolCalls),
+        ], modelType: "qwen3")
+        let request = #"{"model":"mlx-community/Qwen3-4B-4bit","messages":[{"role":"user","content":"weather?"}],"tools":[{"type":"function","function":{"name":"get_weather"}}]}"#
+        let response = try #require(full(await call(request, chatEnvironment(backend: backend))))
+        let message = try #require(((jsonObject(response.body)?["choices"] as? [[String: Any]])?.first)?["message"] as? [String: Any])
+        #expect(message["content"] is NSNull)
+        #expect(message.keys.contains("content"))
+        #expect((message["tool_calls"] as? [[String: Any]])?.count == 1)
     }
 
     /// Two calls in one turn keep their indices, in both wire shapes (S2-2 requirement 5).

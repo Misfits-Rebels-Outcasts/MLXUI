@@ -119,13 +119,42 @@ struct ServeToolCallScannerTests {
         #expect(result.calls.first?.function.name == "get_weather")
     }
 
-    /// `.llama3` — the template renders a bare JSON object, so detection is by balanced braces.
+    /// `.llama3` — the template renders the call as the whole assistant turn, so the `{` only
+    /// counts as a candidate at the turn's opening.
     @Test func llama3CallIsFoundFromBareJSON() {
         let output = "{\"name\": \"get_weather\", \"parameters\": {\"location\": \"Paris\"}}"
         let result = run(.llama3, [output])
         #expect(result.text.isEmpty)
         #expect(result.calls.first?.function.name == "get_weather")
         #expect(result.calls.first?.function.arguments["location"] == .string("Paris"))
+    }
+
+    /// Leading whitespace before the call is not content: a calls-only turn reports none.
+    @Test func llama3CallBehindLeadingWhitespaceIsStillTheTurn() {
+        let result = run(.llama3, ["\n  {\"name\": \"get_weather\", \"parameters\": {}}"])
+        #expect(result.text.isEmpty)
+        #expect(result.calls.count == 1)
+    }
+
+    /// The `<|python_tag|>` prefix Llama 3 also emits: parsed, and **not** leaked as content.
+    @Test func llama3PythonTagIsConsumedAndItsCallParsed() {
+        let result = run(.llama3, ["<|python_tag|>{\"name\": \"get_weather\", \"parameters\": {\"location\": \"Paris\"}}"])
+        #expect(result.calls.count == 1)
+        #expect(result.calls.first?.function.name == "get_weather")
+        #expect(!result.text.contains("<|python_tag|>"))
+        #expect(result.text.isEmpty)
+
+        // Split across deltas, including mid-marker.
+        let split = run(.llama3, ["<|python", "_tag|>{\"name\": \"f\", \"parameters\": {}}"])
+        #expect(split.calls.count == 1)
+        #expect(!split.text.contains("python"))
+    }
+
+    /// A marker with no call behind it is consumed, and the text that follows it is content.
+    @Test func llama3PythonTagWithoutACallLeavesOnlyTheText() {
+        let result = run(.llama3, ["<|python_tag|>I could not find a tool for that."])
+        #expect(result.calls.isEmpty)
+        #expect(result.text == "I could not find a tool for that.")
     }
 
     /// Braces inside strings don't end the object early.
@@ -136,12 +165,29 @@ struct ServeToolCallScannerTests {
         #expect(result.calls.first?.function.arguments["location"] == .string("Par}is"))
     }
 
-    /// JSON in prose is held only until it closes, then handed straight back.
-    @Test func llama3JSONInProseComesBackAsText() {
-        let result = run(.llama3, ["Here is an example: {\"a\": 1} and that is all."])
-        #expect(result.text == "Here is an example: {\"a\": 1} and that is all.")
-        #expect(result.calls.isEmpty)
+    /// **S2-2b, review call 3.** Away from the turn's opening a `{` is prose: it streams in the
+    /// same push it arrives in — no brace counting, no delay — and an example that looks exactly
+    /// like a call stays an example.
+    @Test func aMidAnswerExampleStaysTextAndStreamsImmediately() {
+        var scanner = ServeToolCallScanner(format: .llama3, tools: nil)
+        var text = scanner.push("Here is an example: {")
+        #expect(text == "Here is an example: {")                    // nothing held back
+        text += scanner.push("\"a\": 1} and that is all.")
+        text += scanner.finish()
+        #expect(text == "Here is an example: {\"a\": 1} and that is all.")
+        #expect(scanner.takeCalls().isEmpty)
+
+        // An unmatched `{` mid-answer is not held either — it is out before the stream ends.
+        var unmatched = ServeToolCallScanner(format: .llama3, tools: nil)
+        #expect(unmatched.push("Use a JSON object like {") == "Use a JSON object like {")
+        #expect(unmatched.finish().isEmpty)
+
+        // A call-shaped object mid-answer is text, not a call.
+        let example = run(.llama3, ["For instance {\"name\": \"f\", \"parameters\": {}} is the shape."])
+        #expect(example.calls.isEmpty)
+        #expect(example.text == "For instance {\"name\": \"f\", \"parameters\": {}} is the shape.")
     }
+
 
     // MARK: - Several calls in one turn
 

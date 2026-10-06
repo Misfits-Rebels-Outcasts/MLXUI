@@ -275,18 +275,24 @@ nonisolated enum OpenAIChatDialect {
         "chatcmpl-" + String(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased().prefix(24))
     }
 
-    /// The non-streaming `chat.completion` object. `tool_calls` is present only when the model
-    /// produced one (S2-2); `content` stays a string (empty when the turn was only calls), which
-    /// is what S1 already sent.
+    /// The non-streaming `chat.completion` object (S2-2).
+    ///
+    /// `content` follows the Chat Completions reference: a turn that is **only** tool calls reports
+    /// `"content": null`; a turn with text keeps that text even when it also called a tool. A turn
+    /// with no calls keeps S1's shape exactly — a string, empty or not.
     static func completionBody(id: String, created: Int, model: String, text: String,
                                toolCalls: [ServeToolCall] = [],
                                finish: ServeFinishReason, usage: ServeUsage) -> Data {
-        encode(Completion(id: id, created: created, model: model,
-                          choices: [.init(index: 0, message: .init(role: "assistant", content: text,
-                                                                   tool_calls: toolCalls.isEmpty ? nil
-                                                                       : toolCalls.map(ToolCallWire.init)),
-                                          finish_reason: finish.rawValue)],
-                          usage: .init(usage)))
+        let onlyCalls = !toolCalls.isEmpty
+            && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return encode(Completion(id: id, created: created, model: model,
+                                 choices: [.init(index: 0,
+                                                 message: .init(role: "assistant",
+                                                                content: onlyCalls ? nil : text,
+                                                                tool_calls: toolCalls.isEmpty ? nil
+                                                                    : toolCalls.map(ToolCallWire.init)),
+                                                 finish_reason: finish.rawValue)],
+                                 usage: .init(usage)))
     }
 
     /// One `delta.tool_calls[]` event: `index` on every fragment, `id` and `name` on the first
@@ -371,12 +377,15 @@ nonisolated enum OpenAIChatDialect {
     private struct Completion: Encodable {
         struct Message: Encodable {
             let role: String
-            let content: String
+            /// `nil` → `"content": null` (a turn that is only tool calls). The reference sends the
+            /// key with a null rather than omitting it.
+            let content: String?
             let tool_calls: [ToolCallWire]?
             func encode(to encoder: Encoder) throws {
                 var c = encoder.container(keyedBy: Keys.self)
                 try c.encode(role, forKey: .role)
-                try c.encode(content, forKey: .content)
+                if let content { try c.encode(content, forKey: .content) }
+                else { try c.encodeNil(forKey: .content) }
                 try c.encodeIfPresent(tool_calls, forKey: .tool_calls)
             }
             private enum Keys: String, CodingKey { case role, content, tool_calls }
