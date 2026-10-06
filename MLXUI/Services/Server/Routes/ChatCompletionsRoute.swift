@@ -78,6 +78,11 @@ nonisolated enum ChatCompletionsRoute {
         // ignores the request (decision 2) — so the log records what actually happened.
         tracker.reasoningOn = ReasoningTemplateTable.thinkingOn(requested: request.reasoning,
                                                                  forModelType: modelType)
+        // S2-3b: an unrecognised `reasoning_effort` is honoured as "on" and named in the log — a
+        // parameter value, not request content.
+        if let unknown = request.unknownReasoningEffort {
+            log.notice("unknown reasoning_effort '\(unknown, privacy: .public)' treated as on")
+        }
         tracker.toolsIgnored = request.toolsRequested && !acceptsTools
         if tracker.toolsIgnored { log.notice("tools ignored") }
         if !acceptsTools { request.tools = [] }

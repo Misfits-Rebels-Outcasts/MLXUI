@@ -338,36 +338,32 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 // is scanned for tool calls, matched against `stop`, or emitted as `content`.
                 // `ServeTextPipeline` is deliberately not used here: its leading-`<think>` strip is
                 // the *thinking-off* behaviour, and it would eat the block we are meant to forward.
-                var detokenizer = IncrementalDetokenizer(decode: { context.tokenizer.decode(tokenIds: $0) })
-                var splitter = ServeReasoningSplitter()
-                var stop = StopMatcher(request.stop)
-                func emitSplit(_ halves: (reasoning: String, content: String)) -> Bool {
+                var pipeline = ServeThinkingTextPipeline(
+                    decode: { context.tokenizer.decode(tokenIds: $0) },
+                    stop: request.stop,
+                    // S2-3b: the *prompt* decides whether the output starts inside the block, not
+                    // a guess from the first characters (`qwen3_5*` opens it; `qwen3` does not).
+                    startsInsideThink: Self.promptOpensThinkBlock(context: context, tokens: input.text.tokens))
+                func emitHalves(_ halves: (reasoning: String, content: String)) {
                     if !halves.reasoning.isEmpty { continuation.yield(.reasoningDelta(halves.reasoning)) }
-                    guard !halves.content.isEmpty else { return false }
-                    let matched = stop.push(halves.content)
-                    routeContent(matched.emit)
-                    return matched.stopped
+                    routeContent(halves.content)
                 }
                 for await generation in stream {
                     if Task.isCancelled { break }
                     switch generation {
                     case .token(let id):
                         completionTokens += 1
-                        if emitSplit(splitter.push(detokenizer.push(id))) { stoppedByClient = true }
+                        emitHalves(pipeline.push(id))
                     case .info(let info):
                         libraryReason = info.stopReason
                     }
-                    if stoppedByClient { break }
+                    if pipeline.stopped { break }
                 }
                 if Task.isCancelled { throw CancellationError() }
-                // End of stream: whatever the splitter still holds is thinking (an unclosed block
-                // runs to EOS — a `max_tokens` cut mid-think), then the stop matcher's tail.
-                _ = emitSplit(splitter.push(detokenizer.flush()))
-                _ = emitSplit(splitter.finish())
-                if !stoppedByClient {
-                    let tail = stop.finish()
-                    routeContent(tail)
-                }
+                // End of stream: an unclosed block runs to EOS (a `max_tokens` cut mid-think) — and
+                // nothing at all is flushed once a stop sequence has matched.
+                emitHalves(pipeline.finish())
+                stoppedByClient = pipeline.stopped
             } else {
                 // S1's path, unchanged: detokenize → strip a leading closed `<think>` → `stop`.
                 var pipeline = ServeTextPipeline(decode: { context.tokenizer.decode(tokenIds: $0) },
@@ -399,6 +395,20 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 : (hitLimit && !stoppedByClient ? .length : .stop)
             continuation.yield(.finish(finish))
         }
+    }
+
+    /// Whether the **rendered prompt** already opened the think block (S2-3b, review call 2).
+    ///
+    /// Read from the prompt the tokenizer actually produced rather than guessed from the family: the
+    /// `qwen3_5*` templates end their generation prompt with `<think>\n`, and `qwen3`'s ends at the
+    /// assistant header. Trailing whitespace is trimmed so the newline can't hide the tag.
+    nonisolated static func promptOpensThinkBlock(context: ModelContext, tokens: MLXArray) -> Bool {
+        let ids = tokens.asArray(Int.self)
+        guard !ids.isEmpty else { return false }
+        // A window is enough — only the tail matters — and it keeps the decode cheap per request.
+        let tail = context.tokenizer.decode(tokenIds: Array(ids.suffix(16)))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return tail.hasSuffix("<think>")
     }
 
     /// Emit every call the scanner has completed since the last drain.

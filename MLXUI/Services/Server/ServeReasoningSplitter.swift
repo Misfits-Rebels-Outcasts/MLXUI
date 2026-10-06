@@ -7,17 +7,18 @@ import Foundation
 /// must never drop a byte of either half. Only `</think>` is ever held back, and only a genuine
 /// trailing prefix of it.
 ///
-/// **Both generation-prompt shapes are handled without being told which one is in play** (S2-3
-/// decision 3):
+/// **The opening is decided by the prompt, not by looking at the output** (S2-3b, review call 2).
+/// The caller passes `startsInsideThink`, computed from the rendered prompt's decoded tail:
 ///
-/// - *prompt-opened* (`qwen3_5*`: the prompt ends `<think>\n`, so the output starts inside the
-///   block) — the output's first characters are thinking, and `</think>` ends it;
-/// - *model-emitted* (`qwen3`: the prompt ends at the assistant header) — the output opens with
-///   `<think>` itself, which is consumed here and never emitted as either half.
+/// - `true` — *prompt-opened* (`qwen3_5*` templates end `<think>\n`): the output begins inside the
+///   block, so it is thinking from the first character and only `</think>` has to be found;
+/// - `false` — the prompt did not open a block (`qwen3` ends at the assistant header): a **literal
+///   leading `<think>`** opens one, and any other opening is the whole answer. A model that answers
+///   without thinking therefore produces content and no reasoning at all, instead of having its
+///   first words mislabelled as thinking.
 ///
-/// The splitter decides by looking: while the opening is undecided, leading whitespace and a
-/// partial `<think>` are held; a full `<think>` is swallowed; anything else means the block was
-/// already open. `</think>` at the very first position is therefore handled too (empty thinking).
+/// In both modes the leading tag is consumed rather than emitted, and `</think>` at the very first
+/// position gives empty thinking plus the answer.
 nonisolated struct ServeReasoningSplitter {
     private static let openTag = "<think>"
     private static let closeTag = "</think>"
@@ -33,8 +34,15 @@ nonisolated struct ServeReasoningSplitter {
         case answer
     }
 
-    private var phase = Phase.atStart
+    private var phase: Phase
     private var buffer = ""
+
+    /// - Parameter startsInsideThink: whether the rendered prompt already wrote `<think>`. See the
+    ///   type's documentation: it decides whether an output *without* a leading tag is thinking or
+    ///   answer.
+    init(startsInsideThink: Bool) {
+        phase = startsInsideThink ? .reasoning : .atStart
+    }
 
     /// Feed a text delta; returns the thinking and the answer to emit **now**. Either may be empty.
     mutating func push(_ text: String) -> (reasoning: String, content: String) {
@@ -49,9 +57,9 @@ nonisolated struct ServeReasoningSplitter {
         defer { buffer = "" }
         switch phase {
         case .atStart:
-            // A turn that only ever emitted whitespace is neither half.
-            let trimmed = buffer.drop(while: \.isWhitespace)
-            return (trimmed.isEmpty ? "" : buffer, "")
+            // Nothing but whitespace ever arrived: the prompt didn't open a block and no `<think>`
+            // came, so there is neither thinking nor an answer to report.
+            return ("", "")
         case .reasoning:
             return (buffer, "")
         case .trimming:
@@ -67,6 +75,8 @@ nonisolated struct ServeReasoningSplitter {
         while true {
             switch phase {
             case .atStart:
+                // The prompt did *not* open a block: only a literal leading `<think>` does, and
+                // anything else is the answer from here on.
                 let trimmed = buffer.drop(while: \.isWhitespace)
                 if trimmed.isEmpty { return (reasoning, content) }        // whitespace so far: hold
                 if trimmed.hasPrefix(Self.openTag) {
@@ -75,7 +85,8 @@ nonisolated struct ServeReasoningSplitter {
                     continue
                 }
                 if Self.openTag.hasPrefix(trimmed) { return (reasoning, content) }  // a partial `<thi`
-                phase = .reasoning                                        // the block was already open
+                phase = .answer
+                buffer = String(trimmed)
                 continue
 
             case .reasoning:
@@ -91,8 +102,14 @@ nonisolated struct ServeReasoningSplitter {
                 continue
 
             case .trimming:
-                let rest = String(buffer.drop(while: \.isWhitespace))
-                if rest.isEmpty { buffer = ""; return (reasoning, content) }   // still whitespace: hold nothing
+                // Only the newline(s) the template leaves after `</think>` are dropped, never
+                // spaces: an answer that starts with indentation keeps it (S2-3b, review call 5).
+                //
+                // `"\r\n"` is listed as well as `"\r"`: in Swift a CRLF is **one** `Character`
+                // (one grapheme cluster), so a test for the two separately misses it and the CRLF
+                // would survive into the answer.
+                let rest = String(buffer.drop(while: { $0 == "\n" || $0 == "\r" || $0 == "\r\n" }))
+                if rest.isEmpty { buffer = ""; return (reasoning, content) }   // still newlines: hold nothing
                 phase = .answer
                 buffer = rest
                 continue
@@ -103,5 +120,59 @@ nonisolated struct ServeReasoningSplitter {
                 return (reasoning, content)
             }
         }
+    }
+}
+
+/// The thinking path's text pipeline: detokenize → split thinking/answer → `stop`.
+///
+/// Shapes match `ServeTextPipeline` (S1) on purpose, so the two can be read side by side — including
+/// its `if !stopped` guard: **once a stop sequence has matched, nothing is flushed**, because the
+/// detokenizer may be holding the first half of a character that arrived *after* the match, and
+/// text after a stop string is not this server's to send (S2-3b, review call 1).
+nonisolated struct ServeThinkingTextPipeline {
+    private var detokenizer: IncrementalDetokenizer
+    private var splitter: ServeReasoningSplitter
+    private var stop: StopMatcher
+    private(set) var stopped = false
+
+    init(decode: @escaping ([Int]) -> String, stop: [String], startsInsideThink: Bool) {
+        self.detokenizer = IncrementalDetokenizer(decode: decode)
+        self.splitter = ServeReasoningSplitter(startsInsideThink: startsInsideThink)
+        self.stop = StopMatcher(stop)
+    }
+
+    /// One generated token: the thinking and the answer to emit now.
+    mutating func push(_ id: Int) -> (reasoning: String, content: String) {
+        guard !stopped else { return ("", "") }
+        return apply(splitter.push(detokenizer.push(id)))
+    }
+
+    /// End of stream. Each stage is skipped once a stop has matched — the same three guards as S1's
+    /// `ServeTextPipeline.finish()`.
+    mutating func finish() -> (reasoning: String, content: String) {
+        var reasoning = "", content = ""
+        if !stopped {
+            let halves = apply(splitter.push(detokenizer.flush()))
+            reasoning += halves.reasoning
+            content += halves.content
+        }
+        if !stopped {
+            let halves = apply(splitter.finish())
+            reasoning += halves.reasoning
+            content += halves.content
+        }
+        if !stopped {
+            content += stop.finish()          // the tail held back while a stop string was undecided
+        }
+        return (reasoning, content)
+    }
+
+    /// The answer half goes through `stop`; the thinking half never does (a stop string inside the
+    /// thinking is not the client's stop).
+    private mutating func apply(_ halves: (reasoning: String, content: String)) -> (reasoning: String, content: String) {
+        guard !halves.content.isEmpty else { return halves }
+        let matched = stop.push(halves.content)
+        if matched.stopped { stopped = true }
+        return (halves.reasoning, matched.emit)
     }
 }

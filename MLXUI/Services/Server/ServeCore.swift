@@ -101,7 +101,11 @@ nonisolated struct ServeRequest: Sendable, Equatable {
     var stream: Bool = false
     var includeUsage: Bool = false
     var seed: Int?
-    var reasoning: Bool?                        // S2-3 — unset
+    var reasoning: Bool?                        // S2-3 — nil = the client didn't ask
+    /// An `reasoning_effort` string this server doesn't know, kept only so the request log can say
+    /// what was seen (S2-3b). A parameter value is metadata; no prompt or completion content is
+    /// stored anywhere near it (rule 13).
+    var unknownReasoningEffort: String? = nil
     /// The client sent a non-empty `tools[]`. Whether that array is *honoured* depends on the
     /// model (`ToolCallFormatTable.acceptsTools`) and is decided by the route, which is the only
     /// place that knows both; `RequestLogEntry.toolsIgnored` carries the outcome.

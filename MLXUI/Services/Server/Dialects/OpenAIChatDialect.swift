@@ -37,7 +37,9 @@ nonisolated enum OpenAIChatDialect {
         request.tools = try decodeTools(object["tools"])
         request.toolChoice = try decodeToolChoice(object["tool_choice"])
         request.toolsRequested = !request.tools.isEmpty
-        request.reasoning = try decodeReasoning(object)
+        let reasoning = try decodeReasoning(object)
+        request.reasoning = reasoning.reasoning
+        request.unknownReasoningEffort = reasoning.unknown
         request.temperature = try number(object["temperature"], "temperature")
         request.topP = try number(object["top_p"], "top_p")
         // `max_completion_tokens` is the newer name; either one limits the reply.
@@ -119,32 +121,39 @@ nonisolated enum OpenAIChatDialect {
     /// An explicit `enable_thinking` **wins** when both are sent (S2-3 decision 1). Other keys
     /// inside `chat_template_kwargs` are ignored: they belong to templates this server doesn't know
     /// (vLLM filters undeclared kwargs for the same reason).
-    private static func decodeReasoning(_ object: [String: Any]) throws -> Bool? {
+    ///
+    /// An **unknown** effort string is treated as *on* rather than refused (S2-3b, review call 3) —
+    /// a newer OpenAI value should not break a request that clearly asks for thinking — and the
+    /// value is handed back for the request log's notice. A non-string is still a `400`: that is a
+    /// malformed field, not a value from the future. Returns the on/off decision and the unknown
+    /// string (metadata only, never logged with any content).
+    private static func decodeReasoning(_ object: [String: Any]) throws -> (reasoning: Bool?, unknown: String?) {
         let effort: Bool?
+        var unknown: String?
         switch object["reasoning_effort"] {
         case nil, is NSNull: effort = nil
         case let value as String:
-            // The whole documented set; anything else is a 400 rather than a guess.
             switch value {
             case "none", "minimal": effort = false
             case "low", "medium", "high", "xhigh", "max": effort = true
             default:
-                throw invalid("'reasoning_effort' must be 'none', 'minimal', 'low', 'medium', 'high', 'xhigh' or 'max'.",
-                              code: "invalid_reasoning_effort", param: "reasoning_effort")
+                // Unknown but well-formed: honour it as "on" and let the log say what was seen.
+                effort = true
+                unknown = value
             }
         default:
             throw invalid("'reasoning_effort' must be a string.",
                           code: "invalid_reasoning_effort", param: "reasoning_effort")
         }
 
-        guard let kwargs = object["chat_template_kwargs"] else { return effort }
+        guard let kwargs = object["chat_template_kwargs"] else { return (effort, unknown) }
         guard let dictionary = kwargs as? [String: Any] else {
             throw invalid("'chat_template_kwargs' must be an object.",
                           code: "invalid_chat_template_kwargs", param: "chat_template_kwargs")
         }
         switch dictionary["enable_thinking"] {
-        case nil, is NSNull: return effort
-        case let explicit as Bool: return explicit
+        case nil, is NSNull: return (effort, unknown)
+        case let explicit as Bool: return (explicit, unknown)      // explicit wins (decision 1)
         default:
             throw invalid("'chat_template_kwargs.enable_thinking' must be true or false.",
                           code: "invalid_chat_template_kwargs", param: "chat_template_kwargs.enable_thinking")

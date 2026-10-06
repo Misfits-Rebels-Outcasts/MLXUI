@@ -40,8 +40,20 @@ struct ServeReasoningDecodeTests {
         #expect(try decode(#"{"model":"m","messages":[{"role":"user","content":"x"}],"reasoning_effort":null}"#).reasoning == nil)
     }
 
-    @Test func anUnknownReasoningEffortIs400() {
-        #expect(rejection(#"{"model":"m","messages":[{"role":"user","content":"x"}],"reasoning_effort":"lots"}"#)?.status == 400)
+    /// S2-3b: an unknown but well-formed value is honoured as **on** (a newer OpenAI value must not
+    /// break a request that clearly asks for thinking) and kept for the log's notice. A non-string
+    /// is still malformed, and still a 400.
+    @Test func anUnknownReasoningEffortMeansOnAndIsRecorded() throws {
+        let request = try decode(#"{"model":"m","messages":[{"role":"user","content":"x"}],"reasoning_effort":"lots"}"#)
+        #expect(request.reasoning == true)
+        #expect(request.unknownReasoningEffort == "lots")
+
+        #expect(try decode(#"{"model":"m","messages":[{"role":"user","content":"x"}],"reasoning_effort":"high"}"#).unknownReasoningEffort == nil)
+        // An explicit enable_thinking still wins, and the unknown value is still reported.
+        let overridden = try decode(#"{"model":"m","messages":[{"role":"user","content":"x"}],"reasoning_effort":"lots","chat_template_kwargs":{"enable_thinking":false}}"#)
+        #expect(overridden.reasoning == false)
+        #expect(overridden.unknownReasoningEffort == "lots")
+
         #expect(rejection(#"{"model":"m","messages":[{"role":"user","content":"x"}],"reasoning_effort":3}"#)?.status == 400)
     }
 
