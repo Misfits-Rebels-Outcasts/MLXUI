@@ -234,8 +234,16 @@ nonisolated struct MLXChatBackend: ServeBackend {
                      into continuation: AsyncThrowingStream<ServeEvent, Error>.Continuation) async throws {
         let container = try await pool.container(directory: directory, footprintBytes: footprintBytes,
                                                  architecture: architecture)
+        // S2-1 (owner ruling R22): the family's own chat template decides where a `system`
+        // message may sit, and only the backend knows the checkpoint's `model_type`. This runs
+        // after S1-3c's flatten + same-role merge, on the decoded `ServeRequest`.
+        // Implementer's call, pending owner confirmation — the placement table is
+        // `ToolCallFormatTable.systemPlacement(forModelType:)`.
+        let modelType = ModelContainerPool.modelTypeString(directory: directory, architecture: architecture)
+        let messages = ServeMessageAssembly.hoistingSystemMessages(
+            request.messages, placement: ToolCallFormatTable.systemPlacement(forModelType: modelType))
         try await container.perform { context in
-            let chat = request.messages.map { message in
+            let chat = messages.map { message in
                 Chat.Message(role: Self.role(message.role), content: message.text)
             }
             let input: LMInput

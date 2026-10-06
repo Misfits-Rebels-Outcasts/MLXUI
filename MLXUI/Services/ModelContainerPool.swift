@@ -202,30 +202,51 @@ actor ModelContainerPool {
         directory.standardizedFileURL.path
     }
 
-    /// The real loader: `LLMModelFactory` + the tool-call-format wiring that used to live in
-    /// `ModelRunner.containerForModel`, now done once, in the pool, for every consumer.
+    /// The real loader: `LLMModelFactory` load plus the app's tool-call-format override, if any.
+    ///
+    /// **The app defers to upstream here.** mlx-swift-lm 3.31.3 already calls
+    /// `ToolCallFormat.infer(from:configData:)` inside `LLMModelFactory.loadContainer`
+    /// (`LLMModelFactory.swift:543`) when the configuration carries no format, so this overrides
+    /// only where `ToolCallFormatTable.override` says upstream is wrong or missing — which, for
+    /// every model in the catalog as of S2-1, is nowhere. (S1 installed `qwen3_5` → `.xmlFunction`
+    /// here; that duplicated a row upstream already had — readme F3b.)
+    ///
+    /// This remains **the one place in the app that sets `configuration.toolCallFormat`**: chat
+    /// sheet, flow rows and the Local Server all get their container from this pool.
     nonisolated static func loadFromDisk(directory: URL, architecture: String?) async throws -> ModelContainer {
         let container = try await LLMModelFactory.shared.loadContainer(
             from: directory, using: HFTokenizerLoader())
 
-        // Wire the tool-call parser to match the model family. Qwen3.5 emits the XML
-        // `<tool_call><function=…>` form (`ToolCallFormat.xmlFunction`); without this the
-        // generate path parses tool calls as `.json` and never fires them (AG0 finding).
-        if let format = AgentSession.toolCallFormat(
-            forModelType: modelTypeString(directory: directory, architecture: architecture)) {
+        let configData = configData(directory: directory)
+        let modelType = modelTypeString(configData: configData) ?? architecture ?? ""
+        if let format = ToolCallFormatTable.override(forModelType: modelType, configData: configData) {
             await container.update { $0.configuration.toolCallFormat = format }
         }
         return container
     }
 
+    /// The checkpoint's `config.json`, read once per load. Two consumers: the `model_type` the
+    /// family tables key on, and `ToolCallFormat.infer`'s secondary signals (Llama 3's
+    /// `vocab_size` / `rope_scaling`).
+    nonisolated static func configData(directory: URL) -> Data? {
+        try? Data(contentsOf: directory.appendingPathComponent("config.json"))
+    }
+
     /// The checkpoint's `model_type` (from `config.json`), falling back to the catalog
-    /// architecture string. Used to pick the tool-call format.
+    /// architecture string. Used to pick the tool-call format and the `system` placement.
     nonisolated static func modelTypeString(directory: URL, architecture: String?) -> String {
-        if let data = try? Data(contentsOf: directory.appendingPathComponent("config.json")),
-           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let modelType = obj["model_type"] as? String {
-            return modelType
-        }
-        return architecture ?? ""
+        modelTypeString(configData: configData(directory: directory)) ?? architecture ?? ""
+    }
+
+    /// `model_type` out of an already-read `config.json`, or `nil` when it isn't there.
+    ///
+    /// All 12 catalog chat models carry a top-level `model_type`; the nested `text_config` copy is
+    /// deliberately not consulted, because upstream's `ToolCallFormat.infer` doesn't consult it
+    /// either (e.g. `qwen3_5` at the top level, `qwen3_5_text` under `text_config`).
+    nonisolated static func modelTypeString(configData: Data?) -> String? {
+        guard let configData,
+              let obj = try? JSONSerialization.jsonObject(with: configData) as? [String: Any],
+              let modelType = obj["model_type"] as? String else { return nil }
+        return modelType
     }
 }

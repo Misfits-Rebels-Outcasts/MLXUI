@@ -11,11 +11,12 @@
 //  → continue), so this stays small. The dispatch logic is a `static` function so it can be
 //  unit-tested without loading a model.
 //
-//  TOOL-CALL FORMAT (wired in AG1): the generate path selects the parser from
-//  `ModelConfiguration.toolCallFormat ?? .json`. Qwen3.5 emits `<tool_call><function=…>`
-//  which is `ToolCallFormat.xmlFunction` — so the loaded container's configuration must be
-//  set to `.xmlFunction` for the family (see `Self.toolCallFormat(forModelType:)`), or tool
-//  calls won't be parsed. AG0 defines the mapping; AG1 applies it at load + wires the UI.
+//  TOOL-CALL FORMAT (wired in AG1, rewritten in S2-1): the generate path selects the parser from
+//  `ModelConfiguration.toolCallFormat ?? .json`. `LLMModelFactory` already infers that format from
+//  the checkpoint at load (`ToolCallFormat.infer(from:configData:)`), and `ModelContainerPool` adds
+//  the app's overrides on top — see `ToolCallFormatTable`. The app no longer keeps its own family
+//  table here, and `Self.toolCallFormat(forModelType:)` below is only the no-`config.json`
+//  convenience kept for AG0's test.
 //
 
 import Foundation
@@ -232,29 +233,24 @@ nonisolated final class AgentSession {
     }
 
     /// Tool-call parser format for a given `modelType` string from the checkpoint config.
-    /// Returns `nil` when the default (`.json`) is appropriate. Applied at load in AG1.
     ///
-    /// Only *some* of the Qwen family uses the XML form. Per MLXLMCommon's own
-    /// `ToolCallFormat` documentation:
+    /// **S2-1: this no longer keeps a table of its own.** mlx-swift-lm's `LLMModelFactory` already
+    /// runs `ToolCallFormat.infer(from:configData:)` at load (`LLMModelFactory.swift:543`), so the
+    /// app's own row — `qwen3_5` → `.xmlFunction` — only duplicated upstream (readme F3b; keeping
+    /// the duplicate is what the S2-1 contract forbids). The answer now comes from
+    /// `ToolCallFormatTable.resolved`, which defers to upstream and applies the app's overrides on
+    /// top — none for any catalog model, see that table.
     ///
-    ///   - `.json`        — Llama, **Qwen** (incl. Qwen2.5 and Qwen3):
-    ///                      `<tool_call>{"name": "f", "arguments": {…}}</tool_call>`
-    ///   - `.xmlFunction` — Nemotron, **Qwen3 Coder, Qwen3.5**:
-    ///                      `<tool_call><function=f><parameter=k>v</parameter></function>`
+    /// Kept, unchanged in meaning, because AG0's test pins it and because it is the convenience for
+    /// a caller with no `config.json` in hand. Without that data the `llama` family cannot be told
+    /// apart (Llama 3 needs `vocab_size` / `rope_scaling`), and upstream's `infer` returns `nil`
+    /// for it in exactly the same way.
     ///
-    /// Matching all of `qwen*` to `.xmlFunction` made plain Qwen3 emit a JSON tool
-    /// call that the XML parser silently discarded — the model "decided" to call a
-    /// tool and the transcript showed nothing. Found while bringing up `run_shell`
-    /// on Qwen3-8B; see Design/dual-distribution.md § 5.
-    ///
-    /// Known gap: Qwen3-Coder and Qwen3-30B-A3B both report `qwen3_moe`, so the
-    /// Coder variant can't be told apart from `modelType` alone — it would need the
-    /// model id. Left as-is rather than guessed at; Coder is the rarer case and a
-    /// wrong `.xmlFunction` is worse than a wrong `.json` (the JSON parser at least
-    /// fails loudly on malformed input).
+    /// Known gap (unchanged): Qwen3-Coder and Qwen3-30B-A3B both report `qwen3_moe`, so the Coder
+    /// variant can't be told apart from `modelType` alone — it would need the model id. Left as-is
+    /// rather than guessed at; Coder is the rarer case and a wrong `.xmlFunction` is worse than a
+    /// wrong `.json` (the JSON parser at least fails loudly on malformed input).
     static func toolCallFormat(forModelType modelType: String) -> ToolCallFormat? {
-        let t = modelType.lowercased()
-        if t.hasPrefix("qwen3_5") || t.hasPrefix("qwen3.5") { return .xmlFunction }
-        return nil
+        ToolCallFormatTable.resolved(forModelType: modelType, configData: nil)
     }
 }
