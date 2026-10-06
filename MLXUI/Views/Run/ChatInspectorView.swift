@@ -198,7 +198,8 @@ struct ChatInspectorView: View {
                     #if DIRECT_BUILD
                     FolderAccessPanel.presentAndAttach(using: runner)
                     #else
-                    FolderAccessPanel.presentAndGrant(using: runner)
+                    // Grant **and** re-attach: the row is only useful once both hold.
+                    FolderAccessPanel.presentAndGrant(using: runner, attachAfterGrant: true)
                     #endif
                 }
                 .buttonStyle(.link)

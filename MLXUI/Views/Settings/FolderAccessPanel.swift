@@ -25,13 +25,26 @@ enum FolderAccessPanel {
 
     #if !DIRECT_BUILD
     /// Grant a folder the user chose in Settings, where granting is the point.
+    ///
+    /// `attachAfterGrant` is for the one caller that needs both: the inspector's **Re-grant…**,
+    /// which exists to make a folder this chat has already attached work again. Granting alone
+    /// leaves the chat without it (the scope is the intersection of attached and granted), so the
+    /// row would vanish and the user would have to add the folder again with "+". Settings and the
+    /// "+" menu keep the default, because granting is a standing permission and attaching is a
+    /// per-chat choice (D1).
     @MainActor
-    static func presentAndGrant(using runner: ModelRunner) {
+    static func presentAndGrant(
+        using runner: ModelRunner, attachAfterGrant: Bool = false
+    ) {
         guard let url = presentPicker(
             message: "Choose a folder the model's file tools may access.",
             prompt: "Grant Access")
         else { return }
         runner.grantFolderAccess(to: url)
+        guard attachAfterGrant else { return }
+        // Only if the grant took: `attachFolder` would put a chip on a folder it could not read.
+        guard FolderGrants.grant(covering: url.path, in: FolderGrants.load()) != nil else { return }
+        runner.attachFolder(path: url.path)
     }
     #else
     /// Direct's counterpart (CW-2). Named for what it does — there is nothing to grant without a
