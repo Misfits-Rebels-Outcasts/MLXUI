@@ -11,14 +11,24 @@ import AppKit
 enum FolderAccessPanel {
 
     /// Present the panel alone and return the chosen folder. `nil` when the user cancelled.
+    ///
+    /// `startingAt` (M2) points the panel at a folder the user already knows — Re-grant… opens at
+    /// the stale folder's parent so the user lands where they were instead of somewhere generic.
+    /// A path that no longer exists is passed through anyway: AppKit opens the nearest parent it
+    /// can, which is the same convenience.
     @MainActor
-    static func presentPicker(message: String, prompt: String) -> URL? {
+    static func presentPicker(
+        message: String, prompt: String, startingAt: String? = nil
+    ) -> URL? {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.message = message
         panel.prompt = prompt
+        if let startingAt, !startingAt.isEmpty {
+            panel.directoryURL = URL(fileURLWithPath: startingAt, isDirectory: true)
+        }
         guard panel.runModal() == .OK else { return nil }
         return panel.url
     }
@@ -34,11 +44,12 @@ enum FolderAccessPanel {
     /// per-chat choice (D1).
     @MainActor
     static func presentAndGrant(
-        using runner: ModelRunner, attachAfterGrant: Bool = false
+        using runner: ModelRunner, attachAfterGrant: Bool = false, startingAt: String? = nil
     ) {
         guard let url = presentPicker(
             message: "Choose a folder the model's file tools may access.",
-            prompt: "Grant Access")
+            prompt: "Grant Access",
+            startingAt: startingAt)
         else { return }
         runner.grantFolderAccess(to: url)
         guard attachAfterGrant else { return }

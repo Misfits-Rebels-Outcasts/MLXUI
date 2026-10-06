@@ -198,8 +198,10 @@ struct ChatInspectorView: View {
                     #if DIRECT_BUILD
                     FolderAccessPanel.presentAndAttach(using: runner)
                     #else
-                    // Grant **and** re-attach: the row is only useful once both hold.
-                    FolderAccessPanel.presentAndGrant(using: runner, attachAfterGrant: true)
+                    // Grant **and** re-attach: the row is only useful once both hold. The panel
+                    // opens at the stale folder, so the user re-picks where they were (M2).
+                    FolderAccessPanel.presentAndGrant(
+                        using: runner, attachAfterGrant: true, startingAt: path)
                     #endif
                 }
                 .buttonStyle(.link)

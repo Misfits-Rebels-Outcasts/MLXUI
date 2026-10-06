@@ -44,7 +44,10 @@ struct ChatFolderAttachTests {
         return url
     }
 
-    /// A one-shot async gate: `wait` suspends until `raise` runs, and stays raised after that.
+    /// A one-shot async gate: `raise` opens it for good, `wait` suspends until it opens.
+    ///
+    /// `wait(seconds:)` gives up after a bound and returns whether it opened, so a caller that is
+    /// waiting for something that will never happen fails instead of hanging the suite.
     private actor Signal {
         private var raised = false
         private var waiters: [CheckedContinuation<Void, Never>] = []
@@ -56,11 +59,26 @@ struct ChatFolderAttachTests {
             for continuation in pending { continuation.resume() }
         }
 
-        func wait() async {
-            if raised { return }
-            await withCheckedContinuation { continuation in
-                waiters.append(continuation)
+        @discardableResult
+        func wait(seconds: Double? = nil) async -> Bool {
+            if raised { return true }
+            guard let seconds else {
+                await withCheckedContinuation { continuation in waiters.append(continuation) }
+                return true
             }
+            let timeout = Task {
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                await self.expire()
+            }
+            await withCheckedContinuation { continuation in waiters.append(continuation) }
+            timeout.cancel()
+            return raised
+        }
+
+        private func expire() {
+            let pending = waiters
+            waiters = []
+            for continuation in pending { continuation.resume() }
         }
     }
 
@@ -79,9 +97,12 @@ struct ChatFolderAttachTests {
     /// Installs a hook that parks the turn until the test releases it, so the runner can be
     /// observed mid-send with no model and no timing luck. The turn then ends on the injected
     /// container (which throws), so the whole `send` body runs and finishes deterministically.
+    ///
+    /// `reached(within:)` is bounded: a turn that is dropped **before** the hook (exactly the M1
+    /// defect) must fail the test rather than wait on a gate that will never open.
     private func parkAfterImport(
         _ runner: ModelRunner
-    ) -> (reached: @Sendable () async -> Void, release: @Sendable () -> Void) {
+    ) -> (reached: @Sendable () async -> Bool, release: @Sendable () -> Void) {
         let reachedSignal = Signal()
         let releaseSignal = Signal()
         runner.containerForTesting = { throw AttachmentImporter.Failure.tooLarge(1) }
@@ -90,7 +111,7 @@ struct ChatFolderAttachTests {
             await releaseSignal.wait()
         }
         return (
-            reached: { await reachedSignal.wait() },
+            reached: { await reachedSignal.wait(seconds: 5) },
             release: { Task { await releaseSignal.raise() } }
         )
     }
@@ -179,6 +200,78 @@ struct ChatFolderAttachTests {
 
         #expect(!runner.isRunning)
         #expect(!storedUserTexts(runner).contains("stopped"))
+    }
+
+    // MARK: - M1: a file on its own is a turn
+
+    private func textFile(in directory: URL, named name: String, contents: String) throws -> URL {
+        let url = directory.appendingPathComponent(name)
+        try contents.write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
+
+    /// (a) The dead end that started this: `RunChatView` let an attachment-only message through and
+    /// cleared its chips, so if every file failed to import there was neither text nor attachment.
+    /// Nothing is appended, the turn is released, and the import's own error survives.
+    @Test func anAttachmentThatFailsToImportSendsNothingButKeepsTheError() async throws {
+        let (runner, directory) = makeRunner()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let work = try makeWork()
+        defer { try? FileManager.default.removeItem(at: work) }
+        let modelDir = try makeModelDirectory()
+        defer { try? FileManager.default.removeItem(at: modelDir) }
+        runner.modelDirectoryForTesting = { _ in modelDir }
+
+        // Over the 50 MB per-file cap: the import refuses it and reports why.
+        let big = work.appendingPathComponent("huge.bin")
+        FileManager.default.createFile(atPath: big.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: big)
+        try handle.truncate(atOffset: UInt64(51 * 1024 * 1024))
+        try handle.close()
+
+        // No text, and the only file is refused.
+        await runner.send("", attachments: [big], for: entry)
+
+        #expect(!runner.isRunning)                              // the turn was released
+        #expect(runner.errorMessage != nil)                     // …with the refusal kept
+        #expect(runner.transcript.items.isEmpty)                // and nothing sent
+        #expect(!storedUserTexts(runner).contains(""))
+    }
+
+    /// (b) The positive case: text empty, one file that imports — the turn goes through.
+    @Test func anAttachmentAloneIsSent() async throws {
+        let (runner, directory) = makeRunner()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let work = try makeWork()
+        defer { try? FileManager.default.removeItem(at: work) }
+        let modelDir = try makeModelDirectory()
+        defer { try? FileManager.default.removeItem(at: modelDir) }
+        runner.modelDirectoryForTesting = { _ in modelDir }
+
+        let file = try textFile(in: work, named: "Name.txt", contents: "hello from the file")
+
+        let gate = parkAfterImport(runner)
+        let send = Task { await runner.send("", attachments: [file], for: self.entry) }
+        // Bounded: with the M1 defect the turn is dropped before the hook, so this reports a miss
+        // rather than waiting on a gate that never opens.
+        let reached = await gate.reached()
+        #expect(reached)                                        // the turn was not dropped
+        #expect(runner.isRunning)
+        gate.release()
+        await send.value
+
+        #expect(!runner.isRunning)
+        // The injected container throws on purpose, so the turn ends in an error — the point here
+        // is that it *ran* rather than being dropped before the import.
+        #expect(runner.errorMessage != nil)
+        let appended = runner.transcript.items.compactMap { item -> ChatMessage? in
+            guard case .message(let message) = item, message.role == .user else { return nil }
+            return message
+        }
+        #expect(appended.count == 1)
+        #expect(appended.first?.text == "")
+        #expect(appended.first?.attachments.count == 1)
+        #expect(appended.first?.attachments.first?.name == "Name.txt")
     }
 
     // MARK: attach / detach / working folder

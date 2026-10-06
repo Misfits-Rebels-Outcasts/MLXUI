@@ -556,7 +556,9 @@ final class ModelRunner {
     /// streaming assistant text + tool-call cards into the transcript as they arrive.
     func send(_ prompt: String, attachments: [URL] = [], for model: ModelEntry) async {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !isRunning else { return }
+        // M1: a file on its own is a turn — "what is in this file?" needs no typed text. The text
+        // check that used to live here now runs *after* the import, against what actually arrived.
+        guard !trimmed.isEmpty || !attachments.isEmpty, !isRunning else { return }
 
         #if DEBUG
         let modelDir = modelDirectoryForTesting?(model.id)
@@ -613,6 +615,14 @@ final class ModelRunner {
               activeConversationID == turnConversationID,
               isRunning
         else { return }
+        // M1: nothing to send. `RunChatView` let an attachment-only message through and cleared its
+        // chips, so if every file then failed to import there is no text and no attachment — an
+        // empty turn would be appended and a generation spent on nothing. The import has already
+        // reported why (`errorMessage`), so keep that, release the turn and send nothing.
+        guard !trimmed.isEmpty || !readyAttachments.isEmpty else {
+            isRunning = false
+            return
+        }
 
         transcript.addUserMessage(trimmed, attachments: readyAttachments)
         // CW-C-FIX-1: the model gets the same thing the transcript shows. `send` used to pass the
