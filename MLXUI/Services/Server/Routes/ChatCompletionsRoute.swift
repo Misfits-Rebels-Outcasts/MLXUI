@@ -73,6 +73,11 @@ nonisolated enum ChatCompletionsRoute {
         // both ask the same table.
         let modelType = backend.modelType ?? ""
         let acceptsTools = ToolCallFormatTable.acceptsTools(forModelType: modelType)
+        // S2-3: thinking is on only when the client asked *and* the family's template reads
+        // `enable_thinking`. Nothing is refused either way — a family without thinking simply
+        // ignores the request (decision 2) — so the log records what actually happened.
+        tracker.reasoningOn = ReasoningTemplateTable.thinkingOn(requested: request.reasoning,
+                                                                 forModelType: modelType)
         tracker.toolsIgnored = request.toolsRequested && !acceptsTools
         if tracker.toolsIgnored { log.notice("tools ignored") }
         if !acceptsTools { request.tools = [] }
@@ -107,15 +112,16 @@ nonisolated enum ChatCompletionsRoute {
         var usage = ServeUsage(promptTokens: 0, completionTokens: 0)
         var failure: ServeError?
         var calls: [ServeToolCall] = []
+        var reasoning = ""
         do {
             for try await event in backend.generate(request) {
                 switch event {
                 case .textDelta(let piece): text += piece
+                case .reasoningDelta(let piece): reasoning += piece      // S2-3
                 case .usage(let value): usage = value
                 case .finish(let reason): finish = reason
                 case .error(let error): failure = error
                 case .toolCallDelta(let delta): Self.append(delta, to: &calls)
-                case .reasoningDelta: break                         // S2-3
                 }
             }
         } catch {
@@ -129,7 +135,8 @@ nonisolated enum ChatCompletionsRoute {
         tracker.toolCalls = calls.count
         let body = OpenAIChatDialect.completionBody(
             id: OpenAIChatDialect.makeCompletionID(), created: Int(environment.now().timeIntervalSince1970),
-            model: request.model, text: text, toolCalls: calls, finish: finish, usage: usage)
+            model: request.model, text: text, reasoning: reasoning, toolCalls: calls,
+            finish: finish, usage: usage)
         return tracker.succeed(.full(ServeResponse(status: 200, body: body,
                                                    headers: ["Content-Type": "application/json"])))
     }
@@ -187,10 +194,13 @@ nonisolated enum ChatCompletionsRoute {
                         if delta.id != nil { toolCallCount += 1 }
                         write(OpenAIChatDialect.sse(OpenAIChatDialect.toolCallChunk(
                             id: id, created: created, model: model, call: delta, includeUsage: includeUsage)))
+                    case .reasoningDelta(let piece):
+                        ensureRole()
+                        write(OpenAIChatDialect.sse(OpenAIChatDialect.reasoningChunk(
+                            id: id, created: created, model: model, text: piece, includeUsage: includeUsage)))
                     case .usage(let value): usage = value
                     case .finish(let reason): finish = reason
                     case .error(let error): failure = error
-                    case .reasoningDelta: break                         // S2-3
                     }
                 }
             } catch {
@@ -272,6 +282,9 @@ nonisolated final class RequestTracker: @unchecked Sendable {
 
     var model: String?
     var toolsIgnored = false
+    /// Whether thinking was actually on for this request (S2-3) — metadata only, like everything
+    /// else here (rule 13).
+    var reasoningOn = false
     var usage: ServeUsage?
     /// How many tool calls the model produced — **a count only** (rule 13: no tool names, no
     /// arguments, no results).
@@ -309,6 +322,6 @@ nonisolated final class RequestTracker: @unchecked Sendable {
             time: started, userAgent: head.userAgent, model: model,
             promptTokens: usage?.promptTokens, completionTokens: usage?.completionTokens,
             durationSeconds: finished.timeIntervalSince(started), status: status, toolsIgnored: toolsIgnored,
-            toolCalls: toolCalls))
+            reasoningOn: reasoningOn, toolCalls: toolCalls))
     }
 }

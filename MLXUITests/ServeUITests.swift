@@ -330,6 +330,18 @@ struct ConnectSnippetsTests {
                                   toolCalls: 1)
         #expect(RequestLogList.line(one).contains("1 tool call"))
     }
+
+    /// S2-3: the log line says "thinking" when it was on — the flag only.
+    @Test func theRequestLogLineNotesThinkingWithoutTheThinking() {
+        let base = RequestLogEntry(time: Date(timeIntervalSince1970: 0), userAgent: nil, model: "m",
+                                   promptTokens: 3, completionTokens: 4, durationSeconds: 0.5,
+                                   status: 200, toolsIgnored: false)
+        #expect(!RequestLogList.line(base).contains("thinking"))
+
+        var on = base
+        on.reasoningOn = true
+        #expect(RequestLogList.line(on).contains("thinking"))
+    }
 }
 
 // MARK: - Live wiring (S1-5's by-hand run found the model directory built from the unslugged HF id)

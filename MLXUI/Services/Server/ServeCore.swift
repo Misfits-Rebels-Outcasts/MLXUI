@@ -256,6 +256,8 @@ nonisolated struct RequestLogEntry: Sendable, Equatable {
     var status: Int
     /// The client sent a `tools[]` and this model can't use it (S1's "tools ignored" note).
     var toolsIgnored: Bool
+    /// Thinking was actually on for this request (S2-3) — the flag, never the thinking itself.
+    var reasoningOn: Bool = false
     /// How many tool calls the model produced (S2-2). **A count only** — rule 13: no tool names,
     /// no arguments, no results, ever.
     var toolCalls: Int = 0

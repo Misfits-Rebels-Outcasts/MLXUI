@@ -14,6 +14,7 @@ nonisolated final class FakeBackend: ServeBackend, @unchecked Sendable {
         case usage(prompt: Int, completion: Int)
         case finish(ServeFinishReason)
         case toolCall(index: Int, id: String?, name: String?, arguments: String?)
+        case reasoning(String)
         case fail
     }
 
@@ -50,6 +51,7 @@ nonisolated final class FakeBackend: ServeBackend, @unchecked Sendable {
                     case .toolCall(let index, let id, let name, let arguments):
                         continuation.yield(.toolCallDelta(ServeToolCallDelta(
                             index: index, id: id, name: name, argumentsFragment: arguments)))
+                    case .reasoning(let text): continuation.yield(.reasoningDelta(text))
                     case .fail: continuation.finish(throwing: ServeError(status: 500, message: "boom", code: "boom")); return
                     }
                 }
@@ -771,6 +773,66 @@ struct ChatCompletionsRouteTests {
     }
 
     /// Two calls in one turn keep their indices, in both wire shapes (S2-2 requirement 5).
+    // MARK: - S2-3 reasoning
+
+    /// Non-streaming: the thinking half comes back as `message.reasoning_content`, the answer as
+    /// `content`, and nothing is mixed.
+    @Test func reasoningIsEncodedNonStreaming() async throws {
+        let backend = FakeBackend([
+            .reasoning("I should add 2 and 2."), .text("The answer is 4."), .finish(.stop),
+        ], modelType: "qwen3")
+        let request = #"{"model":"mlx-community/Qwen3-4B-4bit","messages":[{"role":"user","content":"2+2?"}],"reasoning_effort":"high"}"#
+        let response = try #require(full(await call(request, chatEnvironment(backend: backend))))
+        let message = try #require(((jsonObject(response.body)?["choices"] as? [[String: Any]])?.first)?["message"] as? [String: Any])
+        #expect(message["reasoning_content"] as? String == "I should add 2 and 2.")
+        #expect(message["content"] as? String == "The answer is 4.")
+    }
+
+    /// Streaming: `delta.reasoning_content` chunks before the answer chunks.
+    @Test func reasoningIsEncodedStreaming() async throws {
+        let backend = FakeBackend([
+            .reasoning("Thinking."), .text("Answer."), .finish(.stop),
+        ], modelType: "qwen3")
+        let request = #"{"model":"mlx-community/Qwen3-4B-4bit","messages":[{"role":"user","content":"x"}],"stream":true,"reasoning_effort":"high"}"#
+        let streamed = try #require(await collect(await call(request, chatEnvironment(backend: backend))))
+        let events = streamed.text.components(separatedBy: "\n\n").filter { $0.hasPrefix("data: {") }
+        func delta(_ event: String) -> [String: Any]? {
+            guard let chunk = jsonObject(Data(event.dropFirst(6).utf8)) else { return nil }
+            return ((chunk["choices"] as? [[String: Any]])?.first)?["delta"] as? [String: Any]
+        }
+        #expect(events.compactMap { delta($0)?["reasoning_content"] as? String } == ["Thinking."])
+        #expect(events.compactMap { delta($0)?["content"] as? String }.joined() == "Answer.")
+    }
+
+    /// The log records that thinking was on — the flag, nothing else (rule 13).
+    @Test func theLogNotesThinkingButHoldsNoThinking() async throws {
+        let backend = FakeBackend([.reasoning("SECRET-REASONING-TEXT"), .text("ok"), .finish(.stop)],
+                                  modelType: "qwen3")
+        let log = RequestLog()
+        let request = #"{"model":"mlx-community/Qwen3-4B-4bit","messages":[{"role":"user","content":"x"}],"reasoning_effort":"high"}"#
+        _ = await call(request, chatEnvironment(backend: backend, log: log))
+        let entry = try #require(log.entries.last)
+        #expect(entry.reasoningOn)
+        #expect(!String(describing: log.entries).contains("SECRET-REASONING-TEXT"))
+    }
+
+    /// A family whose template has no thinking: the control is **ignored**, never a 400, and the log
+    /// says so (decision 2).
+    @Test func aFamilyWithoutThinkingIgnoresTheControl() async throws {
+        let backend = FakeBackend([.text("ok"), .finish(.stop)], modelType: "llama")
+        let log = RequestLog()
+        let request = #"{"model":"mlx-community/Qwen3-4B-4bit","messages":[{"role":"user","content":"x"}],"reasoning_effort":"high"}"#
+        let response = try #require(full(await call(request, chatEnvironment(backend: backend, log: log))))
+        #expect(response.status == 200)
+        #expect(log.entries.last?.reasoningOn == false)
+
+        // …and a thinking request to a *thinking* family with the control absent stays off too.
+        let off = RequestLog()
+        _ = await call(#"{"model":"mlx-community/Qwen3-4B-4bit","messages":[{"role":"user","content":"x"}]}"#,
+                       chatEnvironment(backend: backend, log: off))
+        #expect(off.entries.last?.reasoningOn == false)
+    }
+
     @Test func twoToolCallsKeepTheirIndices() async throws {
         let backend = FakeBackend([
             .toolCall(index: 0, id: "call_a", name: "first", arguments: "{}"),
@@ -972,5 +1034,49 @@ struct MLXChatBackendRealModelTests {
             if case .textDelta(let piece) = event { answer += piece }
         }
         #expect(!answer.isEmpty)
+    }
+
+    /// S2-3 on a real checkpoint, both ways: with thinking asked for, the thinking comes back as
+    /// `.reasoningDelta` and the answer as content with no `<think>` marker in either; without it,
+    /// there is no reasoning at all (S1's behaviour). Two runs each cover the non-streaming
+    /// (accumulate every event) and streaming (per-event) consumers.
+    @Test(.enabled(if: MLXChatBackendRealModelTests.modelDir != nil))
+    func thinkingOnAndOffOnARealModel() async throws {
+        let dir = URL(fileURLWithPath: try #require(Self.modelDir))
+        let backend = MLXChatBackend(directory: dir, pool: ModelContainerPool(budgetBytes: 40 << 30))
+        func request(_ reasoning: Bool?) -> ServeRequest {
+            var request = ServeRequest(model: "m", messages: [
+                ServeMessage(role: .user, text: "What is 2 + 2? Think it through, then answer.")])
+            request.temperature = 0
+            request.maxTokens = 512
+            request.reasoning = reasoning
+            return request
+        }
+        func halves(_ request: ServeRequest) async throws -> (reasoning: String, content: String, finish: ServeFinishReason?) {
+            var reasoning = "", content = ""
+            var finish: ServeFinishReason?
+            for try await event in backend.generate(request) {
+                switch event {
+                case .reasoningDelta(let piece): reasoning += piece
+                case .textDelta(let piece): content += piece
+                case .finish(let reason): finish = reason
+                default: break
+                }
+            }
+            return (reasoning, content, finish)
+        }
+
+        let on = try await halves(request(true))
+        print("S2-3 MEASURE thinking on: reasoning chars=\(on.reasoning.count) content chars=\(on.content.count) finish=\(String(describing: on.finish))")
+        #expect(!on.reasoning.isEmpty)                                  // the model did think
+        #expect(!on.reasoning.contains("<think>") && !on.reasoning.contains("</think>"))
+        #expect(!on.content.contains("<think>") && !on.content.contains("</think>"))
+        if on.finish == .stop { #expect(!on.content.isEmpty) }          // a clean finish means an answer
+        else { #expect(on.content.isEmpty) }                            // length: cut mid-think
+
+        let off = try await halves(request(nil))
+        print("S2-3 MEASURE thinking off: reasoning chars=\(off.reasoning.count) content chars=\(off.content.count) finish=\(String(describing: off.finish))")
+        #expect(off.reasoning.isEmpty)                                  // S1: nothing is labelled reasoning
+        #expect(!off.content.isEmpty)
     }
 }

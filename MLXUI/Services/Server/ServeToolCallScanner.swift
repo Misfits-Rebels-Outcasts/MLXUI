@@ -186,21 +186,14 @@ nonisolated struct ServeToolCallScanner {
     /// Every path clears the buffer: this is the one function whose whole job is deciding what is
     /// still held, and returning without clearing would re-emit it on the next push.
     private mutating func holdPartialTag() -> String {
-        guard let startTag, startTag.count > 1, !buffer.isEmpty else {
+        guard let startTag else {
             let held = buffer
             buffer = ""
             return held
         }
-        for length in stride(from: min(startTag.count - 1, buffer.count), through: 1, by: -1) {
-            let suffix = buffer.suffix(length)
-            guard suffix == startTag.prefix(length) else { continue }
-            let safe = String(buffer.dropLast(length))
-            buffer = String(suffix)
-            return safe
-        }
-        let held = buffer
-        buffer = ""
-        return held
+        let (safe, held) = ServeTextFraming.holding(buffer, partialOf: startTag)
+        buffer = held
+        return safe
     }
 
     /// The index just past the `}` that closes the object starting at `buffer.first`, or `nil`

@@ -261,7 +261,16 @@ nonisolated struct MLXChatBackend: ServeBackend {
         let format = ToolCallFormatTable.resolved(forModelType: checkpointModelType,
                                                  configData: ModelContainerPool.configData(directory: directory)) ?? .json
         let hasToolHistory = messages.contains { $0.role == .tool || !$0.toolCalls.isEmpty }
-        let noThinking = LLMEngine.noThinkingContext
+        // S2-3: thinking is OFF unless the request asked for it *and* the family's template reads
+        // `enable_thinking` — the same shape as the tools gate above, and the same default S1 had.
+        // The client's `reasoning_effort` string is deliberately **not** forwarded: the Qwen3.8 and
+        // Ternary-Bonsai templates raise on anything but `xhigh`/`medium`/`low`, and the OpenAI
+        // vocabulary (`minimal`) is not in their list, so a forwarded value would kill the render
+        // and silently turn thinking off. The templates have no budget control to set anyway.
+        // Implementer's call, pending owner confirmation.
+        let thinking = ReasoningTemplateTable.thinkingOn(requested: request.reasoning,
+                                                         forModelType: checkpointModelType)
+        let templateContext: [String: any Sendable] = ["enable_thinking": thinking]
         try await container.perform { context in
             let input: LMInput
             if hasToolHistory {
@@ -272,7 +281,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 do {
                     input = try await context.processor.prepare(
                         input: UserInput(prompt: .messages(raw), tools: tools.isEmpty ? nil : tools,
-                                         additionalContext: noThinking))
+                                         additionalContext: templateContext))
                 } catch {
                     input = try await context.processor.prepare(
                         input: UserInput(prompt: .messages(raw), tools: tools.isEmpty ? nil : tools))
@@ -282,7 +291,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 do {
                     input = try await context.processor.prepare(
                         input: UserInput(chat: chat, tools: tools.isEmpty ? nil : tools,
-                                         additionalContext: noThinking))
+                                         additionalContext: templateContext))
                 } catch {
                     input = try await context.processor.prepare(
                         input: UserInput(chat: chat, tools: tools.isEmpty ? nil : tools))
@@ -299,16 +308,17 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 topP: Float(sampling.topP))
             let stream = try MLXLMCommon.generateTokens(input: input, parameters: parameters, context: context)
 
-            var pipeline = ServeTextPipeline(decode: { context.tokenizer.decode(tokenIds: $0) }, stop: request.stop)
             // The scanner exists only when a tool call could actually be produced; `tools` empty
             // means the family can't use them or the client asked for `tool_choice: "none"`.
             var scanner: ServeToolCallScanner? = tools.isEmpty
                 ? nil : ServeToolCallScanner(format: format, tools: tools)
             var callIndex = 0
 
-            /// Text goes through the scanner (when there is one) and out; any call it completed is
-            /// yielded as its own event.
-            func route(_ text: String) {
+            /// The answer half — after the split when thinking is on — goes through the scanner
+            /// (when there is one) and out; any call it completed is yielded as its own event.
+            /// A `<tool_call>` written inside a think block is *reasoning*, and never reaches here
+            /// (S2-3 decision 4).
+            func routeContent(_ text: String) {
                 guard !text.isEmpty else { return }
                 if scanner != nil {
                     let safe = scanner?.push(text) ?? text
@@ -321,30 +331,72 @@ nonisolated struct MLXChatBackend: ServeBackend {
 
             var completionTokens = 0
             var libraryReason: GenerateStopReason?
-            for await generation in stream {
-                if Task.isCancelled { break }
-                switch generation {
-                case .token(let id):
-                    completionTokens += 1
-                    route(pipeline.push(id).text)
-                case .info(let info):
-                    libraryReason = info.stopReason
-                }
-                if pipeline.stopped { break }
-            }
-            if Task.isCancelled { throw CancellationError() }
+            var stoppedByClient = false
 
-            route(pipeline.finish())
+            if thinking {
+                // S2-3: the raw text is split into its thinking and its answer, and only the answer
+                // is scanned for tool calls, matched against `stop`, or emitted as `content`.
+                // `ServeTextPipeline` is deliberately not used here: its leading-`<think>` strip is
+                // the *thinking-off* behaviour, and it would eat the block we are meant to forward.
+                var detokenizer = IncrementalDetokenizer(decode: { context.tokenizer.decode(tokenIds: $0) })
+                var splitter = ServeReasoningSplitter()
+                var stop = StopMatcher(request.stop)
+                func emitSplit(_ halves: (reasoning: String, content: String)) -> Bool {
+                    if !halves.reasoning.isEmpty { continuation.yield(.reasoningDelta(halves.reasoning)) }
+                    guard !halves.content.isEmpty else { return false }
+                    let matched = stop.push(halves.content)
+                    routeContent(matched.emit)
+                    return matched.stopped
+                }
+                for await generation in stream {
+                    if Task.isCancelled { break }
+                    switch generation {
+                    case .token(let id):
+                        completionTokens += 1
+                        if emitSplit(splitter.push(detokenizer.push(id))) { stoppedByClient = true }
+                    case .info(let info):
+                        libraryReason = info.stopReason
+                    }
+                    if stoppedByClient { break }
+                }
+                if Task.isCancelled { throw CancellationError() }
+                // End of stream: whatever the splitter still holds is thinking (an unclosed block
+                // runs to EOS — a `max_tokens` cut mid-think), then the stop matcher's tail.
+                _ = emitSplit(splitter.push(detokenizer.flush()))
+                _ = emitSplit(splitter.finish())
+                if !stoppedByClient {
+                    let tail = stop.finish()
+                    routeContent(tail)
+                }
+            } else {
+                // S1's path, unchanged: detokenize → strip a leading closed `<think>` → `stop`.
+                var pipeline = ServeTextPipeline(decode: { context.tokenizer.decode(tokenIds: $0) },
+                                                 stop: request.stop)
+                for await generation in stream {
+                    if Task.isCancelled { break }
+                    switch generation {
+                    case .token(let id):
+                        completionTokens += 1
+                        routeContent(pipeline.push(id).text)
+                    case .info(let info):
+                        libraryReason = info.stopReason
+                    }
+                    if pipeline.stopped { break }
+                }
+                if Task.isCancelled { throw CancellationError() }
+                stoppedByClient = pipeline.stopped
+                routeContent(pipeline.finish())
+            }
             // Whatever the scanner still held: a call the stream ended inside, or plain text.
-            route(scanner?.finish() ?? "")
+            routeContent(scanner?.finish() ?? "")
             Self.yieldCalls(from: &scanner, into: continuation, index: &callIndex)
 
             let hitLimit = libraryReason == .length
-                || (libraryReason == nil && !pipeline.stopped && completionTokens >= request.effectiveMaxTokens)
+                || (libraryReason == nil && !stoppedByClient && completionTokens >= request.effectiveMaxTokens)
             continuation.yield(.usage(ServeUsage(promptTokens: promptTokens, completionTokens: completionTokens)))
             // S2-2: a turn that produced calls ends as `tool_calls`, whatever the sampler said.
             let finish: ServeFinishReason = callIndex > 0 ? .toolCalls
-                : (hitLimit && !pipeline.stopped ? .length : .stop)
+                : (hitLimit && !stoppedByClient ? .length : .stop)
             continuation.yield(.finish(finish))
         }
     }

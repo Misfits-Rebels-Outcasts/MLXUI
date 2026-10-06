@@ -37,6 +37,7 @@ nonisolated enum OpenAIChatDialect {
         request.tools = try decodeTools(object["tools"])
         request.toolChoice = try decodeToolChoice(object["tool_choice"])
         request.toolsRequested = !request.tools.isEmpty
+        request.reasoning = try decodeReasoning(object)
         request.temperature = try number(object["temperature"], "temperature")
         request.topP = try number(object["top_p"], "top_p")
         // `max_completion_tokens` is the newer name; either one limits the reply.
@@ -91,6 +92,62 @@ nonisolated enum OpenAIChatDialect {
             }
         default:
             throw invalid("'tools' must be an array.", code: "invalid_tools", param: "tools")
+        }
+    }
+
+    // MARK: - Reasoning (S2-3)
+
+    /// Whether the client asked for thinking — `nil` when it didn't say.
+    ///
+    /// Two controls, each cited in the journal:
+    ///
+    /// - `reasoning_effort`
+    ///   (https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create):
+    ///   the documented set is `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` — the first
+    ///   two mean off, the rest mean on. There is **no budget to pass on**, and the string is not
+    ///   forwarded to the template (see `MLXChatBackend`: the Qwen3.8/Bonsai templates raise on
+    ///   anything outside their own three values, which would kill the render and silently turn
+    ///   thinking off);
+    /// - `chat_template_kwargs: {"enable_thinking": true|false}` — the **vLLM** convention for
+    ///   handing a value to `apply_chat_template`
+    ///   (https://docs.vllm.ai/en/latest/serving/online_serving/openai_compatible_server; Qwen's own
+    ///   docs show the same call at https://qwen.readthedocs.io/en/latest/deployment/vllm.html). The
+    ///   S2-3 brief called this "the vLLM / LM Studio convention"; LM Studio's OpenAI-compatible
+    ///   endpoint documents no such key (its reasoning switch is native-REST `/api/v1/chat` only),
+    ///   so the citation here is vLLM and Qwen, not LM Studio.
+    ///
+    /// An explicit `enable_thinking` **wins** when both are sent (S2-3 decision 1). Other keys
+    /// inside `chat_template_kwargs` are ignored: they belong to templates this server doesn't know
+    /// (vLLM filters undeclared kwargs for the same reason).
+    private static func decodeReasoning(_ object: [String: Any]) throws -> Bool? {
+        let effort: Bool?
+        switch object["reasoning_effort"] {
+        case nil, is NSNull: effort = nil
+        case let value as String:
+            // The whole documented set; anything else is a 400 rather than a guess.
+            switch value {
+            case "none", "minimal": effort = false
+            case "low", "medium", "high", "xhigh", "max": effort = true
+            default:
+                throw invalid("'reasoning_effort' must be 'none', 'minimal', 'low', 'medium', 'high', 'xhigh' or 'max'.",
+                              code: "invalid_reasoning_effort", param: "reasoning_effort")
+            }
+        default:
+            throw invalid("'reasoning_effort' must be a string.",
+                          code: "invalid_reasoning_effort", param: "reasoning_effort")
+        }
+
+        guard let kwargs = object["chat_template_kwargs"] else { return effort }
+        guard let dictionary = kwargs as? [String: Any] else {
+            throw invalid("'chat_template_kwargs' must be an object.",
+                          code: "invalid_chat_template_kwargs", param: "chat_template_kwargs")
+        }
+        switch dictionary["enable_thinking"] {
+        case nil, is NSNull: return effort
+        case let explicit as Bool: return explicit
+        default:
+            throw invalid("'chat_template_kwargs.enable_thinking' must be true or false.",
+                          code: "invalid_chat_template_kwargs", param: "chat_template_kwargs.enable_thinking")
         }
     }
 
@@ -153,6 +210,9 @@ nonisolated enum OpenAIChatDialect {
         case "user":
             return ServeMessage(role: .user, text: content)
         case "assistant":
+            // An incoming `reasoning_content` is accepted and **dropped** (S2-3 decision 6): it is
+            // not part of `content`, and the Qwen templates strip prior thinking out of history
+            // themselves, so forwarding it would double it.
             return ServeMessage(role: .assistant, text: content,
                                 toolCalls: try decodeToolCalls(message["tool_calls"], param: "\(param).tool_calls"))
         case "tool":
@@ -281,6 +341,7 @@ nonisolated enum OpenAIChatDialect {
     /// `"content": null`; a turn with text keeps that text even when it also called a tool. A turn
     /// with no calls keeps S1's shape exactly — a string, empty or not.
     static func completionBody(id: String, created: Int, model: String, text: String,
+                               reasoning: String = "",
                                toolCalls: [ServeToolCall] = [],
                                finish: ServeFinishReason, usage: ServeUsage) -> Data {
         let onlyCalls = !toolCalls.isEmpty
@@ -289,10 +350,20 @@ nonisolated enum OpenAIChatDialect {
                                  choices: [.init(index: 0,
                                                  message: .init(role: "assistant",
                                                                 content: onlyCalls ? nil : text,
+                                                                reasoning_content: reasoning.isEmpty ? nil : reasoning,
                                                                 tool_calls: toolCalls.isEmpty ? nil
                                                                     : toolCalls.map(ToolCallWire.init)),
                                                  finish_reason: finish.rawValue)],
                                  usage: .init(usage)))
+    }
+
+    /// One `delta.reasoning_content` event (S2-3): the thinking half, on its own, with no
+    /// `content` key. Byte-exact — the split happened on the raw text.
+    static func reasoningChunk(id: String, created: Int, model: String,
+                               text: String, includeUsage: Bool) -> Data {
+        chunk(id: id, created: created, model: model,
+              delta: .init(role: nil, content: nil, reasoning: text, tool_calls: nil),
+              finish: nil, usage: includeUsage ? .some(nil) : nil)
     }
 
     /// One `delta.tool_calls[]` event: `index` on every fragment, `id` and `name` on the first
@@ -301,7 +372,7 @@ nonisolated enum OpenAIChatDialect {
     static func toolCallChunk(id: String, created: Int, model: String,
                               call: ServeToolCallDelta, includeUsage: Bool) -> Data {
         chunk(id: id, created: created, model: model,
-              delta: .init(role: nil, content: nil,
+              delta: .init(role: nil, content: nil, reasoning: nil,
                            tool_calls: [.init(index: call.index, id: call.id, name: call.name,
                                               arguments: call.argumentsFragment)]),
               finish: nil, usage: includeUsage ? .some(nil) : nil)
@@ -315,18 +386,18 @@ nonisolated enum OpenAIChatDialect {
     /// The SSE chunk events. `includeUsage` makes every chunk carry `"usage": null` until the last,
     /// as OpenAI's `stream_options.include_usage` does.
     static func roleChunk(id: String, created: Int, model: String, includeUsage: Bool) -> Data {
-        chunk(id: id, created: created, model: model, delta: .init(role: "assistant", content: "", tool_calls: nil),
+        chunk(id: id, created: created, model: model, delta: .init(role: "assistant", content: "", reasoning: nil, tool_calls: nil),
               finish: nil, usage: includeUsage ? .some(nil) : nil)
     }
 
     static func contentChunk(id: String, created: Int, model: String, text: String, includeUsage: Bool) -> Data {
-        chunk(id: id, created: created, model: model, delta: .init(role: nil, content: text, tool_calls: nil),
+        chunk(id: id, created: created, model: model, delta: .init(role: nil, content: text, reasoning: nil, tool_calls: nil),
               finish: nil, usage: includeUsage ? .some(nil) : nil)
     }
 
     static func finishChunk(id: String, created: Int, model: String, finish: ServeFinishReason,
                             includeUsage: Bool) -> Data {
-        chunk(id: id, created: created, model: model, delta: .init(role: nil, content: nil, tool_calls: nil),
+        chunk(id: id, created: created, model: model, delta: .init(role: nil, content: nil, reasoning: nil, tool_calls: nil),
               finish: finish.rawValue, usage: includeUsage ? .some(nil) : nil)
     }
 
@@ -380,15 +451,18 @@ nonisolated enum OpenAIChatDialect {
             /// `nil` → `"content": null` (a turn that is only tool calls). The reference sends the
             /// key with a null rather than omitting it.
             let content: String?
+            /// The thinking half (S2-3), omitted entirely when the model did none.
+            let reasoning_content: String?
             let tool_calls: [ToolCallWire]?
             func encode(to encoder: Encoder) throws {
                 var c = encoder.container(keyedBy: Keys.self)
                 try c.encode(role, forKey: .role)
                 if let content { try c.encode(content, forKey: .content) }
                 else { try c.encodeNil(forKey: .content) }
+                try c.encodeIfPresent(reasoning_content, forKey: .reasoning_content)
                 try c.encodeIfPresent(tool_calls, forKey: .tool_calls)
             }
-            private enum Keys: String, CodingKey { case role, content, tool_calls }
+            private enum Keys: String, CodingKey { case role, content, reasoning_content, tool_calls }
         }
         struct Choice: Encodable { let index: Int; let message: Message; let finish_reason: String }
         let id: String
@@ -423,14 +497,16 @@ nonisolated enum OpenAIChatDialect {
         }
         let role: String?
         let content: String?
+        let reasoning: String?
         let tool_calls: [ToolCall]?
         func encode(to encoder: Encoder) throws {
             var c = encoder.container(keyedBy: Keys.self)
             try c.encodeIfPresent(role, forKey: .role)
             try c.encodeIfPresent(content, forKey: .content)
+            try c.encodeIfPresent(reasoning, forKey: .reasoning_content)
             try c.encodeIfPresent(tool_calls, forKey: .tool_calls)
         }
-        private enum Keys: String, CodingKey { case role, content, tool_calls }
+        private enum Keys: String, CodingKey { case role, content, reasoning_content, tool_calls }
     }
 
     private struct Chunk: Encodable {
