@@ -435,6 +435,48 @@ final class ModelRunner {
         return { stored in await OCRImageTool.recognizeText(in: stored) }
     }
 
+    /// CW-4: the environment block the next send would carry, rebuilt on demand for the inspector.
+    /// Shares `environmentBlock(…)` with `send`, so the meter measures the text the model actually
+    /// gets rather than a second guess at it.
+    func currentEnvironmentBlock() -> String? {
+        let conversation = conversations.first { $0.id == activeConversationID }
+        #if DIRECT_BUILD
+        let edition = FileScope.Edition.direct
+        let grants: [FolderGrant] = []
+        let homePath: String? = FileManager.default.homeDirectoryForCurrentUser.path
+        #else
+        let edition = FileScope.Edition.appStore
+        let grants = FolderGrants.load()
+        let homePath: String? = nil
+        #endif
+        return environmentBlock(
+            conversation: conversation, edition: edition, grants: grants,
+            homePath: homePath, attachmentsNote: nil)
+    }
+
+    /// One place builds the C3 block: `send` and the inspector both call this.
+    private func environmentBlock(
+        conversation: Conversation?,
+        edition: FileScope.Edition,
+        grants: [FolderGrant],
+        homePath: String?,
+        attachmentsNote: String?
+    ) -> String? {
+        let scope = FileScope.forConversation(
+            attached: conversation?.attachedFolders ?? [],
+            workingFolder: conversation?.effectiveWorkingFolder,
+            grants: grants,
+            edition: edition)
+        return ChatEnvironment.instructions(
+            scope: scope,
+            edition: edition,
+            fileToolsEnabled: enabledToolNames,
+            writeEnabled: enabledToolNames.contains("write_file")
+                || enabledToolNames.contains("edit_file"),
+            homePath: homePath,
+            attachmentsNote: attachmentsNote)
+    }
+
     /// Import the files this message carries (CW-3): copy into the conversation's attachments
     /// folder, extract text, apply the C11 budget. Returns those that made it — a refusal is
     /// reported and skipped, never a reason to lose the message. `async` because the image branch
@@ -561,14 +603,9 @@ final class ModelRunner {
             grants: grants,
             edition: edition)
         let attachmentsNote = ChatAttachment.environmentNote(for: readyAttachments)
-        let instructions = ChatEnvironment.instructions(
-            scope: fileScope,
-            edition: edition,
-            fileToolsEnabled: enabledToolNames,
-            writeEnabled: enabledToolNames.contains("write_file")
-                || enabledToolNames.contains("edit_file"),
-            homePath: homePath,
-            attachmentsNote: attachmentsNote)
+        let instructions = environmentBlock(
+            conversation: conversation, edition: edition, grants: grants,
+            homePath: homePath, attachmentsNote: attachmentsNote)
 
         currentTask = Task { [weak self] in
             guard let self else { return }

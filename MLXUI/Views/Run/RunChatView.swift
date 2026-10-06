@@ -17,6 +17,10 @@ struct RunChatView: View {
     @State private var conversationToDelete: Conversation?
     /// CX-2: a failed export. Its own message — `runner.errorMessage` belongs to model runs.
     @State private var exportError: String?
+    /// CW-4: the right sidebar. Persisted, so it comes back the way the user left it.
+    @AppStorage("chatInspectorShown") private var showsInspector = false
+    /// CW-5: a tool card the inspector asked the transcript to scroll to.
+    @State private var scrollTarget: UUID?
 
     private var runner: ModelRunner { appState.modelRunner }
 
@@ -39,7 +43,19 @@ struct RunChatView: View {
                 inputBar
             }
         }
-        .frame(width: 840, height: 620)
+        // CW-4: the inspector widens the sheet first, or it would be pushed off a fixed 840 pt.
+        .frame(width: showsInspector ? 1100 : 840, height: 620)
+        .inspector(isPresented: $showsInspector) {
+            ChatInspectorView(
+                model: model,
+                runner: runner,
+                draft: prompt,
+                pendingAttachments: pendingFiles.map(\.lastPathComponent),
+                attachFile: { url in
+                    if !pendingFiles.contains(url) { pendingFiles.append(url) }
+                })
+                .inspectorColumnWidth(min: 220, ideal: 240, max: 320)
+        }
         .onAppear { appState.modelRunner.prepare(for: model) }
         .onDisappear { appState.stopModel() }
         .sheet(item: Binding(
@@ -150,6 +166,14 @@ struct RunChatView: View {
             if !runner.availableTools.isEmpty {
                 toolsMenu
             }
+            Button {
+                showsInspector.toggle()
+            } label: {
+                Image(systemName: "sidebar.right")
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut("i", modifiers: [.command, .option])
+            .help("Show chat details")
             Button("Done") {
                 appState.stopModel()
                 dismiss()
@@ -264,6 +288,10 @@ struct RunChatView: View {
             .onChange(of: runner.transcript.items.count) { _, _ in scrollToEnd(proxy) }
             .onChange(of: runner.transcript.lastAssistantText) { _, _ in scrollToEnd(proxy) }
             .onChange(of: runner.isRunning) { _, _ in scrollToEnd(proxy) }
+            .onChange(of: scrollTarget) { _, target in
+                guard let target else { return }
+                withAnimation { proxy.scrollTo(target, anchor: .center) }
+            }
         }
     }
 
