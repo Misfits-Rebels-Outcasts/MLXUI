@@ -412,6 +412,22 @@ struct RunChatView: View {
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            // CW-UX-1: the refusal says "no folder is attached"; this is the missing click. It is
+            // offered only while that is still true, and clicking attaches — it never resends, so
+            // the user stays the one who decides to ask again.
+            if FolderSuggestion.showsOnCard(
+                result: activity.result,
+                attached: runner.activeAttachedFolders),
+               FolderSuggestion.fileToolsOn(enabledToolNames: runner.enabledToolNames) {
+                HStack(spacing: 6) {
+                    if folderCandidates.isEmpty {
+                        addFolderButton
+                    } else {
+                        folderButtons(folderCandidates)
+                    }
+                }
+                .disabled(runner.isRunning)
+            }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -606,6 +622,7 @@ struct RunChatView: View {
 
     private var inputBar: some View {
         VStack(alignment: .leading, spacing: 6) {
+            folderSuggestionRow
             if !runner.activeAttachedFolders.isEmpty {
                 attachedFolderChips
             }
@@ -711,6 +728,101 @@ struct RunChatView: View {
         .fixedSize()
         .help("Add a folder to this chat")
         .disabled(runner.isRunning)
+    }
+
+    // MARK: - CW-UX-1: one click from available to attached
+
+    /// What this chat could use right now, in the order the "+" menu lists it.
+    private var folderCandidates: [String] {
+        #if DIRECT_BUILD
+        Self.recentFolderCandidates(attached: runner.activeAttachedFolders)
+        #else
+        Self.grantCandidates(attached: runner.activeAttachedFolders)
+        #endif
+    }
+
+    /// The composer's hint, above the message box. Disappears the moment a folder is attached,
+    /// because the chip row replaces it (and `candidates` returns `[]`).
+    @ViewBuilder
+    private var folderSuggestionRow: some View {
+        let candidates = FolderSuggestion.candidates(
+            attached: runner.activeAttachedFolders,
+            available: folderCandidates,
+            fileToolsOn: FolderSuggestion.fileToolsOn(enabledToolNames: runner.enabledToolNames))
+        if !candidates.isEmpty {
+            HStack(spacing: 6) {
+                Text("Use a folder in this chat:")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                folderButtons(candidates)
+            }
+            .disabled(runner.isRunning)
+        } else if runner.activeAttachedFolders.isEmpty,
+                  FolderSuggestion.fileToolsOn(enabledToolNames: runner.enabledToolNames),
+                  folderCandidates.isEmpty {
+            // Nothing is offered and nothing is attached: the only route is the picker itself.
+            // App Store grants-and-attaches there; Direct attaches (no sandbox, no bookmark).
+            addFolderButton
+                .disabled(runner.isRunning)
+        }
+    }
+
+    /// Up to `maxButtons` folders, then "More…" when there are more.
+    @ViewBuilder
+    private func folderButtons(_ candidates: [String]) -> some View {
+        let row = FolderSuggestion.row(candidates: candidates)
+        ForEach(row.shown, id: \.self) { path in
+            Button {
+                runner.attachFolder(path: path)
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "plus")
+                        .font(.caption2)
+                    Text(Self.folderLabel(path))
+                        .font(.caption2)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(.quaternary.opacity(0.6), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .help(path)
+        }
+        if row.hasMore {
+            // Reuses the "+" menu's own list rather than a second copy of it: the menu is the
+            // established place for the full set.
+            Menu("More…") {
+                ForEach(candidates, id: \.self) { path in
+                    Button(Self.folderLabel(path)) { runner.attachFolder(path: path) }
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .font(.caption2)
+            .help("Show every folder this chat could use")
+        }
+    }
+
+    private var addFolderButton: some View {
+        Button {
+            #if DIRECT_BUILD
+            FolderAccessPanel.presentAndAttach(using: runner)
+            #else
+            FolderAccessPanel.presentAndGrant(using: runner, attachAfterGrant: true)
+            #endif
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "plus")
+                    .font(.caption2)
+                Text("Add folder…")
+                    .font(.caption2)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(.quaternary.opacity(0.6), in: Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     /// CW-3's file picker: several files at once, no folders (Add folder… is the folder route).
