@@ -579,7 +579,8 @@ final class ModelRunner {
         }
         let history = Conversation.chatHistory(from: transcript.items)
         if let index = conversations.firstIndex(where: { $0.id == activeConversationID }),
-           conversations[index].items.isEmpty, conversations[index].title == Conversation.untitled {
+           conversations[index].items.isEmpty, conversations[index].title == Conversation.untitled,
+           !trimmed.isEmpty {
             conversations[index].title = Conversation.title(forFirstPrompt: trimmed)
         }
 
@@ -614,6 +615,12 @@ final class ModelRunner {
         else { return }
 
         transcript.addUserMessage(trimmed, attachments: readyAttachments)
+        // CW-C-FIX-1: the model gets the same thing the transcript shows. `send` used to pass the
+        // bare `trimmed` text as the prompt, so an attachment's contents reached the **bubble** and
+        // `chatHistory` but not the turn that needed them — the model answered "you'll need to
+        // attach it first" while looking at a message that already had it. `chatHistory` covers
+        // earlier turns; this covers the turn being sent.
+        let modelPrompt = ChatAttachment.prompt(text: trimmed, attachments: readyAttachments)
 
         // Snapshot the enabled tools for this turn (Sendable to hand to the nonisolated session).
         let registry = ToolRegistry(availableTools.filter { enabledToolNames.contains($0.name) })
@@ -679,7 +686,7 @@ final class ModelRunner {
                     }
                 )
 
-                for try await chunk in session.streamResponse(to: trimmed) {
+                for try await chunk in session.streamResponse(to: modelPrompt) {
                     // A late chunk must not leak into a conversation the user switched to
                     // (switching stops the task, but a chunk can already be in flight).
                     guard self.activeConversationID == turnConversationID else { break }

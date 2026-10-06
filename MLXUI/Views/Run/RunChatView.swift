@@ -640,7 +640,8 @@ struct RunChatView: View {
                             .font(.system(size: 22))
                     }
                     .buttonStyle(.plain)
-                    .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        && pendingFiles.isEmpty)
                 }
             }
             #if DIRECT_BUILD
@@ -841,8 +842,11 @@ struct RunChatView: View {
 
     private func send() {
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !runner.isRunning else { return }
         let files = pendingFiles
+        // A file on its own is a message: "what is in this file?" needs no typed text, and the
+        // composer already shows the chip. Requiring text here made an attachment-only send a dead
+        // end (CW-C-FIX-1).
+        guard !text.isEmpty || !files.isEmpty, !runner.isRunning else { return }
         prompt = ""
         pendingFiles = []
         Task { await appState.sendPrompt(text, attachments: files) }

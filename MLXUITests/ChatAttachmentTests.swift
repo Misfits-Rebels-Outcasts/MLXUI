@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import MLXLMCommon
 @testable import MLXUI
 
 /// CW-3 — the attachment model, the C11 budget decision and the model-facing rendering. Pure: no
@@ -107,6 +108,74 @@ struct ChatAttachmentTests {
         let rendered = ChatAttachment.modelFacing(
             text: "What does it say?", attachments: [attachment("shot.png", mode: .ocr, text: "hello")])
         #expect(rendered.contains("<attachment name=\"shot.png\">\nhello\n</attachment>"))
+    }
+
+    // MARK: - what the model is actually sent (CW-C-FIX-1)
+
+    /// The report: a small `Name.txt` went into the bubble and `chatHistory` but **not** into the
+    /// turn being sent, so the model said "attach it first" while looking at a message that already
+    /// had it. `prompt(text:attachments:)` is what `send` now passes to the session.
+    @Test func anInlineAttachmentsContentIsInThePromptForThisTurn() {
+        let prompt = ChatAttachment.prompt(
+            text: "What is the content of the file?",
+            attachments: [attachment("Name.txt", text: "hello from the file")])
+        #expect(prompt.contains("hello from the file"))
+        #expect(prompt.contains("What is the content of the file?"))
+        #expect(prompt.contains("<attachment name=\"Name.txt\">"))
+    }
+
+    /// The bug, in one line, so a regression is unmistakable: the bare text is what the old call
+    /// site passed, and it carries none of the file.
+    @Test func theBareTextIsNotEnoughWhichIsWhyTheCallSiteChanged() {
+        let attachments = [attachment("Name.txt", text: "hello from the file")]
+        let bare = "What is the content of the file?"
+        #expect(!bare.contains("hello from the file"))
+        #expect(ChatAttachment.prompt(text: bare, attachments: attachments)
+            != bare)
+    }
+
+    /// The regression that started this: `ChatAttachment.prompt` was correct and unused. The
+    /// call site is what has to be pinned, so this asserts the source of the one function that
+    /// hands the prompt to the model — a text-only assertion, deliberately.
+    ///
+    /// This is the only test in the suite that reads source. Say so plainly: no unit test can see
+    /// a wrong call site through a `ModelContainer`, and the alternative was to ship the bug again.
+    @Test func sendFeedsTheModelTheRenderedPrompt() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("MLXUI/Services/ModelRunner.swift"),
+            encoding: .utf8)
+        #expect(source.contains(
+            "let modelPrompt = ChatAttachment.prompt(text: trimmed, attachments: readyAttachments)"))
+        #expect(source.contains("session.streamResponse(to: modelPrompt)"))
+        // …and nothing hands the bare text to the model.
+        #expect(!source.contains("streamResponse(to: trimmed)"))
+    }
+
+    /// A by-reference file is still not inlined — the model is given the path and told to read it.
+    @Test func aByReferenceAttachmentIsAPathAndNotTheContent() {
+        let prompt = ChatAttachment.prompt(
+            text: "Summarise this.",
+            attachments: [attachment("big.txt", mode: .reference, text: nil)])
+        #expect(prompt.contains("path=\"/container/attachments/big.txt\""))
+        #expect(!prompt.contains("contents"))
+    }
+
+    /// The prompt and the replayed history are the same rendering, so a relaunch replays byte-for-
+    /// byte what the model saw the first time.
+    @Test func thePromptMatchesWhatTheTranscriptReplays() {
+        let attachments = [
+            attachment("rates.csv", text: "a,b"),
+            attachment("big.txt", mode: .reference, text: nil),
+        ]
+        let prompt = ChatAttachment.prompt(text: "look", attachments: attachments)
+        let replayed = Conversation.chatHistory(from: [
+            .message(ChatMessage(role: .user, text: "look", attachments: attachments)),
+        ])
+        #expect(replayed.count == 1)
+        #expect(replayed[0].content == prompt)
     }
 
     @Test func aMessageWithNoAttachmentsIsJustItsText() {

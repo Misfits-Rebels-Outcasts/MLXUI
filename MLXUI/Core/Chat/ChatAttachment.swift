@@ -126,6 +126,13 @@ nonisolated struct ChatAttachment: Identifiable, Codable, Sendable, Equatable {
             .replacingOccurrences(of: "\"", with: "&quot;")
     }
 
+    /// The message **as the model receives it**: the user's text plus one block per attachment.
+    /// `ChatAttachment.modelFacing` is the renderer; this is the name the caller should use, so
+    /// "the model gets what the transcript shows" is one call and not a second decision.
+    static func prompt(text: String, attachments: [ChatAttachment]) -> String {
+        modelFacing(text: text, attachments: attachments)
+    }
+
     /// The whole user turn for a message: its text plus one block per attachment.
     static func modelFacing(text: String, attachments: [ChatAttachment]) -> String {
         guard !attachments.isEmpty else { return text }
