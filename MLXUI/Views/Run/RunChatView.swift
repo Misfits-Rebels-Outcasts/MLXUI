@@ -42,21 +42,29 @@ struct RunChatView: View {
                 Divider()
                 inputBar
             }
+            if showsInspector {
+                Divider()
+                ChatInspectorView(
+                    model: model,
+                    runner: runner,
+                    draft: prompt,
+                    pendingAttachments: pendingFiles.map(\.lastPathComponent),
+                    attachFile: { url in
+                        if !pendingFiles.contains(url) { pendingFiles.append(url) }
+                    },
+                    showInTranscript: $scrollTarget)
+                .frame(width: 240)
+            }
         }
-        // CW-4: the inspector widens the sheet first, or it would be pushed off a fixed 840 pt.
-        .frame(width: showsInspector ? 1100 : 840, height: 620)
-        .inspector(isPresented: $showsInspector) {
-            ChatInspectorView(
-                model: model,
-                runner: runner,
-                draft: prompt,
-                pendingAttachments: pendingFiles.map(\.lastPathComponent),
-                attachFile: { url in
-                    if !pendingFiles.contains(url) { pendingFiles.append(url) }
-                },
-                showInTranscript: $scrollTarget)
-                .inspectorColumnWidth(min: 220, ideal: 240, max: 320)
-        }
+        // CW-4-FIX-1: the chat's details pane is a plain HStack column, **not** `.inspector`.
+        //
+        // `.inspector` belongs to a window's chrome — inside a sheet it fights AppKit's sheet
+        // sizing, and on macOS 14 it collapsed this one to a small, unusable box. A column in the
+        // layout is deterministic in a sheet, and the sheet is free to keep one size because the
+        // pane is only 240 pt of it.
+        .frame(
+            minWidth: 840, idealWidth: 1100, maxWidth: .infinity,
+            minHeight: 520, idealHeight: 620, maxHeight: .infinity)
         .onAppear { appState.modelRunner.prepare(for: model) }
         .onDisappear { appState.stopModel() }
         .sheet(item: Binding(
