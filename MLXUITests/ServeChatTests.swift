@@ -1029,6 +1029,9 @@ struct MLXChatBackendRealModelTests {
     /// A `qwen3_5` model folder for the tokenizer-only prompt-shape probe (S2-6). Weights are never
     /// loaded, so this can point at the 27B checkpoints the 19 GB Mac can't run.
     static let qwen35Dir = ProcessInfo.processInfo.environment["MLXUI_TEST_QWEN35_TOKENIZER_DIR"]
+    /// A **Llama 3.1** model folder, for S2-7's raw-turn recording.
+    /// `TEST_RUNNER_MLXUI_TEST_LLAMA_DIR=<path>`.
+    static let llamaDir = ProcessInfo.processInfo.environment["MLXUI_TEST_LLAMA_DIR"]
 
     @Test(.enabled(if: MLXChatBackendRealModelTests.modelDir != nil))
     func streamsATokenAtATimeAndKeepsMarkupIntact() async throws {
@@ -1203,6 +1206,41 @@ struct MLXChatBackendRealModelTests {
         let message = try #require(inner["message"] as? String)
         print("S2-6 MEASURE oversized route: \(message)")
         #expect(message.contains("40960") && message.contains("480"))
+    }
+
+    /// **S2-7 requirement 3** — the raw text of one real Llama-3.1-8B tool turn (SV-6's own prompt),
+    /// and what the scanner makes of it. The verbatim text is **printed, never logged** (rule 13) and
+    /// not asserted verbatim — the model phrases freely run to run — while the two properties SV-6
+    /// needs are asserted: the turn yields calls, and no call object leaks into the content.
+    @Test(.enabled(if: MLXChatBackendRealModelTests.llamaDir != nil))
+    func aRealLlamaToolTurnIsReadAsCalls() async throws {
+        let dir = URL(fileURLWithPath: try #require(Self.llamaDir))
+        let pool = ModelContainerPool(budgetBytes: 40 << 30)
+        let container = try await pool.container(directory: dir, architecture: nil)
+        let prompt = "Read hello.txt, then create a file called notes.md whose first line is the "
+            + "first line of hello.txt, then list the files in this folder."
+
+        let raw = try await container.perform { context -> String in
+            let input = try await context.processor.prepare(
+                input: UserInput(chat: [Chat.Message(role: .user, content: prompt)],
+                                 tools: openCodeTools))
+            let stream = try MLXLMCommon.generateTokens(
+                input: input,
+                parameters: GenerateParameters(maxTokens: 400, temperature: 0, topP: 1),
+                context: context)
+            var ids: [Int] = []
+            for await generation in stream { if case .token(let id) = generation { ids.append(id) } }
+            return context.tokenizer.decode(tokenIds: ids)
+        }
+
+        print("S2-7 MEASURE llama raw turn: \(raw.debugDescription)")
+        var scanner = ServeToolCallScanner(format: .llama3, tools: openCodeTools)
+        var content = scanner.push(raw)
+        content += scanner.finish()
+        let calls = scanner.takeCalls()
+        print("S2-7 MEASURE llama calls=\(calls.map(\.function.name)) content=\(content.debugDescription)")
+        #expect(!calls.isEmpty)                                  // the turn is a call, not prose
+        #expect(!content.contains("\"parameters\""))              // …and no call object leaked
     }
 
     /// The review's open item (S2-3b), closed with the tokenizer alone: a `qwen3_5` checkpoint's

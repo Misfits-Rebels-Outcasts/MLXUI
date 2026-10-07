@@ -71,6 +71,16 @@ nonisolated struct ServeToolCallScanner {
     /// a call. Never returns without emptying the buffer.
     mutating func finish() -> String {
         guard !buffer.isEmpty else { return "" }
+        if startTag == nil {
+            // S2-7: an inline turn's opening may be a *run* of calls, and only now is the run's end
+            // known for certain (nothing more can arrive). Whatever is left after it is text.
+            var out = drainInline(atEnd: true)
+            if !buffer.isEmpty {
+                out += buffer
+                buffer = ""
+            }
+            return out
+        }
         let held = buffer
         buffer = ""
         if let call = parser.parse(content: held, tools: tools) {
@@ -83,7 +93,7 @@ nonisolated struct ServeToolCallScanner {
     // MARK: - Tagged formats
 
     private mutating func drain() -> String {
-        guard let startTag else { return drainInline() }
+        guard let startTag else { return drainInline(atEnd: false) }
         var out = ""
         while true {
             guard let start = buffer.range(of: startTag) else {
@@ -121,12 +131,28 @@ nonisolated struct ServeToolCallScanner {
     /// of the assistant turn, or a `{` immediately after the `<|python_tag|>` marker. Anywhere else
     /// a `{` is prose and streams **immediately** — no brace counting, no delay, and a JSON example
     /// in an answer stays an answer. That matches the template, which puts the call where a
-    /// generation prompt expects it, and the parser's own limitation (Llama 3.1 takes one call per
-    /// turn).
+    /// generation prompt expects it.
+    ///
+    /// **The opening may be a run of calls (S2-7).** Llama 3.1's template is written for one call
+    /// per turn, but the models emit several — SV-6's Llama-3.1-8B turn produced a `write` object
+    /// followed by a `glob` object, and the second one used to leak into `content` as text (the
+    /// first parsed, then the "one call per turn" rule streamed everything after it). So the run is
+    /// read as a whole:
+    ///
+    /// * objects separated by whitespace, `,` or `;`, and a `[ … ]` array of them, are all calls —
+    ///   indices 0, 1, …;
+    /// * if **any** object in the run fails to parse, the **whole run is text** — a client must
+    ///   never be handed call #1 of a run whose #2 is prose;
+    /// * the run ends at its last object: the separators after it stay in the buffer, so text after
+    ///   the run streams exactly as it does today.
+    ///
+    /// A run is decided only when it cannot grow: at a non-`{` character after the separators, or at
+    /// end of stream. That is the price of "no half-calls" — a call at the turn's opening is emitted
+    /// once the run is settled rather than at its own closing brace.
     ///
     /// The marker is consumed rather than emitted, so it never reaches a client as content. Only
     /// the JSON form is detected: the parser's pythonic fallback has no delimiter to scan for.
-    private mutating func drainInline() -> String {
+    private mutating func drainInline(atEnd: Bool) -> String {
         var out = ""
         while true {
             if inlineDecided {
@@ -148,7 +174,7 @@ nonisolated struct ServeToolCallScanner {
                 if Self.pythonTag.hasPrefix(trimmed) { return out }  // a partial marker: hold
             }
 
-            guard trimmed.hasPrefix("{") else {
+            guard trimmed.hasPrefix("{") || trimmed.hasPrefix("[") else {
                 // Ordinary text: it goes out, and nothing later in the turn is a candidate.
                 inlineDecided = true
                 out += buffer
@@ -156,19 +182,79 @@ nonisolated struct ServeToolCallScanner {
                 return out
             }
             let candidate = String(trimmed)
-            guard let end = Self.endOfBalancedObject(candidate) else { return out }   // still arriving
-            let segment = String(candidate[candidate.startIndex ..< end])
-            buffer = String(candidate[end...])
-            if let call = parser.parse(content: segment, tools: tools) {
-                calls.append(call)
-                inlineDecided = true                                // one call per turn is the format's rule
-                continue                                            // `leading` whitespace goes with it
+            switch openingRun(candidate, atEnd: atEnd) {
+            case .incomplete:
+                return out                                          // still arriving: keep holding
+            case .text:
+                // Not a call run — prose, or a run with an unreadable object. All of it is text.
+                inlineDecided = true
+                out += leading
+                buffer = candidate
+            case .calls(let parsed, let end):
+                calls.append(contentsOf: parsed)
+                inlineDecided = true                                // one *run* per turn is the rule
+                buffer = String(candidate[end...])
             }
-            // Not a call — an example in prose. The whitespace before it is text again, and the
-            // rest of the turn streams from here.
-            inlineDecided = true
-            out += leading + segment
+            // `leading` whitespace goes with a call run, and is text otherwise.
         }
+    }
+
+    /// What the turn's opening turned out to be (S2-7).
+    private enum OpeningRun {
+        /// Calls, and the offset just past the last object (the separators after it stay in the buffer).
+        case calls([ToolCall], end: String.Index)
+        /// No calls here: prose, or a run with at least one unreadable object.
+        case text
+        /// The run may still grow — a partial object, or a separator that another object may follow.
+        case incomplete
+    }
+
+    /// Read `candidate` as a run of tool calls (`{…}`, `{…} {…}`, `{…},{…}`, `{…};{…}`, or `[ … ]`).
+    ///
+    /// The separators and the array form are the owner's S2-7 call, and what they rest on is JSON
+    /// itself (RFC 8259: whitespace between values is insignificant, `,` separates array elements)
+    /// plus the JSON-lines style models emit with `;`. The bracketed form needs no invention at all
+    /// — upstream's `parseEOS` already decodes `[LlamaFunction]` for this format, so it is the
+    /// format's own sanctioned multi-call shape.
+    private func openingRun(_ candidate: String, atEnd: Bool) -> OpeningRun {
+        if candidate.hasPrefix("[") {
+            guard let length = Self.balancedLength(candidate, open: "[", close: "]") else { return .incomplete }
+            let end = candidate.index(candidate.startIndex, offsetBy: length)
+            let parsed = parser.parseEOS(String(candidate[candidate.startIndex ..< end]), tools: tools)
+            return parsed.isEmpty ? .text : .calls(parsed, end: end)
+        }
+        var cursor = candidate.startIndex
+        var parsed: [ToolCall] = []
+        var lastEnd = cursor
+        while cursor < candidate.endIndex, candidate[cursor] == "{" {
+            guard let length = Self.balancedLength(String(candidate[cursor...]), open: "{", close: "}") else {
+                return .incomplete
+            }
+            let end = candidate.index(cursor, offsetBy: length)
+            guard let call = parser.parse(content: String(candidate[cursor ..< end]), tools: tools) else {
+                return .text                                        // whole run is text, no half-call
+            }
+            parsed.append(call)
+            lastEnd = end
+            var next = end
+            while next < candidate.endIndex, Self.isRunSeparator(candidate[next]) {
+                next = candidate.index(after: next)
+            }
+            if next < candidate.endIndex, candidate[next] == "{" {
+                cursor = next                                       // another object: keep reading
+                continue
+            }
+            if next == candidate.endIndex, !atEnd { return .incomplete }  // it may still grow
+            break
+        }
+        return parsed.isEmpty ? .text : .calls(parsed, end: lastEnd)
+    }
+
+    /// What may sit between two objects of one run: whitespace, `,` (JSON's own separator) or `;`
+    /// (what models that emit JSON lines use). A separator inside a string is invisible here — it is
+    /// inside a balanced object.
+    private static func isRunSeparator(_ character: Character) -> Bool {
+        character.isWhitespace || character == "," || character == ";"
     }
 
     /// Parse one candidate segment: a call, or the segment handed straight back as text (S2-2
@@ -199,25 +285,31 @@ nonisolated struct ServeToolCallScanner {
     /// The index just past the `}` that closes the object starting at `buffer.first`, or `nil`
     /// while it is still open. Braces inside strings (and their escapes) don't count.
     static func endOfBalancedObject(_ text: String) -> String.Index? {
+        balancedLength(text, open: "{", close: "}").map { text.index(text.startIndex, offsetBy: $0) }
+    }
+
+    /// How many characters the balanced `open`…`close` value at the start of `text` occupies, or
+    /// `nil` while it is still open. Delimiters inside strings (and their escapes) don't count.
+    /// Used for the run's objects (`{…}`) and its array form (`[…]`, S2-7).
+    static func balancedLength(_ text: String, open: Character, close: Character) -> Int? {
         var depth = 0
         var inString = false
         var escaped = false
-        var index = text.startIndex
-        while index < text.endIndex {
-            let character = text[index]
+        var count = 0
+        for character in text {
+            count += 1
             if escaped {
                 escaped = false
             } else if inString {
                 if character == "\\" { escaped = true } else if character == "\"" { inString = false }
             } else if character == "\"" {
                 inString = true
-            } else if character == "{" {
+            } else if character == open {
                 depth += 1
-            } else if character == "}" {
+            } else if character == close {
                 depth -= 1
-                if depth == 0 { return text.index(after: index) }
+                if depth == 0 { return count }
             }
-            index = text.index(after: index)
         }
         return nil
     }

@@ -25,6 +25,33 @@ private let weatherToolSchema: [String: any Sendable] = [
     ] as [String: any Sendable],
 ]
 
+/// S2-7 — OpenCode's own tool schemas (the SV-6 run's shapes): `write`, `glob`, `read`, `bash`.
+/// Shared with the gated real-model turn in `ServeChatTests`.
+let openCodeTools: [[String: any Sendable]] = ["write", "glob", "read", "bash"].map { name in
+    [
+        "type": "function",
+        "function": [
+            "name": name,
+            "description": "\(name) (OpenCode)",
+            "parameters": [
+                "type": "object",
+                "properties": [
+                    "content": ["type": "string"] as [String: any Sendable],
+                    "filePath": ["type": "string"] as [String: any Sendable],
+                    "path": ["type": "string"] as [String: any Sendable],
+                    "pattern": ["type": "string"] as [String: any Sendable],
+                    "command": ["type": "string"] as [String: any Sendable],
+                ] as [String: any Sendable],
+                "required": [] as [String],
+            ] as [String: any Sendable],
+        ] as [String: any Sendable],
+    ]
+}
+
+/// The exact text SV-6's Llama-3.1-8B turn produced (owner, 2026-10-07): two top-level JSON objects,
+/// whitespace-separated, where the Llama 3 template expects one call per turn.
+private let sv6LlamaText = #"{"name": "write", "parameters": {"content": "hello world", "filePath": "notes.md"}} {"name": "glob", "parameters": {"path": "", "pattern": "notes.md"}}"#
+
 struct ServeToolCallScannerTests {
 
     /// Feed `chunks` to a fresh scanner and return everything it let through plus the calls it
@@ -36,6 +63,124 @@ struct ServeToolCallScannerTests {
         for chunk in chunks { text += scanner.push(chunk) }
         text += scanner.finish()
         return (text, scanner.takeCalls())
+    }
+
+    // MARK: - S2-7: a run of JSON objects at the turn's opening
+
+    /// **The SV-6 reproduction** (S2-7): the exact Llama-3.1-8B turn, one push, OpenCode's schemas.
+    /// Before the fix it produced `calls=["write"]` plus the `glob` object as **content** — the first
+    /// object parsed and the "one call per turn" rule streamed everything after it (case (a)).
+    @Test func theSV6StringIsTwoCallsInOnePush() {
+        let result = run(.llama3, [sv6LlamaText], tools: openCodeTools)
+        print("S2-7 MEASURE one push: text=\(result.text.debugDescription) calls=\(result.calls.map(\.function.name))")
+        #expect(result.calls.map(\.function.name) == ["write", "glob"])
+        #expect(result.text.isEmpty)
+        #expect(result.calls.first?.function.arguments["content"] == .string("hello world"))
+        #expect(result.calls.first?.function.arguments["filePath"] == .string("notes.md"))
+        #expect(result.calls.last?.function.arguments["pattern"] == .string("notes.md"))
+    }
+
+    /// The same string arriving a token at a time — the real streaming shape — and behind each
+    /// opening the model has been seen to emit.
+    @Test func theSV6StringIsTwoCallsTokenByTokenAndBehindEveryOpening() {
+        for opening in ["", "\n", "\n\n", "  ", "<|python_tag|>", "\n<|python_tag|>"] {
+            let text = opening + sv6LlamaText
+            let one = run(.llama3, [text], tools: openCodeTools)
+            #expect(one.calls.map(\.function.name) == ["write", "glob"], "\(opening.debugDescription)")
+            #expect(one.text.isEmpty, "\(opening.debugDescription): \(one.text.debugDescription)")
+
+            let tokens = run(.llama3, text.map(String.init), tools: openCodeTools)
+            print("S2-7 MEASURE token-sized (\(opening.debugDescription)): text=\(tokens.text.debugDescription) "
+                  + "calls=\(tokens.calls.map(\.function.name))")
+            #expect(tokens.calls.map(\.function.name) == ["write", "glob"], "\(opening.debugDescription)")
+            #expect(tokens.text.isEmpty, "\(opening.debugDescription): \(tokens.text.debugDescription)")
+        }
+    }
+
+    /// **The real turn** (S2-7 requirement 3, gated test `aRealLlamaToolTurnIsReadAsCalls`): the
+    /// installed `Meta-Llama-3.1-8B-Instruct-4bit` emitted three objects behind `<|python_tag|>`,
+    /// separated by `;` — not the space the SV-6 report showed, which is why `;` is in the separator
+    /// set on evidence rather than in the abstract. Pinned here so the default suite covers it.
+    @Test func theRealLlamaShapeIsThreeSemicolonSeparatedCalls() {
+        let raw = #"<|python_tag|>{"name": "read", "parameters": {"filePath": "hello.txt"}}; {"name": "write", "parameters": {"content": "Hello World", "filePath": "notes.md"}}; {"name": "glob", "parameters": {"pattern": "*.txt"}}"#
+        let result = run(.llama3, [raw], tools: openCodeTools)
+        #expect(result.calls.map(\.function.name) == ["read", "write", "glob"])
+        #expect(result.text.isEmpty)
+
+        // The same turn one token at a time.
+        let tokens = run(.llama3, raw.map(String.init), tools: openCodeTools)
+        #expect(tokens.calls.map(\.function.name) == ["read", "write", "glob"])
+        #expect(tokens.text.isEmpty)
+    }
+
+    /// Every separator the run accepts, plus the bracketed form upstream's `parseEOS` already decodes.
+    @Test func everyRunSeparatorAndTheArrayFormAreAccepted() {
+        let a = #"{"name": "write", "parameters": {"content": "hi", "filePath": "notes.md"}}"#
+        let b = #"{"name": "glob", "parameters": {"pattern": "notes.md"}}"#
+        for separator in [" ", "\n", "\n\n", "\t", ", ", "; ", ",\n", ";\n", ",", ";"] {
+            let result = run(.llama3, [a + separator + b], tools: openCodeTools)
+            #expect(result.calls.map(\.function.name) == ["write", "glob"], "\(separator.debugDescription)")
+            #expect(result.text.isEmpty, "\(separator.debugDescription): \(result.text.debugDescription)")
+        }
+        let array = run(.llama3, ["[" + a + ", " + b + "]"], tools: openCodeTools)
+        #expect(array.calls.map(\.function.name) == ["write", "glob"])
+        #expect(array.text.isEmpty)
+        // …and a bracketed run behind the marker, split across deltas.
+        let marked = run(.llama3, ["<|python_tag|>[" + a + ",", b + "]"], tools: openCodeTools)
+        #expect(marked.calls.map(\.function.name) == ["write", "glob"])
+        #expect(marked.text.isEmpty)
+    }
+
+    /// **No half-calls**: one unreadable object in the run makes the whole run text — the readable
+    /// one is not handed to the client on its own.
+    @Test func oneBadObjectMakesTheWholeRunText() {
+        let good = #"{"name": "write", "parameters": {"content": "hi"}}"#
+        // A **complete** object that is not a call: it has no `name` for the parser to read. (An
+        // *incomplete* object is the truncation path instead — `anUnclosedInlineObjectComesBackAsText`.)
+        let unreadable = #"{"parameters": {}}"#
+        let result = run(.llama3, [good + " " + unreadable + " done"], tools: openCodeTools)
+        print("S2-7 MEASURE bad run: text=\(result.text.debugDescription) calls=\(result.calls.map(\.function.name))")
+        #expect(result.calls.isEmpty)                       // no half-call: the readable one too
+        #expect(result.text.contains("\"name\": \"write\""))
+        #expect(result.text.contains("done"))
+
+        // The same, one token at a time.
+        let tokens = run(.llama3, (good + " " + unreadable + " done").map(String.init), tools: openCodeTools)
+        #expect(tokens.calls.isEmpty)
+        #expect(tokens.text.contains("\"name\": \"write\""))
+
+        // And an unreadable object *second* in a two-object run does not strand the first.
+        let stranded = run(.llama3, [good + " " + #"{"name": 42}"#], tools: openCodeTools)
+        #expect(stranded.calls.isEmpty)
+        #expect(stranded.text.contains("\"name\": \"write\""))
+    }
+
+    /// A single call is unchanged (the S2-2 cases), and so are the mid-answer `{` rules: a run is
+    /// only ever read at the turn's **opening**.
+    @Test func aSingleCallAndTheMidAnswerRulesAreUnchanged() {
+        let one = run(.llama3, [#"{"name": "get_weather", "parameters": {"location": "Paris"}}"#])
+        #expect(one.calls.count == 1 && one.text.isEmpty)
+
+        // Prose first: the whole turn is text, including anything that looks like a run.
+        let prose = run(.llama3, ["Sure! " + sv6LlamaText], tools: openCodeTools)
+        #expect(prose.calls.isEmpty)
+        #expect(prose.text.hasPrefix("Sure! "))
+
+        // A run *after* an answer is an example, not calls (S2-2b's rule, at the run's scale).
+        var scanner = ServeToolCallScanner(format: .llama3, tools: openCodeTools)
+        var text = scanner.push("Here is an example: ")
+        text += scanner.push(sv6LlamaText)
+        text += scanner.finish()
+        #expect(scanner.takeCalls().isEmpty)
+        #expect(text.contains("{\"name\": \"write\"") && text.contains("{\"name\": \"glob\""))
+    }
+
+    /// The trailing separators after a run stay in the buffer, so text after the run streams as it
+    /// does today (and a calls-only turn's whitespace is what S2-2b's content rule then nulls).
+    @Test func textAfterTheRunStreamsAsToday() {
+        let result = run(.llama3, [sv6LlamaText + "\n\nAll done."], tools: openCodeTools)
+        #expect(result.calls.map(\.function.name) == ["write", "glob"])
+        #expect(result.text == "\n\nAll done.")
     }
 
     // MARK: - TCP-1, per catalog format
