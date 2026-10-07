@@ -64,6 +64,30 @@ nonisolated struct AFMBackend: ServeBackend {
         }
     }
 
+    /// R23 (S2-6): the model's own window, from the SDK through the seam. `nil` when the seam can't
+    /// tell us (no count, nothing to compare) — never a guess.
+    var contextLimit: Int? { streamer.contextSize }
+
+    /// R23 (S2-6): the SDK's real token count for exactly the payload `run` will send, so an
+    /// over-limit request is a clean 400 before the head. Below macOS 26.4 the seam answers `nil`
+    /// and S1's in-stream error stays the behaviour.
+    func countPromptTokens(_ request: ServeRequest) async -> Int? {
+        guard let payload = Self.payload(request) else { return nil }
+        return await streamer.promptTokenCount(instructions: payload.instructions, prompt: payload.prompt)
+    }
+
+    /// The (instructions, prompt) pair this backend sends: system messages joined as the session's
+    /// instructions, every other turn folded into one prompt (`AFMBackend.prompt(history:last:)`).
+    /// One place, so the pre-count counts what the stream will send. `nil` when the last turn isn't
+    /// the user's — the same `400` `run` reports.
+    nonisolated static func payload(_ request: ServeRequest) -> (instructions: String, prompt: String)? {
+        let instructions = request.messages.filter { $0.role == .system }.map(\.text)
+            .filter { !$0.isEmpty }.joined(separator: "\n\n")
+        let conversation = request.messages.filter { $0.role != .system }
+        guard let last = conversation.last, last.role == .user else { return nil }
+        return (instructions, prompt(history: Array(conversation.dropLast()), last: last.text))
+    }
+
     private func run(_ request: ServeRequest, into continuation: AsyncThrowingStream<ServeEvent, Error>.Continuation) async {
         switch readiness() {
         case .ready?: break
@@ -74,16 +98,13 @@ nonisolated struct AFMBackend: ServeBackend {
             return
         }
 
-        let instructions = request.messages.filter { $0.role == .system }.map(\.text)
-            .filter { !$0.isEmpty }.joined(separator: "\n\n")
-        let conversation = request.messages.filter { $0.role != .system }
-        guard let last = conversation.last, last.role == .user else {
+        guard let payload = Self.payload(request) else {
             continuation.yield(.error(ServeError(status: 400, message: "The last message must come from the user.",
                                                  code: "invalid_messages")))
             return
         }
-        let history = Array(conversation.dropLast())
-        let prompt = Self.prompt(history: history, last: last.text)
+        let instructions = payload.instructions
+        let prompt = payload.prompt
 
         var converter = SnapshotDeltaConverter()
         var stop = StopMatcher(request.stop)

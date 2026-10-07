@@ -1,5 +1,7 @@
 import Testing
 import Foundation
+import MLX
+import MLXLMCommon
 @testable import MLXUI
 
 // S1-3 — `POST /v1/chat/completions`: dialect, token pipeline, queue, route, wire.
@@ -27,11 +29,20 @@ nonisolated final class FakeBackend: ServeBackend, @unchecked Sendable {
     /// What the checkpoint reports as its `model_type` (S2-2): the route asks this to decide
     /// whether the client's `tools` are honoured. `nil` stands in for Apple Foundation Models.
     var modelType: String?
+    /// The context window the checkpoint declares, and the prompt count the route pre-checks
+    /// (S2-6). Both default to `nil` — "this backend can't count", which is S1's behaviour.
+    var contextLimit: Int?
+    var promptTokenCount: Int?
 
-    init(_ script: [Step], modelType: String? = nil) {
+    init(_ script: [Step], modelType: String? = nil,
+         contextLimit: Int? = nil, promptTokenCount: Int? = nil) {
         self.script = script
         self.modelType = modelType
+        self.contextLimit = contextLimit
+        self.promptTokenCount = promptTokenCount
     }
+
+    func countPromptTokens(_ request: ServeRequest) async -> Int? { promptTokenCount }
 
     var requests: [ServeRequest] { lock.lock(); defer { lock.unlock() }; return _requests }
     var cancelled: Int { lock.lock(); defer { lock.unlock() }; return _cancelled }
@@ -773,6 +784,67 @@ struct ChatCompletionsRouteTests {
     }
 
     /// Two calls in one turn keep their indices, in both wire shapes (S2-2 requirement 5).
+    // MARK: - S2-6 pre-count (R23)
+
+    /// An over-limit prompt is a `400` **before the head**: the reply is a whole response, never a
+    /// stream, so not one SSE byte can have been written.
+    @Test func anOverLimitStreamIs400BeforeTheHead() async throws {
+        let backend = FakeBackend([.text("never")], modelType: "qwen3", contextLimit: 40960,
+                                  promptTokenCount: 41208)
+        let queue = ServeQueue()
+        let log = RequestLog()
+        let request = #"{"model":"mlx-community/Qwen3-4B-4bit","messages":[{"role":"user","content":"x"}],"stream":true}"#
+        let reply = await call(request, chatEnvironment(backend: backend, queue: queue, log: log))
+
+        let response = try #require(full(reply))                       // not `.stream`: no head, no bytes
+        #expect(response.status == 400)
+        let error = try #require((jsonObject(response.body)?["error"] as? [String: Any]))
+        #expect(error["code"] as? String == "context_length_exceeded")
+        #expect(error["type"] as? String == "invalid_request_error")
+        let message = try #require(error["message"] as? String)
+        #expect(message.contains("40960") && message.contains("41208"))
+        #expect(backend.requests.isEmpty)                              // nothing was generated
+        let running = await queue.runningCount
+        let waiting = await queue.waitingCount
+        #expect(running == 0 && waiting == 0)                          // and no slot was taken
+        #expect(log.entries.last?.status == 400)
+    }
+
+    /// The same for a non-streaming request.
+    @Test func anOverLimitRequestIs400NonStreamingToo() async throws {
+        let backend = FakeBackend([.text("never")], modelType: "qwen3", contextLimit: 100, promptTokenCount: 101)
+        let response = try #require(full(await call(hello, chatEnvironment(backend: backend))))
+        #expect(response.status == 400)
+        #expect((jsonObject(response.body)?["error"] as? [String: Any])?["code"] as? String == "context_length_exceeded")
+        #expect(backend.requests.isEmpty)
+    }
+
+    /// A prompt that exactly fills the window is fine — the boundary is `>`, not `>=`.
+    @Test func aPromptAtTheLimitRuns() async throws {
+        let backend = FakeBackend([.text("ok"), .finish(.stop)], modelType: "qwen3", contextLimit: 40960,
+                                  promptTokenCount: 40960)
+        let response = try #require(full(await call(hello, chatEnvironment(backend: backend))))
+        #expect(response.status == 200)
+        #expect(backend.requests.count == 1)
+    }
+
+    /// When a backend can't count — no declared window, or an SDK without a tokenizer — there is no
+    /// pre-count and S1's behaviour stands (the runtime's own overflow handling decides).
+    @Test func noCountMeansNoPreCount() async throws {
+        let noWindow = FakeBackend([.text("ok"), .finish(.stop)], modelType: "qwen3", promptTokenCount: 999999)
+        #expect(try #require(full(await call(hello, chatEnvironment(backend: noWindow)))).status == 200)
+
+        let noCount = FakeBackend([.text("ok"), .finish(.stop)], modelType: "qwen3", contextLimit: 10)
+        #expect(try #require(full(await call(hello, chatEnvironment(backend: noCount)))).status == 200)
+
+        // …and a stream still streams.
+        let streaming = FakeBackend([.text("ok"), .finish(.stop)], modelType: "qwen3")
+        let request = #"{"model":"mlx-community/Qwen3-4B-4bit","messages":[{"role":"user","content":"x"}],"stream":true}"#
+        guard case .stream = await call(request, chatEnvironment(backend: streaming)) else {
+            Issue.record("expected a stream"); return
+        }
+    }
+
     // MARK: - S2-3 reasoning
 
     /// Non-streaming: the thinking half comes back as `message.reasoning_content`, the answer as
@@ -954,6 +1026,9 @@ struct ChatCompletionsWireTests {
 /// `TEST_RUNNER_MLXUI_TEST_LLM_DIR=<path>`.
 struct MLXChatBackendRealModelTests {
     private static let modelDir = ProcessInfo.processInfo.environment["MLXUI_TEST_LLM_DIR"]
+    /// A `qwen3_5` model folder for the tokenizer-only prompt-shape probe (S2-6). Weights are never
+    /// loaded, so this can point at the 27B checkpoints the 19 GB Mac can't run.
+    static let qwen35Dir = ProcessInfo.processInfo.environment["MLXUI_TEST_QWEN35_TOKENIZER_DIR"]
 
     @Test(.enabled(if: MLXChatBackendRealModelTests.modelDir != nil))
     func streamsATokenAtATimeAndKeepsMarkupIntact() async throws {
@@ -1034,6 +1109,124 @@ struct MLXChatBackendRealModelTests {
             if case .textDelta(let piece) = event { answer += piece }
         }
         #expect(!answer.isEmpty)
+    }
+
+    /// S2-6 (R23) on a real checkpoint: an oversized prompt is a `400` from the **real** tokenizer
+    /// count, before the head — and the count the route uses is the same number the generation
+    /// path would build.
+    ///
+    /// The equality half is the fidelity pin: `countPromptTokens` renders with the tokenizer alone
+    /// (no weights), while generation renders through the container's processor. If those two ever
+    /// disagree, the pre-count would refuse prompts that fit or wave through prompts that don't.
+    @Test(.enabled(if: MLXChatBackendRealModelTests.modelDir != nil))
+    func thePreCountMatchesWhatGenerationWouldSend() async throws {
+        let dir = URL(fileURLWithPath: try #require(Self.modelDir))
+        let backend = MLXChatBackend(directory: dir, pool: ModelContainerPool(budgetBytes: 40 << 30))
+        #expect(backend.contextLimit == 40960)                  // qwen3's own config.json
+
+        var request = ServeRequest(model: "m", messages: [
+            ServeMessage(role: .system, text: "Be brief."),
+            ServeMessage(role: .user, text: String(repeating: "Hello there. ", count: 40)),
+        ])
+        request.tools = [ServeToolSpec(name: "get_weather", rawJSON: #"{"type":"function","function":{"name":"get_weather","parameters":{"type":"object","properties":{"location":{"type":"string"}}}}}"#)]
+
+        // A history that carries **tool traffic** as well: that is the path where the template is
+        // handed raw dictionaries, and the one a count could most easily get wrong.
+        request.messages.append(ServeMessage(role: .assistant, text: "", toolCalls: [
+            ServeToolCall(id: "call_1", name: "get_weather", argumentsJSON: #"{"location":"Paris"}"#)]))
+        request.messages.append(ServeMessage(role: .tool, text: "18 degrees", toolCallID: "call_1",
+                                            toolName: "get_weather"))
+        request.messages.append(ServeMessage(role: .user, text: "And tomorrow?"))
+
+        // S2-6 requirement 5: measure what the pre-count costs the head, cold and warm. Nothing
+        // loads weights, so this is the tokenizer read (cached after the first) plus the render.
+        let coldStart = Date()
+        let counted = try #require(await backend.countPromptTokens(request))
+        let cold = Date().timeIntervalSince(coldStart)
+        let warmStart = Date()
+        let again = try #require(await backend.countPromptTokens(request))
+        let warm = Date().timeIntervalSince(warmStart)
+        #expect(counted == again)
+        #expect(counted > 0)
+
+        // The container path (what generation actually sends), rendered by the same backend helpers.
+        let container = try await ModelContainerPool(budgetBytes: 40 << 30)
+            .container(directory: dir, architecture: nil)
+        let expected = try await container.perform { context in
+            let input = try await context.processor.prepare(
+                input: UserInput(prompt: .messages(MLXChatBackend.templateMessages(request.messages)),
+                                 tools: backend.effectiveTools(request),
+                                 additionalContext: backend.templateContext(request)))
+            return input.text.tokens.size
+        }
+        print("S2-6 MEASURE prompt tokens (with tool history): tokenizer-only=\(counted) container=\(expected)")
+        print("S2-6 MEASURE pre-count cost (no weights): cold \(Int(cold * 1000)) ms, warm \(Int(warm * 1000)) ms")
+        #expect(counted == expected)
+
+        // An oversized prompt is refused before anything is generated.
+        var huge = ServeRequest(model: "m", messages: [
+            ServeMessage(role: .user, text: String(repeating: "This is a long sentence. ", count: 8000)),
+        ])
+        huge.maxTokens = 64
+        let hugeCount = try #require(await backend.countPromptTokens(huge))
+        print("S2-6 MEASURE oversized prompt tokens=\(hugeCount) limit=\(backend.contextLimit ?? -1)")
+        #expect(hugeCount > 40960)
+    }
+
+    /// …and the same prompt over the **real route**, with the real backend: a plain `400` and not a
+    /// stream, so no head and no SSE byte went out (S2-6's whole point).
+    @Test(.enabled(if: MLXChatBackendRealModelTests.modelDir != nil))
+    func anOversizedPromptIs400OverTheRealRoute() async throws {
+        let dir = URL(fileURLWithPath: try #require(Self.modelDir))
+        let backend = MLXChatBackend(directory: dir, pool: ModelContainerPool(budgetBytes: 40 << 30))
+        let id = "mlx-community/Qwen3-8B-4bit"
+        let environment = ServeEnvironment(
+            servedModelIDs: { [id] },
+            installed: { InstalledModelIndex(entries: [
+                .init(id: "mlx-community--Qwen3-8B-4bit", hfModelId: id, kind: .llm, ramGB: 4)]) },
+            appleFoundationReadiness: { nil },
+            created: 1,
+            backendFor: { $0 == id ? backend : nil })
+
+        let body = Data(#"{"model":"\#(id)","stream":true,"messages":[{"role":"user","content":"\#(String(repeating: "This is a long sentence. ", count: 8000))"}]}"#.utf8)
+        let head = ServeRequestHead(method: "POST", path: "/v1/chat/completions", host: "127.0.0.1:1212", origin: nil,
+                                    transferEncoding: nil, contentLength: String(body.count), userAgent: "t")
+        let reply = await ServeAPI.handle(head: head, guard: RequestGuard(port: 1212),
+                                          environment: environment, body: { body })
+        guard case .full(let response) = reply else {
+            Issue.record("expected a plain 400 — a stream would mean a 200 head went out"); return
+        }
+        #expect(response.status == 400)
+        let error = try #require(try JSONSerialization.jsonObject(with: response.body) as? [String: Any])
+        let inner = try #require(error["error"] as? [String: Any])
+        #expect(inner["code"] as? String == "context_length_exceeded")
+        let message = try #require(inner["message"] as? String)
+        print("S2-6 MEASURE oversized route: \(message)")
+        #expect(message.contains("40960") && message.contains("480"))
+    }
+
+    /// The review's open item (S2-3b), closed with the tokenizer alone: a `qwen3_5` checkpoint's
+    /// generation prompt **ends `<think>`** when thinking is on and does not when it is off — which
+    /// is what `startsInsideThink` is computed from. No weights are loaded: only `tokenizer.json`
+    /// and the chat template, so a 27B checkpoint is safe to point this at.
+    ///
+    /// `TEST_RUNNER_MLXUI_TEST_QWEN35_TOKENIZER_DIR=<path to any qwen3_5 model folder>`.
+    @Test(.enabled(if: MLXChatBackendRealModelTests.qwen35Dir != nil))
+    func aQwen35PromptOpensTheThinkBlockOnlyWhenThinkingIsOn() async throws {
+        let dir = URL(fileURLWithPath: try #require(Self.qwen35Dir))
+        let tokenizer = try await HFTokenizerLoader().load(from: dir)
+        let messages: [[String: any Sendable]] = [["role": "user", "content": "What is 2 + 2?"]]
+
+        func tail(thinking: Bool) throws -> String {
+            let ids = try tokenizer.applyChatTemplate(messages: messages, tools: nil,
+                                                      additionalContext: ["enable_thinking": thinking])
+            return tokenizer.decode(tokenIds: Array(ids.suffix(MLXChatBackend.promptTailTokens)))
+        }
+        let on = try tail(thinking: true)
+        let off = try tail(thinking: false)
+        print("S2-6 MEASURE qwen3_5 prompt tail (on)=\(on.debugDescription) (off)=\(off.debugDescription)")
+        #expect(MLXChatBackend.promptOpensThinkBlock(decodedTail: on))          // starts inside the block
+        #expect(!MLXChatBackend.promptOpensThinkBlock(decodedTail: off))        // pre-closed empty block
     }
 
     /// S2-3 on a real checkpoint, both ways: with thinking asked for, the thinking comes back as

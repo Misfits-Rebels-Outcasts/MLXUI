@@ -77,6 +77,22 @@ nonisolated protocol AppleFoundationChatStreaming: Sendable {
     /// folded in by the caller). Unset sampling params are the model's own.
     func streamChat(instructions: String, prompt: String,
                     temperature: Double?, maximumResponseTokens: Int?) -> AsyncThrowingStream<AppleFoundationChatEvent, Error>
+
+    /// R23 (S2-6): the tokens `instructions` + `prompt` will occupy, so an over-limit request can be
+    /// a clean `400` **before** the 200 head instead of an in-stream error. `nil` — the default —
+    /// means "this streamer can't count", which is the honest answer below macOS 26.4 where
+    /// `SystemLanguageModel.tokenCount(for:)` doesn't exist. **Never an estimate** (rule: the
+    /// ~4 chars/token figure is for *usage*, not for refusing a request).
+    func promptTokenCount(instructions: String, prompt: String) async -> Int?
+
+    /// The model's context window (`SystemLanguageModel.contextSize`), or `nil` when unknown.
+    var contextSize: Int? { get }
+}
+
+extension AppleFoundationChatStreaming {
+    /// Streamers that can't count (fixtures, and any SDK without `tokenCount(for:)`).
+    func promptTokenCount(instructions: String, prompt: String) async -> Int? { nil }
+    var contextSize: Int? { nil }
 }
 
 /// The real executor. `@available(macOS 26, *)` because `LanguageModelSession` and
@@ -129,6 +145,27 @@ extension AppleFoundationModelExecutor: AppleFoundationChatStreaming {
             continuation.onTermination = { _ in task.cancel() }
         }
     }
+
+    /// R23 (S2-6): the real count, from the SDK's own tokenizer — `tokenCount(for:)`, macOS 26.4+.
+    /// Instructions and prompt are counted separately because that is how the session is built
+    /// (`LanguageModelSession(instructions:)` + `streamResponse(to:)`); their sum is what has to fit.
+    /// Typechecked against the installed SDK (macOS 27.0) before writing this: rule 11.
+    func promptTokenCount(instructions: String, prompt: String) async -> Int? {
+        guard #available(macOS 26.4, *) else { return nil }
+        let model = SystemLanguageModel.default
+        var total = 0
+        if !instructions.isEmpty {
+            guard let count = try? await model.tokenCount(for: Instructions(instructions)) else { return nil }
+            total += count
+        }
+        guard let promptCount = try? await model.tokenCount(for: prompt) else { return nil }
+        return total + promptCount
+    }
+
+    /// `SystemLanguageModel.contextSize` (macOS 26.0+, back-deployed before 26.4). Measured at
+    /// 8192 tokens on this Mac — journal `2026-369`, and the number the Connect sheet's fitness
+    /// line already uses.
+    var contextSize: Int? { SystemLanguageModel.default.contextSize }
 
     /// Prompt = everything before the reply; completion = the reply entry. `tokenCount(for:)` is
     /// macOS 26.4+, so older systems report no usage and the backend estimates.

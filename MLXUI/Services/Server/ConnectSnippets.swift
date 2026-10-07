@@ -89,13 +89,11 @@ nonisolated enum ConnectSnippets {
 
     /// `max_position_embeddings` from a checkpoint's `config.json` (top level, or inside
     /// `text_config` for multimodal checkpoints). `nil` when absent or unreadable.
+    /// The checkpoint's declared window. The parse lives in `ModelContextWindow` (S2-6) because the
+    /// Local Server's pre-count must use the same number this line shows; this stays as the Connect
+    /// sheet's name for it.
     static func contextLength(configJSON: Data?) -> Int? {
-        guard let configJSON,
-              let object = (try? JSONSerialization.jsonObject(with: configJSON)) as? [String: Any] else { return nil }
-        func positions(_ dictionary: [String: Any]) -> Int? {
-            (dictionary["max_position_embeddings"] as? NSNumber).flatMap { $0.intValue > 0 ? $0.intValue : nil }
-        }
-        return positions(object) ?? (object["text_config"] as? [String: Any]).flatMap(positions)
+        ModelContextWindow.limit(configData: configJSON)
     }
 
     /// Apple Foundation Models' window (measured on macOS 27.0: `SystemLanguageModel.contextSize`).

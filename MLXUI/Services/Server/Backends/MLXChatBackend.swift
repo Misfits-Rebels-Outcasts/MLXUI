@@ -211,6 +211,11 @@ nonisolated struct MLXChatBackend: ServeBackend {
     /// honours a client's `tools`.
     let checkpointModelType: String
 
+    /// The context window the checkpoint's own `config.json` declares (S2-6, R23) — the number the
+    /// pre-count compares against. `nil` when it declares none, in which case nothing is pre-counted
+    /// (`ServeBackend.countPromptTokens` answers `nil` too).
+    let contextLimit: Int?
+
     var modelType: String? { checkpointModelType.isEmpty ? nil : checkpointModelType }
 
     init(directory: URL, footprintBytes: Int64? = nil, architecture: String? = nil,
@@ -219,12 +224,63 @@ nonisolated struct MLXChatBackend: ServeBackend {
         self.footprintBytes = footprintBytes
         self.architecture = architecture
         self.pool = pool
-        self.checkpointModelType = ModelContainerPool.modelTypeString(directory: directory,
-                                                                     architecture: architecture)
+        // One read of `config.json` for both facts.
+        let configData = ModelContainerPool.configData(directory: directory)
+        self.checkpointModelType = ModelContainerPool.modelTypeString(configData: configData)
+            ?? architecture ?? ""
+        self.contextLimit = ModelContextWindow.limit(configData: configData)
     }
 
     /// Whether this checkpoint's family can take tools at all (S2-1's table).
     var acceptsTools: Bool { ToolCallFormatTable.acceptsTools(forModelType: checkpointModelType) }
+
+    // MARK: - What the prompt will be (one source for the count and the generation — S2-6)
+
+    /// The tools that will be rendered for this request (S2-2's gate and `tool_choice`).
+    nonisolated func effectiveTools(_ request: ServeRequest) -> [[String: any Sendable]] {
+        acceptsTools ? request.renderedTools.compactMap(\.object) : []
+    }
+
+    /// The template's render context (S2-3's thinking switch).
+    nonisolated func templateContext(_ request: ServeRequest) -> [String: any Sendable] {
+        ["enable_thinking": ReasoningTemplateTable.thinkingOn(requested: request.reasoning,
+                                                              forModelType: checkpointModelType)]
+    }
+
+    /// Whether the history carries tool traffic, which decides the `UserInput` shape — and so which
+    /// message conversion the template sees.
+    nonisolated static func hasToolHistory(_ messages: [ServeMessage]) -> Bool {
+        messages.contains { $0.role == .tool || !$0.toolCalls.isEmpty }
+    }
+
+    /// The messages as the **template** receives them (S2-6): exactly what generation sends, so the
+    /// pre-count counts the real prompt. With tool history the raw dictionaries are used (that path
+    /// bypasses mlx-swift-lm's `MessageGenerator` anyway); without it, the role/content pair is what
+    /// `DefaultMessageGenerator` produces — and the one generator that would differ
+    /// (`NoSystemMessageGenerator`, for a family with no system role) has had its input already
+    /// folded away by S2-1's assembly.
+    nonisolated static func templateMessages(_ messages: [ServeMessage]) -> [[String: any Sendable]] {
+        if hasToolHistory(messages) { return rawMessages(messages) }
+        return messages.map { ["role": $0.role.rawValue, "content": $0.text] }
+    }
+
+    /// R23 (S2-6): the real prompt's token count, rendered with the **tokenizer alone** — the same
+    /// chat template the generation uses, without loading weights, so the head never waits for a
+    /// model load. `nil` when there is no declared limit to compare against, when the tokenizer
+    /// can't be read, or when the checkpoint has no chat template; the request then simply runs and
+    /// the runtime's own overflow handling applies (S1's behaviour).
+    ///
+    /// The tokenizer comes from `ServePromptCounter`, which caches it: measured cold at 1,043 ms
+    /// (reading `tokenizer.json` for a 151k vocabulary) and warm at a few milliseconds, which is the
+    /// difference between a usable head and a one-second stall.
+    func countPromptTokens(_ request: ServeRequest) async -> Int? {
+        guard contextLimit != nil else { return nil }
+        let tools = effectiveTools(request)
+        return await ServePromptCounter.shared.count(directory: directory,
+                                                     messages: Self.templateMessages(request.messages),
+                                                     tools: tools.isEmpty ? nil : tools,
+                                                     context: templateContext(request))
+    }
 
     func generate(_ request: ServeRequest) -> AsyncThrowingStream<ServeEvent, Error> {
         AsyncThrowingStream { continuation in
@@ -250,17 +306,15 @@ nonisolated struct MLXChatBackend: ServeBackend {
         // S2-2: S2-1's `system` hoisting and the flatten-or-keep decision for tool traffic now
         // happen in the route, which reads this backend's `modelType` and so has the one fact both
         // need. The backend stays a renderer: messages in, prompt out.
-        let acceptsTools = self.acceptsTools
         let messages = request.messages
         // S2-2 gate: `tools` are honoured only for a family whose template renders them *and* whose
         // output a parser reads. `tool_choice: "none"` renders none at all; a named function
         // renders just that tool when the client sent it (`renderedTools`), since a model can't be
         // forced — best effort, implementer's call, pending owner confirmation.
-        let tools: [[String: any Sendable]] = acceptsTools
-            ? request.renderedTools.compactMap(\.object) : []
+        let tools = effectiveTools(request)
         let format = ToolCallFormatTable.resolved(forModelType: checkpointModelType,
                                                  configData: ModelContainerPool.configData(directory: directory)) ?? .json
-        let hasToolHistory = messages.contains { $0.role == .tool || !$0.toolCalls.isEmpty }
+        let hasToolHistory = Self.hasToolHistory(messages)
         // S2-3: thinking is OFF unless the request asked for it *and* the family's template reads
         // `enable_thinking` — the same shape as the tools gate above, and the same default S1 had.
         // The client's `reasoning_effort` string is deliberately **not** forwarded: the Qwen3.8 and
@@ -270,7 +324,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
         // Implementer's call, pending owner confirmation.
         let thinking = ReasoningTemplateTable.thinkingOn(requested: request.reasoning,
                                                          forModelType: checkpointModelType)
-        let templateContext: [String: any Sendable] = ["enable_thinking": thinking]
+        let renderContext: [String: any Sendable] = ["enable_thinking": thinking]
         try await container.perform { context in
             let input: LMInput
             if hasToolHistory {
@@ -281,7 +335,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 do {
                     input = try await context.processor.prepare(
                         input: UserInput(prompt: .messages(raw), tools: tools.isEmpty ? nil : tools,
-                                         additionalContext: templateContext))
+                                         additionalContext: renderContext))
                 } catch {
                     input = try await context.processor.prepare(
                         input: UserInput(prompt: .messages(raw), tools: tools.isEmpty ? nil : tools))
@@ -291,7 +345,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 do {
                     input = try await context.processor.prepare(
                         input: UserInput(chat: chat, tools: tools.isEmpty ? nil : tools,
-                                         additionalContext: templateContext))
+                                         additionalContext: renderContext))
                 } catch {
                     input = try await context.processor.prepare(
                         input: UserInput(chat: chat, tools: tools.isEmpty ? nil : tools))
@@ -406,9 +460,17 @@ nonisolated struct MLXChatBackend: ServeBackend {
         let ids = tokens.asArray(Int.self)
         guard !ids.isEmpty else { return false }
         // A window is enough — only the tail matters — and it keeps the decode cheap per request.
-        let tail = context.tokenizer.decode(tokenIds: Array(ids.suffix(16)))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return tail.hasSuffix("<think>")
+        return promptOpensThinkBlock(decodedTail: context.tokenizer.decode(tokenIds: Array(ids.suffix(promptTailTokens))))
+    }
+
+    /// How many prompt tokens the tail probe decodes. One is enough in principle (`<think>` is a
+    /// single token in these tokenizers); sixteen costs nothing and survives a tokenizer that
+    /// splits it.
+    static let promptTailTokens = 16
+
+    /// The decision itself, on text — so a tokenizer-only test can make it without a model.
+    nonisolated static func promptOpensThinkBlock(decodedTail: String) -> Bool {
+        decodedTail.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("<think>")
     }
 
     /// Emit every call the scanner has completed since the last drain.

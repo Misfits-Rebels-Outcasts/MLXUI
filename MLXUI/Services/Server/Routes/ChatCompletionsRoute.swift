@@ -92,6 +92,20 @@ nonisolated enum ChatCompletionsRoute {
             request.messages, acceptsTools: acceptsTools,
             placement: ToolCallFormatTable.systemPlacement(forModelType: modelType))
 
+        // R23 (S2-6): count the **real** prompt before any response byte is chosen, so an
+        // over-limit request is a plain `400` — no 200 head, no first SSE byte, and no queue slot
+        // taken (nothing is generated). The message carries both numbers, which is what the
+        // documented error does.
+        // https://developers.openai.com/api/docs/guides/error-codes (fetched 2026-10-07) for the
+        // `invalid_request_error` envelope, and `context_length_exceeded` as the code OpenAI and its
+        // clients have long used for this case (Portkey's error library reproduces the original
+        // message: "The total number of tokens exceeds the model's maximum context length.").
+        if let limit = backend.contextLimit,
+           let count = await backend.countPromptTokens(request), count > limit {
+            return tracker.fail(ServeError(status: 400, message: Self.contextLengthMessage(count: count, limit: limit),
+                                           code: "context_length_exceeded"))
+        }
+
         guard let ticket = await environment.queue.reserve(model: request.model) else {
             return tracker.fail(ServeError(status: 503, message: "The server is busy with other requests for this model. Try again shortly.",
                                            type: "server_error", code: "server_busy"),
@@ -263,6 +277,15 @@ nonisolated enum ChatCompletionsRoute {
                                                       type: "server_error", code: "internal_error")
     fileprivate static let generationFailed = ServeError(status: 500, message: "The model failed to generate a reply.",
                                                          type: "server_error", code: "generation_failed")
+
+    /// The `400` for a prompt that doesn't fit (R23, S2-6), carrying the limit **and** the count —
+    /// the shape the documented OpenAI error uses ("This model's maximum context length is N tokens.
+    /// However, your messages resulted in M tokens."). Implementer's call, pending owner
+    /// confirmation: plain numbers, and no `param` (the whole request is at fault, not one field).
+    static func contextLengthMessage(count: Int, limit: Int) -> String {
+        "This model's maximum context length is \(limit) tokens, but this request's prompt is \(count) tokens. "
+            + "Shorten the messages and try again."
+    }
 }
 
 /// When the last byte (or heartbeat) was written — the heartbeat's only input.

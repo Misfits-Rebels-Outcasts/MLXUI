@@ -141,11 +141,22 @@ nonisolated protocol ServeBackend: Sendable {
     /// whether a client's `tools` are honoured (S2-2) — the same value the backend itself uses to
     /// pick the parser, so the two answers can't disagree.
     var modelType: String? { get }
+
+    /// The context window the model declares (S2-6, R23). `nil` when nothing declares one, in which
+    /// case the route pre-counts nothing.
+    var contextLimit: Int? { get }
+
+    /// The **real** prompt's token count, before any response byte (S2-6, R23). `nil` means "this
+    /// backend can't count", which is the honest answer for a streamer whose SDK has no tokenizer —
+    /// S1's in-stream overflow error stays the behaviour there. Never an estimate.
+    func countPromptTokens(_ request: ServeRequest) async -> Int?
 }
 
 extension ServeBackend {
-    /// Backends with no checkpoint behind them (Apple Foundation Models) answer `nil`.
+    /// Backends with no checkpoint behind them answer `nil` for the family fact.
     var modelType: String? { nil }
+    var contextLimit: Int? { nil }
+    func countPromptTokens(_ request: ServeRequest) async -> Int? { nil }
 }
 
 // MARK: - Queue

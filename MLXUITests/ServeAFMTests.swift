@@ -25,8 +25,18 @@ nonisolated final class FakeChatStreamer: AppleFoundationChatStreaming, @uncheck
     private var _calls: [Call] = []
     private var _cancelled = 0
     let script: [Step]
+    /// S2-6: what the seam reports. Both default to nil — "this streamer can't count", which is the
+    /// real answer below macOS 26.4 and the shape the default protocol implementation has.
+    let contextSize: Int?
+    let promptTokenCount: Int?
 
-    init(_ script: [Step]) { self.script = script }
+    init(_ script: [Step], contextSize: Int? = nil, promptTokenCount: Int? = nil) {
+        self.script = script
+        self.contextSize = contextSize
+        self.promptTokenCount = promptTokenCount
+    }
+
+    func promptTokenCount(instructions: String, prompt: String) async -> Int? { promptTokenCount }
 
     var calls: [Call] { lock.lock(); defer { lock.unlock() }; return _calls }
     var cancelled: Int { lock.lock(); defer { lock.unlock() }; return _cancelled }
@@ -298,6 +308,39 @@ struct AFMRouteTests {
     @Test func absentBelowMacOS26Is404() async throws {
         let r = try #require(response(await call(environment(readiness: nil, streamer: nil))))
         #expect(r.status == 404)
+    }
+
+    /// S2-6 (R23): with the SDK's count available, an over-limit prompt is a `400` **before the
+    /// head** — the model is never called, so nothing was generated.
+    @Test func anOverLimitPromptIs400BeforeTheHeadWhenTheSDKCanCount() async throws {
+        let streamer = FakeChatStreamer([.snapshot("never")], contextSize: 8192, promptTokenCount: 9000)
+        let log = RequestLog()
+        let r = try #require(response(await call(environment(readiness: .ready, streamer: streamer, log: log))))
+        #expect(r.status == 400)
+        let error = try #require((try JSONSerialization.jsonObject(with: r.body) as? [String: Any])?["error"] as? [String: Any])
+        #expect(error["code"] as? String == "context_length_exceeded")
+        #expect((error["message"] as? String)?.contains("8192") == true)
+        #expect((error["message"] as? String)?.contains("9000") == true)
+        #expect(streamer.calls.isEmpty)                       // the model never ran
+        #expect(log.entries.last?.status == 400)
+    }
+
+    /// A prompt that exactly fills the window runs.
+    @Test func aPromptAtTheAFMLimitRuns() async throws {
+        let streamer = FakeChatStreamer([.snapshot("hi")], contextSize: 8192, promptTokenCount: 8192)
+        let r = try #require(response(await call(environment(readiness: .ready, streamer: streamer))))
+        #expect(r.status == 200)
+        #expect(streamer.calls.count == 1)
+    }
+
+    /// Without a count (the default below macOS 26.4) nothing is pre-counted: S1's in-stream error
+    /// is still what an overflow gets.
+    @Test func withoutACountTheInStreamErrorRemains() async throws {
+        let streamer = FakeChatStreamer([.fail(.contextWindowExceeded(limit: 8192, tokenCount: 9000))])
+        let r = try #require(response(await call(environment(readiness: .ready, streamer: streamer))))
+        #expect(r.status == 400)
+        #expect(streamer.calls.count == 1)                    // it *did* run: the error came from the model
+        #expect(String(decoding: r.body, as: UTF8.self).contains("9000"))
     }
 
     @Test func aContextOverflowIs400WithTheLimit() async throws {
