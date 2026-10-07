@@ -107,6 +107,20 @@ nonisolated enum AgentReadinessFacts {
         InstalledModelIndex.loadInstalled().entries.first { $0.hfModelId == hfModelID }?.downloadSizeGB
     }
 
+    /// Everything the Connect sheet needs about one served model (S2-5): S2-4's state, the window
+    /// S2-6 enforces, and whether S2-3's thinking control reaches this family's template.
+    static func connectFacts(hfModelID: String, weightsGB: Double? = nil,
+                             budgetBytes: Int64 = MemoryBudget.shared.capacityBytes) -> ConnectSnippets.ModelFacts {
+        let config = ModelContainerPool.configData(
+            directory: ModelStore.shared.directory(forHFModelID: hfModelID))
+        let modelType = ModelContainerPool.modelTypeString(configData: config) ?? ""
+        return ConnectSnippets.ModelFacts(
+            modelID: hfModelID,
+            agent: state(hfModelID: hfModelID, weightsGB: weightsGB, budgetBytes: budgetBytes),
+            contextLength: ModelContextWindow.limit(configData: config),
+            thinkingAvailable: ReasoningTemplateTable.readsEnableThinking(forModelType: modelType))
+    }
+
     /// `weightsGB` is passed by callers that already hold the catalog entry (the detail page); when
     /// it is `nil` the installed index is asked instead.
     static func state(hfModelID: String, architecture: String? = nil, weightsGB: Double? = nil,

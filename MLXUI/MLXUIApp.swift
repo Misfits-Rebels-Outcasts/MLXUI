@@ -119,7 +119,8 @@ struct MLXUIApp: App {
                     .environment(appState)
             }
             .sheet(isPresented: Binding(
-                get: { LocalServerGate.isAvailable && appState.localServer.showConnect },
+                get: { ConnectSheetPresentation.isPresented(gateAvailable: LocalServerGate.isAvailable,
+                                                           requested: appState.localServer.showConnect) },
                 set: { appState.localServer.showConnect = $0 }
             )) {
                 ConnectAppSheet(controller: appState.localServer, initialModelID: appState.localServer.connectModelID)

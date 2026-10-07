@@ -79,7 +79,18 @@ struct ConnectAppSheet: View {
     }
 
     private var snippet: String {
-        ConnectSnippets.text(for: harness, port: port, modelID: modelID.isEmpty ? "<model id>" : modelID)
+        ConnectSnippets.text(for: harness, port: port, model: modelFacts)
+    }
+
+    /// S2-5: the snippet is generated per model from its facts, so a model that isn't Agent-ready
+    /// gets S1's plain-chat block instead of a tools or limits claim.
+    private var modelFacts: ConnectSnippets.ModelFacts {
+        guard !modelID.isEmpty else { return .plain("<model id>") }
+        if modelID == ServedModels.appleFoundationID {
+            // Apple Foundation Models answers text only: no tools, and its window is the measured one.
+            return .plain(modelID, contextLength: ConnectSnippets.appleFoundationContextLength)
+        }
+        return AgentReadinessFacts.connectFacts(hfModelID: modelID)
     }
 
     /// One honest line about the selected model: its context length and, since S2-4, its
