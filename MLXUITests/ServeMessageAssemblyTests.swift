@@ -15,6 +15,148 @@ struct ServeMessageAssemblyTests {
         ServeMessage(role: role, text: text)
     }
 
+    // MARK: - S2-8: one-call-per-turn history
+
+    private func call(_ id: String?, _ name: String) -> ServeToolCall {
+        ServeToolCall(id: id, name: name, argumentsJSON: "{}")
+    }
+
+    private func assistant(_ text: String, _ calls: [ServeToolCall]) -> ServeMessage {
+        ServeMessage(role: .assistant, text: text, toolCalls: calls)
+    }
+
+    private func result(_ id: String?, _ name: String?, _ text: String) -> ServeMessage {
+        ServeMessage(role: .tool, text: text, toolCallID: id, toolName: name)
+    }
+
+    /// The SV-6 shape: one assistant turn, two calls, two results — split and interleaved.
+    @Test func aTwoCallTurnSplitsAndInterleavesItsResults() {
+        let messages = [
+            msg(.user, "do it"),
+            assistant("on it", [call("a", "read"), call("b", "write")]),
+            result("a", "read", "file body"),
+            result("b", "write", "ok"),
+        ]
+        #expect(ServeMessageAssembly.splittingMultiCallTurns(messages) == [
+            msg(.user, "do it"),
+            assistant("on it", [call("a", "read")]),      // the turn's text rides the first piece
+            result("a", "read", "file body"),
+            assistant("", [call("b", "write")]),
+            result("b", "write", "ok"),
+        ])
+    }
+
+    /// Three calls (what this Mac's Llama emitted) and a result that arrived *before* its turn.
+    @Test func threeCallsSplitAndResultsAreMatchedWhereverTheySit() {
+        let messages = [
+            msg(.user, "go"),
+            result("c", "glob", "1 match"),                // out of order: names a later call
+            assistant("", [call("a", "read"), call("b", "write"), call("c", "glob")]),
+            result("a", "read", "body"),
+            result("b", "write", "ok"),
+        ]
+        #expect(ServeMessageAssembly.splittingMultiCallTurns(messages) == [
+            msg(.user, "go"),
+            assistant("", [call("a", "read")]),
+            result("a", "read", "body"),
+            assistant("", [call("b", "write")]),
+            result("b", "write", "ok"),
+            assistant("", [call("c", "glob")]),
+            result("c", "glob", "1 match"),
+        ])
+    }
+
+    /// A result whose id matches no call keeps the client's order — after the split pieces, not
+    /// guessed into one of them.
+    @Test func anUnmatchedResultKeepsTheClientsOrder() {
+        let messages = [
+            msg(.user, "go"),
+            assistant("", [call("a", "read"), call("b", "write")]),
+            result("zz", nil, "from nowhere"),
+            result("a", "read", "body"),
+        ]
+        #expect(ServeMessageAssembly.splittingMultiCallTurns(messages) == [
+            msg(.user, "go"),
+            assistant("", [call("a", "read")]),
+            result("a", "read", "body"),
+            assistant("", [call("b", "write")]),
+            result("zz", nil, "from nowhere"),
+        ])
+    }
+
+    /// Calls **without ids** are still split (otherwise the template refuses), and their results
+    /// keep the client's order after the pieces.
+    @Test func callsWithoutIdsStillSplitAndTheirResultsKeepOrder() {
+        let messages = [
+            msg(.user, "go"),
+            assistant("t", [call(nil, "read"), call(nil, "write")]),
+            result(nil, "read", "body"),
+            result(nil, "write", "ok"),
+        ]
+        #expect(ServeMessageAssembly.splittingMultiCallTurns(messages) == [
+            msg(.user, "go"),
+            assistant("t", [call(nil, "read")]),
+            assistant("", [call(nil, "write")]),
+            result(nil, "read", "body"),
+            result(nil, "write", "ok"),
+        ])
+    }
+
+    /// A single call — every family's normal shape — is untouched, text and result position alike.
+    @Test func aSingleCallTurnIsUntouched() {
+        let messages = [msg(.user, "go"), assistant("t", [call("a", "read")]), result("a", "read", "body")]
+        #expect(ServeMessageAssembly.splittingMultiCallTurns(messages) == messages)
+    }
+
+    /// A family **without** the limit keeps the client's packed turn: the wire history is already
+    /// what its template loops over, and splitting would change a prompt that works.
+    @Test func aFamilyWithoutTheLimitKeepsThePackedTurn() {
+        let messages = [
+            msg(.user, "go"),
+            assistant("", [call("a", "read"), call("b", "write")]),
+            result("a", "read", "body"),
+            result("b", "write", "ok"),
+        ]
+        #expect(ServeMessageAssembly.assembling(messages, acceptsTools: true, oneCallPerTurn: false,
+                                                placement: .anywhere) == messages)
+        // …and with the flag, the same input comes out split.
+        let split = ServeMessageAssembly.assembling(messages, acceptsTools: true, oneCallPerTurn: true,
+                                                    placement: .anywhere)
+        #expect(split.map(\.role) == [.user, .assistant, .tool, .assistant, .tool])
+    }
+
+    /// The split pieces survive the assembly's own same-role merge (S2-21's rule) — which is exactly
+    /// why the interleaving order matters: two assistant turns in a row *would* be glued.
+    @Test func theSplitPiecesAreNotGluedByTheMerge() {
+        let messages = [
+            msg(.user, "go"),
+            assistant("", [call("a", "read"), call("b", "write")]),
+            result("a", "read", "body"),
+            result("b", "write", "ok"),
+        ]
+        let assembled = ServeMessageAssembly.assembling(messages, acceptsTools: true, oneCallPerTurn: true,
+                                                        placement: .firstOnly)
+        #expect(assembled.count == 5)
+        #expect(assembled.map(\.role) == [.user, .assistant, .tool, .assistant, .tool])
+        #expect(assembled[1].toolCalls.map(\.name) == ["read"])
+        #expect(assembled[3].toolCalls.map(\.name) == ["write"])
+    }
+
+    /// The per-family flag, cited from the templates (S2-8): only `llama` refuses a packed turn.
+    @Test func onlyTheLlamaFamilyCarriesTheOneCallLimit() {
+        #expect(ToolCallHistoryTable.oneCallPerTurn(forModelType: "llama"))
+        #expect(ToolCallHistoryTable.oneCallPerTurn(forModelType: "Llama"))
+        #expect(!ToolCallHistoryTable.oneCallPerTurn(forModelType: "llama4"))       // unread template
+        for family in ["qwen3_5", "qwen3_5_text", "qwen3", "qwen2", "mistral3", "ministral3",
+                       "gemma2", "gemma3_text", "gpt_oss", "some_new_arch"] {
+            #expect(!ToolCallHistoryTable.oneCallPerTurn(forModelType: family), "\(family)")
+        }
+        // The silent variant is recorded too (llama drops the rest, gpt-oss never reaches the path).
+        #expect(ToolCallHistoryTable.rendersFirstCallOnly(forModelType: "llama"))
+        #expect(ToolCallHistoryTable.rendersFirstCallOnly(forModelType: "gpt_oss"))
+        #expect(!ToolCallHistoryTable.rendersFirstCallOnly(forModelType: "qwen3"))
+    }
+
     // MARK: strict families (qwen3_5, mistral3, gemma3_text, gpt_oss)
 
     @Test func systemInTheMiddleMovesToTheFrontForAStrictFamily() {

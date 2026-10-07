@@ -20,13 +20,76 @@ import Foundation
 /// server's MLX backend asks for it because only the backend knows the checkpoint's `model_type`.
 nonisolated enum ServeMessageAssembly {
 
-    /// The whole assembly, in the order the server applies it: tool traffic settled first, then
-    /// the family's `system` placement.
+    /// The whole assembly, in the order the server applies it: tool traffic settled first, then the
+    /// family's one-call-per-turn rule (S2-8), then its `system` placement.
+    ///
+    /// The split runs **before** the hoisting, so the hoisting's own re-merge sees the final shape —
+    /// and the split's pieces can't be glued back together, because `canMerge` refuses both a turn
+    /// with `toolCalls` and a `tool` turn (which is exactly why the interleaving order matters).
     static func assembling(_ messages: [ServeMessage],
                            acceptsTools: Bool,
+                           oneCallPerTurn: Bool = false,
                            placement: ToolCallFormatTable.SystemPlacement) -> [ServeMessage] {
         let settled = acceptsTools ? messages : flatteningToolTraffic(messages)
-        return hoistingSystemMessages(settled, placement: placement)
+        let history = oneCallPerTurn ? splittingMultiCallTurns(settled) : settled
+        return hoistingSystemMessages(history, placement: placement)
+    }
+
+    /// **S2-8 — a family whose template takes one tool call per assistant turn.** Llama 3.1's
+    /// template *raises* on a turn with two (`ToolCallHistoryTable`), so a model that answered with
+    /// several calls could not be asked again: the histories the client replays were unrenderable
+    /// (SV-6's Llama run, journal `2026-415`).
+    ///
+    /// An assistant turn with N > 1 calls becomes N single-call turns, each followed by the `tool`
+    /// results that belong to it — `assistant(A), tool(A), assistant(B), tool(B) …` — matched on
+    /// `tool_call_id`. The turn's text rides on the **first** piece, and every piece keeps the
+    /// original role ordering around it.
+    ///
+    /// **Edge cases (implementer's call, pending owner confirmation):**
+    ///
+    /// * a call with **no id**, or a result whose id matches no call in the turn — the calls are
+    ///   still split (otherwise the template raises and the request dies), but the results are left
+    ///   **in the client's order** after the last piece, rather than guessed at;
+    /// * results that arrive *before* their assistant turn (a replayed conversation may do this) are
+    ///   matched the same way and moved to their call;
+    /// * a turn with a single call is untouched — text, id and result position stay as the client
+    ///   sent them, which is the shape every family's template already handles.
+    static func splittingMultiCallTurns(_ messages: [ServeMessage]) -> [ServeMessage] {
+        guard messages.contains(where: { $0.role == .assistant && $0.toolCalls.count > 1 }) else {
+            return messages                                             // nothing to do: byte-identical
+        }
+        // Which results **move** — only those naming a call of a multi-call turn. Everything else
+        // stays exactly where the client put it, which is what "keeps the client's order" means.
+        var owners: [Int: (turn: Int, id: String)] = [:]                // result index → its call
+        for (turn, message) in messages.enumerated()
+        where message.role == .assistant && message.toolCalls.count > 1 {
+            let ids = Set(message.toolCalls.compactMap(\.id))
+            for (index, candidate) in messages.enumerated()
+            where candidate.role == .tool && candidate.toolCallID.map(ids.contains) == true {
+                owners[index] = (turn, candidate.toolCallID ?? "")
+            }
+        }
+
+        var out: [ServeMessage] = []
+        for (index, message) in messages.enumerated() {
+            if message.role == .tool, owners[index] != nil {
+                continue                                                // placed with its call below
+            }
+            guard message.role == .assistant, message.toolCalls.count > 1 else {
+                out.append(message)
+                continue
+            }
+            for (position, call) in message.toolCalls.enumerated() {
+                // The turn's text rides on the first piece; the rest are calls only.
+                out.append(ServeMessage(role: .assistant, text: position == 0 ? message.text : "",
+                                        toolCalls: [call]))
+                for (resultIndex, result) in messages.enumerated()
+                where owners[resultIndex]?.turn == index && owners[resultIndex]?.id == call.id {
+                    out.append(result)
+                }
+            }
+        }
+        return out
     }
 
     /// Adjacent messages with the same role become one, joined by a blank line. An empty side adds

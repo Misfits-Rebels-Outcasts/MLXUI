@@ -149,14 +149,18 @@ nonisolated protocol ServeBackend: Sendable {
     /// The **real** prompt's token count, before any response byte (S2-6, R23). `nil` means "this
     /// backend can't count", which is the honest answer for a streamer whose SDK has no tokenizer —
     /// S1's in-stream overflow error stays the behaviour there. Never an estimate.
-    func countPromptTokens(_ request: ServeRequest) async -> Int?
+    ///
+    /// **Throws a `ServeError` only when the checkpoint's template *refuses* the request** (S2-8):
+    /// that is a `400` the route can send before the head, in a stream as much as outside one. Any
+    /// other failure to count stays `nil` — S2-6's fail-open, unchanged.
+    func countPromptTokens(_ request: ServeRequest) async throws -> Int?
 }
 
 extension ServeBackend {
     /// Backends with no checkpoint behind them answer `nil` for the family fact.
     var modelType: String? { nil }
     var contextLimit: Int? { nil }
-    func countPromptTokens(_ request: ServeRequest) async -> Int? { nil }
+    func countPromptTokens(_ request: ServeRequest) async throws -> Int? { nil }
 }
 
 // MARK: - Queue

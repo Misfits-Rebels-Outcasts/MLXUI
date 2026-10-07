@@ -273,13 +273,21 @@ nonisolated struct MLXChatBackend: ServeBackend {
     /// The tokenizer comes from `ServePromptCounter`, which caches it: measured cold at 1,043 ms
     /// (reading `tokenizer.json` for a 151k vocabulary) and warm at a few milliseconds, which is the
     /// difference between a usable head and a one-second stall.
-    func countPromptTokens(_ request: ServeRequest) async -> Int? {
-        guard contextLimit != nil else { return nil }
+    func countPromptTokens(_ request: ServeRequest) async throws -> Int? {
+        // No `contextLimit` early-out: the render is also how a template *refusal* is found (S2-8),
+        // and a refused prompt must be a 400 whether or not the checkpoint declares a window.
         let tools = effectiveTools(request)
-        return await ServePromptCounter.shared.count(directory: directory,
-                                                     messages: Self.templateMessages(request.messages),
-                                                     tools: tools.isEmpty ? nil : tools,
-                                                     context: templateContext(request))
+        do {
+            return try await ServePromptCounter.shared.count(directory: directory,
+                                                            messages: Self.templateMessages(request.messages),
+                                                            tools: tools.isEmpty ? nil : tools,
+                                                            context: templateContext(request))
+        } catch {
+            // S2-8: the checkpoint refusing the request is a 400 the route can send before the head.
+            // Anything else (an unreadable template, a tokenizer hiccup) is S2-6's fail-open: run
+            // the request and let the runtime's own handling decide.
+            throw ChatTemplateFailure.serveError(for: error) ?? error
+        }
     }
 
     func generate(_ request: ServeRequest) -> AsyncThrowingStream<ServeEvent, Error> {
@@ -337,8 +345,22 @@ nonisolated struct MLXChatBackend: ServeBackend {
                         input: UserInput(prompt: .messages(raw), tools: tools.isEmpty ? nil : tools,
                                          additionalContext: renderContext))
                 } catch {
-                    input = try await context.processor.prepare(
-                        input: UserInput(prompt: .messages(raw), tools: tools.isEmpty ? nil : tools))
+                    // As below: the optional render context is retried without, and a refusal that
+                    // survives the retry is the template's own 400 (S2-8).
+                    do {
+                        input = try await context.processor.prepare(
+                            input: UserInput(prompt: .messages(raw), tools: tools.isEmpty ? nil : tools))
+                    } catch {
+                        // A refusal goes out on the stream's **error channel** rather than being
+                        // thrown: the route turns that into the error the client sees, and throwing
+                        // would replace it with S2's opaque 500 (which exists so a backend failure
+                        // never leaks its internals to a client). Not a refusal → rethrow, as before.
+                        if let refusal = ChatTemplateFailure.serveError(for: error) {
+                            continuation.yield(.error(refusal))
+                            return
+                        }
+                        throw error
+                    }
                 }
             } else {
                 let chat = messages.map { Chat.Message(role: Self.role($0.role), content: $0.text) }
@@ -347,8 +369,23 @@ nonisolated struct MLXChatBackend: ServeBackend {
                         input: UserInput(chat: chat, tools: tools.isEmpty ? nil : tools,
                                          additionalContext: renderContext))
                 } catch {
-                    input = try await context.processor.prepare(
-                        input: UserInput(chat: chat, tools: tools.isEmpty ? nil : tools))
+                    // The render context (`enable_thinking`) is optional by design — a template that
+                    // doesn't read it may raise, so retry without it. S2-8: if the *retry* is refused
+                    // too, the checkpoint is declining the request: report that as a 400, not a 500.
+                    do {
+                        input = try await context.processor.prepare(
+                            input: UserInput(chat: chat, tools: tools.isEmpty ? nil : tools))
+                    } catch {
+                        // A refusal goes out on the stream's **error channel** rather than being
+                        // thrown: the route turns that into the error the client sees, and throwing
+                        // would replace it with S2's opaque 500 (which exists so a backend failure
+                        // never leaks its internals to a client). Not a refusal → rethrow, as before.
+                        if let refusal = ChatTemplateFailure.serveError(for: error) {
+                            continuation.yield(.error(refusal))
+                            return
+                        }
+                        throw error
+                    }
                 }
             }
             let promptTokens = input.text.tokens.size

@@ -18,6 +18,11 @@ nonisolated final class FakeBackend: ServeBackend, @unchecked Sendable {
         case toolCall(index: Int, id: String?, name: String?, arguments: String?)
         case reasoning(String)
         case fail
+        /// S2-8: throw a specific `ServeError` (a backend failure — the route keeps it opaque).
+        case failWith(ServeError)
+        /// S2-8: report it on the stream's **error channel**, which is how a template refusal
+        /// travels — the client sees this error, not a generic 500.
+        case error(ServeError)
     }
 
     private let lock = NSLock()
@@ -34,15 +39,22 @@ nonisolated final class FakeBackend: ServeBackend, @unchecked Sendable {
     var contextLimit: Int?
     var promptTokenCount: Int?
 
+    /// S2-8: what the pre-flight render reports — a refusal, or a count.
+    var refusal: ServeError?
+
     init(_ script: [Step], modelType: String? = nil,
-         contextLimit: Int? = nil, promptTokenCount: Int? = nil) {
+         contextLimit: Int? = nil, promptTokenCount: Int? = nil, refusal: ServeError? = nil) {
         self.script = script
         self.modelType = modelType
         self.contextLimit = contextLimit
         self.promptTokenCount = promptTokenCount
+        self.refusal = refusal
     }
 
-    func countPromptTokens(_ request: ServeRequest) async -> Int? { promptTokenCount }
+    func countPromptTokens(_ request: ServeRequest) async throws -> Int? {
+        if let refusal { throw refusal }
+        return promptTokenCount
+    }
 
     var requests: [ServeRequest] { lock.lock(); defer { lock.unlock() }; return _requests }
     var cancelled: Int { lock.lock(); defer { lock.unlock() }; return _cancelled }
@@ -64,6 +76,10 @@ nonisolated final class FakeBackend: ServeBackend, @unchecked Sendable {
                             index: index, id: id, name: name, argumentsFragment: arguments)))
                     case .reasoning(let text): continuation.yield(.reasoningDelta(text))
                     case .fail: continuation.finish(throwing: ServeError(status: 500, message: "boom", code: "boom")); return
+                    case .failWith(let error): continuation.finish(throwing: error); return
+                    // The real backend yields the error **and then finishes** — without the finish
+                    // the consumer waits forever (which is how this fake was first written).
+                    case .error(let error): continuation.yield(.error(error)); continuation.finish(); return
                     }
                 }
                 continuation.finish()
@@ -784,6 +800,100 @@ struct ChatCompletionsRouteTests {
     }
 
     /// Two calls in one turn keep their indices, in both wire shapes (S2-2 requirement 5).
+    // MARK: - S2-8: a template refusal is a 400
+
+    /// A stand-in for `swift-jinja`'s `TemplateException`: the production code recognises a refusal
+    /// **by type name** (the module isn't a dependency of this target, and adding one needs owner
+    /// approval), so the name is what this mirrors. The *real* type is covered by the gated test
+    /// below, against Llama's own template.
+    private struct TemplateException: Error { var message: String? }
+
+    /// The refusal → wire error mapping, with the template's own words.
+    @Test func aTemplateRefusalMapsToA400WithTheTemplatesWords() throws {
+        let raised = "This model only supports single tool-calls at once!"
+        let error = try #require(ChatTemplateFailure.serveError(for: TemplateException(message: raised)))
+        #expect(error.status == 400)
+        #expect(error.code == "template_error")
+        #expect(error.type == "invalid_request_error")
+        #expect(error.message == "This model's chat template refused the request: \(raised)")
+
+        // A template that raises without words still says what happened — nothing is invented.
+        let silent = try #require(ChatTemplateFailure.serveError(for: TemplateException(message: nil)))
+        #expect(silent.status == 400)
+        #expect(silent.message.hasPrefix("This model's chat template refused the request: "))
+        #expect(silent.message.contains("raised an exception"))
+
+        // Anything that isn't a template refusal is not this error (it keeps S2's mapping).
+        #expect(ChatTemplateFailure.serveError(for: ServeError(status: 500, message: "x", code: "boom")) == nil)
+    }
+
+    /// A refusal reaches the client as a **400 before the head**, for a streaming request too —
+    /// which is why the backend's pre-flight reports it rather than the generation.
+    @Test func aRefusalIsA400BeforeTheHeadStreamingAndNot() async throws {
+        for stream in [true, false] {
+            let refusal = try #require(ChatTemplateFailure.serveError(for: TemplateException(
+                message: "This model only supports single tool-calls at once!")))
+            let backend = FakeBackend([.text("never")], modelType: "llama",
+                                      contextLimit: 131_072, promptTokenCount: 10, refusal: refusal)
+            let request = stream
+                ? #"{"model":"\#(testModel)","messages":[{"role":"user","content":"x"}],"stream":true}"#
+                : hello
+            let reply = await call(request, chatEnvironment(backend: backend))
+            let response = try #require(full(reply))              // a whole response: no head, no SSE byte
+            #expect(response.status == 400, "stream=\(stream)")
+            let inner = try #require(jsonObject(response.body)?["error"] as? [String: Any])
+            #expect(inner["code"] as? String == "template_error", "stream=\(stream)")
+            #expect((inner["message"] as? String)?.contains("single tool-calls") == true, "stream=\(stream)")
+            #expect(backend.requests.isEmpty, "stream=\(stream)")   // nothing was generated
+        }
+    }
+
+    /// The route's own wiring of S2-8's flag: a family whose template takes one call per turn gets a
+    /// **split** history, a family that loops over calls keeps the client's packed turn — and both
+    /// see the same wire response.
+    @Test func theRouteSplitsTheHistoryForTheLlamaFamilyOnly() async throws {
+        let packed = #"""
+        {"model":"\#(testModel)","messages":[{"role":"user","content":"go"},
+          {"role":"assistant","content":null,"tool_calls":[
+            {"id":"c1","type":"function","function":{"name":"read","arguments":"{}"}},
+            {"id":"c2","type":"function","function":{"name":"write","arguments":"{}"}}]},
+          {"role":"tool","tool_call_id":"c1","content":"body"},
+          {"role":"tool","tool_call_id":"c2","content":"ok"}]}
+        """#
+
+        for (family, expected) in [("llama", 5), ("qwen3", 4)] {
+            let backend = FakeBackend([.text("done"), .finish(.stop)], modelType: family,
+                                      contextLimit: 131_072, promptTokenCount: 10)
+            _ = await call(packed, chatEnvironment(backend: backend))
+            let sent = try #require(backend.requests.first)
+            #expect(sent.messages.count == expected, "\(family): \(sent.messages.map(\.role))")
+            if family == "llama" {
+                #expect(sent.messages.map(\.role) == [.user, .assistant, .tool, .assistant, .tool])
+                #expect(sent.messages[1].toolCalls.map(\.name) == ["read"])
+                #expect(sent.messages[3].toolCalls.map(\.name) == ["write"])
+            } else {
+                #expect(sent.messages[1].toolCalls.count == 2)       // the packed turn, untouched
+            }
+        }
+    }
+
+    /// Belt and braces: a refusal the backend reports **during** generation (the container path, after
+    /// the pre-flight found nothing) arrives on the error channel and keeps its 400 — while a genuine
+    /// backend *failure* stays the opaque 500 (`aBackendFailureIs500WithoutLeakingDetail`).
+    @Test func aRefusalReportedByTheBackendIsA400NotA500() async throws {
+        let refusal = try #require(ChatTemplateFailure.serveError(for: TemplateException(message: "no")))
+        let backend = FakeBackend([.error(refusal)], modelType: "llama")
+        let response = try #require(full(await call(hello, chatEnvironment(backend: backend))))
+        #expect(response.status == 400)
+        #expect((jsonObject(response.body)?["error"] as? [String: Any])?["code"] as? String == "template_error")
+
+        // …and a backend failure keeps S2's opaque 500 (no `template_error`, no internals).
+        let failure = FakeBackend([.failWith(ServeError(status: 500, message: "boom", code: "boom"))])
+        let opaque = try #require(full(await call(hello, chatEnvironment(backend: failure))))
+        #expect(opaque.status == 500)
+        #expect((jsonObject(opaque.body)?["error"] as? [String: Any])?["code"] as? String == "generation_failed")
+    }
+
     // MARK: - S2-6 pre-count (R23)
 
     /// An over-limit prompt is a `400` **before the head**: the reply is a whole response, never a
@@ -1206,6 +1316,84 @@ struct MLXChatBackendRealModelTests {
         let message = try #require(inner["message"] as? String)
         print("S2-6 MEASURE oversized route: \(message)")
         #expect(message.contains("40960") && message.contains("480"))
+    }
+
+    /// **S2-8** — the refusal the detector claims to recognise, against Llama's **real** template: the
+    /// type name it matches on and the raise text it reads out of the value are both exercised here,
+    /// not against a stand-in.
+    @Test(.enabled(if: MLXChatBackendRealModelTests.llamaDir != nil))
+    func theRealLlamaTemplateRefusalIsRecognised() async throws {
+        let dir = URL(fileURLWithPath: try #require(Self.llamaDir))
+        let tokenizer = try await HFTokenizerLoader().load(from: dir)
+        let packed: [[String: any Sendable]] = [
+            ["role": "user", "content": "go"],
+            ["role": "assistant", "content": "",
+             "tool_calls": [
+                ["id": "c1", "type": "function", "function": ["name": "read", "arguments": "{}"]],
+                ["id": "c2", "type": "function", "function": ["name": "write", "arguments": "{}"]],
+             ] as [[String: any Sendable]]],
+        ]
+        do {
+            _ = try tokenizer.applyChatTemplate(messages: packed, tools: nil, additionalContext: nil)
+            Issue.record("expected Llama's template to refuse two calls in one assistant turn")
+        } catch {
+            print("S2-8 MEASURE real refusal: type=\(type(of: error)) "
+                  + "text=\(String(describing: ChatTemplateFailure.raisedText(from: error)))")
+            #expect(ChatTemplateFailure.isTemplateRefusal(error))
+            let raised = try #require(ChatTemplateFailure.raisedText(from: error))
+            #expect(raised.contains("single tool-calls"))
+            let mapped = try #require(ChatTemplateFailure.serveError(for: error))
+            #expect(mapped.status == 400 && mapped.code == "template_error")
+            #expect(mapped.message.contains(raised))
+        }
+    }
+
+    /// **S2-8's fix, end to end on the real model**: the SV-6 turn — one assistant message carrying
+    /// two calls, replayed by a client — used to be a `500 generation_failed` (the template refused
+    /// the packed history). With the history split it is served normally.
+    @Test(.enabled(if: MLXChatBackendRealModelTests.llamaDir != nil))
+    func aPackedLlamaHistoryIsServedAfterTheSplit() async throws {
+        let dir = URL(fileURLWithPath: try #require(Self.llamaDir))
+        let backend = MLXChatBackend(directory: dir, pool: ModelContainerPool(budgetBytes: 40 << 30))
+        let id = "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit"
+        let environment = ServeEnvironment(
+            servedModelIDs: { [id] },
+            installed: { InstalledModelIndex(entries: [
+                .init(id: "mlx-community--Meta-Llama-3.1-8B-Instruct-4bit", hfModelId: id,
+                      kind: .llm, ramGB: 6.75, downloadSizeGB: 4.5)]) },
+            appleFoundationReadiness: { nil }, created: 1,
+            backendFor: { $0 == id ? backend : nil })
+
+        let payload: [String: Any] = [
+            "model": id, "max_tokens": 64,
+            "messages": [
+                ["role": "user", "content": "Read hello.txt, then create notes.md."],
+                ["role": "assistant", "content": NSNull(),
+                 "tool_calls": [
+                    ["id": "c1", "type": "function",
+                     "function": ["name": "read", "arguments": #"{"filePath": "hello.txt"}"#]],
+                    ["id": "c2", "type": "function",
+                     "function": ["name": "write", "arguments": #"{"content": "x", "filePath": "notes.md"}"#]],
+                 ]],
+                ["role": "tool", "tool_call_id": "c1", "content": "Hello from SV-6"],
+                ["role": "tool", "tool_call_id": "c2", "content": "ok"],
+            ],
+            "tools": openCodeTools,
+        ]
+        let body = try JSONSerialization.data(withJSONObject: payload)
+        let head = ServeRequestHead(method: "POST", path: "/v1/chat/completions", host: "127.0.0.1:1212",
+                                    origin: nil, transferEncoding: nil,
+                                    contentLength: String(body.count), userAgent: "t")
+        let reply = await ServeAPI.handle(head: head, guard: RequestGuard(port: 1212),
+                                          environment: environment, body: { body })
+        guard case .full(let response) = reply else {
+            Issue.record("expected a whole response, not a stream"); return
+        }
+        let text = String(decoding: response.body, as: UTF8.self)
+        print("S2-8 MEASURE packed history: status=\(response.status) body=\(text.prefix(240))")
+        #expect(response.status == 200)                     // not a 400 refusal, not a 500 failure
+        #expect(!text.contains("template_error"))
+        #expect(!text.contains("generation_failed"))
     }
 
     /// **S2-7 requirement 3** — the raw text of one real Llama-3.1-8B tool turn (SV-6's own prompt),

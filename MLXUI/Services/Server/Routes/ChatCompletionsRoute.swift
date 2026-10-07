@@ -90,6 +90,9 @@ nonisolated enum ChatCompletionsRoute {
         // the family's `system` placement (S2-1, owner ruling R22).
         request.messages = ServeMessageAssembly.assembling(
             request.messages, acceptsTools: acceptsTools,
+            // S2-8: a family whose template takes one call per assistant turn gets the packed
+            // history split, so the client can replay a multi-call turn at all.
+            oneCallPerTurn: ToolCallHistoryTable.oneCallPerTurn(forModelType: modelType),
             placement: ToolCallFormatTable.systemPlacement(forModelType: modelType))
 
         // R23 (S2-6): count the **real** prompt before any response byte is chosen, so an
@@ -100,10 +103,22 @@ nonisolated enum ChatCompletionsRoute {
         // `invalid_request_error` envelope, and `context_length_exceeded` as the code OpenAI and its
         // clients have long used for this case (Portkey's error library reproduces the original
         // message: "The total number of tokens exceeds the model's maximum context length.").
-        if let limit = backend.contextLimit,
-           let count = await backend.countPromptTokens(request), count > limit {
-            return tracker.fail(ServeError(status: 400, message: Self.contextLengthMessage(count: count, limit: limit),
-                                           code: "context_length_exceeded"))
+        do {
+            // S2-8: this render is also where a *template refusal* surfaces, which is why it runs even
+            // for a model with no declared window — a refusal must be a 400 before the head, in a
+            // streaming request as much as outside one.
+            let count = try await backend.countPromptTokens(request)
+            if let limit = backend.contextLimit, let count, count > limit {
+                return tracker.fail(ServeError(status: 400,
+                                               message: Self.contextLengthMessage(count: count, limit: limit),
+                                               code: "context_length_exceeded"))
+            }
+        } catch let refusal as ServeError {
+            // The checkpoint's template refused the prompt: the caller's problem to fix, so a plain
+            // 400 rather than a 200 that dies mid-SSE.
+            return tracker.fail(refusal)
+        } catch {
+            // S2-6 fail-open: a count we can't make is not a reason to refuse the request.
         }
 
         guard let ticket = await environment.queue.reserve(model: request.model) else {

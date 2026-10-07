@@ -31,13 +31,15 @@ actor ServePromptCounter {
 
     /// Count the tokens the template renders for `messages`, with this request's tools and render
     /// context. `nil` when the checkpoint has no readable tokenizer or no chat template.
+    /// - Throws: whatever the template raised (S2-8 turns a refusal into a `400`); a *missing*
+    ///   tokenizer or chat template is `nil` — "can't count", not a refusal (S2-6's fail-open).
     func count(directory: URL,
                messages: [[String: any Sendable]],
                tools: [[String: any Sendable]]?,
-               context: [String: any Sendable]) async -> Int? {
+               context: [String: any Sendable]) async throws -> Int? {
         guard let tokenizer = await tokenizer(for: directory) else { return nil }
-        return try? tokenizer.applyChatTemplate(messages: messages, tools: tools,
-                                                additionalContext: context).count
+        return try tokenizer.applyChatTemplate(messages: messages, tools: tools,
+                                               additionalContext: context).count
     }
 
     /// For tests and for the journal's measurement: how many tokenizers are resident.
