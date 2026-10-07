@@ -11,7 +11,9 @@ struct MLXToolsTests {
     // MARK: InstalledModelIndex (model resolution)
 
     private func entry(_ id: String, _ kind: RunnerKind, _ ram: Double) -> InstalledModelIndex.Entry {
-        .init(id: id, hfModelId: id, kind: kind, ramGB: ram)
+        // S2-4b: the entry carries the catalog's weights size too; these fixtures only exercise the
+        // resolver, which uses `ramGB`.
+        .init(id: id, hfModelId: id, kind: kind, ramGB: ram, downloadSizeGB: ram / 1.5)
     }
 
     @Test func indexPicksSmallestInstalledOfKind() {

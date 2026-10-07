@@ -84,7 +84,7 @@ private func chatEnvironment(backend: ServeBackend?, queue: ServeQueue = ServeQu
     ServeEnvironment(
         servedModelIDs: { served },
         installed: { InstalledModelIndex(entries: [
-            .init(id: "mlx-community--Qwen3-4B-4bit", hfModelId: testModel, kind: .llm, ramGB: 3)]) },
+            .init(id: "mlx-community--Qwen3-4B-4bit", hfModelId: testModel, kind: .llm, ramGB: 3, downloadSizeGB: 2)]) },
         appleFoundationReadiness: { nil },
         created: 1_700_000_000,
         backendFor: { id in id == testModel ? backend : nil },
@@ -1183,7 +1183,7 @@ struct MLXChatBackendRealModelTests {
         let environment = ServeEnvironment(
             servedModelIDs: { [id] },
             installed: { InstalledModelIndex(entries: [
-                .init(id: "mlx-community--Qwen3-8B-4bit", hfModelId: id, kind: .llm, ramGB: 4)]) },
+                .init(id: "mlx-community--Qwen3-8B-4bit", hfModelId: id, kind: .llm, ramGB: 4, downloadSizeGB: 2.67)]) },
             appleFoundationReadiness: { nil },
             created: 1,
             backendFor: { $0 == id ? backend : nil })

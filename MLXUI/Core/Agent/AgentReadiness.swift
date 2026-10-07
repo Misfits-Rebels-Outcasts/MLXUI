@@ -10,8 +10,18 @@ import Foundation
 /// |---|---|---|
 /// | a | its family's template renders tools | `ToolCallFormatTable.acceptsTools` (S2-1) |
 /// | b | its context window is ≥ 32k | `ModelContextWindow` (S2-6) |
+/// | d | 32k fits this Mac's memory | `kvBytes` + the catalog's **`downloadSizeGB`** ≤ the budget |
 /// | c | a **recorded** SV-6 pass | `verified` — ships empty; a later commit adds rows |
-/// | d | 32k fits this Mac's memory | `kvBytes` + the catalog's `ramGB` ≤ the shared budget |
+///
+/// **Checked in that order (S2-4b, owner ruling).** Memory comes **before** the SV-6 row, so a model
+/// that passes a+b but doesn't fit is `mayNotFit` whether or not anyone verified it; a verified model
+/// that fits is `agentReady`, and an unverified one that fits is `eligibleNotVerified` ("tools
+/// supported, not yet agent-tested").
+///
+/// The memory term is the **weights' size**, not the catalog's `ramGB`: `ramGB` is the catalog's
+/// 1.5×-RAM heuristic, so `ramGB + KV` would charge that headroom twice. (S2-4 measured
+/// 6.75 + 4.50 = 11.25 GiB for Qwen3-8B and refused it; its weights are 4.50, so 4.50 + 4.50 = 9.00
+/// fits a 10.80 GiB budget.)
 ///
 /// (d) is the planner's recommendation, **owner decision pending**; (c) is deliberately a table no
 /// code path can infer from — "it would probably pass" is not a pass.
@@ -27,7 +37,8 @@ nonisolated enum AgentReadiness {
         case agentReady
         /// a + b pass, but no SV-6 row yet. The honest state for a model nobody has verified.
         case eligibleNotVerified
-        /// a + b + c pass, (d) fails: it works, but a 32k context may not fit this Mac.
+        /// a + b pass, (d) fails: the tools work, but a 32k context may not fit this Mac. Decided
+        /// **before** the SV-6 row (S2-4b), so it covers verified and unverified models alike.
         case mayNotFit
         /// a or b fails. `reason` is plain English and is what the UI shows.
         case notAgentReady(reason: String)
@@ -48,7 +59,7 @@ nonisolated enum AgentReadiness {
 
     /// Criteria a…d over facts only. `verification` is "is there an SV-6 row for this id" — the
     /// caller owns the table lookup, so this stays pure.
-    static func state(modelType: String, contextLength: Int?, catalogRAMGB: Double,
+    static func state(modelType: String, contextLength: Int?, weightsGB: Double,
                       configData: Data?, budgetBytes: Int64, verification: Verification? = nil) -> State {
         // (a) without tool support there is no agent, whatever else is true.
         guard ToolCallFormatTable.acceptsTools(forModelType: modelType) else {
@@ -62,14 +73,14 @@ nonisolated enum AgentReadiness {
             return .notAgentReady(reason: "Its context window is \(declared); agent use needs "
                                    + "\(requiredContextTokens).")
         }
+        // (d) does the weights' size plus a 32k KV cache fit this Mac? Fail **open** — an estimate
+        // we can't make is not evidence that the model won't fit.
+        if budgetBytes > 0, let kv = kvBytes(configData: configData), kv > 0 {
+            let weightsBytes = Int64((weightsGB * 1_073_741_824).rounded())
+            guard weightsBytes + Int64(kv) <= budgetBytes else { return .mayNotFit }
+        }
         // (c) a recorded pass, never an inference.
-        guard verification != nil else { return .eligibleNotVerified }
-        // (d) the planner's recommendation: does 32k fit this Mac? Fail **open** — an estimate we
-        // can't make is not evidence that the model won't fit.
-        guard budgetBytes > 0, let kv = kvBytes(configData: configData), kv > 0 else { return .agentReady }
-        let kvBytes = Int64(kv)
-        let modelBytes = Int64((catalogRAMGB * 1_073_741_824).rounded())
-        return modelBytes + kvBytes <= budgetBytes ? .agentReady : .mayNotFit
+        return verification != nil ? .agentReady : .eligibleNotVerified
     }
 
     /// Criterion (d): the KV cache a **32k** context needs, from the checkpoint's own config.
@@ -136,28 +147,22 @@ nonisolated enum AgentReadiness {
 
     // MARK: - What the user sees
 
-    /// The badge's short label. Copy is implementer's call, pending owner confirmation.
+    /// The badge's label — **owner-approved copy** (R30, S2-4b). One short line each.
     static func badge(for state: State) -> String {
         switch state {
         case .agentReady: "Agent-ready"
-        case .eligibleNotVerified: "Eligible"
-        case .mayNotFit: "May not fit"
+        case .eligibleNotVerified: "Tools supported · not yet agent-tested"
+        case .mayNotFit: "May not fit a long context on this Mac"
         case .notAgentReady: "Not agent-ready"
         }
     }
 
-    /// The badge's tooltip / the Connect sheet's one line — **one short line**, and for
-    /// `notAgentReady` it *is* the reason, so the user is told why in plain English.
+    /// The badge's tooltip / the Connect sheet's line, also owner-approved. For `notAgentReady` it
+    /// **is** the plain-English reason, so the user is told why; the badge carries "Not agent-ready".
     static func line(for state: State) -> String {
         switch state {
-        case .agentReady:
-            "Agent-ready: tools work, the context is 32k or more, and it fits this Mac's memory."
-        case .eligibleNotVerified:
-            "Tools and context are fine; not yet verified with a tool-calling harness (SV-6)."
-        case .mayNotFit:
-            "Tools and context are fine, but a 32k context may not fit this Mac's memory."
-        case .notAgentReady(let reason):
-            reason
+        case .notAgentReady(let reason): reason
+        default: badge(for: state)
         }
     }
 

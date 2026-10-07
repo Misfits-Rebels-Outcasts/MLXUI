@@ -99,23 +99,24 @@ enum ServeToggleVisibility {
 /// line both read the facts here, through S2-6's `ModelContextWindow`, so a model can't be
 /// "Agent-ready" in one place and not in another.
 nonisolated enum AgentReadinessFacts {
-    /// The RAM the catalog recorded for this id — read from the **installed index**, which is where
-    /// `InstallManager` wrote the catalog's figure, so a surface without an `AppState` (the Connect
-    /// sheet) can still answer criterion (d). `nil` for a model the index doesn't know.
-    static func catalogRAMGB(hfModelID: String) -> Double? {
-        InstalledModelIndex.loadInstalled().entries.first { $0.hfModelId == hfModelID }?.ramGB
+    /// The **weights' download size** the catalog records for this id (S2-4b) — read from the
+    /// installed index, which decodes the same bundled `browser.json`, so a surface without an
+    /// `AppState` (the Connect sheet) can still answer criterion (d). `nil` for a model the index
+    /// doesn't know.
+    static func weightsGB(hfModelID: String) -> Double? {
+        InstalledModelIndex.loadInstalled().entries.first { $0.hfModelId == hfModelID }?.downloadSizeGB
     }
 
-    /// `catalogRAMGB` is passed by callers that already hold the catalog entry (the detail page);
-    /// when it is `nil` the installed index is asked instead.
-    static func state(hfModelID: String, architecture: String? = nil, catalogRAMGB: Double? = nil,
+    /// `weightsGB` is passed by callers that already hold the catalog entry (the detail page); when
+    /// it is `nil` the installed index is asked instead.
+    static func state(hfModelID: String, architecture: String? = nil, weightsGB: Double? = nil,
                       budgetBytes: Int64 = MemoryBudget.shared.capacityBytes) -> AgentReadiness.State {
         let config = ModelContainerPool.configData(
             directory: ModelStore.shared.directory(forHFModelID: hfModelID))
         let modelType = ModelContainerPool.modelTypeString(configData: config) ?? architecture ?? ""
         return AgentReadiness.state(modelType: modelType,
                                     contextLength: ModelContextWindow.limit(configData: config),
-                                    catalogRAMGB: catalogRAMGB ?? Self.catalogRAMGB(hfModelID: hfModelID) ?? 0,
+                                    weightsGB: weightsGB ?? Self.weightsGB(hfModelID: hfModelID) ?? 0,
                                     configData: config,
                                     budgetBytes: budgetBytes,
                                     verification: AgentReadiness.verified[hfModelID])

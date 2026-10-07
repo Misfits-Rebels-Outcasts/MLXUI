@@ -14,12 +14,13 @@ struct AgentReadinessCriteriaTests {
     /// The owner's Mac's budget, as `MemoryBudget.shared` computes it.
     private static let budget = EngineCache.defaultBudget(totalRAMGB: 18)
 
-    /// A fixture: the model's id, `model_type`, the config fragment that carries its KV keys, the
-    /// catalog's `ramGB`, and the KV bytes a 32k context needs (hand-computed below).
+    /// A fixture: the model's id, `model_type`, the catalog's **`downloadSizeGB`** (S2-4b's memory
+    /// term — the weights, not the 1.5× `ramGB` heuristic), the KV bytes a 32k context needs
+    /// (hand-computed below), and the config that carries its KV keys.
     private struct Fixture {
         var id: String
         var modelType: String
-        var ramGB: Double
+        var weightsGB: Double
         var kvBytes: Int
         /// Kept last (with a default) so the call sites read id → type → ram → kv → config.
         var verifiedFirst = false
@@ -58,55 +59,55 @@ struct AgentReadinessCriteriaTests {
     ///   48 linear layers × (48 × 128 × 128 × 2 recurrent + 3 × 10,240 × 2 conv) = 78,446,592
     private static let catalog: [Fixture] = [
         // 4 × qwen3_5 hybrids (`text_config`; the 27B class has 48 linear value heads, the 9B 32).
-        Fixture(id: "prism-ml/Ternary-Bonsai-27B-mlx-2bit", modelType: "qwen3_5", ramGB: 12.66,
+        Fixture(id: "prism-ml/Ternary-Bonsai-27B-mlx-2bit", modelType: "qwen3_5", weightsGB: 8.44,
                 kvBytes: 2_225_930_240,
                 config: hybrid(layers: 64, attnHeads: 24, kvHeads: 4, headDim: 256, hidden: 5120,
                                maxPosition: 262144, valueHeads: 48)),
-        Fixture(id: "mlx-community/Qwen3.5-9B-MLX-4bit", modelType: "qwen3_5", ramGB: 8.96,
+        Fixture(id: "mlx-community/Qwen3.5-9B-MLX-4bit", modelType: "qwen3_5", weightsGB: 5.97,
                 kvBytes: 1_100_087_296,
                 config: hybrid(layers: 32, attnHeads: 16, kvHeads: 4, headDim: 256, hidden: 4096,
                                maxPosition: 262144, valueHeads: 32)),
-        Fixture(id: "lukaskremla/Qwen3.8-27B-3bit-MLX", modelType: "qwen3_5", ramGB: 19.08,
+        Fixture(id: "lukaskremla/Qwen3.8-27B-3bit-MLX", modelType: "qwen3_5", weightsGB: 12.72,
                 kvBytes: 2_225_930_240, verifiedFirst: true,
                 config: hybrid(layers: 64, attnHeads: 24, kvHeads: 4, headDim: 256, hidden: 5120,
                                maxPosition: 262144, valueHeads: 48)),
-        Fixture(id: "mlx-community/Qwen3.8-27B-4bit", modelType: "qwen3_5", ramGB: 26.0,
+        Fixture(id: "mlx-community/Qwen3.8-27B-4bit", modelType: "qwen3_5", weightsGB: 16.08,
                 kvBytes: 2_225_930_240,
                 config: hybrid(layers: 64, attnHeads: 24, kvHeads: 4, headDim: 256, hidden: 5120,
                                maxPosition: 262144, valueHeads: 48)),
         // Plain decoders, keys at the top level.
-        Fixture(id: "mlx-community/gemma-3-1b-it-qat-4bit", modelType: "gemma3_text", ramGB: 0.84,
+        Fixture(id: "mlx-community/gemma-3-1b-it-qat-4bit", modelType: "gemma3_text", weightsGB: 0.56,
                 kvBytes: 872_415_232,
                 config: json(["model_type": "gemma3_text", "num_hidden_layers": 26,
                               "num_attention_heads": 4, "num_key_value_heads": 1, "head_dim": 256,
                               "hidden_size": 1152, "max_position_embeddings": 32768,
                               "sliding_window": 512, "sliding_window_pattern": 6])),
-        Fixture(id: "mlx-community/Ministral-3-3B-Instruct-2512-4bit", modelType: "mistral3", ramGB: 2.53,
+        Fixture(id: "mlx-community/Ministral-3-3B-Instruct-2512-4bit", modelType: "mistral3", weightsGB: 1.69,
                 kvBytes: 3_489_660_928, verifiedFirst: true,
                 config: json(["model_type": "mistral3", "text_config": [
                     "model_type": "ministral3", "num_hidden_layers": 26, "num_attention_heads": 32,
                     "num_key_value_heads": 8, "head_dim": 128, "hidden_size": 3072,
                     "max_position_embeddings": 262144, "sliding_window": NSNull(),
                 ]])),
-        Fixture(id: "mlx-community/Qwen3-8B-4bit", modelType: "qwen3", ramGB: 6.75,
+        Fixture(id: "mlx-community/Qwen3-8B-4bit", modelType: "qwen3", weightsGB: 4.5,
                 kvBytes: 4_831_838_208, verifiedFirst: true,
                 config: json(["model_type": "qwen3", "num_hidden_layers": 36, "num_attention_heads": 32,
                               "num_key_value_heads": 8, "head_dim": 128, "hidden_size": 4096,
                               "max_position_embeddings": 40960, "sliding_window": NSNull(),
                               "use_sliding_window": false])),
         // `head_dim` absent → hidden_size / num_attention_heads (4096/32, 5120/40).
-        Fixture(id: "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit", modelType: "llama", ramGB: 6.75,
+        Fixture(id: "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit", modelType: "llama", weightsGB: 4.5,
                 kvBytes: 4_294_967_296, verifiedFirst: true,
                 config: json(["model_type": "llama", "num_hidden_layers": 32, "num_attention_heads": 32,
                               "num_key_value_heads": 8, "hidden_size": 4096,
                               "max_position_embeddings": 131072])),
-        Fixture(id: "mlx-community/gemma-2-9b-it-4bit", modelType: "gemma2", ramGB: 7.59,
+        Fixture(id: "mlx-community/gemma-2-9b-it-4bit", modelType: "gemma2", weightsGB: 5.06,
                 kvBytes: 11_274_289_152, verifiedFirst: true,
                 config: json(["model_type": "gemma2", "num_hidden_layers": 42, "num_attention_heads": 16,
                               "num_key_value_heads": 8, "head_dim": 256, "hidden_size": 3584,
                               "max_position_embeddings": 8192, "sliding_window": 4096,
                               "sliding_window_size": 4096])),
-        Fixture(id: "mlx-community/Qwen2.5-14B-Instruct-4bit", modelType: "qwen2", ramGB: 11.81,
+        Fixture(id: "mlx-community/Qwen2.5-14B-Instruct-4bit", modelType: "qwen2", weightsGB: 7.88,
                 kvBytes: 6_442_450_944, verifiedFirst: true,
                 config: json(["model_type": "qwen2", "num_hidden_layers": 48, "num_attention_heads": 40,
                               "num_key_value_heads": 8, "hidden_size": 5120,
@@ -114,14 +115,14 @@ struct AgentReadinessCriteriaTests {
                               "use_sliding_window": false])),
         // MoE + alternating attention: the 12 `sliding_attention` layers are counted at the full
         // window (an upper bound — their window is 128 tokens), so this is 24 layers' worth.
-        Fixture(id: "mlx-community/gpt-oss-20b-MXFP4-Q8", modelType: "gpt_oss", ramGB: 17.65,
+        Fixture(id: "mlx-community/gpt-oss-20b-MXFP4-Q8", modelType: "gpt_oss", weightsGB: 11.76,
                 kvBytes: 1_610_612_736, verifiedFirst: true,
                 config: json(["model_type": "gpt_oss", "num_hidden_layers": 24, "num_attention_heads": 64,
                               "num_key_value_heads": 8, "head_dim": 64, "hidden_size": 2880,
                               "max_position_embeddings": 131072, "sliding_window": 128,
                               "num_local_experts": 32, "num_experts_per_tok": 4,
                               "layer_types": (0 ..< 12).flatMap { _ in ["sliding_attention", "full_attention"] }])),
-        Fixture(id: "mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit", modelType: "mistral3", ramGB: 20.25,
+        Fixture(id: "mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit", modelType: "mistral3", weightsGB: 13.5,
                 kvBytes: 5_368_709_120,
                 config: json(["model_type": "mistral3", "text_config": [
                     "model_type": "ministral3", "num_hidden_layers": 40, "num_attention_heads": 32,
@@ -175,37 +176,78 @@ struct AgentReadinessCriteriaTests {
         #expect(AgentReadiness.kvBytes(configData: data(#"{"num_hidden_layers":36,"hidden_size":4096}"#)) == nil)
     }
 
-    /// **The catalog, with no SV-6 rows** — the state the app ships in. Everything with tools and a
-    /// 32k window is `eligibleNotVerified`; the two Gemmas and gpt-oss are refused for their
-    /// templates. Qwen2.5-14B sits exactly on the 32k boundary and passes.
-    @Test func theShippedTableLeavesEverythingUnverified() {
+    /// **The catalog, with no SV-6 rows** — the state the app ships in. Memory is judged **before**
+    /// the SV-6 row (S2-4b), so the models whose weights plus a 32k KV don't fit are `mayNotFit` even
+    /// though nobody has verified them, and the ones that fit are `eligibleNotVerified`. The two
+    /// Gemmas and gpt-oss are refused for their templates before either question is asked.
+    @Test func theShippedTableJudgesMemoryBeforeVerification() {
         let expected: [(String, AgentReadiness.State)] = [
-            ("prism-ml/Ternary-Bonsai-27B-mlx-2bit", .eligibleNotVerified),
-            ("mlx-community/Qwen3.5-9B-MLX-4bit", .eligibleNotVerified),
-            ("lukaskremla/Qwen3.8-27B-3bit-MLX", .eligibleNotVerified),
-            ("mlx-community/Qwen3.8-27B-4bit", .eligibleNotVerified),
+            ("prism-ml/Ternary-Bonsai-27B-mlx-2bit", .eligibleNotVerified),   // 8.44 + 2.07 = 10.51 ✅
+            ("mlx-community/Qwen3.5-9B-MLX-4bit", .eligibleNotVerified),      // 5.97 + 1.02 = 6.99 ✅
+            ("lukaskremla/Qwen3.8-27B-3bit-MLX", .mayNotFit),                 // 12.72 + 2.07 = 14.79 ❌
+            ("mlx-community/Qwen3.8-27B-4bit", .mayNotFit),                   // 16.08 + 2.07 = 18.15 ❌
             ("mlx-community/gemma-3-1b-it-qat-4bit",
              .notAgentReady(reason: "This model's template has no tool support.")),
-            ("mlx-community/Ministral-3-3B-Instruct-2512-4bit", .eligibleNotVerified),
-            ("mlx-community/Qwen3-8B-4bit", .eligibleNotVerified),
-            ("mlx-community/Meta-Llama-3.1-8B-Instruct-4bit", .eligibleNotVerified),
+            ("mlx-community/Ministral-3-3B-Instruct-2512-4bit", .eligibleNotVerified),  // 1.69 + 3.25 ✅
+            ("mlx-community/Qwen3-8B-4bit", .eligibleNotVerified),            // 4.50 + 4.50 = 9.00 ✅
+            ("mlx-community/Meta-Llama-3.1-8B-Instruct-4bit", .eligibleNotVerified),    // 4.50 + 4.00 ✅
             ("mlx-community/gemma-2-9b-it-4bit",
              .notAgentReady(reason: "This model's template has no tool support.")),
-            ("mlx-community/Qwen2.5-14B-Instruct-4bit", .eligibleNotVerified),
+            ("mlx-community/Qwen2.5-14B-Instruct-4bit", .mayNotFit),          // 7.88 + 6.00 = 13.88 ❌
             ("mlx-community/gpt-oss-20b-MXFP4-Q8",
              .notAgentReady(reason: "This model's template has no tool support.")),
-            ("mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit", .eligibleNotVerified),
+            ("mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit", .mayNotFit),      // 13.50 + 5.00 ❌
         ]
         #expect(AgentReadiness.verified.isEmpty)          // the table ships empty: never inferred
         #expect(Self.catalog.count == expected.count)
         for (id, want) in expected {
             let fixture = try? #require(Self.catalog.first { $0.id == id })
             let state = AgentReadiness.state(modelType: fixture?.modelType ?? "", contextLength: nil,
-                                             catalogRAMGB: fixture?.ramGB ?? 0,
+                                             weightsGB: fixture?.weightsGB ?? 0,
                                              configData: fixture.map { data($0.config) },
                                              budgetBytes: Self.budget)
             #expect(state == want, "\(id): \(state)")
         }
+    }
+
+    /// S2-4b's two named cases on the 18 GiB fixture, spelled out: the model the owner asked about
+    /// fits once the 1.5× heuristic is not counted twice, and a 14B does not.
+    @Test func theOwnersTwoMemoryCases() throws {
+        // Qwen3-8B: weights 4.50 GiB + KV 4.50 GiB = 9.00 GiB ≤ 10.80 → verified ⇒ agentReady.
+        let qwen = try #require(Self.catalog.first { $0.id == "mlx-community/Qwen3-8B-4bit" })
+        #expect(qwen.weightsGB == 4.5)
+        #expect(AgentReadiness.state(modelType: qwen.modelType, contextLength: nil,
+                                     weightsGB: qwen.weightsGB, configData: data(qwen.config),
+                                     budgetBytes: Self.budget,
+                                     verification: AgentReadiness.Verification(hfModelID: qwen.id,
+                                                                               date: "2026-10-07",
+                                                                               journal: "test"))
+                == .agentReady)
+        // Qwen2.5-14B: 7.88 + 6.00 = 13.88 GiB > 10.80 → mayNotFit, verified or not.
+        let fourteenB = try #require(Self.catalog.first { $0.id == "mlx-community/Qwen2.5-14B-Instruct-4bit" })
+        #expect(AgentReadiness.state(modelType: fourteenB.modelType, contextLength: nil,
+                                     weightsGB: fourteenB.weightsGB, configData: data(fourteenB.config),
+                                     budgetBytes: Self.budget) == .mayNotFit)
+    }
+
+    /// **The reordering of S2-4b**: an unverified model that passes a+b but doesn't fit is
+    /// `mayNotFit`, not `eligibleNotVerified` — the memory answer does not wait for a recorded pass.
+    /// A verified model that fits is `agentReady`; unverified and fitting is `eligibleNotVerified`.
+    @Test func memoryIsDecidedBeforeTheRecordedPass() throws {
+        func state(_ id: String, verified: Bool) throws -> AgentReadiness.State {
+            let fixture = try #require(Self.catalog.first { $0.id == id })
+            return AgentReadiness.state(modelType: fixture.modelType, contextLength: nil,
+                                        weightsGB: fixture.weightsGB, configData: data(fixture.config),
+                                        budgetBytes: Self.budget,
+                                        verification: verified ? AgentReadiness.Verification(
+                                            hfModelID: id, date: "2026-10-07", journal: "test") : nil)
+        }
+        // Over memory: the same answer with and without a pass.
+        #expect(try state("mlx-community/Qwen2.5-14B-Instruct-4bit", verified: false) == .mayNotFit)
+        #expect(try state("mlx-community/Qwen2.5-14B-Instruct-4bit", verified: true) == .mayNotFit)
+        // Fitting: the pass is what separates the two remaining states.
+        #expect(try state("mlx-community/Qwen3-8B-4bit", verified: false) == .eligibleNotVerified)
+        #expect(try state("mlx-community/Qwen3-8B-4bit", verified: true) == .agentReady)
     }
 
     /// **With SV-6 rows** — criterion (d) does the deciding, and it is tight on this Mac: 8B models
@@ -214,18 +256,18 @@ struct AgentReadinessCriteriaTests {
         func state(_ id: String, verified: Bool) throws -> AgentReadiness.State {
             let fixture = try #require(Self.catalog.first { $0.id == id })
             return AgentReadiness.state(modelType: fixture.modelType, contextLength: nil,
-                                        catalogRAMGB: fixture.ramGB, configData: data(fixture.config),
+                                        weightsGB: fixture.weightsGB, configData: data(fixture.config),
                                         budgetBytes: Self.budget,
                                         verification: verified ? AgentReadiness.Verification(
                                             hfModelID: id, date: "2026-10-07", journal: "test") : nil)
         }
-        // 8.96 + 1.02 = 9.98 GiB ≤ 10.80 → ready.
+        // 5.97 + 1.02 = 6.99 GiB ≤ 10.80 → ready.
         #expect(try state("mlx-community/Qwen3.5-9B-MLX-4bit", verified: true) == .agentReady)
-        // 6.75 + 4.00 = 10.75 GiB ≤ 10.80 → ready, by 53 MB.
+        // 4.50 + 4.00 = 8.50 GiB ≤ 10.80 → ready.
         #expect(try state("mlx-community/Meta-Llama-3.1-8B-Instruct-4bit", verified: true) == .agentReady)
-        // 6.75 + 4.50 = 11.25 GiB > 10.80 → may not fit.
-        #expect(try state("mlx-community/Qwen3-8B-4bit", verified: true) == .mayNotFit)
-        // 11.81 + 6.00 = 17.81 GiB → may not fit.
+        // 4.50 + 4.50 = 9.00 GiB ≤ 10.80 → ready (S2-4b: ramGB's 6.75 would have refused it).
+        #expect(try state("mlx-community/Qwen3-8B-4bit", verified: true) == .agentReady)
+        // 7.88 + 6.00 = 13.88 GiB → may not fit.
         #expect(try state("mlx-community/Qwen2.5-14B-Instruct-4bit", verified: true) == .mayNotFit)
         // A row cannot rescue a model whose template ignores tools: (a) is checked first.
         #expect(try state("mlx-community/gemma-2-9b-it-4bit", verified: true)
@@ -239,7 +281,7 @@ struct AgentReadinessCriteriaTests {
     /// word "unknown" rather than assumed large.
     @Test func theContextCriterionIsInclusiveAt32k() {
         func state(context: Int?) -> AgentReadiness.State {
-            AgentReadiness.state(modelType: "qwen3", contextLength: context, catalogRAMGB: 1,
+            AgentReadiness.state(modelType: "qwen3", contextLength: context, weightsGB: 1,
                                  configData: nil, budgetBytes: Self.budget)
         }
         #expect(state(context: 32_768) == .eligibleNotVerified)
@@ -251,46 +293,102 @@ struct AgentReadinessCriteriaTests {
     /// The config's own window is used when the caller doesn't pass one — one parse, S2-6's.
     @Test func theWindowComesFromTheConfigWhenNotGiven() throws {
         let qwen = try #require(Self.catalog.first { $0.id == "mlx-community/Qwen3-8B-4bit" })
-        #expect(AgentReadiness.state(modelType: "qwen3", contextLength: nil, catalogRAMGB: 6.75,
+        #expect(AgentReadiness.state(modelType: "qwen3", contextLength: nil, weightsGB: 4.5,
                                      configData: data(qwen.config), budgetBytes: Self.budget)
                 == .eligibleNotVerified)
         // gemma-2's 8,192 would refuse it, but its template refuses it first — the reason says so.
         let gemma = try #require(Self.catalog.first { $0.id == "mlx-community/gemma-2-9b-it-4bit" })
-        #expect(AgentReadiness.state(modelType: "gemma2", contextLength: nil, catalogRAMGB: 7.59,
+        #expect(AgentReadiness.state(modelType: "gemma2", contextLength: nil, weightsGB: 5.06,
                                      configData: data(gemma.config), budgetBytes: Self.budget)
                 == .notAgentReady(reason: "This model's template has no tool support."))
     }
 
-    /// An unusable estimate must not *refuse* a model — fail open, like the pre-count.
-    @Test func anUnknownBudgetOrConfigDoesNotRefuse() {
+    /// An unusable estimate must not *refuse* a model — fail open, like the pre-count. Three ways it
+    /// can be unusable: no budget, no config, or a config that doesn't state the dimensions.
+    @Test func anUnknownBudgetOrConfigDoesNotRefuse() throws {
         let verification = AgentReadiness.Verification(hfModelID: "x", date: "2026-10-07", journal: "j")
-        #expect(AgentReadiness.state(modelType: "qwen3", contextLength: 40_960, catalogRAMGB: 999,
-                                     configData: nil, budgetBytes: 0, verification: verification) == .agentReady)
-        #expect(AgentReadiness.state(modelType: "qwen3", contextLength: 40_960, catalogRAMGB: 999,
-                                     configData: nil, budgetBytes: Self.budget,
-                                     verification: verification) == .agentReady)
+        func state(config: Data?, budget: Int64, weights: Double = 999) -> AgentReadiness.State {
+            AgentReadiness.state(modelType: "qwen3", contextLength: 40_960, weightsGB: weights,
+                                 configData: config, budgetBytes: budget, verification: verification)
+        }
+        // Weights far past the budget, but *no* budget to compare against…
+        #expect(state(config: nil, budget: 0) == .agentReady)
+        // …and no config, so there is no KV estimate to add.
+        #expect(state(config: nil, budget: Self.budget) == .agentReady)
+        #expect(state(config: data(#"{"model_type":"qwen3"}"#), budget: Self.budget) == .agentReady)
+        #expect(state(config: data("not json"), budget: Self.budget) == .agentReady)
+        // But a *known* KV with no budget is still fail-open, not a refusal: this is the case that
+        // makes the `budgetBytes > 0` guard load-bearing.
+        let qwen = try #require(Self.catalog.first { $0.id == "mlx-community/Qwen3-8B-4bit" })
+        #expect(state(config: data(qwen.config), budget: 0) == .agentReady)
+        #expect(state(config: data(qwen.config), budget: Self.budget, weights: qwen.weightsGB) == .agentReady)
+        // The same request with a real budget and absurd weights does refuse.
+        #expect(state(config: data(qwen.config), budget: Self.budget, weights: 999) == .mayNotFit)
     }
 
     /// A family the table doesn't know is not Agent-ready — the conservative answer for a badge.
     @Test func anUnknownFamilyIsRefused() {
-        #expect(AgentReadiness.state(modelType: "some_new_arch", contextLength: 131_072, catalogRAMGB: 1,
+        #expect(AgentReadiness.state(modelType: "some_new_arch", contextLength: 131_072, weightsGB: 1,
                                      configData: nil, budgetBytes: Self.budget)
                 == .notAgentReady(reason: "This model's template has no tool support."))
     }
 
-    /// The copy: one short line per state, and for `notAgentReady` the line **is** the reason.
-    @Test func everyStateHasOneLineAndABadge() {
-        let states: [AgentReadiness.State] = [.agentReady, .eligibleNotVerified, .mayNotFit,
-                                              .notAgentReady(reason: "Because.")]
-        for state in states {
+    /// The change this cycle rests on: every bundled catalog entry carries **both** sizes, so the
+    /// installed index (which decodes `downloadSizeGB` non-optionally) can always answer criterion
+    /// (d). If a future entry omits the field, this reds instead of the index silently emptying.
+    ///
+    /// It also pins the finding that made S2-4b necessary: `ramGB` is *not* exactly
+    /// `1.5 × downloadSizeGB` (it is rounded to 2 dp and a couple of entries were hand-adjusted), so
+    /// the criterion must read the stored field rather than divide.
+    @Test func theBundledCatalogCarriesBothSizeFields() throws {
+        let raw = try #require(Bundle.main.url(forResource: "browser", withExtension: "json"))
+        let object = try JSONSerialization.jsonObject(with: try Data(contentsOf: raw))
+        var withRAM = 0, withBoth = 0, diverging = 0
+        func walk(_ node: Any) {
+            if let dictionary = node as? [String: Any] {
+                if let ram = dictionary["ramGB"] as? Double {
+                    withRAM += 1
+                    if let download = dictionary["downloadSizeGB"] as? Double {
+                        withBoth += 1
+                        if abs(ram - 1.5 * download) > 0.01 { diverging += 1 }
+                    }
+                }
+                for value in dictionary.values { walk(value) }
+            } else if let list = node as? [Any] {
+                for value in list { walk(value) }
+            }
+        }
+        walk(object)
+        #expect(withRAM == 87)                     // every catalog entry states a RAM figure
+        #expect(withBoth == withRAM)               // …and every one states the weights' size too
+        #expect(diverging > 0)                     // ramGB/1.5 would be wrong for some entries
+    }
+
+    /// The copy is the **owner-approved** wording (R30, S2-4b) — pinned exactly, so a later edit has
+    /// to be deliberate.
+    @Test func theCopyIsTheOwnersApprovedWording() {
+        #expect(AgentReadiness.badge(for: .agentReady) == "Agent-ready")
+        #expect(AgentReadiness.badge(for: .eligibleNotVerified) == "Tools supported · not yet agent-tested")
+        #expect(AgentReadiness.badge(for: .mayNotFit) == "May not fit a long context on this Mac")
+        #expect(AgentReadiness.badge(for: .notAgentReady(reason: "Because.")) == "Not agent-ready")
+
+        // The sheet's line: the same words, except that `notAgentReady` carries the reason.
+        #expect(AgentReadiness.line(for: .agentReady) == "Agent-ready")
+        #expect(AgentReadiness.line(for: .eligibleNotVerified) == "Tools supported · not yet agent-tested")
+        #expect(AgentReadiness.line(for: .mayNotFit) == "May not fit a long context on this Mac")
+        #expect(AgentReadiness.line(for: .notAgentReady(reason: "Because.")) == "Because.")
+        #expect(AgentReadiness.line(for: .notAgentReady(reason: "Its context window is 8192 tokens; "
+                                                          + "agent use needs 32768."))
+                == "Its context window is 8192 tokens; agent use needs 32768.")
+
+        // One short line each, and never S1's stale claim.
+        for state in [AgentReadiness.State.agentReady, .eligibleNotVerified, .mayNotFit,
+                      .notAgentReady(reason: "Because.")] {
             let line = AgentReadiness.line(for: state)
             #expect(!line.isEmpty && !line.contains("\n"), "\(state)")
             #expect(line.count < 130, "\(state): \(line.count) chars")
-            #expect(!AgentReadiness.badge(for: state).isEmpty)
+            #expect(!line.contains("aren't supported"))
         }
-        #expect(AgentReadiness.line(for: .notAgentReady(reason: "Because.")) == "Because.")
-        // The shipped copy must not still claim tools are unsupported (S1's line).
-        #expect(!AgentReadiness.line(for: .agentReady).contains("aren't supported"))
     }
 
     /// Rule 14/R27: gate closed ⇒ no badge, no line. Only installed MLX chat models get one.

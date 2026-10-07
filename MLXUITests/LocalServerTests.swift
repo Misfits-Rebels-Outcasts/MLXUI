@@ -95,7 +95,8 @@ struct RequestGuardTests {
 /// S1-2 — which models `/v1/models` lists, and the responses around them.
 struct ServeAPITests {
     private static func entry(_ hf: String, _ kind: RunnerKind) -> InstalledModelIndex.Entry {
-        InstalledModelIndex.Entry(id: hf.replacingOccurrences(of: "/", with: "--"), hfModelId: hf, kind: kind, ramGB: 4)
+        InstalledModelIndex.Entry(id: hf.replacingOccurrences(of: "/", with: "--"), hfModelId: hf, kind: kind, ramGB: 4,
+                                      downloadSizeGB: 2.67)
     }
 
     private let installed = InstalledModelIndex(entries: [
@@ -416,7 +417,7 @@ struct LocalServerIntegrationTests {
         ServeEnvironment(
             servedModelIDs: { [model] },
             installed: { InstalledModelIndex(entries: [
-                .init(id: "mlx-community--Qwen3-4B-4bit", hfModelId: model, kind: .llm, ramGB: 3)]) },
+                .init(id: "mlx-community--Qwen3-4B-4bit", hfModelId: model, kind: .llm, ramGB: 3, downloadSizeGB: 2)]) },
             appleFoundationReadiness: { nil },
             created: 1_700_000_000)
     }

@@ -242,9 +242,11 @@ struct ModelDetailView: View {
     @ViewBuilder private func agentBadge(state: InstallState) -> some View {
         if AgentReadiness.isVisible(gateAvailable: LocalServerGate.isAvailable,
                                     runnerKind: model.runnerKind, isInstalled: isInstalledOnDisk) {
+            // S2-4b: criterion (d)'s model term is the **weights' size**, not `ramGB` (the catalog's
+            // 1.5× RAM heuristic — charging it would count that headroom twice).
             let readiness = AgentReadinessFacts.state(hfModelID: model.hfModelId,
                                                       architecture: model.architecture,
-                                                      catalogRAMGB: model.ramGB)
+                                                      weightsGB: model.downloadSizeGB)
             Text(AgentReadiness.badge(for: readiness))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Self.badgeColor(readiness))

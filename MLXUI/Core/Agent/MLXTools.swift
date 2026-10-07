@@ -29,6 +29,10 @@ nonisolated struct InstalledModelIndex: Sendable {
         let hfModelId: String
         let kind: RunnerKind
         let ramGB: Double
+        /// The weights' download size, straight from the catalog (S2-4b). `ramGB` is the catalog's
+        /// 1.5× RAM heuristic — *not* exactly 1.5× this field (rounded to 2 dp, and a couple of
+        /// entries were hand-adjusted), so the memory criterion reads this, never `ramGB / 1.5`.
+        let downloadSizeGB: Double
     }
 
     /// Installed models only.
@@ -70,7 +74,8 @@ nonisolated struct InstalledModelIndex: Sendable {
         else { return [] }
         return catalog.domains.flatMap(\.all).map {
             Entry(id: $0.id, hfModelId: $0.hfModelId,
-                  kind: Self.kind(modelType: $0.modelType, family: $0.family), ramGB: $0.ramGB)
+                  kind: Self.kind(modelType: $0.modelType, family: $0.family), ramGB: $0.ramGB,
+                  downloadSizeGB: $0.downloadSizeGB)
         }
     }
 
@@ -87,6 +92,7 @@ nonisolated struct InstalledModelIndex: Sendable {
             let family: String
             let modelType: String
             let ramGB: Double
+            let downloadSizeGB: Double
         }
         let domains: [Node]
     }

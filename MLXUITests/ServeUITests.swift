@@ -22,7 +22,7 @@ private func environment() -> ServeEnvironment {
 
 /// An index with these HF ids installed as chat models.
 private func installedIndex(_ ids: [String]) -> InstalledModelIndex {
-    InstalledModelIndex(entries: ids.map { .init(id: $0, hfModelId: $0, kind: .llm, ramGB: 4) })
+    InstalledModelIndex(entries: ids.map { .init(id: $0, hfModelId: $0, kind: .llm, ramGB: 4, downloadSizeGB: 2.67) })
 }
 
 /// Since S1-5d the controller counts *reachable* models (served AND installed), so the helper's
@@ -353,7 +353,7 @@ struct ConnectSnippetsTests {
 struct LiveMLXBackendWiringTests {
     @Test func theLiveBackendPointsAtTheSlugDirectoryInstallManagerWrites() {
         let entry = InstalledModelIndex.Entry(id: "mlx-community--Qwen3-4B-4bit", hfModelId: "mlx-community/Qwen3-4B-4bit",
-                                              kind: .llm, ramGB: 3)
+                                              kind: .llm, ramGB: 3, downloadSizeGB: 2)
         let backend = ServeEnvironment.mlxBackend(for: entry)
         #expect(backend.directory == ModelStore.shared.directory(forModelID: "mlx-community--Qwen3-4B-4bit"))
         #expect(backend.directory.lastPathComponent == "mlx-community--Qwen3-4B-4bit")          // one component, no nested "mlx-community/"
@@ -485,7 +485,7 @@ struct ServeMemoryTests {
     }
 
     private func index(_ entries: [(String, Double, RunnerKind)]) -> InstalledModelIndex {
-        InstalledModelIndex(entries: entries.map { .init(id: $0.0.replacingOccurrences(of: "/", with: "--"), hfModelId: $0.0, kind: $0.2, ramGB: $0.1) })
+        InstalledModelIndex(entries: entries.map { .init(id: $0.0.replacingOccurrences(of: "/", with: "--"), hfModelId: $0.0, kind: $0.2, ramGB: $0.1, downloadSizeGB: $0.1 / 1.5) })
     }
 
     @Test func theNoteAppearsOnlyWhenTheServedModelsTogetherExceedTheBudget() {
@@ -526,7 +526,8 @@ struct ServeMemoryRouteTests {
     private func env(ramGB: Double, capacityGB: Double, backend: FakeBackend, kind: RunnerKind = .llm) -> ServeEnvironment {
         var env = ServeEnvironment(
             servedModelIDs: { ["a/big"] },
-            installed: { InstalledModelIndex(entries: [.init(id: "a--big", hfModelId: "a/big", kind: kind, ramGB: ramGB)]) },
+            installed: { InstalledModelIndex(entries: [.init(id: "a--big", hfModelId: "a/big", kind: kind, ramGB: ramGB,
+                                                                      downloadSizeGB: ramGB / 1.5)]) },
             appleFoundationReadiness: { nil }, created: 1,
             backendFor: { _ in backend })
         env.memoryCapacityBytes = Int64(capacityGB * 1_073_741_824)
