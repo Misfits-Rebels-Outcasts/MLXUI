@@ -82,16 +82,20 @@ struct ConnectAppSheet: View {
         ConnectSnippets.text(for: harness, port: port, modelID: modelID.isEmpty ? "<model id>" : modelID)
     }
 
-    /// One honest line about the selected model.
+    /// One honest line about the selected model: its context length and, since S2-4, its
+    /// Agent-ready state — replacing S1's "tool calls aren't supported yet", which S2-2 made false.
     private var fitness: String {
-        let length: Int?
         if modelID == ServedModels.appleFoundationID {
-            length = ConnectSnippets.appleFoundationContextLength
-        } else {
-            let config = ModelStore.shared.directory(forHFModelID: modelID).appendingPathComponent("config.json")
-            length = ConnectSnippets.contextLength(configJSON: try? Data(contentsOf: config))
+            // Apple Foundation Models answers text only: its family never accepts tools.
+            return ConnectSnippets.fitnessLine(
+                contextLength: ConnectSnippets.appleFoundationContextLength,
+                agent: .notAgentReady(reason: "Text only — Apple Foundation Models has no tool support."))
         }
-        return ConnectSnippets.fitnessLine(contextLength: length)
+        let config = ModelStore.shared.directory(forHFModelID: modelID).appendingPathComponent("config.json")
+        let data = try? Data(contentsOf: config)
+        return ConnectSnippets.fitnessLine(
+            contextLength: ConnectSnippets.contextLength(configJSON: data),
+            agent: AgentReadinessFacts.state(hfModelID: modelID))
     }
 
     private func row(_ title: String, _ value: String) -> some View {

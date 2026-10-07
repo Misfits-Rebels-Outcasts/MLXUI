@@ -176,6 +176,38 @@ struct ServeAPITests {
         #expect(data[0]["created"] as? Int == 1_700_000_000)
     }
 
+    /// S2-4: every entry carries `context_length` — the same number the Connect sheet shows and the
+    /// pre-count enforces.
+    @Test func modelsCarriesContextLengthPerEntry() throws {
+        var env = environment(served: ["mlx-community/Qwen3-4B-4bit", ServedModels.appleFoundationID], afm: .ready)
+        env.modelContextLength = { id in id == ServedModels.appleFoundationID ? 8192 : 40_960 }
+        let response = respond("GET", "/v1/models", env: env)
+        let object = try #require(try JSONSerialization.jsonObject(with: response.body) as? [String: Any])
+        let data = try #require(object["data"] as? [[String: Any]])
+        #expect(data.count == 2)
+        for entry in data {
+            #expect(entry["context_length"] as? Int == (entry["id"] as? String == "apple-foundation" ? 8192 : 40_960))
+        }
+    }
+
+    /// Unknown stays unknown: the field is **omitted**, not zero — additive and honest.
+    @Test func modelsOmitsAnUnknownContextLength() throws {
+        let response = respond("GET", "/v1/models")           // the default lookup answers nil
+        let object = try #require(try JSONSerialization.jsonObject(with: response.body) as? [String: Any])
+        let data = try #require(object["data"] as? [[String: Any]])
+        #expect(data[0]["context_length"] == nil)
+        #expect(data[0].keys.contains("context_length") == false)
+        // …and the rest of the S1 shape is untouched (S1-2's test covers the values).
+        #expect(data[0]["object"] as? String == "model")
+    }
+
+    /// The live lookup's Apple Foundation Models answer is the measured window, and it needs no
+    /// disk or catalog to say so.
+    @Test func theLiveLookupKnowsAppleFoundation() {
+        #expect(ServeEnvironment.liveModelContextLength(ServedModels.appleFoundationID) == 8192)
+        #expect(ServeEnvironment.liveModelContextLength("not-a-model") == nil)
+    }
+
     @Test func anEmptyServedSetIsAnEmptyList() throws {
         let response = respond("GET", "/v1/models", env: environment(served: []))
         let object = try #require(try JSONSerialization.jsonObject(with: response.body) as? [String: Any])

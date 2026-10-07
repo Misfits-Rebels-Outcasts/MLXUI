@@ -16,13 +16,17 @@ import MLXLMCommon
 /// out is a **separate instance** from the one inside the pool's `ModelContainer`, so a generation
 /// and a pre-count never share an object.
 ///
-/// Known limits (implementer's call, pending owner confirmation): the cache is FIFO at four
-/// directories, and it is keyed on the path alone — re-downloading a model in place would need a
-/// relaunch (or four other models) before its tokenizer is re-read.
+/// Known limits (implementer's call, pending owner confirmation): the cache holds four directories,
+/// least-recently-used first (the same convention as `ResidentPool`), and it is keyed on the path
+/// alone — re-downloading a model in place would need a relaunch (or four other models) before its
+/// tokenizer is re-read. (S2-6 review: the first version popped `keys.first`, which in a Swift
+/// dictionary is *arbitrary*, not oldest — now genuinely LRU.)
 actor ServePromptCounter {
     nonisolated static let shared = ServePromptCounter()
 
     private var tokenizers: [String: any MLXLMCommon.Tokenizer] = [:]
+    /// Most-recently-used first; eviction pops the end.
+    private var recency: [String] = []
     private let capacity = 4
 
     /// Count the tokens the template renders for `messages`, with this request's tools and render
@@ -41,12 +45,22 @@ actor ServePromptCounter {
 
     private func tokenizer(for directory: URL) async -> (any MLXLMCommon.Tokenizer)? {
         let key = directory.standardizedFileURL.path
-        if let cached = tokenizers[key] { return cached }
+        if let cached = tokenizers[key] {
+            touch(key)
+            return cached
+        }
         guard let loaded = try? await HFTokenizerLoader().load(from: directory) else { return nil }
-        if tokenizers.count >= capacity, let oldest = tokenizers.keys.first {
-            tokenizers[oldest] = nil
+        if tokenizers.count >= capacity, let leastRecent = recency.last {
+            tokenizers[leastRecent] = nil
+            recency.removeLast()
         }
         tokenizers[key] = loaded
+        touch(key)
         return loaded
+    }
+
+    private func touch(_ key: String) {
+        recency.removeAll { $0 == key }
+        recency.insert(key, at: 0)
     }
 }

@@ -22,6 +22,10 @@ nonisolated struct ServeEnvironment: Sendable {
     /// S1-5c: the whole shared memory budget (`MemoryBudget.shared`). A served model larger than this
     /// is refused with a 503 rather than loaded to thrash.
     var memoryCapacityBytes: Int64 = MemoryBudget.shared.capacityBytes
+    /// S2-4: the context window `/v1/models` reports for a model id, or `nil` when the checkpoint
+    /// declares none. Injected because it reads `config.json`; the live value reads the same
+    /// `ModelContextWindow` the pre-count uses, and 8,192 for Apple Foundation Models.
+    var modelContextLength: @Sendable (String) -> Int? = { _ in nil }
     var now: @Sendable () -> Date = { Date() }
 
     /// The app's real environment: the served set from `served`, the live install markers, the
@@ -42,7 +46,21 @@ nonisolated struct ServeEnvironment: Sendable {
                     $0.kind == .llm && $0.hfModelId == id
                 }) else { return nil }
                 return mlxBackend(for: entry)
-            })
+            },
+            modelContextLength: { id in liveModelContextLength(id) })
+    }
+
+    /// S2-4: what `live()`'s `/v1/models` reports as a model's `context_length` — Apple Foundation
+    /// Models' measured 8,192, else the checkpoint's own `config.json` through S2-6's
+    /// `ModelContextWindow`. Split out so the `apple-foundation` answer is testable without a server
+    /// or a disk read (that branch returns before touching either).
+    static func liveModelContextLength(_ id: String) -> Int? {
+        if id == ServedModels.appleFoundationID { return ConnectSnippets.appleFoundationContextLength }
+        guard let entry = InstalledModelIndex.loadInstalled().entries.first(where: {
+            $0.kind == .llm && $0.hfModelId == id
+        }) else { return nil }
+        return ModelContextWindow.limit(configData: ModelContainerPool.configData(
+            directory: ModelStore.shared.directory(forHFModelID: entry.hfModelId)))
     }
 
     /// The backend for an installed MLX chat model. The directory is keyed by the **HF repo**
@@ -108,7 +126,8 @@ nonisolated enum ServeAPI {
             let ids = ServedModels.ids(served: environment.servedModelIDs(),
                                        installed: environment.installed(),
                                        appleFoundation: environment.appleFoundationReadiness())
-            return json(200, ModelsRoute.body(ids: ids, created: environment.created))
+            return json(200, ModelsRoute.body(ids: ids, created: environment.created,
+                                              contextLength: environment.modelContextLength))
         default:
             return error(ServeError(status: 404, message: "Unknown endpoint \(head.method) \(head.path).",
                                     code: "not_found"))

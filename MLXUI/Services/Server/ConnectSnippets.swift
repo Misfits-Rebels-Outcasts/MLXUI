@@ -80,11 +80,15 @@ nonisolated enum ConnectSnippets {
     }
 
     /// One honest line about a model's fitness (design §5 item 2): its context length when the
-    /// checkpoint's `config.json` says, and that S1 answers in plain text only.
-    static func fitnessLine(contextLength: Int?) -> String {
+    /// checkpoint's `config.json` says, plus its **Agent-ready state** (S2-4).
+    ///
+    /// S1's wording ended "It answers in plain text — tool calls aren't supported yet." S2-2 made
+    /// that false, so the second sentence is now `AgentReadiness.line(for:)` — one short line, and
+    /// for a model that isn't Agent-ready it is the plain-English reason.
+    static func fitnessLine(contextLength: Int?, agent: AgentReadiness.State) -> String {
         let context = contextLength.map { "Context length: \(formatted($0)) tokens." }
             ?? "Context length: not stated by this model's config."
-        return context + " It answers in plain text — tool calls aren't supported yet."
+        return context + " " + AgentReadiness.line(for: agent)
     }
 
     /// `max_position_embeddings` from a checkpoint's `config.json` (top level, or inside

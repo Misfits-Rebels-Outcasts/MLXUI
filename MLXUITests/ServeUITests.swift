@@ -302,9 +302,13 @@ struct ConnectSnippetsTests {
         #expect(length(#"{"text_config": {"max_position_embeddings": 131072}}"#) == 131072)
         #expect(length(#"{"hidden_size": 8}"#) == nil)
         #expect(length(nil) == nil)
-        #expect(ConnectSnippets.fitnessLine(contextLength: 40960).hasPrefix("Context length: 40,960 tokens."))
-        #expect(ConnectSnippets.fitnessLine(contextLength: nil).contains("not stated"))
-        #expect(ConnectSnippets.fitnessLine(contextLength: 8192).contains("plain text"))
+        // S2-4 replaced the "plain text only" half with the Agent-ready state.
+        #expect(ConnectSnippets.fitnessLine(contextLength: 40960, agent: .eligibleNotVerified)
+            .hasPrefix("Context length: 40,960 tokens."))
+        #expect(ConnectSnippets.fitnessLine(contextLength: nil, agent: .eligibleNotVerified)
+            .contains("not stated"))
+        #expect(ConnectSnippets.fitnessLine(contextLength: 8192, agent: .notAgentReady(reason: "Why."))
+            .hasSuffix("Why."))
     }
 
     @Test func theRequestLogLineHoldsMetadataOnly() {

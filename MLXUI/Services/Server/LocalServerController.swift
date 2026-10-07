@@ -94,6 +94,34 @@ enum ServeToggleVisibility {
     }
 }
 
+/// S2-4 — the app's own inputs to `AgentReadiness`, kept out of `Core/Agent/AgentReadiness.swift` so
+/// the criteria stay pure (no disk, no `MemoryBudget`, no catalog). The badge and the Connect sheet's
+/// line both read the facts here, through S2-6's `ModelContextWindow`, so a model can't be
+/// "Agent-ready" in one place and not in another.
+nonisolated enum AgentReadinessFacts {
+    /// The RAM the catalog recorded for this id — read from the **installed index**, which is where
+    /// `InstallManager` wrote the catalog's figure, so a surface without an `AppState` (the Connect
+    /// sheet) can still answer criterion (d). `nil` for a model the index doesn't know.
+    static func catalogRAMGB(hfModelID: String) -> Double? {
+        InstalledModelIndex.loadInstalled().entries.first { $0.hfModelId == hfModelID }?.ramGB
+    }
+
+    /// `catalogRAMGB` is passed by callers that already hold the catalog entry (the detail page);
+    /// when it is `nil` the installed index is asked instead.
+    static func state(hfModelID: String, architecture: String? = nil, catalogRAMGB: Double? = nil,
+                      budgetBytes: Int64 = MemoryBudget.shared.capacityBytes) -> AgentReadiness.State {
+        let config = ModelContainerPool.configData(
+            directory: ModelStore.shared.directory(forHFModelID: hfModelID))
+        let modelType = ModelContainerPool.modelTypeString(configData: config) ?? architecture ?? ""
+        return AgentReadiness.state(modelType: modelType,
+                                    contextLength: ModelContextWindow.limit(configData: config),
+                                    catalogRAMGB: catalogRAMGB ?? Self.catalogRAMGB(hfModelID: hfModelID) ?? 0,
+                                    configData: config,
+                                    budgetBytes: budgetBytes,
+                                    verification: AgentReadiness.verified[hfModelID])
+    }
+}
+
 /// Which models a Mac can actually serve, and what the user is told (S1-5c, owner rulings 2026-10-02).
 nonisolated enum ServeMemory {
     /// "Needs 24 GB RAM" — the same rule that already swaps Run for "Needs N GB RAM" on the detail
