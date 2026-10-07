@@ -101,9 +101,11 @@ nonisolated enum ConnectSnippets {
     /// * `limit` — `context` + `output`, both **required** by the schema when `limit` is present.
     ///   OpenCode compacts against `context` and puts `output` in `max_tokens`, so `context` is the
     ///   window S2-6's pre-count enforces: OpenCode compacts *before* our `400`.
-    /// * `reasoning` + `options.reasoningEffort` — only for a family whose template reads
-    ///   `enable_thinking` (S2-3). `reasoning: true` is what makes OpenCode offer the effort variants;
-    ///   `options.reasoningEffort` is what reaches the wire, via the SDK's `reasoning_effort`.
+    /// * `reasoning: true` — only for a family whose template reads `enable_thinking` (S2-3), and it
+    ///   is the **capability** flag alone (S2-5b): it makes OpenCode offer the effort variants; the
+    ///   user picks one when they want it. Nothing here asks for thinking — R30, and with
+    ///   `limit.output` covering reasoning *and* answer an unattended default can end `length`
+    ///   before the tool call.
     private static func openCode(base: String, model: ModelFacts) -> String {
         let id = jsonEscaped(model.modelID)
         var members = ["\"name\": \"\(id)\""]
@@ -113,8 +115,12 @@ nonisolated enum ConnectSnippets {
                 members.append("\"limit\": { \"context\": \(context), \"output\": \(serverDefaultMaxTokens) }")
             }
             if model.thinkingAvailable {
+                // S2-5b: the **capability** flag only. R30's "thinking is off unless asked" means no
+                // `options.reasoningEffort` here — a default effort would ask on every turn, and
+                // with `limit.output` covering reasoning *and* answer a long think can end `length`
+                // before the tool call. OpenCode shows the effort variants because of this flag; the
+                // user picks one when they want it (the readme's C2 row says how).
                 members.append("\"reasoning\": true")
-                members.append("\"options\": { \"reasoningEffort\": \"high\" }")
             }
         }
         // 10 spaces: inside `"models"` (6) → the model key (8) → its object.
@@ -150,7 +156,8 @@ nonisolated enum ConnectSnippets {
     ///   own autodetection ("required for Agent mode").
     /// * `contextLength` lives under `defaultCompletionOptions` in the reference.
     /// * Thinking goes through `requestOptions.extraBodyProperties`, which merges arbitrary keys into
-    ///   the HTTP body — `reasoning_effort` is our S2-3 wire name.
+    ///   the HTTP body — `reasoning_effort` is our S2-3 wire name. S2-5b ships it **commented out**
+    ///   (R30: off unless asked), with the one-line hint above it.
     private static func continueConfig(base: String, model: ModelFacts) -> String {
         var lines = [
             "# ~/.continue/config.yaml",
@@ -173,9 +180,12 @@ nonisolated enum ConnectSnippets {
                 lines.append("      contextLength: \(context)")
             }
             if model.thinkingAvailable {
-                lines.append("    requestOptions:")
-                lines.append("      extraBodyProperties:")
-                lines.append(#"        reasoning_effort: "high""#)
+                // S2-5b: commented out, not active — same reason as OpenCode's (R30). Uncommenting
+                // it turns thinking on for this model; until then the block never asks.
+                lines.append("    # Uncommenting this turns thinking on for this model:")
+                lines.append("    # requestOptions:")
+                lines.append("    #   extraBodyProperties:")
+                lines.append(#"    #     reasoning_effort: "high""#)
             }
         }
         return lines.joined(separator: "\n")

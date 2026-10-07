@@ -384,16 +384,17 @@ struct ConnectSnippetsTests {
         #expect(!yaml.contains("contextLength"))
     }
 
-    /// Thinking appears only for a family whose template reads `enable_thinking` (S2-3), and only
-    /// through the two keys that actually reach the wire.
-    @Test func theThinkingLinesAppearOnlyForThinkingFamilies() throws {
+    /// Thinking appears only for a family whose template reads `enable_thinking` (S2-3), and **never
+    /// as an active request** (S2-5b, R30): the OpenCode block only declares the capability, and
+    /// Continue's `reasoning_effort` line is a commented-out suggestion.
+    @Test func theThinkingLinesAppearOnlyForThinkingFamiliesAndNeverAsk() throws {
         let thinking = try openCodeModel(facts(.eligibleNotVerified, context: 40_960, thinking: true))
-        #expect(thinking["reasoning"] as? Bool == true)
-        #expect((thinking["options"] as? [String: Any])?["reasoningEffort"] as? String == "high")
+        #expect(thinking["reasoning"] as? Bool == true)          // the capability flag…
+        #expect(thinking["options"] == nil)                      // …and no effort is asked for
         let yamlThinking = ConnectSnippets.text(for: .continueDev, port: 1212,
                                                 model: facts(.eligibleNotVerified, context: 40_960, thinking: true))
-        #expect(yamlThinking.contains("extraBodyProperties:"))
-        #expect(yamlThinking.contains(#"reasoning_effort: "high""#))
+        #expect(yamlThinking.contains("# Uncommenting this turns thinking on for this model:"))
+        #expect(yamlThinking.contains(#"#     reasoning_effort: "high""#))
 
         for model in [try openCodeModel(facts(.eligibleNotVerified, context: 40_960, thinking: false)),
                       try openCodeModel(facts(.notAgentReady(reason: "x"), context: 40_960, thinking: true))] {
@@ -403,6 +404,31 @@ struct ConnectSnippetsTests {
         let yaml = ConnectSnippets.text(for: .continueDev, port: 1212,
                                         model: facts(.notAgentReady(reason: "x"), context: 40_960, thinking: true))
         #expect(!yaml.contains("reasoning_effort"))
+    }
+
+    /// S2-5b's rule, stated on its own: **no snippet asks for thinking.** Nothing in either app
+    /// block may enable it — the user opts in (R30), and a default effort can eat `limit.output`
+    /// before a tool call lands.
+    @Test func noSnippetAsksForThinkingByDefault() throws {
+        let states: [AgentReadiness.State] = [.agentReady, .eligibleNotVerified, .mayNotFit,
+                                              .notAgentReady(reason: "x")]
+        for state in states {
+            for thinking in [true, false] {
+                let model = try openCodeModel(facts(state, context: 40_960, thinking: thinking))
+                #expect(model["options"] == nil, "\(state) thinking=\(thinking)")
+                let text = ConnectSnippets.text(for: .openCode, port: 1212,
+                                                model: facts(state, context: 40_960, thinking: thinking))
+                #expect(!text.contains("reasoningEffort"), "\(state) thinking=\(thinking)")
+
+                let yaml = ConnectSnippets.text(for: .continueDev, port: 1212,
+                                                model: facts(state, context: 40_960, thinking: thinking))
+                // Any mention of the wire control is inside a YAML comment.
+                for line in yaml.split(separator: "\n") where line.contains("reasoning_effort") {
+                    #expect(line.trimmingCharacters(in: .whitespaces).hasPrefix("#"),
+                            "\(state) thinking=\(thinking): \(line)")
+                }
+            }
+        }
     }
 
     /// Every combination still produces something the harness could load: valid JSON for OpenCode,
