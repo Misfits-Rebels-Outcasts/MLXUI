@@ -176,21 +176,22 @@ struct AgentReadinessCriteriaTests {
         #expect(AgentReadiness.kvBytes(configData: data(#"{"num_hidden_layers":36,"hidden_size":4096}"#)) == nil)
     }
 
-    /// **The catalog, with no SV-6 rows** — the state the app ships in. Memory is judged **before**
-    /// the SV-6 row (S2-4b), so the models whose weights plus a 32k KV don't fit are `mayNotFit` even
-    /// though nobody has verified them, and the ones that fit are `eligibleNotVerified`. The two
-    /// Gemmas and gpt-oss are refused for their templates before either question is asked.
+    /// **The catalog as it ships** (S2-9): three models carry a recorded SV-6 pass and are
+    /// `agentReady`; memory is judged **before** the SV-6 row (S2-4b), so the models whose weights plus
+    /// a 32k KV don't fit are `mayNotFit` whether or not anyone verified them, and the rest of the
+    /// fit-but-unverified set is `eligibleNotVerified`. The two Gemmas and gpt-oss are refused for
+    /// their templates before either question is asked.
     @Test func theShippedTableJudgesMemoryBeforeVerification() {
         let expected: [(String, AgentReadiness.State)] = [
             ("prism-ml/Ternary-Bonsai-27B-mlx-2bit", .eligibleNotVerified),   // 8.44 + 2.07 = 10.51 ✅
-            ("mlx-community/Qwen3.5-9B-MLX-4bit", .eligibleNotVerified),      // 5.97 + 1.02 = 6.99 ✅
+            ("mlx-community/Qwen3.5-9B-MLX-4bit", .agentReady),               // 5.97 + 1.02 = 6.99 ✅ + SV-6
             ("lukaskremla/Qwen3.8-27B-3bit-MLX", .mayNotFit),                 // 12.72 + 2.07 = 14.79 ❌
             ("mlx-community/Qwen3.8-27B-4bit", .mayNotFit),                   // 16.08 + 2.07 = 18.15 ❌
             ("mlx-community/gemma-3-1b-it-qat-4bit",
              .notAgentReady(reason: "This model's template has no tool support.")),
-            ("mlx-community/Ministral-3-3B-Instruct-2512-4bit", .eligibleNotVerified),  // 1.69 + 3.25 ✅
-            ("mlx-community/Qwen3-8B-4bit", .eligibleNotVerified),            // 4.50 + 4.50 = 9.00 ✅
-            ("mlx-community/Meta-Llama-3.1-8B-Instruct-4bit", .eligibleNotVerified),    // 4.50 + 4.00 ✅
+            ("mlx-community/Ministral-3-3B-Instruct-2512-4bit", .agentReady),  // 1.69 + 3.25 ✅ + SV-6
+            ("mlx-community/Qwen3-8B-4bit", .agentReady),                      // 4.50 + 4.50 ✅ + SV-6
+            ("mlx-community/Meta-Llama-3.1-8B-Instruct-4bit", .eligibleNotVerified),    // 4.50 + 4.00 ✅, no row
             ("mlx-community/gemma-2-9b-it-4bit",
              .notAgentReady(reason: "This model's template has no tool support.")),
             ("mlx-community/Qwen2.5-14B-Instruct-4bit", .mayNotFit),          // 7.88 + 6.00 = 13.88 ❌
@@ -198,16 +199,48 @@ struct AgentReadinessCriteriaTests {
              .notAgentReady(reason: "This model's template has no tool support.")),
             ("mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit", .mayNotFit),      // 13.50 + 5.00 ❌
         ]
-        #expect(AgentReadiness.verified.isEmpty)          // the table ships empty: never inferred
         #expect(Self.catalog.count == expected.count)
         for (id, want) in expected {
             let fixture = try? #require(Self.catalog.first { $0.id == id })
+            // The **real** table supplies the row, so this test tracks the shipped rows rather than a
+            // fixture's idea of them (S2-9).
             let state = AgentReadiness.state(modelType: fixture?.modelType ?? "", contextLength: nil,
                                              weightsGB: fixture?.weightsGB ?? 0,
                                              configData: fixture.map { data($0.config) },
-                                             budgetBytes: Self.budget)
+                                             budgetBytes: Self.budget,
+                                             verification: AgentReadiness.verified[id])
             #expect(state == want, "\(id): \(state)")
         }
+    }
+
+    /// **S2-9** — the three SV-6 passes, and the deliberate absence. A row is what turns a fitting
+    /// model from `eligibleNotVerified` into `agentReady`; Llama has none, so it stays unverified even
+    /// though its server path works.
+    @Test func theRecordedSV6PassesAreTheThreeModelsThatPassed() throws {
+        #expect(AgentReadiness.verified.count == 3)
+        #expect(Set(AgentReadiness.verified.keys) == [
+            "mlx-community/Qwen3-8B-4bit",
+            "mlx-community/Ministral-3-3B-Instruct-2512-4bit",
+            "mlx-community/Qwen3.5-9B-MLX-4bit",
+        ])
+        for verification in AgentReadiness.verified.values {
+            #expect(verification.journal.contains("2026-417"))
+            #expect(verification.date.contains("2026-10-07"))
+        }
+
+        func state(_ id: String) throws -> AgentReadiness.State {
+            let fixture = try #require(Self.catalog.first { $0.id == id })
+            return AgentReadiness.state(modelType: fixture.modelType, contextLength: nil,
+                                        weightsGB: fixture.weightsGB, configData: data(fixture.config),
+                                        budgetBytes: Self.budget,
+                                        verification: AgentReadiness.verified[id])
+        }
+        #expect(try state("mlx-community/Qwen3-8B-4bit") == .agentReady)
+        #expect(try state("mlx-community/Ministral-3-3B-Instruct-2512-4bit") == .agentReady)
+        #expect(try state("mlx-community/Qwen3.5-9B-MLX-4bit") == .agentReady)
+        // Llama-3.1-8B: no row, so no claim — it was the SV-6 run that found S2-7 and S2-8.
+        #expect(AgentReadiness.verified["mlx-community/Meta-Llama-3.1-8B-Instruct-4bit"] == nil)
+        #expect(try state("mlx-community/Meta-Llama-3.1-8B-Instruct-4bit") == .eligibleNotVerified)
     }
 
     /// S2-4b's two named cases on the 18 GiB fixture, spelled out: the model the owner asked about

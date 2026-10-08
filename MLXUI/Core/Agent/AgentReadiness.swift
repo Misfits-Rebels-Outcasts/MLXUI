@@ -11,7 +11,7 @@ import Foundation
 /// | a | its family's template renders tools | `ToolCallFormatTable.acceptsTools` (S2-1) |
 /// | b | its context window is ≥ 32k | `ModelContextWindow` (S2-6) |
 /// | d | 32k fits this Mac's memory | `kvBytes` + the catalog's **`downloadSizeGB`** ≤ the budget |
-/// | c | a **recorded** SV-6 pass | `verified` — ships empty; a later commit adds rows |
+/// | c | a **recorded** SV-6 pass | `verified` — hand-entered rows only; never inferred |
 ///
 /// **Checked in that order (S2-4b, owner ruling).** Memory comes **before** the SV-6 row, so a model
 /// that passes a+b but doesn't fit is `mayNotFit` whether or not anyone verified it; a verified model
@@ -51,9 +51,20 @@ nonisolated enum AgentReadiness {
         var journal: String
     }
 
-    /// The bundled SV-6 table. **Ships empty** (2026-10-07): no SV-6 has been run yet, and a pass is
-    /// never inferred from a criterion — only the owner running the harness makes a row.
-    static let verified: [String: Verification] = [:]
+    /// The bundled SV-6 table: **only recorded passes**, entered by hand after the owner ran the
+    /// harness (`RSI/evals/smoke-checklist.md`, row SV-6). A pass is never inferred from a criterion —
+    /// three models passed on 2026-10-07/08 and are here; `Meta-Llama-3.1-8B-Instruct-4bit`
+    /// deliberately is **not** (its server path passes after S2-7/S2-8, but the model wrote before
+    /// reading — see journal `2026-417`).
+    static let verified: [String: Verification] = [
+        "mlx-community/Qwen3-8B-4bit": Verification(
+            hfModelID: "mlx-community/Qwen3-8B-4bit", date: "2026-10-07/08", journal: "2026-417 · SV-6"),
+        "mlx-community/Ministral-3-3B-Instruct-2512-4bit": Verification(
+            hfModelID: "mlx-community/Ministral-3-3B-Instruct-2512-4bit", date: "2026-10-07/08",
+            journal: "2026-417 · SV-6"),
+        "mlx-community/Qwen3.5-9B-MLX-4bit": Verification(
+            hfModelID: "mlx-community/Qwen3.5-9B-MLX-4bit", date: "2026-10-07/08", journal: "2026-417 · SV-6"),
+    ]
 
     // MARK: - The criteria
 
