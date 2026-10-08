@@ -23,6 +23,13 @@ nonisolated enum ResponsesRoute {
         // decode are the same note in the same field (R39 #1).
         if decoded.droppedHostedTools { tracker.toolsIgnored = true }
 
+        guard !prepared.request.stream else {
+            return ServePipeline.stream(prepared,
+                                        encoder: OpenAIResponsesStreamEncoder(
+                                            id: OpenAIResponsesDialect.makeID("resp"), model: prepared.request.model,
+                                            createdAt: Int(environment.now().timeIntervalSince1970)),
+                                        tracker: tracker, environment: environment)
+        }
         let collected: ServeCollected
         switch await ServePipeline.collect(prepared, tracker: tracker, environment: environment) {
         case .failure(let failure): return tracker.fail(failure)

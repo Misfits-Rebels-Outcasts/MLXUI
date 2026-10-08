@@ -44,9 +44,10 @@ nonisolated enum OpenAIResponsesDialect {
         guard let model = object["model"] as? String, !model.isEmpty else {
             throw invalid("'model' is required.", code: "missing_model", param: "model")
         }
-        if let stream = object["stream"] {
-            guard let flag = stream as? Bool else { throw invalid("'stream' must be true or false.", code: "invalid_stream", param: "stream") }
-            if flag { throw invalid("Streaming arrives in S3-3b; send stream: false for now.", code: "streaming_not_supported", param: "stream") }
+        var stream = false
+        if let value = object["stream"], !(value is NSNull) {
+            guard let flag = value as? Bool else { throw invalid("'stream' must be true or false.", code: "invalid_stream", param: "stream") }
+            stream = flag
         }
         if let previous = object["previous_response_id"], !(previous is NSNull) {
             throw invalid("'previous_response_id' is not supported yet.", code: "previous_response_id_not_supported",
@@ -66,6 +67,7 @@ nonisolated enum OpenAIResponsesDialect {
         }
 
         var request = ServeRequest(model: model, messages: ServeMessageAssembly.mergingAdjacentRoles(messages))
+        request.stream = stream
         let tools = try decodeTools(object["tools"])
         request.tools = tools.specs
         request.toolsRequested = !tools.specs.isEmpty
@@ -326,15 +328,23 @@ nonisolated enum OpenAIResponsesDialect {
                            "call_id": call.id ?? OpenAIChatDialect.makeToolCallID(),
                            "name": call.name, "arguments": call.argumentsJSON])
         }
-        var body: [String: Any] = [
+        let body = responseObject(id: id, createdAt: createdAt, model: model, incomplete: incomplete,
+                                  output: output, usage: usageObject(collected.usage))
+        return (try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
+    }
+
+    /// The `response` object, whole: the body of a non-streaming reply and the payload of
+    /// `response.completed` / `response.incomplete` (S3-3b), so the two cannot drift. `usage: nil` is the
+    /// in-progress response of `response.created`.
+    static func responseObject(id: String, createdAt: Int, model: String, incomplete: Bool = false,
+                               output: [[String: Any]], usage: [String: Any]?, status: String? = nil) -> [String: Any] {
+        [
             "id": id, "object": "response", "created_at": createdAt, "model": model,
-            "status": incomplete ? "incomplete" : "completed",
+            "status": status ?? (usage == nil ? "in_progress" : (incomplete ? "incomplete" : "completed")),
             "incomplete_details": incomplete ? ["reason": "max_output_tokens"] : NSNull(),
             "error": NSNull(), "instructions": NSNull(), "metadata": [String: Any](),
             "parallel_tool_calls": true, "tool_choice": "auto", "tools": [Any](),
-            "output": output, "usage": usageObject(collected.usage)]
-        body["output"] = output
-        return (try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
+            "output": output, "usage": usage ?? NSNull()]
     }
 
     /// `input_tokens` is the whole prompt; `input_tokens_details.cached_tokens` is the part the prompt cache

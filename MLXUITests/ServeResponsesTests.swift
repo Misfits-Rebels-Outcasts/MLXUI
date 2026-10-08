@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import MLXUI
 
-// S3-3 — `POST /v1/responses` (non-streaming; no store, no streaming yet).
+// S3-3 / S3-3b — `POST /v1/responses`, non-streaming and streaming (no store yet).
 
 private let model = "mlx-community/Qwen3-4B-4bit"
 
@@ -188,9 +188,9 @@ struct ResponsesDecodeTests {
         #expect(decoded.request.messages == [ServeMessage(role: .user, text: "x")])
     }
 
-    @Test func streamAndPreviousResponseIdAreRefusedForNow() {
-        let stream = refused(#""input":"x","stream":true"#)
-        #expect(stream?.status == 400 && stream?.message.contains("S3-3b") == true)
+    @Test func previousResponseIdIsRefusedForNowAndStreamIsAccepted() throws {
+        #expect(try decode(#""input":"x","stream":true"#).request.stream)
+        #expect(refused(#""input":"x","stream":"yes""#)?.status == 400)
         let previous = refused(#""input":"x","previous_response_id":"resp_1""#)
         #expect(previous?.status == 400 && previous?.message.contains("not supported yet") == true)
         #expect(refused(#""input":"x","previous_response_id":null,"stream":false"#) == nil)
@@ -393,8 +393,6 @@ struct ResponsesRouteTests {
         _ = await queue.reserve(model: model)
         let busy = try #require(await send(req(#""input":"x""#), env: environment(MessagesBackend(), queue: queue)))
         #expect(busy.status == 503 && busy.headers["Retry-After"] == "2")
-        let streaming = try #require(await send(req(#""input":"x","stream":true"#), env: environment(MessagesBackend())))
-        #expect(streaming.status == 400)
     }
 
     @Test func droppedUnknownItemsAreCountedInTheLogMetadata() async throws {
@@ -432,5 +430,238 @@ struct ResponsesRouteTests {
         let seen = try #require(backend.generated.first)
         #expect(seen.messages == [ServeMessage(role: .system, text: "You are Codex."), ServeMessage(role: .user, text: "fix it")])
         #expect(seen.tools.map(\.name) == ["exec_command"] && seen.reasoning == nil)
+    }
+}
+
+
+// MARK: - Streaming (S3-3b)
+
+private struct RSEvent {
+    let name: String
+    let json: [String: Any]
+    var index: Int? { json["output_index"] as? Int }
+    /// `name[@output_index]`: a whole sequence reads at a glance.
+    var summary: String { index.map { "\(name)@\($0)" } ?? name }
+}
+
+private func parseResponsesSSE(_ text: String) -> [RSEvent] {
+    text.components(separatedBy: "\n\n").filter { !$0.isEmpty && !$0.hasPrefix(":") }.compactMap { chunk in
+        let lines = chunk.components(separatedBy: "\n")
+        guard let name = lines.first(where: { $0.hasPrefix("event: ") })?.dropFirst(7),
+              let data = lines.first(where: { $0.hasPrefix("data: ") })?.dropFirst(6),
+              let json = object(Data(data.utf8)) else { return nil }
+        return RSEvent(name: String(name), json: json)
+    }
+}
+
+private func streamRun(_ events: [ServeEvent], backend: ServeBackend? = nil, keepAlive: Double = 1.0)
+    async -> (status: Int?, headers: [String: String], events: [RSEvent], text: String) {
+    let body = Data(req(#""input":"hi","stream":true"#).utf8)
+    let head = ServeRequestHead(method: "POST", path: "/v1/responses", host: "127.0.0.1:1212", origin: nil,
+                                transferEncoding: nil, contentLength: String(body.count), userAgent: nil)
+    var env = environment(backend ?? MessagesBackend(events: events))
+    env.keepAliveSeconds = keepAlive
+    guard case .stream(let status, let headers, let bytes) = await ServeAPI.handle(
+        head: head, guard: RequestGuard(port: 1212), environment: env, body: { body }) else { return (nil, [:], [], "") }
+    var all: [UInt8] = []
+    for await chunk in bytes { all += chunk }
+    let text = String(decoding: all, as: UTF8.self)
+    return (status, headers, parseResponsesSSE(text), text)
+}
+
+private func tokens(_ prompt: Int, _ completion: Int, cached: Int = 0) -> ServeEvent {
+    .usage(ServeUsage(promptTokens: prompt, completionTokens: completion, cachedTokens: cached))
+}
+
+private func fcall(_ index: Int, id: String?, name: String? = nil, args: String? = nil) -> ServeEvent {
+    .toolCallDelta(ServeToolCallDelta(index: index, id: id, name: name, argumentsFragment: args))
+}
+
+/// What every stream must satisfy, whatever it contains.
+private func expectWellFormed(_ events: [RSEvent], sourceLocation: SourceLocation = #_sourceLocation) {
+    #expect(events.first?.name == "response.created", sourceLocation: sourceLocation)            // the SDK needs it first
+    #expect(events.allSatisfy { $0.json["type"] as? String == $0.name }, sourceLocation: sourceLocation)
+    #expect(events.map { $0.json["sequence_number"] as? Int } == Array(0..<events.count).map { Optional($0) },
+            sourceLocation: sourceLocation)                                                      // running, from 0, no gaps
+}
+
+struct ResponsesStreamTests {
+    @Test func textOnly() async throws {
+        let run = await streamRun([.textDelta("Hel"), .textDelta("lo"), tokens(10, 2), .finish(.stop)])
+        #expect(run.status == 200 && run.headers["Content-Type"] == "text/event-stream")
+        #expect(run.events.map(\.summary) == [
+            "response.created", "response.in_progress",
+            "response.output_item.added@0", "response.content_part.added@0",
+            "response.output_text.delta@0", "response.output_text.delta@0",
+            "response.output_text.done@0", "response.content_part.done@0", "response.output_item.done@0",
+            "response.completed"])
+        expectWellFormed(run.events)
+        let created = try #require(run.events[0].json["response"] as? [String: Any])
+        #expect(created["status"] as? String == "in_progress" && (created["output"] as? [Any])?.isEmpty == true)
+        #expect((created["id"] as? String)?.hasPrefix("resp_") == true)
+        let added = try #require(run.events[2].json["item"] as? [String: Any])
+        #expect(added["type"] as? String == "message" && added["status"] as? String == "in_progress")
+        let deltas = run.events.filter { $0.name == "response.output_text.delta" }
+        #expect(deltas.compactMap { $0.json["delta"] as? String }.joined() == "Hello")
+        #expect(deltas.allSatisfy { $0.json["content_index"] as? Int == 0 && $0.json["item_id"] as? String == added["id"] as? String })
+        let done = try #require(run.events[8].json["item"] as? [String: Any])
+        #expect(done["id"] as? String == added["id"] as? String && done["status"] as? String == "completed")
+        let part = try #require((done["content"] as? [[String: Any]])?.first)
+        #expect(part["text"] as? String == "Hello" && part["type"] as? String == "output_text")
+    }
+
+    @Test func theFinalResponseCarriesTheWholeOutputAndUsage() async throws {
+        let run = await streamRun([.reasoningDelta("plan"), .textDelta("Hi"), fcall(0, id: "call_1", name: "f", args: #"{"a":1}"#),
+                                   tokens(1000, 7, cached: 900), .finish(.toolCalls)])
+        let response = try #require(run.events.last?.json["response"] as? [String: Any])
+        #expect(run.events.last?.name == "response.completed" && response["status"] as? String == "completed")
+        #expect(response["id"] as? String == (run.events[0].json["response"] as? [String: Any])?["id"] as? String)
+        let finalOutput = try #require(response["output"] as? [[String: Any]])
+        let doneItems = run.events.filter { $0.name == "response.output_item.done" }.compactMap { $0.json["item"] as? [String: Any] }
+        #expect(finalOutput.map { $0["id"] as? String } == doneItems.map { $0["id"] as? String })
+        #expect(finalOutput.map { $0["type"] as? String } == ["reasoning", "message", "function_call"])
+        let usage = try #require(response["usage"] as? [String: Any])
+        #expect(usage["input_tokens"] as? Int == 1000 && usage["output_tokens"] as? Int == 7 && usage["total_tokens"] as? Int == 1007)
+        #expect((usage["input_tokens_details"] as? [String: Int]) == ["cached_tokens": 900])
+        // A miss still carries the details object (R40).
+        let miss = await streamRun([.textDelta("x"), tokens(5, 1), .finish(.stop)])
+        let missUsage = try #require((miss.events.last?.json["response"] as? [String: Any])?["usage"] as? [String: Any])
+        #expect((missUsage["input_tokens_details"] as? [String: Int]) == ["cached_tokens": 0])
+    }
+
+    @Test func reasoningThenText() async throws {
+        let run = await streamRun([.reasoningDelta("pl"), .reasoningDelta("an"), .textDelta("Hi"), tokens(5, 4), .finish(.stop)])
+        #expect(run.events.map(\.summary) == [
+            "response.created", "response.in_progress",
+            "response.output_item.added@0", "response.reasoning_text.delta@0", "response.reasoning_text.delta@0",
+            "response.reasoning_text.done@0", "response.output_item.done@0",
+            "response.output_item.added@1", "response.content_part.added@1", "response.output_text.delta@1",
+            "response.output_text.done@1", "response.content_part.done@1", "response.output_item.done@1",
+            "response.completed"])
+        expectWellFormed(run.events)
+        let delta = try #require(run.events.first { $0.name == "response.reasoning_text.delta" }?.json)
+        #expect(delta["content_index"] as? Int == 0 && delta["delta"] as? String == "pl")      // Codex needs content_index
+        let done = try #require(run.events[6].json["item"] as? [String: Any])
+        #expect(done["type"] as? String == "reasoning" && (done["summary"] as? [Any])?.isEmpty == true)
+        #expect(((done["content"] as? [[String: Any]])?.first)?["text"] as? String == "plan")
+    }
+
+    @Test func textThenFunctionCall() async throws {
+        let run = await streamRun([.textDelta("Looking."), fcall(0, id: "call_1", name: "get_weather", args: #"{"city":"Oslo"}"#),
+                                   tokens(8, 9), .finish(.toolCalls)])
+        #expect(run.events.map(\.summary) == [
+            "response.created", "response.in_progress",
+            "response.output_item.added@0", "response.content_part.added@0", "response.output_text.delta@0",
+            "response.output_text.done@0", "response.content_part.done@0", "response.output_item.done@0",
+            "response.output_item.added@1", "response.function_call_arguments.delta@1",
+            "response.function_call_arguments.done@1", "response.output_item.done@1",
+            "response.completed"])
+        expectWellFormed(run.events)
+        let added = try #require(run.events[8].json["item"] as? [String: Any])
+        #expect(added["type"] as? String == "function_call" && added["call_id"] as? String == "call_1")
+        #expect(added["name"] as? String == "get_weather" && added["arguments"] as? String == "")
+        let delta = try #require(run.events[9].json)
+        #expect(delta["item_id"] as? String == added["id"] as? String && delta["delta"] as? String == #"{"city":"Oslo"}"#)
+        let done = try #require(run.events[11].json["item"] as? [String: Any])
+        #expect(done["id"] as? String == added["id"] as? String && done["arguments"] as? String == #"{"city":"Oslo"}"#)
+        #expect(done["call_id"] as? String == "call_1" && done["status"] as? String == "completed")
+    }
+
+    @Test func functionCallOnlyStartsAtIndexZero() async throws {
+        let run = await streamRun([fcall(0, id: "call_1", name: "f", args: "{}"), tokens(3, 4), .finish(.toolCalls)])
+        #expect(run.events.map(\.summary) == [
+            "response.created", "response.in_progress", "response.output_item.added@0",
+            "response.function_call_arguments.delta@0", "response.function_call_arguments.done@0",
+            "response.output_item.done@0", "response.completed"])
+        expectWellFormed(run.events)
+    }
+
+    @Test func twoFunctionCallsAreTwoItemsWithRunningIndexes() async throws {
+        let run = await streamRun([fcall(0, id: "call_a", name: "f", args: #"{"a":1}"#),
+                                   fcall(1, id: "call_b", name: "g", args: #"{"b":2}"#), tokens(3, 8), .finish(.toolCalls)])
+        #expect(run.events.map(\.summary) == [
+            "response.created", "response.in_progress",
+            "response.output_item.added@0", "response.function_call_arguments.delta@0",
+            "response.function_call_arguments.done@0", "response.output_item.done@0",
+            "response.output_item.added@1", "response.function_call_arguments.delta@1",
+            "response.function_call_arguments.done@1", "response.output_item.done@1",
+            "response.completed"])
+        expectWellFormed(run.events)
+        let ids = run.events.filter { $0.name == "response.output_item.done" }.compactMap { ($0.json["item"] as? [String: Any])?["call_id"] as? String }
+        #expect(ids == ["call_a", "call_b"])
+        let itemIDs = run.events.filter { $0.name == "response.output_item.added" }.compactMap { ($0.json["item"] as? [String: Any])?["id"] as? String }
+        #expect(Set(itemIDs).count == 2)
+    }
+
+    @Test func aContinuationFragmentStaysInTheOpenCall() async throws {
+        let run = await streamRun([fcall(0, id: "call_a", name: "f", args: #"{"a":"#), fcall(0, id: nil, args: #"1}"#),
+                                   tokens(3, 8), .finish(.toolCalls)])
+        #expect(run.events.filter { $0.name == "response.output_item.added" }.count == 1)
+        let done = try #require(run.events.first { $0.name == "response.output_item.done" }?.json["item"] as? [String: Any])
+        #expect(done["arguments"] as? String == #"{"a":1}"#)
+    }
+
+    /// Codex treats `response.incomplete` as an error unless the reason is `interrupted` (journal 2026-433);
+    /// the documented event is still the right one for a length stop.
+    @Test func lengthEndsWithResponseIncomplete() async throws {
+        let run = await streamRun([.textDelta("cut"), tokens(5, 4096), .finish(.length)])
+        #expect(run.events.last?.name == "response.incomplete")
+        expectWellFormed(run.events)
+        let response = try #require(run.events.last?.json["response"] as? [String: Any])
+        #expect(response["status"] as? String == "incomplete")
+        #expect((response["incomplete_details"] as? [String: String])?["reason"] == "max_output_tokens")
+        #expect(!run.text.contains("response.completed"))
+    }
+
+    @Test func anEmptyReplyIsOneEmptyMessage() async throws {
+        let run = await streamRun([tokens(4, 0), .finish(.stop)])
+        let output = try #require((run.events.last?.json["response"] as? [String: Any])?["output"] as? [[String: Any]])
+        #expect(output.count == 1 && output[0]["type"] as? String == "message")
+        expectWellFormed(run.events)
+    }
+
+    /// Codex ignores a bare `error` event and fails the turn on `response.failed`; after it, nothing.
+    @Test func aMidStreamErrorIsResponseFailedAndNothingAfter() async throws {
+        let run = await streamRun([.textDelta("par"), .error(ServeError(status: 500, message: "The model failed to generate a reply.",
+                                                                          type: "server_error", code: "generation_failed"))])
+        #expect(run.events.map(\.name) == ["response.created", "response.in_progress", "response.output_item.added",
+                                           "response.content_part.added", "response.output_text.delta", "response.failed"])
+        expectWellFormed(run.events)
+        let response = try #require(run.events.last?.json["response"] as? [String: Any])
+        #expect(response["status"] as? String == "failed")
+        let error = try #require(response["error"] as? [String: String])
+        #expect(error["code"] == "generation_failed" && error["message"] == "The model failed to generate a reply.")
+        #expect(!run.text.contains("response.completed") && !run.text.contains("response.incomplete"))
+        #expect(!run.text.contains("event: error"))
+    }
+
+    @Test func aFailureBeforeAnyOutputStillOpensWithResponseCreated() async throws {
+        let run = await streamRun([.error(ServeError(status: 500, message: "boom", type: "server_error", code: "generation_failed"))])
+        #expect(run.events.map(\.name) == ["response.created", "response.in_progress", "response.failed"])
+        expectWellFormed(run.events)
+    }
+
+    @Test func aFailureBeforeTheHeadIsTheJSONError() async throws {
+        let body = Data(req(#""input":"x","stream":true"#).replacingOccurrences(of: model, with: "nope").utf8)
+        let head = ServeRequestHead(method: "POST", path: "/v1/responses", host: "127.0.0.1:1212", origin: nil,
+                                    transferEncoding: nil, contentLength: String(body.count), userAgent: nil)
+        guard case .full(let response) = await ServeAPI.handle(head: head, guard: RequestGuard(port: 1212),
+                                                                environment: environment(MessagesBackend()), body: { body }) else {
+            Issue.record("expected a whole response, not a stream"); return
+        }
+        #expect(response.status == 404 && (object(response.body)?["error"] as? [String: Any])?["code"] as? String == "model_not_found")
+    }
+
+    /// An SSE comment, never an event: the OpenAI SDK needs `response.created` first. (Codex's idle timer is
+    /// reset only by a parsed event; its default is 300 s — journal 2026-433.)
+    @Test func keepAliveIsAnSSECommentWrittenWhileTheModelWorks() async throws {
+        let encoder = OpenAIResponsesStreamEncoder(id: "resp_x", model: "m", createdAt: 1)
+        #expect(String(decoding: encoder.keepAlive, as: UTF8.self) == ": keep-alive\n\n")
+
+        let slow = FakeBackend([.wait(0.45), .text("late"), .usage(prompt: 2, completion: 1), .finish(.stop)], modelType: "qwen3")
+        let run = await streamRun([], backend: slow, keepAlive: 0.1)
+        #expect(run.text.hasPrefix(": keep-alive\n\n"))
+        #expect(run.events.first?.name == "response.created" && run.events.last?.name == "response.completed")
+        expectWellFormed(run.events)
     }
 }
