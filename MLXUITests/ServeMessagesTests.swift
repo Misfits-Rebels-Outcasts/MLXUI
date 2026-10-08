@@ -44,7 +44,7 @@ nonisolated final class MessagesBackend: ServeBackend, @unchecked Sendable {
 }
 
 private func environment(_ backend: ServeBackend?, queue: ServeQueue = ServeQueue(),
-                         log: RequestLog = RequestLog()) -> ServeEnvironment {
+                         log: RequestLog = RequestLog(), keepAlive: Double = 1.0) -> ServeEnvironment {
     ServeEnvironment(
         servedModelIDs: { [model] },
         installed: { InstalledModelIndex(entries: [
@@ -52,7 +52,7 @@ private func environment(_ backend: ServeBackend?, queue: ServeQueue = ServeQueu
         appleFoundationReadiness: { nil },
         created: 1_700_000_000,
         backendFor: { $0 == model ? backend : nil },
-        queue: queue, requestLog: log)
+        queue: queue, requestLog: log, keepAliveSeconds: keepAlive)
 }
 
 private func send(_ json: String, path: String = "/v1/messages", method: String = "POST",
@@ -329,17 +329,6 @@ struct AnthropicMessagesRouteTests {
         #expect(backend.generated.first?.tools.map(\.name) == ["get_weather"])        // the gate let them through
     }
 
-    @Test func streamTrueIsAnAnthropicShaped400ForNow() async throws {
-        let backend = MessagesBackend()
-        let response = try #require(await send(request(#","stream":true"#), env: environment(backend)))
-        #expect(response.status == 400)
-        let error = try #require(object(response.body)?["error"] as? [String: Any])
-        #expect(object(response.body)?["type"] as? String == "error")
-        #expect(error["type"] as? String == "invalid_request_error")
-        #expect((error["message"] as? String)?.contains("S3-2b") == true)
-        #expect(backend.generated.isEmpty)
-    }
-
     @Test func errorsKeepOurStatusesInAnthropicsShape() async throws {
         let missing = try #require(await send(request().replacingOccurrences(of: model, with: "nope"), env: environment(MessagesBackend())))
         #expect(missing.status == 404)
@@ -470,5 +459,190 @@ struct AnthropicGuardRenderingTests {
         // them, and the route answers regardless (P1).
         let response = try #require(await send(request(), env: environment(MessagesBackend())))
         #expect(response.status == 200)
+    }
+}
+
+
+// MARK: - Streaming (S3-2b)
+
+/// One SSE event of a stream: its `event:` name and decoded `data:` JSON.
+private struct SSEEvent {
+    let name: String
+    let json: [String: Any]
+    /// `type[:index][:kind]` — enough to read a whole sequence at a glance.
+    var summary: String {
+        var parts = [name]
+        if let index = json["index"] as? Int { parts.append(String(index)) }
+        if let kind = (json["delta"] as? [String: Any])?["type"] as? String ?? (json["content_block"] as? [String: Any])?["type"] as? String {
+            parts.append(kind)
+        }
+        return parts.joined(separator: ":")
+    }
+}
+
+private func parseSSE(_ text: String) -> [SSEEvent] {
+    text.components(separatedBy: "\n\n").filter { !$0.isEmpty }.compactMap { chunk in
+        let lines = chunk.components(separatedBy: "\n")
+        guard let name = lines.first(where: { $0.hasPrefix("event: ") })?.dropFirst(7),
+              let data = lines.first(where: { $0.hasPrefix("data: ") })?.dropFirst(6),
+              let json = object(Data(data.utf8)) else { return nil }
+        return SSEEvent(name: String(name), json: json)
+    }
+}
+
+private func stream(_ events: [ServeEvent], _ extra: String = #","stream":true"#, backend: ServeBackend? = nil,
+                    keepAlive: Double = 1.0) async -> (head: (status: Int, headers: [String: String])?, events: [SSEEvent], text: String) {
+    let body = Data(request(extra).utf8)
+    let head = ServeRequestHead(method: "POST", path: "/v1/messages", host: "127.0.0.1:1212", origin: nil,
+                                transferEncoding: nil, contentLength: String(body.count), userAgent: nil)
+    let env = environment(backend ?? MessagesBackend(events: events), keepAlive: keepAlive)
+    guard case .stream(let status, let headers, let bytes) = await ServeAPI.handle(
+        head: head, guard: RequestGuard(port: 1212), environment: env, body: { body }) else { return (nil, [], "") }
+    var all: [UInt8] = []
+    for await chunk in bytes { all += chunk }
+    let text = String(decoding: all, as: UTF8.self)
+    return ((status, headers), parseSSE(text), text)
+}
+
+private func usage(_ prompt: Int, _ completion: Int, cached: Int = 0) -> ServeEvent {
+    .usage(ServeUsage(promptTokens: prompt, completionTokens: completion, cachedTokens: cached))
+}
+
+private func call(_ index: Int, id: String?, name: String? = nil, args: String? = nil) -> ServeEvent {
+    .toolCallDelta(ServeToolCallDelta(index: index, id: id, name: name, argumentsFragment: args))
+}
+
+struct AnthropicStreamTests {
+    @Test func textOnly() async throws {
+        let run = await stream([.textDelta("Hel"), .textDelta("lo"), usage(10, 2), .finish(.stop)])
+        #expect(run.head?.status == 200 && run.head?.headers["Content-Type"] == "text/event-stream")
+        #expect(run.events.map(\.summary) == [
+            "message_start", "content_block_start:0:text", "content_block_delta:0:text_delta",
+            "content_block_delta:0:text_delta", "content_block_stop:0", "message_delta", "message_stop"])
+        let start = try #require(run.events[0].json["message"] as? [String: Any])
+        #expect(start["role"] as? String == "assistant" && (start["content"] as? [Any])?.isEmpty == true)
+        #expect(start["stop_reason"] is NSNull && (start["id"] as? String)?.hasPrefix("msg_") == true)
+        #expect(run.events[1].json["content_block"] as? [String: String] == ["type": "text", "text": ""])
+        let text = run.events.compactMap { ($0.json["delta"] as? [String: Any])?["text"] as? String }.joined()
+        #expect(text == "Hello")
+        let delta = run.events[5].json
+        #expect((delta["delta"] as? [String: Any])?["stop_reason"] as? String == "end_turn")
+        #expect((delta["delta"] as? [String: Any])?["stop_sequence"] is NSNull)
+        #expect(delta["usage"] as? [String: Int] == ["input_tokens": 10, "output_tokens": 2])
+        // Every frame is `event:` + `data:` whose `type` matches the event name.
+        #expect(run.events.allSatisfy { $0.json["type"] as? String == $0.name })
+    }
+
+    @Test func thinkingThenText() async throws {
+        let run = await stream([.reasoningDelta("pl"), .reasoningDelta("an"), .textDelta("Hi"), usage(5, 4), .finish(.stop)])
+        #expect(run.events.map(\.summary) == [
+            "message_start",
+            "content_block_start:0:thinking", "content_block_delta:0:thinking_delta", "content_block_delta:0:thinking_delta",
+            "content_block_delta:0:signature_delta", "content_block_stop:0",
+            "content_block_start:1:text", "content_block_delta:1:text_delta", "content_block_stop:1",
+            "message_delta", "message_stop"])
+        #expect(run.events[1].json["content_block"] as? [String: String] == ["type": "thinking", "thinking": "", "signature": ""])
+        #expect((run.events[4].json["delta"] as? [String: Any])?["signature"] as? String == "")
+    }
+
+    @Test func textThenToolUse() async throws {
+        let run = await stream([.textDelta("Looking."), call(0, id: "call_1", name: "get_weather", args: #"{"city":"Oslo"}"#),
+                                usage(8, 9), .finish(.toolCalls)])
+        #expect(run.events.map(\.summary) == [
+            "message_start",
+            "content_block_start:0:text", "content_block_delta:0:text_delta", "content_block_stop:0",
+            "content_block_start:1:tool_use", "content_block_delta:1:input_json_delta", "content_block_stop:1",
+            "message_delta", "message_stop"])
+        let block = try #require(run.events[4].json["content_block"] as? [String: Any])
+        #expect(block["id"] as? String == "call_1" && block["name"] as? String == "get_weather")
+        #expect((block["input"] as? [String: Any])?.isEmpty == true)
+        #expect((run.events[5].json["delta"] as? [String: String])?["partial_json"] == #"{"city":"Oslo"}"#)
+        #expect((run.events[7].json["delta"] as? [String: Any])?["stop_reason"] as? String == "tool_use")
+    }
+
+    @Test func aToolOnlyTurnStartsAtIndexZero() async throws {
+        let run = await stream([call(0, id: "call_1", name: "f", args: "{}"), usage(3, 4), .finish(.toolCalls)])
+        #expect(run.events.map(\.summary) == [
+            "message_start", "content_block_start:0:tool_use", "content_block_delta:0:input_json_delta",
+            "content_block_stop:0", "message_delta", "message_stop"])
+    }
+
+    @Test func twoToolCallsAreTwoBlocksWithRunningIndexes() async throws {
+        let run = await stream([call(0, id: "call_a", name: "f", args: #"{"a":1}"#),
+                                call(1, id: "call_b", name: "g", args: #"{"b":2}"#), usage(3, 8), .finish(.toolCalls)])
+        #expect(run.events.map(\.summary) == [
+            "message_start",
+            "content_block_start:0:tool_use", "content_block_delta:0:input_json_delta", "content_block_stop:0",
+            "content_block_start:1:tool_use", "content_block_delta:1:input_json_delta", "content_block_stop:1",
+            "message_delta", "message_stop"])
+        let ids = run.events.compactMap { ($0.json["content_block"] as? [String: Any])?["id"] as? String }
+        #expect(ids == ["call_a", "call_b"])
+    }
+
+    @Test func aContinuationFragmentStaysInTheOpenToolBlock() async throws {
+        let run = await stream([call(0, id: "call_a", name: "f", args: #"{"a":"#), call(0, id: nil, args: #"1}"#),
+                                usage(3, 8), .finish(.toolCalls)])
+        #expect(run.events.map(\.summary).filter { $0 == "content_block_start:0:tool_use" }.count == 1)
+        let pieces = run.events.compactMap { ($0.json["delta"] as? [String: Any])?["partial_json"] as? String }
+        #expect(pieces.joined() == #"{"a":1}"#)
+    }
+
+    @Test func blockSwitchingFollowsTheKindWithAnIncreasingIndex() async throws {
+        let run = await stream([.textDelta("a"), .reasoningDelta("b"), .textDelta("c"), usage(1, 3), .finish(.length)])
+        let starts = run.events.filter { $0.name == "content_block_start" }
+        #expect(starts.map { $0.json["index"] as? Int } == [0, 1, 2])
+        #expect(starts.compactMap { ($0.json["content_block"] as? [String: Any])?["type"] as? String } == ["text", "thinking", "text"])
+        let stops = run.events.filter { $0.name == "content_block_stop" }
+        #expect(stops.map { $0.json["index"] as? Int } == [0, 1, 2])
+        #expect((run.events.first { $0.name == "message_delta" }?.json["delta"] as? [String: Any])?["stop_reason"] as? String == "max_tokens")
+    }
+
+    @Test func anEmptyReplyIsStartDeltaStop() async throws {
+        let run = await stream([usage(4, 0), .finish(.stop)])
+        #expect(run.events.map(\.summary) == ["message_start", "message_delta", "message_stop"])
+    }
+
+    /// `message_delta.usage` is cumulative: output tokens, the cache-adjusted input tokens, and
+    /// `cache_read_input_tokens` only when something was reused (R34 #10).
+    @Test func messageDeltaCarriesTheCacheAdjustedUsage() async throws {
+        let hit = await stream([.textDelta("x"), usage(1000, 3, cached: 900), .finish(.stop)])
+        let hitUsage = try #require(hit.events.first { $0.name == "message_delta" }?.json["usage"] as? [String: Int])
+        #expect(hitUsage == ["input_tokens": 100, "cache_read_input_tokens": 900, "output_tokens": 3])
+        let miss = await stream([.textDelta("x"), usage(1000, 3), .finish(.stop)])
+        let missUsage = try #require(miss.events.first { $0.name == "message_delta" }?.json["usage"] as? [String: Int])
+        #expect(missUsage == ["input_tokens": 1000, "output_tokens": 3])
+    }
+
+    @Test func aMidStreamErrorIsAnErrorEventAndNoMessageStop() async throws {
+        let run = await stream([.textDelta("par"), .error(ServeError(status: 500, message: "The model failed to generate a reply.",
+                                                                     type: "server_error", code: "generation_failed"))])
+        #expect(run.events.map(\.name) == ["message_start", "content_block_start", "content_block_delta", "error"])
+        let error = try #require(run.events.last?.json["error"] as? [String: String])
+        #expect(run.events.last?.json["type"] as? String == "error")
+        #expect(error["type"] == "api_error" && error["message"] == "The model failed to generate a reply.")
+        #expect(!run.text.contains("message_stop") && !run.text.contains("message_delta"))
+    }
+
+    @Test func aFailureBeforeTheHeadIsTheJSONError() async throws {
+        let body = Data(request(#","stream":true"#).replacingOccurrences(of: model, with: "nope").utf8)
+        let head = ServeRequestHead(method: "POST", path: "/v1/messages", host: "127.0.0.1:1212", origin: nil,
+                                    transferEncoding: nil, contentLength: String(body.count), userAgent: nil)
+        guard case .full(let response) = await ServeAPI.handle(head: head, guard: RequestGuard(port: 1212),
+                                                                environment: environment(MessagesBackend()), body: { body }) else {
+            Issue.record("expected a whole response, not a stream"); return
+        }
+        #expect(response.status == 404 && object(response.body)?["type"] as? String == "error")
+    }
+
+    @Test func keepAliveIsAnthropicsPing() async throws {
+        let encoder = AnthropicStreamEncoder(id: "msg_x", model: "m")
+        #expect(String(decoding: encoder.keepAlive, as: UTF8.self) == "event: ping\ndata: {\"type\":\"ping\"}\n\n")
+
+        // …and the pipeline writes it while the model is still thinking about the first token.
+        let slow = FakeBackend([.wait(0.45), .text("late"), .usage(prompt: 2, completion: 1), .finish(.stop)], modelType: "qwen3")
+        let run = await stream([], backend: slow, keepAlive: 0.1)
+        #expect(run.text.hasPrefix("event: ping\n"))
+        #expect(run.events.first?.name == "ping" && run.events.contains { $0.name == "message_stop" })
+        #expect(run.events.last?.name == "message_stop")
     }
 }

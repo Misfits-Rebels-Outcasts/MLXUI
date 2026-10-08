@@ -1,7 +1,7 @@
 import Foundation
 
-/// The Anthropic Messages wire format ⇄ the neutral core (backlog S3-2). Non-streaming only; the
-/// event stream is S3-2b.
+/// The Anthropic Messages wire format ⇄ the neutral core (backlog S3-2). The event stream is
+/// `AnthropicStreamEncoder` (S3-2b).
 ///
 /// Wire facts are from https://platform.claude.com/docs/en/api/messages, `…/api/messages-count-tokens`,
 /// `…/build-with-claude/prompt-caching` and `…/api/errors` (fetched 2026-10-09):
