@@ -72,6 +72,47 @@ nonisolated enum ServePipeline {
     /// log line is right whichever step refuses; the caller logs the failure itself.
     static func prepare(_ decoded: ServeRequest, tracker: RequestTracker,
                         environment: ServeEnvironment) async -> Result<ServePrepared, ServeFailure> {
+        let resolved: Resolved
+        switch await resolve(decoded, tracker: tracker, environment: environment, enforcingContextLimit: true) {
+        case .failure(let failure): return .failure(failure)
+        case .success(let value): resolved = value
+        }
+        guard let ticket = await environment.queue.reserve(model: resolved.request.model) else {
+            return .failure(ServeFailure(ServeError(status: 503, message: "The server is busy with other requests for this model. Try again shortly.",
+                                                    type: "server_error", code: "server_busy"),
+                                         retryAfterSeconds: 2))
+        }
+        return .success(ServePrepared(request: resolved.request, backend: resolved.backend, ticket: ticket))
+    }
+
+    /// S3-2: the prompt's token count for `/v1/messages/count_tokens` — the same resolution, `tools`
+    /// gate, thinking decision, assembly and S2-6 render as a real request, with **no generation and no
+    /// queue slot**. Unlike a real request it does not refuse a prompt past the window: a counting call
+    /// is how a client finds that out. A template refusal is still a `400`. A backend that can't count
+    /// (no tokenizer, Apple Foundation Models below macOS 26.4) is a `501`, never an estimate.
+    static func countPrompt(_ decoded: ServeRequest, tracker: RequestTracker,
+                            environment: ServeEnvironment) async -> Result<Int, ServeFailure> {
+        switch await resolve(decoded, tracker: tracker, environment: environment, enforcingContextLimit: false) {
+        case .failure(let failure): return .failure(failure)
+        case .success(let resolved):
+            guard let count = resolved.promptTokens else {
+                return .failure(ServeFailure(ServeError(
+                    status: 501, message: "This model's tokens can't be counted by this build.",
+                    type: "server_error", code: "count_unavailable")))
+            }
+            return .success(count)
+        }
+    }
+
+    private struct Resolved {
+        let request: ServeRequest
+        let backend: ServeBackend
+        /// The S2-6 render's count; `nil` when the backend couldn't make one (fail-open).
+        let promptTokens: Int?
+    }
+
+    private static func resolve(_ decoded: ServeRequest, tracker: RequestTracker, environment: ServeEnvironment,
+                                enforcingContextLimit: Bool) async -> Result<Resolved, ServeFailure> {
         // The pipeline reshapes the request below (tool traffic, `system` placement), so it works on
         // a mutable copy of what the dialect decoded.
         var request = decoded
@@ -148,12 +189,14 @@ nonisolated enum ServePipeline {
         // `invalid_request_error` envelope, and `context_length_exceeded` as the code OpenAI and its
         // clients have long used for this case (Portkey's error library reproduces the original
         // message: "The total number of tokens exceeds the model's maximum context length.").
+        var promptTokens: Int?
         do {
             // S2-8: this render is also where a *template refusal* surfaces, which is why it runs even
             // for a model with no declared window — a refusal must be a 400 before the head, in a
             // streaming request as much as outside one.
             let count = try await backend.countPromptTokens(request)
-            if let limit = backend.contextLimit, let count, count > limit {
+            promptTokens = count
+            if enforcingContextLimit, let limit = backend.contextLimit, let count, count > limit {
                 return .failure(ServeFailure(ServeError(status: 400,
                                                         message: contextLengthMessage(count: count, limit: limit),
                                                         code: "context_length_exceeded")))
@@ -166,12 +209,7 @@ nonisolated enum ServePipeline {
             // S2-6 fail-open: a count we can't make is not a reason to refuse the request.
         }
 
-        guard let ticket = await environment.queue.reserve(model: request.model) else {
-            return .failure(ServeFailure(ServeError(status: 503, message: "The server is busy with other requests for this model. Try again shortly.",
-                                                    type: "server_error", code: "server_busy"),
-                                         retryAfterSeconds: 2))
-        }
-        return .success(ServePrepared(request: request, backend: backend, ticket: ticket))
+        return .success(Resolved(request: request, backend: backend, promptTokens: promptTokens))
     }
 
     // MARK: - Non-streaming

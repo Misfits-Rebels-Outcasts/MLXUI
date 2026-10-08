@@ -98,23 +98,32 @@ nonisolated enum ServeAPI {
     /// The endpoints that need no request body — a pure function over the head (S1-2).
     static func respond(to head: ServeRequestHead, guard requestGuard: RequestGuard,
                         environment: ServeEnvironment) -> ServeResponse {
-        if let rejection = requestGuard.check(head) { return error(rejection) }
+        if let rejection = requestGuard.check(head) { return error(rejection, path: head.path) }
         return route(head, environment: environment)
     }
 
     /// The full path (S1-3): the guard still runs first, then `POST /v1/chat/completions` (which
-    /// reads the body and may stream), else the body-less routes.
+    /// reads the body and may stream), S3-2's `POST /v1/messages` and `/v1/messages/count_tokens`,
+    /// else the body-less routes. Errors on `/v1/messages*` — the guard's included — are rendered in
+    /// Anthropic's shape; the guard's *decisions* are the same on every path (R35).
     static func handle(head: ServeRequestHead, guard requestGuard: RequestGuard, environment: ServeEnvironment,
                        body: @Sendable () async throws -> Data) async -> ServeReply {
-        if let rejection = requestGuard.check(head) { return .full(error(rejection)) }
-        guard head.path == "/v1/chat/completions" else { return .full(route(head, environment: environment)) }
-        guard head.method == "POST" else { return .full(methodNotAllowed(["POST"])) }
+        if let rejection = requestGuard.check(head) { return .full(error(rejection, path: head.path)) }
+        let post: ((ServeRequestHead, Data, ServeEnvironment) async -> ServeReply)?
+        switch head.path {
+        case "/v1/chat/completions": post = { await ChatCompletionsRoute.handle(head: $0, body: $1, environment: $2) }
+        case "/v1/messages": post = { await MessagesRoute.handle(head: $0, body: $1, environment: $2) }
+        case "/v1/messages/count_tokens": post = { await MessagesRoute.countTokens(head: $0, body: $1, environment: $2) }
+        default: post = nil
+        }
+        guard let post else { return .full(route(head, environment: environment)) }
+        guard head.method == "POST" else { return .full(methodNotAllowed(["POST"], path: head.path)) }
         let data: Data
         do { data = try await body() } catch {
             return .full(Self.error(ServeError(status: 400, message: "The request body couldn't be read.",
-                                               code: "invalid_body")))
+                                               code: "invalid_body"), path: head.path))
         }
-        return await ChatCompletionsRoute.handle(head: head, body: data, environment: environment)
+        return await post(head, data, environment)
     }
 
     private static func route(_ head: ServeRequestHead, environment: ServeEnvironment) -> ServeResponse {
@@ -130,7 +139,7 @@ nonisolated enum ServeAPI {
                                               contextLength: environment.modelContextLength))
         default:
             return error(ServeError(status: 404, message: "Unknown endpoint \(head.method) \(head.path).",
-                                    code: "not_found"))
+                                    code: "not_found"), path: head.path)
         }
     }
 
@@ -138,13 +147,18 @@ nonisolated enum ServeAPI {
         ServeResponse(status: status, body: body, headers: ["Content-Type": "application/json"])
     }
 
-    private static func error(_ error: ServeError) -> ServeResponse {
-        json(error.status, error.body())
+    /// The error as a response, in the shape of the dialect that owns `path` (OpenAI's unless the path
+    /// is the Anthropic one).
+    private static func error(_ error: ServeError, path: String? = nil) -> ServeResponse {
+        if let path, AnthropicMessagesDialect.owns(path) {
+            return json(error.status, AnthropicMessagesDialect.errorBody(error))
+        }
+        return json(error.status, error.body())
     }
 
-    private static func methodNotAllowed(_ allowed: [String]) -> ServeResponse {
+    private static func methodNotAllowed(_ allowed: [String], path: String? = nil) -> ServeResponse {
         var response = error(ServeError(status: 405, message: "Method not allowed. Use \(allowed.joined(separator: ", ")).",
-                                        code: "method_not_allowed"))
+                                        code: "method_not_allowed"), path: path)
         response.headers["Allow"] = allowed.joined(separator: ", ")
         return response
     }
