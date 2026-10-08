@@ -128,23 +128,7 @@ nonisolated enum OpenAIChatDialect {
     /// malformed field, not a value from the future. Returns the on/off decision and the unknown
     /// string (metadata only, never logged with any content).
     private static func decodeReasoning(_ object: [String: Any]) throws -> (reasoning: Bool?, unknown: String?) {
-        let effort: Bool?
-        var unknown: String?
-        switch object["reasoning_effort"] {
-        case nil, is NSNull: effort = nil
-        case let value as String:
-            switch value {
-            case "none", "minimal": effort = false
-            case "low", "medium", "high", "xhigh", "max": effort = true
-            default:
-                // Unknown but well-formed: honour it as "on" and let the log say what was seen.
-                effort = true
-                unknown = value
-            }
-        default:
-            throw invalid("'reasoning_effort' must be a string.",
-                          code: "invalid_reasoning_effort", param: "reasoning_effort")
-        }
+        let (effort, unknown) = try decodeReasoningEffort(object["reasoning_effort"], name: "reasoning_effort")
 
         guard let kwargs = object["chat_template_kwargs"] else { return (effort, unknown) }
         guard let dictionary = kwargs as? [String: Any] else {
@@ -157,6 +141,26 @@ nonisolated enum OpenAIChatDialect {
         default:
             throw invalid("'chat_template_kwargs.enable_thinking' must be true or false.",
                           code: "invalid_chat_template_kwargs", param: "chat_template_kwargs.enable_thinking")
+        }
+    }
+
+    /// S2-3's `reasoning_effort` mapping as one function (S3-3 reuses it for the Responses API's
+    /// `reasoning.effort`, with no new rule): `none` / `minimal` → off; `low` … `max` → on; an unknown
+    /// string → on, handed back for the log's notice; absent → `nil` (the client didn't ask); a
+    /// non-string → `400` naming `name`.
+    static func decodeReasoningEffort(_ value: Any?, name: String) throws -> (reasoning: Bool?, unknown: String?) {
+        switch value {
+        case nil, is NSNull: return (nil, nil)
+        case let value as String:
+            switch value {
+            case "none", "minimal": return (false, nil)
+            case "low", "medium", "high", "xhigh", "max": return (true, nil)
+            default:
+                // Unknown but well-formed: honour it as "on" and let the log say what was seen.
+                return (true, value)
+            }
+        default:
+            throw invalid("'\(name)' must be a string.", code: "invalid_reasoning_effort", param: name)
         }
     }
 

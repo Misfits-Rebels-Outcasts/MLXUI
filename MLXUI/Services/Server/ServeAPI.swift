@@ -103,7 +103,7 @@ nonisolated enum ServeAPI {
     }
 
     /// The full path (S1-3): the guard still runs first, then `POST /v1/chat/completions` (which
-    /// reads the body and may stream), S3-2's `POST /v1/messages` and `/v1/messages/count_tokens`,
+    /// reads the body and may stream), S3-2's `POST /v1/messages` and `/v1/messages/count_tokens`, S3-3's `POST /v1/responses`,
     /// else the body-less routes. Errors on `/v1/messages*` — the guard's included — are rendered in
     /// Anthropic's shape; the guard's *decisions* are the same on every path (R35).
     static func handle(head: ServeRequestHead, guard requestGuard: RequestGuard, environment: ServeEnvironment,
@@ -112,6 +112,7 @@ nonisolated enum ServeAPI {
         let post: ((ServeRequestHead, Data, ServeEnvironment) async -> ServeReply)?
         switch head.path {
         case "/v1/chat/completions": post = { await ChatCompletionsRoute.handle(head: $0, body: $1, environment: $2) }
+        case "/v1/responses": post = { await ResponsesRoute.handle(head: $0, body: $1, environment: $2) }
         case "/v1/messages": post = { await MessagesRoute.handle(head: $0, body: $1, environment: $2) }
         case "/v1/messages/count_tokens": post = { await MessagesRoute.countTokens(head: $0, body: $1, environment: $2) }
         default: post = nil
