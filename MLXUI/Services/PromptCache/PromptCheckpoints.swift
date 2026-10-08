@@ -68,6 +68,7 @@ nonisolated enum PromptCheckpointing {
         tokens: [Int],
         render: ([ServeMessage]) async throws -> [Int],
         newCache: () -> Cache,
+        isTrimmable: (Cache) -> Bool,
         restore: (PromptCacheHit<Snapshot>) -> Cache?,
         prefill: (_ from: Int, _ to: Int, _ cache: Cache) throws -> Void,
         snapshot: (Cache) -> (snapshot: Snapshot, bytes: Int64, trimmable: Bool)
@@ -79,17 +80,28 @@ nonisolated enum PromptCheckpointing {
         // 1. lookup → a copy made on the generating side, trimmed if needed.
         var working: Cache?
         var position = 0
-        if let hit = await store.lookup(key: key, prompt: tokens), let restored = restore(hit) {
+        var mark = ContinuousClock.now
+        func lap() -> Double {
+            let now = ContinuousClock.now
+            defer { mark = now }
+            let d = now - mark
+            return Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18
+        }
+        let hit = await store.lookup(key: key, prompt: tokens)
+        outcome.timings.lookup = lap()
+        if let hit, let restored = restore(hit) {
             working = restored
             position = hit.reusedLength
             outcome.reusedTokens = hit.reusedLength
             outcome.hitStoredLength = hit.storedLength
         }
+        outcome.timings.restore = lap()
 
         // 2. where to checkpoint (probe renders; a failed probe just means no checkpoint there)
         let probes = PromptCheckpoints.probeMessages(for: messages)
         let turnProbe = try? await render(probes.turn)
         let systemProbe: [Int]? = if let system = probes.system { try? await render(system) } else { nil }
+        outcome.timings.probes = lap()
         let wanted = PromptCheckpoints.positions(actual: tokens, turnProbe: turnProbe, systemProbe: systemProbe,
                                                  minimumLength: store.minimumReuse).filter { $0 > position }
 
@@ -97,12 +109,21 @@ nonisolated enum PromptCheckpointing {
         if !wanted.isEmpty, working == nil { working = newCache() }
         for target in wanted {
             guard let cache = working else { break }
+            _ = lap()
             try prefill(position, target, cache)
             position = target
+            outcome.timings.prefill += lap()
+            // PC-3b: a trimmable cache stores only the **last** checkpoint (T). T's snapshot covers
+            // the system boundary S by trimming (`lookup` matches a trimmable snapshot by common
+            // prefix), so a second snapshot of the same prefix is a near-duplicate that costs
+            // memory and a copy. Non-trimmable caches (hybrids, sliding windows past their window)
+            // can't be trimmed back, so they keep both.
+            if target != wanted.last, isTrimmable(cache) { continue }
             let taken = snapshot(cache)
             let stored = await store.insert(key: key, tokens: Array(tokens[0..<target]), snapshot: taken.snapshot,
                                             bytes: taken.bytes, trimmable: taken.trimmable)
             if stored { outcome.storedAt.append(target) }
+            outcome.timings.snapshot += lap()
         }
 
         guard let cache = working, position > 0 else {
@@ -125,10 +146,13 @@ nonisolated enum PromptCheckpointing {
         try await plan(
             store: store, key: key, messages: messages, tokens: tokens, render: render,
             newCache: { context.model.newCache(parameters: parameters) },
+            isTrimmable: { canTrimPromptCache($0) },
             restore: { hit in
                 let copy = hit.makeCopy()           // made here, inside the caller's `perform` (PC-1 carry-over 3)
                 let trimmed = hit.trimBy == 0 ? 0 : trimPromptCache(copy.caches, numTokens: hit.trimBy)
-                return trimmed == hit.trimBy ? copy.caches : nil
+                guard trimmed == hit.trimBy else { return nil }
+                eval(copy.caches)                   // PC-3b: evaluate here so "copy+eval" is measurable, not hidden in the first step
+                return copy.caches
             },
             prefill: { from, to, cache in
                 try prefill(tokens, from: from, to: to, cache: cache, context: context,

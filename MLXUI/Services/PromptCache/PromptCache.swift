@@ -55,6 +55,25 @@ nonisolated enum PromptCacheBypass: String, Sendable, Equatable {
     case failed                  // the cache path threw; the request ran as if it were off
 }
 
+/// Where a request's cache work went, in seconds (PC-3b). Durations only — metadata (rule 9).
+nonisolated struct PromptCacheTimings: Sendable, Equatable {
+    /// `pool.container` (a model load shows up here).
+    var container = 0.0
+    /// Rendering the real prompt through the chat template and tokenizer (`processor.prepare`).
+    var render = 0.0
+    /// The two probe renders (turn and system boundary) — each is a full render + tokenization.
+    var probes = 0.0
+    /// `store.lookup`.
+    var lookup = 0.0
+    /// Copying the hit, trimming it, and evaluating the copy.
+    var restore = 0.0
+    /// Manual prefill to the checkpoints (a miss's real work; ~0 on a hit that already covers T).
+    var prefill = 0.0
+    /// Copying + inserting snapshots after each prefilled segment.
+    var snapshot = 0.0
+    var total: Double { container + render + probes + lookup + restore + prefill + snapshot }
+}
+
 /// What a request did with the cache. Nothing in it is content: counts and token positions only.
 /// PC-3 turns `reusedTokens` into `usage.cached_tokens`.
 nonisolated struct PromptCacheOutcome: Sendable, Equatable {
@@ -65,6 +84,7 @@ nonisolated struct PromptCacheOutcome: Sendable, Equatable {
     /// The checkpoints this request prefilled and stored, by position.
     var storedAt: [Int] = []
     var hitStoredLength: Int? = nil
+    var timings = PromptCacheTimings()
 }
 
 nonisolated enum PromptCachePolicy {
