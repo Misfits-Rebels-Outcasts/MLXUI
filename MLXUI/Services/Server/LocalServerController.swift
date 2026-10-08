@@ -211,6 +211,8 @@ final class LocalServerController {
     @ObservationIgnored private let appleFoundation: () -> Readiness?
     @ObservationIgnored private let catalogLoaded: () -> Bool
     @ObservationIgnored private let evictModel: (String) async -> Void
+    /// PC-1: the prompt cache's snapshots of an uninstalled model go with its weights (F11).
+    @ObservationIgnored private let evictPromptCache: (String) async -> Void
     @ObservationIgnored private let budgetBytes: Int64
 
     /// - Parameters: `installed` / `appleFoundation` / `evict` / `budgetBytes` default to the live
@@ -223,6 +225,10 @@ final class LocalServerController {
          evict: @escaping (String) async -> Void = { hfModelID in
              await ModelContainerPool.shared.evict(modelID: ModelStore.repoSlug(for: hfModelID))
          },
+         evictPromptCache: @escaping (String) async -> Void = { hfModelID in
+             let directory = ModelStore.shared.directory(forHFModelID: hfModelID)
+             await PromptCacheShared.store.evict(directory: ModelContainerPool.key(for: directory))
+         },
          budgetBytes: Int64 = MemoryBudget.shared.capacityBytes) {
         self.server = server
         self.defaults = defaults
@@ -230,6 +236,7 @@ final class LocalServerController {
         self.appleFoundation = appleFoundation
         self.catalogLoaded = catalogLoaded
         self.evictModel = evict
+        self.evictPromptCache = evictPromptCache
         self.budgetBytes = budgetBytes
         self.enabled = defaults.object(forKey: Self.enabledKey) as? Bool ?? true
         self.hasShownConnect = defaults.bool(forKey: Self.connectShownKey)
@@ -309,7 +316,13 @@ final class LocalServerController {
         guard !isInstalledLLM(hfModelID) else { return }
         let wasServed = isServing(hfModelID)
         await reconcileServed()                          // un-serves + evicts it when it was served
-        if !wasServed { await evictModel(hfModelID) }    // loaded by chat / a flow, never served
+        if !wasServed { await evictLoaded(hfModelID) }   // loaded by chat / a flow, never served
+    }
+
+    /// A model's weights and its prompt-cache snapshots (PC-1).
+    private func evictLoaded(_ hfModelID: String) async {
+        await evictModel(hfModelID)
+        await evictPromptCache(hfModelID)
     }
 
     /// Drops every served MLX id that is no longer an installed chat model — evicting its weights —
@@ -322,7 +335,7 @@ final class LocalServerController {
         let gone = servedIDs.filter { $0 != ServedModels.appleFoundationID && !isInstalledLLM($0) }
         for id in gone {
             server.update(settings: server.settings.serving(id, false))
-            await evictModel(id)
+            await evictLoaded(id)
         }
         await apply()
     }

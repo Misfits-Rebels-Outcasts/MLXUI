@@ -9,6 +9,9 @@ import os
 /// load fails. The ledger is the single source of "how much is held".
 ///
 /// **When a reservation doesn't fit** (the ruling, in order):
+/// 0. (PC-1, owner ruling A1 2026-10-08) ask every participant of **lower `evictionPriority` than
+///    the requester** to evict its LRU entry first — the prompt cache's snapshots (priority −1)
+///    go before any weights, including the requester's own LRU;
 /// 1. evict from the **requester's own** LRU, one entry at a time;
 /// 2. then ask the **other** participant(s) to evict their least-recently-used entry;
 /// 3. if neither has anything evictable but other loads are still **in flight** (reserved, not yet
@@ -25,6 +28,16 @@ nonisolated protocol MemoryBudgetParticipant: AnyObject, Sendable {
     /// Evict the least-recently-used entry that actually holds memory, releasing its
     /// reservation. Returns `false` when there is nothing to evict.
     func evictLeastRecentlyUsed() async -> Bool
+
+    /// PC-1: who is dropped first when a reservation doesn't fit. Higher survives longer. Weights
+    /// (`ResidentPool`, `EngineCache`) are 0 (the default); the prompt-cache store is
+    /// `MemoryBudget.snapshotPriority`. A requester evicts every strictly lower participant before
+    /// it touches its own entries.
+    var evictionPriority: Int { get }
+}
+
+nonisolated extension MemoryBudgetParticipant {
+    var evictionPriority: Int { 0 }
 }
 
 nonisolated final class MemoryBudget: @unchecked Sendable {
@@ -35,6 +48,9 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     /// The app-wide budget: `max(4 GB, total RAM × 0.6)` (the figure `EngineCache` always used).
     static let shared = MemoryBudget(
         capacityBytes: EngineCache.defaultBudget(totalRAMGB: SystemInfo.detect().totalRAMGB))
+
+    /// Eviction priority of prompt-cache snapshots: below every weights holder (PC-1, ruling A1).
+    static let snapshotPriority = -1
 
     let capacityBytes: Int64
 
@@ -75,12 +91,22 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
         while true {
             if tryAdd(reservation, bytes: bytes) { return reservation }
 
-            // 1. the requester's own LRU first.
+            let peers = others(excluding: owner)
+            let mine = owner.evictionPriority
+
+            // 0. participants that rank below the requester (prompt-cache snapshots): before any
+            //    weights, the requester's own included.
+            var freed = false
+            for lower in peers.filter({ $0.evictionPriority < mine }).sorted(by: { $0.evictionPriority < $1.evictionPriority }) {
+                if await lower.evictLeastRecentlyUsed() { freed = true; break }
+            }
+            if freed { continue }
+
+            // 1. the requester's own LRU.
             if await owner.evictLeastRecentlyUsed() { continue }
 
-            // 2. then the other participant(s).
-            var freed = false
-            for other in others(excluding: owner) {
+            // 2. then the other participant(s) of equal or higher priority.
+            for other in peers.filter({ $0.evictionPriority >= mine }) {
                 if await other.evictLeastRecentlyUsed() { freed = true; break }
             }
             if freed { continue }
@@ -96,6 +122,15 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
             Self.log.notice("over budget: \(label, privacy: .public) needs \(bytes) B, capacity \(self.capacityBytes) B, nothing left to evict")
             return reservation
         }
+    }
+
+    /// PC-1: reserve `bytes` **only if they fit right now** — evicts nothing, waits for nothing.
+    /// The prompt-cache store uses this: a snapshot may never push weights (or anything) out.
+    /// The reservation is pending until `commit`/`release`, like `reserve`'s.
+    func tryReserve(bytes: Int64) -> Reservation? {
+        let reservation = Reservation(id: UUID())
+        guard bytes > 0 else { return nil }
+        return tryAdd(reservation, bytes: bytes) ? reservation : nil
     }
 
     /// The entry is resident now (and therefore evictable).
