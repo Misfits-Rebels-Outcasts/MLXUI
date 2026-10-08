@@ -1,23 +1,17 @@
 import Foundation
-import os
 
-/// What a route hands back to the transport: a whole response, or an open SSE byte stream.
-nonisolated enum ServeReply: Sendable {
-    case full(ServeResponse)
-    case stream(status: Int, headers: [String: String], body: AsyncStream<[UInt8]>)
-}
-
-/// `POST /v1/chat/completions` (S1-3): decode → is the model served → queue → backend → encode.
+/// `POST /v1/chat/completions` (S1-3): decode → `ServePipeline` → encode.
+///
+/// Since S3-2a this route is only the OpenAI dialect's two ends. Model resolution, the `tools` gate,
+/// thinking, message assembly, the S2-6 pre-count, queueing and generation are `ServePipeline`'s, so
+/// the S3 dialects reuse them instead of forking them.
 ///
 /// - Unknown / unserved model → `404`; line full → `503` + `Retry-After: 2` (decided *before* any
 ///   byte is written, so it is still a proper status).
 /// - Non-streaming runs to completion (it cannot notice a disconnect — S1-A ruling 3).
-/// - Streaming writes `: keep-alive` whenever nothing was written for `keepAliveSeconds` (S1-A
-///   ruling 2), including while queued and during prefill; a client that went away makes the next
-///   write fail, which cancels the generation (S1-0).
+/// - Streaming heartbeats and cancellation: see `ServePipeline.stream`.
 /// - **Nothing here logs request or response content.** The request log has no field for it.
 nonisolated enum ChatCompletionsRoute {
-    private static let log = Logger(subsystem: "com.ai-browser", category: "local-server")
 
     static func handle(head: ServeRequestHead, body: Data, environment: ServeEnvironment) async -> ServeReply {
         let started = environment.now()
@@ -25,347 +19,42 @@ nonisolated enum ChatCompletionsRoute {
 
         let decoded: ServeRequest
         do { decoded = try OpenAIChatDialect.decode(body) } catch {
-            return tracker.fail(error as? ServeError ?? Self.internalError)
-        }
-        // The route reshapes the request below (tool traffic, `system` placement), so it works on a
-        // mutable copy of what the dialect decoded.
-        var request = decoded
-        tracker.model = request.model
-        // S1's shape, provisional: a request that carried `tools` is "ignored" until the model is
-        // resolved below and says otherwise (an early 404/503 still logs what the client sent).
-        tracker.toolsIgnored = request.toolsRequested
-
-        // Apple Foundation Models that is served but not ready is a 503 with the readiness sentence
-        // (S1-4), not a 404: `/v1/models` omits it until ready, but the client named a model the
-        // user *is* serving. Readiness comes only through the injected checker (readme T8).
-        if request.model == ServedModels.appleFoundationID,
-           environment.servedModelIDs().contains(request.model),
-           let state = environment.appleFoundationReadiness(), state != .ready {
-            return tracker.fail(ReadinessSentence.error(for: state), headers: ["Retry-After": "2"])
+            return tracker.fail(error as? ServeError ?? ServePipeline.internalError)
         }
 
-        let servable = ServedModels.ids(served: environment.servedModelIDs(),
-                                        installed: environment.installed(),
-                                        appleFoundation: environment.appleFoundationReadiness())
-        guard servable.contains(request.model) else {
-            return tracker.fail(ServeError(status: 404, message: "The model '\(request.model)' is not served.",
-                                           code: "model_not_found"))
+        let prepared: ServePrepared
+        switch await ServePipeline.prepare(decoded, tracker: tracker, environment: environment) {
+        case .failure(let failure): return tracker.fail(failure)
+        case .success(let value): prepared = value
         }
-        // S1-5c: a model bigger than the whole shared budget would load anyway and thrash — say so.
-        // (The catalog size of an installed MLX model; Apple Foundation Models isn't in the index.)
-        if let entry = environment.installed().entries.first(where: { $0.kind == .llm && $0.hfModelId == request.model }),
-           ServeMemory.exceedsBudget(modelRAMGB: entry.ramGB, capacityBytes: environment.memoryCapacityBytes) {
-            return tracker.fail(ServeError(
-                status: 503,
-                message: ServeMemory.tooLargeSentence(model: request.model, modelRAMGB: entry.ramGB,
-                                                      capacityBytes: environment.memoryCapacityBytes),
-                type: "server_error", code: "model_too_large"))
-        }
-        guard let backend = environment.backendFor(request.model) else {
-            return tracker.fail(ServeError(status: 501, message: "The model '\(request.model)' can't be served by this build yet.",
-                                           type: "server_error", code: "not_implemented"))
-        }
+        let request = prepared.request
 
-        // S2-2: the client's `tools` are honoured only for a family whose template renders them and
-        // whose output a parser reads (`ToolCallFormatTable`). Otherwise S1 exactly: the history's
-        // tool traffic is flattened back to plain text (owner ruling R20, 2026-10-02) and the log
-        // says "tools ignored" — the same answer the backend reaches on its own `modelType`, since
-        // both ask the same table.
-        let modelType = backend.modelType ?? ""
-        let acceptsTools = ToolCallFormatTable.acceptsTools(forModelType: modelType)
-        // S2-3: thinking is on only when the client asked *and* the family's template reads
-        // `enable_thinking`. Nothing is refused either way — a family without thinking simply
-        // ignores the request (decision 2) — so the log records what actually happened.
-        tracker.reasoningOn = ReasoningTemplateTable.thinkingOn(requested: request.reasoning,
-                                                                 forModelType: modelType)
-        // S2-3b: an unrecognised `reasoning_effort` is honoured as "on" and named in the log — a
-        // parameter value, not request content.
-        if let unknown = request.unknownReasoningEffort {
-            log.notice("unknown reasoning_effort '\(unknown, privacy: .public)' treated as on")
-        }
-        tracker.toolsIgnored = request.toolsRequested && !acceptsTools
-        if tracker.toolsIgnored { log.notice("tools ignored") }
-        if !acceptsTools { request.tools = [] }
-        // The request's final shape, in the order the assembly takes: tool traffic settled, then
-        // the family's `system` placement (S2-1, owner ruling R22).
-        request.messages = ServeMessageAssembly.assembling(
-            request.messages, acceptsTools: acceptsTools,
-            // S2-8: a family whose template takes one call per assistant turn gets the packed
-            // history split, so the client can replay a multi-call turn at all.
-            oneCallPerTurn: ToolCallHistoryTable.oneCallPerTurn(forModelType: modelType),
-            placement: ToolCallFormatTable.systemPlacement(forModelType: modelType))
-
-        // R23 (S2-6): count the **real** prompt before any response byte is chosen, so an
-        // over-limit request is a plain `400` — no 200 head, no first SSE byte, and no queue slot
-        // taken (nothing is generated). The message carries both numbers, which is what the
-        // documented error does.
-        // https://developers.openai.com/api/docs/guides/error-codes (fetched 2026-10-07) for the
-        // `invalid_request_error` envelope, and `context_length_exceeded` as the code OpenAI and its
-        // clients have long used for this case (Portkey's error library reproduces the original
-        // message: "The total number of tokens exceeds the model's maximum context length.").
-        do {
-            // S2-8: this render is also where a *template refusal* surfaces, which is why it runs even
-            // for a model with no declared window — a refusal must be a 400 before the head, in a
-            // streaming request as much as outside one.
-            let count = try await backend.countPromptTokens(request)
-            if let limit = backend.contextLimit, let count, count > limit {
-                return tracker.fail(ServeError(status: 400,
-                                               message: Self.contextLengthMessage(count: count, limit: limit),
-                                               code: "context_length_exceeded"))
+        guard request.stream else {
+            let collected: ServeCollected
+            switch await ServePipeline.collect(prepared, tracker: tracker, environment: environment) {
+            case .failure(let failure): return tracker.fail(failure)
+            case .success(let value): collected = value
             }
-        } catch let refusal as ServeError {
-            // The checkpoint's template refused the prompt: the caller's problem to fix, so a plain
-            // 400 rather than a 200 that dies mid-SSE.
-            return tracker.fail(refusal)
-        } catch {
-            // S2-6 fail-open: a count we can't make is not a reason to refuse the request.
+            let body = OpenAIChatDialect.completionBody(
+                id: OpenAIChatDialect.makeCompletionID(), created: Int(environment.now().timeIntervalSince1970),
+                model: request.model, text: collected.text, reasoning: collected.reasoning,
+                toolCalls: collected.toolCalls, finish: collected.finish, usage: collected.usage)
+            return tracker.succeed(.full(ServeResponse(status: 200, body: body,
+                                                       headers: ["Content-Type": "application/json"])))
         }
-
-        guard let ticket = await environment.queue.reserve(model: request.model) else {
-            return tracker.fail(ServeError(status: 503, message: "The server is busy with other requests for this model. Try again shortly.",
-                                           type: "server_error", code: "server_busy"),
-                                headers: ["Retry-After": "2"])
-        }
-
-        return request.stream
-            ? stream(request, backend: backend, ticket: ticket, tracker: tracker, environment: environment)
-            : await complete(request, backend: backend, ticket: ticket, tracker: tracker, environment: environment)
-    }
-
-    // MARK: - Non-streaming
-
-    private static func complete(_ request: ServeRequest, backend: ServeBackend, ticket: ServeQueue.Ticket,
-                                 tracker: RequestTracker, environment: ServeEnvironment) async -> ServeReply {
-        let queue = environment.queue
-        do { try await queue.waitTurn(ticket) } catch {
-            await queue.release(ticket)
-            return tracker.fail(Self.internalError)
-        }
-        var text = ""
-        var finish = ServeFinishReason.stop
-        var usage = ServeUsage(promptTokens: 0, completionTokens: 0)
-        var failure: ServeError?
-        var calls: [ServeToolCall] = []
-        var reasoning = ""
-        do {
-            for try await event in backend.generate(request) {
-                switch event {
-                case .textDelta(let piece): text += piece
-                case .reasoningDelta(let piece): reasoning += piece      // S2-3
-                case .usage(let value): usage = value
-                case .finish(let reason): finish = reason
-                case .error(let error): failure = error
-                case .toolCallDelta(let delta): Self.append(delta, to: &calls)
-                }
-            }
-        } catch {
-            log.error("generation failed: \(String(describing: type(of: error)), privacy: .public)")
-            failure = Self.generationFailed
-        }
-        await queue.release(ticket)
-        if let failure { return tracker.fail(failure) }
-
-        tracker.usage = usage
-        tracker.toolCalls = calls.count
-        let body = OpenAIChatDialect.completionBody(
+        let encoder = OpenAIChatStreamEncoder(
             id: OpenAIChatDialect.makeCompletionID(), created: Int(environment.now().timeIntervalSince1970),
-            model: request.model, text: text, reasoning: reasoning, toolCalls: calls,
-            finish: finish, usage: usage)
-        return tracker.succeed(.full(ServeResponse(status: 200, body: body,
-                                                   headers: ["Content-Type": "application/json"])))
+            model: request.model, includeUsage: request.includeUsage)
+        return ServePipeline.stream(prepared, encoder: encoder, tracker: tracker, environment: environment)
     }
 
-    /// Fold one `delta.tool_calls` fragment into the running call list. The parsers hand back a
-    /// finished call, so today each event is a whole call; keying on `index` keeps this right if a
-    /// format ever fragments.
+    // The pipeline's helpers keep their historical names here: they are the OpenAI route's public
+    // face as far as the existing tests are concerned.
     static func append(_ delta: ServeToolCallDelta, to calls: inout [ServeToolCall]) {
-        while calls.count <= delta.index { calls.append(ServeToolCall(id: nil, name: "", argumentsJSON: "")) }
-        if let id = delta.id { calls[delta.index].id = id }
-        if let name = delta.name { calls[delta.index].name = name }
-        calls[delta.index].argumentsJSON += delta.argumentsFragment ?? ""
+        ServePipeline.append(delta, to: &calls)
     }
 
-    // MARK: - Streaming
-
-    private static func stream(_ request: ServeRequest, backend: ServeBackend, ticket: ServeQueue.Ticket,
-                               tracker: RequestTracker, environment: ServeEnvironment) -> ServeReply {
-        let (bytes, continuation) = AsyncStream<[UInt8]>.makeStream()
-        let clock = WriteClock(now: environment.now)
-        let id = OpenAIChatDialect.makeCompletionID()
-        let created = Int(environment.now().timeIntervalSince1970)
-        let model = request.model
-        let includeUsage = request.includeUsage
-        let queue = environment.queue
-        let write: @Sendable ([UInt8]) -> Void = { chunk in continuation.yield(chunk); clock.touch() }
-
-        let producer = Task {
-            defer { continuation.finish() }
-            do { try await queue.waitTurn(ticket) } catch {
-                await queue.release(ticket)
-                _ = tracker.fail(Self.internalError)
-                return
-            }
-            var wroteRole = false
-            var usage: ServeUsage?
-            var finish: ServeFinishReason?
-            var failure: ServeError?
-            var toolCallCount = 0
-            func ensureRole() {
-                guard !wroteRole else { return }
-                wroteRole = true
-                write(OpenAIChatDialect.sse(OpenAIChatDialect.roleChunk(id: id, created: created, model: model,
-                                                                         includeUsage: includeUsage)))
-            }
-            do {
-                for try await event in backend.generate(request) {
-                    switch event {
-                    case .textDelta(let piece):
-                        ensureRole()
-                        write(OpenAIChatDialect.sse(OpenAIChatDialect.contentChunk(
-                            id: id, created: created, model: model, text: piece, includeUsage: includeUsage)))
-                    case .toolCallDelta(let delta):
-                        ensureRole()
-                        if delta.id != nil { toolCallCount += 1 }
-                        write(OpenAIChatDialect.sse(OpenAIChatDialect.toolCallChunk(
-                            id: id, created: created, model: model, call: delta, includeUsage: includeUsage)))
-                    case .reasoningDelta(let piece):
-                        ensureRole()
-                        write(OpenAIChatDialect.sse(OpenAIChatDialect.reasoningChunk(
-                            id: id, created: created, model: model, text: piece, includeUsage: includeUsage)))
-                    case .usage(let value): usage = value
-                    case .finish(let reason): finish = reason
-                    case .error(let error): failure = error
-                    }
-                }
-            } catch {
-                log.error("generation failed: \(String(describing: type(of: error)), privacy: .public)")
-                failure = Self.generationFailed
-            }
-            await queue.release(ticket)
-
-            if Task.isCancelled {                                          // the client went away
-                _ = tracker.fail(ServeError(status: 499, message: "Client closed the request.", code: "client_closed"))
-                return
-            }
-            if let failure {
-                write(OpenAIChatDialect.sse(OpenAIChatDialect.streamErrorChunk(failure)))
-                write(OpenAIChatDialect.done)
-                _ = tracker.fail(failure, response: false)
-                return
-            }
-            ensureRole()
-            write(OpenAIChatDialect.sse(OpenAIChatDialect.finishChunk(
-                id: id, created: created, model: model, finish: finish ?? .stop, includeUsage: includeUsage)))
-            if includeUsage, let usage {
-                write(OpenAIChatDialect.sse(OpenAIChatDialect.usageChunk(id: id, created: created, model: model, usage: usage)))
-            }
-            write(OpenAIChatDialect.done)
-            tracker.usage = usage
-            tracker.toolCalls = toolCallCount
-            _ = tracker.succeed(nil)
-        }
-
-        let heartbeat = Task {
-            let interval = environment.keepAliveSeconds
-            while !Task.isCancelled {
-                let idle = clock.secondsSinceLastWrite()
-                if idle >= interval {
-                    write(OpenAIChatDialect.keepAlive)
-                    try? await Task.sleep(for: .seconds(interval))
-                } else {
-                    try? await Task.sleep(for: .seconds(interval - idle))
-                }
-            }
-        }
-        continuation.onTermination = { _ in
-            producer.cancel()
-            heartbeat.cancel()
-        }
-        return .stream(status: 200,
-                       headers: ["Content-Type": "text/event-stream", "Cache-Control": "no-cache"],
-                       body: bytes)
-    }
-
-    // MARK: - Shared
-
-    fileprivate static let internalError = ServeError(status: 500, message: "The server couldn't handle this request.",
-                                                      type: "server_error", code: "internal_error")
-    fileprivate static let generationFailed = ServeError(status: 500, message: "The model failed to generate a reply.",
-                                                         type: "server_error", code: "generation_failed")
-
-    /// The `400` for a prompt that doesn't fit (R23, S2-6), carrying the limit **and** the count —
-    /// the shape the documented OpenAI error uses ("This model's maximum context length is N tokens.
-    /// However, your messages resulted in M tokens."). Implementer's call, pending owner
-    /// confirmation: plain numbers, and no `param` (the whole request is at fault, not one field).
     static func contextLengthMessage(count: Int, limit: Int) -> String {
-        "This model's maximum context length is \(limit) tokens, but this request's prompt is \(count) tokens. "
-            + "Shorten the messages and try again."
-    }
-}
-
-/// When the last byte (or heartbeat) was written — the heartbeat's only input.
-nonisolated final class WriteClock: @unchecked Sendable {
-    private let lock = NSLock()
-    private var last: Date
-    private let now: @Sendable () -> Date
-
-    init(now: @escaping @Sendable () -> Date) { self.now = now; self.last = now() }
-
-    func touch() { lock.lock(); last = now(); lock.unlock() }
-    func secondsSinceLastWrite() -> Double { lock.lock(); defer { lock.unlock() }; return now().timeIntervalSince(last) }
-}
-
-/// Accumulates one request's log line and writes it exactly once (metadata only).
-nonisolated final class RequestTracker: @unchecked Sendable {
-    private let head: ServeRequestHead
-    private let started: Date
-    private let environment: ServeEnvironment
-    private let lock = NSLock()
-    private var recorded = false
-
-    var model: String?
-    var toolsIgnored = false
-    /// Whether thinking was actually on for this request (S2-3) — metadata only, like everything
-    /// else here (rule 13).
-    var reasoningOn = false
-    var usage: ServeUsage?
-    /// How many tool calls the model produced — **a count only** (rule 13: no tool names, no
-    /// arguments, no results).
-    var toolCalls = 0
-
-    init(head: ServeRequestHead, started: Date, environment: ServeEnvironment) {
-        self.head = head
-        self.started = started
-        self.environment = environment
-    }
-
-    /// Log `status` and return the error as a response (`response: false` = only log it — the
-    /// stream already carried the error).
-    @discardableResult
-    func fail(_ error: ServeError, headers: [String: String] = [:], response: Bool = true) -> ServeReply {
-        record(status: error.status)
-        var all = ["Content-Type": "application/json"]
-        for (name, value) in headers { all[name] = value }
-        return .full(ServeResponse(status: error.status, body: error.body(), headers: all))
-    }
-
-    @discardableResult
-    func succeed(_ reply: ServeReply?) -> ServeReply {
-        record(status: 200)
-        return reply ?? .full(ServeResponse(status: 200, body: Data()))
-    }
-
-    private func record(status: Int) {
-        lock.lock()
-        defer { lock.unlock() }
-        guard !recorded else { return }
-        recorded = true
-        let finished = environment.now()
-        environment.requestLog.record(RequestLogEntry(
-            time: started, userAgent: head.userAgent, model: model,
-            promptTokens: usage?.promptTokens, completionTokens: usage?.completionTokens,
-            durationSeconds: finished.timeIntervalSince(started), status: status, toolsIgnored: toolsIgnored,
-            reasoningOn: reasoningOn, toolCalls: toolCalls,
-            cachedTokens: usage?.cachedTokens ?? 0, cacheFellBack: usage?.cacheFellBack ?? false))
+        ServePipeline.contextLengthMessage(count: count, limit: limit)
     }
 }
