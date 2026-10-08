@@ -333,4 +333,26 @@ struct PromptCacheRealModelTests {
         #expect(PromptCacheCounters.shared.snapshot.fallbacks == 1)
         #expect(await PromptCacheShared.store.count == 0)
     }
+
+    /// PC-3b: a **new session** that shares only the system prompt with an earlier one. On a
+    /// trimmable family only T was stored, so the system prefix is reused by trimming T back; on a
+    /// hybrid / sliding-window family S was stored and is reused exactly. Either way the reply must
+    /// equal cache-off (B1) and the reuse must reach the system prefix (~2K tokens here).
+    @Test(.enabled(if: PromptCacheRealModelTests.enabled))
+    func aNewSessionSharingOnlyTheSystemPromptReusesItAndMatchesCacheOff() async throws {
+        let (dir, pool, backend) = try Self.make()
+        await PromptCacheShared.store.clear()
+        let a = Self.request(Self.opening(Self.askForList))
+        let onA = try await Self.run(a, backend: backend, cache: true)
+        print("PCTEST new-session: session A stored \(onA.outcome?.storedAt ?? []) of \(onA.outcome?.promptTokens ?? 0) prompt tokens")
+        let b = Self.request(Self.opening("Using only the facts above, write a numbered list of at least 40 items, each naming a ferry master and the day he works."))
+        let onB = try await Self.run(b, backend: backend, cache: true)
+        let reused = onB.outcome?.reusedTokens ?? 0
+        print("PCTEST new-session: session B reused \(reused) of \(onB.outcome?.promptTokens ?? 0) (from a stored snapshot of \(onB.outcome?.hitStoredLength ?? -1)), stored \(onB.outcome?.storedAt ?? [])")
+        #expect(reused >= 1900, "the system prompt (~2K tokens) must be reused")
+        #expect(reused < (onB.outcome?.promptTokens ?? 0) - 8, "…but not the new question")
+        let offB = try await Self.run(b, backend: backend, cache: false)
+        Self.assertLongEnough(onB, "new session B")
+        try await Self.assertEquivalent(offB, onB, label: "new session B (system-prefix hit)", request: b, pool: pool, dir: dir)
+    }
 }

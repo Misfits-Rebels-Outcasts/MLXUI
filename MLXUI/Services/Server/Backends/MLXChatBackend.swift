@@ -313,6 +313,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
 
     private func run(_ request: ServeRequest,
                      into continuation: AsyncThrowingStream<ServeEvent, Error>.Continuation) async throws {
+        let runStart = ContinuousClock.now
         let container = try await pool.container(directory: directory, footprintBytes: footprintBytes,
                                                  architecture: architecture)
         // S2-2: S2-1's `system` hoisting and the flatten-or-keep decision for tool traffic now
@@ -337,7 +338,9 @@ nonisolated struct MLXChatBackend: ServeBackend {
         let thinking = ReasoningTemplateTable.thinkingOn(requested: request.reasoning,
                                                          forModelType: checkpointModelType)
         let renderContext: [String: any Sendable] = ["enable_thinking": thinking]
+        let containerSeconds = Self.seconds(ContinuousClock.now - runStart)
         try await container.perform { context in
+            let performStart = ContinuousClock.now
             let input: LMInput
             // PC-2 (T5): which render attempt succeeded — the probe renders must use the same one.
             var usedContext = true
@@ -397,6 +400,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 }
             }
             let promptTokens = input.text.tokens.size
+            let renderSeconds = Self.seconds(ContinuousClock.now - performStart)
 
             if let seed = request.seed { MLXRandom.seed(UInt64(truncatingIfNeeded: seed)) }
             let sampling = SamplingDefaults.load(directory: directory)
@@ -412,7 +416,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 request: request, messages: messages, input: input, context: context, parameters: parameters,
                 directory: directory, modelType: checkpointModelType, tools: tools,
                 hasToolHistory: hasToolHistory, renderContext: usedContext ? renderContext : nil,
-                observer: promptCacheObserver)
+                observer: promptCacheObserver, container: containerSeconds, render: renderSeconds)
             if Task.isCancelled { throw CancellationError() }
             let stream = try MLXLMCommon.generateTokens(
                 input: prepared.cache == nil ? input : LMInput(tokens: MLXArray(prepared.tailTokens)),
@@ -508,6 +512,10 @@ nonisolated struct MLXChatBackend: ServeBackend {
         }
     }
 
+    nonisolated static func seconds(_ d: Duration) -> Double {
+        Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18
+    }
+
     /// PC-2: the cache work for one request, or `nil` cache when it is bypassed or fails. A failure
     /// of the cache path is never a failure of the request: it runs as if the cache were off.
     /// Cancellation is the one thing that propagates (the caller checks `Task.isCancelled`).
@@ -515,7 +523,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
         request: ServeRequest, messages: [ServeMessage], input: LMInput, context: ModelContext,
         parameters: GenerateParameters, directory: URL, modelType: String,
         tools: [[String: any Sendable]], hasToolHistory: Bool, renderContext: [String: any Sendable]?,
-        observer: (@Sendable (PromptCacheOutcome) -> Void)?
+        observer: (@Sendable (PromptCacheOutcome) -> Void)?, container: Double, render: Double
     ) async -> PreparedPrompt {
         let promptTokens = input.text.tokens.size
         var outcome = PromptCacheOutcome(
@@ -558,6 +566,9 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 prepared = PreparedPrompt(cache: nil, tailTokens: [], outcome: outcome)
             }
         }
+        outcome.timings.container = container
+        outcome.timings.render = render
+        prepared.outcome = outcome
         PromptCacheCounters.shared.record(outcome)
         observer?(outcome)
         return prepared

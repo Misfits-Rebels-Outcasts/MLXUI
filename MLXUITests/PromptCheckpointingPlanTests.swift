@@ -38,6 +38,7 @@ struct PromptCheckpointingPlanTests {
                 return Array(tokens[0..<system]) + [-9]
             },
             newCache: { FakeCache() },
+            isTrimmable: { _ in trimmable },
             restore: { hit in
                 let cache = FakeCache()
                 cache.fed = Array(hit.makeCopy().covered.prefix(hit.reusedLength))     // copy, then trim
@@ -125,13 +126,61 @@ struct PromptCheckpointingPlanTests {
         #expect(failed.tailTokens == tokens)
     }
 
-    @Test func everyShapeOfPromptKeepsTheInvariant() async throws {
+    // MARK: PC-3b — a trimmable cache stores only T
+
+    @Test func aTrimmableCacheStoresOnlyTheTurnBoundaryButStillPrefillsThroughTheSystemBoundary() async throws {
+        let tokens = ids(1000)
+        let s = store()
+        let result = try await plan(s, tokens: tokens, turn: 996, system: 700, trimmable: true)
+        expectExact(result, tokens)
+        #expect(result.cache?.calls.map { [$0.from, $0.to] } == [[0, 700], [700, 996]])    // the work is the same…
+        #expect(result.outcome.storedAt == [996])                                           // …one snapshot, not two
+        #expect(await s.count == 1)
+    }
+
+    @Test func aNonTrimmableCacheKeepsBothBoundaries() async throws {
+        let tokens = ids(1000)
+        let s = store()
+        let result = try await plan(s, tokens: tokens, turn: 996, system: 700, trimmable: false)
+        #expect(result.outcome.storedAt == [700, 996])
+        #expect(await s.count == 2)
+    }
+
+    @Test func aSecondSessionSharingOnlyTheSystemPrefixStillReusesItFromTheSingleTrimmableSnapshot() async throws {
+        let s = store()
+        let first = ids(1000)
+        _ = try await plan(s, tokens: first, turn: 996, system: 700, trimmable: true)       // stores T only
+        // a new session: same system prefix (720 tokens incl. the user header), different conversation
+        let second = Array(first[0..<720]) + Array(5000..<5400)
+        let result = try await plan(s, tokens: second, turn: 1100, system: 700, trimmable: true)
+        expectExact(result, second)
+        #expect(result.outcome.reusedTokens == 720)                                         // ≥ S: covered by trimming T
+        #expect(result.outcome.hitStoredLength == 996)
+        #expect(await s.count == 2)                                                         // + the new session's own T
+    }
+
+    @Test func aSecondSessionOnANonTrimmableCacheReusesTheSystemSnapshot() async throws {
+        let s = store()
+        let first = ids(1000)
+        _ = try await plan(s, tokens: first, turn: 996, system: 700, trimmable: false)      // stores S and T
+        let second = Array(first[0..<720]) + Array(5000..<5400)
+        let result = try await plan(s, tokens: second, turn: 1100, system: 700, trimmable: false)
+        expectExact(result, second)
+        #expect(result.outcome.reusedTokens == 700)                                         // exactly S
+        #expect(result.outcome.hitStoredLength == 700)
+    }
+
+    @Test func everyShapeOfPromptKeepsTheInvariantForBothKindsOfCache() async throws {
+        for trimmable in [false, true] { try await sweep(trimmable: trimmable) }
+    }
+
+    private func sweep(trimmable: Bool) async throws {
         // A sweep: lengths × boundaries, hits and misses alike.
         let s = store()
         for n in [260, 300, 513, 1024, 2047] {
             let tokens = ids(n)
             for (turn, system) in [(n - 4, n / 2), (n, nil), (n - 1, n - 1), (n / 2, nil), (nil, n / 3)] as [(Int?, Int?)] {
-                let result = try await plan(s, tokens: tokens, turn: turn, system: system)
+                let result = try await plan(s, tokens: tokens, turn: turn, system: system, trimmable: trimmable)
                 expectExact(result, tokens)
                 if let cache = result.cache {
                     var cursor = result.outcome.reusedTokens
