@@ -79,4 +79,18 @@ struct PromptCachePolicyTests {
         // a failed render (nil probe) just means no checkpoint from it
         #expect(PromptCheckpoints.positions(actual: actual, turnProbe: nil, systemProbe: nil, minimumLength: 256).isEmpty)
     }
+
+    // MARK: the TCP-1 detector used by the real-model markup test
+
+    @Test func theDroppedCloseDetectorSeesTCP1AndNothingElse() {
+        #expect(PromptCacheMarkup.hasDroppedClose("<div<span>hi</span></div>"))              // TCP-1: `>` dropped
+        #expect(PromptCacheMarkup.hasDroppedClose("<div\n<span>hi</span>\n</div>"))          // …with a newline where it was
+        #expect(PromptCacheMarkup.hasDroppedClose("x <div class=\"a\" <span>"))
+        #expect(!PromptCacheMarkup.hasDroppedClose("<div><span>hi</span></div>"))
+        #expect(!PromptCacheMarkup.hasDroppedClose("<div>\n<span>hi</span>\n</div>"))        // Ministral's layout is fine
+        #expect(!PromptCacheMarkup.hasDroppedClose("a < b and b > c"))
+        #expect(!PromptCacheMarkup.hasDroppedClose(""))
+        #expect(PromptCacheMarkup.completeTags(in: "<div>\n<span>hi</span>\n</div>") == 4)
+        #expect(PromptCacheMarkup.completeTags(in: "no markup here") == 0)
+    }
 }
