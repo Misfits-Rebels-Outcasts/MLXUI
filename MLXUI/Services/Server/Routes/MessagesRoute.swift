@@ -22,7 +22,8 @@ nonisolated enum MessagesRoute {
         guard !prepared.request.stream else {
             return ServePipeline.stream(prepared,
                                         encoder: AnthropicStreamEncoder(id: AnthropicMessagesDialect.makeMessageID(),
-                                                                        model: prepared.request.model),
+                                                                        model: prepared.request.model,
+                                                                        promptTokens: prepared.promptTokens),
                                         tracker: tracker, environment: environment)
         }
         let collected: ServeCollected

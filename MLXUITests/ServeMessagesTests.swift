@@ -634,6 +634,18 @@ struct AnthropicStreamTests {
         #expect(response.status == 404 && object(response.body)?["type"] as? String == "error")
     }
 
+    /// S3-2c: `message_start` carries the prepare-time count (what the counter said), 0 when it couldn't count.
+    @Test func messageStartCarriesThePrepareTimeCount() async throws {
+        func startUsage(count: Int?) async throws -> [String: Int] {
+            let backend = MessagesBackend(events: [.textDelta("x"), usage(999, 1), .finish(.stop)], count: count)
+            let run = await stream([], backend: backend)
+            let message = try #require(run.events.first?.json["message"] as? [String: Any])
+            return try #require(message["usage"] as? [String: Int])
+        }
+        #expect(try await startUsage(count: 321) == ["input_tokens": 321, "output_tokens": 0])
+        #expect(try await startUsage(count: nil) == ["input_tokens": 0, "output_tokens": 0])
+    }
+
     @Test func keepAliveIsAnthropicsPing() async throws {
         let encoder = AnthropicStreamEncoder(id: "msg_x", model: "m")
         #expect(String(decoding: encoder.keepAlive, as: UTF8.self) == "event: ping\ndata: {\"type\":\"ping\"}\n\n")

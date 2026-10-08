@@ -34,6 +34,9 @@ nonisolated struct ServePrepared: Sendable {
     let request: ServeRequest
     let backend: ServeBackend
     let ticket: ServeQueue.Ticket
+    /// The S2-6 render's count of the prompt, when the backend could make one (S3-2c). Additive: the
+    /// OpenAI route ignores it; the Anthropic stream seeds `message_start.usage.input_tokens` with it.
+    var promptTokens: Int? = nil
 }
 
 /// Everything a non-streaming generation produced.
@@ -82,7 +85,8 @@ nonisolated enum ServePipeline {
                                                     type: "server_error", code: "server_busy"),
                                          retryAfterSeconds: 2))
         }
-        return .success(ServePrepared(request: resolved.request, backend: resolved.backend, ticket: ticket))
+        return .success(ServePrepared(request: resolved.request, backend: resolved.backend, ticket: ticket,
+                                      promptTokens: resolved.promptTokens))
     }
 
     /// S3-2: the prompt's token count for `/v1/messages/count_tokens` — the same resolution, `tools`
