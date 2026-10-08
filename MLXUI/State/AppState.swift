@@ -81,7 +81,7 @@ final class AppState { //appstatecomeback
     /// rule 10, ruling C1). **Committed `true` until the owner flips it at Review PC-A**; flip it
     /// locally only for the real-model tests and smoke rows. Every prompt-cache path asks
     /// `PromptCache.isEnabled`, never this flag.
-    static let disablePromptCache = true
+    static let disablePromptCache = false
 
     /// Set to `true` to hide the `code` and `improvise` rows from the flow editor's **Flow**
     /// tab capability-flag list. The other three flags (`network`, `offdevice`, `events`)
