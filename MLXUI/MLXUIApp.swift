@@ -106,6 +106,11 @@ struct MLXUIApp: App {
                     }
                 }
             }
+            // Launch size: the window's minimum comes from here. Without it the first content
+            // shown is the "Loading catalog…" spinner, and `.contentSize` clamped the 1400×900
+            // default down to the spinner's size — the App Store build opened tiny, and macOS
+            // then autosaved that tiny frame. (Same floor the unused `ContentView` declares.)
+            .frame(minWidth: 900, minHeight: 600)
             .environment(appState)
             // S1-5 — resume serving if the user left models served (gate permitting; a no-op
             // while hidden and under test).
@@ -195,7 +200,7 @@ struct MLXUIApp: App {
             .onChange(of: appState.filterSource) { _, _ in appState.saveFilters() }
             .onChange(of: appState.sortOrder) { _, _ in appState.saveFilters() }
         }
-        .windowResizability(.contentSize)
+        .windowResizability(.contentMinSize)   // min from content, no max clamp
         .defaultSize(width: 1400, height: 900)
         .commands {
             CommandGroup(replacing: .newItem) {
