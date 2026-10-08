@@ -39,8 +39,9 @@ struct PromptCacheStoreTests {
         let hit = await s.lookup(key: key(), prompt: tokens(350))
         #expect(hit?.reusedLength == 300)
         #expect(hit?.trimBy == 0)
-        #expect(hit?.snapshot.copies == 1)                       // T4: never the stored one
-        #expect(await s.lookup(key: key(), prompt: tokens(350))?.snapshot.copies == 1)   // …and the store's stays pristine
+        #expect(hit?.stored.copies == 0)                         // lookup copies nothing: the backend does, in `perform`
+        #expect(hit?.makeCopy().copies == 1)                     // T4: the model only ever gets a copy
+        #expect(await s.lookup(key: key(), prompt: tokens(350))?.makeCopy().copies == 1)   // …and the store's stays pristine
     }
 
     @Test func oneDifferentTokenInsideANonTrimmableSnapshotIsAMiss() async {
@@ -95,9 +96,9 @@ struct PromptCacheStoreTests {
         await s.insert(key: key(), tokens: tokens(300), snapshot: Fake(name: "S"), bytes: Self.mb, trimmable: false)
         await s.insert(key: key(), tokens: tokens(900), snapshot: Fake(name: "T"), bytes: Self.mb, trimmable: false)
         let hit = await s.lookup(key: key(), prompt: tokens(1000))
-        #expect(hit?.snapshot.name == "T")
+        #expect(hit?.stored.name == "T")
         #expect(hit?.reusedLength == 900)                        // T17: every Fake has offset 0
-        #expect(await s.lookup(key: key(), prompt: tokens(500))?.snapshot.name == "S")
+        #expect(await s.lookup(key: key(), prompt: tokens(500))?.stored.name == "S")
     }
 
     @Test func aDifferentModelKeyNeverMatches() async {
@@ -174,6 +175,44 @@ struct PromptCacheStoreTests {
             #expect(budget.usedBytes <= 100 * Self.mb)
         }
         #expect(await s.count == 3)
+    }
+
+    @Test func aSnapshotThatCanNeverFitDropsNothing() async throws {
+        let budget = MemoryBudget(capacityBytes: 10 * Self.gb)
+        let pool = ResidentPool<Weights>(budget: budget)
+        let s = store(budget)                                        // cap 2.5 GB
+        _ = try await pool.value(for: "A", bytes: 8 * Self.gb) { Weights("A") }
+        let k = key()
+        await s.insert(key: k, tokens: tokens(300), snapshot: Fake(name: "1"), bytes: 512 * Self.mb, trimmable: false)
+        await s.insert(key: k, tokens: tokens(400), snapshot: Fake(name: "2"), bytes: 512 * Self.mb, trimmable: false)
+        // free = 10 − 8 − 1 = 1 GB; plus the store's own 1 GB → at most 2 GB can ever be found.
+        #expect(await s.insert(key: k, tokens: tokens(500), snapshot: Fake(name: "big"), bytes: 2 * Self.gb + 200 * Self.mb, trimmable: false) == false)
+        #expect(await s.storedLengths(for: k).sorted() == [300, 400])     // nothing was flushed for it
+        #expect(budget.usedBytes == 9 * Self.gb)
+        #expect(await pool.residentKeys == ["A"])
+        // exactly what can be found is accepted — by dropping the older ones
+        #expect(await s.insert(key: k, tokens: tokens(500), snapshot: Fake(name: "fits"), bytes: 2 * Self.gb, trimmable: false))
+        #expect(await s.storedLengths(for: k) == [500])
+        #expect(budget.usedBytes == 10 * Self.gb)
+    }
+
+    // MARK: - tryReserve (PC-1 review, carry-over 1)
+
+    @Test func tryReserveTakesRoomOnlyWhenItIsFreeAndAsksNobodyToEvict() async {
+        let budget = MemoryBudget(capacityBytes: 100)
+        let log = OrderLog()
+        let holder = Recorder(name: "holder", priority: 0, log: log)
+        let snaps = Recorder(name: "snaps", priority: MemoryBudget.snapshotPriority, log: log)
+        budget.register(holder); budget.register(snaps)
+        let first = budget.tryReserve(bytes: 60)
+        #expect(first != nil)
+        if let first { budget.commit(first) }
+        #expect(budget.usedBytes == 60)
+        #expect(budget.tryReserve(bytes: 41) == nil)                 // does not fit → nil…
+        #expect(budget.usedBytes == 60)                              // …and nothing was added
+        #expect(await log.names.isEmpty)                             // …and nobody was asked to make room
+        #expect(budget.tryReserve(bytes: 40) != nil)                 // exactly the free room
+        #expect(budget.usedBytes == 100)
     }
 
     // MARK: - Memory: snapshots go before weights (ruling A1, T11)

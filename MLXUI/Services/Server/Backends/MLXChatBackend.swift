@@ -218,6 +218,10 @@ nonisolated struct MLXChatBackend: ServeBackend {
 
     var modelType: String? { checkpointModelType.isEmpty ? nil : checkpointModelType }
 
+    /// PC-2: told what each request did with the prompt cache (counts only, never content). Tests
+    /// set it; PC-3 turns `reusedTokens` into `usage.cached_tokens` and the request log.
+    var promptCacheObserver: (@Sendable (PromptCacheOutcome) -> Void)? = nil
+
     init(directory: URL, footprintBytes: Int64? = nil, architecture: String? = nil,
          pool: ModelContainerPool = .shared) {
         self.directory = directory
@@ -335,6 +339,8 @@ nonisolated struct MLXChatBackend: ServeBackend {
         let renderContext: [String: any Sendable] = ["enable_thinking": thinking]
         try await container.perform { context in
             let input: LMInput
+            // PC-2 (T5): which render attempt succeeded — the probe renders must use the same one.
+            var usedContext = true
             if hasToolHistory {
                 // `.messages` carries the raw template dictionaries, which is the only way to hand
                 // mlx-swift-lm an assistant `tool_calls` array or a `tool_call_id`: `Chat.Message`
@@ -345,6 +351,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
                         input: UserInput(prompt: .messages(raw), tools: tools.isEmpty ? nil : tools,
                                          additionalContext: renderContext))
                 } catch {
+                    usedContext = false
                     // As below: the optional render context is retried without, and a refusal that
                     // survives the retry is the template's own 400 (S2-8).
                     do {
@@ -369,6 +376,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
                         input: UserInput(chat: chat, tools: tools.isEmpty ? nil : tools,
                                          additionalContext: renderContext))
                 } catch {
+                    usedContext = false
                     // The render context (`enable_thinking`) is optional by design — a template that
                     // doesn't read it may raise, so retry without it. S2-8: if the *retry* is refused
                     // too, the checkpoint is declining the request: report that as a 400, not a 500.
@@ -397,7 +405,18 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 maxTokens: request.effectiveMaxTokens,
                 temperature: Float(sampling.temperature),
                 topP: Float(sampling.topP))
-            let stream = try MLXLMCommon.generateTokens(input: input, parameters: parameters, context: context)
+
+            // PC-2 — the one seam. Everything below this block is unchanged: the stream is just
+            // generated from a prefilled cache and the tail instead of from the whole prompt.
+            let prepared = await Self.preparePromptCache(
+                request: request, messages: messages, input: input, context: context, parameters: parameters,
+                directory: directory, modelType: checkpointModelType, tools: tools,
+                hasToolHistory: hasToolHistory, renderContext: usedContext ? renderContext : nil,
+                observer: promptCacheObserver)
+            if Task.isCancelled { throw CancellationError() }
+            let stream = try MLXLMCommon.generateTokens(
+                input: prepared.cache == nil ? input : LMInput(tokens: MLXArray(prepared.tailTokens)),
+                cache: prepared.cache, parameters: parameters, context: context)
 
             // The scanner exists only when a tool call could actually be produced; `tools` empty
             // means the family can't use them or the client asked for `tool_choice: "none"`.
@@ -486,6 +505,59 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 : (hitLimit && !stoppedByClient ? .length : .stop)
             continuation.yield(.finish(finish))
         }
+    }
+
+    /// PC-2: the cache work for one request, or `nil` cache when it is bypassed or fails. A failure
+    /// of the cache path is never a failure of the request: it runs as if the cache were off.
+    /// Cancellation is the one thing that propagates (the caller checks `Task.isCancelled`).
+    private static func preparePromptCache(
+        request: ServeRequest, messages: [ServeMessage], input: LMInput, context: ModelContext,
+        parameters: GenerateParameters, directory: URL, modelType: String,
+        tools: [[String: any Sendable]], hasToolHistory: Bool, renderContext: [String: any Sendable]?,
+        observer: (@Sendable (PromptCacheOutcome) -> Void)?
+    ) async -> PreparedPrompt {
+        let promptTokens = input.text.tokens.size
+        var outcome = PromptCacheOutcome(
+            bypass: PromptCachePolicy.bypass(enabled: PromptCache.isEnabled, modelType: modelType,
+                                             seed: request.seed, kvBits: parameters.kvBits,
+                                             maxKVSize: parameters.maxKVSize),
+            promptTokens: promptTokens)
+        var prepared = PreparedPrompt(cache: nil, tailTokens: [], outcome: outcome)
+        if outcome.bypass == nil {
+            let key = PromptCacheModelKey(
+                directory: directory,
+                parameters: "kvBits=nil;maxKVSize=nil;prefillStepSize=\(parameters.prefillStepSize)")
+            let toolsArgument: [[String: any Sendable]]? = tools.isEmpty ? nil : tools
+            // Probe renders: the same shape (raw `.messages` vs `Chat.Message`), the same `tools`
+            // and the same context attempt as the real prompt (T5).
+            let render: ([ServeMessage]) async throws -> [Int] = { probe in
+                let probeInput: LMInput
+                if hasToolHistory {
+                    probeInput = try await context.processor.prepare(
+                        input: UserInput(prompt: .messages(Self.rawMessages(probe)), tools: toolsArgument,
+                                         additionalContext: renderContext))
+                } else {
+                    let chat = probe.map { Chat.Message(role: Self.role($0.role), content: $0.text) }
+                    probeInput = try await context.processor.prepare(
+                        input: UserInput(chat: chat, tools: toolsArgument, additionalContext: renderContext))
+                }
+                return probeInput.text.tokens.asArray(Int.self)
+            }
+            do {
+                prepared = try await PromptCheckpointing.prepare(
+                    store: PromptCacheShared.store, key: key, messages: messages,
+                    tokens: input.text.tokens.asArray(Int.self), context: context,
+                    parameters: parameters, render: render)
+                outcome = prepared.outcome
+            } catch {
+                // Cancellation is re-raised by the caller's `Task.isCancelled` check; anything else
+                // falls back to the uncached path.
+                if !(error is CancellationError) { outcome.bypass = .failed }
+                prepared = PreparedPrompt(cache: nil, tailTokens: [], outcome: outcome)
+            }
+        }
+        observer?(outcome)
+        return prepared
     }
 
     /// Whether the **rendered prompt** already opened the think block (S2-3b, review call 2).

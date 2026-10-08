@@ -50,15 +50,26 @@ nonisolated struct PromptCacheModelKey: Hashable, Sendable {
 }
 
 /// A reusable prefix handed back by `lookup`.
+///
+/// **The copy is not made here.** `KVCache.copy()` builds lazy MLX slices; the store is an actor
+/// whose executor is not the model container's, and mlx-swift's graph construction is not
+/// documented as thread-safe off the thread that evaluates it (PC-1 review, carry-over 3; journal
+/// 2026-420). So the hit carries the stored reference and the copy step, and the backend calls
+/// `makeCopy()` **inside `container.perform`** — and only there (T4: never hand the model the
+/// stored one). The stored snapshot is never mutated, so holding its reference across the actor
+/// boundary is safe.
 nonisolated struct PromptCacheHit<Snapshot: Sendable>: Sendable {
-    /// A **copy** of the stored snapshot (T4) — the store's own is never handed out.
-    let snapshot: Snapshot
+    let stored: Snapshot
+    let copyStep: @Sendable (Snapshot) -> Snapshot
     /// How many prompt tokens the snapshot covers once trimmed: prefill starts here. Always ≤ n − 1.
     let reusedLength: Int
     /// Tokens to trim off the copy first (0 for an exact-prefix hit; > 0 only for a trimmable one).
     let trimBy: Int
     /// The stored snapshot's own length, for logs.
     let storedLength: Int
+
+    /// A fresh copy of the stored snapshot. Call it where the model runs.
+    func makeCopy() -> Snapshot { copyStep(stored) }
 }
 
 nonisolated enum PromptCacheDefaults {
@@ -97,8 +108,8 @@ actor PromptCacheStore<Snapshot: Sendable>: MemoryBudgetParticipant {
     let minimumReuse: Int
     let maxPerModel: Int
 
-    /// - Parameter copy: how to duplicate a snapshot (`KVCache.copy()` per layer). Called on every
-    ///   hit, so the stored one stays pristine.
+    /// - Parameter copy: how to duplicate a snapshot (`KVCache.copy()` per layer). Handed to every
+    ///   hit as `copyStep`; the backend runs it inside `container.perform`.
     init(budget: MemoryBudget = .shared,
          capFraction: Double = PromptCacheDefaults.capFraction,
          minimumReuse: Int = PromptCacheDefaults.minimumReuse,
@@ -158,7 +169,7 @@ actor PromptCacheStore<Snapshot: Sendable>: MemoryBudgetParticipant {
         clock += 1
         entries[best.index].lastUsed = clock
         let entry = entries[best.index]
-        return PromptCacheHit(snapshot: copySnapshot(entry.snapshot), reusedLength: best.reuse,
+        return PromptCacheHit(stored: entry.snapshot, copyStep: copySnapshot, reusedLength: best.reuse,
                               trimBy: entry.tokens.count - best.reuse, storedLength: entry.tokens.count)
     }
 
@@ -173,6 +184,9 @@ actor PromptCacheStore<Snapshot: Sendable>: MemoryBudgetParticipant {
     func insert(key: PromptCacheModelKey, tokens: [Int], snapshot: Snapshot, bytes: Int64,
                 trimmable: Bool) -> Bool {
         guard bytes > 0, !tokens.isEmpty, bytes <= capBytes else { return false }
+        // Never flush the store for a snapshot that can't fit even then (PC-1 review, carry-over 2):
+        // the most room there could ever be is what is free now plus everything this store holds.
+        guard bytes <= budget.capacityBytes - budget.usedBytes + totalBytes else { return false }
         let digest = Self.digest(tokens)
         if let i = entries.firstIndex(where: {
             $0.key == key && $0.tokens.count == tokens.count && $0.tokenDigest == digest && $0.tokens == tokens
