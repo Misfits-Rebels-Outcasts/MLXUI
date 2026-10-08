@@ -8,10 +8,12 @@ struct PromptCachePolicyTests {
 
     // MARK: kill switch and allowlist
 
-    @Test func theKillSwitchIsCommittedOnAndPromptCacheFollowsIt() {
-        #expect(AppState.disablePromptCache == true)                // rule 10: flipped only by the owner
+    @Test func theKillSwitchIsShippedOffAndPromptCacheFollowsItAndTheServerGate() {
+        #expect(AppState.disablePromptCache == false)               // shipped at Review PC-A, 2026-10-08 (99fda41)
         PromptCache.overrideForTesting = nil
-        #expect(PromptCache.isEnabled == false)
+        #expect(PromptCache.isEnabled == (!AppState.disablePromptCache && LocalServerGate.isAvailable))
+        PromptCache.overrideForTesting = false
+        #expect(PromptCache.isEnabled == false)                     // the test override still wins either way
         PromptCache.overrideForTesting = true
         #expect(PromptCache.isEnabled == true)
         PromptCache.overrideForTesting = nil
