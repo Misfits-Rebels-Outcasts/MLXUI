@@ -77,10 +77,10 @@ final class AppState { //appstatecomeback
     /// them. Every surface asks `LocalServerGate.isAvailable`, never this flag directly.
     static let hideLocalServer = false
 
-    /// PC-2 kill switch for the Local Server's prompt cache (`RSI/DelegatePromptCacheBacklog.md`
-    /// rule 10, ruling C1). **Committed `true` until the owner flips it at Review PC-A**; flip it
-    /// locally only for the real-model tests and smoke rows. Every prompt-cache path asks
-    /// `PromptCache.isEnabled`, never this flag.
+    /// Kill switch for the Local Server's prompt cache (`RSI/DelegatePromptCacheBacklog.md` rule 10,
+    /// ruling C1). **Shipped `false` (cache on) at Review PC-A, 2026-10-08.** Set it `true` to switch
+    /// the cache off everywhere. Every prompt-cache path asks `PromptCache.isEnabled`, never this
+    /// flag, and that also requires the Local Server to be available (`LocalServerGate`).
     static let disablePromptCache = false
 
     /// Set to `true` to hide the `code` and `improvise` rows from the flow editor's **Flow**
