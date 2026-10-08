@@ -365,6 +365,7 @@ nonisolated final class RequestTracker: @unchecked Sendable {
             time: started, userAgent: head.userAgent, model: model,
             promptTokens: usage?.promptTokens, completionTokens: usage?.completionTokens,
             durationSeconds: finished.timeIntervalSince(started), status: status, toolsIgnored: toolsIgnored,
-            reasoningOn: reasoningOn, toolCalls: toolCalls))
+            reasoningOn: reasoningOn, toolCalls: toolCalls,
+            cachedTokens: usage?.cachedTokens ?? 0, cacheFellBack: usage?.cacheFellBack ?? false))
     }
 }

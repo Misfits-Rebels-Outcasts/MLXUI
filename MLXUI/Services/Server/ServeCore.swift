@@ -14,6 +14,12 @@ nonisolated enum ServeFinishReason: String, Sendable, Equatable {
 nonisolated struct ServeUsage: Sendable, Equatable {
     var promptTokens: Int
     var completionTokens: Int
+    /// PC-3: prompt tokens served from the prompt cache. **Part of `promptTokens`, not extra** (it
+    /// is the OpenAI `prompt_tokens_details.cached_tokens` meaning). 0 = a miss or the cache is off.
+    var cachedTokens: Int = 0
+    /// PC-3: the cache path failed and the request ran as if the cache were off. Never on the wire;
+    /// it exists so a failing cache can't hide as "no hit" in the request log.
+    var cacheFellBack: Bool = false
     var totalTokens: Int { promptTokens + completionTokens }
 }
 
@@ -280,6 +286,10 @@ nonisolated struct RequestLogEntry: Sendable, Equatable {
     /// How many tool calls the model produced (S2-2). **A count only** — rule 13: no tool names,
     /// no arguments, no results, ever.
     var toolCalls: Int = 0
+    /// PC-3: prompt tokens served from the prompt cache. A count only (rule 9).
+    var cachedTokens: Int = 0
+    /// PC-3: the cache path failed and the request ran uncached (metadata only).
+    var cacheFellBack: Bool = false
 }
 
 /// A bounded in-memory log the Connect sheet / Settings pane will read (S1-5).

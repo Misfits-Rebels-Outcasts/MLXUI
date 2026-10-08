@@ -70,6 +70,12 @@ struct LocalServerSettingsView: View {
                 }
             }
 
+            // PC-3: only while the prompt cache is switched on (rule 10) — and, like the whole pane,
+            // only when the Local Server is available (rule 14).
+            if PromptCache.isEnabled {
+                Section("Prompt cache") { PromptCacheLine() }
+            }
+
             Section("Recent requests") {
                 RequestLogList(log: controller.server.requestLog)
             }
@@ -148,6 +154,31 @@ struct RequestLogList: View {
         // S2-2: how many tool calls the model made — a count only, never a name, an argument or a
         // result (rule 13). This line is the request log's only consumer.
         if entry.toolCalls > 0 { parts.append(entry.toolCalls == 1 ? "1 tool call" : "\(entry.toolCalls) tool calls") }
+        // PC-3: how much of the prompt came from the cache — a count — and, when the cache path
+        // failed and the request ran without it, a marker, so a broken cache can't hide as "no hit".
+        if entry.cachedTokens > 0 { parts.append("reused \(entry.cachedTokens)") }
+        if entry.cacheFellBack { parts.append("cache fell back") }
         return parts.joined(separator: "  ")
+    }
+}
+
+/// PC-3: "Prompt cache: N snapshots, X GB". Refreshes while it is on screen; counts and bytes only.
+struct PromptCacheLine: View {
+    @State private var snapshots = 0
+    @State private var bytes: Int64 = 0
+    @State private var fallbacks = 0
+
+    var body: some View {
+        Text(PromptCacheSummary.line(snapshots: snapshots, bytes: bytes, fallbacks: fallbacks))
+            .font(.callout)
+            .foregroundStyle(fallbacks > 0 ? Color.orange : Color.secondary)
+            .task {
+                while !Task.isCancelled {
+                    snapshots = await PromptCacheShared.store.count
+                    bytes = await PromptCacheShared.store.totalBytes
+                    fallbacks = PromptCacheCounters.shared.snapshot.fallbacks
+                    try? await Task.sleep(for: .seconds(2))
+                }
+            }
     }
 }

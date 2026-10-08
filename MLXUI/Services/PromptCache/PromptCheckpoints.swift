@@ -41,21 +41,78 @@ nonisolated enum PromptCheckpoints {
 }
 
 /// The result of preparing a request's KV cache.
-nonisolated struct PreparedPrompt: @unchecked Sendable {
+nonisolated struct PromptPlan<Cache>: @unchecked Sendable {
     /// `nil` = no cache work happened: generate from the full input exactly as without the cache.
-    let cache: [KVCache]?
+    let cache: Cache?
     /// The tokens still to process (`tokens[prefilled...]`); the whole prompt when `cache == nil`.
     let tailTokens: [Int]
     var outcome: PromptCacheOutcome
 }
 
+typealias PreparedPrompt = PromptPlan<[KVCache]>
+
 nonisolated enum PromptCheckpointing {
-    /// Look the prompt up, copy and trim the hit (inside the caller's `perform`), prefill to the
-    /// checkpoints, insert a snapshot after each finished segment, and hand back the cache plus the
-    /// tail. Cancellation throws before the unfinished segment is stored.
+    /// The whole algorithm, with the model's three operations passed in so it can be pinned without
+    /// a model (PC-3 carry-over 2): what is **reused + prefilled + handed to `generateTokens` as the
+    /// tail** is the prompt exactly — no gap, no overlap, and the tail is never empty.
     ///
-    /// - Parameter render: renders a conversation the **same way the real prompt was rendered**
-    ///   (T5) and returns its token ids; a throw means "no checkpoint from that probe".
+    /// - `restore`: turns a hit into a cache holding exactly `hit.reusedLength` tokens (copy, then
+    ///   trim), or `nil` if that can't be done — a miss, never a wrong cache.
+    /// - `prefill(from, to, cache)`: feeds `tokens[from..<to]` and evaluates; throws on cancellation.
+    /// - `snapshot(cache)`: an evaluated copy, its bytes, and whether it can be trimmed.
+    /// - `render`: renders a probe conversation **the same way the real prompt was rendered** (T5).
+    static func plan<Cache, Snapshot: Sendable>(
+        store: PromptCacheStore<Snapshot>,
+        key: PromptCacheModelKey,
+        messages: [ServeMessage],
+        tokens: [Int],
+        render: ([ServeMessage]) async throws -> [Int],
+        newCache: () -> Cache,
+        restore: (PromptCacheHit<Snapshot>) -> Cache?,
+        prefill: (_ from: Int, _ to: Int, _ cache: Cache) throws -> Void,
+        snapshot: (Cache) -> (snapshot: Snapshot, bytes: Int64, trimmable: Bool)
+    ) async throws -> PromptPlan<Cache> {
+        var outcome = PromptCacheOutcome(promptTokens: tokens.count)
+        let n = tokens.count
+        guard n >= 2 else { return PromptPlan(cache: nil, tailTokens: tokens, outcome: outcome) }
+
+        // 1. lookup → a copy made on the generating side, trimmed if needed.
+        var working: Cache?
+        var position = 0
+        if let hit = await store.lookup(key: key, prompt: tokens), let restored = restore(hit) {
+            working = restored
+            position = hit.reusedLength
+            outcome.reusedTokens = hit.reusedLength
+            outcome.hitStoredLength = hit.storedLength
+        }
+
+        // 2. where to checkpoint (probe renders; a failed probe just means no checkpoint there)
+        let probes = PromptCheckpoints.probeMessages(for: messages)
+        let turnProbe = try? await render(probes.turn)
+        let systemProbe: [Int]? = if let system = probes.system { try? await render(system) } else { nil }
+        let wanted = PromptCheckpoints.positions(actual: tokens, turnProbe: turnProbe, systemProbe: systemProbe,
+                                                 minimumLength: store.minimumReuse).filter { $0 > position }
+
+        // 3. prefill segment by segment; store each snapshot only after its segment is evaluated.
+        if !wanted.isEmpty, working == nil { working = newCache() }
+        for target in wanted {
+            guard let cache = working else { break }
+            try prefill(position, target, cache)
+            position = target
+            let taken = snapshot(cache)
+            let stored = await store.insert(key: key, tokens: Array(tokens[0..<target]), snapshot: taken.snapshot,
+                                            bytes: taken.bytes, trimmable: taken.trimmable)
+            if stored { outcome.storedAt.append(target) }
+        }
+
+        guard let cache = working, position > 0 else {
+            return PromptPlan(cache: nil, tailTokens: tokens, outcome: outcome)
+        }
+        return PromptPlan(cache: cache, tailTokens: Array(tokens[position...]), outcome: outcome)
+    }
+
+    /// The real model's version: copy and trim a hit, prefill through the model, snapshot as a
+    /// `KVSnapshot`. Cancellation throws before the unfinished segment is stored.
     static func prepare(
         store: PromptCacheStore<KVSnapshot>,
         key: PromptCacheModelKey,
@@ -65,49 +122,22 @@ nonisolated enum PromptCheckpointing {
         parameters: GenerateParameters,
         render: ([ServeMessage]) async throws -> [Int]
     ) async throws -> PreparedPrompt {
-        var outcome = PromptCacheOutcome(promptTokens: tokens.count)
-        let n = tokens.count
-        guard n >= 2 else { return PreparedPrompt(cache: nil, tailTokens: tokens, outcome: outcome) }
-
-        // 1. lookup → a copy made here, on the generating side (carry-over 3), trimmed if needed.
-        var working: [KVCache]?
-        var position = 0
-        if let hit = await store.lookup(key: key, prompt: tokens) {
-            let snapshot = hit.makeCopy()
-            let trimmed = hit.trimBy == 0 ? 0 : trimPromptCache(snapshot.caches, numTokens: hit.trimBy)
-            if trimmed == hit.trimBy {
-                working = snapshot.caches
-                position = hit.reusedLength
-                outcome.reusedTokens = hit.reusedLength
-                outcome.hitStoredLength = hit.storedLength
-            }   // else: a trim that didn't take is a miss, never a wrong cache
-        }
-
-        // 2. where to checkpoint (probe renders; a failed probe just means no checkpoint there)
-        let probes = PromptCheckpoints.probeMessages(for: messages)
-        let turnProbe = try? await render(probes.turn)
-        let systemProbe: [Int]? = if let system = probes.system { try? await render(system) } else { nil }
-        let minimum = await store.minimumReuse
-        let wanted = PromptCheckpoints.positions(actual: tokens, turnProbe: turnProbe, systemProbe: systemProbe,
-                                                 minimumLength: minimum).filter { $0 > position }
-
-        // 3. prefill segment by segment; store each snapshot only after its segment is evaluated.
-        if !wanted.isEmpty, working == nil { working = context.model.newCache(parameters: parameters) }
-        for target in wanted {
-            guard let cache = working else { break }
-            try prefill(tokens, from: position, to: target, cache: cache, context: context,
-                        step: parameters.prefillStepSize)
-            position = target
-            let snapshot = KVSnapshot(caches: cache.map { $0.copy() })     // evaluated above (T3)
-            let stored = await store.insert(key: key, tokens: Array(tokens[0..<target]), snapshot: snapshot,
-                                            bytes: snapshot.bytes, trimmable: canTrimPromptCache(snapshot.caches))
-            if stored { outcome.storedAt.append(target) }
-        }
-
-        guard let cache = working, position > 0 else {
-            return PreparedPrompt(cache: nil, tailTokens: tokens, outcome: outcome)
-        }
-        return PreparedPrompt(cache: cache, tailTokens: Array(tokens[position...]), outcome: outcome)
+        try await plan(
+            store: store, key: key, messages: messages, tokens: tokens, render: render,
+            newCache: { context.model.newCache(parameters: parameters) },
+            restore: { hit in
+                let copy = hit.makeCopy()           // made here, inside the caller's `perform` (PC-1 carry-over 3)
+                let trimmed = hit.trimBy == 0 ? 0 : trimPromptCache(copy.caches, numTokens: hit.trimBy)
+                return trimmed == hit.trimBy ? copy.caches : nil
+            },
+            prefill: { from, to, cache in
+                try prefill(tokens, from: from, to: to, cache: cache, context: context,
+                            step: parameters.prefillStepSize)
+            },
+            snapshot: { cache in
+                let snapshot = KVSnapshot(caches: cache.map { $0.copy() })     // evaluated by prefill (T3)
+                return (snapshot, snapshot.bytes, canTrimPromptCache(snapshot.caches))
+            })
     }
 
     /// Mirrors `LLMModel.prepare` (F7): chunks through the model, `eval(cache)` after each, with a

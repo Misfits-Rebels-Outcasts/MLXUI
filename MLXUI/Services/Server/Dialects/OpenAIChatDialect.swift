@@ -433,10 +433,16 @@ nonisolated enum OpenAIChatDialect {
         let prompt_tokens: Int
         let completion_tokens: Int
         let total_tokens: Int
+        /// PC-3: `usage.prompt_tokens_details.cached_tokens`, as in OpenAI's `CompletionUsage`
+        /// (integer). Present **only when something was served from the cache**, so a response from
+        /// a server with the cache off or a miss is byte-identical to before.
+        struct PromptTokensDetails: Encodable { let cached_tokens: Int }
+        let prompt_tokens_details: PromptTokensDetails?
         init(_ usage: ServeUsage) {
             prompt_tokens = usage.promptTokens
             completion_tokens = usage.completionTokens
             total_tokens = usage.totalTokens
+            prompt_tokens_details = usage.cachedTokens > 0 ? PromptTokensDetails(cached_tokens: usage.cachedTokens) : nil
         }
     }
 

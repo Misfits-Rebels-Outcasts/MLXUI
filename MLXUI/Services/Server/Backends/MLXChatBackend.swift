@@ -499,7 +499,8 @@ nonisolated struct MLXChatBackend: ServeBackend {
 
             let hitLimit = libraryReason == .length
                 || (libraryReason == nil && !stoppedByClient && completionTokens >= request.effectiveMaxTokens)
-            continuation.yield(.usage(ServeUsage(promptTokens: promptTokens, completionTokens: completionTokens)))
+            continuation.yield(.usage(ServeUsage(
+                promptTokens: promptTokens, completionTokens: completionTokens, outcome: prepared.outcome)))
             // S2-2: a turn that produced calls ends as `tool_calls`, whatever the sampler said.
             let finish: ServeFinishReason = callIndex > 0 ? .toolCalls
                 : (hitLimit && !stoppedByClient ? .length : .stop)
@@ -544,6 +545,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 return probeInput.text.tokens.asArray(Int.self)
             }
             do {
+                if PromptCache.injectFailureForTesting { throw PromptCacheFault.injected }
                 prepared = try await PromptCheckpointing.prepare(
                     store: PromptCacheShared.store, key: key, messages: messages,
                     tokens: input.text.tokens.asArray(Int.self), context: context,
@@ -556,6 +558,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 prepared = PreparedPrompt(cache: nil, tailTokens: [], outcome: outcome)
             }
         }
+        PromptCacheCounters.shared.record(outcome)
         observer?(outcome)
         return prepared
     }

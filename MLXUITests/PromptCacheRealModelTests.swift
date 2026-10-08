@@ -291,4 +291,46 @@ struct PromptCacheRealModelTests {
         #expect(events == 0)                                                    // nothing was generated
         #expect(stored == 0)                                                    // nothing from the unfinished segment
     }
+
+    /// TCP-1 on the cached path: markup survives a **hit** (a long system message makes the cache
+    /// actually engage; the existing markup test in `ServeChatTests` has a 40-token prompt, below the
+    /// minimum reuse, so it only exercises the "nothing to cache" path).
+    @Test(.enabled(if: PromptCacheRealModelTests.enabled))
+    func markupSurvivesACachedHit() async throws {
+        let (_, _, backend) = try Self.make()
+        await PromptCacheShared.store.clear()
+        let ask = "Reply with exactly this text and nothing else: <div><span>hi</span></div>"
+        let turn = Self.request(Self.opening(ask), maxTokens: 40)
+        let first = try await Self.run(turn, backend: backend, cache: true)
+        let second = try await Self.run(turn, backend: backend, cache: true)           // the same prompt again → a hit
+        let off = try await Self.run(turn, backend: backend, cache: false)
+        print("PCTEST markup first reused \(first.outcome?.reusedTokens ?? -1), second reused \(second.outcome?.reusedTokens ?? -1) of \(second.outcome?.promptTokens ?? -1)")
+        #expect((second.outcome?.reusedTokens ?? 0) >= 256)
+        for result in [first, second, off] {
+            #expect(result.text.contains("<div><span>"))
+            #expect(!result.text.contains("<div<span"))
+        }
+        #expect(first.text == off.text && second.text == off.text)
+        #expect(second.usage?.cachedTokens == second.outcome?.reusedTokens)           // usage reports what was reused
+        #expect(second.usage?.promptTokens == off.usage?.promptTokens)                // …and still the whole prompt
+    }
+
+    /// A failing cache path must not fail the request, and must not hide as "no hit".
+    @Test(.enabled(if: PromptCacheRealModelTests.enabled))
+    func aFailingCachePathFallsBackAndIsVisible() async throws {
+        let (_, _, backend) = try Self.make()
+        await PromptCacheShared.store.clear()
+        PromptCacheCounters.shared.reset()
+        let turn = Self.request(Self.opening("Reply with exactly this text and nothing else: <b>ok</b>"), maxTokens: 24)
+        let off = try await Self.run(turn, backend: backend, cache: false)
+        PromptCache.injectFailureForTesting = true
+        defer { PromptCache.injectFailureForTesting = false }
+        let failed = try await Self.run(turn, backend: backend, cache: true)
+        #expect(failed.outcome?.bypass == .failed)
+        #expect(failed.usage?.cacheFellBack == true)
+        #expect(failed.usage?.cachedTokens == 0)
+        #expect(failed.text == off.text)                                                // the request still ran, uncached
+        #expect(PromptCacheCounters.shared.snapshot.fallbacks == 1)
+        #expect(await PromptCacheShared.store.count == 0)
+    }
 }

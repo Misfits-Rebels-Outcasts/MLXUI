@@ -19,9 +19,9 @@ struct PromptCachePolicyTests {
 
     @Test func theAllowlistIsExactlyTheFamiliesWithAPassingRealModelTest() {
         // Pinned (ruling D1). Adding a family means a journal line showing its real-model test.
-        #expect(PromptCacheAllowlist.tested == ["qwen3", "qwen3_5", "gemma3_text", "llama", "gemma2"])
-        // mistral3 passed on Ministral-3-3B but would also admit Devstral-Small-2-24B (untested): owner's call.
-        for untested in ["mistral3", "gpt_oss", "qwen2", "ministral3", ""] {
+        #expect(PromptCacheAllowlist.tested == ["qwen3", "qwen3_5", "gemma3_text", "llama", "gemma2", "mistral3"])
+        // By model_type (owner, 2026-10-08): `mistral3` admits Devstral too, as `qwen3_5` admits Qwen3.8/Bonsai.
+        for untested in ["gpt_oss", "qwen2", "ministral3", "qwen3_5_text", ""] {
             #expect(PromptCacheAllowlist.allows(untested) == false, "\(untested)")
         }
     }
