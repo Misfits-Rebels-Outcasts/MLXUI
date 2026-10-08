@@ -139,6 +139,11 @@ nonisolated enum AnthropicMessagesDialect {
                 calls.append(ServeToolCall(id: id, name: name, argumentsJSON: try inputJSON(block["input"], param: param)))
             case ("assistant", "thinking"), ("assistant", "redacted_thinking"):
                 continue                       // dropped; the signature is never checked (R34 #3)
+            case ("user", "image"), ("user", "document"):
+                // R36: a placeholder, never a 400 — an agent resends the whole history every turn, so one
+                // refused block would end the session for good.
+                if !text.isEmpty, !text.hasSuffix("\n") { text += "\n" }
+                text += placeholder(forBlockType: type)
             case ("user", "tool_result"):
                 guard let id = block["tool_use_id"] as? String else {
                     throw invalid("\(param).content: a tool_result block needs 'tool_use_id'", code: "invalid_content_block")
@@ -162,6 +167,12 @@ nonisolated enum AnthropicMessagesDialect {
         return out
     }
 
+    /// What stands in for an image or document block this model can't read (owner ruling R36).
+    static func placeholder(forBlockType type: String) -> String {
+        type == "image" ? "[image omitted: this model can't see images]"
+                        : "[document omitted: this model can't read documents]"
+    }
+
     /// A `tool_result`'s `content`: a string, or text blocks (anything else — images — is refused).
     private static func resultText(_ value: Any?, param: String) throws -> String {
         switch value {
@@ -169,9 +180,13 @@ nonisolated enum AnthropicMessagesDialect {
         case let text as String: return text
         case let blocks as [Any]:
             return try blocks.map { block -> String in
-                guard let block = block as? [String: Any], block["type"] as? String == "text",
-                      let text = block["text"] as? String else {
-                    throw invalid("\(param).content: a tool_result may only contain text", code: "unsupported_content_block")
+                guard let block = block as? [String: Any], let type = block["type"] as? String else {
+                    throw invalid("\(param).content: a tool_result block needs a type", code: "unsupported_content_block")
+                }
+                if type == "image" || type == "document" { return placeholder(forBlockType: type) }     // R36
+                guard type == "text", let text = block["text"] as? String else {
+                    throw invalid("\(param).content: a tool_result may only contain text, images or documents",
+                                  code: "unsupported_content_block")
                 }
                 return text
             }.joined()

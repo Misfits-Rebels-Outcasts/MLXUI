@@ -175,15 +175,30 @@ struct AnthropicMessagesDecodeTests {
         #expect(decoded.messages == [ServeMessage(role: .user, text: "hi")])
     }
 
-    @Test func unsupportedBlocksAndServerToolsAre400sNamingThem() {
-        let image = request("").replacingOccurrences(of: #""content":"hi""#,
-            with: #""content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AA"}}]"#)
-        let error = #expect(throws: ServeError.self) { try AnthropicMessagesDialect.decode(Data(image.utf8)) }
-        #expect(error?.message.contains("image") == true)
+    /// R36: an image or document block is a text placeholder, never a 400 — in user content and inside a
+    /// tool_result. Server tools stay a 400.
+    @Test func imagesAndDocumentsBecomePlaceholdersNotErrors() throws {
+        let image = #"{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AA"}}"#
+        let document = #"{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"AA"}}"#
+        let body = request("").replacingOccurrences(of: #""messages":[{"role":"user","content":"hi"}]"#, with: """
+        "messages":[{"role":"user","content":[{"type":"text","text":"look"},\(image),\(document),
+          {"type":"tool_result","tool_use_id":"t","content":[\(image),\(document)]}]}]
+        """)
+        let decoded = try AnthropicMessagesDialect.decode(Data(body.utf8))
+        #expect(decoded.messages == [
+            ServeMessage(role: .user, text: "look\n[image omitted: this model can't see images]\n[document omitted: this model can't read documents]"),
+            ServeMessage(role: .tool, text: "[image omitted: this model can't see images][document omitted: this model can't read documents]",
+                         toolCallID: "t"),
+        ])
+    }
+
+    @Test func serverToolsAndUnknownBlocksAreStill400s() {
         let server = #expect(throws: ServeError.self) {
             try AnthropicMessagesDialect.decode(Data(request(#","tools":[{"type":"web_search_20250305","name":"web_search"}]"#).utf8))
         }
         #expect(server?.message.contains("web_search_20250305") == true)
+        let unknown = request("").replacingOccurrences(of: #""content":"hi""#, with: #""content":[{"type":"server_tool_use","id":"x"}]"#)
+        #expect(throws: ServeError.self) { try AnthropicMessagesDialect.decode(Data(unknown.utf8)) }
     }
 }
 
