@@ -196,9 +196,29 @@ struct ResponsesDecodeTests {
         #expect(refused(#""input":"x","previous_response_id":null,"stream":false"#) == nil)
     }
 
-    @Test func unknownItemsAndMissingInputAreClear400s() {
-        #expect(refused(#""input":[{"type":"item_reference","id":"msg_1"}]"#)?.code == "unsupported_input_item")
-        #expect(refused(#""input":[{"type":"local_shell_call","call_id":"c"}]"#)?.status == 400)
+    /// R40: an unknown item *type* is dropped and counted, never a 400 (Codex resends its whole history).
+    @Test func unknownItemTypesAreDroppedAndCounted() throws {
+        let decoded = try decode(#"""
+        "input":[{"type":"message","role":"user","content":"q"},
+                 {"type":"item_reference","id":"msg_1"},
+                 {"type":"local_shell_call","call_id":"c","action":{}},
+                 {"type":"web_search_call","id":"ws_1","status":"completed"},
+                 {"type":"message","role":"assistant","content":"a"}]
+        """#)
+        #expect(decoded.request.messages == [ServeMessage(role: .user, text: "q"), ServeMessage(role: .assistant, text: "a")])
+        #expect(decoded.ignoredInputItems == 3)
+        #expect(try decode(#""input":"plain""#).ignoredInputItems == 0)
+        // reasoning items are known (dropped by R39) and are not counted as unknown.
+        #expect(try decode(#""input":[{"type":"reasoning","summary":[]},{"role":"user","content":"x"}]"#).ignoredInputItems == 0)
+    }
+
+    /// …but malformed items of a known type, an unknown role and an item with no type at all stay 400s.
+    @Test func malformedKnownItemsUnknownRolesAndMissingInputAreStill400s() {
+        #expect(refused(#""input":[{"type":"function_call","name":"f"}]"#)?.code == "invalid_input_item")
+        #expect(refused(#""input":[{"type":"function_call_output"}]"#)?.code == "invalid_input_item")
+        #expect(refused(#""input":[{"type":"message","content":"x"}]"#)?.code == "invalid_input_item")
+        #expect(refused(#""input":[{"type":"message","role":"narrator","content":"x"}]"#)?.code == "unsupported_role")
+        #expect(refused(#""input":[{"content":"x"}]"#)?.code == "invalid_input_item")
         #expect(refused(#""model2":1"#)?.code == "missing_input")
         #expect(refused(#""input":[{"type":"message","role":"user","content":[{"type":"input_audio"}]}]"#)?.code == "unsupported_content_part")
     }
@@ -269,11 +289,11 @@ struct ResponsesEncodeTests {
     }
 
     /// Inclusive, as OpenAI's: `input_tokens` is the whole prompt and `cached_tokens` the part reused;
-    /// the details object is omitted when nothing was reused.
-    @Test func usageIsInclusiveAndCachedTokensOmittedWhenZero() throws {
+    /// the details object is always present, 0 when nothing was reused (R40).
+    @Test func usageIsInclusiveAndCachedTokensAlwaysPresent() throws {
         let miss = OpenAIResponsesDialect.usageObject(ServeUsage(promptTokens: 100, completionTokens: 5))
         #expect(miss["input_tokens"] as? Int == 100 && miss["output_tokens"] as? Int == 5 && miss["total_tokens"] as? Int == 105)
-        #expect(miss["input_tokens_details"] == nil)
+        #expect((miss["input_tokens_details"] as? [String: Int]) == ["cached_tokens": 0])
         let hit = OpenAIResponsesDialect.usageObject(ServeUsage(promptTokens: 100, completionTokens: 5, cachedTokens: 80))
         #expect(hit["input_tokens"] as? Int == 100)                                    // NOT 20
         #expect((hit["input_tokens_details"] as? [String: Int]) == ["cached_tokens": 80])
@@ -291,8 +311,9 @@ struct ResponsesRouteTests {
         let body = try #require(object(response.body))
         #expect(body["object"] as? String == "response" && body["model"] as? String == model)
         #expect((body["id"] as? String)?.hasPrefix("resp_") == true)
-        let usage = try #require(body["usage"] as? [String: Int])
-        #expect(usage == ["input_tokens": 10, "output_tokens": 2, "total_tokens": 12])
+        let usage = try #require(body["usage"] as? [String: Any])
+        #expect(usage["input_tokens"] as? Int == 10 && usage["output_tokens"] as? Int == 2 && usage["total_tokens"] as? Int == 12)
+        #expect((usage["input_tokens_details"] as? [String: Int]) == ["cached_tokens": 0])
         #expect(backend.generated.first?.messages == [ServeMessage(role: .user, text: "hi")])
     }
 
@@ -374,6 +395,17 @@ struct ResponsesRouteTests {
         #expect(busy.status == 503 && busy.headers["Retry-After"] == "2")
         let streaming = try #require(await send(req(#""input":"x","stream":true"#), env: environment(MessagesBackend())))
         #expect(streaming.status == 400)
+    }
+
+    @Test func droppedUnknownItemsAreCountedInTheLogMetadata() async throws {
+        let log = RequestLog()
+        let body = req(#""input":[{"type":"message","role":"user","content":"hi"},{"type":"item_reference","id":"x"},{"type":"mystery"}]"#)
+        let response = try #require(await send(body, env: environment(MessagesBackend(), log: log)))
+        #expect(response.status == 200)
+        #expect(log.entries.last?.ignoredInputItems == 2)
+        let plain = RequestLog()
+        _ = await send(req(#""input":"hi""#), env: environment(MessagesBackend(), log: plain))
+        #expect(plain.entries.last?.ignoredInputItems == 0)
     }
 
     @Test func theLogLineIsMetadataOnly() async throws {

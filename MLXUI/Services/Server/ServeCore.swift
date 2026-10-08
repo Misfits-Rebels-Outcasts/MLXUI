@@ -290,6 +290,8 @@ nonisolated struct RequestLogEntry: Sendable, Equatable {
     var cachedTokens: Int = 0
     /// PC-3: the cache path failed and the request ran uncached (metadata only).
     var cacheFellBack: Bool = false
+    /// S3-3b-0 (R40): input items of an unknown type the Responses dialect dropped. A count only.
+    var ignoredInputItems: Int = 0
 }
 
 /// A bounded in-memory log the Connect sheet / Settings pane will read (S1-5).

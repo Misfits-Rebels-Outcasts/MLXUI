@@ -396,6 +396,8 @@ nonisolated final class RequestTracker: @unchecked Sendable {
     /// How many tool calls the model produced — **a count only** (rule 13: no tool names, no
     /// arguments, no results).
     var toolCalls = 0
+    /// Input items of an unknown type that a dialect dropped (R40) — a count only, like every field here.
+    var ignoredInputItems = 0
 
     init(head: ServeRequestHead, started: Date, environment: ServeEnvironment,
          renderError: @escaping @Sendable (ServeError) -> Data = { $0.body() }) {
@@ -437,6 +439,7 @@ nonisolated final class RequestTracker: @unchecked Sendable {
             promptTokens: usage?.promptTokens, completionTokens: usage?.completionTokens,
             durationSeconds: finished.timeIntervalSince(started), status: status, toolsIgnored: toolsIgnored,
             reasoningOn: reasoningOn, toolCalls: toolCalls,
-            cachedTokens: usage?.cachedTokens ?? 0, cacheFellBack: usage?.cacheFellBack ?? false))
+            cachedTokens: usage?.cachedTokens ?? 0, cacheFellBack: usage?.cacheFellBack ?? false,
+            ignoredInputItems: ignoredInputItems))
     }
 }

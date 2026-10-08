@@ -21,6 +21,9 @@ nonisolated enum OpenAIResponsesDialect {
     struct Decoded {
         var request: ServeRequest
         var droppedHostedTools: Bool
+        /// Input items of a type this server doesn't know, dropped (R40): Codex resends its whole history
+        /// every turn, so one 400 would end the session. A count only — the route notes it in the log.
+        var ignoredInputItems: Int = 0
     }
 
     /// Hosted tools the model could only call on OpenAI's side. Accepted and dropped (owner ruling
@@ -56,7 +59,8 @@ nonisolated enum OpenAIResponsesDialect {
         case let text as String: if !text.isEmpty { messages.append(ServeMessage(role: .system, text: text)) }
         default: throw invalid("'instructions' must be a string.", code: "invalid_instructions", param: "instructions")
         }
-        messages += try decodeInput(object["input"])
+        let input = try decodeInput(object["input"])
+        messages += input.messages
         guard !messages.isEmpty else {
             throw invalid("'input' is required.", code: "missing_input", param: "input")
         }
@@ -77,27 +81,31 @@ nonisolated enum OpenAIResponsesDialect {
         }
         // Accepted and ignored, never a 400 (R38): metadata, user, store, include, text, prompt_cache_key,
         // parallel_tool_calls, service_tier, truncation, client_metadata, safety_identifier, background.
-        return Decoded(request: request, droppedHostedTools: tools.dropped)
+        return Decoded(request: request, droppedHostedTools: tools.dropped, ignoredInputItems: input.ignored)
     }
 
     // MARK: - Input
 
-    private static func decodeInput(_ value: Any?) throws -> [ServeMessage] {
+    private static func decodeInput(_ value: Any?) throws -> (messages: [ServeMessage], ignored: Int) {
         switch value {
-        case nil, is NSNull: return []
-        case let text as String: return text.isEmpty ? [] : [ServeMessage(role: .user, text: text)]
+        case nil, is NSNull: return ([], 0)
+        case let text as String: return (text.isEmpty ? [] : [ServeMessage(role: .user, text: text)], 0)
         case let items as [Any]:
             var out: [ServeMessage] = []
+            var ignored = 0
             for (index, raw) in items.enumerated() {
-                try decodeItem(raw, at: index, into: &out)
+                if try !decodeItem(raw, at: index, into: &out) { ignored += 1 }
             }
-            return out
+            return (out, ignored)
         default:
             throw invalid("'input' must be a string or an array of items.", code: "invalid_input", param: "input")
         }
     }
 
-    private static func decodeItem(_ raw: Any, at index: Int, into out: inout [ServeMessage]) throws {
+    /// - Returns: `false` when the item's type is unknown and it was dropped (R40); a malformed item of a
+    ///   known type, an unknown message role, or an item with no type at all is still a `400`.
+    @discardableResult
+    private static func decodeItem(_ raw: Any, at index: Int, into out: inout [ServeMessage]) throws -> Bool {
         let param = "input[\(index)]"
         guard let item = raw as? [String: Any] else {
             throw invalid("Each input item must be an object.", code: "invalid_input_item", param: param)
@@ -138,11 +146,13 @@ nonisolated enum OpenAIResponsesDialect {
             out.append(ServeMessage(role: .tool, text: try decodeContent(item["output"], param: "\(param).output"),
                                     toolCallID: callID))
         case "reasoning":
-            return          // dropped, with or without `encrypted_content`: never a 400 (R39)
+            return true     // dropped, with or without `encrypted_content`: never a 400 (R39)
+        case "":
+            throw invalid("Each input item needs a 'type' (or a 'role').", code: "invalid_input_item", param: param)
         default:
-            throw invalid("Input item type '\(type.isEmpty ? "unknown" : type)' isn't supported.",
-                          code: "unsupported_input_item", param: "\(param).type")
+            return false    // an item type we don't know: dropped and counted, never a 400 (R40)
         }
+        return true
     }
 
     /// A string, or content parts: text parts are joined; an image or file becomes the R36 placeholder.
@@ -328,11 +338,11 @@ nonisolated enum OpenAIResponsesDialect {
     }
 
     /// `input_tokens` is the whole prompt; `input_tokens_details.cached_tokens` is the part the prompt cache
-    /// supplied (inclusive — the core's meaning), omitted when 0.
+    /// supplied (inclusive — the core's meaning); the details object is always present, 0 when nothing was cached (R40).
     static func usageObject(_ usage: ServeUsage) -> [String: Any] {
         var object: [String: Any] = ["input_tokens": usage.promptTokens, "output_tokens": usage.completionTokens,
                                      "total_tokens": usage.totalTokens]
-        if usage.cachedTokens > 0 { object["input_tokens_details"] = ["cached_tokens": usage.cachedTokens] }
+        object["input_tokens_details"] = ["cached_tokens": usage.cachedTokens]       // always present, 0 when none (R40)
         return object
     }
 }

@@ -11,6 +11,7 @@ nonisolated enum ResponsesRoute {
         do { decoded = try OpenAIResponsesDialect.decode(body) } catch {
             return tracker.fail(error as? ServeError ?? ServePipeline.internalError)
         }
+        tracker.ignoredInputItems = decoded.ignoredInputItems
         let prepared: ServePrepared
         switch await ServePipeline.prepare(decoded.request, tracker: tracker, environment: environment) {
         case .failure(let failure):
