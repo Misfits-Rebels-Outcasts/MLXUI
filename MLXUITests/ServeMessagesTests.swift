@@ -83,6 +83,53 @@ struct AnthropicMessagesDecodeTests {
         #expect(blocks.messages.count == 2)
     }
 
+    /// R43: Claude Code sends `system` entries inside `messages` (string or text blocks).
+    @Test func systemEntriesInsideMessagesAreAcceptedAsSystemMessages() throws {
+        func messages(_ json: String, top: String = "") throws -> [ServeMessage] {
+            try AnthropicMessagesDialect.decode(Data(
+                #"{"model":"m","max_tokens":9\#(top),"messages":\#(json)}"#.utf8)).messages
+        }
+        // at messages[0], as a string
+        #expect(try messages(#"[{"role":"system","content":"S0"},{"role":"user","content":"hi"}]"#)
+                == [ServeMessage(role: .system, text: "S0"), ServeMessage(role: .user, text: "hi")])
+        // as text blocks (with cache_control), after a user turn
+        #expect(try messages(#"[{"role":"user","content":"hi"},{"role":"system","content":[{"type":"text","text":"A","cache_control":{"type":"ephemeral"}},{"type":"text","text":"B"}]}]"#)
+                == [ServeMessage(role: .user, text: "hi"), ServeMessage(role: .system, text: "A\n\nB")])
+        // mid-conversation, between tool traffic, with a top-level system as well (it stays first)
+        let mixed = try messages(#"""
+        [{"role":"user","content":"go"},{"role":"system","content":"S1"},
+         {"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"f","input":{}}]},
+         {"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]},
+         {"role":"system","content":[{"type":"text","text":"S2"}]}]
+        """#, top: #","system":"TOP""#)
+        #expect(mixed.map(\.role) == [.system, .user, .system, .assistant, .tool, .system])
+        #expect(mixed.map(\.text) == ["TOP", "go", "S1", "", "ok", "S2"])
+        // an empty system entry adds nothing
+        #expect(try messages(#"[{"role":"system","content":""},{"role":"user","content":"hi"}]"#) == [ServeMessage(role: .user, text: "hi")])
+    }
+
+    /// …and the assembly places them per family, as for every dialect.
+    @Test func systemEntriesAreHoistedPerFamilyByTheAssembly() throws {
+        let decoded = try AnthropicMessagesDialect.decode(Data(
+            #"{"model":"m","max_tokens":9,"system":"TOP","messages":[{"role":"user","content":"go"},{"role":"system","content":"MID"},{"role":"user","content":"again"}]}"#.utf8))
+        let firstOnly = ServeMessageAssembly.assembling(decoded.messages, acceptsTools: true, placement: .firstOnly)
+        #expect(firstOnly.map(\.role) == [.system, .user])
+        #expect(firstOnly.first?.text == "TOP\n\nMID")
+        let anywhere = ServeMessageAssembly.assembling(decoded.messages, acceptsTools: true, placement: .anywhere)
+        #expect(anywhere.map(\.role) == [.system, .user, .system, .user])
+    }
+
+    @Test func anUnknownRoleOrANonTextSystemBlockIsStillA400() {
+        let role = #expect(throws: ServeError.self) {
+            try AnthropicMessagesDialect.decode(Data(#"{"model":"m","max_tokens":9,"messages":[{"role":"narrator","content":"x"}]}"#.utf8))
+        }
+        #expect(role?.code == "unsupported_role")
+        let block = #expect(throws: ServeError.self) {
+            try AnthropicMessagesDialect.decode(Data(#"{"model":"m","max_tokens":9,"messages":[{"role":"system","content":[{"type":"image","source":{}}]}]}"#.utf8))
+        }
+        #expect(block?.code == "unsupported_content_block")
+    }
+
     @Test func toolTrafficKeepsItsOrderAndIds() throws {
         let body = request("").replacingOccurrences(of: #""messages":[{"role":"user","content":"hi"}]"#, with: #"""
         "messages":[

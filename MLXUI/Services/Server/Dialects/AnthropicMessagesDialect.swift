@@ -99,9 +99,11 @@ nonisolated enum AnthropicMessagesDialect {
         guard let message = raw as? [String: Any], let role = message["role"] as? String else {
             throw invalid("\(param): each message needs a role", code: "invalid_message")
         }
-        guard role == "user" || role == "assistant" else {
-            throw invalid("\(param).role: must be 'user' or 'assistant' (system goes in the top-level 'system' field)",
-                          code: "unsupported_role")
+        // R43: Claude Code puts `system` entries *inside* `messages` (the `mid-conversation-system` beta; seen at
+        // messages[1] and again after a tool_result, journal 2026-436). They become `.system` messages, and the
+        // assembly places them per family as usual. Only an unknown role is refused.
+        guard role == "user" || role == "assistant" || role == "system" else {
+            throw invalid("\(param).role: must be 'user', 'assistant' or 'system'", code: "unsupported_role")
         }
         let blocks: [[String: Any]]
         switch message["content"] {
@@ -116,6 +118,16 @@ nonisolated enum AnthropicMessagesDialect {
             }
         default:
             throw invalid("\(param).content: must be a string or an array of content blocks", code: "invalid_content")
+        }
+
+        if role == "system" {
+            let text = try blocks.map { block -> String in
+                guard block["type"] as? String == "text", let piece = block["text"] as? String else {
+                    throw invalid("\(param).content: a system message may only contain text", code: "unsupported_content_block")
+                }
+                return piece                                    // `cache_control` and the like are ignored
+            }.joined(separator: "\n\n")
+            return text.isEmpty ? [] : [ServeMessage(role: .system, text: text)]
         }
 
         var out: [ServeMessage] = []
