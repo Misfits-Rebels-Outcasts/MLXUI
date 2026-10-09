@@ -78,6 +78,7 @@ nonisolated enum OpenAIResponsesDialect {
         request.temperature = try number(object["temperature"], "temperature")
         request.topP = try number(object["top_p"], "top_p")
         request.maxTokens = try integer(object["max_output_tokens"], "max_output_tokens")
+        request.fillsContextWindow = request.maxTokens == nil          // R41: Codex sends none; see ServeRequest
         if let limit = request.maxTokens, limit < 1 {
             throw invalid("'max_output_tokens' must be at least 1.", code: "invalid_max_output_tokens", param: "max_output_tokens")
         }

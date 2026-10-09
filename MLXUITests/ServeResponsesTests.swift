@@ -665,3 +665,119 @@ struct ResponsesStreamTests {
         expectWellFormed(run.events)
     }
 }
+
+// MARK: - S3-3d: the output limit and the whitespace hold (R41)
+
+struct ResponsesOutputLimitTests {
+    private func maxTokens(_ path: String, _ body: String, window: Int?, count: Int?) async throws -> Int? {
+        let backend = MessagesBackend(count: count, contextLimit: window)
+        let response = try #require(await send(body, env: environment(backend), path: path))
+        #expect(response.status == 200)
+        return backend.generated.first?.effectiveMaxTokens
+    }
+
+    /// No `max_output_tokens` → the room the prompt leaves: window − the S2-6 count.
+    @Test func noLimitMeansTheWindowMinusThePrompt() async throws {
+        #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: 40_960, count: 1_000) == 39_960)
+        #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: 1000, count: 1000) == 1)      // never below 1
+    }
+
+    @Test func anExplicitLimitWins() async throws {
+        #expect(try await maxTokens("/v1/responses", req(#""input":"hi","max_output_tokens":50"#), window: 40_960, count: 1_000) == 50)
+    }
+
+    /// R16's 4096 stands wherever there is no window or no count to compute from.
+    @Test func noWindowOrNoCountKeepsTheDefault() async throws {
+        #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: nil, count: 1_000) == ServeRequest.defaultMaxTokens)
+        #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: 40_960, count: nil) == ServeRequest.defaultMaxTokens)
+    }
+
+    /// The other dialects keep R16 unchanged: chat with no limit gets 4096, and a messages request keeps the
+    /// `max_tokens` it must send.
+    @Test func chatAndMessagesAreUnchanged() async throws {
+        let chat = #"{"model":"\#(model)","messages":[{"role":"user","content":"hi"}]}"#
+        #expect(try await maxTokens("/v1/chat/completions", chat, window: 40_960, count: 1_000) == ServeRequest.defaultMaxTokens)
+        let messages = #"{"model":"\#(model)","max_tokens":77,"messages":[{"role":"user","content":"hi"}]}"#
+        #expect(try await maxTokens("/v1/messages", messages, window: 40_960, count: 1_000) == 77)
+    }
+
+    @Test func aWindowFillingRequestIsOnlyMarkedByTheResponsesDecode() throws {
+        #expect(try decode(#""input":"hi""#).request.fillsContextWindow)
+        #expect(!(try decode(#""input":"hi","max_output_tokens":9"#).request.fillsContextWindow))
+        let chat = try OpenAIChatDialect.decode(Data(#"{"model":"m","messages":[{"role":"user","content":"x"}]}"#.utf8))
+        #expect(!chat.fillsContextWindow)
+    }
+
+    /// A length stop that still happens stays `response.incomplete`.
+    @Test func aLengthStopStaysIncomplete() async throws {
+        let backend = MessagesBackend(events: [.textDelta("cut"), .usage(ServeUsage(promptTokens: 5, completionTokens: 99)), .finish(.length)],
+                                      count: 5, contextLimit: 104)
+        let response = try #require(await send(req(#""input":"hi""#), env: environment(backend)))
+        #expect(object(response.body)?["status"] as? String == "incomplete")
+        #expect(backend.generated.first?.effectiveMaxTokens == 99)
+    }
+}
+
+struct ResponsesWhitespaceTests {
+    /// The output items of a reply, as `(type, payload)` so ids don't matter.
+    private func shape(_ items: [[String: Any]]) -> [String] {
+        items.map { item in
+            switch item["type"] as? String {
+            case "message": return "message:" + ((item["content"] as? [[String: Any]])?.first?["text"] as? String ?? "")
+            case "function_call": return "function_call:\(item["name"] as? String ?? "")(\(item["arguments"] as? String ?? ""))"
+            case let other: return other ?? "?"
+            }
+        }
+    }
+
+    private func nonStreamed(_ events: [ServeEvent]) async throws -> [String] {
+        let response = try #require(await send(req(#""input":"hi""#), env: environment(MessagesBackend(events: events))))
+        return shape(try #require(object(response.body)?["output"] as? [[String: Any]]))
+    }
+
+    private func streamed(_ events: [ServeEvent]) async throws -> (items: [String], run: [String]) {
+        let run = await streamRun(events)
+        let final = try #require((run.events.last?.json["response"] as? [String: Any])?["output"] as? [[String: Any]])
+        let done = run.events.filter { $0.name == "response.output_item.done" }.compactMap { $0.json["item"] as? [String: Any] }
+        #expect(shape(final) == shape(done))                                 // the final response is the .done items
+        return (shape(final), run.events.map(\.name))
+    }
+
+    private func same(_ events: [ServeEvent], _ expected: [String], sourceLocation: SourceLocation = #_sourceLocation) async throws {
+        let plain = try await nonStreamed(events)
+        let live = try await streamed(events)
+        #expect(plain == expected, sourceLocation: sourceLocation)
+        #expect(live.items == expected, sourceLocation: sourceLocation)
+    }
+
+    @Test func spacesThenTextAreFlushedInOrder() async throws {
+        try await same([.textDelta("  "), .textDelta("\n"), .textDelta("hi"), .usage(ServeUsage(promptTokens: 1, completionTokens: 1)), .finish(.stop)],
+                       ["message:  \nhi"])
+        // …as one ordered stream of deltas: nothing was emitted for the held part until "hi" arrived.
+        let run = await streamRun([.textDelta("  "), .textDelta("hi"), .finish(.stop)])
+        let deltas = run.events.filter { $0.name == "response.output_text.delta" }.compactMap { $0.json["delta"] as? String }
+        #expect(deltas == ["  hi"])
+    }
+
+    @Test func spacesThenACallOpenNoMessage() async throws {
+        let events: [ServeEvent] = [.textDelta("  "), .textDelta("\n"),
+                                    .toolCallDelta(ServeToolCallDelta(index: 0, id: "c1", name: "f", argumentsFragment: "{}")),
+                                    .usage(ServeUsage(promptTokens: 1, completionTokens: 1)), .finish(.toolCalls)]
+        try await same(events, ["function_call:f({})"])
+        let live = try await streamed(events)
+        #expect(!live.run.contains("response.content_part.added"))              // no message item was ever opened
+    }
+
+    @Test func textThenSpacesThenACallKeepsTheSpacesInTheMessage() async throws {
+        try await same([.textDelta("hi"), .textDelta("   "),
+                        .toolCallDelta(ServeToolCallDelta(index: 0, id: "c1", name: "f", argumentsFragment: "{}")),
+                        .finish(.toolCalls)],
+                       ["message:hi   ", "function_call:f({})"])
+    }
+
+    @Test func whitespaceAloneIsAMessageOnlyWhenNothingElseCame() async throws {
+        try await same([.textDelta("  "), .finish(.stop)], ["message:  "])
+        try await same([.reasoningDelta("plan"), .textDelta("  "), .finish(.stop)], ["reasoning"])
+        try await same([.finish(.stop)], ["message:"])
+    }
+}

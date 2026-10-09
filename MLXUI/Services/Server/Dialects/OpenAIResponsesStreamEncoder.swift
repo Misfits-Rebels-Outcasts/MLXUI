@@ -34,6 +34,7 @@ nonisolated struct OpenAIResponsesStreamEncoder: ServeStreamEncoder {
     private var nextOutputIndex = 0
     private var open: Open?
     private var items: [[String: Any]] = []
+    private var heldText = ""
 
     init(id: String, model: String, createdAt: Int) {
         self.id = id
@@ -49,6 +50,7 @@ nonisolated struct OpenAIResponsesStreamEncoder: ServeStreamEncoder {
         var out = startIfNeeded()
         switch event {
         case .reasoningDelta(let piece):
+            heldText = ""
             if case .reasoning = open {} else {
                 out += closeOpen()
                 let itemID = OpenAIResponsesDialect.makeID("rs")
@@ -62,22 +64,23 @@ nonisolated struct OpenAIResponsesStreamEncoder: ServeStreamEncoder {
                                                                    "content_index": 0, "delta": piece]))
             }
         case .textDelta(let piece):
-            if case .message = open {} else {
-                out += closeOpen()
-                let itemID = OpenAIResponsesDialect.makeID("msg")
-                open = .message(id: itemID, text: "")
-                out.append(emit("response.output_item.added", ["output_index": nextOutputIndex,
-                    "item": ["id": itemID, "type": "message", "role": "assistant", "status": "in_progress",
-                             "content": [Any]()] as [String: Any]]))
-                out.append(emit("response.content_part.added", ["item_id": itemID, "output_index": nextOutputIndex,
-                    "content_index": 0, "part": ["type": "output_text", "text": "", "annotations": [Any]()] as [String: Any]]))
-            }
             if case .message(let itemID, let text) = open {
                 open = .message(id: itemID, text: text + piece)
-                out.append(emit("response.output_text.delta", ["item_id": itemID, "output_index": nextOutputIndex,
-                    "content_index": 0, "delta": piece, "logprobs": [Any]()]))
+                out.append(textDelta(piece, itemID: itemID))
+            } else {
+                // R41: leading whitespace-only text is held until real text arrives (then flushed in order). A
+                // call or reasoning that starts first discards it, so no message item is opened for nothing —
+                // the same items the non-streaming reply produces.
+                heldText += piece
+                if heldText.contains(where: { !$0.isWhitespace }) {
+                    out += closeOpen()
+                    out += openMessage()
+                    out += appendText(heldText)
+                    heldText = ""
+                }
             }
         case .toolCallDelta(let call):
+            heldText = ""
             // A delta carrying an `id` is a new call; one without continues the open call's arguments.
             var continuing = false
             if call.id == nil, case .functionCall = open { continuing = true }
@@ -105,10 +108,14 @@ nonisolated struct OpenAIResponsesStreamEncoder: ServeStreamEncoder {
     mutating func completion(finish: ServeFinishReason, usage: ServeUsage?) -> [[UInt8]] {
         var out = startIfNeeded()
         out += closeOpen()
-        if items.isEmpty {                                  // the same empty message the non-streaming reply has
-            out += frames(for: .textDelta(""))
+        // Held whitespace is a reply of its own only when nothing else was produced (the non-streaming rule); an
+        // otherwise empty reply is the same empty message the non-streaming reply has.
+        if items.isEmpty {
+            out += openMessage()
+            if !heldText.isEmpty { out += appendText(heldText) }
             out += closeOpen()
         }
+        heldText = ""
         let incomplete = finish == .length
         let response = OpenAIResponsesDialect.responseObject(
             id: id, createdAt: createdAt, model: model, incomplete: incomplete, output: items,
@@ -131,6 +138,28 @@ nonisolated struct OpenAIResponsesStreamEncoder: ServeStreamEncoder {
     }
 
     // MARK: - Pieces
+
+    /// Open a message item (`output_item.added` with empty content, then `content_part.added`).
+    private mutating func openMessage() -> [[UInt8]] {
+        let itemID = OpenAIResponsesDialect.makeID("msg")
+        open = .message(id: itemID, text: "")
+        return [emit("response.output_item.added", ["output_index": nextOutputIndex,
+                    "item": ["id": itemID, "type": "message", "role": "assistant", "status": "in_progress",
+                             "content": [Any]()] as [String: Any]]),
+                emit("response.content_part.added", ["item_id": itemID, "output_index": nextOutputIndex,
+                    "content_index": 0, "part": ["type": "output_text", "text": "", "annotations": [Any]()] as [String: Any]])]
+    }
+
+    private mutating func appendText(_ piece: String) -> [[UInt8]] {
+        guard case .message(let itemID, let text) = open else { return [] }
+        open = .message(id: itemID, text: text + piece)
+        return [textDelta(piece, itemID: itemID)]
+    }
+
+    private mutating func textDelta(_ piece: String, itemID: String) -> [UInt8] {
+        emit("response.output_text.delta", ["item_id": itemID, "output_index": nextOutputIndex,
+                                            "content_index": 0, "delta": piece, "logprobs": [Any]()])
+    }
 
     private mutating func startIfNeeded() -> [[UInt8]] {
         guard !started else { return [] }

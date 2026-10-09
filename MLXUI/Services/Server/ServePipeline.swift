@@ -213,6 +213,12 @@ nonisolated enum ServePipeline {
             // S2-6 fail-open: a count we can't make is not a reason to refuse the request.
         }
 
+        // S3-3d (R41): a dialect that asked for the whole window (and set no limit of its own) gets the room the
+        // prompt leaves. Needs both a declared window and a count; otherwise R16's 4096 stands.
+        if request.fillsContextWindow, request.maxTokens == nil,
+           let limit = backend.contextLimit, let promptTokens {
+            request.maxTokens = max(1, limit - promptTokens)
+        }
         return .success(Resolved(request: request, backend: backend, promptTokens: promptTokens))
     }
 
