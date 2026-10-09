@@ -784,3 +784,79 @@ struct ResponsesWhitespaceTests {
         try await same([.finish(.stop)], ["message:"])
     }
 }
+
+// MARK: - S3-3f: the output clamp, every dialect (R44)
+
+struct OutputClampTests {
+    private func limit(_ path: String, _ body: String, window: Int?, count: Int?) async throws -> Int? {
+        let backend = MessagesBackend(count: count, contextLimit: window)
+        let response = try #require(await send(body, env: environment(backend), path: path))
+        #expect(response.status == 200)
+        return backend.generated.first?.effectiveMaxTokens
+    }
+    private let chat = #"{"model":"\#(model)","messages":[{"role":"user","content":"hi"}]}"#
+    private func chat(max: Int) -> String { #"{"model":"\#(model)","max_tokens":\#(max),"messages":[{"role":"user","content":"hi"}]}"# }
+    private func messages(max: Int) -> String { #"{"model":"\#(model)","max_tokens":\#(max),"messages":[{"role":"user","content":"hi"}]}"# }
+
+    /// Chat's default 4096 with a prompt that nearly fills the window is lowered to what is left.
+    @Test func chatDefaultIsClampedWhenThePromptNearsTheWindow() async throws {
+        #expect(try await limit("/v1/chat/completions", chat, window: 8_192, count: 8_000) == 192)
+        #expect(try await limit("/v1/chat/completions", chat, window: 40_960, count: 30_000) == 2_768)   // min(40960, 32768) − 30000
+    }
+
+    /// Room to spare: the default is left alone (a clamp never raises).
+    @Test func roomToSpareLeavesTheDefaultAndSmallLimitsUntouched() async throws {
+        #expect(try await limit("/v1/chat/completions", chat, window: 40_960, count: 1_000) == ServeRequest.defaultMaxTokens)
+        #expect(try await limit("/v1/chat/completions", chat, window: 262_144, count: 1_000) == ServeRequest.defaultMaxTokens)
+        #expect(try await limit("/v1/chat/completions", chat(max: 50), window: 40_960, count: 1_000) == 50)
+        #expect(try await limit("/v1/messages", messages(max: 64), window: 262_144, count: 1_000) == 64)
+        #expect(try await limit("/v1/responses", req(#""input":"hi","max_output_tokens":10"#), window: 40_960, count: 1_000) == 10)
+    }
+
+    /// A Messages request for 32000 on a 40,960 window gets 32768 − prompt.
+    @Test func messagesBigLimitIsClampedToTheCappedWindowMinusThePrompt() async throws {
+        #expect(try await limit("/v1/messages", messages(max: 32_000), window: 40_960, count: 1_000) == 31_768)
+        #expect(try await limit("/v1/messages", messages(max: 32_000), window: 40_960, count: 500) == 32_000)    // fits: unchanged
+        #expect(try await limit("/v1/messages", messages(max: 32_000), window: 262_144, count: 1_000) == 31_768) // the cap applies to the window term
+    }
+
+    /// An explicit limit above the room is lowered too, on every dialect.
+    @Test func anExplicitLimitAboveTheRoomIsLowered() async throws {
+        #expect(try await limit("/v1/chat/completions", chat(max: 9_000), window: 8_192, count: 1_000) == 7_192)
+        #expect(try await limit("/v1/responses", req(#""input":"hi","max_output_tokens":9000"#), window: 8_192, count: 1_000) == 7_192)
+    }
+
+    /// No window, or no count: unchanged.
+    @Test func noWindowOrNoCountLeavesEveryLimitAlone() async throws {
+        #expect(try await limit("/v1/chat/completions", chat, window: nil, count: 1_000) == ServeRequest.defaultMaxTokens)
+        #expect(try await limit("/v1/messages", messages(max: 32_000), window: nil, count: 1_000) == 32_000)
+        #expect(try await limit("/v1/messages", messages(max: 32_000), window: 40_960, count: nil) == 32_000)
+        #expect(try await limit("/v1/chat/completions", chat, window: 40_960, count: nil) == ServeRequest.defaultMaxTokens)
+    }
+
+    /// The R44 formula as written: `min(window, 32768) − prompt`, floor 1. A prompt longer than the cap (but inside
+    /// the window) therefore gets 1 token. Pinned so the consequence is on the record (journal 2026-437).
+    @Test func aPromptPastTheCapGetsTheFloor() async throws {
+        #expect(try await limit("/v1/chat/completions", chat, window: 40_960, count: 35_000) == 1)
+        #expect(try await limit("/v1/chat/completions", chat, window: 262_144, count: 100_000) == 1)
+    }
+
+    /// The Responses fill is the same rule with "requested" = the cap.
+    @Test func theResponsesFillIsTheSameRule() async throws {
+        #expect(try await limit("/v1/responses", req(#""input":"hi""#), window: 40_960, count: 1_000) == 31_768)
+        #expect(try await limit("/v1/responses", req(#""input":"hi""#), window: 262_144, count: 1_000) == 31_768)
+        #expect(try await limit("/v1/responses", req(#""input":"hi""#), window: 8_192, count: 1_000) == 7_192)
+    }
+
+    /// A length stop is still reported as one: chat says `length`, messages `max_tokens`.
+    @Test func aClampedLimitStillEndsAsALengthStop() async throws {
+        let events: [ServeEvent] = [.textDelta("cut"), .usage(ServeUsage(promptTokens: 8_000, completionTokens: 192)), .finish(.length)]
+        let chatReply = try #require(await send(chat, env: environment(MessagesBackend(events: events, count: 8_000, contextLimit: 8_192)),
+                                                path: "/v1/chat/completions"))
+        let choice = try #require((object(chatReply.body)?["choices"] as? [[String: Any]])?.first)
+        #expect(choice["finish_reason"] as? String == "length")
+        let messagesReply = try #require(await send(messages(max: 9_000), env: environment(MessagesBackend(events: events, count: 8_000, contextLimit: 8_192)),
+                                                    path: "/v1/messages"))
+        #expect(object(messagesReply.body)?["stop_reason"] as? String == "max_tokens")
+    }
+}
