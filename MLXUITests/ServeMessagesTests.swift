@@ -187,17 +187,28 @@ struct AnthropicMessagesDecodeTests {
         #expect(throws: ServeError.self) { try choice(#"{"type":"bogus"}"#) }
     }
 
-    /// R34 #4: enabled/adaptive → on; disabled / between_tools / anything else → off; absent → not asked.
+    /// R44 (amends R34 #4): only `enabled` → on; adaptive / disabled / between_tools / anything else → off; absent → not asked.
     @Test func thinkingTypeMapsPerTheRuling() throws {
         func thinking(_ json: String?) throws -> Bool? {
             try AnthropicMessagesDialect.decode(Data(request(json.map { #","thinking":\#($0)"# } ?? "").utf8)).reasoning
         }
         #expect(try thinking(#"{"type":"enabled","budget_tokens":2048}"#) == true)
-        #expect(try thinking(#"{"type":"adaptive","display":"omitted"}"#) == true)
+        #expect(try thinking(#"{"type":"adaptive","display":"omitted"}"#) == false)      // what Claude Code sends on every call
+        #expect(try thinking(#"{"type":"adaptive"}"#) == false)
         #expect(try thinking(#"{"type":"disabled"}"#) == false)
         #expect(try thinking(#"{"type":"between_tools"}"#) == false)
         #expect(try thinking(#"{"type":"from-the-future"}"#) == false)
         #expect(try thinking(nil) == nil)
+    }
+
+    /// The decision reaches the template switch: adaptive (as Claude Code sends it) leaves thinking off, `enabled` turns it on.
+    @Test func adaptiveThinkingIsOffAndEnabledIsOnAtTheTemplate() throws {
+        func on(_ thinking: String) throws -> Bool {
+            let r = try AnthropicMessagesDialect.decode(Data(request(#","thinking":\#(thinking)"#).utf8))
+            return ReasoningTemplateTable.thinkingOn(requested: r.reasoning, forModelType: "qwen3")
+        }
+        #expect(try on(#"{"type":"adaptive","display":"omitted"}"#) == false)
+        #expect(try on(#"{"type":"enabled","budget_tokens":2048}"#) == true)
     }
 
     @Test func maxTokensIsRequiredForMessagesButNotForCountTokens() throws {

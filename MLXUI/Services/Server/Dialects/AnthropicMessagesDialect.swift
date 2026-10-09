@@ -281,13 +281,14 @@ nonisolated enum AnthropicMessagesDialect {
         }
     }
 
-    /// `thinking.type`: `enabled` / `adaptive` → on; `disabled`, `between_tools`, anything else, or no
-    /// field → off (R30, owner ruling R34 #4). `budget_tokens` and `display` are ignored. `nil` when the
-    /// client didn't send a `thinking` object.
+    /// `thinking.type`: only `enabled` turns thinking on; `disabled`, `adaptive`, `between_tools`, anything else,
+    /// or no field → off (R30; owner ruling R44, which amends R34 #4: Claude Code sends `adaptive` with
+    /// `display: "omitted"` on every call, and it asked for no thinking text). `budget_tokens` and `display` are
+    /// ignored. `nil` when the client didn't send a `thinking` object.
     private static func decodeThinking(_ value: Any?) -> Bool? {
         guard let thinking = value as? [String: Any] else { return nil }
         switch thinking["type"] as? String {
-        case "enabled", "adaptive": return true
+        case "enabled": return true
         default: return false
         }
     }
