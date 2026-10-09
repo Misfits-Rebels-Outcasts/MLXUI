@@ -679,10 +679,10 @@ struct ResponsesOutputLimitTests {
     /// No `max_output_tokens` → the room the prompt leaves: min(window, 32768) − the S2-6 count (R42).
     @Test func noLimitMeansTheCappedWindowMinusThePrompt() async throws {
         #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: 8_192, count: 1_000) == 7_192)       // under the cap: the window
-        #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: 40_960, count: 1_000) == 31_768)      // 32768 − 1000
-        #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: 262_144, count: 1_000) == 31_768)     // the cap, not 261144
+        #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: 40_960, count: 1_000) == 32_768)      // the reply cap; the window leaves 39,960
+        #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: 262_144, count: 1_000) == 32_768)     // the cap, not 261,144
         #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: 1000, count: 1000) == 1)             // never below 1
-        #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: 40_960, count: 40_000) == 1)          // prompt past the cap
+        #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: 40_960, count: 40_000) == 960)        // the window bounds prompt + reply
     }
 
     @Test func anExplicitLimitWins() async throws {
@@ -801,7 +801,7 @@ struct OutputClampTests {
     /// Chat's default 4096 with a prompt that nearly fills the window is lowered to what is left.
     @Test func chatDefaultIsClampedWhenThePromptNearsTheWindow() async throws {
         #expect(try await limit("/v1/chat/completions", chat, window: 8_192, count: 8_000) == 192)
-        #expect(try await limit("/v1/chat/completions", chat, window: 40_960, count: 30_000) == 2_768)   // min(40960, 32768) − 30000
+        #expect(try await limit("/v1/chat/completions", chat, window: 40_960, count: 30_000) == ServeRequest.defaultMaxTokens)   // 10,960 left: the default stands
     }
 
     /// Room to spare: the default is left alone (a clamp never raises).
@@ -813,11 +813,11 @@ struct OutputClampTests {
         #expect(try await limit("/v1/responses", req(#""input":"hi","max_output_tokens":10"#), window: 40_960, count: 1_000) == 10)
     }
 
-    /// A Messages request for 32000 on a 40,960 window gets 32768 − prompt.
-    @Test func messagesBigLimitIsClampedToTheCappedWindowMinusThePrompt() async throws {
-        #expect(try await limit("/v1/messages", messages(max: 32_000), window: 40_960, count: 1_000) == 31_768)
-        #expect(try await limit("/v1/messages", messages(max: 32_000), window: 40_960, count: 500) == 32_000)    // fits: unchanged
-        #expect(try await limit("/v1/messages", messages(max: 32_000), window: 262_144, count: 1_000) == 31_768) // the cap applies to the window term
+    /// A Messages request for 32000 on a 40,960 window is lowered to what the window leaves after the prompt.
+    @Test func messagesBigLimitIsClampedToWhatTheWindowLeaves() async throws {
+        #expect(try await limit("/v1/messages", messages(max: 32_000), window: 40_960, count: 20_000) == 20_960)
+        #expect(try await limit("/v1/messages", messages(max: 32_000), window: 40_960, count: 1_000) == 32_000)   // fits: unchanged
+        #expect(try await limit("/v1/messages", messages(max: 32_000), window: 262_144, count: 1_000) == 32_000)
     }
 
     /// An explicit limit above the room is lowered too, on every dialect.
@@ -834,17 +834,27 @@ struct OutputClampTests {
         #expect(try await limit("/v1/chat/completions", chat, window: 40_960, count: nil) == ServeRequest.defaultMaxTokens)
     }
 
-    /// The R44 formula as written: `min(window, 32768) − prompt`, floor 1. A prompt longer than the cap (but inside
-    /// the window) therefore gets 1 token. Pinned so the consequence is on the record (journal 2026-437).
-    @Test func aPromptPastTheCapGetsTheFloor() async throws {
-        #expect(try await limit("/v1/chat/completions", chat, window: 40_960, count: 35_000) == 1)
-        #expect(try await limit("/v1/chat/completions", chat, window: 262_144, count: 100_000) == 1)
+    /// R46: the window bounds prompt + reply, and the 32k caps the reply only, so a long prompt no longer starves the reply
+    /// (R44's `min(window, 32768) − prompt` gave 1 token past a 32k prompt).
+    @Test func aLongPromptKeepsTheRoomTheWindowHasLeft() async throws {
+        // window 40,960, prompt 35,000 → 5,960 of room (a request for more is lowered to it)
+        #expect(try await limit("/v1/messages", messages(max: 32_000), window: 40_960, count: 35_000) == 5_960)
+        // window 262,144, prompt 100,000 → 162,144 of room, but the reply is capped at 32,768
+        #expect(try await limit("/v1/responses", req(#""input":"hi""#), window: 262_144, count: 100_000) == 32_768)
+        // window 40,960, prompt 1,000 → min(requested, 32,768)
+        #expect(try await limit("/v1/responses", req(#""input":"hi""#), window: 40_960, count: 1_000) == 32_768)
+        #expect(try await limit("/v1/messages", messages(max: 32_000), window: 40_960, count: 1_000) == 32_000)
+        #expect(try await limit("/v1/messages", messages(max: 50_000), window: 262_144, count: 1_000) == 32_768)  // the reply cap
+        // the default 4096 is left alone while the window has room, even for a 100k prompt
+        #expect(try await limit("/v1/chat/completions", chat, window: 262_144, count: 100_000) == ServeRequest.defaultMaxTokens)
+        // and the floor is still 1
+        #expect(try await limit("/v1/chat/completions", chat, window: 40_960, count: 40_960) == 1)
     }
 
     /// The Responses fill is the same rule with "requested" = the cap.
     @Test func theResponsesFillIsTheSameRule() async throws {
-        #expect(try await limit("/v1/responses", req(#""input":"hi""#), window: 40_960, count: 1_000) == 31_768)
-        #expect(try await limit("/v1/responses", req(#""input":"hi""#), window: 262_144, count: 1_000) == 31_768)
+        #expect(try await limit("/v1/responses", req(#""input":"hi""#), window: 40_960, count: 1_000) == 32_768)
+        #expect(try await limit("/v1/responses", req(#""input":"hi""#), window: 262_144, count: 1_000) == 32_768)
         #expect(try await limit("/v1/responses", req(#""input":"hi""#), window: 8_192, count: 1_000) == 7_192)
     }
 

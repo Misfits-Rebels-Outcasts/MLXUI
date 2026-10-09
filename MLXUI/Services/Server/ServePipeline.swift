@@ -213,14 +213,15 @@ nonisolated enum ServePipeline {
             // S2-6 fail-open: a count we can't make is not a reason to refuse the request.
         }
 
-        // The output clamp (R44, narrowing R16 for every dialect; it subsumes the R41/R42 Responses fill). With a
-        // declared window and a count, the effective limit is
-        //   min(requested-or-default, min(window, fillCapTokens) − prompt), floor 1,
+        // The output clamp (R44, corrected by R46; it subsumes the R41/R42 Responses fill). With a declared window
+        // and a count, the effective limit is
+        //   min(requested-or-default, max(1, min(window − prompt, fillCapTokens))),
         // where "requested" is the client's limit, else the fill cap for a dialect that asked for the whole window
-        // (`fillsContextWindow`, Responses), else R16's 4096. It only ever lowers a limit, never raises one. No
-        // window or no count → untouched (4096 stands). A length stop is still reported as one.
+        // (`fillsContextWindow`, Responses), else R16's 4096. The window bounds prompt + reply; the 32k caps the
+        // reply only. It only ever lowers a limit, never raises one. No window or no count → untouched (4096
+        // stands). A length stop is still reported as one.
         if let limit = backend.contextLimit, let promptTokens {
-            let room = max(1, min(limit, ServeRequest.fillCapTokens) - promptTokens)
+            let room = max(1, min(limit - promptTokens, ServeRequest.fillCapTokens))
             let requested = request.maxTokens
                 ?? (request.fillsContextWindow ? ServeRequest.fillCapTokens : ServeRequest.defaultMaxTokens)
             request.maxTokens = min(requested, room)
