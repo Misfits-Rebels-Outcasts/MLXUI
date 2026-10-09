@@ -94,6 +94,9 @@ nonisolated struct ServeMessage: Sendable, Equatable {
 
 nonisolated struct ServeRequest: Sendable, Equatable {
     static let defaultMaxTokens = 4096          // R16: a request with no limit gets 4096
+    /// R42: the most a `fillsContextWindow` request may be given, whatever the model's window (a 262k-window model
+    /// would otherwise be allowed a quarter of a million tokens): the room is `min(window, this) − prompt`.
+    static let fillCapTokens = 32_768
 
     var model: String
     var messages: [ServeMessage]
@@ -104,7 +107,7 @@ nonisolated struct ServeRequest: Sendable, Equatable {
     var topP: Double?
     var maxTokens: Int?
     /// S3-3d (R41, amending R16 for `/v1/responses` only): when `maxTokens` is `nil`, generate up to the
-    /// model's context window minus the prompt instead of `defaultMaxTokens`. `ServePipeline.resolve` turns it
+    /// model's context window (capped at `fillCapTokens`, R42) minus the prompt instead of `defaultMaxTokens`. `ServePipeline.resolve` turns it
     /// into a concrete `maxTokens` where the S2-6 count lives; with no known window or no count it changes
     /// nothing and the 4096 default stands. Codex sends no `max_output_tokens`, and a length stop is an error there.
     var fillsContextWindow: Bool = false

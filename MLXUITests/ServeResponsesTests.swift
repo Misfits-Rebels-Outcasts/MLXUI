@@ -676,10 +676,13 @@ struct ResponsesOutputLimitTests {
         return backend.generated.first?.effectiveMaxTokens
     }
 
-    /// No `max_output_tokens` → the room the prompt leaves: window − the S2-6 count.
-    @Test func noLimitMeansTheWindowMinusThePrompt() async throws {
-        #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: 40_960, count: 1_000) == 39_960)
-        #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: 1000, count: 1000) == 1)      // never below 1
+    /// No `max_output_tokens` → the room the prompt leaves: min(window, 32768) − the S2-6 count (R42).
+    @Test func noLimitMeansTheCappedWindowMinusThePrompt() async throws {
+        #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: 8_192, count: 1_000) == 7_192)       // under the cap: the window
+        #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: 40_960, count: 1_000) == 31_768)      // 32768 − 1000
+        #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: 262_144, count: 1_000) == 31_768)     // the cap, not 261144
+        #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: 1000, count: 1000) == 1)             // never below 1
+        #expect(try await maxTokens("/v1/responses", req(#""input":"hi""#), window: 40_960, count: 40_000) == 1)          // prompt past the cap
     }
 
     @Test func anExplicitLimitWins() async throws {
