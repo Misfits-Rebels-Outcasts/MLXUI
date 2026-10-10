@@ -5,8 +5,9 @@ import Foundation
 /// (C-rows, with URL + date) — no config key here is invented. S3 adds Claude Code and Codex.
 ///
 /// **S2-5** — the app snippets (OpenCode, Continue) are per **model** now: what they advertise
-/// depends on `AgentReadiness` and on whether the family can think, so a model that isn't Agent-ready
-/// gets S1's plain-chat block rather than a tools or limits claim that would be false.
+/// depends on the model's **tool capability** (`ToolCallFormatTable.toolSupport`, S2-1) and on whether
+/// the family can think, so a model that can't take tools gets S1's plain-chat block rather than a tools
+/// or limits claim that would be false. (R51, 2026-10-10: there is no "Agent-ready" state any more.)
 nonisolated enum ConnectSnippets {
     enum Harness: String, CaseIterable, Identifiable, Sendable {
         case curl = "curl"
@@ -20,12 +21,13 @@ nonisolated enum ConnectSnippets {
     }
 
     /// What a snippet may claim about the selected model (S2-5). Assembled in the app by
-    /// `AgentReadinessFacts.connectFacts(hfModelID:)`, so the sheet, the tests and the readme's
+    /// `ServeModelFacts.connectFacts(hfModelID:)`, so the sheet, the tests and the readme's
     /// C-rows all describe the same facts.
     nonisolated struct ModelFacts: Equatable, Sendable {
         var modelID: String
-        /// S2-4's state. `notAgentReady` ⇒ S1's plain-chat block, with **no** tools or limits claims.
-        var agent: AgentReadiness.State
+        /// Can this family's template take tools (`ToolCallFormatTable.toolSupport(...).acceptsTools`)?
+        /// `false` ⇒ S1's plain-chat block, with **no** tools or limits claims.
+        var supportsTools: Bool
         /// The context window — the number S2-6's pre-count enforces, and what `/v1/models` reports.
         var contextLength: Int?
         /// Does S2-3's thinking control reach this family's template? (`ReasoningTemplateTable`.)
@@ -33,14 +35,8 @@ nonisolated enum ConnectSnippets {
 
         /// The S1 shape: the model's name and nothing it can't do.
         static func plain(_ modelID: String, contextLength: Int? = nil, thinkingAvailable: Bool = false) -> Self {
-            ModelFacts(modelID: modelID, agent: .notAgentReady(reason: ""), contextLength: contextLength,
+            ModelFacts(modelID: modelID, supportsTools: false, contextLength: contextLength,
                        thinkingAvailable: thinkingAvailable)
-        }
-
-        /// Whether tools and limits may be advertised at all (S2-5's rule).
-        var isAgentCapable: Bool {
-            if case .notAgentReady = agent { return false }
-            return true
         }
     }
 
@@ -109,7 +105,7 @@ nonisolated enum ConnectSnippets {
     private static func openCode(base: String, model: ModelFacts) -> String {
         let id = jsonEscaped(model.modelID)
         var members = ["\"name\": \"\(id)\""]
-        if model.isAgentCapable {
+        if model.supportsTools {
             members.append("\"tool_call\": true")
             if let context = model.contextLength {
                 members.append("\"limit\": { \"context\": \(context), \"output\": \(serverDefaultMaxTokens) }")
@@ -172,7 +168,7 @@ nonisolated enum ConnectSnippets {
             "    apiBase: \(base)",
             "    apiKey: unused    # the local server doesn't check it",
         ]
-        if model.isAgentCapable {
+        if model.supportsTools {
             lines.append("    capabilities:")
             lines.append("      - tool_use")
             if let context = model.contextLength {
@@ -206,16 +202,12 @@ nonisolated enum ConnectSnippets {
     /// `limit.output` so the client asks for exactly what the server would do by default.
     static let serverDefaultMaxTokens = ServeRequest.defaultMaxTokens
 
-    /// One honest line about a model's fitness (design §5 item 2): its context length when the
-    /// checkpoint's `config.json` says, plus its **Agent-ready state** (S2-4).
-    ///
-    /// S1's wording ended "It answers in plain text — tool calls aren't supported yet." S2-2 made
-    /// that false, so the second sentence is now `AgentReadiness.line(for:)` — one short line, and
-    /// for a model that isn't Agent-ready it is the plain-English reason.
-    static func fitnessLine(contextLength: Int?, agent: AgentReadiness.State) -> String {
-        let context = contextLength.map { "Context length: \(formatted($0)) tokens." }
+    /// The Connect sheet's one plain fact about a model: its context length, when the checkpoint's `config.json`
+    /// says. Kept because it is true, useful (it is the window the server enforces and `/v1/models` reports) and
+    /// not a verdict; the readiness line that used to follow it is gone (R51).
+    static func contextLine(contextLength: Int?) -> String {
+        contextLength.map { "Context length: \(formatted($0)) tokens." }
             ?? "Context length: not stated by this model's config."
-        return context + " " + AgentReadiness.line(for: agent)
     }
 
     /// `max_position_embeddings` from a checkpoint's `config.json` (top level, or inside

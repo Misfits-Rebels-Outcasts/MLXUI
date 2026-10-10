@@ -232,37 +232,6 @@ struct ModelDetailView: View {
             }
             .buttonStyle(.bordered)
             serveToggle(state: state)
-            agentBadge(state: state)
-        }
-    }
-
-    /// S2-4 — the Agent-ready badge: only an installed MLX chat model, only while the Local Server is
-    /// available (rule 14/R27 — `AgentReadiness.isVisible`, read through `LocalServerGate`, never the
-    /// flag). Copy and the state itself are implementer's calls, pending owner confirmation.
-    @ViewBuilder private func agentBadge(state: InstallState) -> some View {
-        if AgentReadiness.isVisible(gateAvailable: LocalServerGate.isAvailable,
-                                    runnerKind: model.runnerKind, isInstalled: isInstalledOnDisk) {
-            // S2-4b: criterion (d)'s model term is the **weights' size**, not `ramGB` (the catalog's
-            // 1.5× RAM heuristic — charging it would count that headroom twice).
-            let readiness = AgentReadinessFacts.state(hfModelID: model.hfModelId,
-                                                      architecture: model.architecture,
-                                                      weightsGB: model.downloadSizeGB)
-            Text(AgentReadiness.badge(for: readiness))
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Self.badgeColor(readiness))
-                .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(Self.badgeColor(readiness).opacity(0.12), in: Capsule())
-                .help(AgentReadiness.line(for: readiness))
-                .accessibilityLabel("Agent readiness: \(AgentReadiness.line(for: readiness))")
-        }
-    }
-
-    private static func badgeColor(_ state: AgentReadiness.State) -> Color {
-        switch state {
-        case .agentReady: .green
-        case .eligibleNotVerified: .blue
-        case .mayNotFit: .orange
-        case .notAgentReady: .secondary
         }
     }
 

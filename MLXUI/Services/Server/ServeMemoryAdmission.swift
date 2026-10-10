@@ -62,8 +62,8 @@ nonisolated enum ServeMemoryAdmission {
     /// that keep a full KV: `2 × layers × kv_heads × head_dim × dtype`) and a **fixed** part (a hybrid's
     /// linear-attention state). `nil` when the config doesn't declare enough.
     ///
-    /// Mirrors `AgentReadiness.kvBytes` (S2-4), which holds the owner's uncommitted edits and was not
-    /// touched; `ServeMemoryAdmissionTests` pins the two to the same number for the same config.
+    /// This is the only KV parser: it began as a copy of S2-4's `AgentReadiness.kvBytes`, which R51 removed along
+    /// with the Agent-ready badge.
     static func kvCost(configData: Data?) -> (perToken: Int, fixed: Int)? {
         guard let data = configData,
               let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
@@ -87,7 +87,7 @@ nonisolated enum ServeMemoryAdmission {
     }
 
     /// The fixed state one linear-attention layer holds (the shapes `mlx-swift-lm` allocates; see
-    /// `AgentReadiness.kvBytes` for the sources).
+    /// S2-4's original comments for the sources).
     private static func linearStateBytes(number: (String) -> Int?) -> Int {
         let valueHeads = number("linear_num_value_heads") ?? 0
         let keyHeads = number("linear_num_key_heads") ?? 0
@@ -145,12 +145,6 @@ nonisolated enum ServeMemoryAdmission {
                    message: "This prompt needs about \(gigabytes(needBytes)) GB of memory, and this Mac can give the model "
                        + "about \(gigabytes(roomBytes)) GB. Use a shorter prompt (for example, fewer tools) or a smaller model.",
                    code: "context_too_large_for_memory")
-    }
-
-    /// Criterion (d) of Agent-ready, asked of the same estimator (R47): does a 32,768-token context fit?
-    /// **Not wired** — doing so edits `AgentReadiness.swift`, which holds the owner's uncommitted changes.
-    static func fitsAgentContext(_ profile: ServeMemoryProfile, contextTokens: Int = 32_768) -> Bool {
-        profile.needBytes(promptTokens: contextTokens, replyTokens: 0) <= profile.roomBytes
     }
 
     private static func gigabytes(_ bytes: Int64) -> String { String(format: "%.1f", Double(bytes) / 1_073_741_824) }

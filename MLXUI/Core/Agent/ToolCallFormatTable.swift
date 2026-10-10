@@ -15,8 +15,8 @@
 //       "upstream decides", not ".json": the container's generate path reads
 //       `configuration.toolCallFormat ?? .json` (`Evaluate.swift:1445`).
 //    2. `toolSupport(forModelType:)` — can a harness's `tools` array work for this family at all?
-//       S2-2 keeps S1's "ignore tools" behaviour where the answer is not `.supported`, and S2-4's
-//       Agent-ready badge needs it.
+//       S2-2 keeps S1's "ignore tools" behaviour where the answer is not `.supported`, and the Connect
+//       sheet's snippets (`tool_call`, limits) follow it (R51).
 //    3. `systemPlacement(forModelType:)` — where the family's own chat template lets a `system`
 //       message sit. `ServeMessageAssembly` uses it to hoist or fold system messages.
 //
@@ -84,8 +84,7 @@ nonisolated enum ToolCallFormatTable {
     /// What a `tools` array in a request is worth for a family.
     enum ToolSupport: Equatable {
         /// The template renders tool schemas and a `ToolCallFormat` parser reads the family's
-        /// output. `tools` can be honoured (S2-2) and the model can earn the Agent-ready badge
-        /// (S2-4).
+        /// output. `tools` can be honoured (S2-2) and the Connect snippets advertise `tool_call` (R51).
         case supported
         /// The family's chat template has no `tools` handling at all (`gemma2`, `gemma3_text`):
         /// it ignores the array and answers in prose. Serving `tools` would look like the model

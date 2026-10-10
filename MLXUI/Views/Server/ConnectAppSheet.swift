@@ -25,8 +25,6 @@ struct ConnectAppSheet: View {
             Text(controller.statusSentence)
                 .font(.callout)
                 .foregroundStyle(controller.isRunning ? Color.secondary : Color.orange)
-            Text(LocalServerPolicy.chatOnlyNote)
-                .font(.caption).foregroundStyle(.secondary)
 
             row("Base URL", ConnectSnippets.baseURL(port: port))
             if models.isEmpty {
@@ -41,7 +39,7 @@ struct ConnectAppSheet: View {
                     .labelsHidden()
                     Button("Copy") { copy(modelID, label: "model") }
                 }
-                Text(fitness).font(.caption).foregroundStyle(.secondary)
+                Text(contextLine).font(.caption).foregroundStyle(.secondary)
             }
 
             Picker("App", selection: $harness) {
@@ -82,31 +80,24 @@ struct ConnectAppSheet: View {
         ConnectSnippets.text(for: harness, port: port, model: modelFacts)
     }
 
-    /// S2-5: the snippet is generated per model from its facts, so a model that isn't Agent-ready
-    /// gets S1's plain-chat block instead of a tools or limits claim.
+    /// S2-5: the snippet is generated per model from its facts, so a model that can't take tools gets
+    /// S1's plain-chat block instead of a tools or limits claim.
     private var modelFacts: ConnectSnippets.ModelFacts {
         guard !modelID.isEmpty else { return .plain("<model id>") }
         if modelID == ServedModels.appleFoundationID {
             // Apple Foundation Models answers text only: no tools, and its window is the measured one.
             return .plain(modelID, contextLength: ConnectSnippets.appleFoundationContextLength)
         }
-        return AgentReadinessFacts.connectFacts(hfModelID: modelID)
+        return ServeModelFacts.connectFacts(hfModelID: modelID)
     }
 
-    /// One honest line about the selected model: its context length and, since S2-4, its
-    /// Agent-ready state — replacing S1's "tool calls aren't supported yet", which S2-2 made false.
-    private var fitness: String {
+    /// The one plain fact shown under the model: its context length (R51: no readiness verdict).
+    private var contextLine: String {
         if modelID == ServedModels.appleFoundationID {
-            // Apple Foundation Models answers text only: its family never accepts tools.
-            return ConnectSnippets.fitnessLine(
-                contextLength: ConnectSnippets.appleFoundationContextLength,
-                agent: .notAgentReady(reason: "Text only — Apple Foundation Models has no tool support."))
+            return ConnectSnippets.contextLine(contextLength: ConnectSnippets.appleFoundationContextLength)
         }
         let config = ModelStore.shared.directory(forHFModelID: modelID).appendingPathComponent("config.json")
-        let data = try? Data(contentsOf: config)
-        return ConnectSnippets.fitnessLine(
-            contextLength: ConnectSnippets.contextLength(configJSON: data),
-            agent: AgentReadinessFacts.state(hfModelID: modelID))
+        return ConnectSnippets.contextLine(contextLength: ConnectSnippets.contextLength(configJSON: try? Data(contentsOf: config)))
     }
 
     private func row(_ title: String, _ value: String) -> some View {

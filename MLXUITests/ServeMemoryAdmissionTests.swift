@@ -41,14 +41,6 @@ struct ServeMemoryEstimatorTests {
         #expect(plain.perToken == 32 * 4 * 256 * 2 * 2 && plain.fixed == 0)
     }
 
-    /// The same numbers `AgentReadiness.kvBytes` (the S2-4 badge) computes for the same config.
-    @Test func agreesWithTheBadgesEstimateForTheSameConfig() throws {
-        for config in [qwen3Config, llamaConfig, hybridConfig(), hybridConfig(linearTypes: false)] {
-            let kv = try #require(ServeMemoryAdmission.kvCost(configData: config))
-            #expect(AgentReadiness.kvBytes(configData: config, contextTokens: 32_768) == kv.perToken * 32_768 + kv.fixed)
-        }
-    }
-
     @Test func theProfileScalesKVByTheOverheadFactorAndNeedsWeights() throws {
         let profile = try #require(ServeMemoryAdmission.profile(configData: qwen3Config, weightsBytes: 4_600_000_000,
                                                                  roomBytes: 11_000_000_000))
@@ -108,14 +100,8 @@ struct ServeMemoryEstimatorTests {
                 + "Use a shorter prompt (for example, fewer tools) or a smaller model.")
     }
 
-    @Test func roomIsTheSharedBudgetsCapacityAndAgentContextUsesTheSameEstimator() throws {
+    @Test func roomIsTheSharedBudgetsCapacity() {
         #expect(ServeMemoryAdmission.room(budget: MemoryBudget(capacityBytes: 123_456)) == 123_456)
-        let profile = try #require(ServeMemoryAdmission.profile(configData: qwen3Config, weightsBytes: 4_600_000_000,
-                                                                 roomBytes: 36 * 1_073_741_824 * 6 / 10))
-        #expect(ServeMemoryAdmission.fitsAgentContext(profile))                        // a 36 GiB Mac: 21.6 GiB room
-        var small = profile
-        small.roomBytes = Int64(10.8 * 1_073_741_824)                                  // an 18 GiB Mac
-        #expect(!ServeMemoryAdmission.fitsAgentContext(small))
     }
 
     @Test func weightsAreTheSafetensorsOnly() throws {

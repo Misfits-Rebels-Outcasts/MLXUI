@@ -49,12 +49,6 @@ private actor Evicted {
 
 @MainActor
 struct LocalServerPolicyTests {
-    @Test func theChatOnlyNoteIsThePlainSentenceWithNoBetaWording() {
-        #expect(LocalServerPolicy.chatOnlyNote
-                == "Chat only for now — tool calling for coding agents (OpenCode, Claude Code, Codex) is coming in a later update.")
-        #expect(!LocalServerPolicy.chatOnlyNote.localizedCaseInsensitiveContains("beta"))
-    }
-
     @Test func servingAModelStartsAStoppedServerAndUnservingTheLastStopsIt() {
         let go = { (served: Int, status: LocalServer.Status) in
             LocalServerPolicy.action(gateAvailable: true, enabled: true, servedCount: served, status: status)
@@ -302,20 +296,16 @@ struct ConnectSnippetsTests {
         #expect(length(#"{"text_config": {"max_position_embeddings": 131072}}"#) == 131072)
         #expect(length(#"{"hidden_size": 8}"#) == nil)
         #expect(length(nil) == nil)
-        // S2-4 replaced the "plain text only" half with the Agent-ready state.
-        #expect(ConnectSnippets.fitnessLine(contextLength: 40960, agent: .eligibleNotVerified)
-            .hasPrefix("Context length: 40,960 tokens."))
-        #expect(ConnectSnippets.fitnessLine(contextLength: nil, agent: .eligibleNotVerified)
-            .contains("not stated"))
-        #expect(ConnectSnippets.fitnessLine(contextLength: 8192, agent: .notAgentReady(reason: "Why."))
-            .hasSuffix("Why."))
+        // R51: the sheet shows the context length as a plain fact and nothing after it.
+        #expect(ConnectSnippets.contextLine(contextLength: 40960) == "Context length: 40,960 tokens.")
+        #expect(ConnectSnippets.contextLine(contextLength: nil) == "Context length: not stated by this model's config.")
     }
 
     // MARK: - S2-5: agent snippets
 
-    private func facts(_ agent: AgentReadiness.State, context: Int? = 40_960,
+    private func facts(tools: Bool, context: Int? = 40_960,
                        thinking: Bool = false) -> ConnectSnippets.ModelFacts {
-        ConnectSnippets.ModelFacts(modelID: sampleModel, agent: agent, contextLength: context,
+        ConnectSnippets.ModelFacts(modelID: sampleModel, supportsTools: tools, contextLength: context,
                                    thinkingAvailable: thinking)
     }
 
@@ -331,36 +321,32 @@ struct ConnectSnippetsTests {
         return try #require((provider["models"] as? [String: Any])?[sampleModel] as? [String: Any])
     }
 
-    /// The three Agent-capable states all advertise tools, and the limits come straight from the
-    /// window `/v1/models` reports and S2-6 enforces.
-    @Test func anAgentCapableModelGetsToolsAndLimitsFromTheWindow() throws {
-        for state in [AgentReadiness.State.agentReady, .eligibleNotVerified, .mayNotFit] {
-            let model = try openCodeModel(facts(state, context: 40_960))
-            #expect(model["tool_call"] as? Bool == true, "\(state)")
-            let limit = try #require(model["limit"] as? [String: Any], "\(state)")
-            #expect(limit["context"] as? Int == 40_960, "\(state)")
-            #expect(limit["output"] as? Int == 4_096, "\(state)")   // R16's default
-            // The Continue block carries the same two facts.
-            let yaml = ConnectSnippets.text(for: .continueDev, port: 1212, model: facts(state, context: 40_960))
-            #expect(yaml.contains("provider: openai"), "\(state)")
-            #expect(yaml.contains("      - tool_use"), "\(state)")
-            #expect(yaml.contains("      contextLength: 40960"), "\(state)")
-        }
+    /// A tool-capable model advertises tools, and the limits come straight from the window `/v1/models`
+    /// reports and S2-6 enforces.
+    @Test func aToolCapableModelGetsToolsAndLimitsFromTheWindow() throws {
+        let model = try openCodeModel(facts(tools: true, context: 40_960))
+        #expect(model["tool_call"] as? Bool == true)
+        let limit = try #require(model["limit"] as? [String: Any])
+        #expect(limit["context"] as? Int == 40_960)
+        #expect(limit["output"] as? Int == 4_096)                  // R16's default
+        // The Continue block carries the same two facts.
+        let yaml = ConnectSnippets.text(for: .continueDev, port: 1212, model: facts(tools: true, context: 40_960))
+        #expect(yaml.contains("provider: openai"))
+        #expect(yaml.contains("      - tool_use"))
+        #expect(yaml.contains("      contextLength: 40960"))
     }
 
-    /// A model that isn't Agent-ready gets S1's plain-chat block: no tools, no limits, no thinking —
-    /// in both app snippets. The model id and base URL are still there, so the block still works.
-    @Test func aNotAgentReadyModelGetsThePlainBlock() throws {
-        let reason = "This model's template has no tool support."
-        let model = try openCodeModel(facts(.notAgentReady(reason: reason), context: 8_192, thinking: false))
+    /// A model whose template can't take tools gets S1's plain-chat block: no tools, no limits, no
+    /// thinking, in both app snippets. The model id and base URL are still there, so the block works.
+    @Test func aModelWithoutToolSupportGetsThePlainBlock() throws {
+        let model = try openCodeModel(facts(tools: false, context: 8_192, thinking: false))
         #expect(model["name"] != nil)
         #expect(model["tool_call"] == nil)
         #expect(model["limit"] == nil)
         #expect(model["reasoning"] == nil)
         #expect(model["options"] == nil)
 
-        let yaml = ConnectSnippets.text(for: .continueDev, port: 1212,
-                                        model: facts(.notAgentReady(reason: reason), context: 8_192))
+        let yaml = ConnectSnippets.text(for: .continueDev, port: 1212, model: facts(tools: false, context: 8_192))
         #expect(yaml.contains(sampleModel))
         #expect(yaml.contains("http://127.0.0.1:1212/v1"))
         #expect(!yaml.contains("tool_use"))
@@ -368,18 +354,40 @@ struct ConnectSnippetsTests {
         #expect(!yaml.contains("reasoning_effort"))
     }
 
+    /// R51: the snippet follows the model's **tool capability** (S2-1's table) and its `config.json`'s
+    /// window, through the same function the sheet calls; no readiness state is involved.
+    @Test func theFactsFollowTheToolTableAndTheConfig() throws {
+        func config(_ modelType: String, window: Int?) -> Data {
+            let w = window.map { #","max_position_embeddings":\#($0)"# } ?? ""
+            return Data(#"{"model_type":"\#(modelType)"\#(w)}"#.utf8)
+        }
+        let tooled = ServeModelFacts.facts(modelID: sampleModel, configData: config("qwen3", window: 40_960))
+        #expect(tooled.supportsTools && tooled.contextLength == 40_960 && tooled.thinkingAvailable)
+        let plain = ServeModelFacts.facts(modelID: sampleModel, configData: config("gemma2", window: 8_192))
+        #expect(!plain.supportsTools && plain.contextLength == 8_192)
+        #expect(ToolCallFormatTable.toolSupport(forModelType: "qwen3").acceptsTools
+                && !ToolCallFormatTable.toolSupport(forModelType: "gemma2").acceptsTools)   // the table, not a guess
+        // …and the two snippets differ exactly there
+        #expect(try openCodeModel(tooled)["tool_call"] as? Bool == true)
+        #expect(try openCodeModel(plain)["tool_call"] == nil)
+        // a small window does not turn tools off (R51 removed the 32k criterion)
+        let small = ServeModelFacts.facts(modelID: sampleModel, configData: config("qwen3", window: 8_192))
+        #expect(small.supportsTools)
+        #expect(try openCodeModel(small)["tool_call"] as? Bool == true)
+    }
+
     /// The limits are the passed window, not a constant: two windows differ, and an unstated window
     /// says nothing rather than inventing a number (tools are still advertised).
     @Test func theLimitsFollowTheWindowAndAnUnknownWindowIsOmitted() throws {
-        let small = try openCodeModel(facts(.agentReady, context: 32_768))
+        let small = try openCodeModel(facts(tools: true, context: 32_768))
         #expect((small["limit"] as? [String: Any])?["context"] as? Int == 32_768)
-        let large = try openCodeModel(facts(.agentReady, context: 262_144))
+        let large = try openCodeModel(facts(tools: true, context: 262_144))
         #expect((large["limit"] as? [String: Any])?["context"] as? Int == 262_144)
 
-        let unknown = try openCodeModel(facts(.agentReady, context: nil))
+        let unknown = try openCodeModel(facts(tools: true, context: nil))
         #expect(unknown["tool_call"] as? Bool == true)
         #expect(unknown["limit"] == nil)                      // no invented window
-        let yaml = ConnectSnippets.text(for: .continueDev, port: 1212, model: facts(.agentReady, context: nil))
+        let yaml = ConnectSnippets.text(for: .continueDev, port: 1212, model: facts(tools: true, context: nil))
         #expect(yaml.contains("tool_use"))
         #expect(!yaml.contains("contextLength"))
     }
@@ -388,44 +396,38 @@ struct ConnectSnippetsTests {
     /// as an active request** (S2-5b, R30): the OpenCode block only declares the capability, and
     /// Continue's `reasoning_effort` line is a commented-out suggestion.
     @Test func theThinkingLinesAppearOnlyForThinkingFamiliesAndNeverAsk() throws {
-        let thinking = try openCodeModel(facts(.eligibleNotVerified, context: 40_960, thinking: true))
+        let thinking = try openCodeModel(facts(tools: true, context: 40_960, thinking: true))
         #expect(thinking["reasoning"] as? Bool == true)          // the capability flag…
         #expect(thinking["options"] == nil)                      // …and no effort is asked for
         let yamlThinking = ConnectSnippets.text(for: .continueDev, port: 1212,
-                                                model: facts(.eligibleNotVerified, context: 40_960, thinking: true))
+                                                model: facts(tools: true, context: 40_960, thinking: true))
         #expect(yamlThinking.contains("# Uncommenting this turns thinking on for this model:"))
         #expect(yamlThinking.contains(#"#     reasoning_effort: "high""#))
 
-        for model in [try openCodeModel(facts(.eligibleNotVerified, context: 40_960, thinking: false)),
-                      try openCodeModel(facts(.notAgentReady(reason: "x"), context: 40_960, thinking: true))] {
+        for model in [try openCodeModel(facts(tools: true, context: 40_960, thinking: false)),
+                      try openCodeModel(facts(tools: false, context: 40_960, thinking: true))] {
             #expect(model["reasoning"] == nil)
             #expect(model["options"] == nil)
         }
-        let yaml = ConnectSnippets.text(for: .continueDev, port: 1212,
-                                        model: facts(.notAgentReady(reason: "x"), context: 40_960, thinking: true))
+        let yaml = ConnectSnippets.text(for: .continueDev, port: 1212, model: facts(tools: false, context: 40_960, thinking: true))
         #expect(!yaml.contains("reasoning_effort"))
     }
 
-    /// S2-5b's rule, stated on its own: **no snippet asks for thinking.** Nothing in either app
-    /// block may enable it — the user opts in (R30), and a default effort can eat `limit.output`
-    /// before a tool call lands.
+    /// S2-5b's rule, stated on its own: **no snippet asks for thinking.**
     @Test func noSnippetAsksForThinkingByDefault() throws {
-        let states: [AgentReadiness.State] = [.agentReady, .eligibleNotVerified, .mayNotFit,
-                                              .notAgentReady(reason: "x")]
-        for state in states {
+        for tools in [true, false] {
             for thinking in [true, false] {
-                let model = try openCodeModel(facts(state, context: 40_960, thinking: thinking))
-                #expect(model["options"] == nil, "\(state) thinking=\(thinking)")
+                let model = try openCodeModel(facts(tools: tools, context: 40_960, thinking: thinking))
+                #expect(model["options"] == nil, "tools=\(tools) thinking=\(thinking)")
                 let text = ConnectSnippets.text(for: .openCode, port: 1212,
-                                                model: facts(state, context: 40_960, thinking: thinking))
-                #expect(!text.contains("reasoningEffort"), "\(state) thinking=\(thinking)")
+                                                model: facts(tools: tools, context: 40_960, thinking: thinking))
+                #expect(!text.contains("reasoningEffort"), "tools=\(tools) thinking=\(thinking)")
 
                 let yaml = ConnectSnippets.text(for: .continueDev, port: 1212,
-                                                model: facts(state, context: 40_960, thinking: thinking))
-                // Any mention of the wire control is inside a YAML comment.
+                                                model: facts(tools: tools, context: 40_960, thinking: thinking))
                 for line in yaml.split(separator: "\n") where line.contains("reasoning_effort") {
                     #expect(line.trimmingCharacters(in: .whitespaces).hasPrefix("#"),
-                            "\(state) thinking=\(thinking): \(line)")
+                            "tools=\(tools) thinking=\(thinking): \(line)")
                 }
             }
         }
@@ -433,22 +435,36 @@ struct ConnectSnippetsTests {
 
     /// Every combination still produces something the harness could load: valid JSON for OpenCode,
     /// and the documented YAML skeleton for Continue.
-    @Test func everyStateAndFamilyProducesLoadableText() throws {
-        let states: [AgentReadiness.State] = [.agentReady, .eligibleNotVerified, .mayNotFit,
-                                              .notAgentReady(reason: "x")]
-        for state in states {
+    @Test func everyCombinationProducesLoadableText() throws {
+        for tools in [true, false] {
             for thinking in [true, false] {
                 for context in [nil, 32_768] as [Int?] {
-                    _ = try openCodeJSON(facts(state, context: context, thinking: thinking))
+                    _ = try openCodeJSON(facts(tools: tools, context: context, thinking: thinking))
                 }
             }
-            let yaml = ConnectSnippets.text(for: .continueDev, port: 1212, model: facts(state))
+            let yaml = ConnectSnippets.text(for: .continueDev, port: 1212, model: facts(tools: tools))
             #expect(yaml.hasPrefix("# ~/.continue/config.yaml"))
             #expect(yaml.contains("schema: v1"))
             #expect(yaml.contains("models:"))
             #expect(yaml.contains("  - name: \(sampleModel)"))
             #expect(yaml.contains("    apiBase: http://127.0.0.1:1212/v1"))
             #expect(!yaml.contains("{"))                      // YAML, not the deprecated config.json
+        }
+    }
+
+    /// R51: "I don't want Serve to show … whether it is Agent Ready etc." Nothing the sheet generates or
+    /// shows may carry readiness wording, for any model.
+    @Test func noReadinessWordingAnywhereOnTheConnectSheet() {
+        let banned = ["agent-ready", "agent ready", "agentready", "tools supported", "may not fit", "not agent",
+                      "works with any openai-compatible chat client", "chat only for now"]
+        var texts = [ConnectSnippets.contextLine(contextLength: 40_960), ConnectSnippets.contextLine(contextLength: nil)]
+        for harness in ConnectSnippets.Harness.allCases {
+            for tools in [true, false] {
+                texts.append(ConnectSnippets.text(for: harness, port: 1212, model: facts(tools: tools, thinking: tools)))
+            }
+        }
+        for text in texts {
+            for word in banned { #expect(!text.lowercased().contains(word), "\(word) in: \(text.prefix(60))") }
         }
     }
 
@@ -464,13 +480,12 @@ struct ConnectSnippetsTests {
     /// (implementer verification, S2-5).
     @Test func printsTheAgentSnippetsForHarnessVerification() {
         let qwen = ConnectSnippets.ModelFacts(modelID: "mlx-community/Qwen3-8B-4bit",
-                                              agent: .eligibleNotVerified, contextLength: 40_960,
+                                              supportsTools: true, contextLength: 40_960,
                                               thinkingAvailable: true)
         print("S2-5 MEASURE opencode (Qwen3-8B):\n" + ConnectSnippets.text(for: .openCode, port: 1212, model: qwen))
         print("S2-5 MEASURE continue (Qwen3-8B):\n" + ConnectSnippets.text(for: .continueDev, port: 1212, model: qwen))
         let gemma = ConnectSnippets.ModelFacts(modelID: "mlx-community/gemma-2-9b-it-4bit",
-                                               agent: .notAgentReady(reason: "This model's template has no tool support."),
-                                               contextLength: 8_192, thinkingAvailable: false)
+                                               supportsTools: false, contextLength: 8_192, thinkingAvailable: false)
         print("S2-5 MEASURE opencode (gemma-2):\n" + ConnectSnippets.text(for: .openCode, port: 1212, model: gemma))
     }
 

@@ -57,10 +57,6 @@ enum LocalServerPolicy {
         visible.contains(selected) ? selected : .models
     }
 
-    /// The plain scope line under the status sentence, in Settings → Local Server and the Connect
-    /// sheet (S1-5g). Both surfaces are only built when the gate is open. Keep the wording plain.
-    static let chatOnlyNote = "Chat only for now — tool calling for coding agents (OpenCode, Claude Code, Codex) is coming in a later update."
-
     /// The one-line status ("Serving 2 models at 127.0.0.1:1212").
     static func statusSentence(status: LocalServer.Status, servedCount: Int, enabled: Bool) -> String {
         switch status {
@@ -94,46 +90,25 @@ enum ServeToggleVisibility {
     }
 }
 
-/// S2-4 — the app's own inputs to `AgentReadiness`, kept out of `Core/Agent/AgentReadiness.swift` so
-/// the criteria stay pure (no disk, no `MemoryBudget`, no catalog). The badge and the Connect sheet's
-/// line both read the facts here, through S2-6's `ModelContextWindow`, so a model can't be
-/// "Agent-ready" in one place and not in another.
-nonisolated enum AgentReadinessFacts {
-    /// The **weights' download size** the catalog records for this id (S2-4b) — read from the
-    /// installed index, which decodes the same bundled `browser.json`, so a surface without an
-    /// `AppState` (the Connect sheet) can still answer criterion (d). `nil` for a model the index
-    /// doesn't know.
-    static func weightsGB(hfModelID: String) -> Double? {
-        InstalledModelIndex.loadInstalled().entries.first { $0.hfModelId == hfModelID }?.downloadSizeGB
-    }
-
-    /// Everything the Connect sheet needs about one served model (S2-5): S2-4's state, the window
-    /// S2-6 enforces, and whether S2-3's thinking control reaches this family's template.
-    static func connectFacts(hfModelID: String, weightsGB: Double? = nil,
-                             budgetBytes: Int64 = MemoryBudget.shared.capacityBytes) -> ConnectSnippets.ModelFacts {
+/// The facts the Connect sheet's snippets are generated from (S2-5): the model's tool capability (S2-1's
+/// `ToolCallFormatTable`), the window S2-6 enforces, and whether S2-3's thinking control reaches its template.
+/// R51 (2026-10-10) removed the Agent-ready state that used to sit here: a model is just served.
+nonisolated enum ServeModelFacts {
+    /// Everything the Connect sheet needs about one served model, read from its installed `config.json`.
+    static func connectFacts(hfModelID: String) -> ConnectSnippets.ModelFacts {
         let config = ModelContainerPool.configData(
             directory: ModelStore.shared.directory(forHFModelID: hfModelID))
-        let modelType = ModelContainerPool.modelTypeString(configData: config) ?? ""
+        return facts(modelID: hfModelID, configData: config)
+    }
+
+    /// The pure half: what a `config.json` says about the model.
+    static func facts(modelID: String, configData: Data?) -> ConnectSnippets.ModelFacts {
+        let modelType = ModelContainerPool.modelTypeString(configData: configData) ?? ""
         return ConnectSnippets.ModelFacts(
-            modelID: hfModelID,
-            agent: state(hfModelID: hfModelID, weightsGB: weightsGB, budgetBytes: budgetBytes),
-            contextLength: ModelContextWindow.limit(configData: config),
+            modelID: modelID,
+            supportsTools: ToolCallFormatTable.toolSupport(forModelType: modelType).acceptsTools,
+            contextLength: ModelContextWindow.limit(configData: configData),
             thinkingAvailable: ReasoningTemplateTable.readsEnableThinking(forModelType: modelType))
-    }
-
-    /// `weightsGB` is passed by callers that already hold the catalog entry (the detail page); when
-    /// it is `nil` the installed index is asked instead.
-    static func state(hfModelID: String, architecture: String? = nil, weightsGB: Double? = nil,
-                      budgetBytes: Int64 = MemoryBudget.shared.capacityBytes) -> AgentReadiness.State {
-        let config = ModelContainerPool.configData(
-            directory: ModelStore.shared.directory(forHFModelID: hfModelID))
-        let modelType = ModelContainerPool.modelTypeString(configData: config) ?? architecture ?? ""
-        return AgentReadiness.state(modelType: modelType,
-                                    contextLength: ModelContextWindow.limit(configData: config),
-                                    weightsGB: weightsGB ?? Self.weightsGB(hfModelID: hfModelID) ?? 0,
-                                    configData: config,
-                                    budgetBytes: budgetBytes,
-                                    verification: AgentReadiness.verified[hfModelID])
     }
 }
 
