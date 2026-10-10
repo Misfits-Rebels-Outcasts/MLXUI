@@ -53,12 +53,15 @@ nonisolated struct ServeToolSpec: Sendable, Equatable {
     var name: String
     var rawJSON: String
 
-    /// The object, for `UserInput(tools:)` and `parse(content:tools:)`.
+    /// The object, for `UserInput(tools:)` and `parse(content:tools:)`, with JSON `null`s scrubbed
+    /// (`ServeToolSchema`): the chat template's engine cannot convert one, which used to make a whole request
+    /// unrenderable (S3-5b). `rawJSON` itself stays verbatim.
     var object: [String: any Sendable]? {
         guard let data = rawJSON.data(using: .utf8),
-              let decoded = try? JSONSerialization.jsonObject(with: data) as? [String: any Sendable]
+              let decoded = try? JSONSerialization.jsonObject(with: data),
+              let scrubbed = ServeToolSchema.renderable(decoded) as? [String: any Sendable]
         else { return nil }
-        return decoded
+        return scrubbed
     }
 }
 
