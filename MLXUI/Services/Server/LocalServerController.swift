@@ -250,7 +250,7 @@ final class LocalServerController {
     func setServed(_ id: String, _ on: Bool) async {
         guard LocalServerGate.isAvailable else { return }
         server.update(settings: server.settings.serving(id, on))
-        if on { setEnabled(true) }
+        if on { setEnabled(true) } else { server.forgetStoredResponses(for: id) }       // S3-3c
         await apply()
         if on, !hasShownConnect {
             hasShownConnect = true
@@ -303,6 +303,7 @@ final class LocalServerController {
     private func evictLoaded(_ hfModelID: String) async {
         await evictModel(hfModelID)
         await evictPromptCache(hfModelID)
+        server.forgetStoredResponses(for: hfModelID)
     }
 
     /// Drops every served MLX id that is no longer an installed chat model — evicting its weights —

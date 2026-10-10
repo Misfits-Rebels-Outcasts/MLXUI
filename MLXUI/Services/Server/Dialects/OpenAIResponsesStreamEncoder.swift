@@ -23,6 +23,9 @@ nonisolated struct OpenAIResponsesStreamEncoder: ServeStreamEncoder {
     let id: String
     let model: String
     let createdAt: Int
+    /// S3-3c: told the assistant turn once the response has completed (or ended `incomplete`); never on a failure or
+    /// a cancelled stream. `nil` = nothing is stored (`store:false`).
+    var onCompleted: (@Sendable (ServeMessage) -> Void)?
 
     private enum Open {
         case reasoning(id: String, text: String)
@@ -36,10 +39,11 @@ nonisolated struct OpenAIResponsesStreamEncoder: ServeStreamEncoder {
     private var items: [[String: Any]] = []
     private var heldText = ""
 
-    init(id: String, model: String, createdAt: Int) {
+    init(id: String, model: String, createdAt: Int, onCompleted: (@Sendable (ServeMessage) -> Void)? = nil) {
         self.id = id
         self.model = model
         self.createdAt = createdAt
+        self.onCompleted = onCompleted
     }
 
     var keepAlive: [UInt8] { OpenAIChatDialect.keepAlive }
@@ -121,6 +125,7 @@ nonisolated struct OpenAIResponsesStreamEncoder: ServeStreamEncoder {
             id: id, createdAt: createdAt, model: model, incomplete: incomplete, output: items,
             usage: OpenAIResponsesDialect.usageObject(usage ?? ServeUsage(promptTokens: 0, completionTokens: 0)))
         out.append(emit(incomplete ? "response.incomplete" : "response.completed", ["response": response]))
+        onCompleted?(OpenAIResponsesDialect.assistantTurn(fromOutput: items))
         return out
     }
 

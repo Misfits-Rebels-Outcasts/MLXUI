@@ -27,6 +27,8 @@ nonisolated struct ServeEnvironment: Sendable {
     /// `ModelContextWindow` the pre-count uses, and 8,192 for Apple Foundation Models.
     var modelContextLength: @Sendable (String) -> Int? = { _ in nil }
     var now: @Sendable () -> Date = { Date() }
+    /// S3-3c: the `previous_response_id` store, RAM only (rule 13). A class, so every copy of the environment shares it.
+    var responseStore: ResponseStore = ResponseStore()
 
     /// The app's real environment: the served set from `served`, the live install markers, the
     /// real AFM checker.

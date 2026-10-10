@@ -188,12 +188,23 @@ struct ResponsesDecodeTests {
         #expect(decoded.request.messages == [ServeMessage(role: .user, text: "x")])
     }
 
-    @Test func previousResponseIdIsRefusedForNowAndStreamIsAccepted() throws {
+    @Test func previousResponseIdAndStoreAreDecodedAndStreamIsAccepted() throws {
         #expect(try decode(#""input":"x","stream":true"#).request.stream)
         #expect(refused(#""input":"x","stream":"yes""#)?.status == 400)
-        let previous = refused(#""input":"x","previous_response_id":"resp_1""#)
-        #expect(previous?.status == 400 && previous?.message.contains("not supported yet") == true)
-        #expect(refused(#""input":"x","previous_response_id":null,"stream":false"#) == nil)
+        // S3-3c: the id is carried to the route; a non-string or empty id is a 400; null means none
+        #expect(try decode(#""input":"x","previous_response_id":"resp_1""#).previousResponseID == "resp_1")
+        #expect(refused(#""input":"x","previous_response_id":7"#)?.code == "invalid_previous_response_id")
+        #expect(refused(#""input":"x","previous_response_id":"""#)?.code == "invalid_previous_response_id")
+        #expect(try decode(#""input":"x","previous_response_id":null,"stream":false"#).previousResponseID == nil)
+        // `store` defaults to true (OpenAI), and must be a boolean
+        #expect(try decode(#""input":"x""#).store)
+        #expect(try decode(#""input":"x","store":true"#).store)
+        #expect(try decode(#""input":"x","store":false"#).store == false)
+        #expect(refused(#""input":"x","store":"no""#)?.code == "invalid_store")
+        // `instructions` stay apart from the input so a continued request can replace them
+        let decoded = try decode(#""instructions":"I","input":"x""#)
+        #expect(decoded.instructionMessages == [ServeMessage(role: .system, text: "I")])
+        #expect(decoded.inputMessages == [ServeMessage(role: .user, text: "x")])
     }
 
     /// R40: an unknown item *type* is dropped and counted, never a 400 (Codex resends its whole history).

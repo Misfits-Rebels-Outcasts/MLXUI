@@ -133,7 +133,13 @@ final class LocalServer {
         ipv6Active = false
         portBox.value = 0
         status = .stopped
+        environment.responseStore.removeAll()            // S3-3c: stored conversations never outlive the server
         for server in stopping { await server.stop(timeout: 1) }
+    }
+
+    /// S3-3c: Serve turned off for `model`, or it was uninstalled: the responses it produced go.
+    func forgetStoredResponses(for model: String) {
+        environment.responseStore.evict(model: model)
     }
 
     // MARK: - Pure helpers (tested directly)

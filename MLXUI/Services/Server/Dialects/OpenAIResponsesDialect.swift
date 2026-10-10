@@ -1,7 +1,7 @@
 import Foundation
 
-/// The OpenAI Responses wire format ⇄ the neutral core (backlog S3-3). Non-streaming only; the event
-/// stream is S3-3b and `previous_response_id` is S3-3c.
+/// The OpenAI Responses wire format ⇄ the neutral core (backlog S3-3, S3-3b the event stream, S3-3c
+/// `previous_response_id` through `ResponseStore`).
 ///
 /// Wire facts are from the OpenAI Python SDK's types (`openai` 3.26.1, `openai/types/responses/…`,
 /// fetched 2026-10-09: `Response`, `ResponseOutputMessage`, `ResponseFunctionToolCall`,
@@ -24,6 +24,16 @@ nonisolated enum OpenAIResponsesDialect {
         /// Input items of a type this server doesn't know, dropped (R40): Codex resends its whole history
         /// every turn, so one 400 would end the session. A count only — the route notes it in the log.
         var ignoredInputItems: Int = 0
+        /// S3-3c: the request's `previous_response_id`, when it sent one.
+        var previousResponseID: String? = nil
+        /// S3-3c: `store` (OpenAI defaults it to **true** when omitted: openai-python 3.28 `response_create_params`,
+        /// fetched 2026-10-10). `false` saves nothing.
+        var store: Bool = true
+        /// S3-3c: the `instructions` as a system message, kept apart: a continued request's `instructions` replace
+        /// the earlier ones, which "will not be carried over" (same SDK doc), while earlier *input* items are.
+        var instructionMessages: [ServeMessage] = []
+        /// S3-3c: this request's own input items, in order, before any role merging.
+        var inputMessages: [ServeMessage] = []
     }
 
     /// Hosted tools the model could only call on OpenAI's side, and `namespace` groups. Accepted and dropped
@@ -51,17 +61,28 @@ nonisolated enum OpenAIResponsesDialect {
             guard let flag = value as? Bool else { throw invalid("'stream' must be true or false.", code: "invalid_stream", param: "stream") }
             stream = flag
         }
-        if let previous = object["previous_response_id"], !(previous is NSNull) {
-            throw invalid("'previous_response_id' is not supported yet.", code: "previous_response_id_not_supported",
+        var previousResponseID: String?
+        switch object["previous_response_id"] {
+        case nil, is NSNull: break
+        case let id as String where !id.isEmpty: previousResponseID = id
+        default:
+            throw invalid("'previous_response_id' must be a response id.", code: "invalid_previous_response_id",
                           param: "previous_response_id")
+        }
+        var store = true
+        if let value = object["store"], !(value is NSNull) {
+            guard let flag = value as? Bool else { throw invalid("'store' must be true or false.", code: "invalid_store", param: "store") }
+            store = flag
         }
 
         var messages: [ServeMessage] = []
+        var instructionMessages: [ServeMessage] = []
         switch object["instructions"] {
         case nil, is NSNull: break
-        case let text as String: if !text.isEmpty { messages.append(ServeMessage(role: .system, text: text)) }
+        case let text as String: if !text.isEmpty { instructionMessages = [ServeMessage(role: .system, text: text)] }
         default: throw invalid("'instructions' must be a string.", code: "invalid_instructions", param: "instructions")
         }
+        messages += instructionMessages
         let input = try decodeInput(object["input"])
         messages += input.messages
         guard !messages.isEmpty else {
@@ -84,9 +105,11 @@ nonisolated enum OpenAIResponsesDialect {
         if let limit = request.maxTokens, limit < 1 {
             throw invalid("'max_output_tokens' must be at least 1.", code: "invalid_max_output_tokens", param: "max_output_tokens")
         }
-        // Accepted and ignored, never a 400 (R38): metadata, user, store, include, text, prompt_cache_key,
+        // Accepted and ignored, never a 400 (R38): metadata, user, include, text, prompt_cache_key,
         // parallel_tool_calls, service_tier, truncation, client_metadata, safety_identifier, background.
-        return Decoded(request: request, droppedHostedTools: tools.dropped, ignoredInputItems: input.ignored)
+        return Decoded(request: request, droppedHostedTools: tools.dropped, ignoredInputItems: input.ignored,
+                       previousResponseID: previousResponseID, store: store,
+                       instructionMessages: instructionMessages, inputMessages: input.messages)
     }
 
     // MARK: - Input
@@ -314,6 +337,21 @@ nonisolated enum OpenAIResponsesDialect {
     /// thinking as `reasoning_text` content, with an empty `summary` — it is not a summary), a `message`
     /// with one `output_text`, and one `function_call` per call.
     static func responseBody(id: String, createdAt: Int, model: String, collected: ServeCollected) -> Data {
+        responseBody(id: id, createdAt: createdAt, model: model, collected: collected,
+                     output: outputItems(collected: collected))
+    }
+
+    /// The same body with the `output` items already built, so the route can derive the stored assistant turn from
+    /// exactly the items (and call ids) the client received.
+    static func responseBody(id: String, createdAt: Int, model: String, collected: ServeCollected,
+                             output: [[String: Any]]) -> Data {
+        let incomplete = collected.finish == .length
+        let body = responseObject(id: id, createdAt: createdAt, model: model, incomplete: incomplete,
+                                  output: output, usage: usageObject(collected.usage))
+        return (try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
+    }
+
+    static func outputItems(collected: ServeCollected) -> [[String: Any]] {
         var output: [[String: Any]] = []
         let incomplete = collected.finish == .length
         if !collected.reasoning.isEmpty {
@@ -331,9 +369,29 @@ nonisolated enum OpenAIResponsesDialect {
                            "call_id": call.id ?? OpenAIChatDialect.makeToolCallID(),
                            "name": call.name, "arguments": call.argumentsJSON])
         }
-        let body = responseObject(id: id, createdAt: createdAt, model: model, incomplete: incomplete,
-                                  output: output, usage: usageObject(collected.usage))
-        return (try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
+        return output
+    }
+
+    /// The assistant turn a response's `output` items make when the conversation is continued (S3-3c): the message
+    /// text and the function calls, in one turn; reasoning is dropped, as it is on input.
+    static func assistantTurn(fromOutput items: [[String: Any]]) -> ServeMessage {
+        var text = ""
+        var calls: [ServeToolCall] = []
+        for item in items {
+            switch item["type"] as? String {
+            case "message":
+                for part in item["content"] as? [[String: Any]] ?? [] where part["type"] as? String == "output_text" {
+                    text += part["text"] as? String ?? ""
+                }
+            case "function_call":
+                if let name = item["name"] as? String {
+                    calls.append(ServeToolCall(id: item["call_id"] as? String, name: name,
+                                               argumentsJSON: item["arguments"] as? String ?? "{}"))
+                }
+            default: break
+            }
+        }
+        return ServeMessage(role: .assistant, text: text, toolCalls: calls)
     }
 
     /// The `response` object, whole: the body of a non-streaming reply and the payload of
