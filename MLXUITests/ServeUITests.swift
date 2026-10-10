@@ -253,9 +253,7 @@ struct ConnectSnippetsTests {
     }
 
     @Test func everyHarnessCarriesTheBaseURLOrPortAndTheModel() {
-        // Claude Code and Codex (S3-4) need tools, which the plain `modelID:` facts don't have: their one plain
-        // line carries neither port nor model (their blocks are covered by `claudeCodeGoldens`/`codexGoldens`).
-        for harness in ConnectSnippets.Harness.allCases where harness != .claudeCode && harness != .codex {
+        for harness in ConnectSnippets.Harness.allCases {
             let text = ConnectSnippets.text(for: harness, port: 4321, modelID: sampleModel)
             #expect(text.contains(sampleModel), "\(harness)")
             #expect(text.contains("4321"), "\(harness)")
@@ -495,21 +493,26 @@ struct ConnectSnippetsTests {
     @Test func claudeCodeGoldens() {
         let small = qwen8B(ramGB: 18)
         let usable = small.usableTokens ?? 0
+        let formattedUsable = "29,\(String(format: "%03d", usable % 1000))"
         let text = ConnectSnippets.text(for: .claudeCode, port: 1212, model: small)
         #expect(text == """
+        # Claude Code works best with 64k+ tokens of context; this model holds about \(formattedUsable) on this Mac.
+
         export ANTHROPIC_BASE_URL=http://127.0.0.1:1212
         export ANTHROPIC_AUTH_TOKEN=unused    # any non-empty value; the local server doesn't check it
         export ANTHROPIC_MODEL=mlx-community/Qwen3-8B-4bit
         export ANTHROPIC_DEFAULT_HAIKU_MODEL=mlx-community/Qwen3-8B-4bit    # Claude Code's small background model
         export CLAUDE_CODE_MAX_CONTEXT_TOKENS=\(usable)    # so it compacts before the server would refuse
 
-        # MCP servers and plugins add to every request, and this model holds 29,\(String(format: "%03d", usable % 1000)) tokens.
+        # MCP servers add to every request, and this model holds \(formattedUsable) tokens.
         # For a lean session, start Claude Code without MCP servers:
-        claude --strict-mcp-config --mcp-config '{"mcpServers":{}}'
+        claude --strict-mcp-config --mcp-config '{"mcpServers":{}}' \\
+          --settings '{"modelOverrides":{"claude-sonnet-5-5":"mlx-community/Qwen3-8B-4bit"}}'
         """)
         let large = ConnectSnippets.text(for: .claudeCode, port: 1212, model: qwen8B(ramGB: 36))
         #expect(large.contains("CLAUDE_CODE_MAX_CONTEXT_TOKENS=40960"))
         #expect(large.contains("holds 40,960 tokens"))
+        #expect(large.contains("Claude Code works best with 64k+ tokens of context; this model holds about 40,960 on this Mac."))
         #expect(!text.contains("40960") && text != large)
         #expect(!text.contains("ANTHROPIC_SMALL_FAST_MODEL"))          // deprecated; the current variable is used
         #expect(!text.lowercased().contains("thinking"))               // nothing to set (R44)
@@ -542,17 +545,63 @@ struct ConnectSnippetsTests {
         #expect(ConnectSnippets.codexCompactLimit(usable: 40_960) < 40_960)   // compaction must fit under the refusal line
     }
 
-    /// A model that can't call tools gets one plain line instead of a block, in both clients; Apple Foundation
-    /// Models (text only, window 8,192, no memory profile) is the same.
-    @Test func aModelThatCannotCallToolsGetsOnePlainLineForClaudeCodeAndCodex() {
+    /// R56: every served model gets both blocks. A model without tool support gets the same blocks plus one plain
+    /// line; Apple Foundation Models (text only, window 8,192, no memory profile) likewise.
+    @Test func aModelThatCannotCallToolsStillGetsBothBlocksWithAPlainLine() {
         let gemma = ServeModelFacts.facts(modelID: "mlx-community/gemma-2-9b-it-4bit",
                                           configData: Data(#"{"model_type":"gemma2","max_position_embeddings":8192}"#.utf8))
         let afm = ConnectSnippets.ModelFacts.plain("apple-foundation", contextLength: ConnectSnippets.appleFoundationContextLength)
         for model in [gemma, afm] {
-            #expect(ConnectSnippets.text(for: .claudeCode, port: 1212, model: model)
-                    == "This model can't call tools, so it can't be used with Claude Code.")
-            #expect(ConnectSnippets.text(for: .codex, port: 1212, model: model)
-                    == "This model can't call tools, so it can't be used with Codex.")
+            let claude = ConnectSnippets.text(for: .claudeCode, port: 1212, model: model)
+            let codex = ConnectSnippets.text(for: .codex, port: 1212, model: model)
+            #expect(claude.contains("# This model doesn't support tool calls, so agent tools won't work."), "\(model.modelID)")
+            #expect(codex.contains("# This model doesn't support tool calls, so agent tools won't work."), "\(model.modelID)")
+            #expect(claude.contains("export ANTHROPIC_BASE_URL=http://127.0.0.1:1212") && claude.contains("export ANTHROPIC_MODEL=\(model.modelID)"))
+            #expect(claude.contains("CLAUDE_CODE_MAX_CONTEXT_TOKENS=8192"))                 // the usable-context settings stay
+            #expect(claude.contains("Claude Code works best with 64k+ tokens of context; this model holds about 8,192 on this Mac."))
+            #expect(codex.contains(#"base_url = "http://127.0.0.1:1212/v1""#) && codex.contains("model_context_window = 8192"))
+            #expect(!claude.contains("can't be used with") && !codex.contains("can't be used with"))   // S3-4's lines are gone
+        }
+        // a tool-capable model carries neither line about tools
+        let tooled = qwen8B(ramGB: 18)
+        #expect(!ConnectSnippets.text(for: .claudeCode, port: 1212, model: tooled).contains("tool calls"))
+        #expect(!ConnectSnippets.text(for: .codex, port: 1212, model: tooled).contains("tool calls"))
+    }
+
+    /// R56: the 64k line appears below 65,536 usable tokens and not at or above it; the block itself is never hidden.
+    @Test func theSixtyFourKLineAppearsOnlyBelowTheThreshold() {
+        func facts(_ usable: Int) -> ConnectSnippets.ModelFacts {
+            ConnectSnippets.ModelFacts(modelID: "m/x", supportsTools: true, contextLength: 262_144, thinkingAvailable: false,
+                                       usableTokens: usable)
+        }
+        let below = ConnectSnippets.text(for: .claudeCode, port: 1212, model: facts(65_535))
+        let at = ConnectSnippets.text(for: .claudeCode, port: 1212, model: facts(65_536))
+        #expect(below.contains("Claude Code works best with 64k+") && below.contains("about 65,535 on this Mac"))
+        #expect(!at.contains("Claude Code works best with 64k+"))
+        for text in [below, at] { #expect(text.contains("export ANTHROPIC_BASE_URL=")) }
+        // Codex never carries the line (it is Claude Code's)
+        #expect(!ConnectSnippets.text(for: .codex, port: 1212, model: facts(8_192)).contains("64k"))
+    }
+
+    /// R56: the context line adds what this Mac holds, only when that is less than the window.
+    @Test func theContextLineSaysWhatThisMacHoldsWhenItIsLess() {
+        #expect(ConnectSnippets.contextLine(contextLength: 40_960, usable: 29_372)
+                == "Context length: 40,960 tokens (this Mac holds about 29,372).")
+        #expect(ConnectSnippets.contextLine(contextLength: 40_960, usable: 40_960) == "Context length: 40,960 tokens.")
+        #expect(ConnectSnippets.contextLine(contextLength: 40_960, usable: nil) == "Context length: 40,960 tokens.")
+        #expect(ConnectSnippets.contextLine(contextLength: nil, usable: 5_000) == "Context length: not stated by this model's config.")
+    }
+
+    /// No block is ever hidden, for any model: tool-capable or not, memory-bound or not, with or without facts.
+    @Test func noBlockIsHiddenForAnyModel() {
+        let models: [ConnectSnippets.ModelFacts] = [
+            qwen8B(ramGB: 18), qwen8B(ramGB: 36),
+            ServeModelFacts.facts(modelID: "g/gemma", configData: Data(#"{"model_type":"gemma2"}"#.utf8)),
+            .plain("apple-foundation", contextLength: 8_192), .plain("x/y"),
+        ]
+        for model in models {
+            #expect(ConnectSnippets.text(for: .claudeCode, port: 1212, model: model).contains("export ANTHROPIC_BASE_URL="), "\(model.modelID)")
+            #expect(ConnectSnippets.text(for: .codex, port: 1212, model: model).contains("[model_providers.mlxui]"), "\(model.modelID)")
         }
     }
 

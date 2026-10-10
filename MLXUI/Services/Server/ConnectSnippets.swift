@@ -158,9 +158,16 @@ nonisolated enum ConnectSnippets {
 
     // MARK: - Claude Code (C5) and Codex (C6)
 
-    /// One plain line for a model that can't call tools: Claude Code and Codex both need them.
-    static func cannotCallToolsLine(_ client: String) -> String {
-        "This model can't call tools, so it can't be used with \(client)."
+    /// **Every served model gets both blocks (owner ruling R56, 2026-10-10)**: like LM Studio and Ollama, the
+    /// sheet shows setup for any model and recommends, it never gates. Two plain lines say what the model can't do:
+    /// this one for a model without tool support (replaces S3-4's "can't be used with Claude Code/Codex" lines)…
+    static let noToolCallsLine = "This model doesn't support tool calls, so agent tools won't work."
+
+    /// …and this one when Claude Code's room is small. Claude Code's own prompt and tools are ~20k tokens and it
+    /// reserves a ~33k compaction buffer (SV-7, journal 2026-446), so under 64k it thrashes.
+    static let claudeCodeComfortableTokens = 65_536
+    static func claudeCodeContextLine(usable: Int) -> String {
+        "Claude Code works best with 64k+ tokens of context; this model holds about \(formatted(usable)) on this Mac."
     }
 
     /// Claude Code — verified 2026-10-10 against https://code.claude.com/docs/en/env-vars and
@@ -178,8 +185,13 @@ nonisolated enum ConnectSnippets {
     ///
     /// Thinking: nothing to set (the server ignores adaptive thinking, R44).
     private static func claudeCode(port: Int, model: ModelFacts) -> String {
-        guard model.supportsTools else { return cannotCallToolsLine("Claude Code") }
-        var lines = [
+        var lines: [String] = []
+        if !model.supportsTools { lines.append("# " + noToolCallsLine) }
+        if let usable = model.usable, usable < claudeCodeComfortableTokens {
+            lines.append("# " + claudeCodeContextLine(usable: usable))
+        }
+        if !lines.isEmpty { lines.append("") }
+        lines += [
             "export ANTHROPIC_BASE_URL=http://127.0.0.1:\(port)",
             "export ANTHROPIC_AUTH_TOKEN=unused    # any non-empty value; the local server doesn't check it",
             "export ANTHROPIC_MODEL=\(shellQuoted(model.modelID))",
@@ -188,14 +200,18 @@ nonisolated enum ConnectSnippets {
         let leanNote: String
         if let usable = model.usable {
             lines.append("export CLAUDE_CODE_MAX_CONTEXT_TOKENS=\(usable)    # so it compacts before the server would refuse")
-            leanNote = "# MCP servers and plugins add to every request, and this model holds \(formatted(usable)) tokens."
+            leanNote = "# MCP servers add to every request, and this model holds \(formatted(usable)) tokens."
         } else {
-            leanNote = "# MCP servers and plugins add to every request, and this model's memory is limited."
+            leanNote = "# MCP servers add to every request, and this model's memory is limited."
         }
         lines.append("")
         lines.append(leanNote)
         lines.append("# For a lean session, start Claude Code without MCP servers:")
-        lines.append(#"claude --strict-mcp-config --mcp-config '{"mcpServers":{}}'"#)
+        // `--settings` takes inline JSON; a `modelOverrides` entry whose value is this id silences Claude Code's
+        // "[claude-code:unrecognized_model]" line (docs: model-config, "Override model IDs per version"; checked on
+        // 2.1.296, journal 2026-447). The key must be an Anthropic model id; it is not the user's settings file.
+        lines.append(#"claude --strict-mcp-config --mcp-config '{"mcpServers":{}}' \"#)
+        lines.append(#"  --settings '{"modelOverrides":{"claude-sonnet-5-5":"\#(jsonEscaped(model.modelID))"}}'"#)
         return lines.joined(separator: "\n")
     }
 
@@ -209,7 +225,6 @@ nonisolated enum ConnectSnippets {
     /// the whole history, so compacting only at the refusal line would be refused itself.
     /// No `model_reasoning_effort` (R40: thinking is off unless asked).
     private static func codex(base: String, model: ModelFacts) -> String {
-        guard model.supportsTools else { return cannotCallToolsLine("Codex") }
         var top = [
             "model = \"\(tomlEscaped(model.modelID))\"",
             "model_provider = \"mlxui\"",
@@ -219,12 +234,16 @@ nonisolated enum ConnectSnippets {
             top.append("model_context_window = \(usable)")
             top.append("model_auto_compact_token_limit = \(codexCompactLimit(usable: usable))")
         }
-        return ([
+        var lines: [String] = []
+        if !model.supportsTools { lines += ["# " + noToolCallsLine, ""] }
+        lines += [
             "# In your shell (any non-empty value; the local server doesn't check it):",
             "export MLXUI_API_KEY=unused",
             "",
             "# ~/.codex/config.toml — run Codex without MCP servers for now.",
-        ] + top + [
+        ]
+        lines += top
+        lines += [
             "",
             "[model_providers.mlxui]",
             "name = \"AI Browser (local)\"",
@@ -232,7 +251,8 @@ nonisolated enum ConnectSnippets {
             "wire_api = \"responses\"",
             "env_key = \"MLXUI_API_KEY\"",
             "stream_idle_timeout_ms = 1800000",
-        ]).joined(separator: "\n")
+        ]
+        return lines.joined(separator: "\n")
     }
 
     /// Where Codex should compact: 90 % of the usable context (see `codex(base:model:)`).
@@ -303,9 +323,11 @@ nonisolated enum ConnectSnippets {
     /// The Connect sheet's one plain fact about a model: its context length, when the checkpoint's `config.json`
     /// says. Kept because it is true, useful (it is the window the server enforces and `/v1/models` reports) and
     /// not a verdict; the readiness line that used to follow it is gone (R51).
-    static func contextLine(contextLength: Int?) -> String {
-        contextLength.map { "Context length: \(formatted($0)) tokens." }
-            ?? "Context length: not stated by this model's config."
+    static func contextLine(contextLength: Int?, usable: Int? = nil) -> String {
+        guard let contextLength else { return "Context length: not stated by this model's config." }
+        var line = "Context length: \(formatted(contextLength)) tokens"
+        if let usable, usable < contextLength { line += " (this Mac holds about \(formatted(usable)))" }   // R56
+        return line + "."
     }
 
     /// `max_position_embeddings` from a checkpoint's `config.json` (top level, or inside

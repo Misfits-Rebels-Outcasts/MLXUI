@@ -96,8 +96,8 @@ struct ConnectAppSheet: View {
         if modelID == ServedModels.appleFoundationID {
             return ConnectSnippets.contextLine(contextLength: ConnectSnippets.appleFoundationContextLength)
         }
-        let config = ModelStore.shared.directory(forHFModelID: modelID).appendingPathComponent("config.json")
-        return ConnectSnippets.contextLine(contextLength: ConnectSnippets.contextLength(configJSON: try? Data(contentsOf: config)))
+        let facts = ServeModelFacts.connectFacts(hfModelID: modelID)
+        return ConnectSnippets.contextLine(contextLength: facts.contextLength, usable: facts.usableTokens)    // R56
     }
 
     private func row(_ title: String, _ value: String) -> some View {
