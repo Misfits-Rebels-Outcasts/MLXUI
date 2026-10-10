@@ -506,14 +506,14 @@ struct ConnectSnippetsTests {
 
         # MCP servers add to every request, and this model holds \(formattedUsable) tokens.
         # For a lean session, start Claude Code without MCP servers:
-        claude --strict-mcp-config --mcp-config '{"mcpServers":{}}' \\
-          --settings '{"modelOverrides":{"claude-sonnet-5-5":"mlx-community/Qwen3-8B-4bit"}}'
+        claude --strict-mcp-config --mcp-config '{"mcpServers":{}}'
         """)
         let large = ConnectSnippets.text(for: .claudeCode, port: 1212, model: qwen8B(ramGB: 36))
         #expect(large.contains("CLAUDE_CODE_MAX_CONTEXT_TOKENS=40960"))
         #expect(large.contains("holds 40,960 tokens"))
         #expect(large.contains("Claude Code works best with 64k+ tokens of context; this model holds about 40,960 on this Mac."))
         #expect(!text.contains("40960") && text != large)
+        #expect(!text.contains("modelOverrides") && !text.contains("--settings"))   // R58: it makes Claude Code ignore the window
         #expect(!text.contains("ANTHROPIC_SMALL_FAST_MODEL"))          // deprecated; the current variable is used
         #expect(!text.lowercased().contains("thinking"))               // nothing to set (R44)
     }

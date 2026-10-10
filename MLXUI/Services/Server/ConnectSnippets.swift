@@ -207,11 +207,10 @@ nonisolated enum ConnectSnippets {
         lines.append("")
         lines.append(leanNote)
         lines.append("# For a lean session, start Claude Code without MCP servers:")
-        // `--settings` takes inline JSON; a `modelOverrides` entry whose value is this id silences Claude Code's
-        // "[claude-code:unrecognized_model]" line (docs: model-config, "Override model IDs per version"; checked on
-        // 2.1.296, journal 2026-447). The key must be an Anthropic model id; it is not the user's settings file.
-        lines.append(#"claude --strict-mcp-config --mcp-config '{"mcpServers":{}}' \"#)
-        lines.append(#"  --settings '{"modelOverrides":{"claude-sonnet-5-5":"\#(jsonEscaped(model.modelID))"}}'"#)
+        // No `--settings modelOverrides` here (R58): it makes Claude Code treat the id as a known model, and then
+        // `CLAUDE_CODE_MAX_CONTEXT_TOKENS` is ignored (/context showed 1M, journal 2026-448). The warning
+        // "[claude-code:unrecognized_model]" it would silence is cosmetic.
+        lines.append(#"claude --strict-mcp-config --mcp-config '{"mcpServers":{}}'"#)
         return lines.joined(separator: "\n")
     }
 
