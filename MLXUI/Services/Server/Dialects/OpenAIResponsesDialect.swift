@@ -26,10 +26,12 @@ nonisolated enum OpenAIResponsesDialect {
         var ignoredInputItems: Int = 0
     }
 
-    /// Hosted tools the model could only call on OpenAI's side. Accepted and dropped (owner ruling
-    /// R39 #1). Matched by prefix so dated variants (`web_search_2025_08_26`,
-    /// `web_search_preview_2025_03_11`) are covered.
-    static let droppedToolTypePrefixes = ["web_search", "image_generation", "tool_search"]
+    /// Hosted tools the model could only call on OpenAI's side, and `namespace` groups. Accepted and dropped
+    /// (owner rulings R39 #1, and R55 which amends R39 #2: Codex 0.162.1 sends `multi_agent_v1` as a
+    /// `namespace` on every request, so a `400` ended every session). Matched by prefix so dated variants
+    /// (`web_search_2025_08_26`, `web_search_preview_2025_03_11`) are covered. The grouped tools are not
+    /// flattened into function tools: MCP/connector support is S4.
+    static let droppedToolTypePrefixes = ["web_search", "image_generation", "tool_search", "namespace"]
 
     // MARK: - Request
 
@@ -209,7 +211,7 @@ nonisolated enum OpenAIResponsesDialect {
 
     /// `tools[]`: flat `{type:"function", name, description, parameters}` re-shaped into the chat form the
     /// templates read. Hosted `web_search*`, `image_generation` and `tool_search` are accepted and dropped
-    /// (R39 #1); everything else — `namespace`, `custom`, `file_search`, `code_interpreter`,
+    /// (R39 #1), and so is `namespace` (R55); everything else — `custom`, `file_search`, `code_interpreter`,
     /// `computer_use*`, `mcp`, … — is a `400` naming the type.
     private static func decodeTools(_ value: Any?) throws -> (specs: [ServeToolSpec], dropped: Bool) {
         switch value {
@@ -225,7 +227,7 @@ nonisolated enum OpenAIResponsesDialect {
                 if droppedToolTypePrefixes.contains(where: { type.hasPrefix($0) }) { dropped = true; continue }
                 guard type == "function" else {
                     throw invalid("Tool type '\(type)' isn't supported; only 'function' is (hosted web_search, "
-                                  + "image_generation and tool_search are accepted and ignored).",
+                                  + "image_generation, tool_search and namespace are accepted and ignored).",
                                   code: "unsupported_tool_type", param: "\(param).type")
                 }
                 guard let name = tool["name"] as? String, !name.isEmpty else {

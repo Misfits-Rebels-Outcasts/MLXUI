@@ -127,7 +127,7 @@ struct ResponsesDecodeTests {
     /// are accepted and dropped.
     @Test func hostedToolsAreDroppedAndFlagged() throws {
         let hosted = ["web_search", "web_search_preview", "web_search_2025_08_26", "web_search_preview_2025_03_11",
-                      "image_generation", "tool_search"]
+                      "image_generation", "tool_search", "namespace"]    // R55: Codex's multi_agent_v1 group
         for type in hosted {
             let decoded = try decode(#""input":"x","tools":[{"type":"\#(type)","external_web_access":false},{"type":"function","name":"f","parameters":{}}]"#)
             #expect(decoded.droppedHostedTools, "\(type)")
@@ -138,7 +138,7 @@ struct ResponsesDecodeTests {
     }
 
     @Test func everyOtherBuiltInToolIsA400NamingTheType() {
-        let refusedTypes = ["namespace", "custom", "file_search", "code_interpreter", "computer_use_preview",
+        let refusedTypes = ["custom", "file_search", "code_interpreter", "computer_use_preview",
                             "computer_use", "mcp", "local_shell", "apply_patch", "shell"]
         for type in refusedTypes {
             let error = refused(#""input":"x","tools":[{"type":"\#(type)","name":"n"}]"#)
@@ -363,6 +363,15 @@ struct ResponsesRouteTests {
         #expect(backend.generated.first?.tools.map(\.name) == ["f"])
         #expect(log.entries.last?.toolsIgnored == true)
 
+        // R55: Codex's `namespace` group (multi_agent_v1) is dropped the same way and flagged in the log.
+        let namespaceLog = RequestLog()
+        let namespaceBackend = MessagesBackend()
+        let namespaced = req(#""input":"hi","tools":[{"type":"function","name":"f","parameters":{"type":"object"}},{"type":"namespace","name":"multi_agent_v1","description":"Tools for spawning and managing sub-agents.","tools":[{"type":"function","name":"spawn_agent","parameters":{"type":"object"}}]}]"#)
+        let namespacedResponse = try #require(await send(namespaced, env: environment(namespaceBackend, log: namespaceLog)))
+        #expect(namespacedResponse.status == 200)
+        #expect(namespaceBackend.generated.first?.tools.map(\.name) == ["f"])      // the group's inner tools are not flattened
+        #expect(namespaceLog.entries.last?.toolsIgnored == true)
+
         // A hosted tool alone leaves no tools at all, and is still flagged.
         let aloneLog = RequestLog()
         _ = await send(req(#""input":"hi","tools":[{"type":"web_search"}]"#), env: environment(MessagesBackend(), log: aloneLog))
@@ -377,7 +386,7 @@ struct ResponsesRouteTests {
 
     @Test func aRefusedToolTypeIs400WithTheOpenAIEnvelope() async throws {
         let backend = MessagesBackend()
-        let response = try #require(await send(req(#""input":"hi","tools":[{"type":"namespace","name":"mcp__x","tools":[]}]"#),
+        let response = try #require(await send(req(#""input":"hi","tools":[{"type":"custom","name":"mcp__x"}]"#),
                                                env: environment(backend)))
         #expect(response.status == 400)
         let error = try #require(object(response.body)?["error"] as? [String: Any])
