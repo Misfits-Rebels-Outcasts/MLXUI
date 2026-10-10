@@ -192,4 +192,56 @@ struct PromptCheckpointingPlanTests {
             }
         }
     }
+
+    // MARK: - R58: the system boundary is the end of the system content
+
+    /// A toy template: `[role id] + one id per character + [end]` per message, then a generation prompt `[7]`.
+    private func toyRender(_ messages: [ServeMessage]) -> [Int] {
+        var out: [Int] = []
+        for message in messages {
+            out.append(message.role == .system ? 1 : message.role == .user ? 3 : 4)
+            out += message.text.unicodeScalars.map { Int($0.value) + 100 }
+            out.append(2)
+        }
+        return out
+    }
+
+    private func toyPlan(_ store: PromptCacheStore<FakeSnapshot>, _ messages: [ServeMessage]) async throws -> (PromptPlan<FakeCache>, [Int]) {
+        let tokens = toyRender(messages) + [7]
+        let plan = try await PromptCheckpointing.plan(
+            store: store, key: key, messages: messages, tokens: tokens,
+            render: { toyRender($0) },
+            newCache: { FakeCache() },
+            isTrimmable: { _ in false },                       // a hybrid: exact prefixes only
+            restore: { hit in
+                let cache = FakeCache()
+                cache.fed = Array(hit.makeCopy().covered.prefix(hit.reusedLength))
+                return cache
+            },
+            prefill: { from, to, cache in
+                #expect(from == cache.fed.count)
+                cache.fed += tokens[from..<to]
+            },
+            snapshot: { cache in (FakeSnapshot(covered: cache.fed), Int64(cache.fed.count) * Self.mb, false) })
+        return (plan, tokens)
+    }
+
+    /// Claude Code's shape (journal 2026-449): the second request's system content is the first's plus an extra
+    /// system-role message hoisted into it, so the prompts share the system content but not the user header after it.
+    /// With *S* (past the header) a non-trimmable snapshot never matched; with *E* (the end of the system content) it does.
+    @Test func aGrowingSystemMessageStillReusesTheSystemContentOnANonTrimmableCache() async throws {
+        let system = String(repeating: "a", count: 400)
+        let s = store()
+        let first = [ServeMessage(role: .system, text: system), ServeMessage(role: .user, text: "go")]
+        let (firstPlan, firstTokens) = try await toyPlan(s, first)
+        expectExact(firstPlan, firstTokens)
+        #expect(firstPlan.outcome.storedAt.first == 400)                    // E: 1 role token + 400 chars − 1 boundary token
+
+        let second = [ServeMessage(role: .system, text: system + "\n\n<total_tokens>9</total_tokens>"),
+                      ServeMessage(role: .user, text: "go"), ServeMessage(role: .assistant, text: "x"),
+                      ServeMessage(role: .user, text: "r")]
+        let (secondPlan, secondTokens) = try await toyPlan(s, second)
+        expectExact(secondPlan, secondTokens)
+        #expect(secondPlan.outcome.reusedTokens == 400)                     // the system content is reused
+    }
 }

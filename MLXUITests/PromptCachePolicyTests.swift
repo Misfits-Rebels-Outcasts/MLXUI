@@ -64,6 +64,31 @@ struct PromptCachePolicyTests {
         #expect(PromptCheckpoints.positions(actual: actual, turnProbe: turn, systemProbe: system, minimumLength: 256) == [700, 996])
     }
 
+    @Test func theSystemBoundaryBecomesTheEndOfTheSystemContentWhenTheSuffixProbeIsGiven() {
+        // actual: system content 0..<695, then the user header up to 700, then the user words.
+        let actual = ids(1000)
+        let turn = Array(actual[0..<996]) + [-1, -2, -3]
+        let system = Array(actual[0..<700]) + [-9]
+        let systemEnd = Array(actual[0..<695]) + [-8, -8, -8]       // the suffix probe stops agreeing where the content ends
+        #expect(PromptCheckpoints.positions(actual: actual, turnProbe: turn, systemProbe: system, systemEndProbe: systemEnd,
+                                            minimumLength: 256) == [694, 996])       // E (one token back) replaces S
+        // without the suffix probe nothing changes (a failed render falls back to S)
+        #expect(PromptCheckpoints.positions(actual: actual, turnProbe: turn, systemProbe: system, systemEndProbe: nil,
+                                            minimumLength: 256) == [700, 996])
+        // never beyond what the real prompt shares with the system probe
+        let early = Array(actual[0..<300]) + [-9]
+        #expect(PromptCheckpoints.positions(actual: actual, turnProbe: turn, systemProbe: early, systemEndProbe: systemEnd,
+                                            minimumLength: 256) == [299, 996])
+    }
+
+    @Test func theSuffixProbeIsTheSystemProbeWithATextSuffixOnTheLastSystemMessage() {
+        let messages = [ServeMessage(role: .system, text: "S1"), ServeMessage(role: .system, text: "S2"),
+                        ServeMessage(role: .user, text: "u1")]
+        let probes = PromptCheckpoints.probeMessages(for: messages)
+        #expect(probes.systemEnd?.map(\.text) == ["S1", "S2" + PromptCheckpoints.probeSystemSuffix, PromptCheckpoints.probeUser])
+        #expect(PromptCheckpoints.probeMessages(for: [ServeMessage(role: .user, text: "hi")]).systemEnd == nil)
+    }
+
     @Test func aTemplateWhoseWholePromptIsTheStableBoundaryIsClampedToLeaveATailToken() {
         // Gemma 3: nothing follows `model⏎`, so the probe agrees with the whole prompt (T == n).
         let actual = ids(500)

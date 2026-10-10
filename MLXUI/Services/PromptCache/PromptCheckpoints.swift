@@ -12,20 +12,39 @@ nonisolated enum PromptCheckpoints {
     // Text that cannot appear in a real conversation by accident; only its first tokens matter.
     static let probeAssistant = "\u{2063}PCPROBE-assistant-\u{2063}"
     static let probeUser = "\u{2063}PCPROBE-user-\u{2063}"
+    /// Appended to the end of the last leading system message to find where the system *content* ends (R58).
+    static let probeSystemSuffix = "\u{2063}PCPROBE-system-\u{2063}"
 
     /// The probe conversations, or `nil` where a boundary doesn't exist.
-    static func probeMessages(for messages: [ServeMessage]) -> (turn: [ServeMessage], system: [ServeMessage]?) {
+    ///
+    /// `systemEnd` is `system` with a probe suffix on the last system message: rendered next to `system`, the two
+    /// agree exactly up to the end of the system content (see `positions`).
+    static func probeMessages(for messages: [ServeMessage])
+        -> (turn: [ServeMessage], system: [ServeMessage]?, systemEnd: [ServeMessage]?) {
         let turn = messages + [ServeMessage(role: .assistant, text: probeAssistant),
                                ServeMessage(role: .user, text: probeUser)]
         let leading = Array(messages.prefix { $0.role == .system })
-        let system = leading.isEmpty ? nil : leading + [ServeMessage(role: .user, text: probeUser)]
-        return (turn, system)
+        guard !leading.isEmpty else { return (turn, nil, nil) }
+        let user = ServeMessage(role: .user, text: probeUser)
+        var extended = leading
+        extended[extended.count - 1].text += probeSystemSuffix
+        return (turn, leading + [user], extended + [user])
     }
 
     /// The positions to checkpoint, ascending: the system boundary *S* (when it is before *T*) and
     /// the turn boundary *T*, each clamped to `n − 1` (a tail token must remain, T6) and dropped
     /// when below `minimumLength` (a snapshot the store would never serve).
-    static func positions(actual: [Int], turnProbe: [Int]?, systemProbe: [Int]?, minimumLength: Int) -> [Int] {
+    ///
+    /// **R58 — the system boundary is the end of the system content, not the user header after it.** *S* runs a few
+    /// tokens past the system content (the `<|im_end|>`, `user` header…). A snapshot that cannot be trimmed back
+    /// (a hybrid's recurrent state) is reusable only when the next prompt agrees with it *exactly*, and Claude Code
+    /// sends system-role messages mid-conversation (hook output, a `<total_tokens>` note) that the server hoists into
+    /// the leading system message: the next prompt's system content is longer, so *S* never matches although 99 % of
+    /// the prompt does (journal 2026-449). When `systemEndProbe` (the system probe with a suffix on its last system
+    /// message) is given, *E* = where the two probe renders stop agreeing, less one token (a boundary token may
+    /// merge with the suffix), and never beyond what the real prompt shares with the system probe. *E* replaces *S*.
+    static func positions(actual: [Int], turnProbe: [Int]?, systemProbe: [Int]?, systemEndProbe: [Int]? = nil,
+                          minimumLength: Int) -> [Int] {
         let n = actual.count
         func common(_ probe: [Int]?) -> Int? {
             guard let probe else { return nil }
@@ -34,7 +53,13 @@ nonisolated enum PromptCheckpoints {
             return min(i, n - 1)
         }
         var out: [Int] = []
-        if let s = common(systemProbe), s >= minimumLength { out.append(s) }
+        var systemBoundary = common(systemProbe)
+        if let systemProbe, let systemEndProbe, let s = systemBoundary {
+            var e = 0
+            while e < systemProbe.count, e < systemEndProbe.count, systemProbe[e] == systemEndProbe[e] { e += 1 }
+            systemBoundary = min(s, e - 1)
+        }
+        if let s = systemBoundary, s >= minimumLength { out.append(s) }
         if let t = common(turnProbe), t >= minimumLength, !out.contains(t) { out.append(t) }
         return out.sorted()
     }
@@ -104,8 +129,10 @@ nonisolated enum PromptCheckpointing {
         let probes = PromptCheckpoints.probeMessages(for: messages)
         let turnProbe = try? await render(probes.turn)
         let systemProbe: [Int]? = if let system = probes.system { try? await render(system) } else { nil }
+        let systemEndProbe: [Int]? = if let end = probes.systemEnd { try? await render(end) } else { nil }
         outcome.timings.probes = lap()
         let wanted = PromptCheckpoints.positions(actual: tokens, turnProbe: turnProbe, systemProbe: systemProbe,
+                                                 systemEndProbe: systemEndProbe,
                                                  minimumLength: store.minimumReuse).filter { $0 > position }
 
         // 3. prefill segment by segment; store each snapshot only after its segment is evaluated.
