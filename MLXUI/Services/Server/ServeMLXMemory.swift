@@ -19,9 +19,12 @@ import MLX
 /// sets the limit to the budget — and only a generation that overlaps a server request sees the lower one.
 nonisolated final class ServeMLXMemory: @unchecked Sendable {
 
-    /// The pool a server generation may keep: 256 MiB. A decode step needs tens of MB of temporaries and a
-    /// 512-token prefill chunk a few hundred; this holds the former and lets the latter be freed.
-    static let generationCacheLimit = 256 * 1_048_576
+    /// The pool a server generation may keep: **1 GiB** (R52). S3-5c shipped 256 MiB (lowest peak), but its
+    /// long-decode data showed the *second* back-to-back reply slowest with 256 MiB in all three pairs, and
+    /// agents send back-to-back requests; 1 GiB was as fast as the default on a single decode and still sits
+    /// ~1.5 GB under the default's peak. A decode step needs tens of MB of temporaries and a 512-token prefill
+    /// chunk a few hundred.
+    static let generationCacheLimit = 1_024 * 1_048_576
 
     static let shared = ServeMLXMemory(read: { Memory.cacheLimit }, write: { Memory.cacheLimit = $0 })
 

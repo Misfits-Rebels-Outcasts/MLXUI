@@ -21,7 +21,7 @@ struct ServeMLXMemoryTests {
         let limit = Limit(big)
         let memory = scope(limit)
         memory.begin()
-        #expect(limit.value == ServeMLXMemory.generationCacheLimit && ServeMLXMemory.generationCacheLimit == 256 * 1_048_576)
+        #expect(limit.value == ServeMLXMemory.generationCacheLimit && ServeMLXMemory.generationCacheLimit == 1_024 * 1_048_576)
         memory.end()
         #expect(limit.value == big)                                              // exactly what was there
     }
