@@ -336,6 +336,14 @@ nonisolated struct MLXChatBackend: ServeBackend {
 
     private func run(_ request: ServeRequest,
                      into continuation: AsyncThrowingStream<ServeEvent, Error>.Continuation) async throws {
+        // S3-5c: MLX's buffer pool is capped while a server generation runs and restored after it.
+        ServeMLXMemory.shared.begin()
+        defer { ServeMLXMemory.shared.end() }
+        try await runInner(request, into: continuation)
+    }
+
+    private func runInner(_ request: ServeRequest,
+                          into continuation: AsyncThrowingStream<ServeEvent, Error>.Continuation) async throws {
         let runStart = ContinuousClock.now
         let container = try await pool.container(directory: directory, footprintBytes: footprintBytes,
                                                  architecture: architecture)
