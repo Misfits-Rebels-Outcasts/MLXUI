@@ -108,6 +108,13 @@ nonisolated enum ServePipeline {
         }
     }
 
+    /// The UTF-8 bytes the prompt will render from: message text, tool-call arguments and the tool specs.
+    static func requestTextBytes(_ request: ServeRequest) -> Int {
+        request.messages.reduce(0) { total, message in
+            total + message.text.utf8.count + message.toolCalls.reduce(0) { $0 + $1.name.utf8.count + $1.argumentsJSON.utf8.count }
+        } + request.tools.reduce(0) { $0 + $1.rawJSON.utf8.count }
+    }
+
     private struct Resolved {
         let request: ServeRequest
         let backend: ServeBackend
@@ -225,6 +232,22 @@ nonisolated enum ServePipeline {
             let requested = request.maxTokens
                 ?? (request.fillsContextWindow ? ServeRequest.fillCapTokens : ServeRequest.defaultMaxTokens)
             request.maxTokens = min(requested, room)
+        }
+        // S3-5a — memory admission (R47), after the count and the window clamp and before the queue slot. Only a
+        // generation is admitted (`count_tokens` never is); a backend with no profile (Apple Foundation Models,
+        // test doubles) is exempt. With no count the size is *estimated* from the request's UTF-8 bytes — for
+        // admission only, never for `count_tokens` or the S2-6 window check above.
+        if enforcingContextLimit, let profile = backend.memoryProfile {
+            let tokens = promptTokens ?? ServeMemoryAdmission.estimatedTokens(utf8Bytes: requestTextBytes(request))
+            switch ServeMemoryAdmission.decide(profile: profile, promptTokens: tokens) {
+            case .refuse(let need, let room):
+                return .failure(ServeFailure(ServeMemoryAdmission.refusal(needBytes: need, roomBytes: room)))
+            case .admit(let maxReply):
+                // It only ever lowers: the requested limit (or the dialect's default) vs what memory allows.
+                let requested = request.maxTokens
+                    ?? (request.fillsContextWindow ? ServeRequest.fillCapTokens : ServeRequest.defaultMaxTokens)
+                request.maxTokens = min(requested, maxReply)
+            }
         }
         return .success(Resolved(request: request, backend: backend, promptTokens: promptTokens))
     }

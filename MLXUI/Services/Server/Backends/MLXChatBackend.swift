@@ -218,12 +218,16 @@ nonisolated struct MLXChatBackend: ServeBackend {
 
     var modelType: String? { checkpointModelType.isEmpty ? nil : checkpointModelType }
 
+    /// S3-5a: the memory admission facts (R47), read once when the backend is built — the weights' bytes
+    /// on disk, the KV cost from `config.json`, and the shared budget's capacity as the room.
+    let memoryProfile: ServeMemoryProfile?
+
     /// PC-2: told what each request did with the prompt cache (counts only, never content). Tests
     /// set it; PC-3 turns `reusedTokens` into `usage.cached_tokens` and the request log.
     var promptCacheObserver: (@Sendable (PromptCacheOutcome) -> Void)? = nil
 
     init(directory: URL, footprintBytes: Int64? = nil, architecture: String? = nil,
-         pool: ModelContainerPool = .shared) {
+         pool: ModelContainerPool = .shared, roomBytes: Int64 = ServeMemoryAdmission.room()) {
         self.directory = directory
         self.footprintBytes = footprintBytes
         self.architecture = architecture
@@ -233,6 +237,17 @@ nonisolated struct MLXChatBackend: ServeBackend {
         self.checkpointModelType = ModelContainerPool.modelTypeString(configData: configData)
             ?? architecture ?? ""
         self.contextLimit = ModelContextWindow.limit(configData: configData)
+        self.memoryProfile = ServeMemoryAdmission.profile(
+            configData: configData, weightsBytes: Self.weightsBytes(in: directory), roomBytes: roomBytes)
+    }
+
+    /// The weights on disk: the sum of the `*.safetensors` files (not the whole directory, so tokenizer and
+    /// config files don't count). `0` when there are none.
+    nonisolated static func weightsBytes(in directory: URL) -> Int64 {
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: [.fileSizeKey], options: [.skipsHiddenFiles])) ?? []
+        return files.filter { $0.pathExtension == "safetensors" }
+            .reduce(Int64(0)) { $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
     }
 
     /// Whether this checkpoint's family can take tools at all (S2-1's table).

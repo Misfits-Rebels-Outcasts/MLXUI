@@ -17,6 +17,8 @@ nonisolated final class MessagesBackend: ServeBackend, @unchecked Sendable {
     let modelType: String? = "qwen3"
     var contextLimit: Int?
     var count: Int?
+    /// S3-5a: the memory admission facts; `nil` = exempt (the default, like every other double).
+    var memoryProfile: ServeMemoryProfile?
     let events: [ServeEvent]
 
     init(events: [ServeEvent] = [.textDelta("ok"), .usage(ServeUsage(promptTokens: 10, completionTokens: 2)), .finish(.stop)],

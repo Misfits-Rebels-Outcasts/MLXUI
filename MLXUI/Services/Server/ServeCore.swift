@@ -168,6 +168,10 @@ nonisolated protocol ServeBackend: Sendable {
     /// that is a `400` the route can send before the head, in a stream as much as outside one. Any
     /// other failure to count stays `nil` — S2-6's fail-open, unchanged.
     func countPromptTokens(_ request: ServeRequest) async throws -> Int?
+
+    /// What a request on this model costs in memory (S3-5a, R47). `nil` = exempt: Apple Foundation Models
+    /// (the OS's memory, not ours), test doubles, or a checkpoint whose config can't be read.
+    var memoryProfile: ServeMemoryProfile? { get }
 }
 
 extension ServeBackend {
@@ -175,6 +179,7 @@ extension ServeBackend {
     var modelType: String? { nil }
     var contextLimit: Int? { nil }
     func countPromptTokens(_ request: ServeRequest) async throws -> Int? { nil }
+    var memoryProfile: ServeMemoryProfile? { nil }
 }
 
 // MARK: - Queue
