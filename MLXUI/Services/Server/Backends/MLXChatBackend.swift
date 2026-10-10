@@ -302,10 +302,18 @@ nonisolated struct MLXChatBackend: ServeBackend {
                                                             tools: tools.isEmpty ? nil : tools,
                                                             context: templateContext(request))
         } catch {
-            // S2-8: the checkpoint refusing the request is a 400 the route can send before the head.
-            // Anything else (an unreadable template, a tokenizer hiccup) is S2-6's fail-open: run
-            // the request and let the runtime's own handling decide.
-            throw ChatTemplateFailure.serveError(for: error) ?? error
+            // S2-8: the checkpoint refusing the request is a 400 the route can send before the head. S3-5b:
+            // so is a template that cannot be *run* on this request (a tool schema it can't serialise): a
+            // clear `400` naming the cause, never S2-6's fail-open. Only a checkpoint with no chat template at
+            // all is "can't count" (the route then answers `nil`, and `count_tokens` a `501`).
+            switch ChatTemplateFailure.classify(error) {
+            case .refusal(let refusal): throw refusal
+            case .missingTemplate: return nil
+            case .renderFailure:
+                throw ChatTemplateFailure.renderFailure(
+                    toolNames: await ServePromptCounter.shared.failingToolNames(
+                        directory: directory, tools: tools, context: templateContext(request)))
+            }
         }
     }
 
@@ -380,11 +388,19 @@ nonisolated struct MLXChatBackend: ServeBackend {
                         // thrown: the route turns that into the error the client sees, and throwing
                         // would replace it with S2's opaque 500 (which exists so a backend failure
                         // never leaks its internals to a client). Not a refusal → rethrow, as before.
-                        if let refusal = ChatTemplateFailure.serveError(for: error) {
+                        switch ChatTemplateFailure.classify(error) {
+                        case .refusal(let refusal):
                             continuation.yield(.error(refusal))
                             return
+                        case .missingTemplate:
+                            throw error
+                        case .renderFailure:
+                            // S3-5b: the same clear 400 as the pre-count, not a generic 500.
+                            continuation.yield(.error(ChatTemplateFailure.renderFailure(
+                                toolNames: await ServePromptCounter.shared.failingToolNames(
+                                    directory: directory, tools: tools, context: renderContext))))
+                            return
                         }
-                        throw error
                     }
                 }
             } else {
@@ -406,11 +422,19 @@ nonisolated struct MLXChatBackend: ServeBackend {
                         // thrown: the route turns that into the error the client sees, and throwing
                         // would replace it with S2's opaque 500 (which exists so a backend failure
                         // never leaks its internals to a client). Not a refusal → rethrow, as before.
-                        if let refusal = ChatTemplateFailure.serveError(for: error) {
+                        switch ChatTemplateFailure.classify(error) {
+                        case .refusal(let refusal):
                             continuation.yield(.error(refusal))
                             return
+                        case .missingTemplate:
+                            throw error
+                        case .renderFailure:
+                            // S3-5b: the same clear 400 as the pre-count, not a generic 500.
+                            continuation.yield(.error(ChatTemplateFailure.renderFailure(
+                                toolNames: await ServePromptCounter.shared.failingToolNames(
+                                    directory: directory, tools: tools, context: renderContext))))
+                            return
                         }
-                        throw error
                     }
                 }
             }

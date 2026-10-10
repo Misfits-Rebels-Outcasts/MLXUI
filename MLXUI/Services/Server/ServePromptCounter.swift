@@ -42,6 +42,17 @@ actor ServePromptCounter {
                                                additionalContext: context).count
     }
 
+    /// S3-5b: after a render has failed, which tools fail **alone** (a one-message conversation), by name.
+    /// Cheap enough for the failure path only: one render per tool.
+    func failingToolNames(directory: URL, tools: [[String: any Sendable]],
+                          context: [String: any Sendable]) async -> [String] {
+        guard let tokenizer = await tokenizer(for: directory) else { return [] }
+        let probe: [[String: any Sendable]] = [["role": "user", "content": "x"]]
+        return ChatTemplateFailure.failingToolNames(in: tools) { tool in
+            (try? tokenizer.applyChatTemplate(messages: probe, tools: [tool], additionalContext: context)) != nil
+        }
+    }
+
     /// For tests and for the journal's measurement: how many tokenizers are resident.
     var cachedCount: Int { tokenizers.count }
 

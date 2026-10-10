@@ -1,4 +1,5 @@
 import Foundation
+import MLXLMCommon
 
 /// **A checkpoint's chat template refused the request** (S2-8): Llama 3.1's template raises when an
 /// assistant turn carries more than one tool call (`ToolCallHistoryTable`), and other templates raise
@@ -38,5 +39,57 @@ nonisolated enum ChatTemplateFailure {
         return ServeError(status: 400,
                           message: "This model's chat template refused the request: \(raised)",
                           code: "template_error")
+    }
+
+    // MARK: - Render failures (S3-5b)
+
+    /// What a thrown render error is. The first two existed before S3-5b; the third used to fall through
+    /// to S2-6's fail-open (the count) or to a generic `500 generation_failed` (the generation).
+    enum Classification {
+        /// The checkpoint's template raised on purpose (`raise_exception`): S2-8's `400`.
+        case refusal(ServeError)
+        /// The checkpoint has no chat template at all: "can't count", not a failure of the request.
+        case missingTemplate
+        /// The template could not be *run* on this input (e.g. `swift-jinja` cannot convert a value in a
+        /// tool schema): the request's content is the problem, and the client can fix it.
+        case renderFailure
+    }
+
+    static func classify(_ error: Error) -> Classification {
+        if let refusal = serveError(for: error) { return .refusal(refusal) }
+        if let tokenizerError = error as? MLXLMCommon.TokenizerError, case .missingChatTemplate = tokenizerError {
+            return .missingTemplate
+        }
+        return .renderFailure
+    }
+
+    /// The `400` for a render failure, naming the cause in one plain sentence: the tool whose schema
+    /// could not be rendered when the probe found one (by name), else the conversation as a whole.
+    static func renderFailure(toolNames: [String]) -> ServeError {
+        let sentence: String
+        switch toolNames.count {
+        case 0:
+            sentence = "This model's chat template couldn't render this request."
+        case 1:
+            sentence = "This model's chat template couldn't render the tool '\(toolNames[0])': its schema contains something the template can't serialise."
+        default:
+            let shown = toolNames.prefix(3).map { "'\($0)'" }.joined(separator: ", ")
+            let more = toolNames.count > 3 ? " and \(toolNames.count - 3) more" : ""
+            sentence = "This model's chat template couldn't render \(toolNames.count) of the tools (\(shown)\(more)): their schemas contain something the template can't serialise."
+        }
+        return ServeError(status: 400, message: sentence, code: "template_error")
+    }
+
+    /// Which tools fail to render **on their own**, by name, in the order given. The probe is injected so
+    /// the search is testable without a tokenizer. Only called after a render has already failed.
+    static func failingToolNames(in tools: [[String: any Sendable]],
+                                 rendersAlone: ([String: any Sendable]) -> Bool) -> [String] {
+        tools.compactMap { tool in
+            rendersAlone(tool) ? nil : toolName(tool)
+        }
+    }
+
+    static func toolName(_ tool: [String: any Sendable]) -> String? {
+        ((tool["function"] as? [String: any Sendable])?["name"] as? String) ?? (tool["name"] as? String)
     }
 }
