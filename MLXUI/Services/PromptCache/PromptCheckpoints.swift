@@ -61,6 +61,8 @@ nonisolated enum PromptCheckpointing {
     /// - `prefill(from, to, cache)`: feeds `tokens[from..<to]` and evaluates; throws on cancellation.
     /// - `snapshot(cache)`: an evaluated copy, its bytes, and whether it can be trimmed.
     /// - `render`: renders a probe conversation **the same way the real prompt was rendered** (T5).
+    /// - `cacheBytes`: the live cache's size in bytes, asked **before** `snapshot` copies it (S3-5c): a snapshot the
+    ///   store would refuse is never built. `nil` = no pre-check (the fakes of older tests).
     static func plan<Cache, Snapshot: Sendable>(
         store: PromptCacheStore<Snapshot>,
         key: PromptCacheModelKey,
@@ -71,7 +73,8 @@ nonisolated enum PromptCheckpointing {
         isTrimmable: (Cache) -> Bool,
         restore: (PromptCacheHit<Snapshot>) -> Cache?,
         prefill: (_ from: Int, _ to: Int, _ cache: Cache) throws -> Void,
-        snapshot: (Cache) -> (snapshot: Snapshot, bytes: Int64, trimmable: Bool)
+        snapshot: (Cache) -> (snapshot: Snapshot, bytes: Int64, trimmable: Bool),
+        cacheBytes: ((Cache) -> Int64)? = nil
     ) async throws -> PromptPlan<Cache> {
         var outcome = PromptCacheOutcome(promptTokens: tokens.count)
         let n = tokens.count
@@ -119,6 +122,9 @@ nonisolated enum PromptCheckpointing {
             // memory and a copy. Non-trimmable caches (hybrids, sliding windows past their window)
             // can't be trimmed back, so they keep both.
             if target != wanted.last, isTrimmable(cache) { continue }
+            // S3-5c: a doomed snapshot (over the store's cap, or more than could ever fit) is not copied at all:
+            // the prefill above was needed, the second copy of the KV would be built only to be thrown away.
+            if let cacheBytes, !(await store.wouldAccept(bytes: cacheBytes(cache))) { continue }
             let taken = snapshot(cache)
             let stored = await store.insert(key: key, tokens: Array(tokens[0..<target]), snapshot: taken.snapshot,
                                             bytes: taken.bytes, trimmable: taken.trimmable)
@@ -161,7 +167,9 @@ nonisolated enum PromptCheckpointing {
             snapshot: { cache in
                 let snapshot = KVSnapshot(caches: cache.map { $0.copy() })     // evaluated by prefill (T3)
                 return (snapshot, snapshot.bytes, canTrimPromptCache(snapshot.caches))
-            })
+            },
+            // The same sum as `KVSnapshot.bytes`, taken from the live cache without copying it.
+            cacheBytes: { cache in Int64(cache.reduce(0) { $0 + $1.state.reduce(0) { $0 + $1.nbytes } }) })
     }
 
     /// Mirrors `LLMModel.prepare` (F7): chunks through the model, `eval(cache)` after each, with a

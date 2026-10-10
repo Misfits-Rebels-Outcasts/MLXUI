@@ -175,6 +175,16 @@ actor PromptCacheStore<Snapshot: Sendable>: MemoryBudgetParticipant {
 
     // MARK: Insert
 
+    /// Whether a snapshot of `bytes` could ever be stored: the two early refusals of `insert`, asked **before**
+    /// the copy is made (S3-5c, INV-1 step 5). A snapshot over the store's cap, or over the most room there could
+    /// ever be (what is free now plus everything this store holds, so the store is never flushed for a snapshot
+    /// that can't fit even then — PC-1 review, carry-over 2), is refused by `insert` anyway; building it first
+    /// only spends a second KV copy.
+    func wouldAccept(bytes: Int64) -> Bool {
+        guard bytes > 0, bytes <= capBytes else { return false }
+        return bytes <= budget.capacityBytes - budget.usedBytes + totalBytes
+    }
+
     /// Stores `snapshot`, which covers exactly `tokens`. Returns whether it was stored.
     ///
     /// Never fails a request and never evicts weights (rule 8): it makes room by dropping its own
@@ -183,10 +193,7 @@ actor PromptCacheStore<Snapshot: Sendable>: MemoryBudgetParticipant {
     @discardableResult
     func insert(key: PromptCacheModelKey, tokens: [Int], snapshot: Snapshot, bytes: Int64,
                 trimmable: Bool) -> Bool {
-        guard bytes > 0, !tokens.isEmpty, bytes <= capBytes else { return false }
-        // Never flush the store for a snapshot that can't fit even then (PC-1 review, carry-over 2):
-        // the most room there could ever be is what is free now plus everything this store holds.
-        guard bytes <= budget.capacityBytes - budget.usedBytes + totalBytes else { return false }
+        guard !tokens.isEmpty, wouldAccept(bytes: bytes) else { return false }
         let digest = Self.digest(tokens)
         if let i = entries.firstIndex(where: {
             $0.key == key && $0.tokens.count == tokens.count && $0.tokenDigest == digest && $0.tokens == tokens
