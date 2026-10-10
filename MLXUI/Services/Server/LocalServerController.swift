@@ -96,19 +96,24 @@ enum ServeToggleVisibility {
 nonisolated enum ServeModelFacts {
     /// Everything the Connect sheet needs about one served model, read from its installed `config.json`.
     static func connectFacts(hfModelID: String) -> ConnectSnippets.ModelFacts {
-        let config = ModelContainerPool.configData(
-            directory: ModelStore.shared.directory(forHFModelID: hfModelID))
-        return facts(modelID: hfModelID, configData: config)
+        let directory = ModelStore.shared.directory(forHFModelID: hfModelID)
+        return facts(modelID: hfModelID, configData: ModelContainerPool.configData(directory: directory),
+                     weightsBytes: MLXChatBackend.weightsBytes(in: directory))
     }
 
-    /// The pure half: what a `config.json` says about the model.
-    static func facts(modelID: String, configData: Data?) -> ConnectSnippets.ModelFacts {
+    /// The pure half: what a `config.json` says about the model, and — with the weights' bytes and the room
+    /// (R53) — how much of its window this Mac can actually hold (`usableTokens`).
+    static func facts(modelID: String, configData: Data?, weightsBytes: Int64 = 0,
+                      roomBytes: Int64 = ServeMemoryAdmission.room()) -> ConnectSnippets.ModelFacts {
         let modelType = ModelContainerPool.modelTypeString(configData: configData) ?? ""
+        let window = ModelContextWindow.limit(configData: configData)
+        let profile = ServeMemoryAdmission.profile(configData: configData, weightsBytes: weightsBytes, roomBytes: roomBytes)
         return ConnectSnippets.ModelFacts(
             modelID: modelID,
             supportsTools: ToolCallFormatTable.toolSupport(forModelType: modelType).acceptsTools,
-            contextLength: ModelContextWindow.limit(configData: configData),
-            thinkingAvailable: ReasoningTemplateTable.readsEnableThinking(forModelType: modelType))
+            contextLength: window,
+            thinkingAvailable: ReasoningTemplateTable.readsEnableThinking(forModelType: modelType),
+            usableTokens: ServeMemoryAdmission.usableTokens(profile: profile, contextLength: window))
     }
 }
 

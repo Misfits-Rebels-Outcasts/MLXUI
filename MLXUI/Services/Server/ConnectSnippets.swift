@@ -12,6 +12,9 @@ nonisolated enum ConnectSnippets {
     enum Harness: String, CaseIterable, Identifiable, Sendable {
         case curl = "curl"
         case openCode = "OpenCode"
+        /// S3-4 (C5, C6).
+        case claudeCode = "Claude Code"
+        case codex = "Codex"
         case xcode = "Xcode"
         case python = "Python"
         /// S2-5. `continue` is a Swift keyword, so the case is spelt out; the raw value is what the
@@ -32,6 +35,13 @@ nonisolated enum ConnectSnippets {
         var contextLength: Int?
         /// Does S2-3's thinking control reach this family's template? (`ReasoningTemplateTable`.)
         var thinkingAvailable: Bool
+        /// R53 — `min(context_length, the largest prompt memory admission accepts on this Mac)`: the number the
+        /// Claude Code and Codex blocks tell the client, so it compacts before the server would refuse. `nil` means
+        /// "not computed" and falls back to `contextLength` (see `usable`).
+        var usableTokens: Int? = nil
+
+        /// What a client app may send: the memory-aware figure, else the model's own window, else unknown.
+        var usable: Int? { usableTokens ?? contextLength }
 
         /// The S1 shape: the model's name and nothing it can't do.
         static func plain(_ modelID: String, contextLength: Int? = nil, thinkingAvailable: Bool = false) -> Self {
@@ -61,6 +71,10 @@ nonisolated enum ConnectSnippets {
             """
         case .openCode:
             return openCode(base: base, model: model)
+        case .claudeCode:
+            return claudeCode(port: port, model: model)
+        case .codex:
+            return codex(base: base, model: model)
         case .xcode:
             return """
             1. Open Xcode ▸ Settings ▸ Intelligence.
@@ -142,6 +156,88 @@ nonisolated enum ConnectSnippets {
         """
     }
 
+    // MARK: - Claude Code (C5) and Codex (C6)
+
+    /// One plain line for a model that can't call tools: Claude Code and Codex both need them.
+    static func cannotCallToolsLine(_ client: String) -> String {
+        "This model can't call tools, so it can't be used with \(client)."
+    }
+
+    /// Claude Code — verified 2026-10-10 against https://code.claude.com/docs/en/env-vars and
+    /// https://code.claude.com/docs/en/model-config (the readme's C5 row has the quotes):
+    ///
+    /// * `ANTHROPIC_BASE_URL` (no `/v1`: Claude Code appends its own path) and `ANTHROPIC_AUTH_TOKEN`
+    ///   ("custom value for the `Authorization` header").
+    /// * `ANTHROPIC_MODEL`, and `ANTHROPIC_DEFAULT_HAIKU_MODEL` for the small/fast background model
+    ///   (`ANTHROPIC_SMALL_FAST_MODEL` is documented as deprecated).
+    /// * `CLAUDE_CODE_MAX_CONTEXT_TOKENS` — for an id that doesn't start with `claude-` (ours never does) "the
+    ///   variable applies directly and proactive compaction continues at the declared window". `usable`, R53.
+    ///   (`CLAUDE_CODE_AUTO_COMPACT_WINDOW` is not used: its documented range starts at 100,000.)
+    /// * `--strict-mcp-config --mcp-config '{"mcpServers":{}}'` — "only use MCP servers from --mcp-config",
+    ///   checked against `claude --help` of 2.1.296.
+    ///
+    /// Thinking: nothing to set (the server ignores adaptive thinking, R44).
+    private static func claudeCode(port: Int, model: ModelFacts) -> String {
+        guard model.supportsTools else { return cannotCallToolsLine("Claude Code") }
+        var lines = [
+            "export ANTHROPIC_BASE_URL=http://127.0.0.1:\(port)",
+            "export ANTHROPIC_AUTH_TOKEN=unused    # any non-empty value; the local server doesn't check it",
+            "export ANTHROPIC_MODEL=\(shellQuoted(model.modelID))",
+            "export ANTHROPIC_DEFAULT_HAIKU_MODEL=\(shellQuoted(model.modelID))    # Claude Code's small background model",
+        ]
+        let leanNote: String
+        if let usable = model.usable {
+            lines.append("export CLAUDE_CODE_MAX_CONTEXT_TOKENS=\(usable)    # so it compacts before the server would refuse")
+            leanNote = "# MCP servers and plugins add to every request, and this model holds \(formatted(usable)) tokens."
+        } else {
+            leanNote = "# MCP servers and plugins add to every request, and this model's memory is limited."
+        }
+        lines.append("")
+        lines.append(leanNote)
+        lines.append("# For a lean session, start Claude Code without MCP servers:")
+        lines.append(#"claude --strict-mcp-config --mcp-config '{"mcpServers":{}}'"#)
+        return lines.joined(separator: "\n")
+    }
+
+    /// Codex — verified 2026-10-10 against https://learn.chatgpt.com/docs/config-file/config-reference and
+    /// .../config-advanced (the redirect target of developers.openai.com/codex/config-*): `model`,
+    /// `model_provider`, `model_context_window`, `model_auto_compact_token_limit`, `web_search` (`disabled`),
+    /// `[model_providers.<id>]` with `name`, `base_url`, `env_key`, `wire_api` (only `responses` is accepted)
+    /// and `stream_idle_timeout_ms` (default 300000; a local model's long prefill needs more).
+    ///
+    /// `model_auto_compact_token_limit` is **90 % of `usable`**, not `usable`: Codex's compaction request carries
+    /// the whole history, so compacting only at the refusal line would be refused itself.
+    /// No `model_reasoning_effort` (R40: thinking is off unless asked).
+    private static func codex(base: String, model: ModelFacts) -> String {
+        guard model.supportsTools else { return cannotCallToolsLine("Codex") }
+        var top = [
+            "model = \"\(tomlEscaped(model.modelID))\"",
+            "model_provider = \"mlxui\"",
+            "web_search = \"disabled\"",
+        ]
+        if let usable = model.usable {
+            top.append("model_context_window = \(usable)")
+            top.append("model_auto_compact_token_limit = \(codexCompactLimit(usable: usable))")
+        }
+        return ([
+            "# In your shell (any non-empty value; the local server doesn't check it):",
+            "export MLXUI_API_KEY=unused",
+            "",
+            "# ~/.codex/config.toml — run Codex without MCP servers for now.",
+        ] + top + [
+            "",
+            "[model_providers.mlxui]",
+            "name = \"AI Browser (local)\"",
+            "base_url = \"\(base)\"",
+            "wire_api = \"responses\"",
+            "env_key = \"MLXUI_API_KEY\"",
+            "stream_idle_timeout_ms = 1800000",
+        ]).joined(separator: "\n")
+    }
+
+    /// Where Codex should compact: 90 % of the usable context (see `codex(base:model:)`).
+    static func codexCompactLimit(usable: Int) -> Int { usable * 9 / 10 }
+
     // MARK: - Continue (C7)
 
     /// ~/.continue/config.yaml — https://docs.continue.dev/reference ("models"), verified 2026-10-07.
@@ -192,6 +288,8 @@ nonisolated enum ConnectSnippets {
         switch harness {
         case .curl: return nil
         case .openCode: return URL(string: "https://opencode.ai/docs/providers/")
+        case .claudeCode: return URL(string: "https://code.claude.com/docs/en/env-vars")
+        case .codex: return URL(string: "https://developers.openai.com/codex/config-reference")
         case .xcode: return URL(string: "https://developer.apple.com/videos/play/wwdc2026/232/")
         case .python: return URL(string: "https://github.com/openai/openai-python")
         case .continueDev: return URL(string: "https://docs.continue.dev/reference")
@@ -231,6 +329,11 @@ nonisolated enum ConnectSnippets {
 
     private static func jsonEscaped(_ text: String) -> String {
         text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+    }
+    private static func tomlEscaped(_ text: String) -> String { jsonEscaped(text) }
+    private static func shellQuoted(_ text: String) -> String {
+        text.allSatisfy { $0.isLetter || $0.isNumber || "-_./:@".contains($0) }
+            ? text : "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
     private static func pythonEscaped(_ text: String) -> String { jsonEscaped(text) }
 }

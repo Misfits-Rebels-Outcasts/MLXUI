@@ -27,6 +27,11 @@ nonisolated struct ServeMemoryProfile: Sendable, Equatable {
         let free = roomBytes - weightsBytes - fixedBytes
         return free > 0 && bytesPerToken > 0 ? Int((Double(free) / bytesPerToken).rounded(.down)) : 0
     }
+
+    /// The largest prompt `ServeMemoryAdmission.decide` admits: the one that still leaves `minimumReplyTokens`.
+    var largestAdmittedPromptTokens: Int {
+        max(0, tokenCapacity - ServeMemoryAdmission.minimumReplyTokens)
+    }
 }
 
 nonisolated enum ServeMemoryAdmission {
@@ -132,6 +137,19 @@ nonisolated enum ServeMemoryAdmission {
         let minimum = profile.needBytes(promptTokens: promptTokens, replyTokens: minimumReplyTokens)
         guard minimum <= profile.roomBytes else { return .refuse(needBytes: minimum, roomBytes: profile.roomBytes) }
         return .admit(maxReplyTokens: max(minimumReplyTokens, profile.tokenCapacity - promptTokens))
+    }
+
+    /// **The usable context (R53)** — what the Connect sheet tells a client app it may send:
+    /// `min(the model's context_length, the largest prompt memory admission accepts on this Mac)`, so the client
+    /// compacts before the server refuses. A model whose memory isn't the limit (small weights, a big room), or
+    /// one with no profile (Apple Foundation Models, an unreadable config), gets its own `context_length`;
+    /// `nil` only when neither fact is known. A plain number, not a verdict.
+    static func usableTokens(profile: ServeMemoryProfile?, contextLength: Int?) -> Int? {
+        switch (profile?.largestAdmittedPromptTokens, contextLength) {
+        case let (memory?, window?): return min(memory, window)
+        case let (memory?, nil): return memory
+        case let (nil, window): return window
+        }
     }
 
     /// A prompt's token count when the render could not count it: UTF-8 bytes ÷ 3, rounded up. For admission only.

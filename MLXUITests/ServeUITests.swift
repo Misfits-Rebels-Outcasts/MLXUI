@@ -253,7 +253,9 @@ struct ConnectSnippetsTests {
     }
 
     @Test func everyHarnessCarriesTheBaseURLOrPortAndTheModel() {
-        for harness in ConnectSnippets.Harness.allCases {
+        // Claude Code and Codex (S3-4) need tools, which the plain `modelID:` facts don't have: their one plain
+        // line carries neither port nor model (their blocks are covered by `claudeCodeGoldens`/`codexGoldens`).
+        for harness in ConnectSnippets.Harness.allCases where harness != .claudeCode && harness != .codex {
             let text = ConnectSnippets.text(for: harness, port: 4321, modelID: sampleModel)
             #expect(text.contains(sampleModel), "\(harness)")
             #expect(text.contains("4321"), "\(harness)")
@@ -450,6 +452,126 @@ struct ConnectSnippetsTests {
             #expect(yaml.contains("    apiBase: http://127.0.0.1:1212/v1"))
             #expect(!yaml.contains("{"))                      // YAML, not the deprecated config.json
         }
+    }
+
+    // MARK: - S3-4: Claude Code (C5) and Codex (C6)
+
+    /// Qwen3-8B-4bit's real shape: 36 layers, 8 KV heads, head_dim 128 (147,456 KV bytes/token), window 40,960.
+    private var qwen8BConfig: Data {
+        Data(#"{"model_type":"qwen3","num_hidden_layers":36,"num_key_value_heads":8,"head_dim":128,"max_position_embeddings":40960}"#.utf8)
+    }
+    private func qwen8B(ramGB: Double) -> ConnectSnippets.ModelFacts {
+        ServeModelFacts.facts(modelID: "mlx-community/Qwen3-8B-4bit", configData: qwen8BConfig,
+                              weightsBytes: 4_600_000_000, roomBytes: EngineCache.defaultBudget(totalRAMGB: Self.reportedRAMGB(ramGB)))
+    }
+    /// `SystemInfo` reports bytes ÷ 1e9, so a "18 GiB" Mac says 19.3: the units quirk behind the 11.6 GiB room.
+    private static func reportedRAMGB(_ gib: Double) -> Double { gib * 1_073_741_824 / 1e9 }
+
+    /// R53: usable = min(context_length, the largest prompt memory admission accepts). Qwen3-8B on an 18 GiB Mac
+    /// is memory-bound (~29.4k); on 36 GiB the window is the limit, so it is the model's own 40,960.
+    @Test func theUsableContextIsTheSmallerOfTheWindowAndWhatMemoryAdmits() {
+        let small = qwen8B(ramGB: 18), large = qwen8B(ramGB: 36)
+        #expect((29_300...29_500).contains(small.usableTokens ?? 0))
+        #expect(large.usableTokens == 40_960)
+        #expect(small.contextLength == 40_960 && small.usable != large.usable)
+        // the pure function, on its own: a model whose memory isn't the limit gets its window; no profile → window
+        let profile = ServeMemoryAdmission.profile(configData: qwen8BConfig, weightsBytes: 4_600_000_000,
+                                                   roomBytes: EngineCache.defaultBudget(totalRAMGB: Self.reportedRAMGB(18)))
+        #expect(ServeMemoryAdmission.usableTokens(profile: profile, contextLength: 8_192) == 8_192)
+        #expect(ServeMemoryAdmission.usableTokens(profile: nil, contextLength: 8_192) == 8_192)
+        #expect(ServeMemoryAdmission.usableTokens(profile: nil, contextLength: nil) == nil)
+        // …and it is exactly the boundary `decide` draws
+        if let profile, let usable = ServeMemoryAdmission.usableTokens(profile: profile, contextLength: nil) {
+            guard case .admit = ServeMemoryAdmission.decide(profile: profile, promptTokens: usable) else {
+                Issue.record("the usable prompt must be admitted"); return
+            }
+            guard case .refuse = ServeMemoryAdmission.decide(profile: profile, promptTokens: usable + 1) else {
+                Issue.record("one more token must be refused"); return
+            }
+        }
+    }
+
+    /// The goldens: the exact text for Qwen3-8B on 18 GiB and on 36 GiB — only the context numbers differ.
+    @Test func claudeCodeGoldens() {
+        let small = qwen8B(ramGB: 18)
+        let usable = small.usableTokens ?? 0
+        let text = ConnectSnippets.text(for: .claudeCode, port: 1212, model: small)
+        #expect(text == """
+        export ANTHROPIC_BASE_URL=http://127.0.0.1:1212
+        export ANTHROPIC_AUTH_TOKEN=unused    # any non-empty value; the local server doesn't check it
+        export ANTHROPIC_MODEL=mlx-community/Qwen3-8B-4bit
+        export ANTHROPIC_DEFAULT_HAIKU_MODEL=mlx-community/Qwen3-8B-4bit    # Claude Code's small background model
+        export CLAUDE_CODE_MAX_CONTEXT_TOKENS=\(usable)    # so it compacts before the server would refuse
+
+        # MCP servers and plugins add to every request, and this model holds 29,\(String(format: "%03d", usable % 1000)) tokens.
+        # For a lean session, start Claude Code without MCP servers:
+        claude --strict-mcp-config --mcp-config '{"mcpServers":{}}'
+        """)
+        let large = ConnectSnippets.text(for: .claudeCode, port: 1212, model: qwen8B(ramGB: 36))
+        #expect(large.contains("CLAUDE_CODE_MAX_CONTEXT_TOKENS=40960"))
+        #expect(large.contains("holds 40,960 tokens"))
+        #expect(!text.contains("40960") && text != large)
+        #expect(!text.contains("ANTHROPIC_SMALL_FAST_MODEL"))          // deprecated; the current variable is used
+        #expect(!text.lowercased().contains("thinking"))               // nothing to set (R44)
+    }
+
+    @Test func codexGoldens() {
+        let small = qwen8B(ramGB: 18)
+        let usable = small.usableTokens ?? 0
+        let text = ConnectSnippets.text(for: .codex, port: 1212, model: small)
+        #expect(text == """
+        # In your shell (any non-empty value; the local server doesn't check it):
+        export MLXUI_API_KEY=unused
+
+        # ~/.codex/config.toml — run Codex without MCP servers for now.
+        model = "mlx-community/Qwen3-8B-4bit"
+        model_provider = "mlxui"
+        web_search = "disabled"
+        model_context_window = \(usable)
+        model_auto_compact_token_limit = \(usable * 9 / 10)
+
+        [model_providers.mlxui]
+        name = "AI Browser (local)"
+        base_url = "http://127.0.0.1:1212/v1"
+        wire_api = "responses"
+        env_key = "MLXUI_API_KEY"
+        stream_idle_timeout_ms = 1800000
+        """)
+        #expect(!text.contains("model_reasoning_effort"))                  // R40
+        #expect(ConnectSnippets.text(for: .codex, port: 1212, model: qwen8B(ramGB: 36)).contains("model_context_window = 40960"))
+        #expect(ConnectSnippets.codexCompactLimit(usable: 40_960) < 40_960)   // compaction must fit under the refusal line
+    }
+
+    /// A model that can't call tools gets one plain line instead of a block, in both clients; Apple Foundation
+    /// Models (text only, window 8,192, no memory profile) is the same.
+    @Test func aModelThatCannotCallToolsGetsOnePlainLineForClaudeCodeAndCodex() {
+        let gemma = ServeModelFacts.facts(modelID: "mlx-community/gemma-2-9b-it-4bit",
+                                          configData: Data(#"{"model_type":"gemma2","max_position_embeddings":8192}"#.utf8))
+        let afm = ConnectSnippets.ModelFacts.plain("apple-foundation", contextLength: ConnectSnippets.appleFoundationContextLength)
+        for model in [gemma, afm] {
+            #expect(ConnectSnippets.text(for: .claudeCode, port: 1212, model: model)
+                    == "This model can't call tools, so it can't be used with Claude Code.")
+            #expect(ConnectSnippets.text(for: .codex, port: 1212, model: model)
+                    == "This model can't call tools, so it can't be used with Codex.")
+        }
+    }
+
+    /// With no memory profile (e.g. an unreadable config) a tool-capable model falls back to its own window; with
+    /// neither, the context lines are left out rather than invented.
+    @Test func withoutAMemoryProfileTheWindowIsTheUsableContext() {
+        let model = ConnectSnippets.ModelFacts(modelID: "m/x", supportsTools: true, contextLength: 32_768, thinkingAvailable: false)
+        #expect(ConnectSnippets.text(for: .claudeCode, port: 1212, model: model).contains("CLAUDE_CODE_MAX_CONTEXT_TOKENS=32768"))
+        #expect(ConnectSnippets.text(for: .codex, port: 1212, model: model).contains("model_context_window = 32768"))
+        let unknown = ConnectSnippets.ModelFacts(modelID: "m/x", supportsTools: true, contextLength: nil, thinkingAvailable: false)
+        #expect(!ConnectSnippets.text(for: .claudeCode, port: 1212, model: unknown).contains("MAX_CONTEXT_TOKENS"))
+        #expect(!ConnectSnippets.text(for: .codex, port: 1212, model: unknown).contains("model_context_window"))
+    }
+
+    /// The port is the server's, not a constant.
+    @Test func theBlocksUseTheServersPort() {
+        let m = qwen8B(ramGB: 18)
+        #expect(ConnectSnippets.text(for: .claudeCode, port: 4321, model: m).contains("ANTHROPIC_BASE_URL=http://127.0.0.1:4321\n"))
+        #expect(ConnectSnippets.text(for: .codex, port: 4321, model: m).contains(#"base_url = "http://127.0.0.1:4321/v1""#))
     }
 
     /// R51: "I don't want Serve to show … whether it is Agent Ready etc." Nothing the sheet generates or
