@@ -367,3 +367,11 @@ nonisolated enum ConnectSheetPresentation {
         gateAvailable && requested
     }
 }
+
+/// The Connect sheet's layout decisions that a test can pin (R59, owner 2026-10-10): the client choice is a
+/// **menu**, so the row stays one line however many clients there are, and the sheet has one size for every model.
+nonisolated enum ConnectSheetLayout {
+    enum ClientPickerStyle: Equatable, Sendable { case menu, segmented }
+    static let clientPickerStyle: ClientPickerStyle = .menu
+    static let size = CGSize(width: 600, height: 520)
+}

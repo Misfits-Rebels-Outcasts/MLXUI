@@ -592,6 +592,15 @@ struct ConnectSnippetsTests {
         #expect(ConnectSnippets.contextLine(contextLength: nil, usable: 5_000) == "Context length: not stated by this model's config.")
     }
 
+    /// R59: the client choice is a menu (a segmented control no longer fits seven clients in 600 pt), and the
+    /// sheet's size does not depend on the model.
+    @Test func theClientChoiceIsAMenuNotASegmentedControl() {
+        #expect(ConnectSheetLayout.clientPickerStyle == .menu)
+        #expect(ConnectSheetLayout.clientPickerStyle != .segmented)
+        #expect(ConnectSnippets.Harness.allCases.count >= 7)      // the reason: seven names no longer fit as segments
+        #expect(ConnectSheetLayout.size == CGSize(width: 600, height: 520))
+    }
+
     /// No block is ever hidden, for any model: tool-capable or not, memory-bound or not, with or without facts.
     @Test func noBlockIsHiddenForAnyModel() {
         let models: [ConnectSnippets.ModelFacts] = [

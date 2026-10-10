@@ -42,28 +42,32 @@ struct ConnectAppSheet: View {
                 Text(contextLine).font(.caption).foregroundStyle(.secondary)
             }
 
-            Picker("App", selection: $harness) {
-                ForEach(ConnectSnippets.Harness.allCases) { Text($0.rawValue).tag($0) }
+            // R59: a menu, so it stays one line however many clients there are (the segmented control no longer
+            // fit once Claude Code and Codex joined it).
+            HStack {
+                Text("Connect with").frame(width: 90, alignment: .leading).foregroundStyle(.secondary)
+                clientPicker
+                Spacer()
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
 
-            ScrollView {
+            ScrollView {    // the snippet scrolls inside the sheet; nothing else moves
                 Text(snippet)
                     .font(.system(.callout, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(10)
             }
-            .frame(minHeight: 150)
+            .frame(minHeight: 150, maxHeight: .infinity)
             .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+
+            Text("Nothing here leaves this Mac; the server only answers requests from it.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             HStack {
                 if let url = ConnectSnippets.docsURL(for: harness) {
                     Link("Docs", destination: url).font(.caption)
                 }
-                Text("Nothing here leaves this Mac; the server only answers requests from it.")
-                    .font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 if let copied { Text("Copied \(copied)").font(.caption).foregroundStyle(.secondary) }
                 Button("Copy") { copy(snippet, label: harness.rawValue) }
@@ -72,8 +76,19 @@ struct ConnectAppSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 600, height: 520)
+        .frame(width: ConnectSheetLayout.size.width, height: ConnectSheetLayout.size.height)
         .onAppear { modelID = initialModelID.flatMap { models.contains($0) ? $0 : nil } ?? models.first ?? "" }
+    }
+
+    @ViewBuilder private var clientPicker: some View {
+        let picker = Picker("Connect with", selection: $harness) {
+            ForEach(ConnectSnippets.Harness.allCases) { Text($0.rawValue).tag($0) }
+        }
+        .labelsHidden()
+        switch ConnectSheetLayout.clientPickerStyle {
+        case .menu: picker.pickerStyle(.menu).fixedSize()
+        case .segmented: picker.pickerStyle(.segmented)
+        }
     }
 
     private var snippet: String {
