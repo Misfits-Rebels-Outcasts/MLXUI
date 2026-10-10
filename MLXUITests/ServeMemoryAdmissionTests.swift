@@ -83,6 +83,24 @@ struct ServeMemoryEstimatorTests {
         #expect(ServeMemoryAdmission.decide(profile: hybrid, promptTokens: n) == .admit(maxReplyTokens: 15_000))
     }
 
+    /// R50: factor 1.75. On this Mac (room 11.6 GiB, Qwen3-8B's 4.6 GB of weights) the boundary sits near 29.4k
+    /// prompt tokens: 29k is admitted (it ran in ~136 s with no swap growth), 30k is refused (2.0 stopped at ~25.6k).
+    @Test func theCalibratedFactorPutsTheBoundaryNear29kTokens() throws {
+        #expect(ServeMemoryAdmission.overheadFactor == 1.75)
+        let thisMac = try #require(ServeMemoryAdmission.profile(configData: qwen3Config, weightsBytes: 4_600_000_000,
+                                                                 roomBytes: Int64(11.6 * 1_073_741_824)))
+        #expect(thisMac.bytesPerToken == 147_456 * 1.75)
+        #expect(ServeMemoryAdmission.decide(profile: thisMac, promptTokens: 25_000) != .refuse(needBytes: 0, roomBytes: 0))
+        guard case .admit = ServeMemoryAdmission.decide(profile: thisMac, promptTokens: 29_000) else {
+            Issue.record("29k tokens must be admitted"); return
+        }
+        guard case .refuse = ServeMemoryAdmission.decide(profile: thisMac, promptTokens: 30_000) else {
+            Issue.record("30k tokens must be refused"); return
+        }
+        let edge = thisMac.tokenCapacity - ServeMemoryAdmission.minimumReplyTokens
+        #expect((29_300...29_500).contains(edge))
+    }
+
     @Test func theRefusalSentenceNamesBothFigures() {
         let error = ServeMemoryAdmission.refusal(needBytes: 17_716_740_096, roomBytes: 11_596_411_699)
         #expect(error.status == 400 && error.code == "context_too_large_for_memory")
@@ -162,7 +180,7 @@ struct ServeMemoryAdmissionRouteTests {
         let chatError = try #require(object(chat.body)?["error"] as? [String: Any])
         #expect(chatError["code"] as? String == "context_too_large_for_memory" && chatError["type"] as? String == "invalid_request_error")
         let message = try #require(chatError["message"] as? String)
-        #expect(message.hasPrefix("This prompt needs about 15.4 GB of memory") && message.contains("this Mac can give the model about 10.8 GB"))
+        #expect(message.hasPrefix("This prompt needs about 14.0 GB of memory") && message.contains("this Mac can give the model about 10.8 GB"))
         #expect(message.hasSuffix("Use a shorter prompt (for example, fewer tools) or a smaller model."))
 
         let anthropic = try #require(await send(messagesBody(max: 1_000), path: "/v1/messages", env: environment(b)))

@@ -35,15 +35,14 @@ nonisolated enum ServeMemoryAdmission {
 
     /// The multiplier from the raw KV bytes per token to what a token really costs during prefill.
     ///
-    /// **Calibrated against Qwen3-8B on an 18 GiB Mac, but not by dividing a footprint by tokens**: the
-    /// measured peak footprint is *not linear* in tokens: it rises at ~1 MB/token and then saturates at the
-    /// working-set ceiling (≈ 13.8 GB) from about 10k tokens on (2k → +2.0 GB, 10k → +9.0 GB, 20k → +9.0 GB,
-    /// 30k → +9.0 GB, INV-1's 39.5k → +8.5 GB), because MLX keeps freed buffers. What *is* measured is where
-    /// the request stops being usable: 20k tokens finished in 91 s, 30k in 519 s, 39.5k not in 300 s. The
-    /// factor puts the admit boundary between 20k and 30k on this Mac. 2.0 × 144 KiB ≈ 295 KB/token (INV-1's
-    /// plateau figure, 215 KB/token, would admit the 519 s case). Implementer's call, pending owner
-    /// confirmation.
-    static let overheadFactor = 2.0
+    /// **Calibrated against Qwen3-8B on an 18 GiB Mac, but not by dividing a footprint by tokens**: peak
+    /// footprint is not linear in tokens (journals `2026-440`, `2026-442`). What *is* measured is where a
+    /// request stops being usable. With MLX's buffer pool capped (S3-5c) and doomed snapshots skipped: 20k
+    /// tokens finish in 80 s, 25k in 105 s, 30k in 136 s with the system's swap unchanged, and 39.5k in 396 s
+    /// with swap growing. **1.75** (≈ 258 KB/token) admits prompts up to ~29.4k tokens for Qwen3-8B on this Mac
+    /// (weights ~4.6 GB, room 11.6 GiB): every admitted run under ~2.3 minutes and out of swap. 2.0 (S3-5a's
+    /// value, set before the pool was capped) admitted ≤ ~25.6k. Owner ruling R50 (2026-10-10) accepted 1.75.
+    static let overheadFactor = 1.75
 
     /// The smallest reply the server will admit a prompt for (R47): a prompt that leaves less than this is refused.
     static let minimumReplyTokens = 1024
