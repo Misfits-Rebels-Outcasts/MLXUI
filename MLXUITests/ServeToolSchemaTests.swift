@@ -110,7 +110,19 @@ struct ServeToolSchemaTests {
         let disk = try #require(((defs["Base"] as? [String: Any])?["properties"] as? [String: Any])?["disk"] as? [String: Any])
         #expect(disk["default"] == nil && disk["type"] as? [String] == ["integer", "null"])        // the string "null" in a type list was always fine
         let category = try #require(((defs["CreateRequest"] as? [String: Any])?["properties"] as? [String: Any])?["category"] as? [String: Any])
-        #expect(category["enum"] as? [String] == ["NVIDIA", "AMD", "null"])
+        #expect(category["enum"] as? [String] == ["NVIDIA", "AMD"])                     // the null is dropped (R49)
+    }
+
+    /// R49: a null in an array is dropped (never the string "null"); an enum emptied by that is removed.
+    @Test func aNullInAnArrayIsDroppedAndAnEmptiedEnumIsRemoved() throws {
+        let schema = #"{"type":"object","properties":{"a":{"enum":[null]},"b":{"enum":[null,"x"]},"c":{"type":"string","examples":[null,"y"]},"d":{"examples":[null]}}}"#
+        let scrubbed = try #require(ServeToolSchema.renderable(try JSONSerialization.jsonObject(with: Data(schema.utf8))) as? [String: Any])
+        let props = try #require(scrubbed["properties"] as? [String: Any])
+        #expect((props["a"] as? [String: Any])?["enum"] == nil)                          // emptied: removed
+        #expect((props["b"] as? [String: Any])?["enum"] as? [String] == ["x"])
+        #expect((props["c"] as? [String: Any])?["examples"] as? [String] == ["y"])
+        #expect(((props["d"] as? [String: Any])?["examples"] as? [Any])?.isEmpty == true)
+        #expect(!canon(scrubbed).contains("\"null\""))                                    // no stringly "null" invented
     }
 
     @Test func aSchemaWithoutNullsComesBackEqual() throws {

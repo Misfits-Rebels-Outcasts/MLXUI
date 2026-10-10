@@ -17,8 +17,9 @@ import Foundation
 ///
 /// * an object key whose value is `null` is **dropped** (`"default": null` carries no usable information for
 ///   a model; `"const": null` and `"example": null` likewise);
-/// * a `null` **inside an array** (an `enum` or `examples` entry) becomes the string `"null"`, so a nullable
-///   enum still reads as one;
+/// * a `null` **inside an array** (an `enum` or `examples` entry) is **dropped** (R49: turned into the string
+///   `"null"` instead, a model could emit `"null"` as a value and fail the client's validation); an `enum`
+///   left empty by that is removed, since an empty `enum` allows nothing;
 /// * a `null` where a **schema** is expected, as a value in `properties`, `$defs`, `definitions`,
 ///   `patternProperties` or `dependentSchemas`, becomes `{}` (the empty schema), so a **property is never
 ///   dropped**. `required` is an array of names and is never touched.
@@ -42,11 +43,13 @@ nonisolated enum ServeToolSchema {
                     continue                                           // anywhere else: drop the key
                 }
                 // The entries of a schema map are schemas (their own keys are keywords again).
-                out[key] = scrub(child, isSchemaMap: !isSchemaMap && schemaMaps.contains(key))
+                let scrubbed = scrub(child, isSchemaMap: !isSchemaMap && schemaMaps.contains(key))
+                if key == "enum", !isSchemaMap, let values = scrubbed as? [Any], values.isEmpty { continue }
+                out[key] = scrubbed
             }
             return out
         case let array as [Any]:
-            return array.map { $0 is NSNull ? "null" : scrub($0, isSchemaMap: false) }
+            return array.filter { !($0 is NSNull) }.map { scrub($0, isSchemaMap: false) }
         default:
             return value
         }
