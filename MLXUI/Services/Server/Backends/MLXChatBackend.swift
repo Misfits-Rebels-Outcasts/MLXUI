@@ -464,7 +464,15 @@ nonisolated struct MLXChatBackend: ServeBackend {
             if let seed = request.seed { MLXRandom.seed(UInt64(truncatingIfNeeded: seed)) }
             let sampling = SamplingDefaults.load(directory: directory)
                 .applying(temperature: request.temperature, topP: request.topP)
-            let parameters = GenerateParameters(
+            // S3.1b: the reply room this request may trade for a prompt-cache snapshot (see `ReplyTrade`).
+            let replyTrade: ReplyTrade? = {
+                guard let profile = memoryProfile, let reserved = workingSet else { return nil }
+                let budget = pool.budget
+                return ReplyTrade(replyLimit: request.effectiveMaxTokens, bytesPerToken: profile.bytesPerToken) {
+                    budget.shrink(reserved, by: $0)
+                }
+            }()
+            var parameters = GenerateParameters(
                 maxTokens: request.effectiveMaxTokens,
                 temperature: Float(sampling.temperature),
                 topP: Float(sampling.topP))
@@ -475,8 +483,12 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 request: request, messages: messages, input: input, context: context, parameters: parameters,
                 directory: directory, modelType: checkpointModelType, tools: tools,
                 hasToolHistory: hasToolHistory, renderContext: usedContext ? renderContext : nil,
-                observer: promptCacheObserver, container: containerSeconds, render: renderSeconds)
+                observer: promptCacheObserver, container: containerSeconds, render: renderSeconds,
+                replyTrade: replyTrade)
             if Task.isCancelled { throw CancellationError() }
+            // S3.1b: a trade lowered the limit before the first output token; it only ever goes down.
+            let replyLimit = request.effectiveMaxTokens - prepared.outcome.replyTokensTraded
+            parameters.maxTokens = replyLimit
             let stream = try MLXLMCommon.generateTokens(
                 input: prepared.cache == nil ? input : LMInput(tokens: MLXArray(prepared.tailTokens)),
                 cache: prepared.cache, parameters: parameters, context: context)
@@ -560,8 +572,9 @@ nonisolated struct MLXChatBackend: ServeBackend {
             routeContent(scanner?.finish() ?? "")
             Self.yieldCalls(from: &scanner, into: continuation, index: &callIndex)
 
-            let hitLimit = libraryReason == .length
-                || (libraryReason == nil && !stoppedByClient && completionTokens >= request.effectiveMaxTokens)
+            let hitLimit = Self.hitReplyLimit(libraryHitLength: libraryReason == .length, libraryGaveNoReason: libraryReason == nil,
+                                              stoppedByClient: stoppedByClient, completionTokens: completionTokens,
+                                              replyLimit: replyLimit)
             continuation.yield(.usage(ServeUsage(
                 promptTokens: promptTokens, completionTokens: completionTokens, outcome: prepared.outcome)))
             // S2-2: a turn that produced calls ends as `tool_calls`, whatever the sampler said.
@@ -569,6 +582,13 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 : (hitLimit && !stoppedByClient ? .length : .stop)
             continuation.yield(.finish(finish))
         }
+    }
+
+    /// Whether the reply ended at its limit — compared against the **lowered** limit when S3.1b traded reply room for a
+    /// snapshot, so such a reply ends with the dialect's normal length stop.
+    nonisolated static func hitReplyLimit(libraryHitLength: Bool, libraryGaveNoReason: Bool, stoppedByClient: Bool,
+                                          completionTokens: Int, replyLimit: Int) -> Bool {
+        libraryHitLength || (libraryGaveNoReason && !stoppedByClient && completionTokens >= replyLimit)
     }
 
     nonisolated static func seconds(_ d: Duration) -> Double {
@@ -582,7 +602,8 @@ nonisolated struct MLXChatBackend: ServeBackend {
         request: ServeRequest, messages: [ServeMessage], input: LMInput, context: ModelContext,
         parameters: GenerateParameters, directory: URL, modelType: String,
         tools: [[String: any Sendable]], hasToolHistory: Bool, renderContext: [String: any Sendable]?,
-        observer: (@Sendable (PromptCacheOutcome) -> Void)?, container: Double, render: Double
+        observer: (@Sendable (PromptCacheOutcome) -> Void)?, container: Double, render: Double,
+        replyTrade: ReplyTrade? = nil
     ) async -> PreparedPrompt {
         let promptTokens = input.text.tokens.size
         var outcome = PromptCacheOutcome(
@@ -616,7 +637,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 prepared = try await PromptCheckpointing.prepare(
                     store: PromptCacheShared.store, key: key, messages: messages,
                     tokens: input.text.tokens.asArray(Int.self), context: context,
-                    parameters: parameters, render: render)
+                    parameters: parameters, render: render, replyTrade: replyTrade)
                 outcome = prepared.outcome
             } catch {
                 // Cancellation is re-raised by the caller's `Task.isCancelled` check; anything else

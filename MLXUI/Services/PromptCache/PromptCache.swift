@@ -84,6 +84,9 @@ nonisolated struct PromptCacheOutcome: Sendable, Equatable {
     /// The checkpoints this request prefilled and stored, by position.
     var storedAt: [Int] = []
     var hitStoredLength: Int? = nil
+    /// S3.1b: reply tokens this request gave up (its `maxTokens` and reply reservation were lowered by this many) so a
+    /// snapshot fit. `0` = no trade.
+    var replyTokensTraded = 0
     var timings = PromptCacheTimings()
 }
 

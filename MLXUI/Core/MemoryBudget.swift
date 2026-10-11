@@ -179,6 +179,17 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
         }
     }
 
+    /// S3.1b — lower an existing reservation by `bytes`. **Only ever lowers**: `false` (and nothing changes) when
+    /// `bytes` is not positive or exceeds what the reservation holds. Used to give back a generation's unused reply
+    /// allowance in exchange for a prompt-cache snapshot (`ReplyTrade`).
+    func shrink(_ reservation: Reservation, by bytes: Int64) -> Bool {
+        withLock {
+            guard bytes > 0, let held = ledger[reservation.id], bytes <= held else { return false }
+            ledger[reservation.id] = held - bytes
+            return true
+        }
+    }
+
     /// The entry is resident now (and therefore evictable).
     func commit(_ reservation: Reservation) {
         let toResume: [CheckedContinuation<Void, Never>] = withLock {

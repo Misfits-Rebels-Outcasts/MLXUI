@@ -185,6 +185,14 @@ actor PromptCacheStore<Snapshot: Sendable>: MemoryBudgetParticipant {
         return bytes <= budget.capacityBytes - budget.usedBytes + totalBytes
     }
 
+    /// S3.1b — by how many bytes a snapshot of `bytes` misses the room (`wouldAccept`'s second test), or `nil` when
+    /// room is not why it is refused (empty, or over the store's own cap) or when it fits. Frees nothing.
+    func roomShortfall(bytes: Int64) -> Int64? {
+        guard bytes > 0, bytes <= capBytes else { return nil }
+        let room = budget.capacityBytes - budget.usedBytes + totalBytes
+        return bytes > room ? bytes - room : nil
+    }
+
     /// Stores `snapshot`, which covers exactly `tokens`. Returns whether it was stored.
     ///
     /// Never fails a request and never evicts weights (rule 8): it makes room by dropping its own

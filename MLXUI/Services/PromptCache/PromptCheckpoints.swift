@@ -99,7 +99,8 @@ nonisolated enum PromptCheckpointing {
         restore: (PromptCacheHit<Snapshot>) -> Cache?,
         prefill: (_ from: Int, _ to: Int, _ cache: Cache) throws -> Void,
         snapshot: (Cache) -> (snapshot: Snapshot, bytes: Int64, trimmable: Bool),
-        cacheBytes: ((Cache) -> Int64)? = nil
+        cacheBytes: ((Cache) -> Int64)? = nil,
+        replyTrade: ReplyTrade? = nil
     ) async throws -> PromptPlan<Cache> {
         var outcome = PromptCacheOutcome(promptTokens: tokens.count)
         let n = tokens.count
@@ -151,7 +152,18 @@ nonisolated enum PromptCheckpointing {
             if target != wanted.last, isTrimmable(cache) { continue }
             // S3-5c: a doomed snapshot (over the store's cap, or more than could ever fit) is not copied at all:
             // the prefill above was needed, the second copy of the KV would be built only to be thrown away.
-            if let cacheBytes, !(await store.wouldAccept(bytes: cacheBytes(cache))) { continue }
+            if let cacheBytes {
+                let size = cacheBytes(cache)
+                if !(await store.wouldAccept(bytes: size)) {
+                    // S3.1b: if the only thing in the way is room, and this request reserved more reply than it will
+                    // use, trade that reply room for the snapshot — decided here, during prefill, so the lowered
+                    // limit is known before the first output token. Anything else: skipped, exactly as before.
+                    guard let replyTrade, let short = await store.roomShortfall(bytes: size),
+                          replyTrade.trade(shortfallBytes: short),
+                          await store.wouldAccept(bytes: size) else { continue }
+                    outcome.replyTokensTraded = replyTrade.tradedTokens
+                }
+            }
             let taken = snapshot(cache)
             let stored = await store.insert(key: key, tokens: Array(tokens[0..<target]), snapshot: taken.snapshot,
                                             bytes: taken.bytes, trimmable: taken.trimmable)
@@ -174,7 +186,8 @@ nonisolated enum PromptCheckpointing {
         tokens: [Int],
         context: ModelContext,
         parameters: GenerateParameters,
-        render: ([ServeMessage]) async throws -> [Int]
+        render: ([ServeMessage]) async throws -> [Int],
+        replyTrade: ReplyTrade? = nil
     ) async throws -> PreparedPrompt {
         try await plan(
             store: store, key: key, messages: messages, tokens: tokens, render: render,
@@ -196,7 +209,8 @@ nonisolated enum PromptCheckpointing {
                 return (snapshot, snapshot.bytes, canTrimPromptCache(snapshot.caches))
             },
             // The same sum as `KVSnapshot.bytes`, taken from the live cache without copying it.
-            cacheBytes: { cache in Int64(cache.reduce(0) { $0 + $1.state.reduce(0) { $0 + $1.nbytes } }) })
+            cacheBytes: { cache in Int64(cache.reduce(0) { $0 + $1.state.reduce(0) { $0 + $1.nbytes } }) },
+            replyTrade: replyTrade)
     }
 
     /// Mirrors `LLMModel.prepare` (F7): chunks through the model, `eval(cache)` after each, with a
