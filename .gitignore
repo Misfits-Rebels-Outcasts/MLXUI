@@ -23,6 +23,10 @@ scripts/
 *.bak
 .derived-data-log-*
 
+# === BG-0: agent-driven build tree (xcodebuild -derivedDataPath .dsh-dd) ===
+.dsh-dd/
+.dsh-home/
+
 # === Terminal-session transcript exports dropped at repo root (e.g. by a CLI recorder) ===
 /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*.txt
 
