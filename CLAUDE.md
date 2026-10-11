@@ -209,8 +209,8 @@ The Python runtime in the sibling **`catflow-mlx`** repo is the **parity referen
 
 An opt-in, loopback-only OpenAI-compatible HTTP server (`/v1/chat/completions`, `/v1/models`,
 `/health`) so other apps on the same Mac can use the user's local MLX models and Apple Foundation
-Models. Built on FlyingFox; S1 of six releases (S2 agent-ready tools, S3 Anthropic/Responses,
-S4 MCP + served flows, S5 embeddings/audio, S6 LAN). Design and rulings:
+Models. Built on FlyingFox; six releases — **S1 (0.20), S2 + the prompt cache (0.21) and S3 (Claude Code via
+`/v1/messages`, Codex via `/v1/responses`) shipped**; next S4 MCP + served flows, S5 embeddings/audio, S6 LAN. Design and rulings:
 `RSI/plan-local-server-2026-09.md` (§0 rulings, §4 security); task contracts:
 `RSI/DelegateServeBacklog.md`; measured facts and traps: `RSI/DelegateServeReadme.md`.
 
@@ -230,6 +230,33 @@ S4 MCP + served flows, S5 embeddings/audio, S6 LAN). Design and rulings:
 - A model's directory is `ModelStore.directory(forModelID:)` for a **slug** (`mlx-community--X`);
   from an HF id use `directory(forHFModelID:)` — the unslugged id builds a path that doesn't exist.
 - The app stays running (no window) while serving; otherwise closing the last window quits, as before.
+- **Tool calls (S2).** `/v1/chat/completions` returns `tool_calls`; **tool calls are returned to
+  the client app, MLXUI never runs them.** Formats defer to mlx-swift-lm (`ToolCallFormatTable`);
+  calls are framed from the raw text by `ServeToolCallScanner`, and every request goes through
+  `ServeMessageAssembly`. Thinking is **off unless the request asks** (R30) and comes back as
+  `reasoning_content`. A prompt past the model's window is a `400 context_length_exceeded`
+  before the head (`ServePromptCounter`); a template refusal is a `400 template_error`.
+  `/v1/models` carries `context_length`. There is **no agent-readiness UI** (owner ruling R51,
+  2026-10-10: "just Serve it"); Connect snippets follow the model's tool support, not a rating.
+  A new dialect reuses all of this rather than forking it.
+- **Dialects (S3).** `/v1/chat/completions`, `/v1/messages` (+ `/count_tokens`) and `/v1/responses` all decode into
+  `ServeRequest` and run through `ServePipeline` (prepare → collect/stream); each dialect owns only its wire format, error
+  shape and stream encoder. Responses keeps a RAM-only `previous_response_id` store (`ResponseStore`, 64 / 64 MB / 30 min).
+  Hosted and `namespace` tools are dropped and flagged; mid-conversation `system` entries in `/v1/messages` stay in place.
+- **No request may kill or freeze the app (S3-5).** Before prefill, `ServeMemoryAdmission` estimates need (weights +
+  tokens × KV bytes × `overheadFactor` 1.75) and refuses with `400 context_too_large_for_memory` or clamps the reply; the
+  backend reserves that need, evicting other resident models first. MLX's buffer cache is capped at 1 GiB per server
+  generation. The reply limit is `min(requested, window − prompt, 32768)`. Tool schemas are scrubbed of JSON nulls
+  (swift-jinja throws on `NSNull`, readme T16).
+- **Serve just serves (R51/R56).** No per-model ratings or badges anywhere; the Connect sheet shows every client's setup
+  block for every model, with plain facts only (the usable context on this Mac, whether the model can call tools).
+- **Prompt cache (PC-A).** `Services/PromptCache/` keeps KV snapshots at prompt checkpoints so a
+  request sharing a prefix prefills only the tail. **In RAM only, never on disk** (token ids are
+  the prompt); weights always win memory over snapshots. Gated by `PromptCache.isEnabled`
+  (`AppState.disablePromptCache` kill switch + `LocalServerGate`); only `model_type`s in
+  `PromptCacheAllowlist` with a passing real-model equivalence test use it. Reused tokens are
+  reported as `usage.prompt_tokens_details.cached_tokens`. Backlog:
+  `RSI/DelegatePromptCacheBacklog.md`.
 
 ## How the data flows
 

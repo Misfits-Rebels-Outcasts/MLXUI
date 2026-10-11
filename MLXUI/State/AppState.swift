@@ -3,7 +3,7 @@ import Observation
 import UniformTypeIdentifiers
 
 @Observable
-final class AppState { //appstatecomeback
+final class AppState {
     // ── Optional domain hiding ──────────────────────────────────────────────────
     /// Set to `true` to hide the "Video Generation" domain (and every model listed
     /// under it, e.g. WAN 2.1) from the catalog UI. Flip back to `false` to restore.
@@ -36,7 +36,7 @@ final class AppState { //appstatecomeback
     /// Set to `true` to hide the "My Workspace" shelf (the New Workspace badge and every
     /// workspace, bundled or saved) on the Automate → AI Workflows page. Flip to `false`
     /// to show the section.
-    static let hideMyWorkspace = true //comeback
+    static let hideMyWorkspace = false //comeback x
 
     /// Set to `true` to hide the "Rerank" domain (and its one model, Qwen3-Reranker-0.6B)
     /// from Browse → Infrastructure. The Infrastructure section itself still renders while
@@ -62,7 +62,7 @@ final class AppState { //appstatecomeback
     /// Set to `true` to hide the "Advance Gallery" shelf (every bundled flow that isn't
     /// basic) on the Automate → AI Workflows page. My Workflows and Basic Gallery still
     /// render.
-    static let hideAdvanceGallery = true //comeback
+    static let hideAdvanceGallery = false //comeback x
 
     /// Set to `true` to hide **Settings → Providers** and **Settings → Privacy** from the
     /// `SettingsRootView` tab bar. Models and Tools always render regardless of this flag.
