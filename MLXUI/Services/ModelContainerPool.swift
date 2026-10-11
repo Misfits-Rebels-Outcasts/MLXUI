@@ -109,6 +109,26 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
         return true
     }
 
+    /// S3-8B: evict the LRU entry that holds memory **except** `key` (the model that is running).
+    func evictLeastRecentlyUsed(except key: String) -> Bool {
+        guard let victim = recency.last(where: { $0 != key && (entries[$0]?.bytes ?? 0) > 0 }),
+              let entry = entries.removeValue(forKey: victim) else { return false }
+        recency.removeAll { $0 == victim }
+        budget.release(entry.reservation)
+        return true
+    }
+
+    /// S3-8B: make room for a running generation that needs `totalNeedBytes` in all (weights + KV), evicting
+    /// other residents for it. The running model's own ledger entry already counts toward that (it was charged
+    /// at load), so only the **excess** over it is reserved: `others + need ≤ capacity`.
+    func reserveWorkingSet(totalNeedBytes: Int64, protecting key: String) async -> MemoryBudget.Reservation? {
+        let protected = entries[key]?.bytes ?? 0
+        let extra = max(0, totalNeedBytes - protected)
+        return await budget.reserveWorkingSet(bytes: extra, for: self, protecting: protected) { [self] in
+            await self.evictLeastRecentlyUsed(except: key)
+        }
+    }
+
     /// Resident keys, most-recently-used first.
     var residentKeys: [String] { recency }
     var totalBytes: Int64 { entries.values.reduce(0) { $0 + $1.bytes } }
@@ -151,16 +171,21 @@ actor ModelContainerPool {
 
     private let pool: ResidentPool<ModelContainer>
     private let loader: Loader
+    /// The budget the pool reserves from (S3-8B: a generation releases its working set back to it).
+    nonisolated let budget: MemoryBudget
 
     /// Reserve from a shared budget (the app's: `MemoryBudget.shared`).
     init(budget: MemoryBudget, loader: @escaping Loader = ModelContainerPool.loadFromDisk) {
         self.pool = ResidentPool(budget: budget)
+        self.budget = budget
         self.loader = loader
     }
 
     /// A pool with its own private budget (tests).
     init(budgetBytes: Int64, loader: @escaping Loader = ModelContainerPool.loadFromDisk) {
-        self.pool = ResidentPool(budgetBytes: budgetBytes)
+        let budget = MemoryBudget(capacityBytes: budgetBytes)
+        self.pool = ResidentPool(budget: budget)
+        self.budget = budget
         self.loader = loader
     }
 
@@ -182,6 +207,12 @@ actor ModelContainerPool {
         return try await pool.value(for: key, bytes: bytes) {
             try await loader(directory, architecture)
         }
+    }
+
+    /// S3-8B: make room for a generation on `directory`'s model that needs `totalNeedBytes` (weights + KV),
+    /// evicting other residents for it. `nil` = it cannot fit even with everything else gone.
+    func reserveWorkingSet(totalNeedBytes: Int64, directory: URL) async -> MemoryBudget.Reservation? {
+        await pool.reserveWorkingSet(totalNeedBytes: totalNeedBytes, protecting: Self.key(for: directory))
     }
 
     /// Free one model's weights (e.g. after the user deletes it).

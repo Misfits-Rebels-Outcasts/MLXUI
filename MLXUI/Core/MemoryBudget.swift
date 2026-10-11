@@ -62,6 +62,8 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     private var ledger: [UUID: Int64] = [:]
     /// Reservations made but not yet resident — not evictable.
     private var pending: Set<UUID> = []
+    /// Reservations granted by `tryReserve` (prompt-cache snapshots): opportunistic, ignored by `reserveWorkingSet`.
+    private var snapshots: Set<UUID> = []
     private var participants: [Weak] = []
     private var waiters: [CheckedContinuation<Void, Never>] = []
     private static let log = Logger(subsystem: "com.ai-browser", category: "memory-budget")
@@ -130,7 +132,51 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     func tryReserve(bytes: Int64) -> Reservation? {
         let reservation = Reservation(id: UUID())
         guard bytes > 0 else { return nil }
-        return tryAdd(reservation, bytes: bytes) ? reservation : nil
+        guard tryAdd(reservation, bytes: bytes) else { return nil }
+        withLock { _ = snapshots.insert(reservation.id) }
+        return reservation
+    }
+
+    /// S3-8B — reserve the **working set** of a running generation (KV cache, prefill buffers) on top of the
+    /// weights already resident, and make the room *for real*: a model's weights are charged at load, but a
+    /// request's KV is not in the ledger, so `ServeMemoryAdmission`'s "every other resident is evictable"
+    /// stayed an assumption until something actually evicted them. This does the evicting.
+    ///
+    /// **Other models' weights are what gets evicted** — the requester's own LRU (through `evictOwn`, which
+    /// must skip the model that is running), then the other participants of equal or higher priority. It
+    /// never evicts below `protectedBytes` (the running model's own weights) and it **never proceeds over
+    /// budget**: when nothing else can be freed it returns `nil` and the caller refuses the request. Loads in
+    /// flight are waited for, as in `reserve`.
+    ///
+    /// **Prompt-cache snapshots are not counted and not evicted.** They are granted with `tryReserve` only
+    /// while they fit, they have their own cap, and the one the request is about to reuse is exactly the memory
+    /// that makes its prefill cheap: evicting it for the request's own working set trades a 25 s turn for a
+    /// 250 s one (journal `2026-452`). Weights still win over snapshots wherever `reserve` runs, as before.
+    func reserveWorkingSet(bytes: Int64, for owner: some MemoryBudgetParticipant, protecting protectedBytes: Int64,
+                           evictOwn: () async -> Bool) async -> Reservation? {
+        let reservation = Reservation(id: UUID())
+        guard bytes > 0 else { return reservation }
+        while true {
+            let (added, held) = withLock { () -> (Bool, Int64) in
+                let held = ledger.filter { !snapshots.contains($0.key) }.values.reduce(0, +)
+                guard held + bytes <= capacityBytes else { return (false, held) }
+                ledger[reservation.id] = bytes
+                pending.insert(reservation.id)
+                return (true, held)
+            }
+            if added { return reservation }
+            guard held > protectedBytes else { return nil }             // only the running model is left
+
+            if await evictOwn() { continue }
+            let mine = owner.evictionPriority
+            var freed = false
+            for other in others(excluding: owner).filter({ $0.evictionPriority >= mine }) {
+                if await other.evictLeastRecentlyUsed() { freed = true; break }
+            }
+            if freed { continue }
+            if await waitForPendingToSettle(excluding: reservation) { continue }
+            return nil
+        }
     }
 
     /// The entry is resident now (and therefore evictable).
@@ -147,6 +193,7 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
         let toResume: [CheckedContinuation<Void, Never>] = withLock {
             ledger.removeValue(forKey: reservation.id)
             pending.remove(reservation.id)
+            snapshots.remove(reservation.id)
             return takeWaitersLocked()
         }
         toResume.forEach { $0.resume() }

@@ -449,6 +449,21 @@ nonisolated struct MLXChatBackend: ServeBackend {
             let promptTokens = input.text.tokens.size
             let renderSeconds = Self.seconds(ContinuousClock.now - performStart)
 
+            // S3-8B — make the room admission assumed. Every other resident model counts against the budget: evict
+            // them (LRU first) until this request's whole need fits beside the rest, or refuse. Prompt-cache
+            // snapshots are neither counted nor evicted (see `MemoryBudget.reserveWorkingSet`).
+            var workingSet: MemoryBudget.Reservation?
+            if let profile = memoryProfile {
+                let need = profile.needBytes(promptTokens: promptTokens, replyTokens: request.effectiveMaxTokens)
+                workingSet = await pool.reserveWorkingSet(totalNeedBytes: need, directory: directory)
+                if workingSet == nil {
+                    continuation.yield(.error(ServeMemoryAdmission.refusal(
+                        needBytes: need, roomBytes: pool.budget.capacityBytes)))
+                    return
+                }
+            }
+            defer { if let workingSet { pool.budget.release(workingSet) } }
+
             if let seed = request.seed { MLXRandom.seed(UInt64(truncatingIfNeeded: seed)) }
             let sampling = SamplingDefaults.load(directory: directory)
                 .applying(temperature: request.temperature, topP: request.topP)
