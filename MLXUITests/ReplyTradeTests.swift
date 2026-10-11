@@ -17,7 +17,7 @@ struct ReplyTradeTests {
         let store: PromptCacheStore<FakeSnapshot>
         let workingSet: MemoryBudget.Reservation
         init() {
-            store = PromptCacheStore<FakeSnapshot>(budget: budget, copy: { $0 })
+            store = PromptCacheStore<FakeSnapshot>(budget: budget, retention: .newestWins, copy: { $0 })
             _ = budget.tryReserve(bytes: 60 * ReplyTradeTests.mb)
             workingSet = budget.tryReserve(bytes: 30 * ReplyTradeTests.mb)!
         }

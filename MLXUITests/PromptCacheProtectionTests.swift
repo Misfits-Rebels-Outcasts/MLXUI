@@ -10,8 +10,9 @@ struct PromptCacheProtectionTests {
     private static let mb = Int64(1_048_576)
     private let key = PromptCacheModelKey(directory: "/models/a", configSHA256: "c", parameters: "p", libraryVersion: "l")
 
-    private func store(_ budget: MemoryBudget, capFraction: Double = 0.5, maxPerModel: Int = 4) -> PromptCacheStore<Snap> {
-        PromptCacheStore<Snap>(budget: budget, capFraction: capFraction, maxPerModel: maxPerModel, copy: { $0 })
+    private func store(_ budget: MemoryBudget, capFraction: Double = 0.5, maxPerModel: Int = 4,
+                       retention: SnapshotRetention = .protectSystem) -> PromptCacheStore<Snap> {
+        PromptCacheStore<Snap>(budget: budget, capFraction: capFraction, maxPerModel: maxPerModel, retention: retention, copy: { $0 })
     }
     /// Distinct prefixes of the given length (so none is a duplicate of another).
     private func tokens(_ n: Int, seed: Int = 0) -> [Int] { (0..<n).map { $0 + seed * 100_000 } }
@@ -61,7 +62,7 @@ struct PromptCacheProtectionTests {
     /// by snapshots, 90 in all. A 15 MB turn snapshot misses the room by 5 MB *because* the protected one is not reclaimable.
     private func rig() async -> (budget: MemoryBudget, store: PromptCacheStore<FakeSnapshot>, ws: MemoryBudget.Reservation) {
         let budget = MemoryBudget(capacityBytes: 100 * Self.mb)
-        let store = PromptCacheStore<FakeSnapshot>(budget: budget, capFraction: 0.5, copy: { $0 })
+        let store = PromptCacheStore<FakeSnapshot>(budget: budget, capFraction: 0.5, retention: .protectSystem, copy: { $0 })
         _ = budget.tryReserve(bytes: 60 * Self.mb)
         let ws = budget.tryReserve(bytes: 20 * Self.mb)!
         let ok = await store.insert(key: key, tokens: Array(0..<500), snapshot: FakeSnapshot(), bytes: 10 * Self.mb,
@@ -158,5 +159,39 @@ struct PromptCacheProtectionTests {
                            trimmable: false, systemBoundary: true)
         #expect(await s.protectedLengths(forDirectory: "/models/a") == [1_000])
         #expect(await s.protectedLengths(forDirectory: "/models/b") == [900])
+    }
+
+    // MARK: - .newestWins reproduces the S3.1b behaviour (nothing is protected)
+
+    @Test func newestWinsLetsALargeSnapshotDisplaceTheSystemOne() async {
+        let s = store(MemoryBudget(capacityBytes: 100 * Self.mb), retention: .newestWins)         // cap 50 MB
+        await put(s, 1_000, mb: 10, system: true)
+        await put(s, 2_000, mb: 20)
+        #expect(await s.protectedLengths(forDirectory: "/models/a").isEmpty)
+        #expect(await put(s, 3_000, mb: 45))                                       // 75 > 50: the LRU entries go, the system one first
+        #expect(await s.storedLengths(for: key) == [3_000])
+        let counted = store(MemoryBudget(capacityBytes: 1_000 * Self.mb), maxPerModel: 2, retention: .newestWins)
+        await put(counted, 1_000, mb: 1, system: true)
+        await put(counted, 2_000, mb: 1)
+        await put(counted, 3_000, mb: 1)
+        #expect(await counted.storedLengths(for: key).sorted() == [2_000, 3_000])
+    }
+
+    @Test func newestWinsStoresATurnSnapshotWithoutAnyTrade() async throws {
+        // The rig of the S3.1b tests, with the system snapshot present but unprotected: the 15 MB turn snapshot misses the
+        // room by nothing once the old entry is reclaimable (10 free + 10 reclaimable ≥ 15).
+        let budget = MemoryBudget(capacityBytes: 100 * Self.mb)
+        let store = PromptCacheStore<FakeSnapshot>(budget: budget, capFraction: 0.5, retention: .newestWins, copy: { $0 })
+        _ = budget.tryReserve(bytes: 60 * Self.mb)
+        _ = budget.tryReserve(bytes: 20 * Self.mb)
+        _ = await store.insert(key: key, tokens: Array(0..<500), snapshot: FakeSnapshot(), bytes: 10 * Self.mb,
+                               trimmable: false, systemBoundary: true)
+        #expect(await store.wouldAccept(bytes: 15 * Self.mb, key: key, systemBoundary: false))
+        #expect(await store.insert(key: key, tokens: Array(1000..<1600), snapshot: FakeSnapshot(), bytes: 15 * Self.mb,
+                                   trimmable: false))
+    }
+
+    @Test func theChosenDefaultIsOneOfTheTwo() {
+        #expect([SnapshotRetention.newestWins, .protectSystem].contains(PromptCacheDefaults.retention))
     }
 }

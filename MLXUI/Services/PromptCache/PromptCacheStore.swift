@@ -72,7 +72,19 @@ nonisolated struct PromptCacheHit<Snapshot: Sendable>: Sendable {
     func makeCopy() -> Snapshot { copyStep(stored) }
 }
 
+/// S3.1d — which snapshot a full store keeps on an 18 GiB Mac, where only one large snapshot fits. One internal constant
+/// (`PromptCacheDefaults.retention`), no setting; both policies keep every safety rule (weights win, snapshots are never
+/// reserved beyond the budget, the reply trade's floor is unchanged).
+nonisolated enum SnapshotRetention: Sendable {
+    /// S3.1b: the newest snapshot wins; the LRU entry — usually the system-boundary one — is displaced first.
+    case newestWins
+    /// S3.1c: a model's newest system-boundary snapshot is protected from displacement by other snapshots.
+    case protectSystem
+}
+
 nonisolated enum PromptCacheDefaults {
+    /// Chosen by the journal-`2026-456` A/B (median total session time over two valid runs per policy; within 5% → `.newestWins`).
+    static let retention: SnapshotRetention = .newestWins
     /// Below this a hit is not worth a copy (implementer's call, pending owner confirmation; PC-0
     /// item 5: a 2K reuse already saves 5.6 s, so 256 tokens is conservative).
     static let minimumReuse = 256
@@ -109,6 +121,7 @@ actor PromptCacheStore<Snapshot: Sendable>: MemoryBudgetParticipant {
     let capBytes: Int64
     let minimumReuse: Int
     let maxPerModel: Int
+    let retention: SnapshotRetention
 
     /// - Parameter copy: how to duplicate a snapshot (`KVCache.copy()` per layer). Handed to every
     ///   hit as `copyStep`; the backend runs it inside `container.perform`.
@@ -116,11 +129,13 @@ actor PromptCacheStore<Snapshot: Sendable>: MemoryBudgetParticipant {
          capFraction: Double = PromptCacheDefaults.capFraction,
          minimumReuse: Int = PromptCacheDefaults.minimumReuse,
          maxPerModel: Int = PromptCacheDefaults.maxPerModel,
+         retention: SnapshotRetention = PromptCacheDefaults.retention,
          copy: @escaping @Sendable (Snapshot) -> Snapshot) {
         self.budget = budget
         self.capBytes = Int64(Double(budget.capacityBytes) * capFraction)
         self.minimumReuse = minimumReuse
         self.maxPerModel = maxPerModel
+        self.retention = retention
         self.copySnapshot = copy
         budget.register(self)
     }
@@ -147,6 +162,7 @@ actor PromptCacheStore<Snapshot: Sendable>: MemoryBudgetParticipant {
     /// system-boundary snapshot of the same model moves the protection, and the older one is an ordinary entry.
     /// `replacing`: the directory whose protection a system-boundary snapshot being stored is about to take over.
     private func protectedIDs(replacing directory: String?) -> Set<UInt64> {
+        guard retention == .protectSystem else { return [] }                 // S3.1d: .newestWins protects nothing
         var newest: [String: Entry] = [:]
         for entry in entries where entry.systemBoundary && entry.key.directory != directory {
             if let seen = newest[entry.key.directory], seen.id > entry.id { continue }
