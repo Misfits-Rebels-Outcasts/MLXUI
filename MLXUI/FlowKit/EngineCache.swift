@@ -121,16 +121,19 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
     }
 
     /// `MemoryBudgetParticipant`: evict the least-recently-used engine that holds memory.
+    ///
+    /// The ledger release is in the **same critical section** as the removal (MB-1): released afterwards, a
+    /// concurrent requester could ask this cache in the gap, hear "nothing to evict", see the bytes still booked
+    /// and nothing in flight, and take the "proceed over budget" exit. (Lock order is this cache's → the budget's;
+    /// the budget never calls a participant while holding its own lock.)
     func evictLeastRecentlyUsed() async -> Bool {
-        let evicted: MemoryBudget.Reservation? = withLock {
+        withLock {
             guard let key = recency.last(where: { (entries[$0]?.bytes ?? 0) > 0 }),
-                  let entry = entries.removeValue(forKey: key) else { return nil }
+                  let entry = entries.removeValue(forKey: key) else { return false }
             recency.removeAll { $0 == key }
-            return entry.reservation
+            budget.release(entry.reservation)
+            return true
         }
-        guard let evicted else { return false }
-        budget.release(evicted)
-        return true
     }
 
     /// Total cached footprint, in bytes (the catalog's `ramGB` figures, not measured).
@@ -145,13 +148,12 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
 
     /// Drop every engine (e.g. a "Clear Cache" action) — the next row reloads.
     func clear() {
-        let reservations: [MemoryBudget.Reservation] = withLock {
+        withLock {
             let held = entries.values.map(\.reservation)
             entries.removeAll()
             recency.removeAll()
-            return held
+            held.forEach { budget.release($0) }      // same critical section as the removal (see evictLeastRecentlyUsed)
         }
-        reservations.forEach { budget.release($0) }
     }
 
     // MARK: - Lock-held helpers

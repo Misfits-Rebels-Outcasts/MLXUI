@@ -80,12 +80,45 @@ struct MemoryBudgetRaceTests {
         #expect(budget.usedBytes == 5 * Self.gb)
         budget.release(r)
     }
+
+    /// The gap that was in `EngineCache.evictLeastRecentlyUsed`: entry removed, ledger released a moment later. With
+    /// nothing in flight, "nothing to evict" must mean "nothing booked". Concurrent evictors make the gap observable
+    /// (not fully deterministic — the window is inside the cache's own critical section — so it repeats).
+    @Test func anEvictionThatAnswersNothingToEvictLeavesNothingBooked() async throws {
+        let budget = MemoryBudget(capacityBytes: 1000 * Self.gb)
+        let cache = EngineCache(budget: budget)
+        let violations = LockedBox<Int>(0)
+        for round in 0..<300 {
+            for i in 0..<4 {
+                _ = try await cache.stage(for: makeEntry(id: "r\(round)-\(i)", modelType: .asr, ramGB: 1),
+                                          config: .default) { _, _ in RaceNoopStage() }
+            }
+            await withTaskGroup(of: Void.self) { group in
+                for _ in 0..<8 {
+                    group.addTask {
+                        while await cache.evictLeastRecentlyUsed() {}
+                        // nothing left to evict and nothing in flight: the ledger must be empty
+                        if budget.usedBytes != 0 { violations.bump() }
+                    }
+                }
+            }
+        }
+        #expect(violations.value == 0, "\(violations.value) times the cache said 'nothing to evict' while bytes were still booked")
+    }
+}
+
+private nonisolated struct RaceNoopStage: PipelineStage {
+    let id = "noop", name = "Noop"
+    var accepts: MediaKind { .text }
+    var produces: MediaKind { .text }
+    func run(_ input: Media, progress: @Sendable @escaping (Double) -> Void) async throws -> Media { input }
 }
 
 private final class LockedBox<T>: @unchecked Sendable {
     private let lock = NSLock()
     private var stored: T
     init(_ v: T) { stored = v }
+    func bump() where T == Int { lock.lock(); stored += 1; lock.unlock() }
     var value: T {
         get { lock.lock(); defer { lock.unlock() }; return stored }
         set { lock.lock(); stored = newValue; lock.unlock() }
