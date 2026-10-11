@@ -189,20 +189,22 @@ actor ModelContainerPool {
         self.loader = loader
     }
 
-    /// The container for an installed catalog model. Footprint = the catalog's `ramGB`
-    /// (the same figure `EngineCache` uses).
+    /// The container for an installed catalog model. The catalog's `ramGB` is only the fallback for the ledger
+    /// charge (`ModelWeightCharge`, R63).
     func container(for model: ModelEntry, directory: URL) async throws -> ModelContainer {
         try await container(directory: directory,
                             footprintBytes: Int64(model.ramGB * 1_073_741_824),
                             architecture: model.architecture)
     }
 
-    /// The container for a model known only by its directory. With no catalog figure,
-    /// `footprintBytes == nil` falls back to the on-disk size of the model directory.
+    /// The container for a model known only by its directory. **Every** LLM load in the app passes through here, so this
+    /// is where the weights are booked: `ModelWeightCharge.bytes` (R63) — the safetensors on disk × the measured load
+    /// factor. `footprintBytes` is the catalog figure, used only when the directory has no safetensors to measure;
+    /// with neither, the whole directory's size.
     func container(directory: URL, footprintBytes: Int64? = nil,
                    architecture: String? = nil) async throws -> ModelContainer {
         let key = Self.key(for: directory)
-        let bytes = footprintBytes ?? Int64(ModelStore.directorySize(at: directory))
+        let bytes = ModelWeightCharge.bytes(directory: directory, catalogFallback: footprintBytes)
         let loader = self.loader
         return try await pool.value(for: key, bytes: bytes) {
             try await loader(directory, architecture)

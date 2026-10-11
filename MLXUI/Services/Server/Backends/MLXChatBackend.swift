@@ -244,10 +244,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
     /// The weights on disk: the sum of the `*.safetensors` files (not the whole directory, so tokenizer and
     /// config files don't count). `0` when there are none.
     nonisolated static func weightsBytes(in directory: URL) -> Int64 {
-        let files = (try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: [.fileSizeKey], options: [.skipsHiddenFiles])) ?? []
-        return files.filter { $0.pathExtension == "safetensors" }
-            .reduce(Int64(0)) { $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+        ModelWeightCharge.safetensorsBytes(in: directory)       // R63: one basis for admission and the ledger
     }
 
     /// Whether this checkpoint's family can take tools at all (S2-1's table).

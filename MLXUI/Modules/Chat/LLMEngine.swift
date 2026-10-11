@@ -28,7 +28,8 @@ enum LLMEngine {
         do {
             // S1-1: weights come from the shared pool — loaded once, reused across rows, the
             // chat sheet and the Local Server — instead of a fresh `loadContainer` per call.
-            // `footprintBytes` is the catalog `ramGB` when the caller has a `ModelEntry`; nil
+            // `footprintBytes` is the catalog `ramGB` when the caller has a `ModelEntry`; it is only the fallback for
+            // the ledger charge (R63, `ModelWeightCharge`: the safetensors on disk × the measured load factor); nil
             // falls back to the model directory's on-disk size.
             let container = try await pool.container(directory: modelDir, footprintBytes: footprintBytes)
             return try await container.perform { context in
