@@ -66,6 +66,9 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     private var snapshots: Set<UUID> = []
     private var participants: [Weak] = []
     private var waiters: [CheckedContinuation<Void, Never>] = []
+    /// Bumped by every `commit`/`release` — i.e. whenever something becomes evictable or room appears. A requester
+    /// captures it in the same lock section as its failed fit check, so "did anything settle since?" is exact (MB-1).
+    private var settled: UInt64 = 0
     private static let log = Logger(subsystem: "com.ai-browser", category: "memory-budget")
 
     init(capacityBytes: Int64) {
@@ -91,7 +94,8 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
         guard bytes > 0 else { return reservation }   // holds nothing; commit/release are no-ops
 
         while true {
-            if tryAdd(reservation, bytes: bytes) { return reservation }
+            let (fits, seen) = tryAddCapturingSettled(reservation, bytes: bytes)
+            if fits { return reservation }
 
             let peers = others(excluding: owner)
             let mine = owner.evictionPriority
@@ -113,15 +117,20 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
             }
             if freed { continue }
 
-            // 3. nothing evictable: if other loads are still in flight, wait for one to settle.
-            if await waitForPendingToSettle(excluding: reservation) { continue }
-
-            // 4. both empty, nothing in flight: proceed over budget and say so.
-            withLock {
+            // 3. nothing evictable. If anything settled while we were asking, what we were told is stale (an entry
+            //    that was in flight may be evictable now) — ask again; else if other loads are still in flight,
+            //    wait for one to settle; else (4) both are empty and nothing is in flight: proceed over budget and
+            //    say so. The verdict and the over-budget grant are one lock section (MB-1): an `await` between them
+            //    let a release land in the gap and the grant went through although the request now fit.
+            var overBudget = false
+            if await settleOrFinalize(excluding: reservation, since: seen, finalize: {
                 ledger[reservation.id] = bytes
                 pending.insert(reservation.id)
+                overBudget = true
+            }) { continue }
+            if overBudget {
+                Self.log.notice("over budget: \(label, privacy: .public) needs \(bytes) B, capacity \(self.capacityBytes) B, nothing left to evict")
             }
-            Self.log.notice("over budget: \(label, privacy: .public) needs \(bytes) B, capacity \(self.capacityBytes) B, nothing left to evict")
             return reservation
         }
     }
@@ -157,12 +166,12 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
         let reservation = Reservation(id: UUID())
         guard bytes > 0 else { return reservation }
         while true {
-            let (added, held) = withLock { () -> (Bool, Int64) in
+            let (added, held, seen) = withLock { () -> (Bool, Int64, UInt64) in
                 let held = ledger.filter { !snapshots.contains($0.key) }.values.reduce(0, +)
-                guard held + bytes <= capacityBytes else { return (false, held) }
+                guard held + bytes <= capacityBytes else { return (false, held, settled) }
                 ledger[reservation.id] = bytes
                 pending.insert(reservation.id)
-                return (true, held)
+                return (true, held, settled)
             }
             if added { return reservation }
             guard held > protectedBytes else { return nil }             // only the running model is left
@@ -174,8 +183,16 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
                 if await other.evictLeastRecentlyUsed() { freed = true; break }
             }
             if freed { continue }
-            if await waitForPendingToSettle(excluding: reservation) { continue }
-            return nil
+            var granted = false
+            if await settleOrFinalize(excluding: reservation, since: seen, finalize: {
+                // last look, in the same lock section as the verdict: it may fit after all
+                let held = ledger.filter { !snapshots.contains($0.key) }.values.reduce(0, +)
+                guard held + bytes <= capacityBytes else { return }
+                ledger[reservation.id] = bytes
+                pending.insert(reservation.id)
+                granted = true
+            }) { continue }
+            return granted ? reservation : nil
         }
     }
 
@@ -183,17 +200,21 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     /// `bytes` is not positive or exceeds what the reservation holds. Used to give back a generation's unused reply
     /// allowance in exchange for a prompt-cache snapshot (`ReplyTrade`).
     func shrink(_ reservation: Reservation, by bytes: Int64) -> Bool {
-        withLock {
-            guard bytes > 0, let held = ledger[reservation.id], bytes <= held else { return false }
+        let (shrunk, toResume): (Bool, [CheckedContinuation<Void, Never>]) = withLock {
+            guard bytes > 0, let held = ledger[reservation.id], bytes <= held else { return (false, []) }
             ledger[reservation.id] = held - bytes
-            return true
+            settled &+= 1                       // room appeared: a requester's earlier "doesn't fit" is stale
+            return (true, takeWaitersLocked())
         }
+        toResume.forEach { $0.resume() }
+        return shrunk
     }
 
     /// The entry is resident now (and therefore evictable).
     func commit(_ reservation: Reservation) {
         let toResume: [CheckedContinuation<Void, Never>] = withLock {
             pending.remove(reservation.id)
+            settled &+= 1
             return takeWaitersLocked()
         }
         toResume.forEach { $0.resume() }
@@ -205,6 +226,7 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
             ledger.removeValue(forKey: reservation.id)
             pending.remove(reservation.id)
             snapshots.remove(reservation.id)
+            settled &+= 1
             return takeWaitersLocked()
         }
         toResume.forEach { $0.resume() }
@@ -220,12 +242,17 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
 
     /// Atomic check-and-add: reserves only if it fits right now.
     private func tryAdd(_ reservation: Reservation, bytes: Int64) -> Bool {
+        tryAddCapturingSettled(reservation, bytes: bytes).fits
+    }
+
+    /// `tryAdd`, also returning the `settled` count read in the **same** lock section as the fit check.
+    private func tryAddCapturingSettled(_ reservation: Reservation, bytes: Int64) -> (fits: Bool, seen: UInt64) {
         withLock {
             let used = ledger.values.reduce(0, +)
-            guard used + bytes <= capacityBytes else { return false }
+            guard used + bytes <= capacityBytes else { return (false, settled) }
             ledger[reservation.id] = bytes
             pending.insert(reservation.id)
-            return true
+            return (true, settled)
         }
     }
 
@@ -242,21 +269,33 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
         return all
     }
 
-    /// If some *other* reservation is still in flight, suspend until any commit/release and
-    /// return `true` (the caller retries); otherwise return `false` immediately.
-    private func waitForPendingToSettle(excluding mine: Reservation) async -> Bool {
-        var waited = false
+    /// `seen` is the `settled` count the caller read together with its failed fit check. Returns `true` when the
+    /// caller must go round again: anything has committed or released since (the eviction answers it just got may
+    /// be stale), or — after suspending until the next commit/release — some other reservation was in flight.
+    /// Returns `false` after running `finalize` when there is nothing to wait for.
+    ///
+    /// The `settled` comparison, the waiter registration and `finalize` each run in one lock section with the
+    /// check that selects them, so a commit cannot slip between "nothing evictable" and "nothing pending" (MB-1),
+    /// no wake-up is lost, and the caller's last action cannot act on a stale verdict.
+    private func settleOrFinalize(excluding mine: Reservation, since seen: UInt64,
+                                  finalize: () -> Void) async -> Bool {
+        var retry = false
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             lock.lock()
-            if pending.subtracting([mine.id]).isEmpty {
+            if settled != seen {
+                retry = true
                 lock.unlock()
                 continuation.resume()
-            } else {
-                waited = true
+            } else if !pending.subtracting([mine.id]).isEmpty {
+                retry = true
                 waiters.append(continuation)
                 lock.unlock()
+            } else {
+                finalize()
+                lock.unlock()
+                continuation.resume()
             }
         }
-        return waited
+        return retry
     }
 }
