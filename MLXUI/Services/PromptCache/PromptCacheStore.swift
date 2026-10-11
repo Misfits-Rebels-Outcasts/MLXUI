@@ -94,6 +94,8 @@ actor PromptCacheStore<Snapshot: Sendable>: MemoryBudgetParticipant {
         let snapshot: Snapshot
         let bytes: Int64
         let trimmable: Bool
+        /// S3.1c: the snapshot of the end of the system content (see `PromptCheckpoints.systemBoundary`).
+        let systemBoundary: Bool
         let reservation: MemoryBudget.Reservation
         var lastUsed: UInt64
     }
@@ -128,7 +130,41 @@ actor PromptCacheStore<Snapshot: Sendable>: MemoryBudgetParticipant {
     /// Lowest priority: dropped before any weights, on every path (ruling A1, T11).
     nonisolated var evictionPriority: Int { MemoryBudget.snapshotPriority }
 
-    func evictLeastRecentlyUsed() -> Bool { dropLeastRecentlyUsed(matching: { _ in true }) }
+    /// Budget pressure (weights, or anything that outranks a snapshot): the unprotected LRU goes first, and when only
+    /// protected system-boundary snapshots are left they go too — **weights win** (PC rule 8, S3.1c).
+    func evictLeastRecentlyUsed() -> Bool {
+        let shielded = protectedIDs(replacing: nil)
+        return dropLeastRecentlyUsed(matching: { !shielded.contains($0.id) })
+            || dropLeastRecentlyUsed(matching: { _ in true })
+    }
+
+    // MARK: Protection (S3.1c)
+
+    /// **A model's most recent system-boundary snapshot is protected from displacement by other snapshots** (count cap,
+    /// byte cap, budget room). It is what a compaction — a request that shares only the system prompt and tools with
+    /// the conversation before it — reads (journal `2026-455`), and at ~0.6 GB it is small next to the turn snapshots
+    /// that otherwise push it out as the conversation grows. One protected entry per model (`key.directory`): a newer
+    /// system-boundary snapshot of the same model moves the protection, and the older one is an ordinary entry.
+    /// `replacing`: the directory whose protection a system-boundary snapshot being stored is about to take over.
+    private func protectedIDs(replacing directory: String?) -> Set<UInt64> {
+        var newest: [String: Entry] = [:]
+        for entry in entries where entry.systemBoundary && entry.key.directory != directory {
+            if let seen = newest[entry.key.directory], seen.id > entry.id { continue }
+            newest[entry.key.directory] = entry
+        }
+        return Set(newest.values.map(\.id))
+    }
+
+    private func protectedBytes(replacing directory: String?) -> Int64 {
+        let shielded = protectedIDs(replacing: directory)
+        return entries.filter { shielded.contains($0.id) }.reduce(0) { $0 + $1.bytes }
+    }
+
+    /// Lengths of the protected snapshots of `directory` (tests, pane).
+    func protectedLengths(forDirectory directory: String) -> [Int] {
+        let shielded = protectedIDs(replacing: nil)
+        return entries.filter { shielded.contains($0.id) && $0.key.directory == directory }.map { $0.tokens.count }
+    }
 
     // MARK: Lookup
 
@@ -180,16 +216,21 @@ actor PromptCacheStore<Snapshot: Sendable>: MemoryBudgetParticipant {
     /// ever be (what is free now plus everything this store holds, so the store is never flushed for a snapshot
     /// that can't fit even then — PC-1 review, carry-over 2), is refused by `insert` anyway; building it first
     /// only spends a second KV copy.
-    func wouldAccept(bytes: Int64) -> Bool {
-        guard bytes > 0, bytes <= capBytes else { return false }
-        return bytes <= budget.capacityBytes - budget.usedBytes + totalBytes
+    ///
+    /// S3.1c: protected snapshots are not reclaimable by this one, so they count against both tests. A system-boundary
+    /// snapshot (`systemBoundary`) of `key`'s model takes over that model's protection, so the old one is reclaimable.
+    func wouldAccept(bytes: Int64, key: PromptCacheModelKey? = nil, systemBoundary: Bool = false) -> Bool {
+        let shielded = protectedBytes(replacing: systemBoundary ? key?.directory : nil)
+        guard bytes > 0, bytes <= capBytes - shielded else { return false }
+        return bytes <= budget.capacityBytes - budget.usedBytes + totalBytes - shielded
     }
 
     /// S3.1b — by how many bytes a snapshot of `bytes` misses the room (`wouldAccept`'s second test), or `nil` when
     /// room is not why it is refused (empty, or over the store's own cap) or when it fits. Frees nothing.
-    func roomShortfall(bytes: Int64) -> Int64? {
-        guard bytes > 0, bytes <= capBytes else { return nil }
-        let room = budget.capacityBytes - budget.usedBytes + totalBytes
+    func roomShortfall(bytes: Int64, key: PromptCacheModelKey? = nil, systemBoundary: Bool = false) -> Int64? {
+        let shielded = protectedBytes(replacing: systemBoundary ? key?.directory : nil)
+        guard bytes > 0, bytes <= capBytes - shielded else { return nil }
+        let room = budget.capacityBytes - budget.usedBytes + totalBytes - shielded
         return bytes > room ? bytes - room : nil
     }
 
@@ -200,8 +241,8 @@ actor PromptCacheStore<Snapshot: Sendable>: MemoryBudgetParticipant {
     /// still doesn't fit the snapshot is simply not kept.
     @discardableResult
     func insert(key: PromptCacheModelKey, tokens: [Int], snapshot: Snapshot, bytes: Int64,
-                trimmable: Bool) -> Bool {
-        guard !tokens.isEmpty, wouldAccept(bytes: bytes) else { return false }
+                trimmable: Bool, systemBoundary: Bool = false) -> Bool {
+        guard !tokens.isEmpty, wouldAccept(bytes: bytes, key: key, systemBoundary: systemBoundary) else { return false }
         let digest = Self.digest(tokens)
         if let i = entries.firstIndex(where: {
             $0.key == key && $0.tokens.count == tokens.count && $0.tokenDigest == digest && $0.tokens == tokens
@@ -210,15 +251,18 @@ actor PromptCacheStore<Snapshot: Sendable>: MemoryBudgetParticipant {
             entries[i].lastUsed = clock           // a duplicate refreshes recency, stores nothing
             return false
         }
+        // Other snapshots may displace anything but the protected entries (S3.1c); when only those are left the
+        // new snapshot is not stored.
+        let shielded = protectedIDs(replacing: systemBoundary ? key.directory : nil)
         while entries.filter({ $0.key == key }).count >= maxPerModel {
-            guard dropLeastRecentlyUsed(matching: { $0.key == key }) else { return false }
+            guard dropLeastRecentlyUsed(matching: { $0.key == key && !shielded.contains($0.id) }) else { return false }
         }
         while totalBytes + bytes > capBytes {
-            guard dropLeastRecentlyUsed(matching: { _ in true }) else { return false }
+            guard dropLeastRecentlyUsed(matching: { !shielded.contains($0.id) }) else { return false }
         }
         var reservation = budget.tryReserve(bytes: bytes)
         while reservation == nil {
-            guard dropLeastRecentlyUsed(matching: { _ in true }) else { return false }
+            guard dropLeastRecentlyUsed(matching: { !shielded.contains($0.id) }) else { return false }
             reservation = budget.tryReserve(bytes: bytes)
         }
         guard let reservation else { return false }
@@ -226,7 +270,8 @@ actor PromptCacheStore<Snapshot: Sendable>: MemoryBudgetParticipant {
         clock += 1
         nextID += 1
         entries.append(Entry(id: nextID, key: key, tokens: tokens, tokenDigest: digest, snapshot: snapshot,
-                             bytes: bytes, trimmable: trimmable, reservation: reservation, lastUsed: clock))
+                             bytes: bytes, trimmable: trimmable, systemBoundary: systemBoundary,
+                             reservation: reservation, lastUsed: clock))
         return true
     }
 

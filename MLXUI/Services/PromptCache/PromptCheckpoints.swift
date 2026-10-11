@@ -45,23 +45,32 @@ nonisolated enum PromptCheckpoints {
     /// merge with the suffix), and never beyond what the real prompt shares with the system probe. *E* replaces *S*.
     static func positions(actual: [Int], turnProbe: [Int]?, systemProbe: [Int]?, systemEndProbe: [Int]? = nil,
                           minimumLength: Int) -> [Int] {
-        let n = actual.count
-        func common(_ probe: [Int]?) -> Int? {
-            guard let probe else { return nil }
-            var i = 0
-            while i < n, i < probe.count, actual[i] == probe[i] { i += 1 }
-            return min(i, n - 1)
-        }
         var out: [Int] = []
-        var systemBoundary = common(systemProbe)
-        if let systemProbe, let systemEndProbe, let s = systemBoundary {
+        if let s = systemBoundary(actual: actual, systemProbe: systemProbe, systemEndProbe: systemEndProbe,
+                                  minimumLength: minimumLength) { out.append(s) }
+        if let t = common(actual, turnProbe), t >= minimumLength, !out.contains(t) { out.append(t) }
+        return out.sorted()
+    }
+
+    /// The system boundary alone (S3.1c: that snapshot is the protected one), or `nil` where there is none.
+    static func systemBoundary(actual: [Int], systemProbe: [Int]?, systemEndProbe: [Int]? = nil,
+                               minimumLength: Int) -> Int? {
+        var boundary = common(actual, systemProbe)
+        if let systemProbe, let systemEndProbe, let s = boundary {
             var e = 0
             while e < systemProbe.count, e < systemEndProbe.count, systemProbe[e] == systemEndProbe[e] { e += 1 }
-            systemBoundary = min(s, e - 1)
+            boundary = min(s, e - 1)
         }
-        if let s = systemBoundary, s >= minimumLength { out.append(s) }
-        if let t = common(turnProbe), t >= minimumLength, !out.contains(t) { out.append(t) }
-        return out.sorted()
+        if let boundary, boundary >= minimumLength { return boundary }
+        return nil
+    }
+
+    private static func common(_ actual: [Int], _ probe: [Int]?) -> Int? {
+        guard let probe else { return nil }
+        let n = actual.count
+        var i = 0
+        while i < n, i < probe.count, actual[i] == probe[i] { i += 1 }
+        return min(i, n - 1)
     }
 }
 
@@ -135,6 +144,8 @@ nonisolated enum PromptCheckpointing {
         let wanted = PromptCheckpoints.positions(actual: tokens, turnProbe: turnProbe, systemProbe: systemProbe,
                                                  systemEndProbe: systemEndProbe,
                                                  minimumLength: store.minimumReuse).filter { $0 > position }
+        let systemTarget = PromptCheckpoints.systemBoundary(actual: tokens, systemProbe: systemProbe,
+                                                            systemEndProbe: systemEndProbe, minimumLength: store.minimumReuse)
 
         // 3. prefill segment by segment; store each snapshot only after its segment is evaluated.
         if !wanted.isEmpty, working == nil { working = newCache() }
@@ -152,21 +163,24 @@ nonisolated enum PromptCheckpointing {
             if target != wanted.last, isTrimmable(cache) { continue }
             // S3-5c: a doomed snapshot (over the store's cap, or more than could ever fit) is not copied at all:
             // the prefill above was needed, the second copy of the KV would be built only to be thrown away.
+            let isSystem = target == systemTarget
             if let cacheBytes {
                 let size = cacheBytes(cache)
-                if !(await store.wouldAccept(bytes: size)) {
+                if !(await store.wouldAccept(bytes: size, key: key, systemBoundary: isSystem)) {
                     // S3.1b: if the only thing in the way is room, and this request reserved more reply than it will
                     // use, trade that reply room for the snapshot — decided here, during prefill, so the lowered
                     // limit is known before the first output token. Anything else: skipped, exactly as before.
-                    guard let replyTrade, let short = await store.roomShortfall(bytes: size),
+                    // S3.1c: the room that counts excludes the protected system-boundary snapshot, so a turn snapshot
+                    // that could only be stored by displacing it is traded for, or skipped.
+                    guard let replyTrade, let short = await store.roomShortfall(bytes: size, key: key, systemBoundary: isSystem),
                           replyTrade.trade(shortfallBytes: short),
-                          await store.wouldAccept(bytes: size) else { continue }
+                          await store.wouldAccept(bytes: size, key: key, systemBoundary: isSystem) else { continue }
                     outcome.replyTokensTraded = replyTrade.tradedTokens
                 }
             }
             let taken = snapshot(cache)
             let stored = await store.insert(key: key, tokens: Array(tokens[0..<target]), snapshot: taken.snapshot,
-                                            bytes: taken.bytes, trimmable: taken.trimmable)
+                                            bytes: taken.bytes, trimmable: taken.trimmable, systemBoundary: isSystem)
             if stored { outcome.storedAt.append(target) }
             outcome.timings.snapshot += lap()
         }
