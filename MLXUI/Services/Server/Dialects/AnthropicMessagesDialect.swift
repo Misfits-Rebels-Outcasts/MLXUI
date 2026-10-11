@@ -46,8 +46,17 @@ nonisolated enum AnthropicMessagesDialect {
         if let system = try decodeSystem(object["system"]), !system.isEmpty {
             messages.append(ServeMessage(role: .system, text: system))
         }
+        // S3-8A: a `system` entry that comes *after* the first user/assistant entry stays where the client put it
+        // (see `inPlaceReminder`); only the leading ones are system messages for the assembly to place.
+        var sawConversation = false
         for (index, raw) in rawMessages.enumerated() {
-            messages.append(contentsOf: try decodeMessage(raw, at: index))
+            let decoded = try decodeMessage(raw, at: index)
+            if sawConversation {
+                messages.append(contentsOf: decoded.map { $0.role == .system ? inPlaceReminder($0) : $0 })
+            } else {
+                messages.append(contentsOf: decoded)
+            }
+            if (raw as? [String: Any])?["role"] as? String != "system" { sawConversation = true }
         }
 
         var request = ServeRequest(model: model, messages: ServeMessageAssembly.mergingAdjacentRoles(messages))
@@ -72,6 +81,19 @@ nonisolated enum AnthropicMessagesDialect {
             request.stream = flag
         }
         return request
+    }
+
+    /// S3-8A (amends R43). Claude Code appends a `system` entry to `messages` on every turn and replays the earlier
+    /// ones unchanged, in place (journal `2026-452`). Hoisting them all into one leading system message made that
+    /// message differ on every request, which moved every later token and left an exact-match (hybrid) prompt
+    /// cache nothing of the previous turn to reuse. A mid-conversation entry therefore becomes a **user** turn at
+    /// its own position, wrapped in the `<system-reminder>` form Claude Code itself uses for such notes, so the
+    /// model can tell it from the user's words; the assembly's same-role merge folds it into an adjacent user turn.
+    private static func inPlaceReminder(_ message: ServeMessage) -> ServeMessage {
+        var reminder = message
+        reminder.role = .user
+        reminder.text = "<system-reminder>\n\(message.text)\n</system-reminder>"
+        return reminder
     }
 
     /// `system`: a string, or `[{type:"text", text}]` blocks (joined with a blank line).

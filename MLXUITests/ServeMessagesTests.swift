@@ -85,40 +85,83 @@ struct AnthropicMessagesDecodeTests {
         #expect(blocks.messages.count == 2)
     }
 
-    /// R43: Claude Code sends `system` entries inside `messages` (string or text blocks).
-    @Test func systemEntriesInsideMessagesAreAcceptedAsSystemMessages() throws {
+    private static func sr(_ text: String) -> String { "<system-reminder>\n\(text)\n</system-reminder>" }
+
+    /// R43 + S3-8A: Claude Code sends `system` entries inside `messages` (string or text blocks). Leading ones are
+    /// system messages for the assembly to place; one that comes after the first user/assistant entry stays in
+    /// place, as a `<system-reminder>` user turn (folded into an adjacent user turn).
+    @Test func leadingSystemEntriesAreSystemMessagesAndLaterOnesStayInPlaceAsUserReminders() throws {
         func messages(_ json: String, top: String = "") throws -> [ServeMessage] {
             try AnthropicMessagesDialect.decode(Data(
                 #"{"model":"m","max_tokens":9\#(top),"messages":\#(json)}"#.utf8)).messages
         }
-        // at messages[0], as a string
+        // at messages[0], as a string: still a system message
         #expect(try messages(#"[{"role":"system","content":"S0"},{"role":"user","content":"hi"}]"#)
                 == [ServeMessage(role: .system, text: "S0"), ServeMessage(role: .user, text: "hi")])
-        // as text blocks (with cache_control), after a user turn
+        // two leading entries stay system (and merge), whatever follows
+        #expect(try messages(#"[{"role":"system","content":"L1"},{"role":"system","content":"L2"},{"role":"user","content":"hi"}]"#)
+                == [ServeMessage(role: .system, text: "L1\n\nL2"), ServeMessage(role: .user, text: "hi")])
+        // as text blocks (with cache_control), after a user turn: folded into that user turn, in place
         #expect(try messages(#"[{"role":"user","content":"hi"},{"role":"system","content":[{"type":"text","text":"A","cache_control":{"type":"ephemeral"}},{"type":"text","text":"B"}]}]"#)
-                == [ServeMessage(role: .user, text: "hi"), ServeMessage(role: .system, text: "A\n\nB")])
-        // mid-conversation, between tool traffic, with a top-level system as well (it stays first)
+                == [ServeMessage(role: .user, text: "hi\n\n" + Self.sr("A\n\nB"))])
+        // mid-conversation, between tool traffic, with a top-level system as well (it stays first, alone)
         let mixed = try messages(#"""
         [{"role":"user","content":"go"},{"role":"system","content":"S1"},
          {"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"f","input":{}}]},
          {"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]},
          {"role":"system","content":[{"type":"text","text":"S2"}]}]
         """#, top: #","system":"TOP""#)
-        #expect(mixed.map(\.role) == [.system, .user, .system, .assistant, .tool, .system])
-        #expect(mixed.map(\.text) == ["TOP", "go", "S1", "", "ok", "S2"])
+        #expect(mixed.map(\.role) == [.system, .user, .assistant, .tool, .user])
+        #expect(mixed.map(\.text) == ["TOP", "go\n\n" + Self.sr("S1"), "", "ok", Self.sr("S2")])
         // an empty system entry adds nothing
         #expect(try messages(#"[{"role":"system","content":""},{"role":"user","content":"hi"}]"#) == [ServeMessage(role: .user, text: "hi")])
+        #expect(try messages(#"[{"role":"user","content":"hi"},{"role":"system","content":""}]"#) == [ServeMessage(role: .user, text: "hi")])
     }
 
-    /// …and the assembly places them per family, as for every dialect.
-    @Test func systemEntriesAreHoistedPerFamilyByTheAssembly() throws {
+    /// …and the assembly no longer has anything to hoist from the middle: only the top-level `system` leads.
+    @Test func midConversationEntriesAreNotHoistedByTheAssembly() throws {
         let decoded = try AnthropicMessagesDialect.decode(Data(
             #"{"model":"m","max_tokens":9,"system":"TOP","messages":[{"role":"user","content":"go"},{"role":"system","content":"MID"},{"role":"user","content":"again"}]}"#.utf8))
         let firstOnly = ServeMessageAssembly.assembling(decoded.messages, acceptsTools: true, placement: .firstOnly)
         #expect(firstOnly.map(\.role) == [.system, .user])
-        #expect(firstOnly.first?.text == "TOP\n\nMID")
+        #expect(firstOnly.first?.text == "TOP")
+        #expect(firstOnly.last?.text == "go\n\n" + Self.sr("MID") + "\n\nagain")
         let anywhere = ServeMessageAssembly.assembling(decoded.messages, acceptsTools: true, placement: .anywhere)
-        #expect(anywhere.map(\.role) == [.system, .user, .system, .user])
+        #expect(anywhere == firstOnly)
+    }
+
+    /// S3-8A — the point of it. A Claude-Code-shaped three-turn conversation: each turn appends one `system` entry and
+    /// replays the earlier ones unchanged. Turn N's rendered prompt (before the generation prompt) must be a prefix
+    /// of turn N+1's — the property an exact-match prompt cache needs. The renderer is ChatML-shaped, like the
+    /// Qwen templates; the live measurement (journal `2026-452`) is the real-template check.
+    @Test func eachTurnsRenderedPromptIsAPrefixOfTheNext() throws {
+        let top = #","system":[{"type":"text","text":"You are Claude Code."}]"#
+        let ctx = #"{"role":"system","content":[{"type":"text","text":"CONTEXT BLOCK"}]}"#
+        func turn(_ tail: [String]) -> String {
+            let entries = [#"{"role":"user","content":"Read a.txt"}"#, ctx] + tail
+            return #"{"model":"m","max_tokens":9\#(top),"messages":[\#(entries.joined(separator: ","))]}"#
+        }
+        let call1 = #"{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"p":"a"}}]}"#
+        let res1 = #"{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"A-TEXT"}]}"#
+        let note1 = #"{"role":"system","content":"note after turn 1"}"#
+        let reply1 = #"{"role":"assistant","content":[{"type":"text","text":"Summary A."}]}"#
+        let ask2 = #"{"role":"user","content":"Read b.txt"}"#
+        let note2 = #"{"role":"system","content":"note after turn 2"}"#
+        let turn1 = turn([])
+        let turn2 = turn([call1, res1, note1])
+        let turn3 = turn([call1, res1, note1, reply1, ask2, note2])
+        func render(_ body: String, placement: ToolCallFormatTable.SystemPlacement) throws -> String {
+            let decoded = try AnthropicMessagesDialect.decode(Data(body.utf8))
+            return ServeMessageAssembly.assembling(decoded.messages, acceptsTools: true, placement: placement)
+                .map { "<|im_start|>\($0.role.rawValue)\n\($0.text)<|im_end|>\n" }.joined()
+        }
+        for placement in [ToolCallFormatTable.SystemPlacement.firstOnly, .anywhere, .unsupported] {
+            let r1 = try render(turn1, placement: placement)
+            let r2 = try render(turn2, placement: placement)
+            let r3 = try render(turn3, placement: placement)
+            #expect(r2.hasPrefix(r1), "turn 2 does not extend turn 1 (\(placement))")
+            #expect(r3.hasPrefix(r2), "turn 3 does not extend turn 2 (\(placement))")
+        }
     }
 
     @Test func anUnknownRoleOrANonTextSystemBlockIsStillA400() {
