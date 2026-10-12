@@ -32,6 +32,11 @@ struct MLXUIApp: App {
         if !TestEnvironment.isRunningTests {
             AppleFoundationAvailability.useRealSystem = true
         }
+        // MLX-ERR-1: an MLX error with no handler installed is a `fatalError` inside mlx-swift,
+        // and `MLXArray`'s own init installs that trampoline — so without this, every unguarded
+        // MLX path in the app can kill the process with no explanation (journal 2026-466).
+        // Installed under tests too, deliberately: the fallback is what a test asserts on.
+        MLXErrorGuard.installFallback()
     }
 
     var body: some Scene {

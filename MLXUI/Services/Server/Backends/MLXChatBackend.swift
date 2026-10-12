@@ -336,7 +336,14 @@ nonisolated struct MLXChatBackend: ServeBackend {
         // S3-5c: MLX's buffer pool is capped while a server generation runs and restored after it.
         ServeMLXMemory.shared.begin()
         defer { ServeMLXMemory.shared.end() }
-        try await runInner(request, into: continuation)
+        // MLX-ERR-1 (journal `2026-466`): the other half of the app's MLX surface. Eight
+        // `MLXUI-*.ips` reports are an MLX error inside `PromptCheckpointing.prefill` reached
+        // from here, and with no handler that was a `fatalError` — the app died mid-request with
+        // no sentence for the client. Guarded, it comes back through the existing error path as
+        // a normal failed request.
+        try await MLXErrorGuard.guarded {
+            try await runInner(request, into: continuation)
+        }
     }
 
     private func runInner(_ request: ServeRequest,

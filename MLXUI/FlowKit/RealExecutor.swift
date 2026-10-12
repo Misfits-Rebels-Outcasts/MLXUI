@@ -100,6 +100,29 @@ nonisolated struct RealExecutor: FlowExecutor {
                  transcript: [FlowInterpreter.TranscriptEntry]?,
                  context: [(label: String, content: String)]?,
                  usedFlowContent: String?) async throws -> Asset {
+        // MLX-ERR-1 (journal `2026-466`): every flow row's engine work happens below this line,
+        // so this one boundary covers all of them. Without it an MLX error inside a stage is a
+        // `fatalError` in mlx-swift — the process dies and the row never reports anything. With
+        // it the row fails like any other row, with MLX's own message in the sentence.
+        //
+        // The body is `executeInner` rather than an indented block so this stays a one-line
+        // wrap of the whole dispatch (the same split `MLXChatBackend.run`/`runInner` uses).
+        do {
+            return try await MLXErrorGuard.guarded {
+                try await executeInner(path: path, row: row, inputs: inputs, transcript: transcript,
+                                       context: context, usedFlowContent: usedFlowContent)
+            }
+        } catch {
+            guard MLXErrorGuard.isMLXError(error) else { throw error }
+            throw FlowError.stageFailure(row: path, message: MLXErrorGuard.sentence(for: error))
+        }
+    }
+
+    /// The real dispatch — see `execute`, which guards it.
+    private func executeInner(path: String, row: Row, inputs: [Asset],
+                              transcript: [FlowInterpreter.TranscriptEntry]?,
+                              context: [(label: String, content: String)]?,
+                              usedFlowContent: String?) async throws -> Asset {
         let task = row.task ?? ""
         guard let desc = TaskCatalog.get(task) else {
             throw FlowError.unknownTask(row: task)

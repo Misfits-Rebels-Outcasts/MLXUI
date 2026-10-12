@@ -1,0 +1,170 @@
+import Foundation
+import MLX
+import os
+
+/// MLX-ERR-1 — an MLX error must never kill the app.
+///
+/// **The bug.** mlx-swift's error path ends in `fatalError` whenever no handler is installed:
+/// `ErrorHandler.dispatch` (`mlx-swift/Source/MLX/ErrorHandler.swift:345`) is reached from
+/// `errorHandlerTrampoline` ← `_mlx_error` ← `mlx_eval`, and with an empty handler stack it calls
+/// `fatalError(message)`. The trampoline is not opt-in: `MLXArray.swift:18` calls `initError()`,
+/// so **creating any `MLXArray` installs it** — which every MLX path in this app does. There is
+/// no non-deprecated global installer in mlx-swift, and `MLXUI/` installs none of the scoped
+/// ones, so in this app *any* MLX error on *any* path is a `fatalError`: the process dies with
+/// Xcode's "hit program assert". That is what 13 `MLXUI-*.ips` reports on this machine show
+/// (journal `2026-464` read every one); 8 of them are an MLX error inside the Local Server's
+/// prompt-cache prefill, and the rest are teardown/exception paths this type cannot help with.
+///
+/// **Two layers, because they cover different code.**
+///
+/// 1. ``guarded(_:)`` wraps the outer boundary of work we own — `RealExecutor.execute` (every
+///    flow row, hence every engine) and `MLXChatBackend.run` (the Local Server) — using
+///    mlx-swift's **scoped, non-deprecated** `withError`. An MLX error becomes a thrown
+///    `MLXError` carrying MLX's own message, so the row or the request reports it like any other
+///    failure instead of killing the process.
+/// 2. ``installFallback()`` covers everything *not* wrapped — today the per-model Run UIs'
+///    engines. mlx-swift offers no non-deprecated process-wide install (see the note on
+///    `installFallback`), so this deliberately uses the deprecated `setErrorHandler`. Without it
+///    an MLX error in a Run UI still kills the app; with it the message is recorded by
+///    ``lastFallbackMessage()`` and logged as a fault.
+///
+/// **Known limitation, deliberate, and not a substitute for layer 1.** The fallback does not make
+/// the *result* correct: mlx-swift's own docs warn that "using the `MLXArray` produced after an
+/// error will likely result in additional errors", so an engine that reported an error may go on
+/// to produce a bad array. Layer 2 trades "the app dies with no explanation" for "the app logs a
+/// fault and keeps running", which is the right trade for a shipping app but means the fallback
+/// must stay **visible** rather than silent — hence the `os.Logger` fault and the recorded
+/// message. Coverage should be extended to the Run-UI engines so those paths get the honest
+/// thrown error too, not just the log.
+nonisolated enum MLXErrorGuard {
+
+    // MARK: - Scoped guard (the one to prefer)
+
+    /// Run `body` with mlx-swift's scoped error handler installed, converting an MLX error into a
+    /// thrown ``MLXError`` at block exit instead of `fatalError`.
+    ///
+    /// The handler is **task-local** in mlx-swift, so it follows the `await` chain and any `MainActor`
+    /// hop inside `body`; MLX work spawned in a *detached* task would not inherit it. Nothing in
+    /// `FlowKit/` or `Modules/` detaches, so the flow and server boundaries are covered
+    /// completely.
+    static func guarded<R>(_ body: () async throws -> R) async throws -> R {
+        try await withError { try await body() }
+    }
+
+    /// Synchronous form, for callers that are not `async`.
+    static func guarded<R>(_ body: () throws -> R) throws -> R {
+        try withError { try body() }
+    }
+
+    /// The sentence to show a person for an error raised under ``guarded(_:)``.
+    ///
+    /// mlx-swift's own `MLXError.errorDescription` is `"MLX Error: <message>"` — accurate but not
+    /// this product's voice (one plain sentence, and what to try). Kept short on purpose: the
+    /// message is MLX's own diagnostic text, so it is often the most useful part.
+    static func sentence(for error: Error) -> String {
+        if let mlx = error as? MLXError, case .caught(let message) = mlx {
+            return "the model's MLX runtime reported an error — \(message). Try the row again; if it repeats, re-install the model."
+        }
+        return (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+    }
+
+    /// Whether `error` is one of ours from mlx-swift. Lets a caller in a module that must stay
+    /// free of `import MLX` (e.g. `FlowKit/RealExecutor`) still recognise the case and re-voice it.
+    static func isMLXError(_ error: Error) -> Bool {
+        error is MLXError
+    }
+
+    // MARK: - Process-wide fallback
+
+    /// Install the process-wide fallback, once. Safe to call more than once.
+    ///
+    /// **This deliberately uses a deprecated API, and that is the point.** mlx-swift's
+    /// deprecation notice points at `withErrorHandler`/`withError`, but those install a
+    /// *task-local* handler: they cannot cover a path we have not wrapped, which is exactly the
+    /// gap this fills. `setErrorHandler` is sync with mlx-swift's `ErrorHandler.globalHandler`
+    /// slot, which `dispatch` consults *after* the task-local stack — so a `guarded` body keeps
+    /// its precise thrown error and everything else falls back to the recorder.
+    ///
+    /// It must go through mlx-swift's slot rather than calling the C `mlx_set_error_handler`
+    /// directly: mlx-swift installs its own trampoline lazily (on the first `MLXArray`), which
+    /// would silently overwrite a handler we installed underneath it.
+    static func installFallback() {
+        _ = fallbackInstalled
+    }
+
+    /// The last message the fallback recorded, or nil if no unguarded MLX error has happened.
+    /// Exists so the fallback cannot fail *silently* — a test asserts it, and a diagnostic or a
+    /// future banner can read it.
+    static func lastFallbackMessage() -> String? {
+        recorder.message
+    }
+
+    /// Clear the recorded message (tests).
+    static func resetFallbackMessage() {
+        recorder.message = nil
+    }
+
+    // MARK: - Internals
+
+    private static let recorder = MLXErrorRecorder()
+
+    private static let fallbackInstalled: Void = {
+        // `setErrorHandler` is deprecated in favour of the scoped API; see `installFallback`'s
+        // doc comment for why the global slot is the only correct hook for this layer.
+        MLXErrorGuard.installDeprecatedGlobalHandler(mlxGlobalErrorHandler)
+    }()
+
+    /// Isolates the one deprecated call so the deprecation is acknowledged in a single, named
+    /// place instead of at a bare call site.
+    @available(*, deprecated, message: "MLX-ERR-1: call MLXErrorGuard.installFallback() instead.")
+    private static func installDeprecatedGlobalHandler(
+        _ handler: (@convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Void)?
+    ) {
+        setErrorHandler(handler)
+    }
+
+    /// Thread-safe holder for the last unguarded message. A class so the `@convention(c)`
+    /// trampoline below can reach it without capturing anything.
+    private final class MLXErrorRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private let log = Logger(subsystem: "net.connectcode.mlxui", category: "mlx-error")
+        private var stored: String?
+
+        var message: String? {
+            get { lock.withLock { stored } }
+            set { lock.withLock { stored = newValue } }
+        }
+
+        func record(_ message: String) {
+            let isFirst = lock.withLock { () -> Bool in
+                guard stored == nil else { return false }
+                stored = message
+                return true
+            }
+            // `.fault`, not `.error`: the fallback firing means an MLX error escaped every
+            // guarded boundary, so the result of that work is suspect (see the type's "Known
+            // limitation"). This has to be loud rather than silent, and the first one names the
+            // missing wrap explicitly so the log says what to do about it.
+            if isFirst {
+                log.fault("an MLX error escaped every guarded boundary — wrap this path in MLXErrorGuard.guarded: \(message, privacy: .public)")
+            } else {
+                log.fault("unguarded MLX error: \(message, privacy: .public)")
+            }
+        }
+    }
+}
+
+/// The `@convention(c)` trampoline mlx-swift calls for an error outside every `guarded` block. A
+/// top-level function so it captures nothing; it forwards to the recorder.
+private let mlxGlobalErrorHandler:
+    @convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Void = { message, _ in
+        let text = message.map { String(cString: $0) } ?? ""
+        MLXErrorGuard.recordFallback(text)
+    }
+
+extension MLXErrorGuard {
+    /// Bridge for the C trampoline (which cannot see `private` members).
+    fileprivate static func recordFallback(_ message: String) {
+        recorder.record(message)
+    }
+}
