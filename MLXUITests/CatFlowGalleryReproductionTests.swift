@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import ImageIO
+import CryptoKit
 @testable import MLXUI
 
 /// Covers the R5 pre-parsed-JSON retirement (CFM-FIX-5 / M11): the bundled gallery ships
@@ -288,14 +289,15 @@ struct CatFlowGalleryReproductionTests {
         #expect(checked >= 2, "expected at least 6- and 7-'s Read rows to be checked, got \(checked)")
     }
 
-    /// BG-4: the shipped placeholders are the owner gate's documented default (G1 — the owner had
-    /// not sent photos), and SAM's headless default prompt is the **centre point**
-    /// (CFM-R15-1 hazard H2 option 1), so `6`'s input has to be big enough for a centre point to
-    /// land somewhere meaningful and `7`'s has to be genuinely small for 2× to show. Pinning the
-    /// dimensions here means the one-file swap when real photos arrive is a deliberate edit with
-    /// a failing test to update, not a silent change of what the smoke row exercises.
-    @Test func thePlaceholderInputsMatchTheShapeTheSmokeRowsAssume() throws {
-        func size(_ flat: String) throws -> (Int, Int) {
+    /// BG-7 (`RSI/DelegateBasicImageFlowsBacklog.md`, owner ruling R6, 2026-10-12): the shipped
+    /// sample inputs are now the **owner's own kitten photo**, not BG-4's placeholders — full size
+    /// for `6`, exact half size for `7` so a 2× upscale lands back at roughly the original. This
+    /// pins both the geometry and the **bytes**, so any future swap is a deliberate edit with a
+    /// failing test to explain, never a silent change of what the smoke rows exercise. The hash
+    /// half matters: the dimensions alone would not notice a re-encode, a colour-profile change,
+    /// or a different crop of the same size.
+    @Test func theKittenInputsMatchTheShapeAndBytesTheSmokeRowsAssume() throws {
+        func fixture(_ flat: String) throws -> (size: (Int, Int), sha: String) {
             var found: URL?
             let walker = FileManager.default.enumerator(at: basicGalleryDir,
                                                         includingPropertiesForKeys: nil)
@@ -305,15 +307,20 @@ struct CatFlowGalleryReproductionTests {
             let url = try #require(found, "\(flat) not found under BasicGallery/**")
             let src = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
             let img = try #require(CGImageSourceCreateImageAtIndex(src, 0, nil))
-            return (img.width, img.height)
+            let sha = SHA256.hash(data: try Data(contentsOf: url)).hex
+            return ((img.width, img.height), sha)
         }
-        // 768×768 for 6 — the reference placeholder's size, and the frame SAM's centre prompt
-        // is authored against.
-        let six = try size("6-CutOutSubject-photo.jpg")
-        #expect(six == (768, 768))
-        // 256×256 for 7 — small enough that a 2× output is visibly sharper.
-        let seven = try size("7-UpscaleSmall-small-photo.jpg")
-        #expect(seven == (256, 256))
+
+        // 6 — the owner's photo at **full size**, 740×503, so SAM's centre point has a real
+        // subject under it (the right-hand kitten's chest/paw; row 103 records what it picks).
+        let six = try fixture("6-CutOutSubject-photo.jpg")
+        #expect(six.size == (740, 503))
+        #expect(six.sha == "bb9559be17db4f27a3f52a24c7ee9061483176741d9f0f25b6fc6199cea1218b")
+
+        // 7 — the same photo at exactly **half** size, 370×252, so 2× returns ~740×504.
+        let seven = try fixture("7-UpscaleSmall-small-photo.jpg")
+        #expect(seven.size == (370, 252))
+        #expect(seven.sha == "c2d1bb3740992e1837827b31689938acc2746343e75b7cfae47fc42fd5c96e47")
     }
 
     /// The end-to-end half of BG-4: prepare a real flow folder from the **built bundle** the way
