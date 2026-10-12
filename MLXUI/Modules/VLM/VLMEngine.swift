@@ -35,18 +35,20 @@ enum VLMEngine {
         prompt: String,
         image: CGImage,
         modelDir: URL,
-        maxTokens: Int
+        maxTokens: Int,
+        pool: ModelContainerPool = .vlm,
+        holder: MemoryBudget.HolderKind? = .flow
     ) async throws -> String {
         guard FileManager.default.fileExists(atPath: modelDir.path) else {
             throw StageError.modelNotInstalled(id: modelDir.lastPathComponent)
         }
         do {
-            // Some checkpoints (e.g. olmOCR-2, fine-tuned from Qwen2.5-VL) ship a config.json
-            // missing the special-token ids the stock Qwen2.5-VL decoder requires. Fill them
-            // in before the factory decodes it, else load fails with `keyNotFound`.
-            VLMConfigNormalizer.normalizeConfigIfNeeded(at: modelDir)
-            let loader = HFTokenizerLoader()
-            let container = try await VLMModelFactory.shared.loadContainer(from: modelDir, using: loader)
+            // SC-2b: the weights are booked in the shared budget at their real size (`ModelWeightCharge`, via the
+            // VLM `ModelContainerPool` below) and leased for the call, instead of loading outside the ledger. The
+            // container then stays resident (evictable, LRU) rather than being reloaded on every call.
+            let lease = try await pool.lease(directory: modelDir, holder: holder)
+            defer { lease.release() }
+            let container = lease.container
             // Cap resolution before inference so vision attention can't OOM (see maxInputPixels).
             let bounded = ImageLoader.downscaled(image, maxPixels: maxInputPixels)
             return try await container.perform { context in
@@ -77,8 +79,31 @@ enum VLMEngine {
             }
         } catch let error as StageError {
             throw error
+        } catch let error as MemoryBudget.WaitError {
+            throw error          // the sentence that names the model and who holds it (SC-2a-b)
         } catch {
             throw StageError.engineFailure(stage: "VLM", underlying: error)
         }
     }
+
+    /// The pool's loader for a VLM directory: the config normalisation, then `VLMModelFactory`.
+    nonisolated static func loadContainer(directory: URL, architecture: String?) async throws -> ModelContainer {
+        // Some checkpoints (e.g. olmOCR-2, fine-tuned from Qwen2.5-VL) ship a config.json
+        // missing the special-token ids the stock Qwen2.5-VL decoder requires. Fill them
+        // in before the factory decodes it, else load fails with `keyNotFound`.
+        VLMConfigNormalizer.normalizeConfigIfNeeded(at: directory)
+        return try await VLMModelFactory.shared.loadContainer(from: directory, using: HFTokenizerLoader())
+    }
 }
+
+extension ModelContainerPool {
+    /// SC-2b: the VLM weights' pool — the same shared `MemoryBudget` as the LLM pool and `EngineCache`, its own
+    /// loader. Chosen over `EngineCache` because the thing to book and lease is a loaded `ModelContainer` (the stage
+    /// is a closure that owns nothing), which is exactly what `ModelContainerPool` already does for LLM weights.
+    static let vlm = ModelContainerPool(budget: .shared, loader: VLMEngine.loadContainer)
+}
+
+/// The VLM and OCR SDKs build a `VLMStage`, whose weights `VLMEngine` books in the pool above; the engine cache
+/// must book those stages at 0 (see `StageBooksOwnWeights`).
+extension VLMSDK: StageBooksOwnWeights {}
+extension OCRSDK: StageBooksOwnWeights {}

@@ -144,15 +144,8 @@ struct MLXUIApp: App {
             // model to its module and present the module's run view; fall back to a
             // graceful "unsupported" view if resolution fails.
             .sheet(item: $appState.asrRunModel) { model in
-                Group {
-                    if let resolved = appState.registry.bestModule(for: model),
-                       let stage = try? resolved.sdk.makeStage(for: model, config: .default) {
-                        resolved.ui.makeRunView(for: model, stage: stage)
-                    } else {
-                        UnsupportedModelView(model: model)
-                    }
-                }
-                .environment(appState)   // B1 re-inject
+                RunSheetHost(model: model)
+                    .environment(appState)   // B1 re-inject
             }
             .alert("Couldn't Open This Flow", isPresented: Binding(
                 get: { appState.openCatFlowError != nil },
@@ -237,4 +230,45 @@ struct MLXUIApp: App {
                 .environment(appState)
         }
     }
+}
+
+
+/// SC-2b — the registry-driven Run sheet. The stage it hands the module's run view is a `LeasingStage`: the
+/// engine is reserved from the shared budget (`EngineCache`, the same entry a flow row for this model uses) as soon
+/// as the sheet opens, held while it is open, and returned when it closes. A refusal surfaces as the run view's own
+/// error (the waiting sentence), not as new UI.
+private struct RunSheetHost: View {
+    let model: ModelEntry
+    @Environment(AppState.self) private var appState
+    @State private var lease = RunSheetLease()
+
+    var body: some View {
+        Group {
+            if let resolved = appState.registry.bestModule(for: model),
+               let stage = lease.stage(for: model, sdk: resolved.sdk) {
+                resolved.ui.makeRunView(for: model, stage: stage)
+            } else {
+                UnsupportedModelView(model: model)
+            }
+        }
+        .task { await lease.prepare() }
+        .onDisappear { lease.release() }
+    }
+}
+
+/// The sheet's one `LeasingStage`, made once (a view body runs many times).
+@MainActor private final class RunSheetLease {
+    private var stage: LeasingStage?
+
+    func stage(for model: ModelEntry, sdk: any ModelSDK) -> LeasingStage? {
+        if let stage { return stage }
+        guard let probe = try? sdk.makeStage(for: model, config: .default) else { return nil }
+        let made = LeasingStage(model: model, config: .default, probe: probe,
+                                booksWeights: !(sdk is StageBooksOwnWeights))
+        stage = made
+        return made
+    }
+
+    func prepare() async { await stage?.prepare() }
+    func release() { stage?.release() }
 }

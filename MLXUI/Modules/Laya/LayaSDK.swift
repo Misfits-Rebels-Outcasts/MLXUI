@@ -5,18 +5,29 @@ import Foundation
 /// work on every row of a flow (or every keystroke of a standalone Run). Shared with
 /// `LayaRunView` (LY-5) so a flow row and the standalone Run surface don't each keep their own
 /// copy of the same ~0.85 GB checkpoint in memory.
+///
+/// **SC-2b:** the entries live on the shared `MemoryBudget` (`EngineLeaseCache`): real bytes, a lease per use
+/// (`lease(for:holder:)`), held entries skipped by eviction, so a Laya load is visible to chat, flows and the
+/// server instead of sitting outside the ledger.
 actor LayaEngineCache {
     static let shared = LayaEngineCache()
-    private var engines: [String: LayaEngine] = [:]
+    private let cache: EngineLeaseCache<LayaEngine>
 
-    func engine(for directory: URL) async throws -> LayaEngine {
-        let key = directory.path
-        if let cached = engines[key] { return cached }
-        let engine = try await LayaEngine.load(modelDirectory: directory)
-        engines[key] = engine
-        return engine
+    init(budget: MemoryBudget = .shared) {
+        cache = EngineLeaseCache(budget: budget) { directory in try await LayaEngine.load(modelDirectory: directory) }
+    }
+
+    /// Unleased (kept for callers that only need the load to have happened).
+    func engine(for directory: URL) async throws -> LayaEngine { try await cache.engine(for: directory) }
+
+    /// The engine in use until `release()` — what a Run view, a flow decider row and the stage hold.
+    func lease(for directory: URL, holder: MemoryBudget.HolderKind? = nil) async throws -> EngineLeaseCache<LayaEngine>.Lease {
+        try await cache.lease(for: directory, holder: holder)
     }
 }
+
+/// `LayaEngine` is used from several tasks (a flow row, a Run view); its `predict` is the only thing they call.
+extension LayaEngine: @unchecked Sendable {}
 
 /// `text → text` stage wrapping `LayaEngine.predict` for a single question. Real executor
 /// wiring (LY-7, `RealExecutor.runDecider`) branches to `LayaEngine` directly rather than
@@ -94,7 +105,7 @@ extension LayaJSON {
 /// `ModelSDK` for Laya's decision encoder. Claims `.decision` entries backed by
 /// `source == .mlx` and `family == "Laya"` — the family check discriminates Laya from other
 /// decision-domain engines sharing `RunnerKind.decision` (CL-1 gate B; CLM 8B is the first).
-nonisolated struct LayaSDK: ModelSDK {
+nonisolated struct LayaSDK: ModelSDK, StageBooksOwnWeights {
     let id = "laya"
 
     func claim(_ model: ModelEntry) -> ClaimScore {
@@ -115,8 +126,9 @@ nonisolated struct LayaSDK: ModelSDK {
                 let definition = LayaQuestionDefinition(
                     type: request.type, instructions: request.instructions, criteria: request.criteria)
                 let question = try definition.resolve()
-                let engine = try await LayaEngineCache.shared.engine(for: directory)
-                let answers = try engine.predict(state: request.state, questions: [question])
+                let lease = try await LayaEngineCache.shared.lease(for: directory, holder: .flow)
+                defer { lease.release() }
+                let answers = try lease.value.predict(state: request.state, questions: [question])
                 guard let answer = answers.first else {
                     throw LayaPromptError.invalidCriteria("Laya produced no answer")
                 }

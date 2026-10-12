@@ -25,7 +25,9 @@ import Foundation
         let cache = EngineCache.shared
         let makeStage: @Sendable (ModelEntry, StageConfig) async throws -> any PipelineStage = { model, config in
             // SC-2a: leased — the engine is in use until the row lets go of the stage, so a later load can't evict it.
-            try await cache.leasedStage(for: model, config: config) { model, config in
+            // SC-2b: a stage whose engine books its own weights (VLM, OCR, Laya, CLM) is booked at 0 here.
+            let books = await MainActor.run { !(appState.registry.bestModule(for: model)?.sdk is StageBooksOwnWeights) }
+            return try await cache.leasedStage(for: model, config: config, booksWeights: books) { model, config in
                 try await MainActor.run {
                     guard let resolved = appState.registry.bestModule(for: model) else {
                         throw StageError.unsupportedModel(id: model.id, kind: model.runnerKind)

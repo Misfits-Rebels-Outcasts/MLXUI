@@ -18,8 +18,9 @@ struct WhisperUI: ModelUI {
         var rebuild: ((String?) -> any PipelineStage)? = nil
         if model.source == .mlx, model.family.lowercased().contains("whisper") {
             let sdk = MLXWhisperSDK()
-            rebuild = { language in
-                (try? sdk.makeStage(for: model, config: StageConfig(language: language))) ?? stage
+            // SC-2b: each rebuild returns the previous stage's lease and leases the new one.
+            rebuild = { [stage] language in
+                LeasingStage.rebuilding(stage, model: model, sdk: sdk, config: StageConfig(language: language)) ?? stage
             }
         }
         return AnyView(ASRRunView(modelDisplayName: model.displayName,

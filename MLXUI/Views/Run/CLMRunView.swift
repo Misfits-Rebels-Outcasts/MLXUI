@@ -304,8 +304,10 @@ final class CLMRunModel {
                 // MLX-ERR-2: inside the detached task (see `LayaRunModel.run`'s note) —
                 // mlx-swift's handler is `@TaskLocal`, so the guard must not sit outside it.
                 let results = try await MLXErrorGuard.guardedRun {
-                    let engine = try await CLMEngineCache.shared.engine(for: directory)
-                    return try await engine.answer(
+                    // SC-2b: leased for the pass (shared budget, real size).
+                    let lease = try await CLMEngineCache.shared.lease(for: directory, holder: .runWindow)
+                    defer { lease.release() }
+                    return try await lease.value.answer(
                         state: .string(state),
                         questions: [(id: "run", type: type, instructions: instructions, criteria: criteria)])
                 }

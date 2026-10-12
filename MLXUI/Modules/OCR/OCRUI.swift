@@ -22,8 +22,9 @@ struct OCRUI: ModelUI {
             rebuild = nil
         case .freeText, .modes:
             let sdk = sdk
-            rebuild = { prompt in
-                try? sdk?.makeStage(for: model, config: StageConfig(prompt: prompt))
+            // SC-2b: each rebuild returns the previous stage's lease and leases the new one.
+            rebuild = { [stage] prompt in
+                LeasingStage.rebuilding(stage, model: model, sdk: sdk, config: StageConfig(prompt: prompt))
             }
         }
         return AnyView(OCRRunView(modelDisplayName: model.displayName,

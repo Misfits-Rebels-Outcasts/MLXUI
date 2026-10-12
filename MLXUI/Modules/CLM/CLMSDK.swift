@@ -1,24 +1,27 @@
 import Foundation
 
-/// Gate F (`RSI/DelegateCLMBacklog.md` §CL-0): keeps **at most one** loaded `CLMEngine` — CLM
-/// is ~9 GB, the heaviest non-diffusion model a flow can load, so unlike `LayaEngineCache`
-/// (unlimited entries, ~1 GB each) this cache never holds two at once. No generic "release the
-/// warm engine on app idle / memory pressure" trigger exists elsewhere in this codebase to hook
-/// into — checked `FlowKit/EngineCache.swift` (a different thing: a RAM-budgeted cache of
-/// *stages* across a flow run, keyed by model id), `LayaEngineCache` (unlimited, no eviction),
-/// and `WanVideoEngine`/`SeedVR2Engine`'s stage-to-stage `Memory.clearCache()` calls (frees MLX's
-/// transient buffer cache between pipeline stages, not a loaded model instance). Per gate F's own
-/// fallback clause, this cache is loaded for the run's lifetime and never evicted proactively;
-/// asking for a different model directory simply replaces the one held.
+/// The loaded `CLMEngine` per model directory. CLM is ~9 GB, the heaviest non-diffusion model a flow can load.
+///
+/// Gate F (`RSI/DelegateCLMBacklog.md` §CL-0) kept **at most one** loaded by replacing the held engine when a
+/// different directory was asked for, because nothing else could say when to release one. **SC-2b:** the
+/// entry now lives on the shared `MemoryBudget` (`EngineLeaseCache`) at its real size, with a lease per use and
+/// held entries skipped by eviction, so the budget decides what is evicted and when — a 9 GB engine is pushed out
+/// when something else needs the room, never while a row or a Run view is using it. (The one-engine rule is
+/// subsumed: a second CLM directory is the same model family, installed once.)
 actor CLMEngineCache {
     static let shared = CLMEngineCache()
-    private var loaded: (directory: URL, engine: CLMEngine)?
+    private let cache: EngineLeaseCache<CLMEngine>
 
-    func engine(for directory: URL) async throws -> CLMEngine {
-        if let loaded, loaded.directory == directory { return loaded.engine }
-        let engine = try await CLMEngine.load(modelDirectory: directory)
-        loaded = (directory, engine)
-        return engine
+    init(budget: MemoryBudget = .shared) {
+        cache = EngineLeaseCache(budget: budget) { directory in try await CLMEngine.load(modelDirectory: directory) }
+    }
+
+    /// Unleased (kept for callers that only need the load to have happened).
+    func engine(for directory: URL) async throws -> CLMEngine { try await cache.engine(for: directory) }
+
+    /// The engine in use until `release()`.
+    func lease(for directory: URL, holder: MemoryBudget.HolderKind? = nil) async throws -> EngineLeaseCache<CLMEngine>.Lease {
+        try await cache.lease(for: directory, holder: holder)
     }
 }
 
@@ -85,7 +88,7 @@ nonisolated private struct CLMStageRequest {
 /// `ModelSDK` for CLM's decision encoder. Claims `.decision` entries backed by `source == .mlx`
 /// and `family == "CLM"` — the same `runnerKind`/`source` guard `LayaSDK` uses, discriminated
 /// by family (CL-1 gate B) since both share `RunnerKind.decision`.
-nonisolated struct CLMSDK: ModelSDK {
+nonisolated struct CLMSDK: ModelSDK, StageBooksOwnWeights {
     let id = "clm"
 
     func claim(_ model: ModelEntry) -> ClaimScore {
@@ -98,8 +101,9 @@ nonisolated struct CLMSDK: ModelSDK {
         return CLMStage(id: model.id, name: model.displayName) { requestJSON in
             do {
                 let request = try CLMStageRequest(requestJSON: requestJSON)
-                let engine = try await CLMEngineCache.shared.engine(for: directory)
-                let results = try await engine.answer(
+                let lease = try await CLMEngineCache.shared.lease(for: directory, holder: .flow)
+                defer { lease.release() }
+                let results = try await lease.value.answer(
                     state: request.state,
                     questions: [(id: "q", type: request.type, instructions: request.instructions, criteria: request.criteria)])
                 guard let answer = results.first?.answer else {

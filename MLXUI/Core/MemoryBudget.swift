@@ -56,8 +56,39 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     }
 
     /// The app-wide budget: `max(4 GB, total RAM × 0.6)` (the figure `EngineCache` always used).
-    static let shared = MemoryBudget(
-        capacityBytes: EngineCache.defaultBudget(totalRAMGB: SystemInfo.detect().totalRAMGB))
+    static let shared = MemoryBudget(capacityBytes: sharedCapacity(totalRAMGB: SystemInfo.detect().totalRAMGB))
+
+    /// The capacity `shared` is created with: `max(4 GB, RAM × 0.6)`, as always.
+    ///
+    /// **SC-2b (owner, 2026-10-12): in a DEBUG build only**, the launch argument `-MLXUIMemoryBudgetGiB <n>` sets it
+    /// to `n` GiB, so a contention check can be run on a Mac with plenty of room (SC-6 owns a runtime-adjustable
+    /// budget). The argument, its key and this branch are inside `#if DEBUG`: a release build neither contains the
+    /// string nor reads `UserDefaults` for it, and nothing else changes `capacityBytes`.
+    static func sharedCapacity(totalRAMGB: Double, defaults: UserDefaults = .standard) -> Int64 {
+        #if DEBUG
+        if let gib = debugOverrideGiB(defaults: defaults) { return Int64(gib * 1_073_741_824) }
+        #endif
+        return EngineCache.defaultBudget(totalRAMGB: totalRAMGB)
+    }
+
+    /// Whether this build can honour the override at all (tests assert it matches `DEBUG`).
+    static var debugOverrideIsCompiledIn: Bool {
+        #if DEBUG
+        true
+        #else
+        false
+        #endif
+    }
+
+    #if DEBUG
+    static let debugOverrideKey = "MLXUIMemoryBudgetGiB"
+    /// The override in GiB when the launch argument (or a defaults entry) names a positive number.
+    static func debugOverrideGiB(defaults: UserDefaults) -> Double? {
+        guard defaults.object(forKey: debugOverrideKey) != nil else { return nil }
+        let gib = defaults.double(forKey: debugOverrideKey)
+        return gib > 0 ? gib : nil
+    }
+    #endif
 
     /// Eviction priority of prompt-cache snapshots: below every weights holder (PC-1, ruling A1).
     static let snapshotPriority = -1
@@ -108,9 +139,12 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     /// Who holds a model (the lease's caller), for the sentence a refused waiter shows.
     enum HolderKind: Sendable, Equatable {
         case chat, flow, serverRequest
+        /// A model's Run window (ASR, OCR, VLM, Laya, CLM … — SC-2b).
+        case runWindow
         var phrase: String {
             switch self {
             case .chat: "Chat"
+            case .runWindow: "a Run window"
             case .flow: "a flow"
             case .serverRequest: "a server request"
             }

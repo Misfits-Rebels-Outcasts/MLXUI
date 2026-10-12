@@ -262,10 +262,12 @@ final class LayaRunModel {
                 // MLX-ERR-2: inside the detached task, not around it — mlx-swift's handler is
                 // `@TaskLocal`, so a guard on the `@MainActor` method above would not be inherited.
                 let answers = try await MLXErrorGuard.guardedRun {
-                    let engine = try await LayaEngineCache.shared.engine(for: directory)
+                    // SC-2b: the engine is leased for the pass (on the shared budget, at its real size).
+                    let lease = try await LayaEngineCache.shared.lease(for: directory, holder: .runWindow)
+                    defer { lease.release() }
                     // `predict` is a plain synchronous GPU forward pass, so the engine load and the
                     // pass share one guard.
-                    return try engine.predict(state: state, questions: [question])
+                    return try lease.value.predict(state: state, questions: [question])
                 }
                 let elapsedMS = Date().timeIntervalSince(start) * 1000
                 await MainActor.run {

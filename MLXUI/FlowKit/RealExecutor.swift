@@ -33,16 +33,18 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// `makeModelStage` so a test can fake `LayaEngine` without loading a real checkpoint. The
     /// default calls the real `LayaEngineCache`/`LayaEngine.predict`.
     var askLaya: @Sendable (URL, String, [LayaQuestion]) async throws -> [LayaAnswer] = { directory, state, questions in
-        let engine = try await LayaEngineCache.shared.engine(for: directory)
-        return try await engine.predict(state: state, questions: questions)
+        let lease = try await LayaEngineCache.shared.lease(for: directory, holder: .flow)   // SC-2b
+        defer { lease.release() }
+        return try await lease.value.predict(state: state, questions: questions)
     }
     /// CL-6 — `CLMDecisionEngine`'s only call into the actual engine, same injection shape as
     /// `askLaya`. The default calls the real `CLMEngineCache`/`CLMEngine.answer` for a single
     /// question.
     var askCLM: @Sendable (URL, CLMJSON, LayaQuestionType, CLMJSON, CLMJSON) async throws -> LayaAnswer = {
         directory, state, type, instructions, criteria in
-        let engine = try await CLMEngineCache.shared.engine(for: directory)
-        let results = try await engine.answer(
+        let lease = try await CLMEngineCache.shared.lease(for: directory, holder: .flow)   // SC-2b
+        defer { lease.release() }
+        let results = try await lease.value.answer(
             state: state, questions: [(id: "q", type: type, instructions: instructions, criteria: criteria)])
         guard let first = results.first else {
             throw LayaPromptError.invalidCriteria("CLM produced no answer")
