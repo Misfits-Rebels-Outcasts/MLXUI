@@ -63,7 +63,9 @@ nonisolated enum MLXErrorGuard {
     /// message is MLX's own diagnostic text, so it is often the most useful part.
     static func sentence(for error: Error) -> String {
         if let mlx = error as? MLXError, case .caught(let message) = mlx {
-            return "the model's MLX runtime reported an error — \(message). Try the row again; if it repeats, re-install the model."
+            // "Try again", not "Try the row again": this sentence is used by flow rows, by every
+            // per-model Run UI and (MLX-ERR-3) by the chat, and two of those three have no row.
+            return "the model's MLX runtime reported an error — \(message). Try again; if it repeats, re-install the model."
         }
         return (error as? LocalizedError)?.errorDescription ?? String(describing: error)
     }
@@ -109,11 +111,51 @@ nonisolated enum MLXErrorGuard {
         return value
     }
 
+    /// Consume a stream that MLX work feeds, **stopping at the first MLX error**.
+    ///
+    /// MLX-ERR-3 (owner ruling R-ME3-1, 2026-10-12: *"stop at the error … The partial reply stays,
+    /// and the turn ends with the error sentence visible"*). `guardedRun` cannot do this: it
+    /// converts at **block exit**, so a mid-stream error would surface only when the producer
+    /// finished and the consumer would keep going until then. This checks **per element**, before
+    /// the element is handed on, so the loop stops at the error and everything already consumed
+    /// stays where the caller put it.
+    ///
+    /// - Parameter onEach: called for each element **before** it is passed on. Return `false` to
+    ///   stop consuming deliberately (e.g. the user switched conversations).
+    ///
+    /// **`makeStream` is a closure because it has to be, not for style.** mlx-swift's handler is
+    /// `@TaskLocal`, and both producers in this app (`AgentSession.rawStreamResponse` and
+    /// mlx-swift-lm's `ChatSession.streamMap`) do their work in a plain `Task {}` — which inherits
+    /// task-locals from the task that *creates* it. Create the stream inside this scope and the
+    /// handler reaches the generation; pass in an already-created stream and it does not. Measured
+    /// by MLX-ERR-3's point-2 probe (journal `2026-469`):
+    ///
+    /// | stream created | error caught by | elements delivered | fallback |
+    /// |---|---|---|---|
+    /// | **inside** this scope | the scoped `ErrorBox` → thrown | 2 of 5 (**stopped at the error**) | 0 |
+    /// | outside, passed in | nothing — the fallback recorded it | 5 of 5 (drained) | 1 |
+    ///
+    /// The outside case fails **silently**: the error goes to the process-wide fallback,
+    /// `check()` never throws, and the loop runs to completion — precisely the bug this helper
+    /// exists to fix, while looking correct at the call site. `aStreamMadeOutsideTheScopeDefeatsTheGuard`
+    /// in `MLXErrorGuardTests` pins that so the closure parameter cannot be "simplified" away.
+    static func guardedStream<S: AsyncSequence>(
+        _ makeStream: () -> S,
+        onEach: (S.Element) throws -> Bool
+    ) async throws {
+        try await withError { box in
+            for try await element in makeStream() {
+                try box.check()
+                let keepGoing = try onEach(element)
+                if !keepGoing { return }
+            }
+        }
+    }
+
     /// How many messages the fallback has recorded. Exposed for tests and for the generation check
     /// above; a plain count is enough because it only ever moves forward.
     static func fallbackGeneration() -> Int {
-        recorder.generation
-    }
+        recorder.generation    }
 
     // MARK: - Process-wide fallback
 

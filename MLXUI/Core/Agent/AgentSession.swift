@@ -254,3 +254,20 @@ nonisolated final class AgentSession {
         ToolCallFormatTable.resolved(forModelType: modelType, configData: nil)
     }
 }
+
+/// The one thing `ModelRunner.send` needs from a streaming session.
+///
+/// MLX-ERR-3's test seam (owner ruling R-ME3-2, 2026-10-12: *"Use the one-method protocol for the
+/// test seam, and assert that the stream stopped early."*). It exists so a test can hand `send` a
+/// stream that reports an MLX error part-way through and assert the turn **stopped there** — which
+/// is the observable difference R-ME3-1 creates, and the thing a closure-shaped seam could not
+/// express. `AgentSession` is the only production conformer.
+///
+/// Deliberately not `Sendable`: `AgentSession` holds a `ModelContainer` and is not, and the session
+/// is built and consumed inside one `ModelRunner` task, so nothing here crosses an isolation
+/// boundary.
+protocol ChatStreamingSession {
+    func streamResponse(to prompt: String) -> AsyncThrowingStream<String, Error>
+}
+
+extension AgentSession: ChatStreamingSession {}

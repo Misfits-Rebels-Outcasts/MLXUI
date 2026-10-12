@@ -131,6 +131,13 @@ final class ModelRunner {
     /// that is what makes a B1 test able to run the *whole* turn, past the append and the save,
     /// with no model. `nil` in the app.
     @ObservationIgnored var containerForTesting: (@Sendable () async throws -> ModelContainer)?
+
+    /// Test seam only (MLX-ERR-3). Supplies the streaming session **instead of** loading weights, so
+    /// a test can drive a whole turn against a stream that reports an MLX error part-way through —
+    /// and assert the turn stopped there. It has to sit before the load: no test in this suite can
+    /// build a `ModelContainer`, so a seam that replaced the session only *after* `containerForModel`
+    /// would be unreachable. `nil` in the app.
+    @ObservationIgnored var streamingSessionForTesting: (@Sendable () -> any ChatStreamingSession)?
     #endif
 
     /// S1-1: loaded weights live in the shared `ModelContainerPool` (chat, flow rows and the
@@ -660,53 +667,30 @@ final class ModelRunner {
         currentTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let container = try await self.containerForModel(model, dir: modelDir)
+                // MLX-ERR-3: the session (and with it the weights load) is built through a factory
+                // so the test seam can replace it, and the whole turn — load, generation and the
+                // in-app MLX tools that run through the session's tool dispatch on this same task —
+                // sits inside one guard.
+                let session = try await self.streamingSession(
+                    for: model, dir: modelDir, instructions: instructions, history: history,
+                    registry: registry, fileScope: fileScope,
+                    turnConversationID: turnConversationID)
 
-                let session = AgentSession(
-                    model: container,
-                    instructions: instructions,
-                    history: history,
-                    registry: registry,
-                    fileScope: fileScope,
-                    // 512 was too tight once reasoning models entered the picture:
-                    // Qwen3's <think> block alone can run 250–500 tokens, so the
-                    // generation was being truncated *before* the tool call was
-                    // emitted. The symptom is indistinguishable from "the model
-                    // chose not to call a tool" — reasoning text, then nothing.
-                    parameters: GenerateParameters(maxTokens: 2048, temperature: 0.7),
-                    maxToolCalls: self.agentToolSettings.toolCallLimit,
-                    approve: { [weak self] call, tool in
-                        switch await self?.approvalDecision(for: tool) {
-                        case .autoApprove:     return true
-                        case .prompt:
-                            return await self?.requestApproval(for: tool, call: call) ?? false
-                        case .autoDeny, .none: return false
-                        }
-                    },
-                    onEvent: { [weak self] event in
-                        Task { @MainActor [weak self] in
-                            guard let self else { return }
-                            // Late events stay out of a switched-to conversation; the
-                            // audit log records the session regardless.
-                            if self.activeConversationID == turnConversationID {
-                                self.transcript.apply(event)
-                            }
-                            self.auditLog.record(event)
-                        }
-                    }
-                )
-
-                for try await chunk in session.streamResponse(to: modelPrompt) {
+                // R-ME3-1 (owner, 2026-10-12): **stop at the error.** `makeStream` must be a
+                // closure: the producer's `Task {}` only inherits mlx-swift's `@TaskLocal` handler
+                // if it is created inside the guard (journal 2026-469).
+                try await MLXErrorGuard.guardedStream({ session.streamResponse(to: modelPrompt) }) { chunk in
                     // A late chunk must not leak into a conversation the user switched to
                     // (switching stops the task, but a chunk can already be in flight).
-                    guard self.activeConversationID == turnConversationID else { break }
+                    guard self.activeConversationID == turnConversationID else { return false }
                     self.transcript.appendAssistantChunk(chunk)
+                    return true
                 }
             } catch is CancellationError {
                 // stopped by the user — leave the partial transcript in place
             } catch {
                 if !Task.isCancelled {
-                    self.errorMessage = "Failed: \(error.localizedDescription)"
+                    self.errorMessage = "Failed: \(MLXErrorGuard.sentence(for: error))"
                 }
             }
             self.isRunning = false
@@ -861,6 +845,60 @@ final class ModelRunner {
         if let injected = containerForTesting { return try await injected() }
         #endif
         return try await pool.container(for: model, directory: dir)
+    }
+
+    /// Build the streaming session for one turn — the single place `send` gets one (MLX-ERR-3).
+    ///
+    /// Extracted from `send` so the test seam can replace the **whole** session, weights load
+    /// included: `streamingSessionForTesting` is checked first, so a test never needs a
+    /// `ModelContainer`, which nothing in this suite can build. The `parameters`/`approve`/`onEvent`
+    /// wiring is unchanged from when it lived inline in `send`.
+    private func streamingSession(
+        for model: ModelEntry,
+        dir: URL,
+        instructions: String?,
+        history: [Chat.Message],
+        registry: ToolRegistry,
+        fileScope: FileScope?,
+        turnConversationID: UUID?
+    ) async throws -> any ChatStreamingSession {
+        #if DEBUG
+        if let injected = streamingSessionForTesting { return injected() }
+        #endif
+        let container = try await containerForModel(model, dir: dir)
+        return AgentSession(
+            model: container,
+            instructions: instructions,
+            history: history,
+            registry: registry,
+            fileScope: fileScope,
+            // 512 was too tight once reasoning models entered the picture:
+            // Qwen3's <think> block alone can run 250–500 tokens, so the
+            // generation was being truncated *before* the tool call was
+            // emitted. The symptom is indistinguishable from "the model
+            // chose not to call a tool" — reasoning text, then nothing.
+            parameters: GenerateParameters(maxTokens: 2048, temperature: 0.7),
+            maxToolCalls: agentToolSettings.toolCallLimit,
+            approve: { [weak self] call, tool in
+                switch await self?.approvalDecision(for: tool) {
+                case .autoApprove:     return true
+                case .prompt:
+                    return await self?.requestApproval(for: tool, call: call) ?? false
+                case .autoDeny, .none: return false
+                }
+            },
+            onEvent: { [weak self] event in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    // Late events stay out of a switched-to conversation; the
+                    // audit log records the session regardless.
+                    if self.activeConversationID == turnConversationID {
+                        self.transcript.apply(event)
+                    }
+                    self.auditLog.record(event)
+                }
+            }
+        )
     }
 
     private func showUnsupported(_ type: String, _ model: ModelEntry) {

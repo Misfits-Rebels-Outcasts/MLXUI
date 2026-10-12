@@ -147,6 +147,91 @@ struct MLXErrorGuardTests {
                 "the body's own throw must win — if this starts failing, `withError`'s contract changed")
     }
 
+    // MARK: - MLX-ERR-3: guardedStream, and the ordering that makes it work
+
+    /// A producer shaped exactly like the two real ones (`AgentSession.rawStreamResponse`,
+    /// mlx-swift-lm's `ChatSession.streamMap`): `makeStream()` plus a plain `Task {}` that yields
+    /// some elements, trips an MLX error, then keeps going.
+    private func streamThatErrorsAfter(_ chunks: Int, thenKeepsGoing late: Int)
+        -> AsyncThrowingStream<String, Error> {
+        let (stream, continuation) = AsyncThrowingStream<String, Error>.makeStream()
+        let task = Task {
+            for i in 0 ..< chunks {
+                continuation.yield("chunk-\(i)")
+                try? await Task.sleep(for: .milliseconds(2))
+            }
+            triggerAnMLXError()
+            for i in 0 ..< late {              // must never reach the caller
+                continuation.yield("late-\(i)")
+                try? await Task.sleep(for: .milliseconds(2))
+            }
+            continuation.finish()
+        }
+        _ = task
+        return stream
+    }
+
+    /// **R-ME3-1**: the loop stops AT the error, and what was consumed before it stays.
+    @Test func guardedStreamStopsAtTheErrorAndKeepsWhatCameBefore() async throws {
+        MLXErrorGuard.installFallback()
+        let before = MLXErrorGuard.fallbackGeneration()
+        var caught: Error?
+        var delivered: [String] = []
+        do {
+            try await MLXErrorGuard.guardedStream({ self.streamThatErrorsAfter(2, thenKeepsGoing: 3) }) { chunk in
+                delivered.append(chunk)
+                return true
+            }
+            Issue.record("expected the MLX error to end the stream")
+        } catch {
+            caught = error
+        }
+        let error = try #require(caught)
+        #expect(MLXErrorGuard.isMLXError(error), "expected an MLXError, got \(error)")
+        #expect(delivered == ["chunk-0", "chunk-1"],
+                "the two chunks before the error must survive and nothing after it may arrive")
+        #expect(MLXErrorGuard.fallbackGeneration() == before,
+                "the scoped handler should have caught it — nothing may reach the fallback")
+    }
+
+    /// `onEach` returning `false` stops deliberate consumption (the conversation-switch case),
+    /// without inventing an error.
+    @Test func guardedStreamHonoursAnEarlyStopFromOnEach() async throws {
+        var delivered: [String] = []
+        try await MLXErrorGuard.guardedStream({ self.streamThatErrorsAfter(4, thenKeepsGoing: 0) }) { chunk in
+            delivered.append(chunk)
+            return delivered.count < 2      // stop after two
+        }
+        #expect(delivered == ["chunk-0", "chunk-1"])
+    }
+
+    /// **The trap the point-2 probe found, pinned.** A stream created *outside* the scope defeats
+    /// the guard completely: the producer's `Task {}` does not inherit mlx-swift's `@TaskLocal`
+    /// handler, so the error goes to the process-wide fallback, `check()` never throws, and the
+    /// loop drains. That is why `guardedStream` takes a closure — this test exists so nobody
+    /// "simplifies" it into `guardedStream(someStream) { … }` and silently reintroduces the bug.
+    @Test func aStreamMadeOutsideTheScopeDefeatsTheGuard() async throws {
+        MLXErrorGuard.installFallback()
+        let before = MLXErrorGuard.fallbackGeneration()
+        let preMade = streamThatErrorsAfter(2, thenKeepsGoing: 3)   // created BEFORE any scope
+
+        var caught: Error?
+        var delivered: [String] = []
+        do {
+            try await withError { box in
+                for try await chunk in preMade {
+                    try box.check()
+                    delivered.append(chunk)
+                }
+            }
+        } catch { caught = error }
+
+        #expect(caught == nil, "the scoped handler cannot see a producer created outside its scope")
+        #expect(delivered.count == 5, "so the loop drains every element, including the late ones")
+        #expect(MLXErrorGuard.fallbackGeneration() > before,
+                "and the error can only be seen by the process-wide fallback")
+    }
+
     // MARK: - MLX-ERR-2: the Run UIs
 
     /// The rule that makes the process-wide fallback safe to ship: if an MLX error escaped through
