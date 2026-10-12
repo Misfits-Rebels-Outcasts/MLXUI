@@ -170,7 +170,10 @@ final class EmbeddingRunModel {
         let texts = textB.map { [textA, $0] } ?? [textA]
         Task {
             do {
-                let vectors = try await EmbeddingEngine.embed(texts, modelDirectory: directory)
+                // MLX-ERR-2 (see MLXErrorGuard.guardedRun).
+                let vectors = try await MLXErrorGuard.guardedRun {
+                    try await EmbeddingEngine.embed(texts, modelDirectory: directory)
+                }
                 self.dimensions = vectors.first?.count
                 if vectors.count == 2 {
                     // Vectors are L2-normalized, so cosine similarity == dot product.
@@ -180,7 +183,7 @@ final class EmbeddingRunModel {
                 self.didEmbed = true
                 self.isRunning = false
             } catch {
-                self.errorText = "\(error)"
+                self.errorText = MLXErrorGuard.sentence(for: error)
                 self.isRunning = false
             }
         }

@@ -49,21 +49,29 @@ final class SegmentAnythingRunModel {
 
         Task {
             do {
-                progress = 0.1
-                let features = try await SegmentAnythingEngine.encodeImage(source, modelID: modelID)
-                progress = 0.7
-                let (masks, iouScores) = try await SegmentAnythingEngine.decodeMasks(
-                    features: features,
-                    points: floatPts,
-                    labels: labels,
-                    modelID: modelID)
-                progress = 0.9
-                let composite = SegmentAnythingEngine.renderTopMask(masks: masks, iouScores: iouScores, sourceImage: source)
+                // MLX-ERR-2: the whole three-step engine sequence sits in one guard, because
+                // `renderTopMask` **cannot throw** — it forces its evaluation inside
+                // (`topMaskLogits` → `.asArray`), so only a `guarded` block's exit check can ever
+                // see an MLX error raised there. Guarding just the `try await` calls would leave
+                // that path showing a result.
+                let composite = try await MLXErrorGuard.guardedRun {
+                    progress = 0.1
+                    let features = try await SegmentAnythingEngine.encodeImage(source, modelID: modelID)
+                    progress = 0.7
+                    let (masks, iouScores) = try await SegmentAnythingEngine.decodeMasks(
+                        features: features,
+                        points: floatPts,
+                        labels: labels,
+                        modelID: modelID)
+                    progress = 0.9
+                    return SegmentAnythingEngine.renderTopMask(masks: masks, iouScores: iouScores,
+                                                               sourceImage: source)
+                }
                 resultImage = composite
                 isRunning = false
                 progress = 1.0
             } catch {
-                errorText = "\(error)"
+                errorText = MLXErrorGuard.sentence(for: error)
                 isRunning = false
             }
         }

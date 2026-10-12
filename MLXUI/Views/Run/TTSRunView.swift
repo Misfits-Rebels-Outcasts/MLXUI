@@ -157,7 +157,10 @@ final class TTSRunModel {
 
         Task {
             do {
-                let result = try await stage.run(.text(text)) { _ in }
+                // MLX-ERR-2 (see MLXErrorGuard.guardedRun). Covers Kokoro and MLXAudioTTS.
+                let result = try await MLXErrorGuard.guardedRun {
+                    try await stage.run(.text(text)) { _ in }
+                }
                 guard case let .audio(audio) = result else {
                     throw StageError.kindMismatch(expected: .audio, got: result.kind)
                 }
@@ -166,7 +169,7 @@ final class TTSRunModel {
                 self.isRunning = false
                 self.play()   // auto-play the result
             } catch {
-                self.errorText = "\(error)"
+                self.errorText = MLXErrorGuard.sentence(for: error)
                 self.isRunning = false
             }
         }

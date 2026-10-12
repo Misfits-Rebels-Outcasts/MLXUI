@@ -191,10 +191,15 @@ final class MusicGenRunModel: NSObject, AVAudioPlayerDelegate {
 
         Task {
             do {
-                let result = try await stage.run(.text(prompt)) { fraction in
-                    Task { @MainActor in
-                        self.progress = fraction
-                        self.progressLabel = Self.label(for: fraction)
+                // MLX-ERR-2: an MLX error inside the engine becomes a thrown sentence instead of
+                // mlx-swift's `fatalError`, and a run in which the process-wide fallback fired can
+                // never be reported as successful (see `MLXErrorGuard.guardedRun`).
+                let result = try await MLXErrorGuard.guardedRun {
+                    try await stage.run(.text(prompt)) { fraction in
+                        Task { @MainActor in
+                            self.progress = fraction
+                            self.progressLabel = Self.label(for: fraction)
+                        }
                     }
                 }
                 guard case let .audio(audio) = result else {
@@ -206,7 +211,7 @@ final class MusicGenRunModel: NSObject, AVAudioPlayerDelegate {
                 self.progress = 1.0
                 self.durationLabel = String(format: "%.1f s", Double(audio.samples.count) / Double(audio.sampleRate))
             } catch {
-                self.errorText = "\(error)"
+                self.errorText = MLXErrorGuard.sentence(for: error)
                 self.isRunning = false
             }
         }

@@ -201,11 +201,14 @@ final class ImageQARunModel {
 
         Task {
             do {
-                let result = try await stage.run(.image(ImageMedia(cgImage: image))) { _ in }
+                // MLX-ERR-2 (see MLXErrorGuard.guardedRun). Covers VLM.
+                let result = try await MLXErrorGuard.guardedRun {
+                    try await stage.run(.image(ImageMedia(cgImage: image))) { _ in }
+                }
                 if case let .text(text) = result { self.answer = text }
                 self.isRunning = false
             } catch {
-                self.errorText = "\(error)"
+                self.errorText = MLXErrorGuard.sentence(for: error)
                 self.isRunning = false
             }
         }

@@ -185,14 +185,17 @@ final class SDXLTurboRunModel {
 
         Task {
             do {
-                let result = try await stage.run(.text(prompt)) { fraction in
-                    Task { @MainActor in self.progress = fraction }
+                // MLX-ERR-2 (see MLXErrorGuard.guardedRun).
+                let result = try await MLXErrorGuard.guardedRun {
+                    try await stage.run(.text(prompt)) { fraction in
+                        Task { @MainActor in self.progress = fraction }
+                    }
                 }
                 if case let .image(media) = result { self.image = media.cgImage }
                 self.isRunning = false
                 self.progress = 1.0
             } catch {
-                self.errorText = "\(error)"
+                self.errorText = MLXErrorGuard.sentence(for: error)
                 self.isRunning = false
             }
         }

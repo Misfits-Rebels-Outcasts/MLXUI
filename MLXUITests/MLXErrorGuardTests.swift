@@ -146,6 +146,78 @@ struct MLXErrorGuardTests {
         #expect(!MLXErrorGuard.isMLXError(error),
                 "the body's own throw must win — if this starts failing, `withError`'s contract changed")
     }
+
+    // MARK: - MLX-ERR-2: the Run UIs
+
+    /// The rule that makes the process-wide fallback safe to ship: if an MLX error escaped through
+    /// the **fallback** during a guarded call, the call must fail even though its body returned
+    /// normally. Otherwise a Run UI would paint a successful result produced by an engine that had
+    /// already errored — the "wrong output nobody notices" shape.
+    ///
+    /// The error has to happen somewhere the scoped handler does **not** reach, or the block-exit
+    /// check would catch it instead and this would pass for the wrong reason. A **detached** task
+    /// is the faithful case: detached tasks do not inherit task-local values, so mlx-swift's
+    /// `@TaskLocal` handler is absent there and the message goes to the fallback — exactly what a
+    /// stray engine thread does in the app.
+    @Test func anMLXErrorEscapingThroughTheFallbackStillFailsTheCall() async throws {
+        var caught: Error?
+        do {
+            _ = try await MLXErrorGuard.guardedRun { () -> Int in
+                await Task.detached { triggerAnMLXError() }.value
+                return 42          // the body "succeeds"
+            }
+            Issue.record("expected the escaped MLX error to fail the call")
+        } catch {
+            caught = error
+        }
+        let error = try #require(caught)
+        #expect(MLXErrorGuard.isMLXError(error), "expected an MLXError, got \(error)")
+        #expect(!MLXErrorGuard.sentence(for: error).isEmpty)
+    }
+
+    /// A generation counter, not a text comparison: the same MLX error happening twice must still
+    /// be visible as "something happened during this call".
+    @Test func theFallbackGenerationAdvancesOnEveryMessage() {
+        MLXErrorGuard.installFallback()
+        let before = MLXErrorGuard.fallbackGeneration()
+        triggerAnMLXError()
+        triggerAnMLXError()
+        #expect(MLXErrorGuard.fallbackGeneration() >= before + 2)
+    }
+
+    /// **The requirement's end-to-end test**: one Run UI's view model, driven with an injected MLX
+    /// error, must put the sentence in its own error bar and must not report a result.
+    ///
+    /// `MusicGenRunModel.generate(prompt:stage:)` is the cleanest seam of the fourteen — the stage
+    /// is a parameter — and it is the same shape as Flux/SDXL/TTS/ASR/VLM/OCR, so this covers the
+    /// pattern rather than one screen. `runOneShot` is what the other modules' tests would reuse.
+    @Test @MainActor func aRunUIWithAnInjectedMLXErrorShowsTheSentenceAndNoResult() async throws {
+        let model = MusicGenRunModel()
+        model.generate(prompt: "calm ambient background music", stage: AudioStageThatRaisesAnMLXError())
+
+        let settled = await waitUntil { !model.isRunning }
+        #expect(settled, "the run should settle rather than stay in `isRunning`")
+
+        let shown = try #require(model.errorText, "the Run UI must show an error, not a result")
+        #expect(shown.contains("MLX"), "expected the MLX sentence, got: \(shown)")
+        #expect(shown.contains("runtime"), "expected the guard's sentence, got: \(shown)")
+        #expect(model.didGenerate == false,
+                "a run in which MLX reported an error must never report success")
+    }
+
+    /// Poll the main actor until `condition` holds. The Run models start an unstructured `Task` and
+    /// have no completion hook, so a test has to wait for the state they write; sleeping yields the
+    /// main actor so that task can run.
+    @MainActor
+    private func waitUntil(timeout: Duration = .seconds(20),
+                           _ condition: () -> Bool) async -> Bool {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while ContinuousClock.now < deadline {
+            if condition() { return true }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return condition()
+    }
 }
 
 /// A deterministic MLX error with no weights, no model and no GPU-heavy path: mlx-swift's own
@@ -172,5 +244,22 @@ private nonisolated struct TextStageThatRaisesAnMLXError: PipelineStage {
         triggerAnMLXError()
         progress(1.0)
         return input
+    }
+}
+
+/// A `.text → .audio` stage that raises an MLX error and then returns a (silent) buffer normally.
+/// The Run UI under test must fail because of the **MLX error**, not because the stage refused
+/// anything — so it returns a shape the view model would otherwise accept.
+private nonisolated struct AudioStageThatRaisesAnMLXError: PipelineStage {
+    let id = "mlxerr.audio"
+    let name = "MLX error audio stage"
+    var accepts: MediaKind { .text }
+    var produces: MediaKind { .audio }
+
+    func run(_ input: Media, progress: @Sendable @escaping (Double) -> Void) async throws -> Media {
+        try require(input, .text)
+        triggerAnMLXError()
+        progress(1.0)
+        return .audio(AudioBuffer(samples: [0, 0], sampleRate: 32_000))
     }
 }

@@ -259,21 +259,25 @@ final class WanRunModel {
 
         Task {
             do {
-                let frames = try await WanVideoEngine.generateAll(
-                    prompt:         prompt,
-                    negativePrompt: negativePrompt,
-                    modelID:        modelID,
-                    numSteps:       numSteps,
-                    numFrames:      numFrames,
-                    latH:           latH,
-                    latW:           latW,
-                    progress: { fraction, label in
-                        Task { @MainActor in
-                            self.progress = fraction
-                            self.progressLabel = label
+                // MLX-ERR-2 (see MLXErrorGuard.guardedRun). Only the MLX half is guarded;
+                // `assembleMp4` below is AVFoundation and reports its own errors to the same catch.
+                let frames = try await MLXErrorGuard.guardedRun {
+                    try await WanVideoEngine.generateAll(
+                        prompt:         prompt,
+                        negativePrompt: negativePrompt,
+                        modelID:        modelID,
+                        numSteps:       numSteps,
+                        numFrames:      numFrames,
+                        latH:           latH,
+                        latW:           latW,
+                        progress: { fraction, label in
+                            Task { @MainActor in
+                                self.progress = fraction
+                                self.progressLabel = label
+                            }
                         }
-                    }
-                )
+                    )
+                }
                 if let first = frames.first { thumbnail = first }
                 progressLabel = "Assembling MP4…"
 
@@ -289,7 +293,7 @@ final class WanRunModel {
                 progress = 1.0
                 progressLabel = "Done — \(frames.count) frames"
             } catch {
-                errorText = "\(error)"; isRunning = false
+                errorText = MLXErrorGuard.sentence(for: error); isRunning = false
             }
         }
     }

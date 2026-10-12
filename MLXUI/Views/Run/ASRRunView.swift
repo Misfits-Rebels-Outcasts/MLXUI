@@ -174,11 +174,15 @@ final class ASRRunModel {
             defer { if accessed { audioURL.stopAccessingSecurityScopedResource() } }
             do {
                 let buffer = try AudioFileReader.read(audioURL)
-                let result = try await stage.run(.audio(buffer)) { _ in }
+                // MLX-ERR-2 (see MLXErrorGuard.guardedRun). Covers MLXWhisper and Voxtral; the
+                // WhisperKit path is CoreML and can't raise an MLX error, so this is a no-op there.
+                let result = try await MLXErrorGuard.guardedRun {
+                    try await stage.run(.audio(buffer)) { _ in }
+                }
                 if case let .text(text) = result { self.transcript = text }
                 self.isRunning = false
             } catch {
-                self.errorText = "\(error)"
+                self.errorText = MLXErrorGuard.sentence(for: error)
                 self.isRunning = false
             }
         }

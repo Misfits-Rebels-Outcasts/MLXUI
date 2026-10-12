@@ -301,10 +301,14 @@ final class CLMRunModel {
         Task.detached(priority: .userInitiated) {
             let start = Date()
             do {
-                let engine = try await CLMEngineCache.shared.engine(for: directory)
-                let results = try await engine.answer(
-                    state: .string(state),
-                    questions: [(id: "run", type: type, instructions: instructions, criteria: criteria)])
+                // MLX-ERR-2: inside the detached task (see `LayaRunModel.run`'s note) —
+                // mlx-swift's handler is `@TaskLocal`, so the guard must not sit outside it.
+                let results = try await MLXErrorGuard.guardedRun {
+                    let engine = try await CLMEngineCache.shared.engine(for: directory)
+                    return try await engine.answer(
+                        state: .string(state),
+                        questions: [(id: "run", type: type, instructions: instructions, criteria: criteria)])
+                }
                 let elapsedMS = Date().timeIntervalSince(start) * 1000
                 await MainActor.run {
                     self.latencyMS = elapsedMS
@@ -314,7 +318,7 @@ final class CLMRunModel {
                 }
             } catch {
                 await MainActor.run {
-                    self.errorText = "\(error)"
+                    self.errorText = MLXErrorGuard.sentence(for: error)
                     self.isRunning = false
                     self.hasLoadedOnce = true
                 }

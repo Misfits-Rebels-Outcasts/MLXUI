@@ -259,8 +259,14 @@ final class LayaRunModel {
             let start = Date()
             do {
                 let question = try definition.resolve()
-                let engine = try await LayaEngineCache.shared.engine(for: directory)
-                let answers = try engine.predict(state: state, questions: [question])
+                // MLX-ERR-2: inside the detached task, not around it — mlx-swift's handler is
+                // `@TaskLocal`, so a guard on the `@MainActor` method above would not be inherited.
+                let answers = try await MLXErrorGuard.guardedRun {
+                    let engine = try await LayaEngineCache.shared.engine(for: directory)
+                    // `predict` is a plain synchronous GPU forward pass, so the engine load and the
+                    // pass share one guard.
+                    return try engine.predict(state: state, questions: [question])
+                }
                 let elapsedMS = Date().timeIntervalSince(start) * 1000
                 await MainActor.run {
                     self.latencyMS = elapsedMS
@@ -269,7 +275,7 @@ final class LayaRunModel {
                 }
             } catch {
                 await MainActor.run {
-                    self.errorText = "\(error)"
+                    self.errorText = MLXErrorGuard.sentence(for: error)
                     self.isRunning = false
                 }
             }

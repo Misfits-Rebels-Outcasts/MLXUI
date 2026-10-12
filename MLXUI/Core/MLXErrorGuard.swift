@@ -74,6 +74,47 @@ nonisolated enum MLXErrorGuard {
         error is MLXError
     }
 
+    // MARK: - The Run-UI entry point (MLX-ERR-2)
+
+    /// Wrap a **Run UI's** engine call.
+    ///
+    /// This is `guarded(_:)` plus one rule that only matters for a view model: an MLX error that
+    /// escaped through the process-wide fallback *during this call* also fails the run.
+    ///
+    /// That second rule is what makes the fallback safe to ship. Layer 2 keeps the app alive by
+    /// recording and logging instead of dying — which, on its own, would let a Run UI paint a
+    /// **successful** result produced by an engine that had already errored (mlx-swift's own docs
+    /// warn the array from a failed op is suspect). A view model that shows "done" there is worse
+    /// than one that crashed: it is the CFM-R16-1 shape, "a wrong output nobody notices". So a
+    /// wrapped Run UI may never report success for a run in which the fallback fired.
+    ///
+    /// Uses a **generation counter**, not the message text: the same MLX error happening twice in a
+    /// row would be invisible to a text comparison.
+    static func guardedRun<R>(_ body: () async throws -> R) async throws -> R {
+        let start = recorder.generation
+        let value = try await guarded(body)
+        if let escaped = recorder.firstMessage(after: start) {
+            throw MLXError.caught(escaped)
+        }
+        return value
+    }
+
+    /// Synchronous form of ``guardedRun(_:)``.
+    static func guardedRun<R>(_ body: () throws -> R) throws -> R {
+        let start = recorder.generation
+        let value = try guarded(body)
+        if let escaped = recorder.firstMessage(after: start) {
+            throw MLXError.caught(escaped)
+        }
+        return value
+    }
+
+    /// How many messages the fallback has recorded. Exposed for tests and for the generation check
+    /// above; a plain count is enough because it only ever moves forward.
+    static func fallbackGeneration() -> Int {
+        recorder.generation
+    }
+
     // MARK: - Process-wide fallback
 
     /// Install the process-wide fallback, once. Safe to call more than once.
@@ -129,14 +170,25 @@ nonisolated enum MLXErrorGuard {
         private let lock = NSLock()
         private let log = Logger(subsystem: "net.connectcode.mlxui", category: "mlx-error")
         private var stored: String?
+        /// Monotonic count of recorded messages — lets a caller ask "did one happen during this
+        /// call?" even when the text repeats. Only ever incremented.
+        private var count = 0
 
         var message: String? {
             get { lock.withLock { stored } }
             set { lock.withLock { stored = newValue } }
         }
 
+        var generation: Int { lock.withLock { count } }
+
+        /// The first message recorded after `generation`, or nil if none was.
+        func firstMessage(after generation: Int) -> String? {
+            lock.withLock { count > generation ? stored : nil }
+        }
+
         func record(_ message: String) {
             let isFirst = lock.withLock { () -> Bool in
+                count += 1
                 guard stored == nil else { return false }
                 stored = message
                 return true

@@ -164,17 +164,23 @@ struct MLXAudioTTSRunView: View {
                 defer { if accessed { url.stopAccessingSecurityScopedResource() } }
                 return try? AudioFileReader.read(url)
             }
+            // MLX-ERR-2: the engine call lives inside the stage closure, so the guard goes here —
+            // wrapping only the `model.synthesize(...)` call below would never see the error.
             let stage = TTSStage(id: "mlx-audio-tts.\(modelID)", name: "TTS (\(family))") { text in
-                try await MLXAudioTTSEngine.synthesize(
-                    text, voice: nil, referenceAudio: refBuffer, modelDirectory: directory)
+                try await MLXErrorGuard.guardedRun {
+                    try await MLXAudioTTSEngine.synthesize(
+                        text, voice: nil, referenceAudio: refBuffer, modelDirectory: directory)
+                }
             }
             model.synthesize(text: trimmed, stage: stage)
         } else {
             let chosen = voice.trimmingCharacters(in: .whitespacesAndNewlines)
             let resolvedVoice = chosen.isEmpty ? nil : chosen
             let stage = TTSStage(id: "mlx-audio-tts.\(modelID)", name: "TTS (\(family))") { text in
-                try await MLXAudioTTSEngine.synthesize(
-                    text, voice: resolvedVoice, modelDirectory: directory)
+                try await MLXErrorGuard.guardedRun {
+                    try await MLXAudioTTSEngine.synthesize(
+                        text, voice: resolvedVoice, modelDirectory: directory)
+                }
             }
             model.synthesize(text: trimmed, stage: stage)
         }

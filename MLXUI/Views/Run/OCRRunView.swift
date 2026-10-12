@@ -258,11 +258,15 @@ final class OCRRunModel {
 
         Task {
             do {
-                let result = try await stage.run(.image(ImageMedia(cgImage: image))) { _ in }
+                // MLX-ERR-2 (see MLXErrorGuard.guardedRun). Covers OCR, dots.ocr, DeepSeek-OCR
+                // and PaddleOCR — every one of them reaches MLX through a `VLMStage`.
+                let result = try await MLXErrorGuard.guardedRun {
+                    try await stage.run(.image(ImageMedia(cgImage: image))) { _ in }
+                }
                 if case let .text(extracted) = result { self.text = extracted }
                 self.isRunning = false
             } catch {
-                self.errorText = "\(error)"
+                self.errorText = MLXErrorGuard.sentence(for: error)
                 self.isRunning = false
             }
         }

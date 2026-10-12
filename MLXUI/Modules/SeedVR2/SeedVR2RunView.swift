@@ -42,26 +42,29 @@ final class SeedVR2RunModel {
 
         Task {
             do {
-                let result = try await SeedVR2Engine.upscale(
-                    image: source,
-                    scale: chosenScale,
-                    seed: nil,
-                    modelID: modelID,
-                    progress: { [weak self] p in
-                        Task { @MainActor [weak self] in
-                            guard let self else { return }
-                            self.progress = p
-                            self.progressLabel = Self.label(for: p)
+                // MLX-ERR-2 (see MLXErrorGuard.guardedRun).
+                let result = try await MLXErrorGuard.guardedRun {
+                    try await SeedVR2Engine.upscale(
+                        image: source,
+                        scale: chosenScale,
+                        seed: nil,
+                        modelID: modelID,
+                        progress: { [weak self] p in
+                            Task { @MainActor [weak self] in
+                                guard let self else { return }
+                                self.progress = p
+                                self.progressLabel = Self.label(for: p)
+                            }
                         }
-                    }
-                )
+                    )
+                }
                 upscaledImage = result
                 display = .upscaled
                 progress = 1.0
                 progressLabel = "Done"
                 isRunning = false
             } catch {
-                errorText = error.localizedDescription
+                errorText = MLXErrorGuard.sentence(for: error)
                 isRunning = false
             }
         }
