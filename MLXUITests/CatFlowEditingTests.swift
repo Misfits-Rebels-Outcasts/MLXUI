@@ -581,14 +581,18 @@ struct CatFlowEditingTests {
     }
 
     @Test @MainActor func rowWithNoRunnableModelIsYellow() throws {
-        // FIX-3 + CFM-R14-2: a model-class row seeded with no runnable model warns. Upscale
-        // has no catalog model at all → seeds nothing and warns; a row whose model name is
-        // neither a bridge display nor a catalog hfModelId warns too.
+        // FIX-3 + CFM-R14-2: a model-class row seeded with no runnable model warns.
+        // **BG-2** (RSI/DelegateBasicImageFlowsBacklog.md, 2026-10-10): this test used
+        // `Upscale` as its example, which stopped being "no runnable model" the moment
+        // `"Upscale": .upscale` + `engines.diffusion.upscale` landed and `SeedVR2 3B` became
+        // its derived default. Switched to `Estimate Depth` — genuinely unserved (no
+        // `taskKinds` entry, no served prefix, no catalog model), which keeps the test's
+        // intent intact: a model-class row with no runnable model seeds nothing and warns.
         let (catalog, claimable) = try loadedCatalogAndClaimable()
         let model = try editor()
         model.modelCatalog = catalog
         model.claimableModelIDs = claimable
-        model.add(task: "Upscale")
+        model.add(task: "Estimate Depth")
         #expect(model.document.rows[0].model == nil)
         #expect(model.warning(for: model.document.rows[0].id) != nil)
         // A row whose model isn't in the derived pool warns too.

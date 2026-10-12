@@ -14,7 +14,11 @@ nonisolated struct SeedVR2SDK: ModelSDK {
     }
 
     func makeStage(for model: ModelEntry, config: StageConfig) throws -> any PipelineStage {
-        SeedVR2Stage(modelID: model.id, scale: 2)
+        // BG-2 (RSI/DelegateBasicImageFlowsBacklog.md): honour the row's `scale=`, already
+        // validated to a whole number in 1…4 by `RealExecutor.stageConfig(for:)`. The `?? 2`
+        // keeps the manifest's own default (`seedvr2-3b.json`'s `"default": 2.0`) for a row
+        // that names no scale. Was hardcoded `2`, which silently ignored `scale=4`.
+        SeedVR2Stage(modelID: model.id, scale: config.scale ?? 2)
     }
 }
 

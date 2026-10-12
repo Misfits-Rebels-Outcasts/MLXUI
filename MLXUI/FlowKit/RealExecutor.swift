@@ -1104,11 +1104,37 @@ nonisolated struct RealExecutor: FlowExecutor {
             let number = { (key: String) -> String? in
                 settings.value(for: key)?.trimmingCharacters(in: .whitespacesAndNewlines)
             }
+            // BG-2 (`RSI/DelegateBasicImageFlowsBacklog.md`): the `scale=` factor the
+            // `seedvr2-3b.json` manifest declares as `number`, `min: 1`, `max: 4`,
+            // `default: 2.0`. It used to be dropped on the floor — `SeedVR2SDK.makeStage`
+            // hardcoded `scale: 2` — so flow 64's `scale=2.0` worked by coincidence and any
+            // `scale=4` would have silently produced 2× output. Two deliberate rules:
+            //
+            // 1. `2.0` → `2` must work (flow 64 writes the float form), so parse as `Double`
+            //    and accept only integral values — `1.5` is a typo or a misunderstanding of a
+            //    factor that the stage models as an `Int`, and rounding it silently would be
+            //    the CFM-R16-1 mistake in miniature.
+            // 2. Out-of-range is an error, never a clamp: the manifest's 1…4 is the contract,
+            //    and a clamp would hand back a wrong-sized image with a green tick.
+            var scale: Int?
+            if let raw = number("scale") {
+                // Range is checked **on the `Double`**, before any `Int` conversion: `Int(1e30)`
+                // traps, and a flow row is untrusted text (a `.cat` is shareable). The
+                // integrality test comes first so `2.0` is accepted, then the range.
+                guard let value = Double(raw), value.rounded() == value,
+                      (1.0...4.0).contains(value) else {
+                    throw FlowError.invalidSettings(
+                        row: path, setting: "scale",
+                        detail: "must be a whole number from 1 to 4 — e.g. scale=2")
+                }
+                scale = Int(value)
+            }
             return StageConfig(
                 seed: number("seed").flatMap(UInt64.init),
                 width: number("width").flatMap(Int.init),
                 height: number("height").flatMap(Int.init),
-                steps: number("steps").flatMap(Int.init)
+                steps: number("steps").flatMap(Int.init),
+                scale: scale
             )
         }
         if desc.refName.hasPrefix("engines.rerank.") {

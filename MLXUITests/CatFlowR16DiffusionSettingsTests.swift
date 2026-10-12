@@ -214,6 +214,132 @@ struct CatFlowR16DiffusionSettingsTests {
             #expect(message.contains("isn't supported"))
         }
     }
+
+    // MARK: - BG-2: Upscale is a real editor step, and `scale=` is honoured
+
+    // BG-2 (`RSI/DelegateBasicImageFlowsBacklog.md`, owner rulings R1 + R2, 2026-10-10).
+    // Everything SeedVR2 needed had shipped in SV-AM4/SV-AM-W except two table entries
+    // (`TaskModels.taskKinds`, `TaskModels.servedRefNamePrefixes`) and the `scale=` plumbing,
+    // which `SeedVR2SDK.makeStage` hardcoded to 2. Same shape as CFM-R16-1: a setting silently
+    // dropped is worse than an error.
+
+    @MainActor
+    private func claimableIDs(catalog: [ModelEntry]) -> Set<String> {
+        let registry = ModelRegistry()
+        for module in installedModules { module.register(into: registry) }
+        return Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
+    }
+
+    @Test @MainActor func upscaleNowDerivesAndSeedsSeedVR2() throws {
+        let catalog = try loadCatalog()
+        let claimable = claimableIDs(catalog: catalog)
+
+        let derived = TaskModels.derivedModels(for: "Upscale", catalog: catalog,
+                                               claimableModelIDs: claimable)
+        #expect(derived.contains { $0.displayName == "SeedVR2 3B" })
+        #expect(TaskModels.isServedByExecutor("Upscale"))
+
+        // The editor's own view: adding an `Upscale` row seeds the bridge display and the row
+        // is green. Before BG-2 the pool was `[]` and the row read "needs a model".
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bg2-editor-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let model = FlowEditorModel(
+            name: "BG2",
+            document: FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: []),
+            workspace: FlowWorkspace(root: root))
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+        model.add(task: "Upscale")
+        let row = try #require(model.document.rows.first)
+        #expect(row.model == "SeedVR2 3B")
+        // The row is green on the **model** axis. A lone `Upscale` at row 1 still shows the
+        // separate, pre-existing "needs an input" advisory — `Upscale` accepts `.image` and is
+        // not a `startingNodes()` source, so nothing feeds it (the same wiring warning BG-1
+        // documented for `Generate Image`). It is advisory only and blocks nothing; asserting
+        // `nil` here would be asserting a behaviour BG-2 never claimed. The flow that *does*
+        // prove the fix is 64, whose Upscale row sits below `Read Image` — next test.
+        let warning = model.warning(for: row.id)
+        #expect(warning?.contains("needs a model") != true)
+    }
+
+    @Test @MainActor func galleryFlow64sSecondRowIsNoLongerYellow() throws {
+        // The BG-0 (b) repro, as a test: `64-UpscaleSmall` loads with row 2 carrying its own
+        // `SeedVR2 3B; scale=2.0` and must show no warning now that `Upscale` is served.
+        let catalog = try loadCatalog()
+        let claimable = claimableIDs(catalog: catalog)
+        let doc = try GalleryLoader.loadDocument(flowID: "64-UpscaleSmall")
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bg2-64-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let model = FlowEditorModel(name: "64", document: doc, workspace: FlowWorkspace(root: root))
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+
+        let upscaleRow = try #require(model.document.rows.first { $0.task == "Upscale" })
+        #expect(upscaleRow.model == "SeedVR2 3B")
+        #expect(model.warning(for: upscaleRow.id) == nil)
+    }
+
+    @Test func stageConfigMapsScaleFromAFloatAndRejectsAnythingElse() throws {
+        let desc = try #require(TaskCatalog.get("Upscale"))
+        let executor = makeExecutor()
+
+        // `64-UpscaleSmall` writes the float form — `2.0` must land as `2`.
+        let two = try executor.stageConfig(
+            for: desc, row: Row(task: "Upscale", model: "SeedVR2 3B", settings: "scale=2.0"))
+        #expect(two.scale == 2)
+        let four = try executor.stageConfig(
+            for: desc, row: Row(task: "Upscale", model: "SeedVR2 3B", settings: "scale=4"))
+        #expect(four.scale == 4)
+        // No `scale=` at all leaves the stage's own default (`nil` → SeedVR2SDK's `?? 2`).
+        let none = try executor.stageConfig(
+            for: desc, row: Row(task: "Upscale", model: "SeedVR2 3B", settings: nil))
+        #expect(none.scale == nil)
+
+        // A fractional factor and an out-of-manifest one are **errors**, never a clamp or a
+        // silent round: the manifest declares `min: 1, max: 4`, and rounding 1.5 to 2 would be
+        // CFM-R16-1's "wrong output nobody notices" with a green tick.
+        for bad in ["1.5", "9", "0", "3.25", "abc"] {
+            do {
+                _ = try executor.stageConfig(
+                    for: desc, row: Row(task: "Upscale", model: "SeedVR2 3B", settings: "scale=\(bad)"),
+                    path: "2")
+                Issue.record("expected scale=\(bad) to be refused")
+            } catch {
+                let message = String(describing: error)
+                #expect(message.contains("scale"), "scale=\(bad) error should name the setting: \(message)")
+                #expect(message.contains("whole number from 1 to 4"),
+                        "scale=\(bad) error should carry the product sentence: \(message)")
+            }
+        }
+    }
+
+    @Test func seedVR2SDKHandsTheRowsScaleToTheStage() throws {
+        let entry = try #require(try loadCatalog().first { $0.runnerKind == .upscale })
+        let withFour = try #require(
+            try SeedVR2SDK().makeStage(for: entry, config: StageConfig(scale: 4)) as? SeedVR2Stage)
+        #expect(withFour.scale == 4)
+        // A row with no `scale=` keeps the manifest default — `seedvr2-3b.json` says 2.0.
+        let withNil = try #require(
+            try SeedVR2SDK().makeStage(for: entry, config: StageConfig()) as? SeedVR2Stage)
+        #expect(withNil.scale == 2)
+    }
+
+    @Test func twoRowsDifferingOnlyByScaleDoNotShareACacheEntry() throws {
+        // BG-2 asked for this explicitly. `CacheKey.cacheKey` keys on the row's **settings
+        // text**, not on the parsed `StageConfig`, so this holds structurally today — the test
+        // is here so a future refactor that switches the key onto `StageConfig` (or drops the
+        // settings ingredient) cannot make 2× and 4× collide on the same cached image.
+        let input = Asset(items: [Item(kind: .image, value: nil, path: nil, sourceText: nil)])
+        let key2 = try CacheKey.cacheKey(task: "Upscale", model: "SeedVR2 3B",
+                                         settings: "scale=2.0", inputs: [input], realism: "real")
+        let key4 = try CacheKey.cacheKey(task: "Upscale", model: "SeedVR2 3B",
+                                         settings: "scale=4", inputs: [input], realism: "real")
+        #expect(key2 != key4)
+        // And the canonical form still distinguishes them after whitespace collapsing.
+        #expect(CacheKey.canonicalSettings("scale=2.0") != CacheKey.canonicalSettings("scale=4"))
+    }
 }
 
 /// A no-op stage for `RealExecutor` config tests (no model needed).

@@ -18,8 +18,10 @@ import Foundation
 nonisolated enum TaskModels {
     /// The capability declaration — a model task names the `RunnerKind` it needs. This is
     /// what replaced the display-name pools as the *filter*. Tasks with no entry here (e.g.
-    /// `Upscale`, `Estimate Depth`) have no runner kind and therefore no candidates — honest
-    /// "no model in this build", whatever the display-name pool used to claim. `Rerank` joined
+    /// `Estimate Depth`) have no runner kind and therefore no candidates — honest
+    /// "no model in this build", whatever the display-name pool used to claim. `Upscale` was
+    /// the other example until BG-2 (2026-10-10) gave the shipped SeedVR2 runner its entry;
+    /// see the `"Upscale"` case below. `Rerank` joined
     /// 2026-09-05 (MoC-3-1, `RSI/DelegateMoCBacklog.md`) — it stays honestly empty until MoC-4
     /// adds the first `.rerank` catalog entry; no catalog entry means `derivedModels` still
     /// returns `[]` for it, exactly as before this entry existed.
@@ -79,6 +81,16 @@ nonisolated enum TaskModels {
         "Animate": .video,
         "Generate Sound": .music,
         "Segment": .segmentation,
+        // BG-2 (RSI/DelegateBasicImageFlowsBacklog.md, owner ruling R1, 2026-10-10). `Upscale`
+        // was the leftover of the two tasks the table's own doc comment named as honestly
+        // empty — SV-AM1…AM5 + SV-AM-W shipped the SeedVR2 catalog entry, `SeedVR2Stage`,
+        // `SeedVR2SDK`'s claim, the Run UI, the `CatalogBridge` "SeedVR2 3B" row and the
+        // `seedvr2-3b.json` manifest, but never updated this table or
+        // `servedRefNamePrefixes`. `derivedModels(for: "Upscale", …)` therefore returned `[]`,
+        // the editor's `isRunnableModel` was false, and gallery flow 64's row 2 read "needs a
+        // model — pick one that runs on this Mac" while naming `SeedVR2 3B` itself.
+        // `Estimate Depth` stays out: still genuinely unserved.
+        "Upscale": .upscale,
         "Rerank": .rerank,
     ]
 
@@ -144,6 +156,13 @@ nonisolated enum TaskModels {
         "engines.diffusion.generate_video",   // text → video
         "engines.diffusion.generate_sound",   // text → music
         "engines.diffusion.segment",          // Segment (image → binary mask) — CFM-R15-1
+        // BG-2 (RSI/DelegateBasicImageFlowsBacklog.md, owner ruling R1, 2026-10-10): the
+        // SeedVR2 runner landed in SV-AM4/SV-AM-W (catalog entry, `SeedVR2Stage`, `SeedVR2SDK`
+        // claim, Run UI, `CatalogBridge` "SeedVR2 3B", `seedvr2-3b.json`) but the prefix was
+        // never added here, so `Upscale` had no derived pool and the editor called flow 64's
+        // row 2 unrunnable. `RealExecutor.runModel`'s generic branch hands the row to the
+        // registry stage, which is exactly `SeedVR2Stage` for this kind.
+        "engines.diffusion.upscale",          // Upscale (image → larger image) — BG-2
         "engines.rerank.",       // Rerank ([text] + query → [text], reordered) — MoC-3-1
     ]
 

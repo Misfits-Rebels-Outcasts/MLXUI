@@ -15,6 +15,13 @@ nonisolated struct StageConfig: Sendable, Hashable {
     var width: Int?            // diffusion — requested output width (CFM-R16-1)
     var height: Int?           // diffusion — requested output height (CFM-R16-1)
     var steps: Int?            // diffusion — requested denoise steps (CFM-R16-1)
+    /// BG-2 (`RSI/DelegateBasicImageFlowsBacklog.md`): the diffusion **upscale factor**,
+    /// already validated by `RealExecutor.stageConfig(for:)` to a whole number inside the
+    /// manifest's 1…4 range. `nil` means the row named no `scale=` and the stage's own default
+    /// applies. Before BG-2 `SeedVR2SDK.makeStage` hardcoded `scale: 2`, so a row's `scale=`
+    /// was silently dropped: flow 64 writes `scale=2.0` and worked only by coincidence, and
+    /// any `scale=4` would have produced 2× output with no error — the CFM-R16-1 lesson.
+    var scale: Int?            // diffusion — upscale factor (BG-2)
     var query: String?         // rerank — the query every candidate is scored against (MoC-3-2)
     var topK: Int?             // rerank — truncate the sorted result to this many (MoC-3-2)
 
@@ -33,6 +40,7 @@ nonisolated struct StageConfig: Sendable, Hashable {
         width: Int? = nil,
         height: Int? = nil,
         steps: Int? = nil,
+        scale: Int? = nil,
         query: String? = nil,
         topK: Int? = nil
     ) {
@@ -47,6 +55,7 @@ nonisolated struct StageConfig: Sendable, Hashable {
         self.width = width
         self.height = height
         self.steps = steps
+        self.scale = scale
         self.query = query
         self.topK = topK
     }

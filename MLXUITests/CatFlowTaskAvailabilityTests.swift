@@ -234,6 +234,12 @@ struct CatFlowTaskAvailabilityTests {
             "Generate Video": .available,   // .video — engines.diffusion.generate_video
             "Generate Sound": .available,   // .music — engines.diffusion.generate_sound
             "Segment": .available,          // .segmentation — engines.diffusion.segment (CFM-R15-1)
+            // BG-2 (RSI/DelegateBasicImageFlowsBacklog.md, 2026-10-10): `Upscale` moved from
+            // `.needsNewerSupport` to `.available`. `taskKinds` gained `"Upscale": .upscale` and
+            // `servedRefNamePrefixes` gained `engines.diffusion.upscale` — everything the
+            // SeedVR2 runner SV-AM4/SV-AM-W shipped had always needed. This line encoded the old
+            // fact, so it changes in the task that changed the fact (backlog rule 3).
+            "Upscale": .available,          // .upscale — engines.diffusion.upscale (BG-2)
             "Rerank": .available,           // .rerank — MoC-4
             "Extract Structured": .available,   // .llm — engines.llm.extract_structured, ported DA-3a, offered DA-3b
 
@@ -246,8 +252,9 @@ struct CatFlowTaskAvailabilityTests {
             "Decode Latent": .needsNewerSupport, "Denoise": .needsNewerSupport,
             // In `taskKinds` (.video) but `engines.diffusion.animate` has no served prefix.
             "Animate": .needsNewerSupport,
-            // No `taskKinds` entry and no served prefix.
-            "Upscale": .needsNewerSupport, "Estimate Depth": .needsNewerSupport,
+            // No `taskKinds` entry and no served prefix. `Upscale` was the other entry here
+            // until BG-2 (2026-10-10) — it is `.available` above now.
+            "Estimate Depth": .needsNewerSupport,
             "Load Checkpoint": .needsNewerSupport, "Blend": .needsNewerSupport,
             "Bake LoRA": .needsNewerSupport, "Pin Model": .needsNewerSupport,
         ]
@@ -316,7 +323,9 @@ struct CatFlowTaskAvailabilityTests {
         // available 2026-08-27 when the ruling landed option (1) — the executor now serves
         // engines.diffusion.segment and SAM3 derives (CFM-R15-1). The latent family, Edit
         // Image, and Inpaint map to `.image` but no stage accepts what those rows hand the
-        // executor, so they stay marked. Upscale and Estimate Depth have no catalog model.
+        // executor, so they stay marked. Estimate Depth has no catalog model and no served
+        // prefix; Upscale stopped being marked in BG-2 (2026-10-10), when SeedVR2's shipped
+        // runner got its `taskKinds` entry and its served prefix.
         let available = { (name: String) in
             TaskAvailability.isAvailable(name, catalog: catalog, claimableModelIDs: claimable)
         }
@@ -326,7 +335,7 @@ struct CatFlowTaskAvailabilityTests {
         #expect(!available("Init Latent"))
         #expect(!available("Decode Latent"))
         #expect(available("Generate Image"))
-        #expect(!available("Upscale"))
+        #expect(available("Upscale"))
         #expect(!available("Estimate Depth"))
         #expect(available("OCR"))
         #expect(available("Describe Image"))
@@ -425,26 +434,30 @@ struct CatFlowTaskAvailabilityTests {
     @Test func offerableModelTasksAreExecutorServed() {
         // Served: an executor path exists for each (LLM frames, ASR, TTS, VLM, embed, the
         // diffusion generators, and — since the owner ruled CFM-R13-6 option (1) 2026-08-27 —
-        // Segment). Frame-backed LLM tasks are covered by `refKind == .frame`.
+        // Segment; `Upscale` joined in BG-2, 2026-10-10). Frame-backed LLM tasks are covered by
+        // `refKind == .frame`.
         let served = ["Generate", "Summarize", "Translate", "Answer", "Rewrite", "Draft",
                       "Ask", "Title", "Critique", "Verify", "Revise", "Merge",
                       "Extract Structured", "Text to Table",
                       "Transcribe", "Speak", "Describe Image", "OCR", "Embed",
                       "Generate Image", "Generate Video", "Generate Sound",
-                      "Segment", "Rerank"]
+                      "Segment", "Upscale", "Rerank"]
         for name in served {
             #expect(TaskModels.isServedByExecutor(name), "\(name) should be executor-served")
         }
         // NOT served: a catalog model may exist for the kind, but the executor has no path.
         // The latent family and the edit/inpaint rows have no stage accepting what they hand
-        // the executor; Upscale/Estimate Depth have no served prefix at all. `Rerank` moved to
+        // the executor; Estimate Depth has no served prefix at all. `Rerank` moved to
         // the served list in MoC-3-1 (RSI/DelegateMoCBacklog.md) — `engines.rerank.` is now
         // allow-listed, even though no `.rerank` catalog entry exists yet (MoC-4). Served and
         // "has a runnable candidate" are different questions: `derivedModels(for: "Rerank", …)`
-        // stays `[]` until a model lands, exactly as it did before this entry.
+        // stays `[]` until a model lands, exactly as it did before this entry. **BG-2**
+        // (RSI/DelegateBasicImageFlowsBacklog.md) moved `Upscale` out of this list: the
+        // SeedVR2 runner has shipped since SV-AM4/SV-AM-W, `seedvr2-3b.json` names the task,
+        // and `CatalogBridge` has the "SeedVR2 3B" row — only the prefix was missing.
         let unserved = ["Edit Image", "Instruct Edit", "Inpaint",
                         "Init Latent", "Encode Latent", "Decode Latent", "Denoise",
-                        "Upscale", "Estimate Depth", "Animate"]
+                        "Estimate Depth", "Animate"]
         for name in unserved {
             #expect(!TaskModels.isServedByExecutor(name), "\(name) should NOT be executor-served")
         }
