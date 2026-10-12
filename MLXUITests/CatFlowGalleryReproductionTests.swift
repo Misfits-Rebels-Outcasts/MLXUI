@@ -290,21 +290,19 @@ struct CatFlowGalleryReproductionTests {
     }
 
     /// BG-7 (`RSI/DelegateBasicImageFlowsBacklog.md`, owner ruling R6, 2026-10-12): the shipped
-    /// sample inputs are now the **owner's own kitten photo**, not BG-4's placeholders — full size
+    /// sample inputs are the **owner's own kitten photo**, not BG-4's placeholders — full size
     /// for `6`, exact half size for `7` so a 2× upscale lands back at roughly the original. This
     /// pins both the geometry and the **bytes**, so any future swap is a deliberate edit with a
     /// failing test to explain, never a silent change of what the smoke rows exercise. The hash
     /// half matters: the dimensions alone would not notice a re-encode, a colour-profile change,
     /// or a different crop of the same size.
+    ///
+    /// **BG-9** (2026-10-12) stripped the source's EXIF/Photoshop metadata from both files, so
+    /// the hashes below are the **post-strip** bytes. See `theSampleInputsCarryNoMetadata` for
+    /// the other half of that change.
     @Test func theKittenInputsMatchTheShapeAndBytesTheSmokeRowsAssume() throws {
         func fixture(_ flat: String) throws -> (size: (Int, Int), sha: String) {
-            var found: URL?
-            let walker = FileManager.default.enumerator(at: basicGalleryDir,
-                                                        includingPropertiesForKeys: nil)
-            while let url = walker?.nextObject() as? URL {
-                if url.lastPathComponent == flat { found = url; break }
-            }
-            let url = try #require(found, "\(flat) not found under BasicGallery/**")
+            let url = try fixtureURL(flat)
             let src = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
             let img = try #require(CGImageSourceCreateImageAtIndex(src, 0, nil))
             let sha = SHA256.hash(data: try Data(contentsOf: url)).hex
@@ -315,12 +313,80 @@ struct CatFlowGalleryReproductionTests {
         // subject under it (the right-hand kitten's chest/paw; row 103 records what it picks).
         let six = try fixture("6-CutOutSubject-photo.jpg")
         #expect(six.size == (740, 503))
-        #expect(six.sha == "bb9559be17db4f27a3f52a24c7ee9061483176741d9f0f25b6fc6199cea1218b")
+        #expect(six.sha == "36b9cb9e3eb45df2be4cdf642d633fcdbd2312942ac5cb8a4cb623c9d62d3043")
 
         // 7 — the same photo at exactly **half** size, 370×252, so 2× returns ~740×504.
         let seven = try fixture("7-UpscaleSmall-small-photo.jpg")
         #expect(seven.size == (370, 252))
-        #expect(seven.sha == "c2d1bb3740992e1837827b31689938acc2746343e75b7cfae47fc42fd5c96e47")
+        #expect(seven.sha == "a0d3183516de9a431232b6d1b90d33bb9fde1f4dc69f41ce8c74c0865e903893")
+    }
+
+    /// BG-9 (`RSI/DelegateBasicImageFlowsBacklog.md`, 2026-10-12): the shipped sample JPEGs must
+    /// carry **no metadata** — the source had `dc:creator` / `UserComment`
+    /// `"1.90.5-PYCZW7L356EJMUH44D4W726LBE.0.1-9"` in an EXIF block plus a Photoshop IRB block
+    /// (both visible in the JPEG's APP1/APP13 segments), which a shipped sample has no business
+    /// carrying.
+    ///
+    /// Asserts on **every** APP1…APP15 and COM segment, not just the two names — "no metadata at
+    /// all" is the requirement, and a future re-encode would otherwise be free to reintroduce ICC
+    /// or IPTC blocks that this test would not see. APP0 (JFIF) is deliberately allowed: it is
+    /// structural (colour space + density), not an annotation, and every decoder reads it.
+    ///
+    /// This is also the test that would have caught the *first* attempt at this change: ImageIO's
+    /// own encoder and its lossless copy path both **synthesise** a minimal EXIF block and an
+    /// empty "Photoshop 3.0" IPTC/digest block, so a re-encode cannot satisfy it. The files ship
+    /// with those segments removed from the container instead (journal `2026-467`).
+    @Test func theSampleInputsCarryNoMetadata() throws {
+        for flat in ["6-CutOutSubject-photo.jpg", "7-UpscaleSmall-small-photo.jpg"] {
+            let data = try Data(contentsOf: try fixtureURL(flat))
+            let bytes = [UInt8](data)
+            #expect(bytes.count > 4 && bytes[0] == 0xFF && bytes[1] == 0xD8, "\(flat) is not a JPEG")
+
+            var offset = 2
+            var found: [String] = []
+            while offset + 3 < bytes.count {
+                guard bytes[offset] == 0xFF else { break }
+                let marker = bytes[offset + 1]
+                if marker == 0xDA { break }                       // SOS: entropy data follows
+                if marker == 0xD8 || (0xD0 ... 0xD7).contains(marker) {
+                    offset += 2
+                    continue
+                }
+                let length = Int(bytes[offset + 2]) << 8 | Int(bytes[offset + 3])
+                let start = offset + 4
+                let end = min(offset + 2 + length, bytes.count)
+                let payload = bytes[start ..< end]
+                // APP1…APP15 and COM are the annotation segments; APP0 is JFIF and stays.
+                if (0xE1 ... 0xEF).contains(marker) || marker == 0xFE {
+                    let name: String
+                    if payload.starts(with: Array("Exif".utf8)) { name = "EXIF" }
+                    else if payload.starts(with: Array("http://ns.adobe.com/xap/1.0/".utf8)) { name = "XMP" }
+                    else if payload.starts(with: Array("http://ns.adobe.com/xmp/extension/".utf8)) { name = "XMP (extension)" }
+                    else if payload.starts(with: Array("Photoshop 3.0".utf8)) { name = "Photoshop IRB" }
+                    else if payload.starts(with: Array("ICC_PROFILE".utf8)) { name = "ICC profile" }
+                    else { name = "unclassified" }
+                    found.append("APP\(marker - 0xE0) \(name)")
+                }
+                offset += 2 + length
+            }
+            #expect(found.isEmpty, "\(flat) still carries metadata segments: \(found)")
+            // And the walk really did reach the image data — otherwise an early `break` would make
+            // the assertion above vacuously true.
+            #expect(offset + 1 < bytes.count && bytes[offset + 1] == 0xDA,
+                    "\(flat): the segment walk should stop at SOS")
+        }
+    }
+
+    /// Locate a flat fixture name anywhere under `Resources/BasicGallery/**` (the repo keeps them
+    /// nested by flow; the bundle flattens them).
+    private func fixtureURL(_ flat: String) throws -> URL {
+        var found: URL?
+        let walker = FileManager.default.enumerator(at: basicGalleryDir,
+                                                   includingPropertiesForKeys: nil)
+        while let url = walker?.nextObject() as? URL {
+            if url.lastPathComponent == flat { found = url; break }
+        }
+        return try #require(found, "\(flat) not found under BasicGallery/**")
     }
 
     /// The end-to-end half of BG-4: prepare a real flow folder from the **built bundle** the way
