@@ -290,6 +290,14 @@ final class FlowEditorModel {
                 document.rows.append(newRow)
             }
             selectedRowID = newRow.id
+            // BG-1 (R2, `RSI/DelegateBasicImageFlowsBacklog.md`): a seeded model must be
+            // **pinned** in the same edit that adds the row. `setModel` has always called
+            // `reconcileModelsBlock()`; this seed path did not, so a fresh `Generate Image`
+            // row named an unpinned display and `FlowValidator.checkModelsPinned` raised
+            // E104 — which `structuralIssues()` turns straight into `saveBlockReason`, so
+            // Save was disabled until the user re-picked the very model already on the row.
+            // Inside the same `commitChange` as the insert, so one undo restores both.
+            reconcileModelsBlock()
             reaimClauseTargets(before: before, after: document.rows)
         }
     }
@@ -325,6 +333,8 @@ final class FlowEditorModel {
             let newRow = Row(id: UUID(), task: name, model: model, settings: seedValue, refs: [])
             insertChild(newRow, into: blockID, below: selectedRowID)
             selectedRowID = newRow.id
+            // BG-1 — same pin-on-seed rule as `add(task:)`, for the block-child seed path.
+            reconcileModelsBlock()
             reaimClauseTargets(before: before, after: document.rows)
         }
     }

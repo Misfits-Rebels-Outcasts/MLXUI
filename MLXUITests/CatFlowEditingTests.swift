@@ -206,6 +206,144 @@ struct CatFlowEditingTests {
         #expect(model.document.rows[1].model == nil)
     }
 
+    // MARK: - BG-1: a seeded model is always pinned, so Save never waits on an install
+
+    /// BG-1 (`RSI/DelegateBasicImageFlowsBacklog.md`, R2). `Generate Image`'s default is
+    /// `Flux-1.lite-8B` — a catalog display with **no** `CatalogBridge` row, so the only way
+    /// another runtime can resolve it is a `models:` pin. `add(task:)` used to seed the row's
+    /// `model` without calling `reconcileModelsBlock()` (which only `setModel` did), leaving
+    /// the display unpinned; `FlowValidator.checkModelsPinned` then raised E104, which
+    /// `structuralIssues()` turned straight into `saveBlockReason` — Save disabled until the
+    /// user re-picked the model already sitting on the row. This is the R2 bug in one test.
+    @Test @MainActor func addingGenerateImagePinsItsSeededModelSoSaveIsNotBlocked() throws {
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let model = try editor()
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+
+        model.add(task: "Generate Image")
+        let r = try #require(model.document.rows.first)
+        let display = try #require(r.model)
+
+        // The seeded display is pinned to the catalog entry's real HF id — display and id are
+        // deliberately different strings; that is what the `models:` block is for.
+        let pinned = try #require(model.document.models[display])
+        let entry = try #require(catalog.first { $0.displayName == display })
+        #expect(pinned == entry.hfModelId)
+        #expect(model.document.modelsOrder.contains(display))
+        #expect(!model.structuralIssues().contains { $0.code == "E104" })
+        #expect(model.saveBlockReason == nil)
+        #expect(model.canSave)
+        // The row is green on the model axis — its yellow line (if any) must never be the
+        // model sentence. At row 1 a `Generate Image` row *does* still show a different,
+        // pre-existing warning ("Row 1 needs an input — nothing feeds it."): `Generate Image`
+        // is not a `startingNodes()` source (`FlowEditorModel.swift:1094`), which is about
+        // wiring, not pinning, and BG-1 deliberately does not touch it. Asserting `nil` here
+        // would be asserting a behaviour BG-1 never claimed.
+        let warning = model.warning(for: r.id)
+        #expect(warning?.contains("needs a model") != true)
+        #expect(warning?.contains("models:") != true)
+    }
+
+    /// BG-1's real contract, stated as a test: **the Save gate does not read install state.**
+    ///
+    /// The structural half is what makes this checkable rather than aspirational: nothing in
+    /// `FlowEditorModel.structuralIssues()`'s input graph reaches installation at all —
+    /// `FlowValidator.checkFlow(parsed, registry:workspace:flowID:)` has no install parameter,
+    /// and `grep installedModelIDs MLXUI/` finds it only in the Run path (`StageFactory`,
+    /// `RealExecutor`, `FlowPreflight`, `ModelSlot.readiness`, `AppState`). The bug R2 reported
+    /// was never a reading of install state; it was an unpinned display, which *looked* like
+    /// "Save waits for the download" because it only bites before you install.
+    ///
+    /// Both sides are asserted: Save's verdict is byte-identical on an empty and a full install
+    /// set, **and** Run's own readiness genuinely does move with it — so this cannot pass by
+    /// accidentally proving that install state is ignored everywhere.
+    @Test @MainActor func saveGateIgnoresInstallStateWhileRunReadinessUsesIt() throws {
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let model = try editor()
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+        model.add(task: "Generate Image")
+
+        let row = try #require(model.document.rows.first)
+        let display = try #require(row.model)
+        let entry = try #require(catalog.first { $0.displayName == display })
+
+        // Save: the same verdict, and the same pin, with nothing and with everything installed.
+        let saveWithNothingInstalled = model.saveBlockReason
+        let modelsWithNothingInstalled = model.document.models
+        #expect(saveWithNothingInstalled == nil)
+        #expect(modelsWithNothingInstalled[display] == entry.hfModelId)
+
+        // Run: the same flow's preflight *does* move with `installedModelIDs`.
+        let slots = TaskModels.derivedModels(for: "Generate Image", catalog: catalog,
+                                             claimableModelIDs: claimable)
+        let slot = try #require(slots.first { $0.displayName == display })
+        #expect(slot.readiness(installedModelIDs: []) != .ready)
+        #expect(slot.readiness(installedModelIDs: [entry.id]) == .ready)
+    }
+
+    /// The pin belongs to the same undo unit as the row (BG-1: "One undo step then restores
+    /// both") — so undoing the add cannot leave a stale `models:` entry behind, which would be
+    /// the other half of the R2 bug.
+    @Test @MainActor func undoAfterAddingAModelRowRemovesBothTheRowAndItsPin() throws {
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let model = try editor()
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+        #expect(model.document.models.isEmpty)
+
+        model.add(task: "Generate Image")
+        #expect(model.document.rows.count == 1)
+        #expect(!model.document.models.isEmpty)
+
+        model.undo()
+        #expect(model.document.rows.isEmpty)
+        #expect(model.document.models.isEmpty)
+        #expect(model.document.modelsOrder.isEmpty)
+    }
+
+    /// The bridged half is unchanged (BG-1's "A bridged seed writes **no** pin"): `Transcribe`
+    /// seeds `Whisper Tiny`, which `CatalogBridge` resolves, so `reconcileModelsBlock()` is a
+    /// no-op and the new call must not invent a pin for it.
+    @Test @MainActor func aBridgedSeedWritesNoPin() throws {
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let model = try editor()
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+        #expect(CatalogBridge.entry(for: "Whisper Tiny") != nil)
+
+        model.add(task: "Transcribe")
+        #expect(model.document.rows[0].model == "Whisper Tiny")
+        #expect(model.document.models.isEmpty)
+    }
+
+    /// `addChild(task:into:)` seeds through a second code path with the same omission, so it
+    /// needs the same pin (BG-1 names both call sites). A block child is reached through
+    /// `allRows()`, so the reconcile must see it — this is the test that would catch a
+    /// `reconcileModelsBlock()` that only walked `document.rows`.
+    @Test @MainActor func addingAModelChildIntoABlockPinsItToo() throws {
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let model = try editor()
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+
+        model.insertBlock(kind: .each, name: "shots", after: nil)
+        let blockID = try #require(model.document.rows.first?.id)
+        #expect(model.document.rows[0].children.count == 1)   // the block's seeded Template
+        model.addChild(task: "Generate Image", into: blockID)
+
+        // `insertChild(below: selectedRowID)` appends when the selected id isn't a child of
+        // this block — the block's own Template is child 0, so the new row is child 1.
+        #expect(model.document.rows[0].children.count == 2)
+        let child = try #require(model.document.rows[0].children.last)
+        #expect(child.task == "Generate Image")
+        let display = try #require(child.model)
+        #expect(display == "Flux-1.lite-8B")
+        #expect(model.document.models[display] == "mlx-community/Flux-1.lite-8B-MLX-Q4")
+        #expect(model.saveBlockReason == nil)
+    }
+
     @Test func removeByIdKeepsOtherRows() throws {
         let r1 = row("Read Text", settings: "memo.txt")
         let r2 = row("Summarize")
