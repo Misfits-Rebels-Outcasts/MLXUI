@@ -2,6 +2,22 @@ import Foundation
 import MLXLLM
 import MLXLMCommon
 
+/// SC-1: where a pooled model stands. **Derived** by `ResidentPool.loadState(for:)` — `ready` is "in `entries`",
+/// `loading` is "in `loading`"; the only thing stored is the *why* of the last attempt that ended without a resident
+/// entry (a failure's message, or the reason a preload declined), which the two maps cannot say.
+nonisolated enum ModelLoadState: Sendable, Equatable {
+    case notLoaded(reason: String?)
+    case loading
+    case ready
+    case failed(String)
+}
+
+/// SC-1: what `LocalServerController` needs of the pool, so its preload wiring is testable without a real container.
+protocol ServePreloading: Sendable {
+    func preload(directory: URL, footprintBytes: Int64?) async -> ModelLoadState
+    func addLoadObserver(_ observer: @escaping @Sendable (String, ModelLoadState) -> Void) async
+}
+
 /// S1-1 — the **one owner of loaded LLM weights** (`RSI/plan-local-server-2026-09.md` F1).
 ///
 /// Before this, `LLMEngine.generate` called `LLMModelFactory.loadContainer` on *every* call
@@ -16,6 +32,11 @@ import MLXLMCommon
 /// The LRU / single-flight logic lives in `ResidentPool` (generic) because a real
 /// `ModelContainer` cannot be fabricated in a unit test.
 actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
+    typealias LoadState = ModelLoadState
+
+    /// Why a preload that did not load declined: nothing in use is pushed out and nothing is waited for.
+    static var notEnoughMemoryReason: String { "not enough memory to load now" }
+
     private struct Entry {
         let value: Value
         let bytes: Int64
@@ -48,6 +69,13 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
     /// with it; once weights are loading nobody's cancel stops them (other callers may have joined).
     private var joined: [UUID: Int] = [:]
     private var waitingForRoom: [UUID: Task<Value, Error>] = [:]
+    /// SC-1: loads started by a preload and joined by nobody else. Cancelling the preload cancels these loads (a
+    /// request that joins one adopts it and it is no longer in this set).
+    private var preloadOnly: Set<UUID> = []
+    private var loadTasks: [UUID: Task<Value, Error>] = [:]
+    /// SC-1: the why of a key's last non-resident ending (see `LoadState`). Cleared when a load starts or succeeds.
+    private var notes: [String: LoadState] = [:]
+    private var observers: [@Sendable (String, LoadState) -> Void] = []
     private let budget: MemoryBudget
 
     /// Reserve from a shared budget (the app's: `MemoryBudget.shared`).
@@ -84,13 +112,14 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
     }
 
     private func acquire(for key: String, bytes: Int64, maxWait: Duration?, leased: Bool,
-                         holder: MemoryBudget.HolderKind?,
+                         holder: MemoryBudget.HolderKind?, preload: Bool = false,
                          load: @escaping @Sendable () async throws -> Value) async throws -> (value: Value, hold: MemoryBudget.Hold?) {
         if let entry = entries[key] {
             touch(key)
             return (entry.value, leased ? budget.hold(entry.reservation, label: key, holder: holder) : nil)
         }
         if let inFlight = loading[key] {
+            if !preload { preloadOnly.remove(inFlight.token) }     // a request adopts the preload's load
             if leased { leasers[inFlight.token, default: []].append(holder) }
             let value = try await awaitLoad(inFlight.task, token: inFlight.token)
             return (value, leased ? claimHold(inFlight.token, holder: holder) : nil)
@@ -115,15 +144,25 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
             }
             do {
                 let value = try await load()
+                // SC-1: a preload nobody joined was cancelled (Serve off): don't keep what it loaded.
+                if self.preloadOnly.contains(token), Task.isCancelled {
+                    budget.release(reservation)
+                    self.fail(key: key, token: token)
+                    throw CancellationError()
+                }
                 self.finish(key: key, token: token, value: value, bytes: bytes, reservation: reservation)
                 return value
             } catch {
                 budget.release(reservation)
-                self.fail(key: key, token: token)
+                self.fail(key: key, token: token, message: (error is CancellationError) ? nil : error.localizedDescription)
                 throw error
             }
         }
         loading[key] = Loading(token: token, task: task)
+        loadTasks[token] = task
+        if preload { preloadOnly.insert(token) }
+        notes.removeValue(forKey: key)
+        emit(key)
         if maxWait != nil { waitingForRoom[token] = task }
         if leased { leasers[token, default: []].append(holder) }
         let value = try await awaitLoad(task, token: token)
@@ -142,8 +181,9 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
     }
 
     private func callerCancelled(_ token: UUID) {
-        guard (joined[token] ?? 0) <= 1, let waiting = waitingForRoom[token] else { return }
-        waiting.cancel()
+        guard (joined[token] ?? 0) <= 1 else { return }
+        if let waiting = waitingForRoom[token] { waiting.cancel() }
+        else if preloadOnly.contains(token) { loadTasks[token]?.cancel() }
     }
 
     private func leaveLoad(_ token: UUID) {
@@ -163,16 +203,21 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
             dropped = true
         }
         if loading.removeValue(forKey: key) != nil { dropped = true }
+        notes.removeValue(forKey: key)
+        emit(key)
         return dropped
     }
 
     /// Drop everything resident, and stop retaining anything still loading. Entries in use are doomed (see `evict`).
     func clear() {
         let reservations = entries.values.map(\.reservation)
+        let keys = Set(entries.keys).union(loading.keys).union(notes.keys)
         entries.removeAll()
         recency.removeAll()
         loading.removeAll()
+        notes.removeAll()
         reservations.forEach { budget.releaseOrDefer($0) }
+        keys.forEach { emit($0) }
     }
 
     /// `MemoryBudgetParticipant`: evict the least-recently-used resident entry that holds memory **and is not in
@@ -188,6 +233,7 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
             guard budget.releaseIfUnheld(entry.reservation) else { continue }   // in use: not ours to take
             entries.removeValue(forKey: victim)
             recency.removeAll { $0 == victim }
+            emit(victim)
             return true
         }
         return false
@@ -219,6 +265,56 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
         }
     }
 
+    /// SC-1: `key`'s load state, derived from the maps (see `LoadState`).
+    func loadState(for key: String) -> LoadState {
+        if entries[key] != nil { return .ready }
+        if loading[key] != nil { return .loading }
+        return notes[key] ?? .notLoaded(reason: nil)
+    }
+
+    /// SC-1: call `observer` on every transition of any key's state (loading started, ready, failed, evicted).
+    /// It runs inside the pool's turn — hand off anything slow.
+    func addObserver(_ observer: @escaping @Sendable (String, LoadState) -> Void) { observers.append(observer) }
+
+    private func emit(_ key: String) {
+        let state = loadState(for: key)
+        observers.forEach { $0(key, state) }
+    }
+
+    /// SC-1: load `key` in the background so the first request finds it resident. **Unleased** (an idle resident,
+    /// evictable like any), **never waits** (`maxWait` 0) and so never pushes out a model in use — it may evict idle
+    /// entries by normal LRU. If it doesn't fit right now the state is `notLoaded` with a reason and the first
+    /// request loads it as before. A load already in flight (a request's) is joined, never doubled. Cancelling the
+    /// caller cancels a load nobody else joined. Returns the state it ended in.
+    @discardableResult
+    func preload(for key: String, bytes: Int64,
+                 load: @escaping @Sendable () async throws -> Value) async -> LoadState {
+        if entries[key] != nil || loading[key] != nil {
+            _ = try? await acquire(for: key, bytes: bytes, maxWait: .zero, leased: false, holder: nil, preload: true, load: load)
+            return loadState(for: key)
+        }
+        // A model larger than the whole budget would be granted over budget (the ledger's last resort): a
+        // preload doesn't do that.
+        guard bytes <= budget.capacityBytes else {
+            decline(key)
+            return loadState(for: key)
+        }
+        do {
+            _ = try await acquire(for: key, bytes: bytes, maxWait: .zero, leased: false, holder: nil, preload: true, load: load)
+        } catch is MemoryBudget.WaitError {
+            if !Task.isCancelled { decline(key) }      // a cancelled wait is not "no room"
+        } catch {
+            // failed(message) was noted by the load; a cancellation leaves notLoaded
+        }
+        return loadState(for: key)
+    }
+
+    private func decline(_ key: String) {
+        guard entries[key] == nil, loading[key] == nil else { return }
+        notes[key] = .notLoaded(reason: Self.notEnoughMemoryReason)
+        emit(key)
+    }
+
     /// Resident keys, most-recently-used first.
     var residentKeys: [String] { recency }
     var totalBytes: Int64 { entries.values.reduce(0) { $0 + $1.bytes } }
@@ -234,6 +330,8 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
     private func finish(key: String, token: UUID, value: Value, bytes: Int64,
                         reservation: MemoryBudget.Reservation) {
         let waiting = leasers.removeValue(forKey: token) ?? []
+        preloadOnly.remove(token)
+        loadTasks.removeValue(forKey: token)
         // Only retain if this load is still the current one (not evicted/cleared meanwhile).
         guard loading[key]?.token == token else {
             // Dropped while loading. Callers still get the value; if any of them lease it, the weights stay booked
@@ -249,15 +347,23 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
         }
         loading[key] = nil
         entries[key] = Entry(value: value, bytes: bytes, reservation: reservation)
+        notes.removeValue(forKey: key)
         touch(key)
+        defer { emit(key) }
         budget.commit(reservation)
         if !waiting.isEmpty { preHolds[token] = waiting.map { ($0, budget.hold(reservation, label: key, holder: $0)) } }
     }
 
-    private func fail(key: String, token: UUID) {
+    private func fail(key: String, token: UUID, message: String? = nil) {
         leasers.removeValue(forKey: token)
         waitingForRoom.removeValue(forKey: token)
-        if loading[key]?.token == token { loading[key] = nil }
+        preloadOnly.remove(token)
+        loadTasks.removeValue(forKey: token)
+        if loading[key]?.token == token {
+            loading[key] = nil
+            if let message { notes[key] = .failed(message) }
+            emit(key)
+        }
     }
 
     /// One of the holds `finish` took for this load's lessees.
@@ -273,7 +379,7 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
 /// The app-wide pool of loaded MLX LLM containers, keyed by model **directory** (so a caller
 /// holding a `ModelEntry` and one holding only a directory — `LLMEngine`, the Summarize tool —
 /// resolve to the same container).
-actor ModelContainerPool {
+actor ModelContainerPool: ServePreloading {
     /// Loads a container from an installed model directory. Injectable so tests never need a
     /// real model.
     typealias Loader = @Sendable (_ directory: URL, _ architecture: String?) async throws -> ModelContainer
@@ -320,6 +426,31 @@ actor ModelContainerPool {
         return try await pool.value(for: key, bytes: bytes) {
             try await loader(directory, architecture)
         }
+    }
+
+    typealias LoadState = ModelLoadState
+
+    /// SC-1: the load state of the model in `directory`.
+    func loadState(directory: URL) async -> LoadState { await pool.loadState(for: Self.key(for: directory)) }
+
+    /// SC-1: see `ResidentPool.addObserver`; the key is `ModelContainerPool.key(for: directory)`.
+    func addLoadObserver(_ observer: @escaping @Sendable (String, LoadState) -> Void) async {
+        await pool.addObserver(observer)
+    }
+
+    /// SC-1: load the model in `directory` ahead of its first request — unleased, never waiting, never evicting a model
+    /// in use (see `ResidentPool.preload`). Books the same bytes as `container(directory:)`.
+    @discardableResult
+    func preload(directory: URL, footprintBytes: Int64? = nil) async -> LoadState {
+        await preload(directory: directory, footprintBytes: footprintBytes, architecture: nil)
+    }
+
+    @discardableResult
+    func preload(directory: URL, footprintBytes: Int64?, architecture: String?) async -> LoadState {
+        let key = Self.key(for: directory)
+        let bytes = ModelWeightCharge.bytes(directory: directory, catalogFallback: footprintBytes)
+        let loader = self.loader
+        return await pool.preload(for: key, bytes: bytes) { try await loader(directory, architecture) }
     }
 
     /// SC-2a: `container(directory:…)`, **leased**. The model is in use until `release()` — call it in a `defer`, so a

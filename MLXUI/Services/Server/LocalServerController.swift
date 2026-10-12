@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 
 /// The decisions the Local Server UI makes, as pure functions of (gate, server status, served set),
 /// so the whole of S1-5's logic is testable without a window. **Every one of them starts from
@@ -194,6 +195,15 @@ final class LocalServerController {
     /// PC-1: the prompt cache's snapshots of an uninstalled model go with its weights (F11).
     @ObservationIgnored private let evictPromptCache: (String) async -> Void
     @ObservationIgnored private let budgetBytes: Int64
+    /// SC-1: the pool served models are preloaded into (`nil` = no preloading: unit tests that don't inject one).
+    @ObservationIgnored private let preloadPool: (any ServePreloading)?
+    @ObservationIgnored private var preloads: [String: (run: UUID, task: Task<Void, Never>)] = [:]
+    @ObservationIgnored private var observingPool = false
+    @ObservationIgnored private static let log = Logger(subsystem: "com.ai-browser", category: "local-server")
+
+    /// SC-1: each served MLX model's load state, mirrored from the pool on every transition (the pool is the source —
+    /// this is only what SwiftUI observes). Absent = not loaded.
+    private(set) var loadStates: [String: ModelLoadState] = [:]
 
     /// - Parameters: `installed` / `appleFoundation` / `evict` / `budgetBytes` default to the live
     ///   catalog (`catalogLoaded`: did it decode non-empty), the AFM checker, `ModelContainerPool.shared` and `MemoryBudget.shared`; tests
@@ -209,7 +219,8 @@ final class LocalServerController {
              let directory = ModelStore.shared.directory(forHFModelID: hfModelID)
              await PromptCacheShared.store.evict(directory: ModelContainerPool.key(for: directory))
          },
-         budgetBytes: Int64 = MemoryBudget.shared.capacityBytes) {
+         budgetBytes: Int64 = MemoryBudget.shared.capacityBytes,
+         preloadPool: (any ServePreloading)? = TestEnvironment.isRunningTests ? nil : ModelContainerPool.shared) {
         self.server = server
         self.defaults = defaults
         self.installedIndex = installed
@@ -218,6 +229,7 @@ final class LocalServerController {
         self.evictModel = evict
         self.evictPromptCache = evictPromptCache
         self.budgetBytes = budgetBytes
+        self.preloadPool = preloadPool
         self.enabled = defaults.object(forKey: Self.enabledKey) as? Bool ?? true
         self.hasShownConnect = defaults.bool(forKey: Self.connectShownKey)
     }
@@ -252,6 +264,7 @@ final class LocalServerController {
         server.update(settings: server.settings.serving(id, on))
         if on { setEnabled(true) } else { server.forgetStoredResponses(for: id) }       // S3-3c
         await apply()
+        if on { startPreloads() } else { cancelPreload(id) }
         if on, !hasShownConnect {
             hasShownConnect = true
             defaults.set(true, forKey: Self.connectShownKey)
@@ -264,6 +277,7 @@ final class LocalServerController {
         guard LocalServerGate.isAvailable else { return }
         setEnabled(on)
         await apply()
+        if on { startPreloads() } else { cancelAllPreloads() }
     }
 
     /// A new port applies on restart: the setting is saved now; a running server restarts so the
@@ -286,6 +300,7 @@ final class LocalServerController {
         guard LocalServerPolicy.shouldAutoStart(gateAvailable: LocalServerGate.isAvailable, enabled: enabled,
                                                 servedCount: reachableIDs.count) else { return }
         await server.start()
+        startPreloads()
     }
 
     /// Uninstall hook (S1-5d): once `hfModelID`'s files are gone, un-serve it, free its weights, and
@@ -329,6 +344,76 @@ final class LocalServerController {
         guard LocalServerGate.isAvailable else { return }
         connectModelID = id ?? reachableIDs.sorted().first
         showConnect = true
+    }
+
+    // MARK: - Preload (SC-1, gate B)
+
+    /// The load state the Server screen shows for a served model. Apple Foundation Models loads nothing: ready.
+    func loadState(for id: String) -> ModelLoadState {
+        id == ServedModels.appleFoundationID ? .ready : loadStates[id] ?? .notLoaded(reason: nil)
+    }
+
+    /// Load every reachable served MLX model in the background — unleased, never waiting, never evicting a model in
+    /// use (`ModelContainerPool.preload`). Nothing while the gate is closed or the server isn't running. A model
+    /// that doesn't fit now stays `notLoaded` with a reason; its first request loads it as before.
+    private func startPreloads() {
+        guard LocalServerGate.isAvailable, enabled, isRunning, let pool = preloadPool else { return }
+        observeLoadStates(pool)
+        let index = installedIndex()
+        for id in reachableIDs where id != ServedModels.appleFoundationID && preloads[id] == nil {
+            guard let entry = index.entries.first(where: { $0.kind == .llm && $0.hfModelId == id }) else { continue }
+            let directory = ModelStore.shared.directory(forHFModelID: id)
+            let footprint = Int64(entry.ramGB * 1_073_741_824)
+            let run = UUID()
+            preloads[id] = (run, Task { [weak self] in
+                let state = await pool.preload(directory: directory, footprintBytes: footprint)
+                await self?.preloadFinished(id, run: run, state)
+            })
+        }
+    }
+
+    private func preloadFinished(_ id: String, run: UUID, _ state: ModelLoadState) {
+        guard preloads[id]?.run == run else { return }     // cancelled, and maybe restarted since
+        preloads.removeValue(forKey: id)
+        loadStates[id] = state
+    }
+
+    /// Serve off for one model: stop a preload in flight. It does not evict (owner ruling 2026-10-12).
+    private func cancelPreload(_ id: String) {
+        preloads.removeValue(forKey: id)?.task.cancel()
+        loadStates.removeValue(forKey: id)
+    }
+
+    private func cancelAllPreloads() {
+        preloads.values.forEach { $0.task.cancel() }
+        preloads.removeAll()
+    }
+
+    /// Mirror the pool's transitions for the served models, and log them (ids only).
+    private func observeLoadStates(_ pool: any ServePreloading) {
+        guard !observingPool else { return }
+        observingPool = true
+        Task { [weak self] in
+            await pool.addLoadObserver { key, state in
+                Task { @MainActor in self?.poolChanged(key: key, state: state) }
+            }
+        }
+    }
+
+    private func poolChanged(key: String, state: ModelLoadState) {
+        guard let id = servedIDs.first(where: {
+            $0 != ServedModels.appleFoundationID
+                && ModelContainerPool.key(for: ModelStore.shared.directory(forHFModelID: $0)) == key
+        }) else { return }
+        loadStates[id] = state
+        let name: String
+        switch state {
+        case .notLoaded: name = "notLoaded"
+        case .loading: name = "loading"
+        case .ready: name = "ready"
+        case .failed: name = "failed"      // the message can carry paths; ids and state only
+        }
+        Self.log.info("model \(id, privacy: .public): \(name, privacy: .public)")
     }
 
     private func setEnabled(_ on: Bool) {
