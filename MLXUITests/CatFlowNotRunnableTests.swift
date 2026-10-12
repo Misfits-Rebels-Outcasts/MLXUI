@@ -33,8 +33,11 @@ struct CatFlowNotRunnableTests {
 
     @Test func flowsThatRunStayRunnable() throws {
         for flowID in ["01-SpokenSummary", "02-MeetingMinutes", "18-DocChat", "51-InboxIngest",
-                       "21-PhotoWebPrep", "65-VoiceoverBed", "1-TranscribeAudio", "2-SummaryFromAudio",
-                       "3-ExtractTableFromImage", "4-WebPageSummary", "5-ExtractWebPageLinks"] {
+                       "21-PhotoWebPrep", "8-VoiceoverBed", "1-TranscribeAudio", "2-SummaryFromAudio",
+                       "3-ExtractTableFromImage", "4-WebPageSummary", "5-ExtractWebPageLinks",
+                       // BG-3 (RSI/DelegateBasicImageFlowsBacklog.md): 63/64/65 moved to the
+                       // Basic Gallery as 6/7/8 — same contents, new flow ids.
+                       "6-CutOutSubject", "7-UpscaleSmall"] {
             #expect(try refusal(flowID) == nil, "\(flowID) should be runnable")
         }
     }
@@ -59,13 +62,13 @@ struct CatFlowNotRunnableTests {
         }
     }
 
-    /// CFM-R15-1 — `63-CutOutSubject` runs now that the owner ruled hazard H2 option (1)
+    /// CFM-R15-1 — `6-CutOutSubject` (was `63-CutOutSubject`; BG-3 renamed it) runs now that the owner ruled hazard H2 option (1)
     /// (2026-08-27): the executor serves `engines.diffusion.segment`, `SAM Base` bridges onto
     /// `mlx-community/sam3-4bit` as a `.substitute`, and the preflight buckets it to-download
     /// instead of blocking.
     @Test func cutOutSubjectRunsSinceSegmentIsServed() throws {
-        #expect(try refusal("63-CutOutSubject") == nil,
-                "63-CutOutSubject should run after CFM-R15-1")
+        #expect(try refusal("6-CutOutSubject") == nil,
+                "6-CutOutSubject should run after CFM-R15-1")
     }
 
     @Test func notRunnableFlowsStillShipRawCatText() throws {

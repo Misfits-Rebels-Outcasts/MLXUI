@@ -156,4 +156,67 @@ struct CatFlowGalleryReproductionTests {
         #expect(doc.version == "0.8")
         #expect(doc.rows.map(\.task) == ["Read Audio", "Transcribe", "Summarize", "Speak", "Save Audio", "Save Text"])
     }
+
+    // MARK: - BG-3: the two shelves are one flattened bundle
+
+    /// BG-3 (`RSI/DelegateBasicImageFlowsBacklog.md`, owner rulings R3 + R4, 2026-10-10) moved
+    /// 63/64/65 onto the Basic shelf as 6/7/8 **keeping their `number` values**, so the shelf a
+    /// flow is on and its badge number are now deliberately different things: Basic shows
+    /// positions 1…8 (`FlowGalleryView`'s `displayNumber: index + 1`) while the numbers stay
+    /// unique in the global sequence. This pins that arrangement as data — the shelf order is
+    /// `_metadata.json` file order, so a re-sort or an inserted entry silently renumbers the
+    /// shelf badge and nothing else would notice.
+    @Test func theBasicShelfIsEightSourcedPositionsWhileKeepingGlobalNumbers() throws {
+        let entries = GalleryLoader.loadMetadata()
+        #expect(entries.count == 77, "a move, never an add — the gallery stays 77")
+        #expect(entries.count == Set(entries.map(\.number)).count, "gallery numbers must stay unique")
+
+        let basic = entries.filter(\.isBasic)
+        #expect(basic.count == 8, "Basic Gallery is 1…8 now: 70,71,72,75,76,63,64,65")
+        // Shelf **order** is metadata order, and the three moved entries sit after 76 (owner
+        // ruling R4: they read 6, 7, 8 — not 1–3, which is where they would land if they had
+        // been left in numeric position or appended before the existing basics).
+        #expect(basic.map(\.flowID) == ["1-TranscribeAudio", "2-SummaryFromAudio",
+                                        "3-ExtractTableFromImage", "4-WebPageSummary",
+                                        "5-ExtractWebPageLinks", "6-CutOutSubject",
+                                        "7-UpscaleSmall", "8-VoiceoverBed"])
+        // R4: the numbers are kept, not renumbered — 63/64/65 are still 63/64/65.
+        #expect(basic.suffix(3).map(\.number) == [63, 64, 65])
+
+        // Advance keeps every other number, with 63–65 simply absent (the gap R4 chose), and
+        // 66–69/73/74/77 untouched.
+        let advance = entries.filter { !$0.isBasic }.map(\.number)
+        #expect(advance.count == 69)
+        #expect(!advance.contains(63) && !advance.contains(64) && !advance.contains(65))
+        for kept in [62, 66, 67, 68, 69, 73, 74, 77] {
+            #expect(advance.contains(kept), "\(kept) must not be renumbered or moved (R4)")
+        }
+    }
+
+    /// The mechanism R3 depends on: both shelves flatten into one `Contents/Resources/` root,
+    /// so a **duplicate flat filename** would be resolved by the bundle in an undefined order —
+    /// the failure mode being the *wrong flow's* `.cat` text loading with a green parse test.
+    /// `GalleryLoader`'s own doc comment calls the names globally unique; this makes that an
+    /// assertion rather than a comment, and it is the check that would have caught a careless
+    /// `git mv` into `BasicGallery/` reusing an existing `photo.jpg`-style name.
+    @Test func noFlatFilenameCollidesAcrossTheTwoShelves() throws {
+        let suffixes = [".cat", ".catpipeline"]
+        func names(_ dir: URL) throws -> [String] {
+            try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        }
+        let advanceCats = try names(galleryDir).filter { n in suffixes.contains { n.hasSuffix($0) } }
+        // Every bundled resource in both dirs, not just the flows — the assets flatten too.
+        let basicAll = try names(basicGalleryDir)
+        let duplicates = Set(advanceCats).intersection(Set(basicAll))
+        #expect(duplicates.isEmpty, "flattened-bundle name collision: \(duplicates.sorted())")
+
+        // And the three moved flows really are on the Basic shelf, loadable, with Fixtures goldens.
+        for id in ["6-CutOutSubject", "7-UpscaleSmall", "8-VoiceoverBed"] {
+            #expect(basicAll.contains("\(id).cat"), "\(id).cat should live in BasicGallery/")
+            #expect(try !GalleryLoader.rawCatText(flowID: id).isEmpty)
+            let golden = fixturesGalleryDir.appendingPathComponent("\(id).parse.json")
+            #expect(FileManager.default.fileExists(atPath: golden.path),
+                    "\(id) needs its renamed fixture — 63/64/65 were `git mv`d, never edited")
+        }
+    }
 }

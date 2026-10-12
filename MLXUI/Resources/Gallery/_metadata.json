@@ -435,27 +435,6 @@
    "description": "Monocular depth as a row — `Estimate Depth` (Depth Pro) turns a flat photo into a depth map, the same preprocessing a ControlNet-driven generation would consume."
   },
   {
-   "number": 63,
-   "title": "Cut Out the Subject",
-   "filename": "63-CutOutSubject.cat",
-   "category": "Diffusion & Generation",
-   "description": "SAM turns \"the subject\" into a mask, no prompt needed — a bounding crop away from a clean cutout."
-  },
-  {
-   "number": 64,
-   "title": "Upscale a Small Photo",
-   "filename": "64-UpscaleSmall.cat",
-   "category": "Diffusion & Generation",
-   "description": "SeedVR2, a single-step restoration model — one row, no second low-denoise pass needed."
-  },
-  {
-   "number": 65,
-   "title": "A Voiceover Bed",
-   "filename": "65-VoiceoverBed.cat",
-   "category": "Diffusion & Generation",
-   "description": "`Generate Sound` (MusicGen) is `Speak`'s sibling — same signature, different job: music instead of a voice reading text."
-  },
-  {
    "number": 66,
    "title": "Eight Seeds, One Sheet",
    "filename": "66-SeedSweep.cat",
@@ -543,6 +522,30 @@
    "filename": "77-TicketRouter.cat",
    "category": "Inbox, Approvals & People",
    "description": "A folder of support tickets sorted by team in one pass — Laya picks the label, nothing is generated, so it's fast enough for a whole inbox."
+  },
+  {
+   "number": 63,
+   "title": "Cut Out the Subject",
+   "filename": "6-CutOutSubject.cat",
+   "category": "Basic",
+   "description": "Point it at a photo and get back a black-and-white mask of the main subject — SAM finds it, no prompt needed.",
+   "tier": "basic"
+  },
+  {
+   "number": 64,
+   "title": "Upscale a Small Photo",
+   "filename": "7-UpscaleSmall.cat",
+   "category": "Basic",
+   "description": "A small photo in, a sharper 2× photo out — one row of SeedVR2 super-resolution.",
+   "tier": "basic"
+  },
+  {
+   "number": 65,
+   "title": "A Voiceover Bed",
+   "filename": "8-VoiceoverBed.cat",
+   "category": "Basic",
+   "description": "Describe the music you want and get a short WAV back — MusicGen writes the background bed.",
+   "tier": "basic"
   }
  ]
 }

@@ -100,15 +100,20 @@ final class AppState {
     static let hideNotSupportedSteps = true
 
     /// Hide individual gallery flows (badges) by gallery number. Numbers are the
-    /// `_metadata.json` `number` field (1–76 today), stable across renames. Basic Gallery's
-    /// filenames restart at `1-`/`2-` for a friendly per-shelf look, but their `number` values
-    /// (70–76) stay in the single global sequence — hiding by number never accidentally
-    /// catches both an Advance Gallery flow and a same-numbered Basic Gallery one. Ranges
-    /// read naturally — hide flows 60–69:
+    /// `_metadata.json` `number` field (1–77 today), stable across renames. Basic Gallery's
+    /// filenames restart at `1-`…`8-` for a friendly per-shelf look, but their `number` values
+    /// (**63–65 and 70–76**) stay in the single global sequence — hiding by number never
+    /// accidentally catches both an Advance Gallery flow and a same-numbered Basic Gallery one.
+    /// Ranges read naturally — hide flows 60–69:
     /// `static let hiddenFlowNumbers: Set<Int> = Set(60...69)`
     /// …and also hide flow 50:
     /// `static let hiddenFlowNumbers: Set<Int> = [50] + Set(60...69)` (or `Set([50])`).
     /// Empty = show everything.
+    ///
+    /// BG-3 (`RSI/DelegateBasicImageFlowsBacklog.md`, owner rulings R3 + R4, 2026-10-10): the
+    /// basic set used to be 70–76 only. 63/64/65 moved to the Basic shelf under owner ruling R4
+    /// **keeping their numbers**, so the set is no longer one contiguous range — which is
+    /// exactly why this list is written out rather than described as a range.
     //static let hiddenFlowNumbers: Set<Int> = Set(60...69)
     static let hiddenFlowNumbers: Set<Int> = []
     

@@ -500,7 +500,7 @@ nonisolated struct RealExecutor: FlowExecutor {
         // Plain model: wrap the registry stage in SingleMediaStage (unwraps one Item,
         // runs, persists heavy outputs file-backed). A row with no upstream input falls
         // back to the settings' first bare token as the text prompt for the prompt-driven
-        // diffusion engines — the Python `_prompt` rule (row 1 of `65-VoiceoverBed`'s
+        // diffusion engines — the Python `_prompt` rule (row 1 of `8-VoiceoverBed`'s
         // `Generate Sound` carries its prompt in the settings).
         let media: Asset
         if let input = inputs.first {

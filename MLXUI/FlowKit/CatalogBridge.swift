@@ -213,7 +213,7 @@ nonisolated enum CatalogBridge {
             candidates: ["mlx-community/SeedVR2-3B-mlx-int8"],
             equivalence: .same,
             manifestFile: "seedvr2-3b.json"),
-        // CFM-R15-1 — Segment. `63-CutOutSubject` names `SAM Base` (the reference manifest's
+        // CFM-R15-1 — Segment. `6-CutOutSubject` names `SAM Base` (the reference manifest's
         // own id `mlx/sam-base`); the only installable segmentation entry is SAM3. `.substitute`
         // renders "running SAM Base as mlx-community/sam3-4bit" on the row, so the different
         // generation is *shown* — the MusicGen precedent (`meta/musicgen-small` → MusicGen).

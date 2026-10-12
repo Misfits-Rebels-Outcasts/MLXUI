@@ -81,7 +81,7 @@ struct CatFlowDiffusionAndCompareEditorTests {
     }
 
     @Test func editingGenerateSoundPromptChangesWhatRealExecutorWouldRead() throws {
-        let doc = try GalleryLoader.loadDocument(flowID: "65-VoiceoverBed")
+        let doc = try GalleryLoader.loadDocument(flowID: "8-VoiceoverBed")
         let row0 = doc.rows[0]
         #expect(row0.task == "Generate Sound")
         let original = row0.settings ?? ""

@@ -96,8 +96,8 @@ struct CatFlowSaveToolsTests {
     }
 
     /// CFM-R12-FIX-1/12 honesty check: Save Image made the *tools* runnable, but of flows
-    /// 60–66 only **65-VoiceoverBed**, **64-UpscaleSmall** (SeedVR2 3B now in catalog,
-    /// SV-AM1) and — since CFM-R15-1 — **63-CutOutSubject** (SAM Base bridges onto
+    /// 60–66 only **8-VoiceoverBed**, **7-UpscaleSmall** (SeedVR2 3B now in catalog,
+    /// SV-AM1) and — since CFM-R15-1 — **6-CutOutSubject** (SAM Base bridges onto
     /// `mlx-community/sam3-4bit`) have a model the bridge can resolve. The rest refuse at the
     /// live gate (Generate Image / Edit Image / Segment / the latent rows have no bridge model).
     @Test func flowsUnblockedBySaveImageAreRunnableNow() throws {
@@ -108,9 +108,9 @@ struct CatFlowSaveToolsTests {
                                                  installed: [], totalRAMGB: 32, claimableModelIDs: [])
         }
         // These flows have a resolvable model in the catalog (not blocked at the bridge gate).
-        #expect(runs("65-VoiceoverBed") == nil)
-        #expect(runs("64-UpscaleSmall") == nil, "SeedVR2 3B is in the catalog (SV-AM1)")
-        #expect(runs("63-CutOutSubject") == nil, "SAM Base bridges onto sam3-4bit (CFM-R15-1)")
+        #expect(runs("8-VoiceoverBed") == nil)
+        #expect(runs("7-UpscaleSmall") == nil, "SeedVR2 3B is in the catalog (SV-AM1)")
+        #expect(runs("6-CutOutSubject") == nil, "SAM Base bridges onto sam3-4bit (CFM-R15-1)")
         // These still refuse: no bridge model exists for their task.
         for fid in ["61-EditInPlace", "62-SeeDepth",
                     "60-GenerateProductShot", "66-SeedSweep"] {

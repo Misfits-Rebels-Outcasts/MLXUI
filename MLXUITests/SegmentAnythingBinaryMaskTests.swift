@@ -5,7 +5,8 @@ import CoreGraphics
 
 /// CFM-R15-1(b) — the flow boundary: the `Segment` stage must emit a **binary** mask
 /// (white = mask, black = background, nothing of the source photo survives — the
-/// `tools/media.py::save_mask` L-mode contract `63-CutOutSubject`'s `Save Image` expects),
+/// `tools/media.py::save_mask` L-mode contract `6-CutOutSubject`'s `Save Image` expects;
+/// BG-3 renamed 63 → 6 when the flow moved to the Basic Gallery),
 /// never the run view's red-tinted overlay. Pins the pixel-buffer writer's values directly
 /// and the stage's Media path end to end.
 struct SegmentAnythingBinaryMaskTests {

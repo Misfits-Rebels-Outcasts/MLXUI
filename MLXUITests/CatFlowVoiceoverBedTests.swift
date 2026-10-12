@@ -2,7 +2,8 @@ import Testing
 import Foundation
 @testable import MLXUI
 
-/// Covers CFM-R4-3: `65-VoiceoverBed` — `Generate Sound` (MusicGen) → `Save Audio`. The
+/// Covers CFM-R4-3: `8-VoiceoverBed` (was `65-VoiceoverBed`; BG-3 renamed it and moved it
+/// to the Basic Gallery) — `Generate Sound` (MusicGen) → `Save Audio`. The
 /// `.substitute` bridge path (MusicGen → `jasonvassallo/mlx-musicgen-small`) is exercised
 /// through preflight, and the flow runs under the mock executor. See
 /// `RSI/DelegateMergeBacklog.md` CFM-R4-3.
@@ -12,7 +13,12 @@ struct CatFlowVoiceoverBedTests {
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let url = repoRoot.appendingPathComponent("MLXUI/Resources/Gallery/\(flowID).cat")
+        // BG-3: the flow lives on the Basic shelf now, and both shelves flatten into the same
+        // bundle root — so a test that reads the repo tree must look in both, exactly as
+        // `CatFlowGalleryReproductionTests.directory(for:)` does.
+        let basic = repoRoot.appendingPathComponent("MLXUI/Resources/BasicGallery/\(flowID).cat")
+        let advance = repoRoot.appendingPathComponent("MLXUI/Resources/Gallery/\(flowID).cat")
+        let url = FileManager.default.fileExists(atPath: basic.path) ? basic : advance
         return try CatParser.parse(try String(contentsOf: url, encoding: .utf8))
     }
 
@@ -28,12 +34,12 @@ struct CatFlowVoiceoverBedTests {
     // MARK: - Runnable + bridge
 
     @Test func voiceoverBedIsRunnable() throws {
-        let doc = try decode("65-VoiceoverBed")
+        let doc = try decode("8-VoiceoverBed")
         #expect(FlowRunner.canRun(doc) == .runnable)
     }
 
     @Test func voiceoverBedResolvesMusicGenThroughSubstitute() throws {
-        let doc = try decode("65-VoiceoverBed")
+        let doc = try decode("8-VoiceoverBed")
         let catalog = try loadCatalog()
         let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: [], totalRAMGB: 16,
                                        claimableModelIDs: [])
@@ -55,7 +61,7 @@ struct CatFlowVoiceoverBedTests {
     // MARK: - First-row prompt fallback (smoke-34: "needs an input, but got 0")
 
     @Test func generateSoundUsesSettingsPromptWhenNoInput() async throws {
-        // 65-VoiceoverBed row 1 is the flow's first row — it has no upstream input. The
+        // 8-VoiceoverBed row 1 is the flow's first row — it has no upstream input. The
         // Python `_prompt` falls back to `Settings.first_bare()`, so the Swift must feed
         // the quoted settings prompt to the stage rather than refuse with "got 0".
         let repoRoot = URL(fileURLWithPath: #filePath)
@@ -69,7 +75,7 @@ struct CatFlowVoiceoverBedTests {
         let capture = CapturingStage()
         let executor = RealExecutor(
             workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory),
-            flowID: "65-VoiceoverBed",
+            flowID: "8-VoiceoverBed",
             blobDirectory: FileManager.default.temporaryDirectory,
             makeModelStage: { _, _ in capture },
             installedModelIDs: [music.id],
@@ -86,14 +92,14 @@ struct CatFlowVoiceoverBedTests {
     // MARK: - Runs under mock
 
     @Test func voiceoverBedRunsEndToEndUnderMock() async throws {
-        let doc = try decode("65-VoiceoverBed")
+        let doc = try decode("8-VoiceoverBed")
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("catflow-voiceover-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: base) }
         let blob = base.appendingPathComponent("blobs")
         let workspace = FlowWorkspace(root: base.appendingPathComponent("flows"))
-        let context = FlowRunner.RunContext(flowID: "65-VoiceoverBed", workspace: workspace,
+        let context = FlowRunner.RunContext(flowID: "8-VoiceoverBed", workspace: workspace,
                                             blobDirectory: blob,
                                             executor: MockExecutor(blobDirectory: blob))
 

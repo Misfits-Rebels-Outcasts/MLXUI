@@ -264,11 +264,12 @@ struct CatFlowR16DiffusionSettingsTests {
     }
 
     @Test @MainActor func galleryFlow64sSecondRowIsNoLongerYellow() throws {
-        // The BG-0 (b) repro, as a test: `64-UpscaleSmall` loads with row 2 carrying its own
+        // The BG-0 (b) repro, as a test: the flow formerly `64-UpscaleSmall` (BG-3 moved it to
+        // the Basic Gallery as `7-UpscaleSmall`) loads with row 2 carrying its own
         // `SeedVR2 3B; scale=2.0` and must show no warning now that `Upscale` is served.
         let catalog = try loadCatalog()
         let claimable = claimableIDs(catalog: catalog)
-        let doc = try GalleryLoader.loadDocument(flowID: "64-UpscaleSmall")
+        let doc = try GalleryLoader.loadDocument(flowID: "7-UpscaleSmall")
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("bg2-64-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -285,7 +286,7 @@ struct CatFlowR16DiffusionSettingsTests {
         let desc = try #require(TaskCatalog.get("Upscale"))
         let executor = makeExecutor()
 
-        // `64-UpscaleSmall` writes the float form — `2.0` must land as `2`.
+        // `7-UpscaleSmall` (was `64-UpscaleSmall`) writes the float form — `2.0` must land as `2`.
         let two = try executor.stageConfig(
             for: desc, row: Row(task: "Upscale", model: "SeedVR2 3B", settings: "scale=2.0"))
         #expect(two.scale == 2)
