@@ -43,38 +43,135 @@ struct RunWindowBudgetTests {
                      cache: cache, maxWait: maxWait)
     }
 
-    // MARK: - (1) the Run window leases while open and returns on close
+    /// A probe whose `run` is under the test's control: it waits for `open`, or throws, or is cancelled.
+    private nonisolated final class Controlled: PipelineStage, @unchecked Sendable {
+        let id: String
+        var name: String { id }
+        var accepts: MediaKind { .text }
+        var produces: MediaKind { .text }
+        private let lock = NSLock()
+        private var _open = false, _started = false
+        let failure: Error?
+        init(id: String, failure: Error? = nil) { self.id = id; self.failure = failure }
+        var started: Bool { lock.lock(); defer { lock.unlock() }; return _started }
+        func open() { lock.lock(); _open = true; lock.unlock() }
+        private var isOpen: Bool { lock.lock(); defer { lock.unlock() }; return _open }
+        func run(_ input: Media, progress: @Sendable @escaping (Double) -> Void) async throws -> Media {
+            lock.lock(); _started = true; lock.unlock()
+            if let failure { throw failure }
+            while !isOpen { try await Task.sleep(for: .milliseconds(10)) }      // throws when cancelled
+            return input
+        }
+    }
+
+    private func waitUntil(_ what: String = "", _ condition: () -> Bool) async throws {
+        for _ in 0..<500 where !condition() { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(condition(), "timed out waiting for \(what)")
+    }
+
+    // MARK: - (1) a Run window leases per run, not while it is open
 
     @Test(arguments: [ModelType.asr, .tts, .image, .music, .embedding, .segmentation, .video, .upscale])
-    func openingARunWindowReservesAndLeasesAndClosingReturnsIt(_ kind: ModelType) async throws {
+    func anOpenIdleRunWindowHoldsNothingARunningOneHoldsItAndAfterwardsItIsEvictable(_ kind: ModelType) async throws {
         let budget = makeBudget(10)
         let cache = EngineCache(budget: budget, countsLLMWeights: false)
         let model = makeEntry(id: "m-\(kind.rawValue)", modelType: kind, ramGB: 3)
-        let stage = leasing(model, cache: cache)
-        #expect(budget.usedBytes == 0)                         // nothing until the sheet opens
-        #expect(await stage.prepare() == nil)
-        #expect(budget.usedBytes == 3 * Self.gb)               // reserved at the entry's size
-        #expect(budget.inUseCount == 1 && stage.isLeased)      // and in use: eviction skips it
-        stage.release()                                         // the sheet closes
-        #expect(budget.inUseCount == 0 && !stage.isLeased)
-        #expect(budget.usedBytes == 3 * Self.gb)               // still resident (warm), but evictable now
+        let probe = Controlled(id: model.id)
+        let stage = LeasingStage(model: model, config: .default, probe: probe, cache: cache, maxWait: .seconds(2))
+        // open and idle: nothing reserved, nothing held
+        #expect(budget.usedBytes == 0 && budget.inUseCount == 0 && !stage.isRunning)
+
+        let run = Task { try await stage.run(.text("x")) { _ in } }
+        try await waitUntil("the run to start") { probe.started }
+        #expect(budget.usedBytes == 3 * Self.gb && budget.inUseCount == 1 && stage.isRunning)   // running: reserved and in use
+        probe.open()
+        _ = try await run.value
+        #expect(budget.inUseCount == 0 && !stage.isRunning)                    // the lease is returned
+        #expect(budget.usedBytes == 3 * Self.gb && cache.count == 1)            // warm: still cached, but evictable now
     }
 
-    @Test func aRunWindowsEngineIsNotEvictedWhileTheSheetIsOpen() async throws {
+    @Test func anOpenIdleRunWindowDoesNotBlockAnotherLoad() async throws {
         let budget = makeBudget(10)
         let cache = EngineCache(budget: budget, countsLLMWeights: false)
-        let open = leasing(makeEntry(id: "open", modelType: .asr, ramGB: 6), cache: cache)
-        #expect(await open.prepare() == nil)
-        // a flow row that can only fit by evicting the open sheet's engine waits, then is refused
-        await #expect(throws: MemoryBudget.WaitError.self) {
-            _ = try await cache.leasedStage(for: makeEntry(id: "row", modelType: .tts, ramGB: 6), config: .default,
+        let idle = LeasingStage(model: makeEntry(id: "idle", modelType: .tts, ramGB: 6), config: .default,
+                                probe: Stub(id: "idle"), cache: cache)
+        _ = try await idle.run(.text("warm")) { _ in }                          // used once, window left open
+        #expect(budget.inUseCount == 0)
+        // a flow row that needs the room takes it from the idle window's cached engine — no wait, no refusal
+        let started = ContinuousClock.now
+        _ = try await cache.leasedStage(for: makeEntry(id: "row", modelType: .asr, ramGB: 6), config: .default,
+                                        maxWait: .seconds(30)) { m, _ in Stub(id: m.id) }
+        #expect(ContinuousClock.now - started < .seconds(5))
+        #expect(cache.count == 1 && budget.usedBytes == 6 * Self.gb)
+        #expect(!idle.isRunning)
+    }
+
+    @Test func aRunInProgressBlocksAnotherLoadUntilItEnds() async throws {
+        let budget = makeBudget(10)
+        let cache = EngineCache(budget: budget, countsLLMWeights: false)
+        let probe = Controlled(id: "busy")
+        let window = LeasingStage(model: makeEntry(id: "busy", modelType: .tts, ramGB: 6), config: .default,
+                                  probe: probe, cache: cache)
+        let run = Task { try await window.run(.text("x")) { _ in } }
+        try await waitUntil("the run to start") { probe.started }
+        // refused while the run is in progress, naming the Run window
+        do {
+            _ = try await cache.leasedStage(for: makeEntry(id: "row", modelType: .asr, ramGB: 6), config: .default,
                                             maxWait: .milliseconds(150)) { m, _ in Stub(id: m.id) }
+            Issue.record("expected a WaitError")
+        } catch let error as MemoryBudget.WaitError {
+            #expect(error.description == "Waiting for memory: busy is in use by a Run window. Try again when it finishes.")
         }
+        // …and a waiter that is already waiting proceeds as soon as the run ends
+        async let waiting = cache.leasedStage(for: makeEntry(id: "row", modelType: .asr, ramGB: 6), config: .default,
+                                              maxWait: .seconds(10)) { m, _ in Stub(id: m.id) }
+        try await Task.sleep(for: .milliseconds(100))
         #expect(cache.count == 1)
-        open.release()
-        _ = try await cache.leasedStage(for: makeEntry(id: "row", modelType: .tts, ramGB: 6), config: .default,
-                                        maxWait: .seconds(1)) { m, _ in Stub(id: m.id) }
-        #expect(cache.count == 1)                              // an ordinary eviction of the closed sheet's engine
+        probe.open()
+        _ = try await run.value
+        _ = try await waiting
+        #expect(cache.count == 1 && budget.usedBytes == 6 * Self.gb)           // the window's engine was evicted for it
+    }
+
+    @Test func aThrowingRunReturnsItsLease() async throws {
+        struct Boom: Error {}
+        let budget = makeBudget(10)
+        let cache = EngineCache(budget: budget, countsLLMWeights: false)
+        let window = LeasingStage(model: makeEntry(id: "boom", modelType: .asr, ramGB: 3), config: .default,
+                                  probe: Controlled(id: "boom", failure: Boom()), cache: cache)
+        await #expect(throws: Boom.self) { _ = try await window.run(.text("x")) { _ in } }
+        #expect(budget.inUseCount == 0 && !window.isRunning)
+    }
+
+    @Test func aCancelledRunReturnsItsLease() async throws {
+        let budget = makeBudget(10)
+        let cache = EngineCache(budget: budget, countsLLMWeights: false)
+        let probe = Controlled(id: "cancel")
+        let window = LeasingStage(model: makeEntry(id: "cancel", modelType: .asr, ramGB: 3), config: .default,
+                                  probe: probe, cache: cache)
+        let run = Task { try await window.run(.text("x")) { _ in } }
+        try await waitUntil("the run to start") { probe.started }
+        #expect(budget.inUseCount == 1)
+        run.cancel()
+        _ = await run.result
+        #expect(budget.inUseCount == 0 && !window.isRunning)
+    }
+
+    @Test func aRunCancelledWhileWaitingForRoomLeavesNothingHeld() async throws {
+        let budget = makeBudget(10)
+        let cache = EngineCache(budget: budget, countsLLMWeights: false)
+        let held = try await cache.lease(for: makeEntry(id: "other", modelType: .tts, ramGB: 6), config: .default,
+                                         holder: .chat) { m, _ in Stub(id: m.id) }
+        let window = LeasingStage(model: makeEntry(id: "w", modelType: .asr, ramGB: 6), config: .default,
+                                  probe: Stub(id: "w"), cache: cache, maxWait: .seconds(60))
+        let run = Task { try await window.run(.text("x")) { _ in } }
+        try await Task.sleep(for: .milliseconds(100))
+        let started = ContinuousClock.now
+        run.cancel()
+        _ = await run.result
+        #expect(ContinuousClock.now - started < .seconds(5))                    // not the 60 s bound
+        #expect(budget.inUseCount == 1)                                         // only `other`
+        held.hold.release()
     }
 
     @Test func aRunWindowAndAFlowRowForTheSameModelShareOneEngine() async throws {
@@ -82,58 +179,51 @@ struct RunWindowBudgetTests {
         let cache = EngineCache(budget: budget, countsLLMWeights: false)
         let model = makeEntry(id: "shared", modelType: .asr, ramGB: 4)
         let builds = Counter()
-        let sheet = leasing(model, cache: cache)
-        #expect(await sheet.prepare() == nil)
+        let window = LeasingStage(model: model, config: .default, probe: Stub(id: model.id), cache: cache)
+        _ = try await window.run(.text("x")) { _ in }                           // the window's run built the engine
         let row = try await cache.leasedStage(for: model, config: .default) { m, _ in builds.bump(); return Stub(id: m.id) }
-        #expect(builds.value == 0)                              // the sheet's engine served the row: no second build
+        #expect(builds.value == 0)                                              // the row reused it: no second build
         #expect(cache.count == 1 && budget.usedBytes == 4 * Self.gb)
-        sheet.release()
-        #expect(budget.inUseCount == 1)                         // the row still holds it
+        #expect(budget.inUseCount == 1)                                         // held by the row alone
         _ = row
     }
 
-    @Test func aRunWindowThatWaitsOutTheBoundShowsTheWaitingSentenceInItsOwnError() async throws {
+    @Test func aRunThatHasToWaitShowsTheWaitingSentenceInTheRunViewsOwnError() async throws {
         let budget = makeBudget(10)
         let cache = EngineCache(budget: budget, countsLLMWeights: false)
         let held = try await cache.lease(for: makeEntry(id: "whisper-small", modelType: .asr, ramGB: 6), config: .default,
                                          holder: .chat) { m, _ in Stub(id: m.id) }
-        let sheet = leasing(makeEntry(id: "ocr-model", modelType: .ocr, ramGB: 6), cache: cache, maxWait: .milliseconds(150))
-        let refusal = await sheet.prepare()
-        let wait = try #require(refusal as? MemoryBudget.WaitError)
-        #expect(wait.description == "Waiting for memory: whisper-small is in use by Chat. Try again when it finishes.")
-        // the Run view's existing error bar renders `localizedDescription`/`errorDescription` of what `run` throws
+        let window = LeasingStage(model: makeEntry(id: "ocr-model", modelType: .ocr, ramGB: 6), config: .default,
+                                  probe: Stub(id: "ocr-model"), cache: cache, maxWait: .milliseconds(150))
+        // the Run view renders what `run` throws via `errorDescription`
         do {
-            _ = try await sheet.run(.text("x")) { _ in }
+            _ = try await window.run(.text("x")) { _ in }
             Issue.record("expected the refusal")
         } catch let error as MemoryBudget.WaitError {
-            #expect(error.errorDescription == wait.description)
+            #expect(error.errorDescription == "Waiting for memory: whisper-small is in use by Chat. Try again when it finishes.")
         }
+        #expect(budget.inUseCount == 1)                                         // the refused run holds nothing
         held.hold.release()
-        // freed: the next run leases and works (the refusal wasn't remembered)
-        let out = try await sheet.run(.text("x")) { _ in }
+        let out = try await window.run(.text("x")) { _ in }                     // freed: the next run works
         guard case .text("x") = out else { Issue.record("unexpected output"); return }
-        #expect(sheet.isLeased)
     }
 
-    @Test func aRebuildReturnsTheOldLeaseAndLeasesTheNewConfig() async throws {
+    @Test func aRebuildIsItsOwnConfigAndEachRunLeasesAndReturns() async throws {
         let budget = makeBudget(10)
         let cache = EngineCache(budget: budget, countsLLMWeights: false)
         let model = makeEntry(id: "whisper", modelType: .asr, ramGB: 3)
         let sdk = CountingSDK()
-        let first = leasing(model, cache: cache)
-        #expect(await first.prepare() == nil)
-        #expect(budget.inUseCount == 1)
+        let first = LeasingStage(model: model, config: .default, probe: Stub(id: model.id), cache: cache)
         let second = try #require(LeasingStage.rebuilding(first, model: model, sdk: sdk, config: StageConfig(language: "fr"))
                                   as? LeasingStage)
-        #expect(!first.isLeased)                                // the old one is returned at once
-        #expect(await second.prepare() == nil)
-        #expect(second.isLeased && budget.inUseCount == 1 && cache.count == 2)   // its own engine (config is part of the key); the first is idle
         let third = try #require(LeasingStage.rebuilding(second, model: model, sdk: sdk, config: StageConfig(language: "de"))
                                  as? LeasingStage)
-        #expect(!second.isLeased)
-        _ = await third.prepare()
-        third.release()
-        #expect(budget.inUseCount == 0)
+        #expect(budget.inUseCount == 0)                                         // rebuilding holds nothing
+        for stage in [first, second, third] {
+            _ = try await stage.run(.text("x")) { _ in }
+            #expect(budget.inUseCount == 0 && !stage.isRunning)
+        }
+        #expect(cache.count == 3 && budget.usedBytes == 9 * Self.gb)            // three configs, three warm engines
         #expect(sdk.builds == 2)
     }
 
@@ -146,23 +236,13 @@ struct RunWindowBudgetTests {
         #expect(LeasingStage.rebuilding(Stub(id: "x"), model: model, sdk: nil, config: .default) == nil)
     }
 
-    @Test func aDroppedRunWindowReturnsItsLease() async throws {
-        let budget = makeBudget(10)
-        let cache = EngineCache(budget: budget, countsLLMWeights: false)
-        do {
-            let stage = leasing(makeEntry(id: "gone", modelType: .asr, ramGB: 3), cache: cache)
-            #expect(await stage.prepare() == nil)
-            #expect(budget.inUseCount == 1)
-        }
-        #expect(budget.inUseCount == 0)
-    }
-
     @Test func aStageWhoseEngineBooksItsOwnWeightsIsBookedAtZeroByTheCache() async throws {
         let budget = makeBudget(10)
         let cache = EngineCache(budget: budget, countsLLMWeights: false)
-        let stage = leasing(makeEntry(id: "vlm", modelType: .vision, ramGB: 5), cache: cache, books: false)
-        #expect(await stage.prepare() == nil)
-        #expect(budget.usedBytes == 0 && budget.inUseCount == 0)    // not double-booked
+        let stage = LeasingStage(model: makeEntry(id: "vlm", modelType: .vision, ramGB: 5), config: .default,
+                                 probe: Stub(id: "vlm"), booksWeights: false, cache: cache)
+        _ = try await stage.run(.text("x")) { _ in }
+        #expect(budget.usedBytes == 0 && budget.inUseCount == 0)                // not double-booked
         // the SDKs that own their weights say so; the ones that don't, don't
         #expect(VLMSDK() is StageBooksOwnWeights)
         #expect(OCRSDK() is StageBooksOwnWeights)

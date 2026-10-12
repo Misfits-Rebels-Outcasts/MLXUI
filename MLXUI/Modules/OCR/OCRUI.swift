@@ -22,7 +22,7 @@ struct OCRUI: ModelUI {
             rebuild = nil
         case .freeText, .modes:
             let sdk = sdk
-            // SC-2b: each rebuild returns the previous stage's lease and leases the new one.
+            // SC-2b: a rebuilt stage leases its engine per run (config is part of the cache key).
             rebuild = { [stage] prompt in
                 LeasingStage.rebuilding(stage, model: model, sdk: sdk, config: StageConfig(prompt: prompt))
             }

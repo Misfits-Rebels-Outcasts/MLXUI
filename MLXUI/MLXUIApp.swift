@@ -234,9 +234,9 @@ struct MLXUIApp: App {
 
 
 /// SC-2b — the registry-driven Run sheet. The stage it hands the module's run view is a `LeasingStage`: the
-/// engine is reserved from the shared budget (`EngineCache`, the same entry a flow row for this model uses) as soon
-/// as the sheet opens, held while it is open, and returned when it closes. A refusal surfaces as the run view's own
-/// error (the waiting sentence), not as new UI.
+/// engine is leased from the shared budget (`EngineCache`, the same entry a flow row for this model uses) **for each
+/// run** and returned when the run ends (SC-2b-b): an open, idle window holds nothing. A refusal surfaces as the run
+/// view's own error (the waiting sentence), not as new UI.
 private struct RunSheetHost: View {
     let model: ModelEntry
     @Environment(AppState.self) private var appState
@@ -251,8 +251,6 @@ private struct RunSheetHost: View {
                 UnsupportedModelView(model: model)
             }
         }
-        .task { await lease.prepare() }
-        .onDisappear { lease.release() }
     }
 }
 
@@ -269,6 +267,4 @@ private struct RunSheetHost: View {
         return made
     }
 
-    func prepare() async { await stage?.prepare() }
-    func release() { stage?.release() }
 }

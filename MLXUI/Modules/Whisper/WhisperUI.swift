@@ -18,7 +18,7 @@ struct WhisperUI: ModelUI {
         var rebuild: ((String?) -> any PipelineStage)? = nil
         if model.source == .mlx, model.family.lowercased().contains("whisper") {
             let sdk = MLXWhisperSDK()
-            // SC-2b: each rebuild returns the previous stage's lease and leases the new one.
+            // SC-2b: a rebuilt stage leases its engine per run (config is part of the cache key).
             rebuild = { [stage] language in
                 LeasingStage.rebuilding(stage, model: model, sdk: sdk, config: StageConfig(language: language)) ?? stage
             }

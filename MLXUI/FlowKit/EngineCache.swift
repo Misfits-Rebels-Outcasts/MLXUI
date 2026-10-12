@@ -239,14 +239,16 @@ nonisolated struct LeasedStage: PipelineStage {
 protocol StageBooksOwnWeights {}
 
 /// SC-2b — a stage handed to a **Run window** (the registry-driven sheet for a non-LLM model). It leases the
-/// model's engine from `EngineCache` (`leasedStage`'s lease, held here) and returns it when the window closes
-/// (`release()`), on the rebuild that replaces it (`rebuilding`), or when the value is dropped (the hold's
-/// deinit — the safety net). A Run window and a flow row for the same model and config share one engine: both
-/// go through the same cache key.
+/// model's engine from `EngineCache` **for each run** (SC-2b-b): acquired when `run` starts, returned in a `defer`
+/// when it ends, including on cancel and throw — the same rule as a chat turn. An open, idle window holds nothing:
+/// between runs the engine stays cached (warm) and evictable, so a forgotten window can't make chat, flows or the
+/// server wait. A Run window and a flow row for the same model and config share one engine: both go through the same
+/// cache key.
 ///
-/// The lease is taken once, lazily and memoised: the sheet starts it as soon as it opens (`prepare()`), and a
-/// run that arrives meanwhile joins it. A refusal (the wait ran out) is not swallowed: the next `run` throws the
-/// `MemoryBudget.WaitError`, whose sentence the Run view's existing error bar already shows.
+/// There is no pre-load on open: reserving takes the same lease the run does, and nothing about opening a window
+/// needs the engine until the user presses Run. A run that has to wait for room throws the `MemoryBudget.WaitError`
+/// (after its bound, or at once when cancelled), whose sentence the Run view's existing error bar already shows; the
+/// next run simply tries again.
 nonisolated final class LeasingStage: PipelineStage, @unchecked Sendable {
     let model: ModelEntry
     let config: StageConfig
@@ -255,8 +257,7 @@ nonisolated final class LeasingStage: PipelineStage, @unchecked Sendable {
     private let booksWeights: Bool
     private let maxWait: Duration
     private let lock = NSLock()
-    private var acquiring: Task<any PipelineStage, Error>?
-    private var hold: MemoryBudget.Hold?
+    private var active = 0
 
     /// `probe` is the stage the SDK built for `model`/`config` (cheap: engines load on first run). It gives this
     /// stage its identity now, and is the builder's result if the cache doesn't already hold one.
@@ -275,59 +276,29 @@ nonisolated final class LeasingStage: PipelineStage, @unchecked Sendable {
     var accepts: MediaKind { probe.accepts }
     var produces: MediaKind { probe.produces }
 
-    /// Reserve and lease the engine now. Returns the refusal, if any; `run` will raise the same.
-    @discardableResult
-    func prepare() async -> Error? {
-        do { _ = try await engine(); return nil } catch { return error }
-    }
-
     func run(_ input: Media, progress: @Sendable @escaping (Double) -> Void) async throws -> Media {
-        try await engine().run(input, progress: progress)
-    }
-
-    /// Return the lease (idempotent). A later `run` leases again.
-    func release() {
-        lock.lock()
-        let held = hold
-        hold = nil
-        acquiring = nil
-        lock.unlock()
-        held?.release()
-    }
-
-    /// Whether this stage currently holds its engine.
-    var isLeased: Bool { lock.lock(); defer { lock.unlock() }; return hold != nil }
-
-    private func engine() async throws -> any PipelineStage {
-        let task: Task<any PipelineStage, Error> = {
-            lock.lock(); defer { lock.unlock() }
-            if let acquiring { return acquiring }
-            let probe = self.probe, model = self.model, config = self.config, cache = self.cache
-            let books = booksWeights, wait = maxWait
-            let task = Task<any PipelineStage, Error> { [weak self] in
-                let (stage, hold) = try await cache.lease(for: model, config: config, maxWait: wait,
-                                                          holder: .runWindow, booksWeights: books) { _, _ in probe }
-                guard let self else { hold.release(); return stage }
-                self.lock.lock(); self.hold = hold; self.lock.unlock()
-                return stage
-            }
-            acquiring = task
-            return task
-        }()
-        do { return try await task.value } catch {
-            lock.lock(); if acquiring == task { acquiring = nil }; lock.unlock()   // a later run may succeed
-            throw error
+        let probe = self.probe
+        let (stage, hold) = try await cache.lease(for: model, config: config, maxWait: maxWait,
+                                                  holder: .runWindow, booksWeights: booksWeights) { _, _ in probe }
+        lock.lock(); active += 1; lock.unlock()
+        defer {
+            hold.release()                                     // on return, throw and cancel alike
+            lock.lock(); active -= 1; lock.unlock()
         }
+        return try await stage.run(input, progress: progress)
     }
 
-    /// A Run view's per-run rebuild (OCR prompt, Whisper language): the replacement leases its own engine
-    /// (config is part of the cache key); the stage it replaces returns its lease first. When `stage` is not a
-    /// `LeasingStage` (a test, a non-sheet caller) this is the SDK's plain `makeStage`.
+    /// Whether a run is in progress (and so the engine is leased).
+    var isRunning: Bool { lock.lock(); defer { lock.unlock() }; return active > 0 }
+
+    /// A Run view's per-run rebuild (OCR prompt, Whisper language): a stage for the new config (config is part of the
+    /// cache key, so a different language/prompt is its own cached engine). Nothing is held between runs, so there is
+    /// no lease to hand over. When `stage` is not a `LeasingStage` (a test, a non-sheet caller) this is the SDK's
+    /// plain `makeStage`.
     static func rebuilding(_ stage: any PipelineStage, model: ModelEntry, sdk: (any ModelSDK)?,
                            config: StageConfig) -> (any PipelineStage)? {
         guard let sdk, let fresh = try? sdk.makeStage(for: model, config: config) else { return nil }
         guard let old = stage as? LeasingStage else { return fresh }
-        old.release()
         return LeasingStage(model: model, config: config, probe: fresh, booksWeights: old.booksWeights,
                             cache: old.cache, maxWait: old.maxWait)
     }
