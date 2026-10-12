@@ -666,6 +666,8 @@ final class ModelRunner {
 
         currentTask = Task { [weak self] in
             guard let self else { return }
+            let turnLease = TurnLease()
+            defer { turnLease.release() }      // SC-2a: the model is in use for the turn — return it on every exit
             do {
                 // MLX-ERR-3: the session (and with it the weights load) is built through a factory
                 // so the test seam can replace it, and the whole turn — load, generation and the
@@ -674,7 +676,7 @@ final class ModelRunner {
                 let session = try await self.streamingSession(
                     for: model, dir: modelDir, instructions: instructions, history: history,
                     registry: registry, fileScope: fileScope,
-                    turnConversationID: turnConversationID)
+                    turnConversationID: turnConversationID, turn: turnLease)
 
                 // R-ME3-1 (owner, 2026-10-12): **stop at the error.** `makeStream` must be a
                 // closure: the producer's `Task {}` only inherits mlx-swift's `@TaskLocal` handler
@@ -847,6 +849,24 @@ final class ModelRunner {
         return try await pool.container(for: model, directory: dir)
     }
 
+    /// SC-2a: the container for one chat turn, **leased** — in use until the turn ends, so another model's load
+    /// (a flow row, a Run UI, a server request) can't evict it mid-reply. The lease goes into `turn`, which `send`
+    /// returns on every exit. With the test seam, nothing is leased.
+    private func leasedContainerForModel(_ model: ModelEntry, dir: URL, turn: TurnLease) async throws -> ModelContainer {
+        #if DEBUG
+        if let injected = containerForTesting { return try await injected() }
+        #endif
+        let lease = try await pool.lease(for: model, directory: dir)
+        turn.hold = lease.hold
+        return lease.container
+    }
+
+    /// The memory lease a chat turn holds (SC-2a); returned by `release()` or when the turn's task lets go of it.
+    private final class TurnLease: @unchecked Sendable {
+        var hold: MemoryBudget.Hold?
+        func release() { hold?.release(); hold = nil }
+    }
+
     /// Build the streaming session for one turn — the single place `send` gets one (MLX-ERR-3).
     ///
     /// Extracted from `send` so the test seam can replace the **whole** session, weights load
@@ -860,12 +880,13 @@ final class ModelRunner {
         history: [Chat.Message],
         registry: ToolRegistry,
         fileScope: FileScope?,
-        turnConversationID: UUID?
+        turnConversationID: UUID?,
+        turn: TurnLease
     ) async throws -> any ChatStreamingSession {
         #if DEBUG
         if let injected = streamingSessionForTesting { return injected() }
         #endif
-        let container = try await containerForModel(model, dir: dir)
+        let container = try await leasedContainerForModel(model, dir: dir, turn: turn)
         return AgentSession(
             model: container,
             instructions: instructions,

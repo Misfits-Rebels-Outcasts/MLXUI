@@ -349,8 +349,18 @@ nonisolated struct MLXChatBackend: ServeBackend {
     private func runInner(_ request: ServeRequest,
                           into continuation: AsyncThrowingStream<ServeEvent, Error>.Continuation) async throws {
         let runStart = ContinuousClock.now
-        let container = try await pool.container(directory: directory, footprintBytes: footprintBytes,
-                                                 architecture: architecture)
+        // SC-2a: leased for the whole request, so a model load or another request's working set can't evict it
+        // from under the generation. Returned on every exit, including cancel and throw.
+        let lease: ModelContainerPool.ContainerLease
+        do {
+            lease = try await pool.lease(directory: directory, footprintBytes: footprintBytes, architecture: architecture)
+        } catch let error as MemoryBudget.WaitError {
+            continuation.yield(.error(ServeError(status: 503, message: error.description, type: "server_error",
+                                                 code: "waiting_for_memory")))
+            return
+        }
+        defer { lease.release() }
+        let container = lease.container
         // S2-2: S2-1's `system` hoisting and the flatten-or-keep decision for tool traffic now
         // happen in the route, which reads this backend's `modelType` and so has the one fact both
         // need. The backend stays a renderer: messages in, prompt out.
@@ -459,7 +469,8 @@ nonisolated struct MLXChatBackend: ServeBackend {
             var workingSet: MemoryBudget.Reservation?
             if let profile = memoryProfile {
                 let need = profile.needBytes(promptTokens: promptTokens, replyTokens: request.effectiveMaxTokens)
-                workingSet = await pool.reserveWorkingSet(totalNeedBytes: need, directory: directory)
+                workingSet = await pool.reserveWorkingSet(totalNeedBytes: need, directory: directory,
+                                                          maxWait: MemoryBudget.defaultMaxWait)
                 if workingSet == nil {
                     continuation.yield(.error(ServeMemoryAdmission.refusal(
                         needBytes: need, roomBytes: pool.budget.capacityBytes)))

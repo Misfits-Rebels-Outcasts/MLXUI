@@ -31,8 +31,11 @@ enum LLMEngine {
             // `footprintBytes` is the catalog `ramGB` when the caller has a `ModelEntry`; it is only the fallback for
             // the ledger charge (R63, `ModelWeightCharge`: the safetensors on disk × the measured load factor); nil
             // falls back to the model directory's on-disk size.
-            let container = try await pool.container(directory: modelDir, footprintBytes: footprintBytes)
-            return try await container.perform { context in
+            // SC-2a: leased for the whole generation — a load for anyone else can't evict it from under us, and it is
+            // returned on every exit (return, throw, cancel).
+            let lease = try await pool.lease(directory: modelDir, footprintBytes: footprintBytes)
+            defer { lease.release() }
+            return try await lease.container.perform { context in
                 // DA-11: ask a hybrid-reasoning template (Qwen3's) to skip its visible
                 // `<think>…</think>` preamble — none of the flow-row LLM primitives
                 // (Generate / Summarize / the deciders / Extract Structured / Text to Table,
