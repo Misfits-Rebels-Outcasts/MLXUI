@@ -289,6 +289,17 @@ nonisolated enum GalleryLoader {
             return [("2-SummaryFromAudio-canond.wav", "canond.wav")]
         case "3-ExtractTableFromImage":
             return [("3-ExtractTableFromImage-budget.png", "budget.png")]
+        // BG-4 (RSI/DelegateBasicImageFlowsBacklog.md, owner ruling R1 2026-10-10). Flows 6 and
+        // 7 were 63/64 in `Resources/Gallery/` (BG-3 moved them); they had never had their
+        // sample inputs bundled, which is why the Run banner said "Read Image needs
+        // 'photo.jpg', which isn't in the flow's folder yet" (BG-0 finding (a)). The sources are
+        // the **flow-ID-prefixed flat names** because the synchronized root group flattens every
+        // `Resources/BasicGallery/**` file into one `Contents/Resources/` root, where bare
+        // `photo.jpg` would collide (the `3-ExtractTableFromImage-budget.png` precedent).
+        case "6-CutOutSubject":
+            return [("6-CutOutSubject-photo.jpg", "photo.jpg")]
+        case "7-UpscaleSmall":
+            return [("7-UpscaleSmall-small-photo.jpg", "small-photo.jpg")]
         default:
             return []
         }

@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import ImageIO
 @testable import MLXUI
 
 /// Covers the R5 pre-parsed-JSON retirement (CFM-FIX-5 / M11): the bundled gallery ships
@@ -217,6 +218,125 @@ struct CatFlowGalleryReproductionTests {
             let golden = fixturesGalleryDir.appendingPathComponent("\(id).parse.json")
             #expect(FileManager.default.fileExists(atPath: golden.path),
                     "\(id) needs its renamed fixture — 63/64/65 were `git mv`d, never edited")
+        }
+    }
+
+    // MARK: - BG-4: every Basic flow's sample input is actually bundled
+
+    /// BG-4 (`RSI/DelegateBasicImageFlowsBacklog.md`, owner ruling R1, 2026-10-10). The reason
+    /// 63/64 never ran is that nobody had ever checked the *other* direction: the `.cat` names a
+    /// file, `bundledAssets` is the only thing that puts it in the flow's folder, and nothing
+    /// asserted the two agreed. `FlowInputAdvisory` said so at Run time and only for whichever
+    /// flow a human happened to open.
+    ///
+    /// This closes the loop for **every** Basic Gallery flow: each `Read *` row's own path
+    /// resolves to a **destination** in that flow's `bundledAssets`, that entry's **source** is
+    /// a file that really exists under `Resources/BasicGallery/**` (the flattened bundle's flat
+    /// name), and — for images — it is a real decodable image. A flow that reads a file with no
+    /// asset entry is exactly the "Read Image needs 'photo.jpg'" bug; the source-existence half
+    /// is the neglected one that a directory rename would silently break.
+    @Test func everyBasicGalleryReadRowHasABundledSourceFile() throws {
+        // Walk the whole BasicGallery tree: the resources are flat in the bundle but nested in
+        // the repo (`<flowID>/<flat name>`), the `3-ExtractTableFromImage-budget.png` layout.
+        var sources: [String: URL] = [:]
+        if let walker = FileManager.default.enumerator(at: basicGalleryDir,
+                                                      includingPropertiesForKeys: [.isRegularFileKey]) {
+            for case let url as URL in walker {
+                guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true
+                else { continue }
+                sources[url.lastPathComponent] = url
+            }
+        }
+
+        let basics = GalleryLoader.loadMetadata().filter(\.isBasic)
+        #expect(basics.count == 8, "the Basic shelf is 1…8 after BG-3")
+
+        var checked = 0
+        for flow in basics {
+            let doc = try GalleryLoader.loadDocument(flowID: flow.flowID)
+            let assets = GalleryLoader.bundledAssets(flowID: flow.flowID)
+            let destinations = Set(assets.map(\.destination))
+
+            for row in doc.rows {
+                guard let task = row.task, SampleSeed.readTaskNames.contains(task) else { continue }
+                // A row fed by a matching upstream, or one with no path, has nothing to bundle
+                // — the same precedence `FlowInputFile` uses, so this never over-warns.
+                guard row.refs.isEmpty,
+                      let raw = FlowSettings(row.settings).pathValue() else { continue }
+                #expect(destinations.contains(raw),
+                        "\(flow.flowID): \(task) reads '\(raw)' but `bundledAssets` has no entry for it — Run would say it isn't in the flow's folder")
+                checked += 1
+            }
+
+            // Every declared asset must have a real source file, or the copy silently no-ops.
+            for asset in assets {
+                let url = sources[asset.source]
+                #expect(url != nil,
+                        "\(flow.flowID): asset source '\(asset.source)' is not under MLXUI/Resources/BasicGallery/**")
+                guard let url else { continue }
+                if asset.destination.hasSuffix(".jpg") || asset.destination.hasSuffix(".png") {
+                    guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+                          let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else {
+                        Issue.record("\(flow.flowID): '\(asset.source)' is not a decodable image")
+                        continue
+                    }
+                    #expect(img.width > 0 && img.height > 0)
+                }
+            }
+        }
+        // The two flows BG-4 fixed must be among them, or this sweep proves nothing about them.
+        #expect(checked >= 2, "expected at least 6- and 7-'s Read rows to be checked, got \(checked)")
+    }
+
+    /// BG-4: the shipped placeholders are the owner gate's documented default (G1 — the owner had
+    /// not sent photos), and SAM's headless default prompt is the **centre point**
+    /// (CFM-R15-1 hazard H2 option 1), so `6`'s input has to be big enough for a centre point to
+    /// land somewhere meaningful and `7`'s has to be genuinely small for 2× to show. Pinning the
+    /// dimensions here means the one-file swap when real photos arrive is a deliberate edit with
+    /// a failing test to update, not a silent change of what the smoke row exercises.
+    @Test func thePlaceholderInputsMatchTheShapeTheSmokeRowsAssume() throws {
+        func size(_ flat: String) throws -> (Int, Int) {
+            var found: URL?
+            let walker = FileManager.default.enumerator(at: basicGalleryDir,
+                                                        includingPropertiesForKeys: nil)
+            while let url = walker?.nextObject() as? URL {
+                if url.lastPathComponent == flat { found = url; break }
+            }
+            let url = try #require(found, "\(flat) not found under BasicGallery/**")
+            let src = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
+            let img = try #require(CGImageSourceCreateImageAtIndex(src, 0, nil))
+            return (img.width, img.height)
+        }
+        // 768×768 for 6 — the reference placeholder's size, and the frame SAM's centre prompt
+        // is authored against.
+        let six = try size("6-CutOutSubject-photo.jpg")
+        #expect(six == (768, 768))
+        // 256×256 for 7 — small enough that a 2× output is visibly sharper.
+        let seven = try size("7-UpscaleSmall-small-photo.jpg")
+        #expect(seven == (256, 256))
+    }
+
+    /// The end-to-end half of BG-4: prepare a real flow folder from the **built bundle** the way
+    /// a Run does, and assert the sentence the owner originally reported is gone. The
+    /// metadata-level test above proves the table and the files agree; this proves the copy
+    /// actually happens and `FlowInputFile` is then satisfied — the exact function
+    /// `FlowInputAdvisory` calls to produce "…which isn't in the flow's folder yet."
+    @Test @MainActor func flowsSixAndSevenHaveNoMissingInputBannerAfterPrepare() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bg4-prepare-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ws = try #require(FlowWorkspace(root: root))
+        let sourceDir = try #require(GalleryLoader.resourcesDirectory,
+                                     "the test host's bundle must have its Resources/")
+
+        for flowID in ["6-CutOutSubject", "7-UpscaleSmall"] {
+            try ws.prepare(flowID: flowID, sourceDir: sourceDir,
+                           bundledAssets: GalleryLoader.bundledAssets(flowID: flowID))
+            let doc = try GalleryLoader.loadDocument(flowID: flowID)
+            let scope = FlowScope(identity: flowID, workspace: ws, locationID: flowID)
+            let advisory = FlowInputAdvisory.advisory(for: doc, scope: scope)
+            #expect(advisory == nil,
+                    "\(flowID) still shows the missing-input banner: \(advisory?.reason ?? "")")
         }
     }
 }
