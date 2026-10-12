@@ -78,6 +78,8 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     private var waiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     /// SC-2a: how many holders each committed reservation has right now (absent = none).
     private var holds: [UUID: Int] = [:]
+    /// SC-2a-b: who holds each reservation (display name + kind), one entry per hold, for the refusal sentence.
+    private var holdInfo: [UUID: [Blocker]] = [:]
     /// SC-2a: reservations dropped by their cache while held — released from the ledger on the last `unhold`.
     private var doomed: Set<UUID> = []
     /// Bumped by every `commit`/`release` — i.e. whenever something becomes evictable or room appears. A requester
@@ -97,13 +99,62 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
         self.cacheClearer = cacheClearer
     }
 
+    /// Who is using memory the requester needs — the model's display name and, when the lease said so, who.
+    struct Blocker: Sendable, Equatable {
+        let model: String
+        let holder: HolderKind?
+    }
+
+    /// Who holds a model (the lease's caller), for the sentence a refused waiter shows.
+    enum HolderKind: Sendable, Equatable {
+        case chat, flow, serverRequest
+        var phrase: String {
+            switch self {
+            case .chat: "Chat"
+            case .flow: "a flow"
+            case .serverRequest: "a server request"
+            }
+        }
+    }
+
     /// The bounded wait ran out (or the waiting task was cancelled) with only held entries in the way.
+    /// `description` follows the error voice: it names the model that is in use and, if known, who is using it.
     struct WaitError: Error, LocalizedError, CustomStringConvertible {
         let label: String
-        var description: String {
-            "Waiting for memory — another model is still in use and didn't finish in time. Try again when it's done."
+        let blockers: [Blocker]
+        init(label: String, blockers: [Blocker] = []) {
+            self.label = label
+            self.blockers = blockers
         }
+        var description: String { MemoryBudget.waitSentence(blockers) }
         var errorDescription: String? { description }
+    }
+
+    /// "Waiting for memory: Qwen3-8B-4bit is in use by Chat. Try again when it finishes."
+    static func waitSentence(_ blockers: [Blocker]) -> String {
+        guard let first = blockers.first else {
+            return "Waiting for memory: another model is still loading or in use. Try again when it finishes."
+        }
+        if let holder = first.holder {
+            return "Waiting for memory: \(first.model) is in use by \(holder.phrase). Try again when it finishes."
+        }
+        return "Waiting for memory: \(first.model) is in use. Try again when it finishes."
+    }
+
+    /// A model's display name from a ledger label: a pool key is a directory path (`…/mlx-community--Qwen3-8B-4bit`),
+    /// an `EngineCache` label is a catalog id.
+    static func displayName(forLabel label: String) -> String {
+        let last = label.split(separator: "/").last.map(String.init) ?? label
+        return last.components(separatedBy: "--").last ?? last
+    }
+
+    /// Why `reserveWorkingSet` returned nothing (SC-2a-b).
+    enum WorkingSetOutcome: Sendable {
+        case granted(Reservation)
+        /// It cannot fit even with everything evictable gone: the caller's `400`, as before.
+        case tooLarge
+        /// Only entries in use (or loads in flight) stood in the way for the whole bound.
+        case busy([Blocker])
     }
 
     /// Bytes currently held (resident + in flight) across every participant.
@@ -135,19 +186,19 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
                         maxWait: Duration = MemoryBudget.defaultMaxWait) async throws -> Reservation {
         let outcome = await reserveCore(bytes: bytes, for: owner, label: label,
                                         deadline: ContinuousClock.now.advanced(by: maxWait))
-        if outcome.timedOut { throw WaitError(label: label) }
+        if outcome.timedOut { throw WaitError(label: label, blockers: outcome.blockers) }
         return outcome.reservation
     }
 
     private func reserveCore(bytes: Int64, for owner: some MemoryBudgetParticipant, label: String,
-                             deadline: ContinuousClock.Instant?) async -> (reservation: Reservation, timedOut: Bool) {
+                             deadline: ContinuousClock.Instant?) async -> (reservation: Reservation, timedOut: Bool, blockers: [Blocker]) {
         let reservation = Reservation(id: UUID())
-        guard bytes > 0 else { return (reservation, false) }   // holds nothing; commit/release are no-ops
+        guard bytes > 0 else { return (reservation, false, []) }   // holds nothing; commit/release are no-ops
 
         while true {
-            if deadline != nil, Task.isCancelled { return (reservation, true) }
+            if deadline != nil, Task.isCancelled { return (reservation, true, currentBlockers(ignoring: [reservation.id])) }
             let (fits, seen) = tryAddCapturingSettled(reservation, bytes: bytes)
-            if fits { return (reservation, false) }
+            if fits { return (reservation, false, []) }
 
             let peers = others(excluding: owner)
             let mine = owner.evictionPriority
@@ -176,20 +227,20 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
             //    are one lock section (MB-1): an `await` between them let a release land in the gap and the grant
             //    went through although the request now fit.
             var overBudget = false
-            let verdict = await settleOrFinalize(excluding: [reservation.id], since: seen, deadline: deadline, finalize: {
+            let (verdict, blockers) = await settleOrFinalize(excluding: [reservation.id], since: seen, deadline: deadline, finalize: {
                 ledger[reservation.id] = bytes
                 pending.insert(reservation.id)
                 overBudget = true
             })
             switch verdict {
             case .retry: continue
-            case .timedOut: return (reservation, true)
+            case .timedOut: return (reservation, true, blockers)
             case .finalized: break
             }
             if overBudget {
                 Self.log.notice("over budget: \(label, privacy: .public) needs \(bytes) B, capacity \(self.capacityBytes) B, nothing left to evict")
             }
-            return (reservation, false)
+            return (reservation, false, [])
         }
     }
 
@@ -227,13 +278,25 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     func reserveWorkingSet(bytes: Int64, for owner: some MemoryBudgetParticipant, protecting protectedBytes: Int64,
                            protectingReservation: Reservation? = nil, maxWait: Duration? = nil,
                            evictOwn: () async -> Bool) async -> Reservation? {
+        if case .granted(let reservation) = await reserveWorkingSetReporting(
+            bytes: bytes, for: owner, protecting: protectedBytes, protectingReservation: protectingReservation,
+            maxWait: maxWait, evictOwn: evictOwn) { return reservation }
+        return nil
+    }
+
+    /// `reserveWorkingSet`, saying **why** when it returns nothing (SC-2a-b): `.tooLarge` — it cannot fit even with
+    /// everything evictable gone (the caller's `400`) — or `.busy` — only entries in use, or loads in flight, stood
+    /// in the way for the whole bound (a `503`, `Retry-After`), with who was using them.
+    func reserveWorkingSetReporting(bytes: Int64, for owner: some MemoryBudgetParticipant,
+                                    protecting protectedBytes: Int64, protectingReservation: Reservation? = nil,
+                                    maxWait: Duration? = nil, evictOwn: () async -> Bool) async -> WorkingSetOutcome {
         let reservation = Reservation(id: UUID())
-        guard bytes > 0 else { return reservation }
+        guard bytes > 0 else { return .granted(reservation) }
         let deadline = maxWait.map { ContinuousClock.now.advanced(by: $0) }
         var ignore: Set<UUID> = [reservation.id]
         if let protectingReservation { ignore.insert(protectingReservation.id) }
         while true {
-            if deadline != nil, Task.isCancelled { return nil }
+            if deadline != nil, Task.isCancelled { return .busy(currentBlockers(ignoring: ignore)) }
             let (added, held, seen) = withLock { () -> (Bool, Int64, UInt64) in
                 let held = ledger.filter { !snapshots.contains($0.key) }.values.reduce(0, +)
                 guard held + bytes <= capacityBytes else { return (false, held, settled) }
@@ -241,8 +304,8 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
                 pending.insert(reservation.id)
                 return (true, held, settled)
             }
-            if added { return reservation }
-            guard held > protectedBytes else { return nil }             // only the running model is left
+            if added { return .granted(reservation) }
+            guard held > protectedBytes else { return .tooLarge }       // only the running model is left
 
             if await evictOwn() { continue }
             let mine = owner.evictionPriority
@@ -252,7 +315,7 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
             }
             if freed { continue }
             var granted = false
-            let verdict = await settleOrFinalize(excluding: ignore, since: seen, deadline: deadline, finalize: {
+            let (verdict, blockers) = await settleOrFinalize(excluding: ignore, since: seen, deadline: deadline, finalize: {
                 // last look, in the same lock section as the verdict: it may fit after all
                 let held = ledger.filter { !snapshots.contains($0.key) }.values.reduce(0, +)
                 guard held + bytes <= capacityBytes else { return }
@@ -260,8 +323,11 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
                 pending.insert(reservation.id)
                 granted = true
             })
-            if verdict == .retry { continue }
-            return granted ? reservation : nil
+            switch verdict {
+            case .retry: continue
+            case .timedOut: return .busy(blockers)
+            case .finalized: return granted ? .granted(reservation) : .tooLarge
+            }
         }
     }
 
@@ -296,6 +362,7 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
             pending.remove(reservation.id)
             snapshots.remove(reservation.id)
             holds.removeValue(forKey: reservation.id)
+            holdInfo.removeValue(forKey: reservation.id)
             doomed.remove(reservation.id)
             settled &+= 1
             return takeWaitersLocked()
@@ -312,10 +379,12 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
         private let lock = NSLock()
         private var budget: MemoryBudget?
         private let reservation: Reservation?
+        private let info: Blocker?
 
-        fileprivate init(budget: MemoryBudget?, reservation: Reservation?) {
+        fileprivate init(budget: MemoryBudget?, reservation: Reservation?, info: Blocker? = nil) {
             self.budget = budget
             self.reservation = reservation
+            self.info = info
         }
 
         /// A hold that holds nothing.
@@ -327,7 +396,7 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
             let b = budget
             budget = nil
             lock.unlock()
-            if let b, let reservation { b.unhold(reservation) }
+            if let b, let reservation { b.unhold(reservation, info: info) }
         }
 
         deinit { release() }
@@ -335,21 +404,29 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
 
     /// Mark the entry behind `reservation` as in use. Called by a cache, in the same critical section that decides
     /// the entry is the one handed out (so it can never be evicted in between).
-    func hold(_ reservation: Reservation) -> Hold {
+    /// `label` is the ledger label (a model key) and `holder` who is using it — both only for the sentence a
+    /// refused waiter shows (SC-2a-b); neither changes behaviour.
+    func hold(_ reservation: Reservation, label: String = "", holder: HolderKind? = nil) -> Hold {
         withLock {
             guard ledger[reservation.id] != nil else { return Hold.inert }
             holds[reservation.id, default: 0] += 1
-            return Hold(budget: self, reservation: reservation)
+            holdInfo[reservation.id, default: []].append(
+                Blocker(model: label.isEmpty ? "A model" : Self.displayName(forLabel: label), holder: holder))
+            return Hold(budget: self, reservation: reservation, info: holdInfo[reservation.id]?.last)
         }
     }
 
     /// Entries currently in use (committed, booked, not snapshots).
     var inUseCount: Int { withLock { holds.keys.filter { ledger[$0] != nil }.count } }
 
-    private func unhold(_ reservation: Reservation) {
+    private func unhold(_ reservation: Reservation, info: Blocker?) {
         let (toResume, dropped): ([CheckedContinuation<Void, Never>], Bool) = withLock {
             guard let n = holds[reservation.id] else { return ([], false) }
             var dropped = false
+            if let info, var list = holdInfo[reservation.id], let at = list.firstIndex(of: info) {
+                list.remove(at: at)
+                if list.isEmpty { holdInfo.removeValue(forKey: reservation.id) } else { holdInfo[reservation.id] = list }
+            }
             if n <= 1 {
                 holds.removeValue(forKey: reservation.id)
                 if doomed.remove(reservation.id) != nil {          // its cache dropped it while it was in use
@@ -453,6 +530,15 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
         continuation?.resume()
     }
 
+    /// Who is using the entries other than `ignoring` (committed, booked, held), in a stable order.
+    private func blockersLocked(ignoring: Set<UUID>) -> [Blocker] {
+        holdInfo.filter { ledger[$0.key] != nil && !ignoring.contains($0.key) }
+            .sorted { $0.key.uuidString < $1.key.uuidString }
+            .flatMap(\.value)
+    }
+
+    private func currentBlockers(ignoring: Set<UUID>) -> [Blocker] { withLock { blockersLocked(ignoring: ignoring) } }
+
     /// Some committed, booked entry other than `ignoring` is in use (SC-2a). Call with `lock` held.
     private func othersHeldLocked(ignoring: Set<UUID>) -> Bool {
         holds.contains { ledger[$0.key] != nil && !ignoring.contains($0.key) }
@@ -471,9 +557,10 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     /// check that selects them, so a commit cannot slip between "nothing evictable" and "nothing pending" (MB-1),
     /// no wake-up is lost, and the caller's last action cannot act on a stale verdict.
     private func settleOrFinalize(excluding mine: Set<UUID>, since seen: UInt64, deadline: ContinuousClock.Instant?,
-                                  finalize: () -> Void) async -> Verdict {
+                                  finalize: () -> Void) async -> (Verdict, [Blocker]) {
         let waiterID = UUID()
         var verdict = Verdict.finalized
+        var blockers: [Blocker] = []
         await withTaskCancellationHandler {
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                 lock.lock()
@@ -488,6 +575,7 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
                 if inFlight || inUse {
                     if let deadline, (ContinuousClock.now >= deadline || Task.isCancelled) {
                         verdict = .timedOut
+                        blockers = blockersLocked(ignoring: mine)
                         lock.unlock()
                         continuation.resume()
                         return
@@ -510,7 +598,7 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
         } onCancel: {
             if deadline != nil { expireWaiter(waiterID) }      // an unbounded (legacy) wait ignores cancellation, as before
         }
-        return verdict
+        return (verdict, blockers)
     }
 }
 
@@ -525,12 +613,10 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
 /// running generation. Implementer's call on the delay/cadence, pending owner confirmation.
 nonisolated final class MLXCacheClearer: @unchecked Sendable {
     static let shared = MLXCacheClearer(
-        currentCacheLimit: { Memory.cacheLimit },
-        serverGenerationLimit: ServeMLXMemory.generationCacheLimit,
+        capActive: { ServeMLXMemory.shared.isCapActive },
         clear: { Memory.clearCache() })
 
-    private let currentCacheLimit: @Sendable () -> Int
-    private let serverGenerationLimit: Int
+    private let capActive: @Sendable () -> Bool
     private let clear: @Sendable () -> Void
     private let delay: Duration
     private let retryEvery: Duration
@@ -540,11 +626,11 @@ nonisolated final class MLXCacheClearer: @unchecked Sendable {
     private var requests = 0
     private var cleared = 0
 
-    init(currentCacheLimit: @escaping @Sendable () -> Int, serverGenerationLimit: Int,
+    /// - Parameter capActive: whether a server generation's scoped `cacheLimit` is in force (`ServeMLXMemory.isCapActive`).
+    init(capActive: @escaping @Sendable () -> Bool,
          clear: @escaping @Sendable () -> Void,
          delay: Duration = .milliseconds(300), retryEvery: Duration = .seconds(1), giveUpAfter: Duration = .seconds(60)) {
-        self.currentCacheLimit = currentCacheLimit
-        self.serverGenerationLimit = serverGenerationLimit
+        self.capActive = capActive
         self.clear = clear
         self.delay = delay
         self.retryEvery = retryEvery
@@ -564,11 +650,11 @@ nonisolated final class MLXCacheClearer: @unchecked Sendable {
         Task.detached(priority: .utility) { [self] in
             try? await Task.sleep(for: delay)
             let start = ContinuousClock.now
-            while currentCacheLimit() <= serverGenerationLimit, ContinuousClock.now - start < giveUpAfter {
+            while capActive(), ContinuousClock.now - start < giveUpAfter {
                 try? await Task.sleep(for: retryEvery)       // a server generation holds its scoped limit
             }
             lock.lock(); scheduled = false; lock.unlock()   // requests after this point schedule the next clear
-            if currentCacheLimit() > serverGenerationLimit {
+            if !capActive() {
                 clear()
                 lock.lock(); cleared += 1; lock.unlock()
             }

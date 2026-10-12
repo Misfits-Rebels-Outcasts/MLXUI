@@ -353,10 +353,10 @@ nonisolated struct MLXChatBackend: ServeBackend {
         // from under the generation. Returned on every exit, including cancel and throw.
         let lease: ModelContainerPool.ContainerLease
         do {
-            lease = try await pool.lease(directory: directory, footprintBytes: footprintBytes, architecture: architecture)
+            lease = try await pool.lease(directory: directory, footprintBytes: footprintBytes,
+                                         architecture: architecture, holder: .serverRequest)
         } catch let error as MemoryBudget.WaitError {
-            continuation.yield(.error(ServeError(status: 503, message: error.description, type: "server_error",
-                                                 code: "waiting_for_memory")))
+            continuation.yield(.error(.waitingForMemory(error.description)))
             return
         }
         defer { lease.release() }
@@ -469,11 +469,18 @@ nonisolated struct MLXChatBackend: ServeBackend {
             var workingSet: MemoryBudget.Reservation?
             if let profile = memoryProfile {
                 let need = profile.needBytes(promptTokens: promptTokens, replyTokens: request.effectiveMaxTokens)
-                workingSet = await pool.reserveWorkingSet(totalNeedBytes: need, directory: directory,
-                                                          maxWait: MemoryBudget.defaultMaxWait)
-                if workingSet == nil {
+                switch await pool.reserveWorkingSetReporting(totalNeedBytes: need, directory: directory,
+                                                             maxWait: MemoryBudget.defaultMaxWait) {
+                case .granted(let reservation):
+                    workingSet = reservation
+                case .tooLarge:
                     continuation.yield(.error(ServeMemoryAdmission.refusal(
                         needBytes: need, roomBytes: pool.budget.capacityBytes)))
+                    return
+                case .busy(let blockers):
+                    // SC-2a-b: it would fit, but only models in use stood in the way for the whole bound — a 503
+                    // the client can retry, not "too large for memory".
+                    continuation.yield(.error(.waitingForMemory(MemoryBudget.waitSentence(blockers))))
                     return
                 }
             }

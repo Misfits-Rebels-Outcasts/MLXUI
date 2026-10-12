@@ -88,15 +88,15 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
     /// must lease it, or a later load may evict the engine's reservation while its weights are still in use.
     func stage(for model: ModelEntry, config: StageConfig,
                builder: Builder) async throws -> any PipelineStage {
-        try await acquire(for: model, config: config, maxWait: nil, leased: false, builder: builder).stage
+        try await acquire(for: model, config: config, maxWait: nil, leased: false, holder: nil, builder: builder).stage
     }
 
     /// SC-2a: `stage(for:)`, leased. The engine is **in use until `hold` is released** (or dropped): LRU eviction
     /// skips it, an explicit `clear()` dooms it (its bytes stay booked until the release), and a build that can
     /// only fit by evicting it waits — at most `maxWait`, then `MemoryBudget.WaitError`.
     func lease(for model: ModelEntry, config: StageConfig, maxWait: Duration = MemoryBudget.defaultMaxWait,
-               builder: Builder) async throws -> (stage: any PipelineStage, hold: MemoryBudget.Hold) {
-        let got = try await acquire(for: model, config: config, maxWait: maxWait, leased: true, builder: builder)
+               holder: MemoryBudget.HolderKind? = .flow, builder: Builder) async throws -> (stage: any PipelineStage, hold: MemoryBudget.Hold) {
+        let got = try await acquire(for: model, config: config, maxWait: maxWait, leased: true, holder: holder, builder: builder)
         return (got.stage, got.hold ?? .inert)
     }
 
@@ -110,12 +110,12 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
     }
 
     private func acquire(for model: ModelEntry, config: StageConfig, maxWait: Duration?, leased: Bool,
-                         builder: Builder) async throws -> (stage: any PipelineStage, hold: MemoryBudget.Hold?) {
+                         holder: MemoryBudget.HolderKind?, builder: Builder) async throws -> (stage: any PipelineStage, hold: MemoryBudget.Hold?) {
         let key = Key(id: model.id, config: config)
         if let cached = withLock({ () -> (stage: any PipelineStage, hold: MemoryBudget.Hold?)? in
             guard let entry = entries[key] else { return nil }
             touchLocked(key)
-            return (entry.stage, leased ? budget.hold(entry.reservation) : nil)
+            return (entry.stage, leased ? budget.hold(entry.reservation, label: model.id, holder: holder) : nil)
         }) {
             return cached
         }
@@ -141,12 +141,12 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
             // Two concurrent callers for one key both build; keep the first, drop the second.
             if let existing = entries[key] {
                 touchLocked(key)
-                return (existing.stage, leased ? budget.hold(existing.reservation) : nil, true)
+                return (existing.stage, leased ? budget.hold(existing.reservation, label: model.id, holder: holder) : nil, true)
             }
             entries[key] = Entry(key: key, model: model, stage: stage, bytes: bytes, reservation: reservation)
             touchLocked(key)
             // held before it is committed (evictable), in the same critical section
-            return (stage, leased ? budget.hold(reservation) : nil, false)
+            return (stage, leased ? budget.hold(reservation, label: model.id, holder: holder) : nil, false)
         }
         if wasDuplicate { budget.release(reservation) } else { budget.commit(reservation) }
         return (result, hold)

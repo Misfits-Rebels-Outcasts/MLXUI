@@ -856,7 +856,7 @@ final class ModelRunner {
         #if DEBUG
         if let injected = containerForTesting { return try await injected() }
         #endif
-        let lease = try await pool.lease(for: model, directory: dir)
+        let lease = try await pool.lease(for: model, directory: dir, holder: .chat)
         turn.hold = lease.hold
         return lease.container
     }

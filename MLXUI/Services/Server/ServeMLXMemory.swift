@@ -40,6 +40,12 @@ nonisolated final class ServeMLXMemory: @unchecked Sendable {
         self.write = write
     }
 
+    /// SC-2a-b: whether a server generation's scoped cap is in force right now (read-only; changes nothing).
+    var isCapActive: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return depth > 0
+    }
+
     /// The limit during a generation: never *raises* a lower limit someone already set.
     static func effectiveLimit(current: Int, cap: Int = generationCacheLimit) -> Int { min(current, cap) }
 

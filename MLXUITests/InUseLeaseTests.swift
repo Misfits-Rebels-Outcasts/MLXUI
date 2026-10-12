@@ -15,8 +15,7 @@ struct InUseLeaseTests {
     /// A budget whose cache clearer is a counting fake (never touches MLX).
     private func makeBudget(_ gbs: Int64, clearer: MLXCacheClearer? = nil) -> MemoryBudget {
         MemoryBudget(capacityBytes: gbs * Self.gb,
-                     cacheClearer: clearer ?? MLXCacheClearer(currentCacheLimit: { Int.max }, serverGenerationLimit: 1,
-                                                              clear: {}, delay: .milliseconds(1)))
+                     cacheClearer: clearer ?? MLXCacheClearer(capActive: { false }, clear: {}, delay: .milliseconds(1)))
     }
 
     private func load(_ pool: ResidentPool<Box>, _ key: String, _ gb: Int64) async throws {
@@ -387,8 +386,7 @@ struct InUseLeaseTests {
 
     @Test func weightsReallyDroppedRequestOneClearAndCoalesceABurst() async throws {
         let cleared = Cell<Int>(0)
-        let clearer = MLXCacheClearer(currentCacheLimit: { Int.max }, serverGenerationLimit: 1,
-                                      clear: { cleared.value += 1 }, delay: .milliseconds(100))
+        let clearer = MLXCacheClearer(capActive: { false }, clear: { cleared.value += 1 }, delay: .milliseconds(100))
         let budget = makeBudget(10, clearer: clearer)
         let pool = ResidentPool<Box>(budget: budget)
         try await load(pool, "a", 4)
@@ -400,8 +398,7 @@ struct InUseLeaseTests {
     }
 
     @Test func aLastHolderReturningFromADoomedEntryRequestsAClear() async throws {
-        let clearer = MLXCacheClearer(currentCacheLimit: { Int.max }, serverGenerationLimit: 1,
-                                      clear: {}, delay: .milliseconds(50))
+        let clearer = MLXCacheClearer(capActive: { false }, clear: {}, delay: .milliseconds(50))
         let budget = makeBudget(10, clearer: clearer)
         let pool = ResidentPool<Box>(budget: budget)
         let a = try await pool.lease(for: "a", bytes: 6 * Self.gb) { Box("a") }
@@ -412,17 +409,140 @@ struct InUseLeaseTests {
     }
 
     @Test func theCacheIsNotClearedWhileAServerGenerationHoldsItsScopedLimit() async throws {
-        let limit = Cell<Int>(1_024 * 1_048_576)               // the server's 1 GiB scoped limit is in force
+        let capActive = Cell<Bool>(true)                            // a server generation's cap is in force
         let cleared = Cell<Int>(0)
-        let clearer = MLXCacheClearer(currentCacheLimit: { limit.value }, serverGenerationLimit: 1_024 * 1_048_576,
-                                      clear: { cleared.value += 1 }, delay: .milliseconds(20),
-                                      retryEvery: .milliseconds(30), giveUpAfter: .seconds(30))
+        let clearer = MLXCacheClearer(capActive: { capActive.value }, clear: { cleared.value += 1 },
+                                      delay: .milliseconds(20), retryEvery: .milliseconds(30), giveUpAfter: .seconds(30))
         clearer.requestClear()
         try await Task.sleep(for: .milliseconds(250))
         #expect(cleared.value == 0)                                 // deferred, not dropped, not fought
-        limit.value = 8 * 1_073_741_824                             // the generation ended; its limit is restored
+        capActive.value = false                                     // the generation ended
         try await Task.sleep(for: .milliseconds(250))
         #expect(cleared.value == 1)
+    }
+
+    // MARK: - SC-2a-b (4): ServeMLXMemory.isCapActive is read-only and mirrors the scope
+
+    @Test func serveMLXMemoryReportsWhenAGenerationCapIsActiveWithoutChangingItsBehaviour() {
+        let limit = Cell<Int>(8 << 30)
+        let writes = Cell<[Int]>([])
+        let memory = ServeMLXMemory(read: { limit.value }, write: { limit.value = $0; writes.value.append($0) })
+        #expect(!memory.isCapActive)
+        memory.begin()
+        #expect(memory.isCapActive)
+        #expect(limit.value == ServeMLXMemory.generationCacheLimit)
+        memory.begin()                                              // nested
+        memory.end()
+        #expect(memory.isCapActive)
+        memory.end()
+        #expect(!memory.isCapActive)
+        #expect(limit.value == 8 << 30)                             // restored exactly as before
+        #expect(writes.value == [ServeMLXMemory.generationCacheLimit, 8 << 30])
+        _ = memory.isCapActive
+        #expect(writes.value.count == 2)                            // reading it writes nothing
+    }
+
+    // MARK: - SC-2a-b (1): why a working set returned nothing
+
+    @Test func aWorkingSetThatCanNeverFitIsTooLargeNotBusy() async throws {
+        let budget = makeBudget(10)
+        let pool = ResidentPool<Box>(budget: budget)
+        let running = try await pool.lease(for: "running", bytes: 6 * Self.gb) { Box("run") }
+        // 6 GB of weights + 5 GB of KV in a 10 GB budget: nothing else exists to wait for
+        let outcome = await pool.reserveWorkingSetReporting(totalNeedBytes: 11 * Self.gb, protecting: "running",
+                                                            maxWait: .seconds(30))
+        guard case .tooLarge = outcome else { Issue.record("expected .tooLarge, got \(outcome)"); return }
+        running.release()
+    }
+
+    @Test func aWorkingSetBlockedOnlyByModelsInUseIsBusyAndNamesThem() async throws {
+        let budget = makeBudget(10)
+        let pool = ResidentPool<Box>(budget: budget)
+        let flow = try await pool.lease(for: "/models/mlx-community--Qwen3-8B-4bit", bytes: 5 * Self.gb, holder: .flow) { Box("f") }
+        let running = try await pool.lease(for: "running", bytes: 4 * Self.gb, holder: .serverRequest) { Box("r") }
+        let outcome = await pool.reserveWorkingSetReporting(totalNeedBytes: 8 * Self.gb, protecting: "running",
+                                                            maxWait: .milliseconds(150))
+        guard case .busy(let blockers) = outcome else { Issue.record("expected .busy, got \(outcome)"); return }
+        #expect(blockers == [.init(model: "Qwen3-8B-4bit", holder: .flow)])        // never the model the request runs
+        #expect(await pool.residentKeys.count == 2)
+        flow.release(); running.release()
+    }
+
+    @Test func theSameWorkingSetIsTooLargeWhenNothingIsHeldAndItCannotFit() async throws {
+        let budget = makeBudget(10)
+        let pool = ResidentPool<Box>(budget: budget)
+        try await load(pool, "idle", 5)                                              // resident, not in use
+        let running = try await pool.lease(for: "running", bytes: 4 * Self.gb) { Box("r") }
+        let outcome = await pool.reserveWorkingSetReporting(totalNeedBytes: 12 * Self.gb, protecting: "running",
+                                                            maxWait: .seconds(5))
+        guard case .tooLarge = outcome else { Issue.record("expected .tooLarge, got \(outcome)"); return }
+        #expect(await pool.residentKeys == ["running"])                              // the idle one was evicted trying
+        running.release()
+    }
+
+    // MARK: - SC-2a-b (3): the sentence names the model and, if known, the holder
+
+    @Test func aRefusedLoadNamesTheModelInUseAndWhoHoldsIt() async throws {
+        let budget = makeBudget(10)
+        let pool = ResidentPool<Box>(budget: budget)
+        let chat = try await pool.lease(for: "/Users/x/models/mlx-community--Qwen3-8B-4bit", bytes: 6 * Self.gb, holder: .chat) { Box("a") }
+        do {
+            _ = try await pool.lease(for: "b", bytes: 6 * Self.gb, maxWait: .milliseconds(100)) { Box("b") }
+            Issue.record("expected a WaitError")
+        } catch let error as MemoryBudget.WaitError {
+            #expect(error.description == "Waiting for memory: Qwen3-8B-4bit is in use by Chat. Try again when it finishes.")
+            #expect(error.errorDescription == error.description)
+        }
+        chat.release()
+    }
+
+    @Test func theSentenceFollowsTheHolderKindAndOmitsItWhenUnknown() {
+        typealias B = MemoryBudget.Blocker
+        #expect(MemoryBudget.waitSentence([B(model: "Qwen3-8B-4bit", holder: .flow)])
+                == "Waiting for memory: Qwen3-8B-4bit is in use by a flow. Try again when it finishes.")
+        #expect(MemoryBudget.waitSentence([B(model: "Qwen3-8B-4bit", holder: .serverRequest)])
+                == "Waiting for memory: Qwen3-8B-4bit is in use by a server request. Try again when it finishes.")
+        #expect(MemoryBudget.waitSentence([B(model: "Qwen3-8B-4bit", holder: nil)])
+                == "Waiting for memory: Qwen3-8B-4bit is in use. Try again when it finishes.")
+        #expect(MemoryBudget.waitSentence([]).hasPrefix("Waiting for memory: another model"))
+        #expect(MemoryBudget.displayName(forLabel: "/a/b/mlx-community--Qwen3-8B-4bit") == "Qwen3-8B-4bit")
+        #expect(MemoryBudget.displayName(forLabel: "some-catalog-id") == "some-catalog-id")
+    }
+
+    @Test func aFlowRowThatWaitsOutTheBoundGetsTheSentenceNotAWrappedEngineFailure() async throws {
+        let budget = makeBudget(10)
+        let cache = EngineCache(budget: budget, countsLLMWeights: true)
+        let m1 = makeEntry(id: "whisper-small", ramGB: 6), m2 = makeEntry(id: "m2", ramGB: 6)
+        let held = try await cache.lease(for: m1, config: .default, holder: .chat) { m, _ in Stub(id: m.id) }
+        do {
+            _ = try await cache.leasedStage(for: m2, config: .default, maxWait: .milliseconds(100)) { m, _ in Stub(id: m.id) }
+            Issue.record("expected a WaitError")
+        } catch let error as MemoryBudget.WaitError {
+            #expect(error.description == "Waiting for memory: whisper-small is in use by Chat. Try again when it finishes.")
+        }
+        held.hold.release()
+    }
+
+    @Test func aLoadJoiningAnInFlightLoadKeepsItsOwnHolderKind() async throws {
+        let budget = makeBudget(10)
+        let pool = ResidentPool<Box>(budget: budget)
+        let go = Cell<Bool>(false)
+        async let first = pool.lease(for: "/m/mlx-community--M-4bit", bytes: 6 * Self.gb, holder: .flow) {
+            while !go.value { try await Task.sleep(for: .milliseconds(10)) }
+            return Box("m")
+        }
+        try await Task.sleep(for: .milliseconds(50))
+        async let second = pool.lease(for: "/m/mlx-community--M-4bit", bytes: 6 * Self.gb, holder: .chat) { Box("never") }
+        try await Task.sleep(for: .milliseconds(50))
+        go.value = true
+        let (l1, l2) = try await (first, second)
+        do {
+            _ = try await pool.lease(for: "other", bytes: 6 * Self.gb, maxWait: .milliseconds(100)) { Box("o") }
+            Issue.record("expected a WaitError")
+        } catch let error as MemoryBudget.WaitError {
+            #expect(Set(error.blockers.map(\.holder)) == [.flow, .chat])
+        }
+        l1.release(); l2.release()
     }
 }
 

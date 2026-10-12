@@ -15,6 +15,18 @@ nonisolated enum ServeReply: Sendable {
 /// A dialect-neutral refusal: the status, code and message (`ServeError`) plus the `Retry-After` the
 /// wire carries where one exists. A dialect renders it in its own error shape; the OpenAI dialect's
 /// rendering is `ServeError.body()` and `Retry-After` as a header, exactly as before.
+/// SC-2a-b: the `503` for "the model it needs is in use by someone else and the wait ran out". Retryable, so a
+/// non-streaming reply carries `Retry-After: 2`; a streaming one has sent its `200` head long before (the wait
+/// happens inside the generation, under the keep-alives), so it is an in-stream error with the same code and message.
+nonisolated extension ServeError {
+    static let waitingForMemoryCode = "waiting_for_memory"
+    static func waitingForMemory(_ message: String) -> ServeError {
+        ServeError(status: 503, message: message, type: "server_error", code: waitingForMemoryCode)
+    }
+    /// `Retry-After` seconds for a retryable refusal raised inside a generation; nil for every other error.
+    var retryAfterSeconds: Int? { code == Self.waitingForMemoryCode ? 2 : nil }
+}
+
 nonisolated struct ServeFailure: Error, Sendable, Equatable {
     var error: ServeError
     var retryAfterSeconds: Int?
@@ -282,7 +294,7 @@ nonisolated enum ServePipeline {
             failure = generationFailed
         }
         await queue.release(ticket)
-        if let failure { return .failure(ServeFailure(failure)) }
+        if let failure { return .failure(ServeFailure(failure, retryAfterSeconds: failure.retryAfterSeconds)) }
 
         tracker.usage = collected.usage
         tracker.toolCalls = collected.toolCalls.count

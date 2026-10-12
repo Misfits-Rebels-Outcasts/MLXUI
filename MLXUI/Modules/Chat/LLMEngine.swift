@@ -33,7 +33,7 @@ enum LLMEngine {
             // falls back to the model directory's on-disk size.
             // SC-2a: leased for the whole generation — a load for anyone else can't evict it from under us, and it is
             // returned on every exit (return, throw, cancel).
-            let lease = try await pool.lease(directory: modelDir, footprintBytes: footprintBytes)
+            let lease = try await pool.lease(directory: modelDir, footprintBytes: footprintBytes, holder: .flow)
             defer { lease.release() }
             return try await lease.container.perform { context in
                 // DA-11: ask a hybrid-reasoning template (Qwen3's) to skip its visible
@@ -72,6 +72,8 @@ enum LLMEngine {
             }
         } catch let error as StageError {
             throw error
+        } catch let error as MemoryBudget.WaitError {
+            throw error          // SC-2a-b: the row's message is the sentence that names the model and who holds it
         } catch {
             throw StageError.engineFailure(stage: "LLM", underlying: error)
         }
