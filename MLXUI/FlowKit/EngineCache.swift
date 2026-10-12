@@ -49,6 +49,8 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
     /// LLM weights, and an LLM stage is now just a closure. Default `true` keeps this cache's
     /// standalone budget policy (and its tests) unchanged; only `shared` opts out.
     private let countsLLMWeights: Bool
+    /// SC-2c: where a model's files are, for the real charge (`ModelLoadProfile`). Injectable for tests.
+    private let modelDirectory: @Sendable (ModelEntry) -> URL
 
     /// `lock`/`unlock` are `noasync` — the SDK's push toward async-safe scoped locking.
     /// Wrapping the critical section in this synchronous helper keeps the lock/unlock pair
@@ -63,16 +65,20 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
     /// is passed per call (the registry isn't available at static-init time).
     static let shared = EngineCache(budget: .shared, countsLLMWeights: false)
 
-    init(budget: MemoryBudget, countsLLMWeights: Bool = true) {
+    init(budget: MemoryBudget, countsLLMWeights: Bool = true,
+         modelDirectory: @escaping @Sendable (ModelEntry) -> URL = { ModelStore.shared.directory(forHFModelID: $0.hfModelId) }) {
         self.budget = budget
         self.countsLLMWeights = countsLLMWeights
+        self.modelDirectory = modelDirectory
         Memory.cacheLimit = Int(budget.capacityBytes)
         budget.register(self)
     }
 
     /// A cache with its own private budget (tests; behaves as the pre-S1-1b cache did).
-    convenience init(budgetBytes: Int64, countsLLMWeights: Bool = true) {
-        self.init(budget: MemoryBudget(capacityBytes: budgetBytes), countsLLMWeights: countsLLMWeights)
+    convenience init(budgetBytes: Int64, countsLLMWeights: Bool = true,
+                     modelDirectory: @escaping @Sendable (ModelEntry) -> URL = { ModelStore.shared.directory(forHFModelID: $0.hfModelId) }) {
+        self.init(budget: MemoryBudget(capacityBytes: budgetBytes), countsLLMWeights: countsLLMWeights,
+                  modelDirectory: modelDirectory)
     }
 
     /// The default budget: `max(4 GB, total RAM × 0.6)`.
@@ -178,7 +184,8 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
         }
     }
 
-    /// Total cached footprint, in bytes (the catalog's `ramGB` figures, not measured).
+    /// Total cached footprint, in bytes (what each entry booked: the real charge, or the catalog's `ramGB` for a model
+    /// whose files can't be measured).
     var totalCachedBytes: Int64 {
         withLock { totalBytesLocked() }
     }
@@ -200,9 +207,13 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
 
     // MARK: - Lock-held helpers
 
-    private func footprint(of model: ModelEntry) -> Int64 {
+    /// What a model books. An LLM stage books 0 when the pool owns its weights; everything else books its **real**
+    /// charge (SC-2c, `ModelLoadProfile`: the files on disk × the kind's measured factor), and the catalog's `ramGB`
+    /// only when the files aren't there to measure (or, for a kind nobody has measured, as a floor).
+    func footprint(of model: ModelEntry) -> Int64 {
         if !countsLLMWeights && model.runnerKind == .llm { return 0 }
-        return Int64(model.ramGB * 1_073_741_824)
+        return ModelLoadProfile.charge(kind: model.runnerKind, directory: modelDirectory(model),
+                                       catalogFallback: Int64(model.ramGB * 1_073_741_824))
     }
 
     private func totalBytesLocked() -> Int64 {
@@ -321,15 +332,10 @@ actor EngineLeaseCache<Engine: Sendable> {
     }
 
     /// What loading `directory` books: every safetensors file under it (an engine may keep its encoder and heads in
-    /// subdirectories) × `ModelWeightCharge.loadFactor`; the directory's whole size when it has none.
+    /// subdirectories) × the decision kind's measured factor (`ModelLoadProfile`); the directory's whole size when it
+    /// has none.
     nonisolated static func charge(directory: URL) -> Int64 {
-        var onDisk: Int64 = 0
-        if let walker = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: [.fileSizeKey]) {
-            for case let url as URL in walker where url.pathExtension == "safetensors" {
-                onDisk += Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
-            }
-        }
-        return onDisk > 0 ? ModelWeightCharge.charge(onDiskBytes: onDisk) : Int64(ModelStore.directorySize(at: directory))
+        ModelLoadProfile.charge(kind: .decision, directory: directory, catalogFallback: nil)     // SC-2c: the one table
     }
 
     /// The engine, **leased**: in use until `release()`. Eviction skips it; a load that can only fit by evicting it

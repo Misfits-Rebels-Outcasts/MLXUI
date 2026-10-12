@@ -49,6 +49,11 @@ enum VLMEngine {
             let lease = try await pool.lease(directory: modelDir, holder: holder)
             defer { lease.release() }
             let container = lease.container
+            // SC-2c: and the call's own working set (image + vision tokens — ≈ 2 GiB for a 1 MP image, measured),
+            // reserved for the call like a server request's KV: other idle models are evicted for it, a model in use is
+            // waited for, and a call that still can't fit is refused instead of running over budget.
+            let working = try await reserveCallWorkingSet(pool: pool, modelDir: modelDir)
+            defer { pool.budget.release(working) }
             // Cap resolution before inference so vision attention can't OOM (see maxInputPixels).
             let bounded = ImageLoader.downscaled(image, maxPixels: maxInputPixels)
             return try await container.perform { context in
@@ -83,6 +88,23 @@ enum VLMEngine {
             throw error          // the sentence that names the model and who holds it (SC-2a-b)
         } catch {
             throw StageError.engineFailure(stage: "VLM", underlying: error)
+        }
+    }
+
+    /// SC-2c: reserve one call's working set (`ModelLoadProfile` `.vision`) beside the model's resident weights. Other
+    /// idle models are evicted for it; a model in use is waited for (`MemoryBudget.defaultMaxWait`) and then a
+    /// `WaitError` naming it is thrown; a call that cannot fit even alone throws `insufficientRAM`. The caller releases
+    /// the reservation when the call ends.
+    nonisolated static func reserveCallWorkingSet(pool: ModelContainerPool, modelDir: URL,
+                                                  maxWait: Duration = MemoryBudget.defaultMaxWait) async throws -> MemoryBudget.Reservation {
+        let weights = ModelWeightCharge.bytes(directory: modelDir, catalogFallback: nil)
+        let need = weights + ModelLoadProfile.workingSetBytes(for: .vision)
+        switch await pool.reserveWorkingSetReporting(totalNeedBytes: need, directory: modelDir, maxWait: maxWait) {
+        case .granted(let reservation): return reservation
+        case .busy(let blockers): throw MemoryBudget.WaitError(label: modelDir.lastPathComponent, blockers: blockers)
+        case .tooLarge:
+            throw StageError.insufficientRAM(requiredGB: Double(need) / 1_073_741_824,
+                                             availableGB: Double(pool.budget.capacityBytes) / 1_073_741_824)
         }
     }
 

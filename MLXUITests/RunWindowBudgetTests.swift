@@ -253,6 +253,11 @@ struct RunWindowBudgetTests {
 
     // MARK: - (3) Laya / CLM: real bytes, leases, held entries skipped
 
+    /// SC-2c: what a decision engine (Laya, CLM) books for `onDisk` bytes of safetensors.
+    private static func decisionCharge(_ onDisk: Int64) -> Int64 {
+        Int64((Double(onDisk) * ModelLoadProfile.entry(for: .decision).factor).rounded())
+    }
+
     private func engineDir(safetensors: [(String, Int)]) throws -> URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("sc2b-\(UUID().uuidString)")
         for (path, size) in safetensors {
@@ -267,7 +272,7 @@ struct RunWindowBudgetTests {
         let dir = try engineDir(safetensors: [("model.safetensors", 1_000_000), ("encoder/w.safetensors", 3_000_000),
                                               ("heads/h.safetensors", 500_000)])
         defer { try? FileManager.default.removeItem(at: dir) }
-        #expect(EngineLeaseCache<Box>.charge(directory: dir) == ModelWeightCharge.charge(onDiskBytes: 4_500_000))
+        #expect(EngineLeaseCache<Box>.charge(directory: dir) == Self.decisionCharge(4_500_000))   // SC-2c: the decision kind's table factor
         #expect(EngineLeaseCache<Box>.charge(directory: dir) > 4_500_000)
         // no safetensors → the directory's size (never 0 for a non-empty directory)
         let plain = FileManager.default.temporaryDirectory.appendingPathComponent("sc2b-\(UUID().uuidString)")
@@ -282,11 +287,11 @@ struct RunWindowBudgetTests {
         let b = try engineDir(safetensors: [("encoder/w.safetensors", 6_000_000)])
         defer { try? FileManager.default.removeItem(at: a); try? FileManager.default.removeItem(at: b) }
         // room for one 6 MB charge and half of another: two can't be resident together
-        let tight = MemoryBudget(capacityBytes: ModelWeightCharge.charge(onDiskBytes: 6_000_000) * 3 / 2,
+        let tight = MemoryBudget(capacityBytes: Self.decisionCharge(6_000_000) * 3 / 2,
                                  cacheClearer: MLXCacheClearer(capActive: { false }, clear: {}, delay: .milliseconds(1)))
         let small = EngineLeaseCache<Box>(budget: tight) { Box($0.lastPathComponent) }
         let leaseA = try await small.lease(for: a, holder: .runWindow)
-        #expect(tight.usedBytes == ModelWeightCharge.charge(onDiskBytes: 6_000_000))      // real, not 0
+        #expect(tight.usedBytes == Self.decisionCharge(6_000_000))      // real, not 0
         #expect(tight.inUseCount == 1)
         do {
             _ = try await small.lease(for: b, holder: .flow, maxWait: .milliseconds(150))
@@ -302,7 +307,7 @@ struct RunWindowBudgetTests {
     }
 
     @Test func aLeaseCacheIsAParticipantOfTheSharedBudgetSoOtherLoadsCanEvictItWhenIdle() async throws {
-        let charge = ModelWeightCharge.charge(onDiskBytes: 6_000_000)
+        let charge = Self.decisionCharge(6_000_000)
         let budget = MemoryBudget(capacityBytes: charge * 3 / 2,
                                   cacheClearer: MLXCacheClearer(capActive: { false }, clear: {}, delay: .milliseconds(1)))
         let cache = EngineLeaseCache<Box>(budget: budget) { Box($0.lastPathComponent) }

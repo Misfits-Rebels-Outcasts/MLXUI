@@ -41,3 +41,73 @@ nonisolated enum ModelWeightCharge {
         Int64((Double(onDiskBytes) * loadFactor).rounded())
     }
 }
+
+
+/// SC-2c — what every **non-LLM** load books, in one small table (journal `2026-474-cc-sc2c-real-sizes`).
+///
+/// `ModelWeightCharge` above is the LLM rule (safetensors × 1.10). The other engines load more than their files: a
+/// vision tower, activations, image and audio buffers, and MLX's buffer cache keeps the freed ones. SC-2b's live
+/// check booked them at the catalog `ramGB` (dots.ocr 1.3 GiB against ≈ 5.7 GB real) and an OCR → VLM pair reached
+/// 11 GB on an 8 GiB cap. Each factor below is `phys_footprint` added by the engine's real path (two runs, peak under
+/// a 25 ms sampler) over the model's safetensors bytes, measured by `RealSizesMeasureTests` and rounded **up** to the
+/// next 0.05:
+///
+/// | kind | model measured | files | peak added | × files | table |
+/// |---|---|---|---|---|---|
+/// | OCR, own engine | dots.ocr-4bit | 3.28 GiB | 5.64 | 1.72 | 1.75 |
+/// | ASR | Voxtral-Mini-4B | 2.92 | 5.94 | 2.03 | 2.05 |
+/// | decision | Laya | 0.78 | 0.93 | 1.18 | 1.20 |
+/// | VLM (the pool) | gemma-3-4b-it-4bit | 3.17 | 6.35 | 2.00 | weights 1.10 + a 2 GiB working set per call |
+///
+/// A kind with **no** measurement (TTS, diffusion, music, segmentation, embedding, rerank, upscale, video) books
+/// `max(files × 1.10, catalog ramGB)`: never below the files, never below what it booked before. Each measured row is
+/// **one model**; the kind's other models inherit it (a Whisper checkpoint will be overbooked, not under). Implementer's
+/// calls, pending owner confirmation: rounding up, and the 2 GiB VLM working set (measured with a ≈ 1 MP image).
+nonisolated enum ModelLoadProfile {
+    struct Entry: Equatable {
+        /// Booked bytes per safetensors byte (what the engine holds once loaded and running, MLX's cache included).
+        let factor: Double
+        /// Extra bytes a single call needs on top of the resident weights (VLM image + vision tokens), reserved for
+        /// the call only; 0 where `factor` already covers a run.
+        let workingSetBytes: Int64
+        /// Measured on a real model (`false` = the conservative default).
+        let measured: Bool
+    }
+
+    static let gib = Int64(1_073_741_824)
+
+    static func entry(for kind: RunnerKind) -> Entry {
+        switch kind {
+        case .llm:      return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 0, measured: true)
+        case .ocr:      return Entry(factor: 1.75, workingSetBytes: 0, measured: true)
+        case .asr:      return Entry(factor: 2.05, workingSetBytes: 0, measured: true)
+        case .decision: return Entry(factor: 1.20, workingSetBytes: 0, measured: true)
+        case .vision:   return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 2 * gib, measured: true)
+        default:        return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 0, measured: false)
+        }
+    }
+
+    /// Every `*.safetensors` under `directory`, subdirectories included (Laya and CLM keep their encoder and heads in
+    /// subfolders; `ModelWeightCharge.safetensorsBytes` reads the top level only, which is right for an LLM folder).
+    static func safetensorsBytes(underneath directory: URL) -> Int64 {
+        guard let walker = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
+        var total: Int64 = 0
+        for case let url as URL in walker where url.pathExtension == "safetensors" {
+            total += Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        }
+        return total
+    }
+
+    /// What a `kind` engine loaded from `directory` books **while it is resident and running**. With no safetensors on
+    /// disk: the catalog figure (`catalogFallback`), else the directory's size.
+    static func charge(kind: RunnerKind, directory: URL, catalogFallback: Int64?) -> Int64 {
+        let onDisk = safetensorsBytes(underneath: directory)
+        guard onDisk > 0 else { return catalogFallback ?? Int64(ModelStore.directorySize(at: directory)) }
+        let entry = entry(for: kind)
+        let booked = Int64((Double(onDisk) * entry.factor).rounded())
+        return entry.measured ? booked : max(booked, catalogFallback ?? 0)
+    }
+
+    /// The per-call extra for `kind` (0 for most).
+    static func workingSetBytes(for kind: RunnerKind) -> Int64 { entry(for: kind).workingSetBytes }
+}

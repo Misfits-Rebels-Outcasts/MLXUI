@@ -477,6 +477,7 @@ struct FlowEditorView: View {
                     output: selectedRowOutput,
                     rowTitle: selectedRowTitle,
                     substitutionNote: selectedSubstitutionNote,
+                    statusNote: model.selectedRowID.flatMap { session.statusNote(for: $0) },   // SC-2c: as FlowListView does
                     savedFile: selectedSavedFile,
                     savedKind: selectedSavedKind,
                     savedPresentation: selectedSavedPresentation,

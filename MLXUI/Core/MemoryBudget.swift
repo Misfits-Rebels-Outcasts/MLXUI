@@ -246,11 +246,11 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
             if freed { continue }
 
             // 1. the requester's own LRU (entries in use are skipped by the participant — SC-2a).
-            if await owner.evictLeastRecentlyUsed() { continue }
+            if await owner.evictLeastRecentlyUsed() { cacheClearer.clearNow(); continue }
 
             // 2. then the other participant(s) of equal or higher priority.
             for other in peers.filter({ $0.evictionPriority >= mine }) {
-                if await other.evictLeastRecentlyUsed() { freed = true; break }
+                if await other.evictLeastRecentlyUsed() { freed = true; cacheClearer.clearNow(); break }
             }
             if freed { continue }
 
@@ -341,11 +341,11 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
             if added { return .granted(reservation) }
             guard held > protectedBytes else { return .tooLarge }       // only the running model is left
 
-            if await evictOwn() { continue }
+            if await evictOwn() { cacheClearer.clearNow(); continue }
             let mine = owner.evictionPriority
             var freed = false
             for other in others(excluding: owner).filter({ $0.evictionPriority >= mine }) {
-                if await other.evictLeastRecentlyUsed() { freed = true; break }
+                if await other.evictLeastRecentlyUsed() { freed = true; cacheClearer.clearNow(); break }
             }
             if freed { continue }
             var granted = false
@@ -674,6 +674,17 @@ nonisolated final class MLXCacheClearer: @unchecked Sendable {
     /// How many `Memory.clearCache()` calls this instance has made (tests).
     var clearCount: Int { lock.lock(); defer { lock.unlock() }; return cleared }
     var requestCount: Int { lock.lock(); defer { lock.unlock() }; return requests }
+
+    /// SC-2c: clear **now**, on the caller's path — used right after the budget evicted an idle entry to make room for a
+    /// load that is about to start, so the evicted engine's MLX buffers (5.7 GB for dots.ocr, ≈ 6 GB for a VLM with its
+    /// cache) are gone before the next load allocates, not 0.3 s later. Skipped while a server generation holds its
+    /// scoped cache limit (`requestClear` is the deferred path for that and for "last holder returned"). The evicted
+    /// value is already dropped by the participant when this runs, so there is something to free.
+    func clearNow() {
+        guard !capActive() else { requestClear(); return }
+        clear()
+        lock.lock(); cleared += 1; lock.unlock()
+    }
 
     func requestClear() {
         lock.lock()

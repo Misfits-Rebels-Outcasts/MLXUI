@@ -388,13 +388,12 @@ struct InUseLeaseTests {
         let cleared = Cell<Int>(0)
         let clearer = MLXCacheClearer(capActive: { false }, clear: { cleared.value += 1 }, delay: .milliseconds(100))
         let budget = makeBudget(10, clearer: clearer)
-        let pool = ResidentPool<Box>(budget: budget)
-        try await load(pool, "a", 4)
-        try await load(pool, "b", 4)
-        try await load(pool, "c", 4)                                // evicts a (and later b): two drops in a burst
+        // SC-2c: an eviction inside `reserve` now also clears immediately (`clearNow`), so the burst is driven straight
+        // through the deferred path: three "weights dropped" notices become one clear.
+        for _ in 0..<3 { budget.weightsDropped() }
         try await Task.sleep(for: .milliseconds(400))
-        #expect(clearer.requestCount >= 1)
-        #expect(cleared.value == 1)                                 // once, not per eviction
+        #expect(clearer.requestCount == 3)
+        #expect(cleared.value == 1)                                 // once, not per notice
     }
 
     @Test func aLastHolderReturningFromADoomedEntryRequestsAClear() async throws {
