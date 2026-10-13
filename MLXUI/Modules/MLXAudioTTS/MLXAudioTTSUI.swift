@@ -16,6 +16,7 @@ struct MLXAudioTTSUI: ModelUI {
         AnyView(MLXAudioTTSRunView(modelDisplayName: model.displayName,
                                    license: model.license,
                                    modelID: model.id,
-                                   family: model.family))
+                                   family: model.family,
+                                   handedStage: stage))
     }
 }

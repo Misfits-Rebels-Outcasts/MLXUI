@@ -16,7 +16,8 @@ struct MusicGenUI: ModelUI {
     @MainActor func makeRunView(for model: ModelEntry, stage: any PipelineStage) -> AnyView {
         AnyView(MusicGenRunView(modelDisplayName: model.displayName,
                                 license: model.license,
-                                modelID: model.id))
+                                modelID: model.id,
+                                handedStage: stage))
     }
 }
 
@@ -28,6 +29,8 @@ struct MusicGenRunView: View {
     let modelDisplayName: String
     let license: String?
     let modelID: String
+    /// SC-5c: the stage the Run sheet handed (a `LeasingStage`); every run goes through it.
+    let handedStage: any PipelineStage
 
     @State private var model = MusicGenRunModel()
     @State private var prompt = "A cheerful acoustic guitar melody with light percussion."
@@ -155,7 +158,10 @@ struct MusicGenRunView: View {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let maxSteps = durations[durationIndex].0
-        let stage = MusicGenStage(modelID: modelID, maxSteps: maxSteps)
+        let modelID = self.modelID
+        let stage = LeasingStage.perRun(handedStage, config: StageConfig(steps: maxSteps)) { _ in
+            MusicGenStage(modelID: modelID, maxSteps: maxSteps)
+        }
         model.generate(prompt: trimmed, stage: stage)
     }
 

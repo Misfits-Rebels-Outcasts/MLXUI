@@ -15,7 +15,8 @@ struct SDXLTurboUI: ModelUI {
     @MainActor func makeRunView(for model: ModelEntry, stage: any PipelineStage) -> AnyView {
         AnyView(SDXLTurboRunView(modelDisplayName: model.displayName,
                                  license: model.license,
-                                 modelID: model.id))
+                                 modelID: model.id,
+                                 handedStage: stage))
     }
 }
 
@@ -28,6 +29,8 @@ struct SDXLTurboRunView: View {
     let modelDisplayName: String
     let license: String?
     let modelID: String
+    /// SC-5c: the stage the Run sheet handed (a `LeasingStage`); every run goes through it.
+    let handedStage: any PipelineStage
 
     @State private var model = SDXLTurboRunModel()
     @State private var prompt = "A photorealistic cat sitting on a moon-lit rooftop."
@@ -145,7 +148,10 @@ struct SDXLTurboRunView: View {
             let t = seedText.trimmingCharacters(in: .whitespacesAndNewlines)
             return t.isEmpty ? nil : UInt64(t)
         }()
-        let stage = SDXLTurboStage(modelID: modelID, seed: seed)
+        let modelID = self.modelID
+        let stage = LeasingStage.perRun(handedStage, config: StageConfig(seed: seed)) { _ in
+            SDXLTurboStage(modelID: modelID, seed: seed)
+        }
         model.start(prompt: trimmed, stage: stage)
     }
 

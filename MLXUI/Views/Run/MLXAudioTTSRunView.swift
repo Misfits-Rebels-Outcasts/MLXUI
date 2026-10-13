@@ -13,6 +13,8 @@ struct MLXAudioTTSRunView: View {
     let license: String?
     let modelID: String
     let family: String
+    /// SC-5c: the stage the Run sheet handed (a `LeasingStage`); every run goes through it.
+    let handedStage: any PipelineStage
 
     @State private var model = TTSRunModel()
     @State private var text = "Hello! This is text-to-speech running locally with MLX."
@@ -166,20 +168,26 @@ struct MLXAudioTTSRunView: View {
             }
             // MLX-ERR-2: the engine call lives inside the stage closure, so the guard goes here —
             // wrapping only the `model.synthesize(...)` call below would never see the error.
-            let stage = TTSStage(id: "mlx-audio-tts.\(modelID)", name: "TTS (\(family))") { text in
-                try await MLXErrorGuard.guardedRun {
-                    try await MLXAudioTTSEngine.synthesize(
-                        text, voice: nil, referenceAudio: refBuffer, modelDirectory: directory)
+            let (modelID, family) = (self.modelID, self.family)
+            let stage = LeasingStage.perRun(handedStage, config: StageConfig()) { _ in
+                TTSStage(id: "mlx-audio-tts.\(modelID)", name: "TTS (\(family))") { text in
+                    try await MLXErrorGuard.guardedRun {
+                        try await MLXAudioTTSEngine.synthesize(
+                            text, voice: nil, referenceAudio: refBuffer, modelDirectory: directory)
+                    }
                 }
             }
             model.synthesize(text: trimmed, stage: stage)
         } else {
             let chosen = voice.trimmingCharacters(in: .whitespacesAndNewlines)
             let resolvedVoice = chosen.isEmpty ? nil : chosen
-            let stage = TTSStage(id: "mlx-audio-tts.\(modelID)", name: "TTS (\(family))") { text in
-                try await MLXErrorGuard.guardedRun {
-                    try await MLXAudioTTSEngine.synthesize(
-                        text, voice: resolvedVoice, modelDirectory: directory)
+            let (modelID, family) = (self.modelID, self.family)
+            let stage = LeasingStage.perRun(handedStage, config: StageConfig(voice: resolvedVoice)) { _ in
+                TTSStage(id: "mlx-audio-tts.\(modelID)", name: "TTS (\(family))") { text in
+                    try await MLXErrorGuard.guardedRun {
+                        try await MLXAudioTTSEngine.synthesize(
+                            text, voice: resolvedVoice, modelDirectory: directory)
+                    }
                 }
             }
             model.synthesize(text: trimmed, stage: stage)

@@ -14,6 +14,7 @@ struct VLMUI: ModelUI {
         AnyView(ImageQARunView(modelDisplayName: model.displayName,
                                license: model.license,
                                modelID: model.id,
-                               hfModelID: model.hfModelId))
+                               hfModelID: model.hfModelId,
+                               handedStage: stage))
     }
 }

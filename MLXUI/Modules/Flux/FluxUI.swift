@@ -15,7 +15,8 @@ struct FluxUI: ModelUI {
     @MainActor func makeRunView(for model: ModelEntry, stage: any PipelineStage) -> AnyView {
         AnyView(FluxRunView(modelDisplayName: model.displayName,
                             license: model.license,
-                            modelID: model.id))
+                            modelID: model.id,
+                            handedStage: stage))
     }
 }
 
@@ -27,6 +28,8 @@ struct FluxRunView: View {
     let modelDisplayName: String
     let license: String?
     let modelID: String
+    /// SC-5c: the stage the Run sheet handed (a `LeasingStage`); every run goes through it.
+    let handedStage: any PipelineStage
 
     @State private var model = FluxRunModel()
     @State private var prompt = "An astronaut riding a horse on Mars."
@@ -162,7 +165,10 @@ struct FluxRunView: View {
             let t = seedText.trimmingCharacters(in: .whitespacesAndNewlines)
             return t.isEmpty ? nil : UInt64(t)
         }()
-        let stage = FluxStage(modelID: modelID, seed: seed)
+        let modelID = self.modelID
+        let stage = LeasingStage.perRun(handedStage, config: StageConfig(seed: seed)) { _ in
+            FluxStage(modelID: modelID, seed: seed)
+        }
         model.start(prompt: trimmed, stage: stage)
     }
 

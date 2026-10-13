@@ -14,6 +14,8 @@ struct ImageQARunView: View {
     let license: String?
     let modelID: String
     let hfModelID: String
+    /// SC-5c: the stage the Run sheet handed (a `LeasingStage`); every run goes through it.
+    let handedStage: any PipelineStage
 
     @State private var model = ImageQARunModel()
     @State private var image: CGImage?
@@ -144,9 +146,11 @@ struct ImageQARunView: View {
     private func run() {
         guard let image else { return }
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        let stage = VLMStage(modelID: modelID,
-                             hfModelID: hfModelID,
-                             prompt: trimmed.isEmpty ? VLMSDK.defaultPrompt : trimmed)
+        let question = trimmed.isEmpty ? VLMSDK.defaultPrompt : trimmed
+        let (modelID, hfModelID) = (self.modelID, self.hfModelID)
+        let stage = LeasingStage.perRun(handedStage, config: StageConfig(prompt: question)) { _ in
+            VLMStage(modelID: modelID, hfModelID: hfModelID, prompt: question)
+        }
         model.start(image: image, stage: stage)
     }
 

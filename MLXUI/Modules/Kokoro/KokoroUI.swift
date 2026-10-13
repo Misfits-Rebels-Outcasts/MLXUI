@@ -12,12 +12,12 @@ struct KokoroUI: ModelUI {
     }
 
     @MainActor func makeRunView(for model: ModelEntry, stage: any PipelineStage) -> AnyView {
-        // The view builds a fresh TTSStage per run with the chosen voice/speed, so it needs
-        // the model id (and the installed voice list for the picker) rather than the
-        // pre-built `stage`.
+        // The view builds a TTSStage per run with the chosen voice/speed and runs it through the handed
+        // `stage` (SC-5c: ask, lease, booking).
         AnyView(TTSRunView(modelDisplayName: model.displayName,
                            license: model.license,
                            modelID: model.id,
-                           voices: KokoroEngine.availableVoices(modelID: model.id)))
+                           voices: KokoroEngine.availableVoices(modelID: model.id),
+                           handedStage: stage))
     }
 }

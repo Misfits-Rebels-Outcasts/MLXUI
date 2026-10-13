@@ -288,6 +288,10 @@ nonisolated final class LeasingStage: PipelineStage, @unchecked Sendable {
     private let maxWait: Duration
     /// SC-5a: asks before a run pushes out a model other apps are being served. `nil` = no question (tests, non-sheet use).
     let confirmer: ServedLoadConfirmer?
+    /// SC-5c: a per-run stage. Its per-run settings (seed, voice, speed, steps, prompt) ride on `probe`, which the run
+    /// executes; the engine cache is keyed without them (they don't change the weights), so a new seed books no second engine.
+    private let perRun: Bool
+    private var cacheConfig: StageConfig { perRun ? config.weightsOnly : config }
     private let lock = NSLock()
     private var active = 0
 
@@ -295,7 +299,8 @@ nonisolated final class LeasingStage: PipelineStage, @unchecked Sendable {
     /// stage its identity now, and is the builder's result if the cache doesn't already hold one.
     init(model: ModelEntry, config: StageConfig, probe: any PipelineStage, booksWeights: Bool = true,
          cache: EngineCache = .shared, maxWait: Duration = MemoryBudget.defaultMaxWait,
-         confirmer: ServedLoadConfirmer? = nil) {
+         confirmer: ServedLoadConfirmer? = nil, perRun: Bool = false) {
+        self.perRun = perRun
         self.model = model
         self.config = config
         self.probe = probe
@@ -309,7 +314,7 @@ nonisolated final class LeasingStage: PipelineStage, @unchecked Sendable {
     /// `EngineCache.footprint` for a stage that books here; `ModelLoadProfile` for one whose engine books its own
     /// weights, the VLM), plus the per-call working set of a vision model. 0 = the run adds nothing to the ledger.
     func bytesNeeded() async -> Int64 {
-        await cache.bytesNeeded(for: model, config: config, booksWeights: booksWeights)
+        await cache.bytesNeeded(for: model, config: cacheConfig, booksWeights: booksWeights)
     }
 
     var id: String { probe.id }
@@ -328,19 +333,30 @@ nonisolated final class LeasingStage: PipelineStage, @unchecked Sendable {
         }
         // every load inside the run is the Run window's, whatever holder the engine itself names
         return try await MemoryBudget.RunWindowScope.$holder.withValue(.runWindow) {
-            let (stage, hold) = try await cache.lease(for: model, config: config, maxWait: maxWait,
+            let (stage, hold) = try await cache.lease(for: model, config: cacheConfig, maxWait: maxWait,
                                                       holder: .runWindow, booksWeights: booksWeights) { _, _ in probe }
             lock.lock(); active += 1; lock.unlock()
             defer {
                 hold.release()                                     // on return, throw and cancel alike
                 lock.lock(); active -= 1; lock.unlock()
             }
-            return try await stage.run(input, progress: progress)
+            return try await (perRun ? probe : stage).run(input, progress: progress)
         }
     }
 
     /// Whether a run is in progress (and so the engine is leased).
     var isRunning: Bool { lock.lock(); defer { lock.unlock() }; return active > 0 }
+
+    /// SC-5c: a Run window's per-run stage for the six views that used to build their own. `stage` is the one the sheet
+    /// handed; `make` builds the stage for this run's settings (`config` carries them for the record — the cache ignores
+    /// them). Not a `LeasingStage` (a test, a non-sheet caller): just `make`'s stage.
+    static func perRun(_ stage: any PipelineStage, config: StageConfig,
+                       make: (StageConfig) -> any PipelineStage) -> any PipelineStage {
+        let made = make(config)
+        guard let old = stage as? LeasingStage else { return made }
+        return LeasingStage(model: old.model, config: config, probe: made, booksWeights: old.booksWeights,
+                            cache: old.cache, maxWait: old.maxWait, confirmer: old.confirmer, perRun: true)
+    }
 
     /// A Run view's per-run rebuild (OCR prompt, Whisper language): a stage for the new config (config is part of the
     /// cache key, so a different language/prompt is its own cached engine). Nothing is held between runs, so there is

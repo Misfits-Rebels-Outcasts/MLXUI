@@ -14,6 +14,8 @@ struct TTSRunView: View {
     let modelID: String
     /// Voices found in the installed model (may be empty until installed).
     let voices: [String]
+    /// SC-5c: the stage the Run sheet handed (a `LeasingStage`); every run goes through it.
+    let handedStage: any PipelineStage
 
     @State private var model = TTSRunModel()
     @State private var text = "Hello! This is Kokoro text-to-speech running locally with MLX."
@@ -133,7 +135,10 @@ struct TTSRunView: View {
     private func run() {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let stage = TTSStage(modelID: modelID, voice: voice, speed: Float(speed))
+        let (modelID, voice, speed) = (self.modelID, self.voice, Float(self.speed))
+        let stage = LeasingStage.perRun(handedStage, config: StageConfig(voice: voice, speed: speed)) { _ in
+            TTSStage(modelID: modelID, voice: voice, speed: speed)
+        }
         model.synthesize(text: trimmed, stage: stage)
     }
 }

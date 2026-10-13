@@ -61,6 +61,15 @@ nonisolated struct StageConfig: Sendable, Hashable {
     }
 
     static let `default` = StageConfig()
+
+    /// SC-5c: this config without the per-run settings that don't change which weights load (what a Run window's
+    /// engine-cache key uses, so a new seed / voice / prompt books no second engine).
+    var weightsOnly: StageConfig {
+        var c = self
+        c.voice = nil; c.speed = 1.0; c.prompt = nil
+        c.seed = nil; c.width = nil; c.height = nil; c.steps = nil
+        return c
+    }
 }
 
 /// Builds a runnable `PipelineStage` for an installed model, gating on install
