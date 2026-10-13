@@ -71,6 +71,9 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
     struct Lease: Sendable {
         let value: Value
         let hold: MemoryBudget.Hold
+        /// SC-3b: this call waited for a load (it started one, or joined one in flight) rather than finding the value
+        /// resident. A fact about the call, for the request log's load wait.
+        var didLoad = false
         func release() { hold.release() }
     }
 
@@ -129,22 +132,22 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
                holder: MemoryBudget.HolderKind? = nil,
                load: @escaping @Sendable () async throws -> Value) async throws -> Lease {
         let got = try await acquire(for: key, bytes: bytes, maxWait: maxWait, leased: true, holder: holder, load: load)
-        return Lease(value: got.value, hold: got.hold ?? .inert)
+        return Lease(value: got.value, hold: got.hold ?? .inert, didLoad: got.didLoad)
     }
 
     private func acquire(for key: String, bytes: Int64, maxWait: Duration?, leased: Bool,
                          holder: MemoryBudget.HolderKind?, preload: Bool = false,
-                         load: @escaping @Sendable () async throws -> Value) async throws -> (value: Value, hold: MemoryBudget.Hold?) {
+                         load: @escaping @Sendable () async throws -> Value) async throws -> (value: Value, hold: MemoryBudget.Hold?, didLoad: Bool) {
         if let entry = entries[key] {
             touch(key)
-            return (entry.value, leased ? budget.hold(entry.reservation, label: key, holder: holder) : nil)
+            return (entry.value, leased ? budget.hold(entry.reservation, label: key, holder: holder) : nil, false)
         }
         let access = pinnedAccess(holder: holder, preload: preload)
         if let inFlight = loading[key] {
             if !preload { preloadOnly.remove(inFlight.token) }     // a request adopts the preload's load
             if leased { leasers[inFlight.token, default: []].append(holder) }
             let value = try await awaitLoad(inFlight.task, token: inFlight.token)
-            return (value, leased ? claimHold(inFlight.token, holder: holder) : nil)
+            return (value, leased ? claimHold(inFlight.token, holder: holder) : nil, true)
         }
 
         // Install the in-flight marker *before* the first suspension, so a concurrent caller for
@@ -189,7 +192,7 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
         if maxWait != nil { waitingForRoom[token] = task }
         if leased { leasers[token, default: []].append(holder) }
         let value = try await awaitLoad(task, token: token)
-        return (value, leased ? claimHold(token, holder: holder) : nil)
+        return (value, leased ? claimHold(token, holder: holder) : nil, true)
     }
 
     /// SC-2 / SC-2f: who may take a pinned idle model for this load. A preload never (it is not a request). Any
@@ -565,7 +568,7 @@ actor ModelContainerPool: ServePreloading {
         let leased = try await pool.lease(for: key, bytes: bytes, maxWait: maxWait, holder: holder) {
             try await loader(directory, architecture)
         }
-        return ContainerLease(container: leased.value, hold: leased.hold)
+        return ContainerLease(container: leased.value, hold: leased.hold, didLoad: leased.didLoad)
     }
 
     /// `lease(directory:…)` for an installed catalog model.
@@ -588,6 +591,8 @@ actor ModelContainerPool: ServePreloading {
     struct ContainerLease: Sendable {
         let container: ModelContainer
         let hold: MemoryBudget.Hold
+        /// SC-3b: the lease waited for the weights to load (see `ResidentPool.Lease.didLoad`).
+        var didLoad = false
         func release() { hold.release() }
     }
 

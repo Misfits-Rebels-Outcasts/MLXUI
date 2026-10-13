@@ -352,6 +352,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
         // SC-2a: leased for the whole request, so a model load or another request's working set can't evict it
         // from under the generation. Returned on every exit, including cancel and throw.
         let lease: ModelContainerPool.ContainerLease
+        let leaseStart = ContinuousClock.now
         do {
             lease = try await pool.lease(directory: directory, footprintBytes: footprintBytes,
                                          architecture: architecture, holder: .serverRequest)
@@ -360,6 +361,8 @@ nonisolated struct MLXChatBackend: ServeBackend {
             return
         }
         defer { lease.release() }
+        // SC-3b: the time this request waited for weights to load; nil when the model was already resident.
+        let loadSeconds: Double? = lease.didLoad ? Self.seconds(ContinuousClock.now - leaseStart) : nil
         let container = lease.container
         // S2-2: S2-1's `system` hoisting and the flatten-or-keep decision for tool traffic now
         // happen in the route, which reads this backend's `modelType` and so has the one fact both
@@ -600,8 +603,10 @@ nonisolated struct MLXChatBackend: ServeBackend {
             let hitLimit = Self.hitReplyLimit(libraryHitLength: libraryReason == .length, libraryGaveNoReason: libraryReason == nil,
                                               stoppedByClient: stoppedByClient, completionTokens: completionTokens,
                                               replyLimit: replyLimit)
-            continuation.yield(.usage(ServeUsage(
-                promptTokens: promptTokens, completionTokens: completionTokens, outcome: prepared.outcome)))
+            var usage = ServeUsage(
+                promptTokens: promptTokens, completionTokens: completionTokens, outcome: prepared.outcome)
+            usage.loadSeconds = loadSeconds
+            continuation.yield(.usage(usage))
             // S2-2: a turn that produced calls ends as `tool_calls`, whatever the sampler said.
             let finish: ServeFinishReason = callIndex > 0 ? .toolCalls
                 : (hitLimit && !stoppedByClient ? .length : .stop)

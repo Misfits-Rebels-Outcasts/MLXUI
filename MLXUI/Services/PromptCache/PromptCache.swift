@@ -142,7 +142,8 @@ nonisolated extension ServeUsage {
     /// The usage a request reports, with what the prompt cache did folded in (PC-3).
     init(promptTokens: Int, completionTokens: Int, outcome: PromptCacheOutcome) {
         self.init(promptTokens: promptTokens, completionTokens: completionTokens,
-                  cachedTokens: outcome.reusedTokens, cacheFellBack: outcome.bypass == .failed)
+                  cachedTokens: outcome.reusedTokens, cacheFellBack: outcome.bypass == .failed,
+                  promptCacheApplied: outcome.bypass == nil)
     }
 }
 

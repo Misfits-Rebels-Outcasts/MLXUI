@@ -175,4 +175,46 @@ struct ServeStatsTests {
         #expect(e.ttftSeconds == nil && e.queueWaitSeconds == nil && e.decodeTokensPerSecond == nil
                 && e.loadWaitSeconds == nil && e.promptTokensReused == nil)
     }
+
+    // MARK: SC-3b — what the backend reports
+
+    private final class Gate: @unchecked Sendable {
+        private var cont: CheckedContinuation<Void, Never>?
+        func wait() async { await withCheckedContinuation { cont = $0 } }
+        func open() { cont?.resume() }
+    }
+    private final class Payload: Sendable {}
+
+    @Test func aLeaseSaysWhetherItWaitedForALoad() async throws {
+        let pool = ResidentPool<Payload>(budget: MemoryBudget(capacityBytes: 10 << 30,
+            cacheClearer: MLXCacheClearer(capActive: { false }, clear: {}, delay: .milliseconds(1))))
+        let cold = try await pool.lease(for: "m", bytes: 1 << 30) { Payload() }
+        #expect(cold.didLoad)
+        cold.release()
+        let warm = try await pool.lease(for: "m", bytes: 1 << 30) { Payload() }
+        #expect(!warm.didLoad)                       // resident: no load wait
+        warm.release()
+    }
+
+    @Test func aLeaseThatJoinsALoadInFlightCountsItsWait() async throws {
+        let pool = ResidentPool<Payload>(budget: MemoryBudget(capacityBytes: 10 << 30,
+            cacheClearer: MLXCacheClearer(capActive: { false }, clear: {}, delay: .milliseconds(1))))
+        let gate = Gate()
+        let first = Task { try await pool.lease(for: "m", bytes: 1 << 30) { await gate.wait(); return Payload() } }
+        try await Task.sleep(for: .milliseconds(100))
+        let second = Task { try await pool.lease(for: "m", bytes: 1 << 30) { Payload() } }
+        try await Task.sleep(for: .milliseconds(100))
+        gate.open()
+        let a = try await first.value, b = try await second.value
+        #expect(a.didLoad && b.didLoad)
+        a.release(); b.release()
+    }
+
+    @Test func thePromptCacheCountsAsAppliedOnlyWhenNothingBypassedIt() {
+        #expect(ServeUsage(promptTokens: 1, completionTokens: 1, outcome: PromptCacheOutcome()).promptCacheApplied)
+        for bypass in [PromptCacheBypass.disabled, .modelNotTested, .seeded, .failed] {
+            #expect(!ServeUsage(promptTokens: 1, completionTokens: 1,
+                                outcome: PromptCacheOutcome(bypass: bypass)).promptCacheApplied, "\(bypass)")
+        }
+    }
 }
