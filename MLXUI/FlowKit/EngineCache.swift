@@ -185,6 +185,19 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
         }
     }
 
+    /// SC-5a / SC-5b: what loading `model` for a Run window or a flow row adds to the ledger that isn't there yet — the
+    /// engine if it isn't cached (the kind's real charge, `footprint(of:)` for a stage that books here; `ModelLoadProfile`
+    /// for one whose engine books its own weights, the VLM, 0 for its weights when already resident), plus the per-call
+    /// working set of a vision model. 0 = the run adds nothing.
+    func bytesNeeded(for model: ModelEntry, config: StageConfig, booksWeights: Bool) async -> Int64 {
+        if booksWeights { return isCached(model, config: config) ? 0 : footprint(of: model) }
+        let directory = modelDirectory(model)
+        let resident = await ModelContainerPool.vlm.residentBytes(directory: directory) != nil
+        let weights = resident ? 0 : ModelLoadProfile.charge(kind: model.runnerKind, directory: directory,
+                                                             catalogFallback: Int64(model.ramGB * 1_073_741_824))
+        return weights + ModelLoadProfile.workingSetBytes(for: model.runnerKind)
+    }
+
     /// SC-5a: whether an engine for `model`/`config` is cached (a load for it needs no room).
     func isCached(_ model: ModelEntry, config: StageConfig) -> Bool {
         withLock { entries[Key(id: model.id, config: config)] != nil }
@@ -296,12 +309,7 @@ nonisolated final class LeasingStage: PipelineStage, @unchecked Sendable {
     /// `EngineCache.footprint` for a stage that books here; `ModelLoadProfile` for one whose engine books its own
     /// weights, the VLM), plus the per-call working set of a vision model. 0 = the run adds nothing to the ledger.
     func bytesNeeded() async -> Int64 {
-        if booksWeights { return cache.isCached(model, config: config) ? 0 : cache.footprint(of: model) }
-        let directory = ModelStore.shared.directory(forHFModelID: model.hfModelId)
-        let resident = await ModelContainerPool.vlm.residentBytes(directory: directory) != nil
-        let weights = resident ? 0 : ModelLoadProfile.charge(kind: model.runnerKind, directory: directory,
-                                                             catalogFallback: Int64(model.ramGB * 1_073_741_824))
-        return weights + ModelLoadProfile.workingSetBytes(for: model.runnerKind)
+        await cache.bytesNeeded(for: model, config: config, booksWeights: booksWeights)
     }
 
     var id: String { probe.id }

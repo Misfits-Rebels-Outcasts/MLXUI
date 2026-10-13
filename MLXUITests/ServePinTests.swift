@@ -70,16 +70,17 @@ struct ServePinPoolTests {
         #expect(await pool.loadState(for: "kept") == .notLoaded(reason: "pushed out by a server request"))
     }
 
-    // SC-5a replaced the SC-2 interim rule here: Chat and a Run window no longer push a pinned model out on their own
-    // (see ServeAskTests). A flow still does, until SC-5b.
-    @Test func aFlowStillPushesOutAPinnedIdleModelAndSaysSo() async throws {
+    // SC-5a/5b replaced the SC-2 interim rule here: Chat, a Run window and a flow no longer push a pinned model out on
+    // their own — they ask first (see ServeAskTests / ServeAskFlowTests).
+    @Test(arguments: [MemoryBudget.HolderKind.chat, .runWindow, .flow])
+    func nothingInteractivePushesAPinnedIdleModelOutOnItsOwn(holder: MemoryBudget.HolderKind) async throws {
         let pool = ResidentPool<Box>(budget: makeBudget(10))
         try await pinned("kept", gbs: 6, in: pool)
-        let lease = try await pool.lease(for: "mine", bytes: 6 * Self.gb, maxWait: .milliseconds(300), holder: .flow) { Box() }
-        lease.release()
-        #expect(await pool.residentKeys == ["mine"])
-        #expect(await pool.isPinned("kept") == false)
-        #expect(await pool.loadState(for: "kept") == .notLoaded(reason: "pushed out by a flow"))
+        await #expect(throws: MemoryBudget.WaitError.self) {
+            _ = try await pool.lease(for: "mine", bytes: 6 * Self.gb, maxWait: .milliseconds(300), holder: holder) { Box() }
+        }
+        #expect(await pool.isPinned("kept"))
+        #expect(await pool.residentKeys == ["kept"])
     }
 
     @Test func pushedOutIsReportedToObserversWithTheReason() async throws {
@@ -128,11 +129,11 @@ struct ServePinPoolTests {
         let state = await b.preload(for: "p", bytes: 6 * Self.gb) { Box() }
         #expect(state == .notLoaded(reason: ResidentPool<Box>.notEnoughMemoryReason))
         #expect(await a.isPinned("kept"))
-        // an interactive one can
-        let lease = try await b.lease(for: "mine", bytes: 6 * Self.gb, holder: .flow) { Box() }
+        // a request for a model that is not kept ready can (a flow now asks first instead — SC-5b)
+        let lease = try await b.lease(for: "mine", bytes: 6 * Self.gb, holder: .serverRequest) { Box() }
         lease.release()
         #expect(await a.residentKeys.isEmpty)
-        #expect(await a.loadState(for: "kept") == .notLoaded(reason: "pushed out by a flow"))
+        #expect(await a.loadState(for: "kept") == .notLoaded(reason: "pushed out by a server request"))
     }
 
     @Test func aPinnedModelsOwnRequestMayTakeAnotherIdlePinnedModelButNeverItself() async throws {
@@ -194,11 +195,9 @@ struct ServePinPoolTests {
         return dir
     }
 
-    // SC-5a: the `.runWindow` case moved to ServeAskTests (a Run window asks instead of pushing out).
-    @Test(arguments: [
-        (MemoryBudget.HolderKind.flow, "pushed out by a flow"),
-    ])
-    func aVLMCallsWorkingSetPassesItsRealRequester(holder: MemoryBudget.HolderKind, reason: String) async throws {
+    // SC-5a/5b: a VLM call's working set made for a Run window or a flow does not take a served model either.
+    @Test(arguments: [MemoryBudget.HolderKind.runWindow, .flow])
+    func aVLMCallsWorkingSetNeverTakesAServedModel(holder: MemoryBudget.HolderKind) async throws {
         struct Boom: Error {}
         let dir = try sparseModelDir(gib: 3)
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -206,9 +205,11 @@ struct ServePinPoolTests {
         let served = ResidentPool<Box>(budget: budget)
         try await pinned("served", gbs: 16, in: served)                     // leaves too little for weights + working set
         let vlm = ModelContainerPool(budget: budget, loader: { _, _ in throw Boom() })
-        let working = try await VLMEngine.reserveCallWorkingSet(pool: vlm, modelDir: dir, maxWait: .seconds(1), requester: holder)
-        budget.release(working)
-        #expect(await served.loadState(for: "served") == .notLoaded(reason: reason))
+        await #expect(throws: MemoryBudget.WaitError.self) {
+            let working = try await VLMEngine.reserveCallWorkingSet(pool: vlm, modelDir: dir, maxWait: .milliseconds(300), requester: holder)
+            budget.release(working)
+        }
+        #expect(await served.isPinned("served"))
     }
 
     private nonisolated struct Stub: PipelineStage {
@@ -219,18 +220,17 @@ struct ServePinPoolTests {
         func run(_ input: Media, progress: @Sendable @escaping (Double) -> Void) async throws -> Media { input }
     }
 
-    @Test(arguments: [
-        (MemoryBudget.HolderKind.flow, "pushed out by a flow"),
-    ])
-    func anEngineCacheBuildPassesItsRealRequester(holder: MemoryBudget.HolderKind, reason: String) async throws {
+    @Test(arguments: [MemoryBudget.HolderKind.runWindow, .flow])
+    func anEngineCacheBuildNeverTakesAServedModel(holder: MemoryBudget.HolderKind) async throws {
         let budget = makeBudget(10)
         let served = ResidentPool<Box>(budget: budget)
         try await pinned("served", gbs: 6, in: served)
         let cache = EngineCache(budget: budget, countsLLMWeights: true)
-        let lease = try await cache.lease(for: makeEntry(id: "engine", ramGB: 6), config: .default,
-                                          maxWait: .seconds(1), holder: holder) { m, _ in Stub(id: m.id) }
-        lease.hold.release()
-        #expect(await served.loadState(for: "served") == .notLoaded(reason: reason))
+        await #expect(throws: MemoryBudget.WaitError.self) {
+            _ = try await cache.lease(for: makeEntry(id: "engine", ramGB: 6), config: .default,
+                                      maxWait: .milliseconds(300), holder: holder) { m, _ in Stub(id: m.id) }
+        }
+        #expect(await served.isPinned("served"))
     }
 
     @Test func theWorkingSetOfAModelNotKeptReadyMayTakeAnIdlePinnedOne() async throws {

@@ -637,6 +637,11 @@ nonisolated enum FlowInterpreter {
                                                         transcript: transcripts[position],
                                                         context: contextArg,
                                                         usedFlowContent: childUsedContent)
+                } catch let question as ServedLoadQuestion {
+                    // SC-5b: the row's model load would stop keeping a served model ready — park the run on the
+                    // question the way a human row parks (the session shows it and re-runs with the answer).
+                    throw ParkRun(path: execPath, prompt: question.sentence, policy: ServedLoadQuestion.policy,
+                                  defaultText: nil)
                 } catch {
                     if onError == "skip" {
                         // SPEC-Q216 (DA-10): emit a terminal event for this row before

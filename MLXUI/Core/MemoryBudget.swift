@@ -167,14 +167,14 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
         case never
         case may(requester: HolderKind?)
 
-        /// SC-5a (gate D): what a load by `holder` may take. **Chat and a Run window never take a pinned model on their
+        /// SC-5a (gate D): what a load by `holder` may take. **Chat, a Run window and a flow never take a pinned model on their
         /// own** — they ask first (`ServedLoadConfirmer`), and "Load anyway" unpins and evicts the models named, so by
         /// the time the load reserves, nothing pinned is in its way; if one still is (pinned in the meantime) the load
-        /// waits, bounded, and is refused rather than pushing it out unasked. A flow and a server request may, until
-        /// SC-5b. A load made inside a Run window's run (`RunWindowScope`) is a Run window's, whoever the engine says.
+        /// waits, bounded, and is refused rather than pushing it out unasked. So does a flow row (SC-5b: it asks, or parks
+        /// when unattended). Only a server request may. A load made inside a Run window's run (`RunWindowScope`) is a Run window's, whoever the engine says.
         static func access(for holder: HolderKind?) -> PinnedAccess {
             switch RunWindowScope.holder ?? holder {
-            case .chat, .runWindow: .never
+            case .chat, .runWindow, .flow: .never
             default: .may(requester: holder)
             }
         }

@@ -66,7 +66,14 @@ final class FlowRunSession {
         /// HR-4 (SPEC-Q233) — the row's incoming value, for the prompt sheet's prefill. `nil`
         /// when the row has none (row 1) or it isn't a single text item.
         let defaultText: String?
+
+        /// SC-5b: this park is a served-load question ("Loading X will stop keeping Y ready…"), not a human row.
+        var isServedLoad: Bool { policy == ServedLoadQuestion.policy }
     }
+
+    /// SC-5b: the run in progress / last started, so a served-load answer can re-run it (also from the Server screen).
+    private var lastRun: (doc: FlowDocument, runner: FlowRunner, context: FlowRunner.RunContext)?
+    @ObservationIgnored private var waitingID: UUID?
 
     // MARK: - Gating
 
@@ -184,6 +191,8 @@ final class FlowRunSession {
         isRunning = true
         errorSentence = nil
         parked = nil
+        lastRun = (doc, runner, context)
+        withdrawServedLoadQuestion()
 
         let startIndex = resume ? firstGrayIndex(in: doc) : 0
         RunMetrics.resetPeak()      // R11-1: measure this run, not the process lifetime
@@ -244,6 +253,25 @@ final class FlowRunSession {
               answers: [parked.execPath: FlowInterpreter.HumanAnswer(tag: nil, text: text)])
     }
 
+    /// SC-5b (gate D): answer a parked served-load question. "Load anyway" re-runs and the row unpins and pushes out the
+    /// named models for its load (state "pushed out by a flow"); "Cancel" re-runs and the row fails with the question's
+    /// sentence. Never called by the app itself: an unattended firing waits here until a person answers.
+    func answerServedLoad(loadAnyway: Bool) {
+        guard let parked, parked.isServedLoad, let last = lastRun else { return }
+        ServedLoadDecisions.shared.set(loadAnyway ? .loadAnyway : .cancel,
+                                       flowID: last.context.scope.locationID, path: parked.execPath)
+        start(doc: last.doc, runner: last.runner, context: last.context)
+    }
+
+    /// The sentence of the parked served-load question, or nil.
+    var servedLoadSentence: String? { parked.flatMap { $0.isServedLoad ? $0.prompt : nil } }
+
+    private func withdrawServedLoadQuestion() {
+        let id = waitingID
+        waitingID = nil
+        ServedLoadWaiting.shared.remove(id)
+    }
+
     /// CFM-R10-Human: no live answer by a `timeout=` row's deadline — re-run with the row's
     /// declared fallback (the `default=` tag for Ask Human, "unchanged" for Human Input),
     /// which the interpreter resolves and discloses as F002. A no-op if the run is no longer
@@ -293,6 +321,7 @@ final class FlowRunSession {
         outputs = [:]
         selectedRowID = nil
         parked = nil
+        withdrawServedLoadQuestion()
         metrics = RunMetrics()
         cacheHitRows = []
     }
@@ -358,6 +387,12 @@ final class FlowRunSession {
             isRunning = false
             parked = ParkedInfo(rowID: id, prompt: prompt, policy: policy, execPath: execPath,
                                 deadline: Self.deadline(fromPolicy: policy), defaultText: defaultText)
+            if policy == ServedLoadQuestion.policy, let flow = lastRun?.context.scope.identity {
+                // SC-5b: also listed on the Local Server screen, answerable there; stays until answered
+                waitingID = ServedLoadWaiting.shared.add(flow: flow, sentence: prompt) { [self] loadAnyway in
+                    answerServedLoad(loadAnyway: loadAnyway)
+                }
+            }
         }
     }
 
@@ -381,6 +416,8 @@ final class FlowRunSession {
         runTask = nil
         isRunning = false
         parked = nil
+        withdrawServedLoadQuestion()
+        if let last = lastRun { ServedLoadDecisions.shared.clear(flowID: last.context.scope.locationID) }
         // The partially-run flow keeps the dots it earned (dots aren't reset on cancel).
     }
 

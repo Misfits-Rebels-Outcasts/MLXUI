@@ -19,6 +19,7 @@ struct ServerView: View {
                             .foregroundStyle(.orange)
                     }
                     ServerStatusSection(screen: screen, controller: controller, refresh: refresh)
+                    ServedLoadWaitingSection()
                     ServerModelsSection(screen: screen, controller: controller,
                                         systemRAMGB: appState.systemInfo.totalRAMGB, refresh: refresh)
                     ServerMemorySection(memory: screen.memory)
@@ -49,6 +50,29 @@ struct ServerView: View {
         }
         screen = controller.screenModel(memory: memory, freeDiskBytes: ServeDisk.freeBytes(),
                                         contextLength: { contexts[$0] ?? nil })
+    }
+}
+
+/// SC-5b (gate D): flows parked on "Loading X will stop keeping Y ready…" — answerable here, never auto-answered.
+private struct ServedLoadWaitingSection: View {
+    private let waiting = ServedLoadWaiting.shared
+
+    var body: some View {
+        ForEach(waiting.items) { item in
+            GroupBox {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("A flow is waiting: \(item.sentence)", systemImage: "hourglass")
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(item.flow).font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        Button("Load anyway") { item.answer(true) }
+                        Button("Cancel", role: .cancel) { item.answer(false) }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(4)
+            }
+        }
     }
 }
 

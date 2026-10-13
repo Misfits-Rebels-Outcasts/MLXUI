@@ -13,7 +13,7 @@ import SwiftUI
 @Observable
 final class ServedLoadConfirmer {
     /// What the sheet shows.
-    struct Question: Identifiable, Equatable {
+    nonisolated struct Question: Identifiable, Equatable, Sendable {
         let id = UUID()
         let modelName: String
         let servedIDs: [String]
@@ -100,14 +100,14 @@ final class ServedLoadConfirmer {
 
 /// The confirm sheet: one sentence, two buttons.
 struct ServedLoadConfirmSheet: View {
-    let question: ServedLoadConfirmer.Question
+    let message: String
     let respond: (Bool) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Stop keeping a served model ready?")
                 .font(.headline)
-            Text(question.message)
+            Text(message)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
@@ -127,7 +127,7 @@ extension View {
     func servedLoadConfirmation(_ confirmer: ServedLoadConfirmer) -> some View {
         sheet(item: Binding(get: { confirmer.question },
                             set: { if $0 == nil { confirmer.respond(false) } })) { question in
-            ServedLoadConfirmSheet(question: question) { confirmer.respond($0) }
+            ServedLoadConfirmSheet(message: question.message) { confirmer.respond($0) }
         }
     }
 }

@@ -29,6 +29,10 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// CFM-R10-Direct: the flow's declared `transforms:` — a row naming one runs its script
     /// fenced (never in the App Store build; `canRun` refuses there).
     var transforms: [String: TransformDef] = [:]
+    /// SC-5b (gate D): called before a model row loads; throws `ServedLoadQuestion` to park the run when the load would stop
+    /// keeping a served model ready (and the row's failure sentence when the user declined). `nil` = no question
+    /// (tests, mock runs).
+    var servedLoadGate: (@Sendable (_ path: String, _ model: ModelEntry) async throws -> Void)?
     /// LY-7/CL-6 — `LayaDecisionEngine`'s only call into the actual engine, injected like
     /// `makeModelStage` so a test can fake `LayaEngine` without loading a real checkpoint. The
     /// default calls the real `LayaEngineCache`/`LayaEngine.predict`.
@@ -128,6 +132,10 @@ nonisolated struct RealExecutor: FlowExecutor {
         let task = row.task ?? ""
         guard let desc = TaskCatalog.get(task) else {
             throw FlowError.unknownTask(row: task)
+        }
+        if let gate = servedLoadGate, row.model != nil,
+           let entry = try? resolveModel(display: row.model, path: path) {
+            try await gate(path, entry)
         }
         tagBox.tag = nil
         flagBox.timeout = nil

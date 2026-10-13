@@ -51,6 +51,11 @@ import Foundation
                                     installedModelIDs: installed,
                                     catalog: catalog)
         executor.transforms = transforms
+        // SC-5b (gate D): a row whose load would stop keeping a served model ready asks first (parks the run).
+        let gate = FlowServedLoadGate.live(flowID: scope.locationID, cache: cache) { model in
+            await MainActor.run { !(appState.registry.bestModule(for: model)?.sdk is StageBooksOwnWeights) }
+        }
+        executor.servedLoadGate = { path, model in try await gate(path: path, model: model) }
         return executor
     }
 

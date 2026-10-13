@@ -238,14 +238,6 @@ struct ServeAskConfirmerTests {
         #expect(await pool.isPinned("kept"))
     }
 
-    @Test func aFlowIsUnchangedUntilSC5b() async throws {
-        let pool = ResidentPool<Box>(budget: makeBudget(10))
-        try await pinned("kept", gbs: 6, in: pool)
-        let lease = try await pool.lease(for: "row", bytes: 6 * gb, maxWait: .milliseconds(300), holder: .flow) { Box() }
-        lease.release()
-        #expect(await pool.loadState(for: "kept") == .notLoaded(reason: "pushed out by a flow"))
-    }
-
     // MARK: Run windows
 
     private nonisolated struct Stub: PipelineStage {

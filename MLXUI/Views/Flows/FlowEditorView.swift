@@ -159,7 +159,7 @@ struct FlowEditorView: View {
         // sheet — Esc, click outside, or the Stop button inside it — is one operation, not
         // two. All three now route through `cancel()`.
         .sheet(isPresented: Binding(
-            get: { session.parked != nil },
+            get: { session.parked != nil && session.servedLoadSentence == nil },
             set: { if !$0 { session.cancel() } }
         )) {
             if let parked = session.parked, let row = model.row(withID: parked.rowID) {
@@ -171,6 +171,14 @@ struct FlowEditorView: View {
                     runner: FlowRunner(),
                     context: AppFlowExecutorFactory.cachingContext(scope: makeScope(), appState: appState, transforms: model.document.transforms))
             }
+        }
+        // SC-5b (gate D): a row's model load would stop keeping a served model ready — the run is parked on the question
+        // (an unattended firing waits here too; it is never auto-answered). Dismissing the sheet is Cancel.
+        .sheet(isPresented: Binding(
+            get: { session.servedLoadSentence != nil },
+            set: { if !$0 { session.answerServedLoad(loadAnyway: false) } }
+        )) {
+            ServedLoadConfirmSheet(message: session.servedLoadSentence ?? "") { session.answerServedLoad(loadAnyway: $0) }
         }
         // Editing invalidates run results; preflight follows the document.
         .onChange(of: model.document) { _, _ in
