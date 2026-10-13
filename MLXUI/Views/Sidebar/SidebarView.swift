@@ -34,6 +34,14 @@ struct SidebarView: View {
                 }
             }
 
+            // SC-4b: only while serving is enabled (the option on); `surfacesVisible` is the observed `isEnabled`.
+            if appState.localServer.surfacesVisible {
+                Section("Serve") {
+                    Label("Local Server", systemImage: "server.rack")
+                        .tag(SidebarItem.server)
+                }
+            }
+
             Section("Installed") {
                 if appState.installedModelIDs.isEmpty {
                     Label("None installed", systemImage: "tray")
@@ -65,6 +73,9 @@ struct SidebarView: View {
                     }
                 }
             }
+        }
+        .onChange(of: appState.localServer.surfacesVisible) { _, visible in
+            appState.selectedSection = LocalServerPolicy.resolvedSidebarItem(appState.selectedSection, serving: visible)
         }
         .listStyle(.sidebar)
         .frame(minWidth: 200)

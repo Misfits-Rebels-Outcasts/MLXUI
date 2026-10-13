@@ -12,7 +12,7 @@ import FlyingSocks
 ///   Connect sheet keeps showing `http://127.0.0.1:<port>/v1`.
 /// - Spike finding (journal 2026-362): FlyingFox's `.loopback(port:)` binds `[::1]` *only*, so the
 ///   IPv4 listener is built explicitly with `.inet(ip4:)`.
-/// - **Gate (R14):** `start()` returns without binding when `!LocalServerGate.isAvailable` — a
+/// - **Gate (R14):** `start()` returns without binding when `!LocalServerGate.isEnabled` — a
 ///   second line of defence behind the UI. Nothing listens in the committed (hidden) default.
 /// - **Not started by itself in S1-2** — S1-5's UI asks; tests start it.
 ///
@@ -73,7 +73,7 @@ final class LocalServer {
     // MARK: - Lifecycle
 
     func start() async {
-        guard LocalServerGate.isAvailable else { return }
+        guard LocalServerGate.isEnabled else { return }
         switch status {
         case .starting, .running: return
         case .stopped, .failed: break

@@ -66,6 +66,8 @@ struct MLXUIApp: App {
                                     OverviewView()
                                 } else if case .aiWorkflows = appState.selectedSection, !AppState.hideAutomate {
                                     FlowGalleryView()
+                                } else if case .server = appState.selectedSection, appState.localServer.surfacesVisible {
+                                    ServerView()
                                 } else if let opened = appState.openedCatFlow {
                                     OpenedFlowView(opened: opened)
                                         .id(opened.url.path)

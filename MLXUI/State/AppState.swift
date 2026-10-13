@@ -738,6 +738,8 @@ enum SidebarItem: Hashable {
     case browse(String)
     case overview
     case aiWorkflows
+    /// SC-4b: the Local Server screen; offered only while `LocalServerGate.isEnabled`.
+    case server
     var isHome: Bool { if case .home = self { return true }; return false }
 }
 

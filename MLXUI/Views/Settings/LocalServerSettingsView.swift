@@ -1,13 +1,13 @@
 import SwiftUI
+import AppKit
 
-/// Settings → Local Server (S1-5, R12's fifth pane): on/off, the status sentence, the port, the
-/// served list with un-serve (Apple Foundation Models' Serve toggle lives here — it is not listed
-/// as a model anywhere else in the app, journal 2026-370), the in-memory request log, and
-/// "Connect your app…". The tab itself is only built when `LocalServerGate.isAvailable`.
+/// Settings → Local Server (S1-5, R12's fifth pane; slimmed by SC-4b): the "Enable Local Server" option (gate J),
+/// the port, and a link to the Local Server screen. Status, the running switch, the models, stats and the request log
+/// live on that screen. The tab itself is only built when `LocalServerGate.isAvailable`; the rest of the pane shows
+/// only when serving is enabled.
 struct LocalServerSettingsView: View {
     @Environment(AppState.self) private var appState
     @State private var portText = ""
-    @State private var showConnect = false
 
     private var controller: LocalServerController { appState.localServer }
 
@@ -21,99 +21,27 @@ struct LocalServerSettingsView: View {
                 Text("Lets apps on this Mac, like OpenCode or Xcode, use your installed models. Adds Local Server to the sidebar.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            if controller.surfacesVisible { serving }
+            if controller.surfacesVisible {
+                Section {
+                    HStack {
+                        Text("Port")
+                        TextField("1212", text: $portText)
+                            .frame(width: 80)
+                            .onSubmit { applyPort() }
+                        Button("Apply") { applyPort() }
+                            .disabled(Int(portText) == controller.server.settings.port || Int(portText) == nil)
+                        Text("Applies on restart — a running server restarts now.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    if case .failed(let reason) = controller.server.status {
+                        Label(reason, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
+                    }
+                    Button("Open Local Server") { openScreen() }
+                }
+            }
         }
         .formStyle(.grouped)
         .onAppear { portText = String(controller.server.settings.port) }
-        .sheet(isPresented: $showConnect) {
-            ConnectAppSheet(controller: controller, initialModelID: nil)
-        }
-    }
-
-    /// Everything but the option: shown only when serving is enabled. (SC-4b moves the running switch and the rest
-    /// to the Local Server screen.)
-    @ViewBuilder private var serving: some View {
-            Section("Server") {
-                Toggle("Let other apps on this Mac use my models", isOn: Binding(
-                    get: { controller.enabled },
-                    set: { on in Task { await controller.setServerEnabled(on) } }))
-                HStack {
-                    Image(systemName: statusSymbol).foregroundStyle(statusColor)
-                    Text(controller.statusSentence)
-                        .foregroundStyle(isFailed ? Color.red : Color.primary)
-                    Spacer()
-                    Button("Connect your app…") { showConnect = true }
-                }
-                HStack {
-                    Text("Port")
-                    TextField("1212", text: $portText)
-                        .frame(width: 80)
-                        .onSubmit { applyPort() }
-                    Button("Apply") { applyPort() }
-                        .disabled(Int(portText) == controller.server.settings.port || Int(portText) == nil)
-                    Text("Applies on restart — a running server restarts now.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-
-            Section("Served models") {
-                if controller.reachableIDs.isEmpty {
-                    Text("Nothing is being served. Turn on Serve on a model's page, or below.")
-                        .foregroundStyle(.secondary)
-                }
-                if let note = controller.memoryNote {
-                    Label(note, systemImage: "memorychip")
-                        .font(.callout)
-                        .foregroundStyle(.orange)
-                }
-                ForEach(controller.reachableIDs.sorted(), id: \.self) { id in
-                    HStack {
-                        Text(id).font(.system(.body, design: .monospaced))
-                        Spacer()
-                        Button("Un-serve") { Task { await controller.setServed(id, false) } }
-                    }
-                }
-                if let readiness = AppleFoundationAvailability.currentReadiness() {
-                    Toggle(isOn: Binding(
-                        get: { controller.isReachable(ServedModels.appleFoundationID) },
-                        set: { on in Task { await controller.setServed(ServedModels.appleFoundationID, on) } })) {
-                        VStack(alignment: .leading) {
-                            Text("Apple Foundation Models (on this Mac)")
-                            if readiness != .ready {
-                                Text(ReadinessSentence.text(for: readiness)).font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    .help("Let other apps on this Mac use this model.")
-                }
-            }
-
-            // PC-3: only while the prompt cache is switched on (rule 10) — and, like the whole pane,
-            // only when the Local Server is available (rule 14).
-            if PromptCache.isEnabled {
-                Section("Prompt cache") { PromptCacheLine() }
-            }
-
-            Section("Recent requests") {
-                RequestLogList(log: controller.server.requestLog)
-            }
-    }
-
-    private var isFailed: Bool { if case .failed = controller.server.status { return true } else { return false } }
-    private var statusSymbol: String {
-        switch controller.server.status {
-        case .running: return "circle.fill"
-        case .starting: return "circle.dotted"
-        case .failed: return "exclamationmark.triangle.fill"
-        case .stopped: return "circle"
-        }
-    }
-    private var statusColor: Color {
-        switch controller.server.status {
-        case .running: return .green
-        case .failed: return .red
-        default: return .secondary
-        }
     }
 
     private func applyPort() {
@@ -123,74 +51,12 @@ struct LocalServerSettingsView: View {
             portText = String(controller.server.settings.port)      // shows the clamped value
         }
     }
-}
 
-/// The last 200 requests, newest first — time, status, model, tokens, duration, caller, and
-/// "tools ignored". **Metadata only**: the log has no field for content (rule 13).
-struct RequestLogList: View {
-    let log: RequestLog
-
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { _ in
-            let entries = Array(log.entries.reversed())
-            if entries.isEmpty {
-                Text("No requests yet.").foregroundStyle(.secondary)
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
-                        ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
-                            Text(Self.line(entry))
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundStyle(entry.status >= 400 ? Color.red : Color.primary)
-                                .textSelection(.enabled)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(height: 160)
-            }
-        }
-    }
-
-    static func line(_ entry: RequestLogEntry) -> String {
-        var parts = [entry.time.formatted(date: .omitted, time: .standard), String(entry.status),
-                     entry.model ?? "—"]
-        if let prompt = entry.promptTokens, let completion = entry.completionTokens {
-            parts.append("\(prompt)→\(completion) tok")
-        }
-        parts.append(String(format: "%.1fs", entry.durationSeconds))
-        if let agent = entry.userAgent { parts.append(agent) }
-        if entry.toolsIgnored { parts.append("tools ignored") }
-        // S2-3: the flag only. The thinking text has nowhere to go — the entry has no field for it.
-        if entry.reasoningOn { parts.append("thinking") }
-        // S2-2: how many tool calls the model made — a count only, never a name, an argument or a
-        // result (rule 13). This line is the request log's only consumer.
-        if entry.toolCalls > 0 { parts.append(entry.toolCalls == 1 ? "1 tool call" : "\(entry.toolCalls) tool calls") }
-        // PC-3: how much of the prompt came from the cache — a count — and, when the cache path
-        // failed and the request ran without it, a marker, so a broken cache can't hide as "no hit".
-        if entry.cachedTokens > 0 { parts.append("reused \(entry.cachedTokens)") }
-        if entry.cacheFellBack { parts.append("cache fell back") }
-        return parts.joined(separator: "  ")
-    }
-}
-
-/// PC-3: "Prompt cache: N snapshots, X GB". Refreshes while it is on screen; counts and bytes only.
-struct PromptCacheLine: View {
-    @State private var snapshots = 0
-    @State private var bytes: Int64 = 0
-    @State private var fallbacks = 0
-
-    var body: some View {
-        Text(PromptCacheSummary.line(snapshots: snapshots, bytes: bytes, fallbacks: fallbacks))
-            .font(.callout)
-            .foregroundStyle(fallbacks > 0 ? Color.orange : Color.secondary)
-            .task {
-                while !Task.isCancelled {
-                    snapshots = await PromptCacheShared.store.count
-                    bytes = await PromptCacheShared.store.totalBytes
-                    fallbacks = PromptCacheCounters.shared.snapshot.fallbacks
-                    try? await Task.sleep(for: .seconds(2))
-                }
-            }
+    /// Selects the screen in the main window and brings that window forward (Settings is its own window).
+    private func openScreen() {
+        appState.selectedSection = .server
+        appState.route = []
+        NSApp.windows.first { $0.canBecomeMain && $0.title != "Settings" && !($0 is NSPanel) }?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 }

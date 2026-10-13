@@ -206,15 +206,17 @@ final class LocalServerController {
     var showConnect = false
     private(set) var connectModelID: String?
 
-    @ObservationIgnored private let installedIndex: () -> InstalledModelIndex
-    @ObservationIgnored private let appleFoundation: () -> Readiness?
+    @ObservationIgnored let installedIndex: () -> InstalledModelIndex
+    @ObservationIgnored let appleFoundation: () -> Readiness?
     @ObservationIgnored private let catalogLoaded: () -> Bool
     @ObservationIgnored private let evictModel: (String) async -> Void
     /// PC-1: the prompt cache's snapshots of an uninstalled model go with its weights (F11).
     @ObservationIgnored private let evictPromptCache: (String) async -> Void
-    @ObservationIgnored private let budgetBytes: Int64
+    @ObservationIgnored let budgetBytes: Int64
     /// SC-1: the pool served models are preloaded into (`nil` = no preloading: unit tests that don't inject one).
-    @ObservationIgnored private let preloadPool: (any ServePreloading)?
+    @ObservationIgnored let preloadPool: (any ServePreloading)?
+    /// SC-4b: the memory ledgers the Server screen's bar reads (budget, pool, prompt-cache snapshots).
+    @ObservationIgnored let ledger: @Sendable () async -> MemoryLedgerSample
     @ObservationIgnored private var preloads: [String: (run: UUID, task: Task<Void, Never>)] = [:]
     @ObservationIgnored private var observingPool = false
     @ObservationIgnored private static let log = Logger(subsystem: "com.ai-browser", category: "local-server")
@@ -244,7 +246,12 @@ final class LocalServerController {
              await PromptCacheShared.store.evict(directory: ModelContainerPool.key(for: directory))
          },
          budgetBytes: Int64 = MemoryBudget.shared.capacityBytes,
-         preloadPool: (any ServePreloading)? = TestEnvironment.isRunningTests ? nil : ModelContainerPool.shared) {
+         preloadPool: (any ServePreloading)? = TestEnvironment.isRunningTests ? nil : ModelContainerPool.shared,
+         ledger: @escaping @Sendable () async -> MemoryLedgerSample = {
+             MemoryLedgerSample(used: MemoryBudget.shared.usedBytes,
+                                poolWeights: await ModelContainerPool.shared.totalBytes,
+                                snapshots: await PromptCacheShared.store.totalBytes)
+         }) {
         self.server = server
         self.defaults = defaults
         self.installedIndex = installed
@@ -254,6 +261,7 @@ final class LocalServerController {
         self.evictPromptCache = evictPromptCache
         self.budgetBytes = budgetBytes
         self.preloadPool = preloadPool
+        self.ledger = ledger
         self.enabled = defaults.object(forKey: Self.enabledKey) as? Bool ?? true
         self.hasShownConnect = defaults.bool(forKey: Self.connectShownKey)
         self.optionEnabled = LocalServerOption.isOn(in: defaults)      // runs the one-time migration first
