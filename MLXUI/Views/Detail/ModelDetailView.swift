@@ -236,11 +236,12 @@ struct ModelDetailView: View {
     }
 
     /// S1-5 — only an installed MLX chat model can be served, and only while the Local Server is
-    /// available. The rule is `ServeToggleVisibility.shouldShow` (pure, tested); the gate is read
-    /// through `LocalServerGate`, never the flag (rule 14).
+    /// enabled (the "Enable Local Server" option, SC-4a). The rule is `ServeToggleVisibility.shouldShow` (pure, tested);
+    /// the gate is read through `LocalServerGate`, never the flag (rule 14).
     @ViewBuilder private func serveToggle(state: InstallState) -> some View {
-        if ServeToggleVisibility.shouldShow(state: state, isInstalledOnDisk: isInstalledOnDisk,
-                                            runnerKind: model.runnerKind, gateAvailable: LocalServerGate.isAvailable) {
+        if appState.localServer.surfacesVisible,      // observed: appears when the option is turned on
+           ServeToggleVisibility.shouldShow(state: state, isInstalledOnDisk: isInstalledOnDisk,
+                                            runnerKind: model.runnerKind) {
             // "Reachable now" = in the served list AND the master switch on (S1-5c, `ServeReach`); a
             // model too big for this Mac can't be switched on (the same rule that swaps Run for
             // "Needs N GB RAM"), but a reachable one can always be switched off.

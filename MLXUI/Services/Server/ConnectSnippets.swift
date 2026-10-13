@@ -363,6 +363,11 @@ nonisolated enum ConnectSnippets {
 /// Extracted from `MLXUIApp`'s sheet binding so "gate closed ⇒ nothing" is a pure, testable rule
 /// (S2-5) rather than a clause inside a view.
 nonisolated enum ConnectSheetPresentation {
+    /// SC-4a: presented only when serving is enabled (the option on).
+    static func isPresented(requested: Bool) -> Bool {
+        isPresented(gateAvailable: LocalServerGate.isEnabled, requested: requested)
+    }
+
     static func isPresented(gateAvailable: Bool, requested: Bool) -> Bool {
         gateAvailable && requested
     }

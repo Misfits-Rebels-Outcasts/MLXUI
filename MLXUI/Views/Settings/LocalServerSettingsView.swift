@@ -13,6 +13,26 @@ struct LocalServerSettingsView: View {
 
     var body: some View {
         Form {
+            // SC-4a (gate J): the first control. Everything below exists only while it is on.
+            Section {
+                Toggle("Enable Local Server", isOn: Binding(
+                    get: { controller.optionEnabled },
+                    set: { on in Task { await controller.setOptionEnabled(on) } }))
+                Text("Lets apps on this Mac, like OpenCode or Xcode, use your installed models. Adds Local Server to the sidebar.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if controller.surfacesVisible { serving }
+        }
+        .formStyle(.grouped)
+        .onAppear { portText = String(controller.server.settings.port) }
+        .sheet(isPresented: $showConnect) {
+            ConnectAppSheet(controller: controller, initialModelID: nil)
+        }
+    }
+
+    /// Everything but the option: shown only when serving is enabled. (SC-4b moves the running switch and the rest
+    /// to the Local Server screen.)
+    @ViewBuilder private var serving: some View {
             Section("Server") {
                 Toggle("Let other apps on this Mac use my models", isOn: Binding(
                     get: { controller.enabled },
@@ -77,12 +97,6 @@ struct LocalServerSettingsView: View {
             Section("Recent requests") {
                 RequestLogList(log: controller.server.requestLog)
             }
-        }
-        .formStyle(.grouped)
-        .onAppear { portText = String(controller.server.settings.port) }
-        .sheet(isPresented: $showConnect) {
-            ConnectAppSheet(controller: controller, initialModelID: nil)
-        }
     }
 
     private var isFailed: Bool { if case .failed = controller.server.status { return true } else { return false } }

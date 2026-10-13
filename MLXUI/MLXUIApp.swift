@@ -10,7 +10,7 @@ struct MLXUIApp: App {
             // S1-5 (design F6): stay running while the Local Server is serving; otherwise — and
             // always while the feature is hidden — quit with the last window, as before.
             LocalServerPolicy.shouldTerminateAfterLastWindowClosed(
-                gateAvailable: LocalServerGate.isAvailable, status: LocalServerController.shared.server.status)
+                status: LocalServerController.shared.server.status)
         }
     }
     @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
@@ -129,8 +129,7 @@ struct MLXUIApp: App {
                     .environment(appState)
             }
             .sheet(isPresented: Binding(
-                get: { ConnectSheetPresentation.isPresented(gateAvailable: LocalServerGate.isAvailable,
-                                                           requested: appState.localServer.showConnect) },
+                get: { appState.localServer.surfacesVisible && appState.localServer.showConnect },
                 set: { appState.localServer.showConnect = $0 }
             )) {
                 ConnectAppSheet(controller: appState.localServer, initialModelID: appState.localServer.connectModelID)

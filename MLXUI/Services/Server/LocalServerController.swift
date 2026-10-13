@@ -4,7 +4,9 @@ import OSLog
 
 /// The decisions the Local Server UI makes, as pure functions of (gate, server status, served set),
 /// so the whole of S1-5's logic is testable without a window. **Every one of them starts from
-/// `gateAvailable`** (rule 14): hidden means no surface, no auto-start and no stay-running.
+/// `gateAvailable`** (rule 14): hidden means no surface, no auto-start and no stay-running. SC-4a: callers pass
+/// `LocalServerGate.isEnabled` for everything except `visibleSettingsPanes`, which takes `isAvailable` (the Settings
+/// pane is where the option lives).
 enum LocalServerPolicy {
     /// What a change to the served set / enabled switch means for the listener.
     enum Action: Equatable { case start, stop, none }
@@ -39,6 +41,11 @@ enum LocalServerPolicy {
         case .starting, .running: return false
         case .stopped, .failed: return true
         }
+    }
+
+    /// SC-4a: the stay-running decision as the app delegate asks it — `gateAvailable` is the gate's `isEnabled` here.
+    static func shouldTerminateAfterLastWindowClosed(status: LocalServer.Status) -> Bool {
+        shouldTerminateAfterLastWindowClosed(gateAvailable: LocalServerGate.isEnabled, status: status)
     }
 
     /// The tabs Settings shows: Providers and Privacy follow `hideProvidersPrivacy`; **Local Server
@@ -80,6 +87,12 @@ enum LocalServerPolicy {
 /// branches). Shown iff the Local Server is available (gate), the model is an MLX chat model, and
 /// the model is installed — in the `.installed` state, or idle with files on disk.
 enum ServeToggleVisibility {
+    /// SC-4a: the toggle exists only when the option is on (enable first, then serve — amends R24).
+    static func shouldShow(state: InstallState, isInstalledOnDisk: Bool, runnerKind: RunnerKind) -> Bool {
+        shouldShow(state: state, isInstalledOnDisk: isInstalledOnDisk, runnerKind: runnerKind,
+                   gateAvailable: LocalServerGate.isEnabled)
+    }
+
     static func shouldShow(state: InstallState, isInstalledOnDisk: Bool, runnerKind: RunnerKind,
                            gateAvailable: Bool) -> Bool {
         guard gateAvailable, runnerKind == .llm else { return false }
@@ -169,7 +182,7 @@ nonisolated enum ServeReach {
 
 /// S1-5's view-model: owns the `LocalServer`, turns "serve this model" into settings + a start/stop,
 /// remembers whether the Connect sheet has ever been shown, and answers the launch / quit questions.
-/// Everything is gated by `LocalServerGate.isAvailable`.
+/// Everything is gated by `LocalServerGate.isEnabled`.
 @Observable
 final class LocalServerController {
     /// The app's one controller (the app delegate needs it for the stay-running decision).
@@ -187,6 +200,8 @@ final class LocalServerController {
     /// Whether the user wants the server on. Defaults to on; serving a model turns it on.
     private(set) var enabled: Bool
     private(set) var hasShownConnect: Bool
+    /// SC-4a: the "Enable Local Server" option, mirrored here so SwiftUI observes it (`LocalServerOption` is the store).
+    private(set) var optionEnabled: Bool
     /// Drives the "Connect your app" sheet.
     var showConnect = false
     private(set) var connectModelID: String?
@@ -241,6 +256,14 @@ final class LocalServerController {
         self.preloadPool = preloadPool
         self.enabled = defaults.object(forKey: Self.enabledKey) as? Bool ?? true
         self.hasShownConnect = defaults.bool(forKey: Self.connectShownKey)
+        self.optionEnabled = LocalServerOption.isOn(in: defaults)      // runs the one-time migration first
+    }
+
+    /// Whether the serving surfaces (Serve toggle, Connect sheet, …) are shown: `LocalServerGate.isEnabled`, read
+    /// after the observed option so a view that asks re-renders when the option changes.
+    var surfacesVisible: Bool {
+        _ = optionEnabled
+        return LocalServerGate.isEnabled
     }
 
     /// The stored list — what the user chose. Not what other apps can reach: use `reachableIDs`.
@@ -273,7 +296,7 @@ final class LocalServerController {
 
     /// The Serve toggle. **First Serve ever:** start the server, then present Connect your app.
     func setServed(_ id: String, _ on: Bool) async {
-        guard LocalServerGate.isAvailable else { return }
+        guard LocalServerGate.isEnabled else { return }
         server.update(settings: server.settings.serving(id, on))
         if on { setEnabled(true); noteServed(id) } else { server.forgetStoredResponses(for: id) }       // S3-3c
         await apply()
@@ -286,9 +309,26 @@ final class LocalServerController {
         }
     }
 
+    /// SC-4a: "Enable Local Server". **Off** stops the listener, cancels preloads and unpins — the served list is
+    /// kept. **On** restores it: reconcile, auto-start, preloads, pins. Asks `isAvailable`: it is the one control
+    /// that exists while serving is not enabled.
+    func setOptionEnabled(_ on: Bool) async {
+        guard LocalServerGate.isAvailable else { return }
+        LocalServerOption.set(on, in: defaults)
+        optionEnabled = on
+        if on {
+            await autoStart()
+        } else {
+            showConnect = false
+            await apply()
+            cancelAllPreloads()
+            await recomputePins()
+        }
+    }
+
     /// The Settings pane's on/off switch.
     func setServerEnabled(_ on: Bool) async {
-        guard LocalServerGate.isAvailable else { return }
+        guard LocalServerGate.isEnabled else { return }
         setEnabled(on)
         await apply()
         if on { startPreloads() } else { cancelAllPreloads() }
@@ -298,7 +338,7 @@ final class LocalServerController {
     /// A new port applies on restart: the setting is saved now; a running server restarts so the
     /// listener moves, and a bind failure ("port in use") shows in the status sentence.
     func setPort(_ port: Int) async {
-        guard LocalServerGate.isAvailable else { return }
+        guard LocalServerGate.isEnabled else { return }
         server.update(settings: server.settings.settingPort(port))
         if isRunning || server.status == .starting {
             await server.stop()
@@ -312,7 +352,7 @@ final class LocalServerController {
     /// resume serving if any reachable model was left served (gate permitting).
     func autoStart() async {
         await reconcileServed()
-        guard LocalServerPolicy.shouldAutoStart(gateAvailable: LocalServerGate.isAvailable, enabled: enabled,
+        guard LocalServerPolicy.shouldAutoStart(gateAvailable: LocalServerGate.isEnabled, enabled: enabled,
                                                 servedCount: reachableIDs.count) else { return }
         await server.start()
         startPreloads()
@@ -323,7 +363,7 @@ final class LocalServerController {
     /// stop the server if it was the last reachable model. A model whose repo is still installed
     /// (another card shares it) is left alone.
     func modelUninstalled(_ hfModelID: String) async {
-        guard LocalServerGate.isAvailable, catalogLoaded() else { return }
+        guard LocalServerGate.isEnabled, catalogLoaded() else { return }
         guard !isInstalledLLM(hfModelID) else { return }
         let wasServed = isServing(hfModelID)
         await reconcileServed()                          // un-serves + evicts it when it was served
@@ -343,7 +383,7 @@ final class LocalServerController {
     /// Also skipped unless the catalog actually loaded non-empty (S1-5e, R26): an unreadable
     /// `browser.json` makes everything look uninstalled and must not wipe the user's list.
     func reconcileServed() async {
-        guard LocalServerGate.isAvailable, catalogLoaded() else { return }
+        guard LocalServerGate.isEnabled, catalogLoaded() else { return }
         let gone = servedIDs.filter { $0 != ServedModels.appleFoundationID && !isInstalledLLM($0) }
         for id in gone {
             server.update(settings: server.settings.serving(id, false))
@@ -358,7 +398,7 @@ final class LocalServerController {
     }
 
     func presentConnect(for id: String?) {
-        guard LocalServerGate.isAvailable else { return }
+        guard LocalServerGate.isEnabled else { return }
         connectModelID = id ?? reachableIDs.sorted().first
         showConnect = true
     }
@@ -381,7 +421,7 @@ final class LocalServerController {
     /// declined for lack of memory — never one that was pushed out (its reason stays until the next request or an
     /// explicit Serve), and never one already loading or ready.
     private func startPreloads(declinedOnly: Bool = false) {
-        guard LocalServerGate.isAvailable, enabled, isRunning, let pool = preloadPool else { return }
+        guard LocalServerGate.isEnabled, enabled, isRunning, let pool = preloadPool else { return }
         observeLoadStates(pool)
         let index = installedIndex()
         for id in reachableIDs where id != ServedModels.appleFoundationID && preloads[id] == nil {
@@ -499,7 +539,7 @@ final class LocalServerController {
         observeLoadStates(pool)
         var pins: [URL] = []
         var overflow: Set<String> = []
-        if LocalServerGate.isAvailable, enabled {
+        if LocalServerGate.isEnabled, enabled {
             var used: Int64 = 0
             for id in servedByRecency() {
                 let directory = ModelStore.shared.directory(forHFModelID: id)
@@ -523,7 +563,7 @@ final class LocalServerController {
     }
 
     private func apply() async {
-        switch LocalServerPolicy.action(gateAvailable: LocalServerGate.isAvailable, enabled: enabled,
+        switch LocalServerPolicy.action(gateAvailable: LocalServerGate.isEnabled, enabled: enabled,
                                         servedCount: reachableIDs.count, status: server.status) {
         case .start: await server.start()
         case .stop: await server.stop()
