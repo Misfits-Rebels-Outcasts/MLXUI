@@ -200,3 +200,40 @@ extension LocalServerPolicy {
         return item
     }
 }
+
+/// SC-4c — the one-line Local Server card on Home (owner ruling 2026-10-13: a status card only, **no per-card labels**
+/// on Home's models — R51 "Serve just serves"). Pure, so the sentences and the visibility rule are testable.
+struct HomeServerCard: Equatable {
+    /// "Open Local Server" goes to the Local Server screen.
+    static let linkTitle = "Open Local Server"
+    static let linkTarget: SidebarItem = .server
+
+    let sentence: String
+
+    /// The card exists only while serving is enabled **and** a model has ever been served. Served models alone
+    /// don't prove it for a migrated profile, so the Connect sheet having been shown counts, as in the option's migration.
+    static func make(enabled: Bool, everServed: Bool, servedCount: Int, reachableCount: Int,
+                     switchOn: Bool, status: LocalServer.Status) -> HomeServerCard? {
+        guard enabled, everServed else { return nil }
+        switch status {
+        case .running(let port):
+            return HomeServerCard(sentence: "Serving \(reachableCount) \(reachableCount == 1 ? "model" : "models") · 127.0.0.1:\(port)")
+        case .failed(let reason):
+            return HomeServerCard(sentence: reason)
+        case .starting:
+            return HomeServerCard(sentence: "Starting…")
+        case .stopped:
+            if !switchOn, servedCount > 0 { return HomeServerCard(sentence: "Server off") }
+            return HomeServerCard(sentence: switchOn ? "Not serving" : "Server off")
+        }
+    }
+}
+
+extension LocalServerController {
+    /// Home's card, or `nil` (gate closed, option off, or nothing ever served).
+    var homeCard: HomeServerCard? {
+        HomeServerCard.make(enabled: surfacesVisible, everServed: hasShownConnect || !servedIDs.isEmpty,
+                            servedCount: servedIDs.count, reachableCount: reachableIDs.count,
+                            switchOn: enabled, status: server.status)
+    }
+}

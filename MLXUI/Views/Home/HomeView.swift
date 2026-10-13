@@ -31,8 +31,12 @@ struct HomeView: View {
 
     private var systemStatusSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Your Mac")
-                .font(.headline)
+            HStack {
+                Text("Your Mac")
+                    .font(.headline)
+                Spacer()
+                serverCard
+            }
 
             HStack(spacing: 24) {
                 statusBadge(icon: "cpu.fill", label: appState.systemInfo.chipName)
@@ -43,6 +47,21 @@ struct HomeView: View {
         }
         .padding(20)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    /// SC-4c: one line, only while the Local Server is enabled and something has been served. Not a per-model label.
+    @ViewBuilder private var serverCard: some View {
+        if let card = appState.localServer.homeCard {
+            HStack(spacing: 6) {
+                Image(systemName: "server.rack").foregroundStyle(.secondary)
+                Text("\(card.sentence) ·").font(.subheadline)
+                Button(HomeServerCard.linkTitle) {
+                    appState.route = []
+                    appState.selectedSection = HomeServerCard.linkTarget
+                }
+                .buttonStyle(.link)
+            }
+        }
     }
 
     private func statusBadge(icon: String, label: String) -> some View {

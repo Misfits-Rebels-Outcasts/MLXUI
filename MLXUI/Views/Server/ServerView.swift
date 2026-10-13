@@ -168,7 +168,7 @@ private struct ServerMemorySection: View {
     private func slices(_ m: ServeMemoryReading) -> [Slice] {
         [Slice(label: "Served models, kept ready", bytes: m.servedKeptReady, color: .accentColor),
          Slice(label: "Other models", bytes: m.otherModels, color: .orange),
-         Slice(label: "Flow and Run engines", bytes: m.engines, color: .purple),
+         Slice(label: "Flow, Run windows and other", bytes: m.engines, color: .purple),
          Slice(label: "Prompt-cache snapshots", bytes: m.snapshots, color: .teal)]
     }
     static func gb(_ bytes: Int64) -> String { String(format: "%.1f GB", Double(bytes) / 1_073_741_824) }
