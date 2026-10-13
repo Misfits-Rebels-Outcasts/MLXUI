@@ -177,6 +177,9 @@ final class LocalServerController {
 
     private static let enabledKey = "localServerEnabled"
     private static let connectShownKey = "localServerConnectShown"
+    private static let servedOrderKey = "localServerServedOrder"
+    /// SC-2: what a resident served model shows when the served set is larger than the budget and it was not kept ready.
+    static let notKeptReadyReason = "not enough memory to keep ready"
 
     let server: LocalServer
     @ObservationIgnored private let defaults: UserDefaults
@@ -204,6 +207,12 @@ final class LocalServerController {
     /// SC-1: each served MLX model's load state, mirrored from the pool on every transition (the pool is the source —
     /// this is only what SwiftUI observes). Absent = not loaded.
     private(set) var loadStates: [String: ModelLoadState] = [:]
+    /// SC-2: reachable served models that are in memory but did not fit the budget alongside the more recently served
+    /// ones, so they are not kept ready (shown as `notLoaded("not enough memory to keep ready")`).
+    private(set) var notKeptReady: Set<String> = []
+    /// SC-2: pin recomputes coalesce — one runs at a time, and a request that arrives meanwhile makes it run again.
+    @ObservationIgnored private var pinTask: Task<Void, Never>?
+    @ObservationIgnored private var pinDirty = false
 
     /// - Parameters: `installed` / `appleFoundation` / `evict` / `budgetBytes` default to the live
     ///   catalog (`catalogLoaded`: did it decode non-empty), the AFM checker, `ModelContainerPool.shared` and `MemoryBudget.shared`; tests
@@ -262,9 +271,10 @@ final class LocalServerController {
     func setServed(_ id: String, _ on: Bool) async {
         guard LocalServerGate.isAvailable else { return }
         server.update(settings: server.settings.serving(id, on))
-        if on { setEnabled(true) } else { server.forgetStoredResponses(for: id) }       // S3-3c
+        if on { setEnabled(true); noteServed(id) } else { server.forgetStoredResponses(for: id) }       // S3-3c
         await apply()
         if on { startPreloads() } else { cancelPreload(id) }
+        await recomputePins()
         if on, !hasShownConnect {
             hasShownConnect = true
             defaults.set(true, forKey: Self.connectShownKey)
@@ -278,6 +288,7 @@ final class LocalServerController {
         setEnabled(on)
         await apply()
         if on { startPreloads() } else { cancelAllPreloads() }
+        await recomputePins()
     }
 
     /// A new port applies on restart: the setting is saved now; a running server restarts so the
@@ -301,6 +312,7 @@ final class LocalServerController {
                                                 servedCount: reachableIDs.count) else { return }
         await server.start()
         startPreloads()
+        await recomputePins()
     }
 
     /// Uninstall hook (S1-5d): once `hfModelID`'s files are gone, un-serve it, free its weights, and
@@ -334,6 +346,7 @@ final class LocalServerController {
             await evictLoaded(id)
         }
         await apply()
+        await recomputePins()
     }
 
     private func isInstalledLLM(_ hfModelID: String) -> Bool {
@@ -350,17 +363,25 @@ final class LocalServerController {
 
     /// The load state the Server screen shows for a served model. Apple Foundation Models loads nothing: ready.
     func loadState(for id: String) -> ModelLoadState {
-        id == ServedModels.appleFoundationID ? .ready : loadStates[id] ?? .notLoaded(reason: nil)
+        if id == ServedModels.appleFoundationID { return .ready }
+        let state = loadStates[id] ?? .notLoaded(reason: nil)
+        if state == .ready, notKeptReady.contains(id) { return .notLoaded(reason: Self.notKeptReadyReason) }
+        return state
     }
 
     /// Load every reachable served MLX model in the background — unleased, never waiting, never evicting a model in
     /// use (`ModelContainerPool.preload`). Nothing while the gate is closed or the server isn't running. A model
     /// that doesn't fit now stays `notLoaded` with a reason; its first request loads it as before.
-    private func startPreloads() {
+    ///
+    /// `declinedOnly` is the automatic retry (SC-2: a recompute found room): it touches only models whose last preload
+    /// declined for lack of memory — never one that was pushed out (its reason stays until the next request or an
+    /// explicit Serve), and never one already loading or ready.
+    private func startPreloads(declinedOnly: Bool = false) {
         guard LocalServerGate.isAvailable, enabled, isRunning, let pool = preloadPool else { return }
         observeLoadStates(pool)
         let index = installedIndex()
         for id in reachableIDs where id != ServedModels.appleFoundationID && preloads[id] == nil {
+            if declinedOnly, loadStates[id] != .notLoaded(reason: ModelLoadState.declinedReason) { continue }
             guard let entry = index.entries.first(where: { $0.kind == .llm && $0.hfModelId == id }) else { continue }
             let directory = ModelStore.shared.directory(forHFModelID: id)
             let footprint = Int64(entry.ramGB * 1_073_741_824)
@@ -376,12 +397,14 @@ final class LocalServerController {
         guard preloads[id]?.run == run else { return }     // cancelled, and maybe restarted since
         preloads.removeValue(forKey: id)
         loadStates[id] = state
+        if state == .ready { Task { await recomputePins() } }      // resident already, so no transition said so
     }
 
     /// Serve off for one model: stop a preload in flight. It does not evict (owner ruling 2026-10-12).
     private func cancelPreload(_ id: String) {
         preloads.removeValue(forKey: id)?.task.cancel()
         loadStates.removeValue(forKey: id)
+        notKeptReady.remove(id)
     }
 
     private func cancelAllPreloads() {
@@ -401,6 +424,15 @@ final class LocalServerController {
     }
 
     private func poolChanged(key: String, state: ModelLoadState) {
+        // Memory freed (any model) or a served model became resident: pins and declined preloads may change. A decline
+        // or a load starting is neither, and must not start a recompute (that would loop).
+        let memoryMoved: Bool
+        switch state {
+        case .ready: memoryMoved = true
+        case .notLoaded(let reason): memoryMoved = reason != ModelLoadState.declinedReason
+        case .loading, .failed: memoryMoved = false
+        }
+        defer { if memoryMoved { Task { await recomputePins() } } }
         guard let id = servedIDs.first(where: {
             $0 != ServedModels.appleFoundationID
                 && ModelContainerPool.key(for: ModelStore.shared.directory(forHFModelID: $0)) == key
@@ -413,7 +445,72 @@ final class LocalServerController {
         case .ready: name = "ready"
         case .failed: name = "failed"      // the message can carry paths; ids and state only
         }
-        Self.log.info("model \(id, privacy: .public): \(name, privacy: .public)")
+        if case .notLoaded(let reason?) = state, reason.hasPrefix("pushed out") {
+            Self.log.info("model \(id, privacy: .public): \(reason, privacy: .public)")      // a requester kind, never content
+        } else {
+            Self.log.info("model \(id, privacy: .public): \(name, privacy: .public)")
+        }
+    }
+
+    // MARK: - Pins (SC-2, gate C)
+
+    /// The reachable served MLX ids, most recently served first (ids never served in this install's history last, by id).
+    private func servedByRecency() -> [String] {
+        let order = defaults.stringArray(forKey: Self.servedOrderKey) ?? []
+        let ids = reachableIDs.filter { $0 != ServedModels.appleFoundationID }
+        let ranked = order.filter { ids.contains($0) }
+        return ranked + ids.subtracting(ranked).sorted()
+    }
+
+    private func noteServed(_ id: String) {
+        var order = defaults.stringArray(forKey: Self.servedOrderKey) ?? []
+        order.removeAll { $0 == id }
+        order.insert(id, at: 0)
+        defaults.set(Array(order.prefix(200)), forKey: Self.servedOrderKey)
+    }
+
+    /// Keep the reachable served models that are in memory ready: pin them, most recently served first, while they fit
+    /// the budget; the rest are `notKeptReady`. Nothing is pinned with the gate closed or the master switch off, and
+    /// a model no longer served is unpinned (not evicted — owner, 2026-10-12). Then retry preloads that declined, since
+    /// this runs exactly when room may have appeared. Coalesced: concurrent requests share one run, and one that
+    /// arrives mid-run makes it go round again.
+    func recomputePins() async {
+        guard preloadPool != nil else { return }
+        pinDirty = true
+        if let running = pinTask { await running.value; return }
+        let task = Task { [weak self] in
+            guard let self else { return }
+            while pinDirty {
+                pinDirty = false
+                await applyPins()
+            }
+            pinTask = nil
+        }
+        pinTask = task
+        await task.value
+    }
+
+    private func applyPins() async {
+        guard let pool = preloadPool else { return }
+        observeLoadStates(pool)
+        var pins: [URL] = []
+        var overflow: Set<String> = []
+        if LocalServerGate.isAvailable, enabled {
+            var used: Int64 = 0
+            for id in servedByRecency() {
+                let directory = ModelStore.shared.directory(forHFModelID: id)
+                guard let bytes = await pool.residentBytes(directory: directory) else { continue }
+                if used + bytes <= budgetBytes {
+                    used += bytes
+                    pins.append(directory)
+                } else {
+                    overflow.insert(id)
+                }
+            }
+        }
+        await pool.setPinned(directories: pins)
+        if notKeptReady != overflow { notKeptReady = overflow }
+        startPreloads(declinedOnly: true)
     }
 
     private func setEnabled(_ on: Bool) {

@@ -44,10 +44,16 @@ nonisolated protocol MemoryBudgetParticipant: AnyObject, Sendable {
     /// `MemoryBudget.snapshotPriority`. A requester evicts every strictly lower participant before
     /// it touches its own entries.
     var evictionPriority: Int { get }
+
+    /// SC-2: the last resort for a requester that may take it — evict the least-recently-used **pinned** entry that is
+    /// not in use (a served model kept ready), recording that `requester` pushed it out. `evictLeastRecentlyUsed`
+    /// never takes a pinned entry. Participants with no pins have nothing to give.
+    func evictPinnedLeastRecentlyUsed(for requester: MemoryBudget.HolderKind?) async -> Bool
 }
 
 nonisolated extension MemoryBudgetParticipant {
     var evictionPriority: Int { 0 }
+    func evictPinnedLeastRecentlyUsed(for requester: MemoryBudget.HolderKind?) async -> Bool { false }
 }
 
 nonisolated final class MemoryBudget: @unchecked Sendable {
@@ -113,6 +119,9 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     private var holdInfo: [UUID: [Blocker]] = [:]
     /// SC-2a: reservations dropped by their cache while held — released from the ledger on the last `unhold`.
     private var doomed: Set<UUID> = []
+    /// SC-2: committed entries their pool keeps ready. Idle, so never "held" — but a requester that may not take a pinned
+    /// entry must wait (bounded) for room rather than be granted over budget because nothing was evictable.
+    private var pinnedIDs: Set<UUID> = []
     /// Bumped by every `commit`/`release` — i.e. whenever something becomes evictable or room appears. A requester
     /// captures it in the same lock section as its failed fit check, so "did anything settle since?" is exact (MB-1).
     private var settled: UInt64 = 0
@@ -149,6 +158,14 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
             case .serverRequest: "a server request"
             }
         }
+    }
+
+    /// SC-2 (gate C): may a reservation take a **pinned** idle entry when nothing else makes room? Interactive
+    /// requesters (Chat, a Run window, a flow) may, as before pinning existed; the server's own loads, preloads and
+    /// working-set reservations may not (until SC-5 turns the interactive case into a question).
+    enum PinnedAccess: Sendable, Equatable {
+        case never
+        case may(requester: HolderKind?)
     }
 
     /// The bounded wait ran out (or the waiting task was cancelled) with only held entries in the way.
@@ -207,8 +224,9 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     /// only in the over-budget log line — never content). **No bound on waiting for held entries**: this is the
     /// pre-SC-2a contract (over budget when nothing is evictable and nothing is in flight). Callers that can hold
     /// entries use `reserveBounded`.
-    func reserve(bytes: Int64, for owner: some MemoryBudgetParticipant, label: String) async -> Reservation {
-        await reserveCore(bytes: bytes, for: owner, label: label, deadline: nil).reservation
+    func reserve(bytes: Int64, for owner: some MemoryBudgetParticipant, label: String,
+                 pinned: PinnedAccess = .may(requester: nil)) async -> Reservation {
+        await reserveCore(bytes: bytes, for: owner, label: label, deadline: nil, pinned: pinned).reservation
     }
 
     /// SC-2a (gate I): `reserve`, but when the only thing between the request and its room is entries **in use**
@@ -217,15 +235,17 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     /// Still over budget — as in the ruling — for a single model larger than the whole capacity, or when nothing
     /// is held.
     func reserveBounded(bytes: Int64, for owner: some MemoryBudgetParticipant, label: String,
-                        maxWait: Duration = MemoryBudget.defaultMaxWait) async throws -> Reservation {
+                        maxWait: Duration = MemoryBudget.defaultMaxWait,
+                        pinned: PinnedAccess = .may(requester: nil)) async throws -> Reservation {
         let outcome = await reserveCore(bytes: bytes, for: owner, label: label,
-                                        deadline: ContinuousClock.now.advanced(by: maxWait))
+                                        deadline: ContinuousClock.now.advanced(by: maxWait), pinned: pinned)
         if outcome.timedOut { throw WaitError(label: label, blockers: outcome.blockers) }
         return outcome.reservation
     }
 
     private func reserveCore(bytes: Int64, for owner: some MemoryBudgetParticipant, label: String,
-                             deadline: ContinuousClock.Instant?) async -> (reservation: Reservation, timedOut: Bool, blockers: [Blocker]) {
+                             deadline: ContinuousClock.Instant?,
+                             pinned: PinnedAccess) async -> (reservation: Reservation, timedOut: Bool, blockers: [Blocker]) {
         let reservation = Reservation(id: UUID())
         guard bytes > 0 else { return (reservation, false, []) }   // holds nothing; commit/release are no-ops
 
@@ -254,6 +274,15 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
             }
             if freed { continue }
 
+            // 2b. (SC-2) a requester that may: the least-recently-used pinned entry that is not in use.
+            if case .may(let requester) = pinned {
+                if await owner.evictPinnedLeastRecentlyUsed(for: requester) { cacheClearer.clearNow(); continue }
+                for other in peers.filter({ $0.evictionPriority >= mine }) {
+                    if await other.evictPinnedLeastRecentlyUsed(for: requester) { freed = true; cacheClearer.clearNow(); break }
+                }
+                if freed { continue }
+            }
+
             // 3. nothing evictable. If anything settled while we were asking, what we were told is stale (an entry
             //    that was in flight may be evictable now) — ask again; else if other loads are still in flight, or
             //    (SC-2a, bounded callers) entries are in use, wait for one to settle; else (4) both are empty and
@@ -261,7 +290,8 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
             //    are one lock section (MB-1): an `await` between them let a release land in the gap and the grant
             //    went through although the request now fit.
             var overBudget = false
-            let (verdict, blockers) = await settleOrFinalize(excluding: [reservation.id], since: seen, deadline: deadline, finalize: {
+            let (verdict, blockers) = await settleOrFinalize(excluding: [reservation.id], since: seen, deadline: deadline,
+                                                           pinnedBlocks: pinned == .never, finalize: {
                 ledger[reservation.id] = bytes
                 pending.insert(reservation.id)
                 overBudget = true
@@ -311,10 +341,11 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     /// entry: this request holds it, so it is never something to wait for.
     func reserveWorkingSet(bytes: Int64, for owner: some MemoryBudgetParticipant, protecting protectedBytes: Int64,
                            protectingReservation: Reservation? = nil, maxWait: Duration? = nil,
+                           pinned: PinnedAccess = .never, evictOwnPinned: (() async -> Bool)? = nil,
                            evictOwn: () async -> Bool) async -> Reservation? {
         if case .granted(let reservation) = await reserveWorkingSetReporting(
             bytes: bytes, for: owner, protecting: protectedBytes, protectingReservation: protectingReservation,
-            maxWait: maxWait, evictOwn: evictOwn) { return reservation }
+            maxWait: maxWait, pinned: pinned, evictOwnPinned: evictOwnPinned, evictOwn: evictOwn) { return reservation }
         return nil
     }
 
@@ -323,7 +354,9 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     /// in the way for the whole bound (a `503`, `Retry-After`), with who was using them.
     func reserveWorkingSetReporting(bytes: Int64, for owner: some MemoryBudgetParticipant,
                                     protecting protectedBytes: Int64, protectingReservation: Reservation? = nil,
-                                    maxWait: Duration? = nil, evictOwn: () async -> Bool) async -> WorkingSetOutcome {
+                                    maxWait: Duration? = nil, pinned: PinnedAccess = .never,
+                                    evictOwnPinned: (() async -> Bool)? = nil,
+                                    evictOwn: () async -> Bool) async -> WorkingSetOutcome {
         let reservation = Reservation(id: UUID())
         guard bytes > 0 else { return .granted(reservation) }
         let deadline = maxWait.map { ContinuousClock.now.advanced(by: $0) }
@@ -348,8 +381,17 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
                 if await other.evictLeastRecentlyUsed() { freed = true; cacheClearer.clearNow(); break }
             }
             if freed { continue }
+            // SC-2: only a requester that may (gate I row 8: a served model that is not kept ready) takes a pinned entry.
+            if case .may(let requester) = pinned {
+                if let evictOwnPinned, await evictOwnPinned() { cacheClearer.clearNow(); continue }
+                for other in others(excluding: owner).filter({ $0.evictionPriority >= mine }) {
+                    if await other.evictPinnedLeastRecentlyUsed(for: requester) { freed = true; cacheClearer.clearNow(); break }
+                }
+                if freed { continue }
+            }
             var granted = false
-            let (verdict, blockers) = await settleOrFinalize(excluding: ignore, since: seen, deadline: deadline, finalize: {
+            let (verdict, blockers) = await settleOrFinalize(excluding: ignore, since: seen, deadline: deadline,
+                                                           pinnedBlocks: pinned == .never, finalize: {
                 // last look, in the same lock section as the verdict: it may fit after all
                 let held = ledger.filter { !snapshots.contains($0.key) }.values.reduce(0, +)
                 guard held + bytes <= capacityBytes else { return }
@@ -448,6 +490,22 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
                 Blocker(model: label.isEmpty ? "A model" : Self.displayName(forLabel: label), holder: holder))
             return Hold(budget: self, reservation: reservation, info: holdInfo[reservation.id]?.last)
         }
+    }
+
+    /// SC-2: the pool pins / unpins the entry behind `reservation`. Wakes waiters on an unpin (room may now be takeable).
+    func setPinned(_ reservation: Reservation, _ on: Bool) {
+        let toResume: [CheckedContinuation<Void, Never>] = withLock {
+            pinnedIDs = pinnedIDs.filter { ledger[$0] != nil }
+            if on {
+                guard ledger[reservation.id] != nil else { return [] }
+                pinnedIDs.insert(reservation.id)
+                return []
+            }
+            guard pinnedIDs.remove(reservation.id) != nil else { return [] }
+            settled &+= 1
+            return takeWaitersLocked()
+        }
+        toResume.forEach { $0.resume() }
     }
 
     /// Entries currently in use (committed, booked, not snapshots).
@@ -578,6 +636,11 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
         holds.contains { ledger[$0.key] != nil && !ignoring.contains($0.key) }
     }
 
+    /// Some committed, booked entry other than `ignoring` is pinned (SC-2). Call with `lock` held.
+    private func othersPinnedLocked(ignoring: Set<UUID>) -> Bool {
+        pinnedIDs.contains { ledger[$0] != nil && !ignoring.contains($0) }
+    }
+
     private enum Verdict { case retry, finalized, timedOut }
 
     /// `seen` is the `settled` count the caller read together with its failed fit check. Returns `.retry` when the
@@ -591,7 +654,7 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     /// check that selects them, so a commit cannot slip between "nothing evictable" and "nothing pending" (MB-1),
     /// no wake-up is lost, and the caller's last action cannot act on a stale verdict.
     private func settleOrFinalize(excluding mine: Set<UUID>, since seen: UInt64, deadline: ContinuousClock.Instant?,
-                                  finalize: () -> Void) async -> (Verdict, [Blocker]) {
+                                  pinnedBlocks: Bool = false, finalize: () -> Void) async -> (Verdict, [Blocker]) {
         let waiterID = UUID()
         var verdict = Verdict.finalized
         var blockers: [Blocker] = []
@@ -605,7 +668,9 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
                     return
                 }
                 let inFlight = !pending.subtracting(mine).isEmpty
-                let inUse = deadline != nil && othersHeldLocked(ignoring: mine)
+                // SC-2: a pinned idle entry that this requester may not take stands in the way like one in use
+                let inUse = deadline != nil && (othersHeldLocked(ignoring: mine)
+                                                || (pinnedBlocks && othersPinnedLocked(ignoring: mine)))
                 if inFlight || inUse {
                     if let deadline, (ContinuousClock.now >= deadline || Task.isCancelled) {
                         verdict = .timedOut

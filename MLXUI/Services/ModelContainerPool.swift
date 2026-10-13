@@ -10,12 +10,25 @@ nonisolated enum ModelLoadState: Sendable, Equatable {
     case loading
     case ready
     case failed(String)
+
+    /// Why a preload that did not load declined: nothing in use is pushed out and nothing is waited for.
+    static let declinedReason = "not enough memory to load now"
 }
 
 /// SC-1: what `LocalServerController` needs of the pool, so its preload wiring is testable without a real container.
 protocol ServePreloading: Sendable {
     func preload(directory: URL, footprintBytes: Int64?) async -> ModelLoadState
     func addLoadObserver(_ observer: @escaping @Sendable (String, ModelLoadState) -> Void) async
+    /// SC-2: bytes booked for the model in `directory` while it is resident; nil when it isn't.
+    func residentBytes(directory: URL) async -> Int64?
+    /// SC-2: keep exactly these models' directories pinned (those that are resident); unpin every other. Pins are
+    /// the controller's alone, so "set" is the whole interface.
+    func setPinned(directories: [URL]) async
+}
+
+extension ServePreloading {
+    func residentBytes(directory: URL) async -> Int64? { nil }
+    func setPinned(directories: [URL]) async {}
 }
 
 /// S1-1 — the **one owner of loaded LLM weights** (`RSI/plan-local-server-2026-09.md` F1).
@@ -35,7 +48,12 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
     typealias LoadState = ModelLoadState
 
     /// Why a preload that did not load declined: nothing in use is pushed out and nothing is waited for.
-    static var notEnoughMemoryReason: String { "not enough memory to load now" }
+    static var notEnoughMemoryReason: String { ModelLoadState.declinedReason }
+
+    /// SC-2: the reason a pinned model shows after a requester took its memory ("pushed out by Chat").
+    static func pushedOutReason(by requester: MemoryBudget.HolderKind?) -> String {
+        "pushed out by \(requester?.phrase ?? "another load")"
+    }
 
     private struct Entry {
         let value: Value
@@ -75,6 +93,9 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
     private var loadTasks: [UUID: Task<Value, Error>] = [:]
     /// SC-1: the why of a key's last non-resident ending (see `LoadState`). Cleared when a load starts or succeeds.
     private var notes: [String: LoadState] = [:]
+    /// SC-2: resident keys kept ready — skipped by automatic eviction. Always a subset of `entries`; removed with the
+    /// entry. Only `evictPinnedLeastRecentlyUsed` (a requester that may) or an explicit `evict`/`clear` takes one.
+    private var pinned: Set<String> = []
     private var observers: [@Sendable (String, LoadState) -> Void] = []
     private let budget: MemoryBudget
 
@@ -118,6 +139,7 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
             touch(key)
             return (entry.value, leased ? budget.hold(entry.reservation, label: key, holder: holder) : nil)
         }
+        let access = pinnedAccess(for: key, holder: holder, preload: preload)
         if let inFlight = loading[key] {
             if !preload { preloadOnly.remove(inFlight.token) }     // a request adopts the preload's load
             if leased { leasers[inFlight.token, default: []].append(holder) }
@@ -133,9 +155,10 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
             let reservation: MemoryBudget.Reservation
             do {
                 if let maxWait {
-                    reservation = try await budget.reserveBounded(bytes: bytes, for: self, label: key, maxWait: maxWait)
+                    reservation = try await budget.reserveBounded(bytes: bytes, for: self, label: key, maxWait: maxWait,
+                                                                  pinned: access)
                 } else {
-                    reservation = await budget.reserve(bytes: bytes, for: self, label: key)
+                    reservation = await budget.reserve(bytes: bytes, for: self, label: key, pinned: access)
                 }
                 self.waitingForRoom.removeValue(forKey: token)
             } catch {
@@ -169,6 +192,15 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
         return (value, leased ? claimHold(token, holder: holder) : nil)
     }
 
+    /// SC-2: who may take a pinned idle model for this load. A preload never; the server's own request only when its
+    /// model is not itself kept ready (gate I row 8: LRU among served models); Chat, a Run window, a flow — and a
+    /// caller that doesn't say — may, as before pinning existed.
+    private func pinnedAccess(for key: String, holder: MemoryBudget.HolderKind?, preload: Bool) -> MemoryBudget.PinnedAccess {
+        if preload { return .never }
+        if holder == .serverRequest, pinned.contains(key) { return .never }
+        return .may(requester: holder)
+    }
+
     /// Await a load, and let a cancelled caller stop a wait for room that nobody else is waiting on.
     private func awaitLoad(_ task: Task<Value, Error>, token: UUID) async throws -> Value {
         joined[token, default: 0] += 1
@@ -199,6 +231,8 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
         var dropped = false
         if let entry = entries.removeValue(forKey: key) {
             recency.removeAll { $0 == key }
+            pinned.remove(key)
+            budget.setPinned(entry.reservation, false)
             budget.releaseOrDefer(entry.reservation)
             dropped = true
         }
@@ -211,9 +245,11 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
     /// Drop everything resident, and stop retaining anything still loading. Entries in use are doomed (see `evict`).
     func clear() {
         let reservations = entries.values.map(\.reservation)
+        reservations.forEach { budget.setPinned($0, false) }
         let keys = Set(entries.keys).union(loading.keys).union(notes.keys)
         entries.removeAll()
         recency.removeAll()
+        pinned.removeAll()
         loading.removeAll()
         notes.removeAll()
         reservations.forEach { budget.releaseOrDefer($0) }
@@ -224,11 +260,18 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
     /// use** (SC-2a).
     func evictLeastRecentlyUsed() -> Bool { evictOldest(except: nil) }
 
+    /// SC-2: the last resort for a requester that may — the LRU **pinned** entry that is not in use. It is unpinned,
+    /// and its state becomes `notLoaded("pushed out by …")` (still served; the next request reloads it).
+    func evictPinnedLeastRecentlyUsed(for requester: MemoryBudget.HolderKind?) -> Bool {
+        evictOldestPinned(except: nil, for: requester)
+    }
+
     /// S3-8B: evict the LRU entry that holds memory and is not in use, **except** `key` (the model that is running).
     func evictLeastRecentlyUsed(except key: String) -> Bool { evictOldest(except: key) }
 
     private func evictOldest(except key: String?) -> Bool {
         for victim in recency.reversed() where victim != key {
+            guard !pinned.contains(victim) else { continue }       // SC-2: kept ready
             guard let entry = entries[victim], entry.bytes > 0 else { continue }
             guard budget.releaseIfUnheld(entry.reservation) else { continue }   // in use: not ours to take
             entries.removeValue(forKey: victim)
@@ -238,6 +281,47 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
         }
         return false
     }
+
+    private func evictOldestPinned(except key: String?, for requester: MemoryBudget.HolderKind?) -> Bool {
+        for victim in recency.reversed() where victim != key && pinned.contains(victim) {
+            guard let entry = entries[victim], entry.bytes > 0 else { continue }
+            guard budget.releaseIfUnheld(entry.reservation) else { continue }
+            entries.removeValue(forKey: victim)
+            recency.removeAll { $0 == victim }
+            pinned.remove(victim)
+            budget.setPinned(entry.reservation, false)      // (releaseIfUnheld already dropped it from the ledger)
+            notes[victim] = .notLoaded(reason: Self.pushedOutReason(by: requester))
+            emit(victim)
+            return true
+        }
+        return false
+    }
+
+    /// SC-2: keep `key` ready — automatic eviction skips it. Only a resident entry can be pinned; returns whether it is.
+    @discardableResult
+    func pin(_ key: String) -> Bool {
+        guard let entry = entries[key] else { return false }
+        pinned.insert(key)
+        budget.setPinned(entry.reservation, true)
+        return true
+    }
+
+    func unpin(_ key: String) {
+        pinned.remove(key)
+        if let entry = entries[key] { budget.setPinned(entry.reservation, false) }
+    }
+    func isPinned(_ key: String) -> Bool { pinned.contains(key) }
+    var pinnedKeys: Set<String> { pinned }
+
+    /// SC-2: pin exactly `keys` (those that are resident); unpin everything else.
+    func setPinned(_ keys: Set<String>) {
+        let next = keys.filter { entries[$0] != nil }
+        for key in pinned.subtracting(next) { unpin(key) }
+        for key in next.subtracting(pinned) { pin(key) }
+    }
+
+    /// SC-2: the bytes booked for `key` while it is resident.
+    func residentBytes(for key: String) -> Int64? { entries[key]?.bytes }
 
     /// S3-8B: make room for a running generation that needs `totalNeedBytes` in all (weights + KV), evicting
     /// other residents for it. The running model's own ledger entry already counts toward that (it was charged
@@ -254,13 +338,23 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
 
     /// `reserveWorkingSet`, saying why it returned nothing (SC-2a-b): too large for this Mac, or busy (only models
     /// in use stood in the way for the whole bound).
+    ///
+    /// SC-2: the working-set path never takes a pinned model — except for a model that is not itself kept ready (gate I
+    /// row 8: LRU among served models), which may take the least-recently-used idle pinned one. `requester` names who
+    /// asks, for the reason that model then shows; the server is the default.
     func reserveWorkingSetReporting(totalNeedBytes: Int64, protecting key: String,
-                                    maxWait: Duration? = nil) async -> MemoryBudget.WorkingSetOutcome {
+                                    maxWait: Duration? = nil,
+                                    requester: MemoryBudget.HolderKind? = nil) async -> MemoryBudget.WorkingSetOutcome {
         let protected = entries[key]?.bytes ?? 0
         let extra = max(0, totalNeedBytes - protected)
+        let who = requester ?? .serverRequest
+        let access: MemoryBudget.PinnedAccess = pinned.contains(key) ? .never : .may(requester: who)
         return await budget.reserveWorkingSetReporting(bytes: extra, for: self, protecting: protected,
                                                        protectingReservation: entries[key]?.reservation,
-                                                       maxWait: maxWait) { [self] in
+                                                       maxWait: maxWait, pinned: access,
+                                                       evictOwnPinned: { [self] in
+            self.evictOldestPinned(except: key, for: who)
+        }) { [self] in
             await self.evictLeastRecentlyUsed(except: key)
         }
     }
@@ -433,6 +527,13 @@ actor ModelContainerPool: ServePreloading {
     /// SC-1: the load state of the model in `directory`.
     func loadState(directory: URL) async -> LoadState { await pool.loadState(for: Self.key(for: directory)) }
 
+    /// SC-2: see `ServePreloading`.
+    func residentBytes(directory: URL) async -> Int64? { await pool.residentBytes(for: Self.key(for: directory)) }
+
+    func setPinned(directories: [URL]) async {
+        await pool.setPinned(Set(directories.map { Self.key(for: $0) }))
+    }
+
     /// SC-1: see `ResidentPool.addObserver`; the key is `ModelContainerPool.key(for: directory)`.
     func addLoadObserver(_ observer: @escaping @Sendable (String, LoadState) -> Void) async {
         await pool.addObserver(observer)
@@ -479,9 +580,10 @@ actor ModelContainerPool: ServePreloading {
 
     /// `reserveWorkingSet`, saying why it returned nothing (SC-2a-b).
     func reserveWorkingSetReporting(totalNeedBytes: Int64, directory: URL,
-                                    maxWait: Duration? = nil) async -> MemoryBudget.WorkingSetOutcome {
+                                    maxWait: Duration? = nil,
+                                    requester: MemoryBudget.HolderKind? = nil) async -> MemoryBudget.WorkingSetOutcome {
         await pool.reserveWorkingSetReporting(totalNeedBytes: totalNeedBytes, protecting: Self.key(for: directory),
-                                              maxWait: maxWait)
+                                              maxWait: maxWait, requester: requester)
     }
 
     /// A container in use (SC-2a).
