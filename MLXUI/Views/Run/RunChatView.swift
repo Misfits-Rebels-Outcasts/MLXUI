@@ -953,6 +953,14 @@ struct RunChatView: View {
         return name.isEmpty ? path : name
     }
 
+    /// SC-5a-b: what the composer gets back after a send — exactly what was sent (text and attachment chips) when the
+    /// user declined the load question, and nothing if the turn started or the composer already holds something new.
+    static func restoredDraft(accepted: Bool, typed: String, files: [URL],
+                              currentPrompt: String, currentFiles: [URL]) -> (prompt: String, files: [URL])? {
+        guard !accepted, currentPrompt.isEmpty, currentFiles.isEmpty else { return nil }
+        return (typed, files)
+    }
+
     private func send() {
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let files = pendingFiles
@@ -960,9 +968,19 @@ struct RunChatView: View {
         // composer already shows the chip. Requiring text here made an attachment-only send a dead
         // end (CW-C-FIX-1).
         guard !text.isEmpty || !files.isEmpty, !runner.isRunning else { return }
+        let typed = prompt
         prompt = ""
         pendingFiles = []
-        Task { await appState.sendPrompt(text, attachments: files) }
+        Task {
+            // SC-5a-b: Cancel on the load question means the turn never started — give back exactly what was sent,
+            // unless the user has already started something new.
+            let accepted = await appState.sendPrompt(text, attachments: files)
+            if let draft = Self.restoredDraft(accepted: accepted, typed: typed, files: files,
+                                              currentPrompt: prompt, currentFiles: pendingFiles) {
+                prompt = draft.prompt
+                pendingFiles = draft.files
+            }
+        }
     }
 }
 

@@ -614,9 +614,11 @@ final class AppState {
         }
     }
 
-    func sendPrompt(_ text: String, attachments: [URL] = []) async {
-        guard let model = runningModel else { return }
-        await modelRunner.send(text, attachments: attachments, for: model)
+    /// `false` when the user declined the "stop keeping a served model ready?" question (SC-5a-b).
+    @discardableResult
+    func sendPrompt(_ text: String, attachments: [URL] = []) async -> Bool {
+        guard let model = runningModel else { return true }
+        return await modelRunner.send(text, attachments: attachments, for: model)
     }
 
     func stopModel() {

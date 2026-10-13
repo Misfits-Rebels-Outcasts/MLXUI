@@ -574,11 +574,15 @@ final class ModelRunner {
 
     /// Generate a reply to `prompt`, running the agent tool loop via `AgentSession` and
     /// streaming assistant text + tool-call cards into the transcript as they arrive.
-    func send(_ prompt: String, attachments: [URL] = [], for model: ModelEntry) async {
+    ///
+    /// Returns `false` only when the user **declined** the load question (SC-5a-b): the turn never started, so the caller
+    /// can give the composer back what it cleared. Every other exit — sent, ignored, failed — is `true`.
+    @discardableResult
+    func send(_ prompt: String, attachments: [URL] = [], for model: ModelEntry) async -> Bool {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         // M1: a file on its own is a turn — "what is in this file?" needs no typed text. The text
         // check that used to live here now runs *after* the import, against what actually arrived.
-        guard !trimmed.isEmpty || !attachments.isEmpty, !isRunning else { return }
+        guard !trimmed.isEmpty || !attachments.isEmpty, !isRunning else { return true }
 
         #if DEBUG
         let modelDir = modelDirectoryForTesting?(model.id)
@@ -589,7 +593,7 @@ final class ModelRunner {
 
         guard FileManager.default.fileExists(atPath: modelDir.path) else {
             errorMessage = "Model files not found. Please reinstall."
-            return
+            return true
         }
 
         errorMessage = nil
@@ -634,23 +638,23 @@ final class ModelRunner {
         guard generation == turnGeneration,
               activeConversationID == turnConversationID,
               isRunning
-        else { return }
+        else { return true }
         // M1: nothing to send. `RunChatView` let an attachment-only message through and cleared its
         // chips, so if every file then failed to import there is no text and no attachment — an
         // empty turn would be appended and a generation spent on nothing. The import has already
         // reported why (`errorMessage`), so keep that, release the turn and send nothing.
         guard !trimmed.isEmpty || !readyAttachments.isEmpty else {
             isRunning = false
-            return
+            return true
         }
 
         // SC-5a (gate D): ask before the turn if loading this model would stop keeping a served one ready. Cancel: the
         // turn doesn't start — nothing appended, nothing loaded, no error banner.
         guard await confirmLoad(model, dir: modelDir) else {
             if generation == turnGeneration { isRunning = false }
-            return
+            return false
         }
-        guard generation == turnGeneration, activeConversationID == turnConversationID, isRunning else { return }
+        guard generation == turnGeneration, activeConversationID == turnConversationID, isRunning else { return true }
 
         transcript.addUserMessage(trimmed, attachments: readyAttachments)
         // CW-C-FIX-1: the model gets the same thing the transcript shows. `send` used to pass the
@@ -726,6 +730,7 @@ final class ModelRunner {
                 self.saveActiveConversation()
             }
         }
+        return true
     }
 
     func stop() {

@@ -362,3 +362,52 @@ struct ServeAskConfirmerTests {
         #expect(!runner.transcript.items.isEmpty && runner.errorMessage == nil)
     }
 }
+
+// MARK: - SC-5a-b: Cancel keeps what you typed
+
+@MainActor
+struct ServeAskDraftTests {
+    private let files = [URL(fileURLWithPath: "/tmp/a.pdf"), URL(fileURLWithPath: "/tmp/b.png")]
+
+    @Test func declinedGivesBackExactlyWhatWasSent() {
+        let draft = RunChatView.restoredDraft(accepted: false, typed: "  hello\nthere ", files: files,
+                                              currentPrompt: "", currentFiles: [])
+        #expect(draft?.prompt == "  hello\nthere " && draft?.files == files)
+    }
+
+    @Test func loadAnywayLeavesTheComposerEmpty() {
+        #expect(RunChatView.restoredDraft(accepted: true, typed: "hello", files: files, currentPrompt: "", currentFiles: []) == nil)
+    }
+
+    @Test func aNewDraftIsNeverOverwritten() {
+        #expect(RunChatView.restoredDraft(accepted: false, typed: "old", files: [], currentPrompt: "new", currentFiles: []) == nil)
+        #expect(RunChatView.restoredDraft(accepted: false, typed: "old", files: [], currentPrompt: "", currentFiles: files) == nil)
+    }
+
+    @Test func sendReportsDeclinedOnlyForACancelledQuestion() async throws {
+        LocalServerGate.overrideForTesting = true
+        defer { LocalServerGate.overrideForTesting = nil }
+        for answer in [false, true] {
+            let store = FileManager.default.temporaryDirectory.appendingPathComponent("sc5ab-\(UUID().uuidString)")
+            let dir = FileManager.default.temporaryDirectory.appendingPathComponent("sc5ab-m-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: store) }
+            let confirmer = ServedLoadConfirmer(check: { _, _ in ["served"] }, pushOut: { _, _ in }, reloadSeconds: { _ in nil })
+            let runner = ModelRunner(loadConfirmer: confirmer)
+            let entry = makeEntry(id: "chat-model", displayName: "Chat Model")
+            runner.prepare(for: entry, in: store)
+            runner.modelDirectoryForTesting = { _ in dir }
+            runner.streamingSessionForTesting = { DraftSession() }
+            let turn = Task { await runner.send("hi", for: entry) }
+            for _ in 0..<500 where confirmer.question == nil { try await Task.sleep(for: .milliseconds(10)) }
+            confirmer.respond(answer)
+            #expect(await turn.value == answer)
+        }
+    }
+
+    private final class DraftSession: ChatStreamingSession, @unchecked Sendable {
+        func streamResponse(to prompt: String) -> AsyncThrowingStream<String, Error> {
+            AsyncThrowingStream { $0.yield("ok"); $0.finish() }
+        }
+    }
+}
