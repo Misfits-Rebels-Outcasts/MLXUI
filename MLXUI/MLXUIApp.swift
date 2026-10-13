@@ -252,18 +252,24 @@ private struct RunSheetHost: View {
                 UnsupportedModelView(model: model)
             }
         }
+        // SC-5a (gate D): this window's question, and the way the Laya / CLM views (which lease their own engine)
+        // reach it.
+        .environment(\.servedLoadConfirmer, lease.confirmer)
+        .servedLoadConfirmation(lease.confirmer)
+        .onDisappear { lease.confirmer.respond(false) }
     }
 }
 
 /// The sheet's one `LeasingStage`, made once (a view body runs many times).
 @MainActor private final class RunSheetLease {
     private var stage: LeasingStage?
+    let confirmer = ServedLoadConfirmer()
 
     func stage(for model: ModelEntry, sdk: any ModelSDK) -> LeasingStage? {
         if let stage { return stage }
         guard let probe = try? sdk.makeStage(for: model, config: .default) else { return nil }
         let made = LeasingStage(model: model, config: .default, probe: probe,
-                                booksWeights: !(sdk is StageBooksOwnWeights))
+                                booksWeights: !(sdk is StageBooksOwnWeights), confirmer: confirmer)
         stage = made
         return made
     }

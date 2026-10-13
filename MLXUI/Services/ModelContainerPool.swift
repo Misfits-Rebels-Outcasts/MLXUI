@@ -24,11 +24,31 @@ protocol ServePreloading: Sendable {
     /// SC-2: keep exactly these models' directories pinned (those that are resident); unpin every other. Pins are
     /// the controller's alone, so "set" is the whole interface.
     func setPinned(directories: [URL]) async
+    /// SC-5a: the pool's pinned residents (least recently used first) and the budget's ledger, for the displacement check.
+    func displacementSnapshot() async -> DisplacementSnapshot?
+    /// SC-5a: gate D's "Load anyway" — unpin and evict these models for `requester`'s load (state `notLoaded("pushed out
+    /// by …")`). A model in use is left alone. Returns the directories actually pushed out.
+    @discardableResult
+    func pushOut(directories: [URL], for requester: MemoryBudget.HolderKind) async -> [URL]
 }
 
 extension ServePreloading {
     func residentBytes(directory: URL) async -> Int64? { nil }
     func setPinned(directories: [URL]) async {}
+    func displacementSnapshot() async -> DisplacementSnapshot? { nil }
+    func pushOut(directories: [URL], for requester: MemoryBudget.HolderKind) async -> [URL] { [] }
+}
+
+/// SC-5a: what `ServeMemory.wouldDisplaceServed` reads: the budget's capacity and entries, and which of them are the
+/// pool's pinned models (least recently used first — the order automatic eviction would take them in), by pool key.
+nonisolated struct DisplacementSnapshot: Sendable, Equatable {
+    struct Pin: Sendable, Equatable {
+        let key: String
+        let item: UUID
+    }
+    let capacityBytes: Int64
+    let items: [MemoryBudget.LedgerItem]
+    let pins: [Pin]
 }
 
 /// S1-1 — the **one owner of loaded LLM weights** (`RSI/plan-local-server-2026-09.md` F1).
@@ -198,8 +218,10 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
     /// SC-2 / SC-2f: who may take a pinned idle model for this load. A preload never (it is not a request). Any
     /// request may — a server request (gate I row 8: LRU among served models; the requester itself is not resident
     /// while it loads, and nothing in use is ever taken), Chat, a Run window, a flow, and a caller that doesn't say.
+    /// SC-5a (gate D): Chat and a Run window no longer do — they ask first, and "Load anyway" pushes the named models
+    /// out before the load (`pushOut`). A flow still may, until SC-5b.
     private func pinnedAccess(holder: MemoryBudget.HolderKind?, preload: Bool) -> MemoryBudget.PinnedAccess {
-        preload ? .never : .may(requester: holder)
+        preload ? .never : .access(for: holder)
     }
 
     /// Await a load, and let a cancelled caller stop a wait for room that nobody else is waiting on.
@@ -285,17 +307,43 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
 
     private func evictOldestPinned(except key: String?, for requester: MemoryBudget.HolderKind?) -> Bool {
         for victim in recency.reversed() where victim != key && pinned.contains(victim) {
-            guard let entry = entries[victim], entry.bytes > 0 else { continue }
-            guard budget.releaseIfUnheld(entry.reservation) else { continue }
-            entries.removeValue(forKey: victim)
-            recency.removeAll { $0 == victim }
-            pinned.remove(victim)
-            budget.setPinned(entry.reservation, false)      // (releaseIfUnheld already dropped it from the ledger)
-            notes[victim] = .notLoaded(reason: Self.pushedOutReason(by: requester))
-            emit(victim)
-            return true
+            if dropPinned(victim, for: requester) { return true }
         }
         return false
+    }
+
+    /// Unpin and evict one pinned entry that is not in use; its state becomes `notLoaded("pushed out by …")`.
+    private func dropPinned(_ victim: String, for requester: MemoryBudget.HolderKind?) -> Bool {
+        guard pinned.contains(victim), let entry = entries[victim], entry.bytes > 0 else { return false }
+        guard budget.releaseIfUnheld(entry.reservation) else { return false }
+        entries.removeValue(forKey: victim)
+        recency.removeAll { $0 == victim }
+        pinned.remove(victim)
+        budget.setPinned(entry.reservation, false)      // (releaseIfUnheld already dropped it from the ledger)
+        notes[victim] = .notLoaded(reason: Self.pushedOutReason(by: requester))
+        emit(victim)
+        return true
+    }
+
+    /// SC-5a: the confirmed half of gate D — push out exactly these pinned keys for `requester`'s load. A key that is in
+    /// use, not pinned or not resident is left alone. Returns the keys that were pushed out.
+    func pushOutPinned(keys: [String], for requester: MemoryBudget.HolderKind) -> [String] {
+        let out = keys.filter { dropPinned($0, for: requester) }
+        if !out.isEmpty { budget.weightsDropped() }
+        return out
+    }
+
+    /// SC-5a: pinned residents, least recently used first, with the ledger entry each books.
+    func pinnedResidents() -> [DisplacementSnapshot.Pin] {
+        recency.reversed().compactMap { key in
+            guard pinned.contains(key), let entry = entries[key] else { return nil }
+            return DisplacementSnapshot.Pin(key: key, item: entry.reservation.id)
+        }
+    }
+
+    /// SC-5a: the ledger plus this pool's pins (see `DisplacementSnapshot`).
+    func displacementSnapshot() -> DisplacementSnapshot {
+        DisplacementSnapshot(capacityBytes: budget.capacityBytes, items: budget.ledgerItems(), pins: pinnedResidents())
     }
 
     /// SC-2: keep `key` ready — automatic eviction skips it. Only a resident entry can be pinned; returns whether it is.
@@ -349,7 +397,7 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
         let protected = entries[key]?.bytes ?? 0
         let extra = max(0, totalNeedBytes - protected)
         let who = requester ?? .serverRequest
-        let access: MemoryBudget.PinnedAccess = .may(requester: who)
+        let access: MemoryBudget.PinnedAccess = .access(for: who)
         return await budget.reserveWorkingSetReporting(bytes: extra, for: self, protecting: protected,
                                                        protectingReservation: entries[key]?.reservation,
                                                        maxWait: maxWait, pinned: access,
@@ -533,6 +581,14 @@ actor ModelContainerPool: ServePreloading {
 
     func setPinned(directories: [URL]) async {
         await pool.setPinned(Set(directories.map { Self.key(for: $0) }))
+    }
+
+    /// SC-5a: see `ServePreloading`.
+    func displacementSnapshot() async -> DisplacementSnapshot? { await pool.displacementSnapshot() }
+
+    func pushOut(directories: [URL], for requester: MemoryBudget.HolderKind) async -> [URL] {
+        let gone = Set(await pool.pushOutPinned(keys: directories.map { Self.key(for: $0) }, for: requester))
+        return directories.filter { gone.contains(Self.key(for: $0)) }
     }
 
     /// SC-1: see `ResidentPool.addObserver`; the key is `ModelContainerPool.key(for: directory)`.

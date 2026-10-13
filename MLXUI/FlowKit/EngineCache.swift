@@ -137,9 +137,9 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
         let reservation: MemoryBudget.Reservation
         if let maxWait {
             reservation = try await budget.reserveBounded(bytes: bytes, for: self, label: model.id, maxWait: maxWait,
-                                                          pinned: .may(requester: holder))
+                                                          pinned: .access(for: holder))
         } else {
-            reservation = await budget.reserve(bytes: bytes, for: self, label: model.id, pinned: .may(requester: holder))
+            reservation = await budget.reserve(bytes: bytes, for: self, label: model.id, pinned: .access(for: holder))
         }
 
         let stage: any PipelineStage
@@ -183,6 +183,11 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
             }
             return false
         }
+    }
+
+    /// SC-5a: whether an engine for `model`/`config` is cached (a load for it needs no room).
+    func isCached(_ model: ModelEntry, config: StageConfig) -> Bool {
+        withLock { entries[Key(id: model.id, config: config)] != nil }
     }
 
     /// Total cached footprint, in bytes (what each entry booked: the real charge, or the catalog's `ramGB` for a model
@@ -268,19 +273,35 @@ nonisolated final class LeasingStage: PipelineStage, @unchecked Sendable {
     private let probe: any PipelineStage
     private let booksWeights: Bool
     private let maxWait: Duration
+    /// SC-5a: asks before a run pushes out a model other apps are being served. `nil` = no question (tests, non-sheet use).
+    let confirmer: ServedLoadConfirmer?
     private let lock = NSLock()
     private var active = 0
 
     /// `probe` is the stage the SDK built for `model`/`config` (cheap: engines load on first run). It gives this
     /// stage its identity now, and is the builder's result if the cache doesn't already hold one.
     init(model: ModelEntry, config: StageConfig, probe: any PipelineStage, booksWeights: Bool = true,
-         cache: EngineCache = .shared, maxWait: Duration = MemoryBudget.defaultMaxWait) {
+         cache: EngineCache = .shared, maxWait: Duration = MemoryBudget.defaultMaxWait,
+         confirmer: ServedLoadConfirmer? = nil) {
         self.model = model
         self.config = config
         self.probe = probe
         self.booksWeights = booksWeights
         self.cache = cache
         self.maxWait = maxWait
+        self.confirmer = confirmer
+    }
+
+    /// SC-5a: what this run needs room for that isn't there yet — the engine if it isn't cached (the kind's real charge,
+    /// `EngineCache.footprint` for a stage that books here; `ModelLoadProfile` for one whose engine books its own
+    /// weights, the VLM), plus the per-call working set of a vision model. 0 = the run adds nothing to the ledger.
+    func bytesNeeded() async -> Int64 {
+        if booksWeights { return cache.isCached(model, config: config) ? 0 : cache.footprint(of: model) }
+        let directory = ModelStore.shared.directory(forHFModelID: model.hfModelId)
+        let resident = await ModelContainerPool.vlm.residentBytes(directory: directory) != nil
+        let weights = resident ? 0 : ModelLoadProfile.charge(kind: model.runnerKind, directory: directory,
+                                                             catalogFallback: Int64(model.ramGB * 1_073_741_824))
+        return weights + ModelLoadProfile.workingSetBytes(for: model.runnerKind)
     }
 
     var id: String { probe.id }
@@ -290,14 +311,24 @@ nonisolated final class LeasingStage: PipelineStage, @unchecked Sendable {
 
     func run(_ input: Media, progress: @Sendable @escaping (Double) -> Void) async throws -> Media {
         let probe = self.probe
-        let (stage, hold) = try await cache.lease(for: model, config: config, maxWait: maxWait,
-                                                  holder: .runWindow, booksWeights: booksWeights) { _, _ in probe }
-        lock.lock(); active += 1; lock.unlock()
-        defer {
-            hold.release()                                     // on return, throw and cancel alike
-            lock.lock(); active -= 1; lock.unlock()
+        // SC-5a (gate D): ask before pushing out a model other apps are being served. Cancel = the run doesn't start
+        // (a `CancellationError`, which the Run views already treat as "stopped", not as a failure).
+        if let confirmer {
+            let needed = await bytesNeeded()
+            guard await confirmer.confirm(modelName: model.displayName, loadBytes: needed, requester: .runWindow)
+            else { throw CancellationError() }
         }
-        return try await stage.run(input, progress: progress)
+        // every load inside the run is the Run window's, whatever holder the engine itself names
+        return try await MemoryBudget.RunWindowScope.$holder.withValue(.runWindow) {
+            let (stage, hold) = try await cache.lease(for: model, config: config, maxWait: maxWait,
+                                                      holder: .runWindow, booksWeights: booksWeights) { _, _ in probe }
+            lock.lock(); active += 1; lock.unlock()
+            defer {
+                hold.release()                                     // on return, throw and cancel alike
+                lock.lock(); active -= 1; lock.unlock()
+            }
+            return try await stage.run(input, progress: progress)
+        }
     }
 
     /// Whether a run is in progress (and so the engine is leased).
@@ -312,7 +343,7 @@ nonisolated final class LeasingStage: PipelineStage, @unchecked Sendable {
         guard let sdk, let fresh = try? sdk.makeStage(for: model, config: config) else { return nil }
         guard let old = stage as? LeasingStage else { return fresh }
         return LeasingStage(model: model, config: config, probe: fresh, booksWeights: old.booksWeights,
-                            cache: old.cache, maxWait: old.maxWait)
+                            cache: old.cache, maxWait: old.maxWait, confirmer: old.confirmer)
     }
 }
 
@@ -352,6 +383,11 @@ actor EngineLeaseCache<Engine: Sendable> {
     func engine(for directory: URL) async throws -> Engine {
         let load = self.load
         return try await pool.value(for: directory.path, bytes: Self.charge(directory: directory)) { try await load(directory) }
+    }
+
+    /// SC-5a: what a Run window's load of `directory` adds to the ledger — 0 when the engine is already resident.
+    func bytesNeeded(directory: URL) async -> Int64 {
+        await pool.residentBytes(for: directory.path) != nil ? 0 : Self.charge(directory: directory)
     }
 
     var residentKeys: [String] { get async { await pool.residentKeys } }

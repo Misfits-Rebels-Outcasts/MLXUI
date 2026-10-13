@@ -13,6 +13,7 @@ struct LayaRunView: View {
     let license: String?
     let modelID: String
 
+    @Environment(\.servedLoadConfirmer) private var confirmer      // SC-5a (gate D)
     @State private var model = LayaRunModel()
     @State private var stateText = "I was billed twice. Please refund the duplicate."
     @State private var questionType: LayaQuestionType = .choice
@@ -221,7 +222,8 @@ struct LayaRunView: View {
         }
 
         let definition = LayaQuestionDefinition(type: questionType, instructions: .string(trimmedInstructions), criteria: criteria)
-        model.run(modelID: modelID, state: text, definition: definition)
+        model.run(modelID: modelID, state: text, definition: definition,
+                  confirmer: confirmer, displayName: modelDisplayName)
     }
 }
 
@@ -242,7 +244,8 @@ final class LayaRunModel {
     var errorText: String?
     var latencyMS: Double?
 
-    func run(modelID: String, state: String, definition: LayaQuestionDefinition) {
+    func run(modelID: String, state: String, definition: LayaQuestionDefinition,
+             confirmer: ServedLoadConfirmer? = nil, displayName: String = "this model") {
         isRunning = true
         answer = nil
         errorText = nil
@@ -259,6 +262,14 @@ final class LayaRunModel {
             let start = Date()
             do {
                 let question = try definition.resolve()
+                // SC-5a (gate D): ask before pushing out a served model. Cancel: the pass doesn't start, no error.
+                if let confirmer {
+                    let needed = await LayaEngineCache.shared.bytesNeeded(directory: directory)
+                    guard await confirmer.confirm(modelName: displayName, loadBytes: needed, requester: .runWindow) else {
+                        await MainActor.run { self.isRunning = false }
+                        return
+                    }
+                }
                 // MLX-ERR-2: inside the detached task, not around it — mlx-swift's handler is
                 // `@TaskLocal`, so a guard on the `@MainActor` method above would not be inherited.
                 let answers = try await MLXErrorGuard.guardedRun {

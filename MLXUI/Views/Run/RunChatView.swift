@@ -67,6 +67,7 @@ struct RunChatView: View {
             minHeight: 520, idealHeight: 620, maxHeight: .infinity)
         .onAppear { appState.modelRunner.prepare(for: model) }
         .onDisappear { appState.stopModel() }
+        .servedLoadConfirmation(runner.loadConfirmer)      // SC-5a (gate D)
         .sheet(item: Binding(
             get: { runner.pendingApproval },
             set: { if $0 == nil { runner.resolveApproval(false) } }

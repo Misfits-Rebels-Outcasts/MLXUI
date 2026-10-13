@@ -19,6 +19,9 @@ actor CLMEngineCache {
     /// Unleased (kept for callers that only need the load to have happened).
     func engine(for directory: URL) async throws -> CLMEngine { try await cache.engine(for: directory) }
 
+    /// SC-5a: what a Run window's load of `directory` adds to the ledger (0 when resident).
+    func bytesNeeded(directory: URL) async -> Int64 { await cache.bytesNeeded(directory: directory) }
+
     /// The engine in use until `release()`.
     func lease(for directory: URL, holder: MemoryBudget.HolderKind? = nil) async throws -> EngineLeaseCache<CLMEngine>.Lease {
         try await cache.lease(for: directory, holder: holder)

@@ -166,6 +166,44 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     enum PinnedAccess: Sendable, Equatable {
         case never
         case may(requester: HolderKind?)
+
+        /// SC-5a (gate D): what a load by `holder` may take. **Chat and a Run window never take a pinned model on their
+        /// own** — they ask first (`ServedLoadConfirmer`), and "Load anyway" unpins and evicts the models named, so by
+        /// the time the load reserves, nothing pinned is in its way; if one still is (pinned in the meantime) the load
+        /// waits, bounded, and is refused rather than pushing it out unasked. A flow and a server request may, until
+        /// SC-5b. A load made inside a Run window's run (`RunWindowScope`) is a Run window's, whoever the engine says.
+        static func access(for holder: HolderKind?) -> PinnedAccess {
+            switch RunWindowScope.holder ?? holder {
+            case .chat, .runWindow: .never
+            default: .may(requester: holder)
+            }
+        }
+    }
+
+    /// SC-5a: marks the loads made inside a Run window's run (a task-local, so it reaches an engine that was written
+    /// to say `.flow`, such as the VLM's). Set by `LeasingStage.run`; nothing else sets it.
+    enum RunWindowScope {
+        @TaskLocal static var holder: HolderKind?
+    }
+
+    /// SC-5a: one booked entry, as the displacement check sees it.
+    struct LedgerItem: Sendable, Equatable {
+        let id: UUID
+        let bytes: Int64
+        let pinned: Bool
+        /// Leased, or reserved but not yet resident: not takeable now, but it will be released.
+        let inUse: Bool
+        let isSnapshot: Bool
+    }
+
+    /// SC-5a: the ledger as the displacement check reads it — a copy, taken in one lock section.
+    func ledgerItems() -> [LedgerItem] {
+        withLock {
+            ledger.map { id, bytes in
+                LedgerItem(id: id, bytes: bytes, pinned: pinnedIDs.contains(id),
+                           inUse: holds[id] != nil || pending.contains(id), isSnapshot: snapshots.contains(id))
+            }
+        }
     }
 
     /// The bounded wait ran out (or the waiting task was cancelled) with only held entries in the way.

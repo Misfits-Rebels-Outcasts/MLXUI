@@ -169,6 +169,45 @@ nonisolated enum ServeMemory {
     }
 
     private static func gigabytes(_ bytes: Int64) -> String { String(format: "%.1f", Double(bytes) / 1_073_741_824) }
+
+    // MARK: - SC-5a — which served models a load would stop keeping ready (gate D)
+
+    /// The pure check. Given the ledger, which pinned (kept-ready) served models would have to be pushed out for a load
+    /// of `loadBytes`? Mirrors the order the budget takes things in: everything that isn't pinned goes first —
+    /// snapshots, idle weights, and, because they will be returned, models in use and loads in flight — and only if
+    /// that is not enough are pinned **idle** models taken, least recently used first, until the load fits.
+    ///
+    /// Empty when it fits, when unpinned entries are enough, when serving isn't enabled, when the requester is the
+    /// server itself (it never asks), and when even every pinned idle model would not make room (the load waits for
+    /// what is in use instead — pushing out would be for nothing). A pinned model **in use** is never listed.
+    /// - Parameter servedID: maps a pool key to the served model's id (nil = not a served model: never listed).
+    static func wouldDisplaceServed(loadBytes: Int64, requester: MemoryBudget.HolderKind?,
+                                    snapshot: DisplacementSnapshot, servedID: (String) -> String?,
+                                    gateEnabled: Bool = LocalServerGate.isEnabled) -> [String] {
+        guard gateEnabled, loadBytes > 0, requester != .serverRequest else { return [] }
+        let used = snapshot.items.reduce(Int64(0)) { $0 + $1.bytes }
+        var shortfall = used + loadBytes - snapshot.capacityBytes
+        guard shortfall > 0 else { return [] }
+        shortfall -= snapshot.items.filter { !$0.pinned }.reduce(Int64(0)) { $0 + $1.bytes }
+        guard shortfall > 0 else { return [] }
+
+        let byID = Dictionary(uniqueKeysWithValues: snapshot.items.map { ($0.id, $0) })
+        var chosen: [String] = []
+        for pin in snapshot.pins {
+            guard let item = byID[pin.item], !item.inUse, let id = servedID(pin.key) else { continue }
+            chosen.append(id)
+            shortfall -= item.bytes
+            if shortfall <= 0 { return chosen }
+        }
+        return []
+    }
+
+    /// The question every interactive load asks first: the served models `loadBytes` would stop keeping ready.
+    @MainActor
+    static func wouldDisplaceServed(loadBytes: Int64, requester: MemoryBudget.HolderKind?,
+                                    controller: LocalServerController = .shared) async -> [String] {
+        await controller.wouldDisplaceServed(loadBytes: loadBytes, requester: requester)
+    }
 }
 
 /// "Reachable now" (S1-5c, owner ruling 1): a model is reachable by other apps only if it is in the
@@ -230,6 +269,11 @@ final class LocalServerController {
     /// SC-2: pin recomputes coalesce — one runs at a time, and a request that arrives meanwhile makes it run again.
     @ObservationIgnored private var pinTask: Task<Void, Never>?
     @ObservationIgnored private var pinDirty = false
+    /// SC-5a: declined preloads are not retried until then — set by a confirmed push-out, so the room it freed isn't
+    /// taken by a served model's preload before the load it was freed for has reserved it. The load finishing is a pool
+    /// transition, which recomputes pins and retries.
+    @ObservationIgnored private var retriesHeldUntil: ContinuousClock.Instant = .now
+    static let retryHold: Duration = .seconds(5)
 
     /// - Parameters: `installed` / `appleFoundation` / `evict` / `budgetBytes` default to the live
     ///   catalog (`catalogLoaded`: did it decode non-empty), the AFM checker, `ModelContainerPool.shared` and `MemoryBudget.shared`; tests
@@ -542,6 +586,42 @@ final class LocalServerController {
         await task.value
     }
 
+    // MARK: - Asking before a push-out (SC-5a, gate D)
+
+    /// `ServeMemory.wouldDisplaceServed` against this controller's pool and served set.
+    func wouldDisplaceServed(loadBytes: Int64, requester: MemoryBudget.HolderKind?) async -> [String] {
+        guard LocalServerGate.isEnabled, let pool = preloadPool, let snapshot = await pool.displacementSnapshot() else { return [] }
+        let keys = servedKeys()
+        return ServeMemory.wouldDisplaceServed(loadBytes: loadBytes, requester: requester, snapshot: snapshot,
+                                               servedID: { keys[$0] })
+    }
+
+    /// "Load anyway": unpin and push out exactly `ids` for `requester`'s load. They stay served; the state shows
+    /// `notLoaded("pushed out by …")` and the next request reloads them. A model in use is left alone (it frees when
+    /// it finishes).
+    func pushOutServed(_ ids: [String], for requester: MemoryBudget.HolderKind) async {
+        guard LocalServerGate.isEnabled, let pool = preloadPool else { return }
+        retriesHeldUntil = ContinuousClock.now.advanced(by: Self.retryHold)
+        let gone = await pool.pushOut(directories: ids.map { ModelStore.shared.directory(forHFModelID: $0) }, for: requester)
+        if !gone.isEmpty {
+            Self.log.notice("pushed out \(gone.count, privacy: .public) served model(s) for \(requester.phrase, privacy: .public), confirmed")
+        }
+        await recomputePins()
+    }
+
+    /// Seconds a served model took to load, the most recent time the request log measured one; nil when it never did.
+    func measuredLoadSeconds(for id: String) -> Double? {
+        server.requestLog.entries.last { $0.model == id && $0.loadWaitSeconds != nil }?.loadWaitSeconds
+    }
+
+    private func servedKeys() -> [String: String] {
+        var map: [String: String] = [:]
+        for id in servedIDs where id != ServedModels.appleFoundationID {
+            map[ModelContainerPool.key(for: ModelStore.shared.directory(forHFModelID: id))] = id
+        }
+        return map
+    }
+
     private func applyPins() async {
         guard let pool = preloadPool else { return }
         observeLoadStates(pool)
@@ -562,7 +642,8 @@ final class LocalServerController {
         }
         await pool.setPinned(directories: pins)
         if notKeptReady != overflow { notKeptReady = overflow }
-        startPreloads(declinedOnly: true)
+        // SC-5a: the room a confirmed push-out just made is for the load that asked, not for a retried preload
+        if ContinuousClock.now >= retriesHeldUntil { startPreloads(declinedOnly: true) }
     }
 
     private func setEnabled(_ on: Bool) {

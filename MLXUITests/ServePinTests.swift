@@ -70,19 +70,16 @@ struct ServePinPoolTests {
         #expect(await pool.loadState(for: "kept") == .notLoaded(reason: "pushed out by a server request"))
     }
 
-    @Test(arguments: [
-        (MemoryBudget.HolderKind.chat, "pushed out by Chat"),
-        (MemoryBudget.HolderKind.runWindow, "pushed out by a Run window"),
-        (MemoryBudget.HolderKind.flow, "pushed out by a flow"),
-    ])
-    func chatARunWindowAndAFlowStillPushOutAPinnedIdleModelAndSayWho(holder: MemoryBudget.HolderKind, reason: String) async throws {
+    // SC-5a replaced the SC-2 interim rule here: Chat and a Run window no longer push a pinned model out on their own
+    // (see ServeAskTests). A flow still does, until SC-5b.
+    @Test func aFlowStillPushesOutAPinnedIdleModelAndSaysSo() async throws {
         let pool = ResidentPool<Box>(budget: makeBudget(10))
         try await pinned("kept", gbs: 6, in: pool)
-        let lease = try await pool.lease(for: "mine", bytes: 6 * Self.gb, maxWait: .milliseconds(300), holder: holder) { Box() }
+        let lease = try await pool.lease(for: "mine", bytes: 6 * Self.gb, maxWait: .milliseconds(300), holder: .flow) { Box() }
         lease.release()
         #expect(await pool.residentKeys == ["mine"])
         #expect(await pool.isPinned("kept") == false)
-        #expect(await pool.loadState(for: "kept") == .notLoaded(reason: reason))
+        #expect(await pool.loadState(for: "kept") == .notLoaded(reason: "pushed out by a flow"))
     }
 
     @Test func pushedOutIsReportedToObserversWithTheReason() async throws {
@@ -94,8 +91,7 @@ struct ServePinPoolTests {
         try await pinned("kept", gbs: 6, in: pool)
         let seen = Seen()
         await pool.addObserver { key, state in if key == "kept" { seen.add(state) } }
-        let lease = try await pool.lease(for: "mine", bytes: 6 * Self.gb, holder: .chat) { Box() }
-        lease.release()
+        #expect(await pool.pushOutPinned(keys: ["kept"], for: .chat) == ["kept"])      // SC-5a: "Load anyway"
         #expect(seen.list == [.notLoaded(reason: "pushed out by Chat")])
     }
 
@@ -198,8 +194,8 @@ struct ServePinPoolTests {
         return dir
     }
 
+    // SC-5a: the `.runWindow` case moved to ServeAskTests (a Run window asks instead of pushing out).
     @Test(arguments: [
-        (MemoryBudget.HolderKind.runWindow, "pushed out by a Run window"),
         (MemoryBudget.HolderKind.flow, "pushed out by a flow"),
     ])
     func aVLMCallsWorkingSetPassesItsRealRequester(holder: MemoryBudget.HolderKind, reason: String) async throws {
@@ -224,7 +220,6 @@ struct ServePinPoolTests {
     }
 
     @Test(arguments: [
-        (MemoryBudget.HolderKind.runWindow, "pushed out by a Run window"),
         (MemoryBudget.HolderKind.flow, "pushed out by a flow"),
     ])
     func anEngineCacheBuildPassesItsRealRequester(holder: MemoryBudget.HolderKind, reason: String) async throws {
@@ -269,6 +264,11 @@ private struct PinPreloader: ServePreloading {
     }
     func residentBytes(directory: URL) async -> Int64? { await pool.residentBytes(for: ModelContainerPool.key(for: directory)) }
     func setPinned(directories: [URL]) async { await pool.setPinned(Set(directories.map { ModelContainerPool.key(for: $0) })) }
+    func displacementSnapshot() async -> DisplacementSnapshot? { await pool.displacementSnapshot() }
+    func pushOut(directories: [URL], for requester: MemoryBudget.HolderKind) async -> [URL] {
+        let gone = Set(await pool.pushOutPinned(keys: directories.map { ModelContainerPool.key(for: $0) }, for: requester))
+        return directories.filter { gone.contains(ModelContainerPool.key(for: $0)) }
+    }
 }
 
 @MainActor
@@ -418,7 +418,9 @@ struct ServePinControllerTests {
         #expect(controller.loadState(for: pinA) == .ready)
         #expect(await p.pool.residentKeys == [p.key(pinA)])
 
-        // Chat needs the room: A is pushed out, unpinned, with the reason; nothing reloads it behind Chat's back
+        // Chat needs the room and the user said "Load anyway" (SC-5a): A is pushed out, unpinned, with the reason;
+        // nothing reloads it behind Chat's back
+        await controller.pushOutServed([pinA], for: .chat)
         let chat = try await p.pool.lease(for: "chat-model", bytes: 4 * Self.gb, holder: .chat) { PinBox() }
         #expect(await until { controller.loadState(for: pinA) == .notLoaded(reason: "pushed out by Chat") })
         #expect(await p.pool.pinnedKeys.isEmpty)

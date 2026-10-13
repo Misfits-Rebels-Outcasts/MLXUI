@@ -145,8 +145,21 @@ final class ModelRunner {
     /// don't reload.
     @ObservationIgnored private let pool: ModelContainerPool
 
-    init(pool: ModelContainerPool = .shared) {
+    /// SC-5a (gate D): asks before a turn's model load pushes out a model other apps are being served; the chat sheet
+    /// presents its question.
+    let loadConfirmer: ServedLoadConfirmer
+
+    init(pool: ModelContainerPool = .shared, loadConfirmer: ServedLoadConfirmer? = nil) {
         self.pool = pool
+        self.loadConfirmer = loadConfirmer ?? ServedLoadConfirmer()
+    }
+
+    /// SC-5a: `true` to go ahead with the turn. Asks only when the model isn't already resident (a resident one adds
+    /// nothing to the ledger) and a served model would be stopped for it.
+    private func confirmLoad(_ model: ModelEntry, dir: URL) async -> Bool {
+        guard await pool.residentBytes(directory: dir) == nil else { return true }
+        let bytes = ModelWeightCharge.bytes(directory: dir, catalogFallback: Int64(model.ramGB * 1_073_741_824))
+        return await loadConfirmer.confirm(modelName: model.displayName, loadBytes: bytes, requester: .chat)
     }
 
     /// Tools that ship in this build. `fetch_url` (AG2), the AG3 compute tools, and the AG4 in-app
@@ -631,6 +644,14 @@ final class ModelRunner {
             return
         }
 
+        // SC-5a (gate D): ask before the turn if loading this model would stop keeping a served one ready. Cancel: the
+        // turn doesn't start — nothing appended, nothing loaded, no error banner.
+        guard await confirmLoad(model, dir: modelDir) else {
+            if generation == turnGeneration { isRunning = false }
+            return
+        }
+        guard generation == turnGeneration, activeConversationID == turnConversationID, isRunning else { return }
+
         transcript.addUserMessage(trimmed, attachments: readyAttachments)
         // CW-C-FIX-1: the model gets the same thing the transcript shows. `send` used to pass the
         // bare `trimmed` text as the prompt, so an attachment's contents reached the **bubble** and
@@ -711,6 +732,7 @@ final class ModelRunner {
         // B1: bump before anything else, so an in-flight attachment import (which has no
         // `currentTask` yet) is invalidated too.
         turnGeneration += 1
+        loadConfirmer.respond(false)        // SC-5a: a question still open is Cancel
         currentTask?.cancel()
         currentTask = nil
         isRunning = false

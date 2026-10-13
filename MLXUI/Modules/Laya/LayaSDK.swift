@@ -20,6 +20,9 @@ actor LayaEngineCache {
     /// Unleased (kept for callers that only need the load to have happened).
     func engine(for directory: URL) async throws -> LayaEngine { try await cache.engine(for: directory) }
 
+    /// SC-5a: what a Run window's load of `directory` adds to the ledger (0 when resident).
+    func bytesNeeded(directory: URL) async -> Int64 { await cache.bytesNeeded(directory: directory) }
+
     /// The engine in use until `release()` — what a Run view, a flow decider row and the stage hold.
     func lease(for directory: URL, holder: MemoryBudget.HolderKind? = nil) async throws -> EngineLeaseCache<LayaEngine>.Lease {
         try await cache.lease(for: directory, holder: holder)

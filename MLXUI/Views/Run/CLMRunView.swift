@@ -20,6 +20,7 @@ struct CLMRunView: View {
     let license: String?
     let modelID: String
 
+    @Environment(\.servedLoadConfirmer) private var confirmer      // SC-5a (gate D)
     @State private var model = CLMRunModel()
     @State private var stateText = "I was billed twice. Please refund the duplicate."
     @State private var questionType: LayaQuestionType = .choice
@@ -232,7 +233,8 @@ struct CLMRunView: View {
 
         model.run(
             modelID: modelID, state: text, type: questionType,
-            instructions: .string(trimmedInstructions), criteria: criteria)
+            instructions: .string(trimmedInstructions), criteria: criteria,
+            confirmer: confirmer, displayName: modelDisplayName)
     }
 }
 
@@ -289,7 +291,8 @@ final class CLMRunModel {
     /// `CLMRunView.runningRow`'s "Loading CLM 8B (about 8 GB)…" vs. plain "Deciding…" text.
     var hasLoadedOnce = false
 
-    func run(modelID: String, state: String, type: LayaQuestionType, instructions: CLMJSON, criteria: CLMJSON?) {
+    func run(modelID: String, state: String, type: LayaQuestionType, instructions: CLMJSON, criteria: CLMJSON?,
+             confirmer: ServedLoadConfirmer? = nil, displayName: String = "this model") {
         isRunning = true
         answer = nil
         errorText = nil
@@ -301,6 +304,14 @@ final class CLMRunModel {
         Task.detached(priority: .userInitiated) {
             let start = Date()
             do {
+                // SC-5a (gate D): ask before pushing out a served model. Cancel: the pass doesn't start, no error.
+                if let confirmer {
+                    let needed = await CLMEngineCache.shared.bytesNeeded(directory: directory)
+                    guard await confirmer.confirm(modelName: displayName, loadBytes: needed, requester: .runWindow) else {
+                        await MainActor.run { self.isRunning = false }
+                        return
+                    }
+                }
                 // MLX-ERR-2: inside the detached task (see `LayaRunModel.run`'s note) —
                 // mlx-swift's handler is `@TaskLocal`, so the guard must not sit outside it.
                 let results = try await MLXErrorGuard.guardedRun {
