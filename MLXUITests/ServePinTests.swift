@@ -139,30 +139,103 @@ struct ServePinPoolTests {
         #expect(await a.loadState(for: "kept") == .notLoaded(reason: "pushed out by a flow"))
     }
 
-    @Test func aWorkingSetThatMayNotTakeAPinnedModelWaitsAndIsWokenWhenItIsUnpinned() async throws {
-        let budget = makeBudget(10)
-        let pool = ResidentPool<Box>(budget: budget)
-        try await pinned("a", gbs: 6, in: pool)
-        try await pinned("b", gbs: 1, in: pool)
-        // "b" is pinned and requests more working set than is free: it may not take "a", so it waits (bounded)…
-        async let outcome = pool.reserveWorkingSetReporting(totalNeedBytes: 5 * Self.gb, protecting: "b", maxWait: .seconds(5))
-        try await Task.sleep(for: .milliseconds(150))
-        await pool.unpin("a")                                               // …and goes ahead once "a" is an ordinary idle entry
-        let result = await outcome
-        guard case .granted = result else { Issue.record("not granted: \(result)"); return }
-        #expect(await pool.residentKeys == ["b"])
-    }
-
-    @Test func theWorkingSetPathDoesNotTakeAPinnedModelForAPinnedOne() async throws {
-        let budget = makeBudget(10)
-        let pool = ResidentPool<Box>(budget: budget)
+    @Test func aPinnedModelsOwnRequestMayTakeAnotherIdlePinnedModelButNeverItself() async throws {
+        let pool = ResidentPool<Box>(budget: makeBudget(10))
         try await pinned("a", gbs: 4, in: pool)
         try await pinned("b", gbs: 4, in: pool)
-        // b's request needs 5 GB more than the 2 GB that is free; only the pinned a could give it
+        // b's request needs 5 GB more than the 2 GB that is free; "a" is the only thing that can give it
         let outcome = await pool.reserveWorkingSetReporting(totalNeedBytes: 9 * Self.gb, protecting: "b")
-        if case .granted = outcome { Issue.record("a pinned model was taken for another pinned model's working set") }
-        #expect(await pool.isPinned("a"))
+        guard case .granted = outcome else { Issue.record("not granted: \(outcome)"); return }
+        #expect(await pool.residentKeys == ["b"])
+        #expect(await pool.isPinned("b"))                                   // never the requester
+        #expect(await pool.loadState(for: "a") == .notLoaded(reason: "pushed out by a server request"))
+    }
+
+    @Test func aServerRequestTakesTheLeastRecentlyUsedIdleServedModelAndNoMore() async throws {
+        let pool = ResidentPool<Box>(budget: makeBudget(10))
+        try await pinned("old", gbs: 4, in: pool)
+        try await pinned("new", gbs: 4, in: pool)
+        let lease = try await pool.lease(for: "third", bytes: 4 * Self.gb, maxWait: .milliseconds(300), holder: .serverRequest) { Box() }
+        lease.release()
+        #expect(Set(await pool.residentKeys) == ["new", "third"])
+        #expect(await pool.isPinned("new"))
+        #expect(await pool.loadState(for: "old") == .notLoaded(reason: "pushed out by a server request"))
+    }
+
+    @Test func tooLargeOnlyWhenNothingCanBeFreedAndAServedModelInUseIsNeverTaken() async throws {
+        let pool = ResidentPool<Box>(budget: makeBudget(10))
+        try await pinned("a", gbs: 4, in: pool)
+        try await pinned("b", gbs: 4, in: pool)
+        let busy = try await pool.lease(for: "a", bytes: 4 * Self.gb) { Box() }      // a is in use
+        let outcome = await pool.reserveWorkingSetReporting(totalNeedBytes: 9 * Self.gb, protecting: "b",
+                                                            maxWait: .milliseconds(200))
+        if case .busy = outcome {} else { Issue.record("expected busy, got \(outcome)") }
         #expect(Set(await pool.residentKeys) == ["a", "b"])
+        busy.release()
+        // and when even the requester alone is the whole budget, it is too large
+        let huge = await pool.reserveWorkingSetReporting(totalNeedBytes: 11 * Self.gb, protecting: "b")
+        if case .tooLarge = huge {} else { Issue.record("expected tooLarge, got \(huge)") }
+    }
+
+    @Test func aPreloadStillNeverTakesAServedModel() async throws {
+        let pool = ResidentPool<Box>(budget: makeBudget(10))
+        try await pinned("a", gbs: 6, in: pool)
+        let state = await pool.preload(for: "p", bytes: 6 * Self.gb) { Box() }
+        #expect(state == .notLoaded(reason: ResidentPool<Box>.notEnoughMemoryReason))
+        #expect(await pool.isPinned("a"))
+    }
+
+    // MARK: - the real requester (SC-2f items 2 and 3)
+
+    private func sparseModelDir(gib: Int64) throws -> URL {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("sc2f-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("model.safetensors")
+        FileManager.default.createFile(atPath: url.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.truncate(atOffset: UInt64(gib * Self.gb))
+        try handle.close()
+        return dir
+    }
+
+    @Test(arguments: [
+        (MemoryBudget.HolderKind.runWindow, "pushed out by a Run window"),
+        (MemoryBudget.HolderKind.flow, "pushed out by a flow"),
+    ])
+    func aVLMCallsWorkingSetPassesItsRealRequester(holder: MemoryBudget.HolderKind, reason: String) async throws {
+        struct Boom: Error {}
+        let dir = try sparseModelDir(gib: 3)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let budget = makeBudget(20)
+        let served = ResidentPool<Box>(budget: budget)
+        try await pinned("served", gbs: 16, in: served)                     // leaves too little for weights + working set
+        let vlm = ModelContainerPool(budget: budget, loader: { _, _ in throw Boom() })
+        let working = try await VLMEngine.reserveCallWorkingSet(pool: vlm, modelDir: dir, maxWait: .seconds(1), requester: holder)
+        budget.release(working)
+        #expect(await served.loadState(for: "served") == .notLoaded(reason: reason))
+    }
+
+    private nonisolated struct Stub: PipelineStage {
+        let id: String
+        var name: String { id }
+        var accepts: MediaKind { .text }
+        var produces: MediaKind { .text }
+        func run(_ input: Media, progress: @Sendable @escaping (Double) -> Void) async throws -> Media { input }
+    }
+
+    @Test(arguments: [
+        (MemoryBudget.HolderKind.runWindow, "pushed out by a Run window"),
+        (MemoryBudget.HolderKind.flow, "pushed out by a flow"),
+    ])
+    func anEngineCacheBuildPassesItsRealRequester(holder: MemoryBudget.HolderKind, reason: String) async throws {
+        let budget = makeBudget(10)
+        let served = ResidentPool<Box>(budget: budget)
+        try await pinned("served", gbs: 6, in: served)
+        let cache = EngineCache(budget: budget, countsLLMWeights: true)
+        let lease = try await cache.lease(for: makeEntry(id: "engine", ramGB: 6), config: .default,
+                                          maxWait: .seconds(1), holder: holder) { m, _ in Stub(id: m.id) }
+        lease.hold.release()
+        #expect(await served.loadState(for: "served") == .notLoaded(reason: reason))
     }
 
     @Test func theWorkingSetOfAModelNotKeptReadyMayTakeAnIdlePinnedOne() async throws {

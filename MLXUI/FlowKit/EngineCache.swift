@@ -136,9 +136,10 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
         let bytes = booksWeights ? footprint(of: model) : 0
         let reservation: MemoryBudget.Reservation
         if let maxWait {
-            reservation = try await budget.reserveBounded(bytes: bytes, for: self, label: model.id, maxWait: maxWait)
+            reservation = try await budget.reserveBounded(bytes: bytes, for: self, label: model.id, maxWait: maxWait,
+                                                          pinned: .may(requester: holder))
         } else {
-            reservation = await budget.reserve(bytes: bytes, for: self, label: model.id)
+            reservation = await budget.reserve(bytes: bytes, for: self, label: model.id, pinned: .may(requester: holder))
         }
 
         let stage: any PipelineStage

@@ -139,7 +139,7 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
             touch(key)
             return (entry.value, leased ? budget.hold(entry.reservation, label: key, holder: holder) : nil)
         }
-        let access = pinnedAccess(for: key, holder: holder, preload: preload)
+        let access = pinnedAccess(holder: holder, preload: preload)
         if let inFlight = loading[key] {
             if !preload { preloadOnly.remove(inFlight.token) }     // a request adopts the preload's load
             if leased { leasers[inFlight.token, default: []].append(holder) }
@@ -192,13 +192,11 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
         return (value, leased ? claimHold(token, holder: holder) : nil)
     }
 
-    /// SC-2: who may take a pinned idle model for this load. A preload never; the server's own request only when its
-    /// model is not itself kept ready (gate I row 8: LRU among served models); Chat, a Run window, a flow — and a
-    /// caller that doesn't say — may, as before pinning existed.
-    private func pinnedAccess(for key: String, holder: MemoryBudget.HolderKind?, preload: Bool) -> MemoryBudget.PinnedAccess {
-        if preload { return .never }
-        if holder == .serverRequest, pinned.contains(key) { return .never }
-        return .may(requester: holder)
+    /// SC-2 / SC-2f: who may take a pinned idle model for this load. A preload never (it is not a request). Any
+    /// request may — a server request (gate I row 8: LRU among served models; the requester itself is not resident
+    /// while it loads, and nothing in use is ever taken), Chat, a Run window, a flow, and a caller that doesn't say.
+    private func pinnedAccess(holder: MemoryBudget.HolderKind?, preload: Bool) -> MemoryBudget.PinnedAccess {
+        preload ? .never : .may(requester: holder)
     }
 
     /// Await a load, and let a cancelled caller stop a wait for room that nobody else is waiting on.
@@ -339,16 +337,16 @@ actor ResidentPool<Value: Sendable>: MemoryBudgetParticipant {
     /// `reserveWorkingSet`, saying why it returned nothing (SC-2a-b): too large for this Mac, or busy (only models
     /// in use stood in the way for the whole bound).
     ///
-    /// SC-2: the working-set path never takes a pinned model — except for a model that is not itself kept ready (gate I
-    /// row 8: LRU among served models), which may take the least-recently-used idle pinned one. `requester` names who
-    /// asks, for the reason that model then shows; the server is the default.
+    /// SC-2f: a working-set request may take the least-recently-used idle pinned model **other than the one running**
+    /// (never one in use); `requester` names who asks, for the reason that model then shows (the server by default).
+    /// `tooLarge` only when nothing can be freed.
     func reserveWorkingSetReporting(totalNeedBytes: Int64, protecting key: String,
                                     maxWait: Duration? = nil,
                                     requester: MemoryBudget.HolderKind? = nil) async -> MemoryBudget.WorkingSetOutcome {
         let protected = entries[key]?.bytes ?? 0
         let extra = max(0, totalNeedBytes - protected)
         let who = requester ?? .serverRequest
-        let access: MemoryBudget.PinnedAccess = pinned.contains(key) ? .never : .may(requester: who)
+        let access: MemoryBudget.PinnedAccess = .may(requester: who)
         return await budget.reserveWorkingSetReporting(bytes: extra, for: self, protecting: protected,
                                                        protectingReservation: entries[key]?.reservation,
                                                        maxWait: maxWait, pinned: access,
