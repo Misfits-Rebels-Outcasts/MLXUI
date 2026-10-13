@@ -20,6 +20,12 @@ nonisolated struct ServeUsage: Sendable, Equatable {
     /// PC-3: the cache path failed and the request ran as if the cache were off. Never on the wire;
     /// it exists so a failing cache can't hide as "no hit" in the request log.
     var cacheFellBack: Bool = false
+    /// SC-3: seconds this request spent loading the model's weights; `nil` when it didn't trigger a load. A number,
+    /// set by the backend that did the loading. Never on the wire.
+    var loadSeconds: Double?
+    /// SC-3: the prompt cache was in play for this request (so `cachedTokens == 0` means a miss, not "no cache").
+    /// Never on the wire.
+    var promptCacheApplied: Bool = false
     var totalTokens: Int { promptTokens + completionTokens }
 }
 
@@ -308,6 +314,17 @@ nonisolated struct RequestLogEntry: Sendable, Equatable {
     var cacheFellBack: Bool = false
     /// S3-3b-0 (R40): input items of an unknown type the Responses dialect dropped. A count only.
     var ignoredInputItems: Int = 0
+    // SC-3 — serving numbers (gate E). Seconds and rates only: nothing here can hold content (rule 13).
+    /// From the request arriving to its first content event (text, reasoning or a tool call); nil when none came.
+    var ttftSeconds: Double? = nil
+    /// Time spent waiting for this model's turn in the queue; nil when it never reached the queue.
+    var queueWaitSeconds: Double? = nil
+    /// Time spent loading the model; nil when this request didn't trigger a load.
+    var loadWaitSeconds: Double? = nil
+    /// Completion tokens over the time from the first content event to the end of generation.
+    var decodeTokensPerSecond: Double? = nil
+    /// Prompt tokens served from the prompt cache; nil when the cache wasn't applicable to this request.
+    var promptTokensReused: Int? = nil
 }
 
 /// A bounded in-memory log the Connect sheet / Settings pane will read (S1-5).

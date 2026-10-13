@@ -272,27 +272,30 @@ nonisolated enum ServePipeline {
                         environment: ServeEnvironment) async -> Result<ServeCollected, ServeFailure> {
         let queue = environment.queue
         let ticket = prepared.ticket
+        let queuedAt = environment.now()
         do { try await queue.waitTurn(ticket) } catch {
             await queue.release(ticket)
             return .failure(ServeFailure(internalError))
         }
+        tracker.turnGranted(waitedSince: queuedAt)
         var collected = ServeCollected()
         var failure: ServeError?
         do {
             for try await event in prepared.backend.generate(prepared.request) {
                 switch event {
-                case .textDelta(let piece): collected.text += piece
-                case .reasoningDelta(let piece): collected.reasoning += piece      // S2-3
+                case .textDelta(let piece): tracker.contentArrived(); collected.text += piece
+                case .reasoningDelta(let piece): tracker.contentArrived(); collected.reasoning += piece      // S2-3
                 case .usage(let value): collected.usage = value
                 case .finish(let reason): collected.finish = reason
                 case .error(let error): failure = error
-                case .toolCallDelta(let delta): append(delta, to: &collected.toolCalls)
+                case .toolCallDelta(let delta): tracker.contentArrived(); append(delta, to: &collected.toolCalls)
                 }
             }
         } catch {
             log.error("generation failed: \(String(describing: type(of: error)), privacy: .public)")
             failure = generationFailed
         }
+        tracker.generationEnded()
         await queue.release(ticket)
         if let failure { return .failure(ServeFailure(failure, retryAfterSeconds: failure.retryAfterSeconds)) }
 
@@ -331,11 +334,13 @@ nonisolated enum ServePipeline {
         let producer = Task {
             defer { continuation.finish() }
             var encoder = initial
+            let queuedAt = environment.now()
             do { try await queue.waitTurn(ticket) } catch {
                 await queue.release(ticket)
                 _ = tracker.fail(internalError)
                 return
             }
+            tracker.turnGranted(waitedSince: queuedAt)
             var usage: ServeUsage?
             var finish: ServeFinishReason?
             var failure: ServeError?
@@ -344,8 +349,10 @@ nonisolated enum ServePipeline {
                 for try await event in backend.generate(request) {
                     switch event {
                     case .textDelta, .reasoningDelta:
+                        tracker.contentArrived()
                         for frame in encoder.frames(for: event) { write(frame) }
                     case .toolCallDelta(let delta):
+                        tracker.contentArrived()
                         if delta.id != nil { toolCallCount += 1 }
                         for frame in encoder.frames(for: event) { write(frame) }
                     case .usage(let value): usage = value
@@ -357,6 +364,7 @@ nonisolated enum ServePipeline {
                 log.error("generation failed: \(String(describing: type(of: error)), privacy: .public)")
                 failure = generationFailed
             }
+            tracker.generationEnded()
             await queue.release(ticket)
 
             if Task.isCancelled {                                          // the client went away
@@ -446,6 +454,10 @@ nonisolated final class RequestTracker: @unchecked Sendable {
     var toolCalls = 0
     /// Input items of an unknown type that a dialect dropped (R40) — a count only, like every field here.
     var ignoredInputItems = 0
+    // SC-3 — instants and durations only; guarded by `lock`.
+    private var queueWait: Double?
+    private var firstContentAt: Date?
+    private var generationEndedAt: Date?
 
     init(head: ServeRequestHead, started: Date, environment: ServeEnvironment,
          renderError: @escaping @Sendable (ServeError) -> Data = { $0.body() }) {
@@ -453,6 +465,24 @@ nonisolated final class RequestTracker: @unchecked Sendable {
         self.started = started
         self.environment = environment
         self.renderError = renderError
+    }
+
+    /// The request got its turn in the queue (SC-3).
+    func turnGranted(waitedSince queuedAt: Date) {
+        let waited = max(0, environment.now().timeIntervalSince(queuedAt))
+        lock.lock(); queueWait = waited; lock.unlock()
+    }
+
+    /// A content event (text, reasoning or tool call) came out of the backend; only the first one counts (SC-3).
+    func contentArrived() {
+        let at = environment.now()
+        lock.lock(); if firstContentAt == nil { firstContentAt = at }; lock.unlock()
+    }
+
+    /// The backend's stream is over, normally or not (SC-3).
+    func generationEnded() {
+        let at = environment.now()
+        lock.lock(); generationEndedAt = at; lock.unlock()
     }
 
     /// Log `status` and return the error as a response (`response: false` = only log it — the
@@ -482,12 +512,21 @@ nonisolated final class RequestTracker: @unchecked Sendable {
         guard !recorded else { return }
         recorded = true
         let finished = environment.now()
+        let ttft = firstContentAt.map { max(0, $0.timeIntervalSince(started)) }
+        var decodeRate: Double?
+        if let first = firstContentAt, let end = generationEndedAt, let tokens = usage?.completionTokens, tokens > 0 {
+            let span = end.timeIntervalSince(first)
+            if span > 0 { decodeRate = Double(tokens) / span }
+        }
         environment.requestLog.record(RequestLogEntry(
             time: started, userAgent: head.userAgent, model: model,
             promptTokens: usage?.promptTokens, completionTokens: usage?.completionTokens,
             durationSeconds: finished.timeIntervalSince(started), status: status, toolsIgnored: toolsIgnored,
             reasoningOn: reasoningOn, toolCalls: toolCalls,
             cachedTokens: usage?.cachedTokens ?? 0, cacheFellBack: usage?.cacheFellBack ?? false,
-            ignoredInputItems: ignoredInputItems))
+            ignoredInputItems: ignoredInputItems,
+            ttftSeconds: ttft, queueWaitSeconds: queueWait, loadWaitSeconds: usage?.loadSeconds,
+            decodeTokensPerSecond: decodeRate,
+            promptTokensReused: usage.flatMap { $0.promptCacheApplied ? $0.cachedTokens : nil }))
     }
 }

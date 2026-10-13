@@ -245,6 +245,10 @@ final class LocalServerController {
 
     /// The stored list — what the user chose. Not what other apps can reach: use `reachableIDs`.
     var servedIDs: Set<String> { server.settings.servedModelIDs }
+
+    /// SC-3: per-model serving numbers over the in-memory request log (last 200). Computed on read — nothing is
+    /// stored — so a view re-reads it when it refreshes (the log is not observable).
+    var servingStats: [String: ModelServeStats] { ServeStats.summary(entries: server.requestLog.entries) }
     func isServing(_ id: String) -> Bool { server.settings.isServing(id) }
     /// **The** reachable set (S1-5d): served AND installed (AFM: served AND ready) — exactly what
     /// `/v1/models` lists. The pane, the status sentence, start/stop and auto-start all count this.
