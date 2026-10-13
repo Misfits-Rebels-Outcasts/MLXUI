@@ -214,6 +214,17 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
         withLock { entries.count }
     }
 
+    /// SC-5c-b: drop one entry and release its reservation (deferred while a hold still has it). A per-run stage's
+    /// engine loads its weights inside each call, so nothing stays resident after the run for the entry to account for.
+    func discard(_ model: ModelEntry, config: StageConfig) {
+        withLock {
+            let key = Key(id: model.id, config: config)
+            guard let entry = entries.removeValue(forKey: key) else { return }
+            recency.removeAll { $0 == key }
+            budget.releaseOrDefer(entry.reservation)
+        }
+    }
+
     /// Drop every engine (e.g. a "Clear Cache" action) — the next row reloads.
     func clear() {
         withLock {
@@ -338,6 +349,7 @@ nonisolated final class LeasingStage: PipelineStage, @unchecked Sendable {
             lock.lock(); active += 1; lock.unlock()
             defer {
                 hold.release()                                     // on return, throw and cancel alike
+                if perRun { cache.discard(model, config: cacheConfig) }     // SC-5c-b: nothing resident to account for
                 lock.lock(); active -= 1; lock.unlock()
             }
             return try await (perRun ? probe : stage).run(input, progress: progress)

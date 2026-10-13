@@ -22,10 +22,15 @@ struct ServeRunWindowStageTests {
         var produces: MediaKind { .text }
         private let lock = NSLock()
         private var _runs = 0
-        init(id: String) { self.id = id }
+        private var _seen: [(count: Int, used: Int64)] = []
+        private let observe: (@Sendable () -> (Int, Int64))?
+        init(id: String, observe: (@Sendable () -> (Int, Int64))? = nil) { self.id = id; self.observe = observe }
         var runs: Int { lock.lock(); defer { lock.unlock() }; return _runs }
+        /// (cache entries, ledger bytes) as seen from inside each run
+        var seen: [(count: Int, used: Int64)] { lock.lock(); defer { lock.unlock() }; return _seen }
         func run(_ input: Media, progress: @Sendable @escaping (Double) -> Void) async throws -> Media {
-            lock.lock(); _runs += 1; lock.unlock(); return input
+            let snap = observe?()
+            lock.lock(); _runs += 1; if let snap { _seen.append((snap.0, snap.1)) }; lock.unlock(); return input
         }
     }
 
@@ -75,11 +80,11 @@ struct ServeRunWindowStageTests {
         let budget = makeBudget(10)
         let cache = EngineCache(budget: budget, countsLLMWeights: true)
         let model = makeEntry(id: "run-\(kind.rawValue)", modelType: kind, ramGB: 3)
-        let probe = Recorder(id: model.id)
+        let probe = Recorder(id: model.id, observe: { (cache.count, budget.usedBytes) })
         let stage = LeasingStage.perRun(handed(model, cache: cache), config: StageConfig(seed: 1)) { _ in probe }
         _ = try await stage.run(.text("x")) { _ in }
         #expect(probe.runs == 1)                                         // the view's per-run stage is what ran
-        #expect(cache.count == 1 && budget.usedBytes >= 3 * gb)          // and its weights are booked
+        #expect(probe.seen.first?.count == 1 && (probe.seen.first?.used ?? 0) >= 3 * gb)   // booked during the run
         #expect(!(stage as? LeasingStage)!.isRunning)                    // lease returned
     }
 
@@ -88,14 +93,50 @@ struct ServeRunWindowStageTests {
         let cache = EngineCache(budget: budget, countsLLMWeights: true)
         let model = makeEntry(id: "seeded", modelType: .image, ramGB: 3)
         let base = handed(model, cache: cache)
-        let probes = (0..<3).map { _ in Recorder(id: model.id) }
+        let probes = (0..<3).map { _ in Recorder(id: model.id, observe: { (cache.count, budget.usedBytes) }) }
         for (i, probe) in probes.enumerated() {
             let stage = LeasingStage.perRun(base, config: StageConfig(seed: UInt64(i))) { _ in probe }
             _ = try await stage.run(.text("x")) { _ in }
         }
-        #expect(cache.count == 1)
-        #expect(budget.usedBytes == cache.totalCachedBytes)
+        #expect(probes.flatMap(\.seen).allSatisfy { $0.count == 1 })     // one engine's worth each time, never a second
+        #expect(Set(probes.flatMap(\.seen).map(\.used)).count == 1)
         #expect(probes.map(\.runs) == [1, 1, 1])                          // each run used its own seed's stage
+    }
+
+    @Test func aPerRunStageBooksOnlyForTheRun() async throws {
+        let budget = makeBudget(10)
+        let cache = EngineCache(budget: budget, countsLLMWeights: true)
+        let model = makeEntry(id: "book-run", modelType: .image, ramGB: 3)
+        let base = handed(model, cache: cache)
+        let before = budget.usedBytes
+        for _ in 0..<2 {                                                 // a second run books again, then gives back again
+            let stage = LeasingStage.perRun(base, config: StageConfig(seed: 1)) { _ in Recorder(id: model.id) }
+            _ = try await stage.run(.text("x")) { _ in }
+            #expect(budget.usedBytes == before && cache.count == 0)
+        }
+    }
+
+    private nonisolated final class Gate: PipelineStage, @unchecked Sendable {
+        let id = "gate"; var name: String { id }
+        var accepts: MediaKind { .text }; var produces: MediaKind { .text }
+        func run(_ input: Media, progress: @Sendable @escaping (Double) -> Void) async throws -> Media {
+            try await Task.sleep(for: .seconds(30)); return input
+        }
+    }
+
+    @Test func aCancelledOrFailedPerRunStageLeavesNothingBooked() async throws {
+        let budget = makeBudget(10)
+        let cache = EngineCache(budget: budget, countsLLMWeights: true)
+        let model = makeEntry(id: "book-cancel", modelType: .tts, ramGB: 3)
+        let base = handed(model, cache: cache)
+        let before = budget.usedBytes
+        let running = LeasingStage.perRun(base, config: StageConfig(voice: "v")) { _ in Gate() }
+        let task = Task { try await running.run(.text("x")) { _ in } }
+        for _ in 0..<500 where budget.usedBytes == before { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(budget.usedBytes > before)                              // booked while running
+        task.cancel()
+        _ = try? await task.value
+        #expect(budget.usedBytes == before && cache.count == 0)
     }
 
     @Test func notHandedALeasingStageItJustRunsTheViewsStage() async throws {
