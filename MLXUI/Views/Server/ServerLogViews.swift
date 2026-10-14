@@ -10,22 +10,27 @@ struct RequestLogList: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
             let entries = Array(log.entries.reversed())
-            if entries.isEmpty {
-                Text("No requests yet.").foregroundStyle(.secondary)
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
-                        ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
-                            Text(Self.line(entry))
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundStyle(entry.status >= 400 ? Color.red : Color.primary)
-                                .textSelection(.enabled)
+            Group {
+                if entries.isEmpty {
+                    Text("No requests yet.").foregroundStyle(.secondary)
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 4) {
+                            ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
+                                Text(Self.line(entry))
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundStyle(entry.status >= 400 ? Color.red : Color.primary)
+                                    .textSelection(.enabled)
+                            }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: 160)
                 }
-                .frame(height: 160)
             }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
         }
     }
 
