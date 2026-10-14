@@ -176,10 +176,13 @@ extension LocalServerController {
 
     /// The memory bar from the ledgers: kept-ready served weights come from the pool's own per-model bookings; the
     /// rest of the pool is "other models"; what the budget holds beyond pool + snapshots is the flow / Run engines.
+    /// SC-4e: a model only counts as kept ready while `applyPins()` would actually have it pinned — gate open and the
+    /// running switch on — since the switch going off unpins everything but leaves `loadState` reporting `.ready`
+    /// (the weights stay resident, just no longer kept ready) until something evicts them.
     func memoryReading() async -> ServeMemoryReading {
         let sample = await ledger()
         var kept: Int64 = 0
-        if let pool = preloadPool {
+        if LocalServerGate.isEnabled, enabled, let pool = preloadPool {
             for id in reachableIDs where id != ServedModels.appleFoundationID && loadState(for: id) == .ready {
                 kept += await pool.residentBytes(directory: ModelStore.shared.directory(forHFModelID: id)) ?? 0
             }

@@ -138,6 +138,38 @@ struct ServerScreenTests {
         #expect(m.used == 12 * gib)
     }
 
+    // SC-4e: the running switch going off unpins everything (`applyPins()`), but the weights stay resident and
+    // `loadState` keeps reporting `.ready` — so kept-ready must follow the pin, not the load state, or the Memory
+    // card still calls stopped-serving weights "kept ready".
+    @Test func keptReadyFollowsTheRunningSwitchNotJustLoadState() async {
+        LocalServerGate.overrideForTesting = true
+        defer { LocalServerGate.overrideForTesting = nil }
+        let pool = SrvPreloader(pool: ResidentPool<SrvBox>(budget: MemoryBudget(
+            capacityBytes: 20 * gib, cacheClearer: MLXCacheClearer(capActive: { false }, clear: {}, delay: .milliseconds(1)))))
+        let url = ModelStore.shared.directory(forHFModelID: srvA)
+        #expect(await pool.preload(directory: url, footprintBytes: 5 * gib) == .ready)
+        let c = controller(served: [srvA], preloader: pool, ledger: {
+            .init(used: 12 * gib, poolWeights: 8 * gib, snapshots: 1 * gib) })
+        await c.setServed(srvA, true)
+        try? await Task.sleep(for: .milliseconds(200))
+        defer { Task { await c.server.stop() } }
+
+        let on = await c.memoryReading()
+        #expect(on.servedKeptReady == 5 * gib)
+        #expect(on.otherModels == 3 * gib)
+
+        await c.setServerEnabled(false)
+        let off = await c.memoryReading()
+        #expect(off.servedKeptReady == 0)
+        #expect(off.otherModels == 8 * gib)                               // the unpinned weights, not lost
+
+        await c.setServerEnabled(true)
+        try? await Task.sleep(for: .milliseconds(200))
+        let backOn = await c.memoryReading()
+        #expect(backOn.servedKeptReady == 5 * gib)
+        #expect(backOn.otherModels == 3 * gib)
+    }
+
     // MARK: Stats
 
     private func record(_ c: LocalServerController, model: String, ttft: Double?, tps: Double?, prompt: Int?, reused: Int?, status: Int = 200) {
