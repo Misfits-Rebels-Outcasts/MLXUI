@@ -25,6 +25,14 @@ nonisolated enum ModelSupport {
         // SeedVR2 3B → SeedVR2Engine ported in SV-AM4 (journal/2026-162).
         // Laya 0.4B (decision encoder) → LayaEngine ported in LY-4 (journal/2026-334).
         // CLM 8B (decision encoder) → CLMEngine ported in CL-4b, Run UI in CL-5 (journal/2026-341).
+        //
+        // The one live gap. CF-2 (`RSI/DelegateClefBacklog.md`): Clef Flash is a Qwen3.5-9B
+        // backbone plus a joint schema head, with no runner until CF-5b, and it shares
+        // `RunnerKind.decision` with Laya and CLM — so without this flag a Decide row offered it
+        // and `RealExecutor`'s `default:` refusal caught it. Remove when CF-5b lands.
+        Gap(
+            idFragment: "clef-flash-4bit",
+            reason: "Clef Flash's backbone + joint-head runner lands in CF-5b"),
     ]
 
     /// A human-readable reason this model can't run yet, or `nil` if it should run.

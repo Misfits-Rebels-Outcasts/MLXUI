@@ -5,7 +5,8 @@ import Testing
 /// (backlog § "Model support gaps").
 struct ModelSupportTests {
     @Test func allCatalogArchitecturesNowHaveRunners() {
-        // Every OCR / embedder architecture is now runnable — the gap list is empty:
+        // Every OCR / embedder architecture is now runnable — Clef Flash is the gap list's only
+        // entry (CF-2 in `RSI/DelegateClefBacklog.md`, pending its CF-5b runner):
         // olmOCR (Qwen2-VL), gemma VLM, MiniLM, ModernBERT (SUP-4), PaddleOCR-VL (SUP-1),
         // dots.ocr / dots.mocr (SUP-3), and DeepSeek-OCR-2 (SUP-2) all resolve to a runner.
         for id in [

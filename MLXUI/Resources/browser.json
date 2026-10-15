@@ -2363,6 +2363,37 @@
           ],
           "descriptionSource": "curated",
           "summary": "An 8B decision encoder — Laya's heavier sibling for long or varied inputs (2048 tokens per text, no option ceiling), with none of the generation ability of a chat model."
+        },
+        {
+          "id": "mlx-community--clef-flash-4bit",
+          "family": "Clef",
+          "displayName": "Clef Flash",
+          "paramSize": "9B",
+          "paramCountB": 9.4,
+          "modelType": "decision",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/clef-flash-4bit",
+          "ramGB": 9.32,
+          "downloadSizeGB": 6.21,
+          "contextWindow": 16384,
+          "license": "apache-2.0",
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 9.32,
+              "downloadSizeGB": 6.21,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/clef-flash-4bit",
+              "recommended": true
+            }
+          ]
         }
       ]
     },
