@@ -147,13 +147,20 @@ struct ClefCatalogTests {
         #expect(clef.descriptionSource == "curated")
         #expect(clef.architecture == "Qwen3.5-9B backbone (4-bit, text path) + Clef joint schema head")
         #expect(clef.taskTags == ["text-classification"])
-        #expect(clef.communityDownloads == 6039)   // else ModelDetailView and the comparison print "—"
-        #expect(clef.communityLikes == 29)
-        #expect(clef.lastUpdated == "2026-10-08")
-        // Numbers from HF `GET /api/models/mlx-community/clef-flash-4bit` (2026-10-16), saved as
-        // `RSI/notes/clef/hf/mlx-community_clef-flash-4bit/api-model.json`: downloads 6039, likes 29,
-        // lastModified 2026-10-08 and `sha` `b5adbe2c…` — unchanged since CF-1's fetch.
-        //
+        // Presence and shape, never the live values: `scripts/regenerate_catalog.py:237,242–243`
+        // rewrites `lastUpdated` / `communityDownloads` / `communityLikes` from the HF API on every
+        // regeneration, so pinning them here would redden this suite for no product reason
+        // (CF-3-FIX-1, Review CF-3 item 4). CF-3's values — 6039 / 29 / 2026-10-08, from
+        // `RSI/notes/clef/hf/mlx-community_clef-flash-4bit/api-model.json` — are in journal `2026-492`.
+        #expect((clef.communityDownloads ?? 0) > 0)   // else ModelDetailView and the comparison print "—"
+        #expect(clef.communityLikes != nil)
+        let dayFormatter = DateFormatter()
+        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dayFormatter.dateFormat = "yyyy-MM-dd"
+        dayFormatter.isLenient = false
+        #expect(dayFormatter.date(from: "not-a-date") == nil, "the yyyy-MM-dd check must have teeth")
+        #expect(clef.lastUpdated.flatMap { dayFormatter.date(from: $0) } != nil,
+                "lastUpdated must be a yyyy-MM-dd date, was \(clef.lastUpdated ?? "nil")")
         // Sanctioned nulls.
         #expect(clef.speedTokensPerSec == nil)     // prefill is not a generation rate (CF-3)
         #expect(clef.benchmarks == nil)            // the catalog has no quality table for it (CF-3)
@@ -162,6 +169,11 @@ struct ClefCatalogTests {
         #expect(summary.contains("16,384-token context"))
         let description = try #require(clef.description)
         #expect(description.hasPrefix("# Clef Flash"))
+        // CF-3-FIX-1 item 3: the summary must not lead with the joint claim — MLXUI asks one question
+        // per call, so joint scoring is the model's design, not what a user of this app gets.
+        let summaryLead = summary.split(separator: ".").first.map(String.init) ?? ""
+        #expect(!summaryLead.lowercased().contains("joint"))
+        #expect(summaryLead.contains("one question per call"))
         // CF-3's contract, verbatim, plus every content item it asks the description to carry.
         #expect(description.contains("It never generates text"))
         #expect(description.contains("16,384-token context"))
@@ -171,6 +183,12 @@ struct ClefCatalogTests {
         #expect(description.contains("7.0 GB") && description.contains("8.6 GB"))   // the 16 GB floor
         #expect(description.contains("Text only in this version"))                  // gate A1
         #expect(description.contains("b5adbe2c"))                                   // Qwen3.8 T5
+        // CF-3-FIX-1 items 1–3 (Review CF-3): the Decision Index run is the conversion's, the
+        // unsourced language clause is gone, and the joint sentence carries MLXUI's scope.
+        #expect(description.contains("The conversion's sampled Decision Index run"))
+        #expect(!description.contains("Cloudflare's sampled"))
+        #expect(!description.contains("benchmarks are English"))
+        #expect(description.contains("asks it one question per call"))
     }
 
     /// The gap's whole purpose, and the reason CF-2 is safe before CF-8: Browse lists the card,
