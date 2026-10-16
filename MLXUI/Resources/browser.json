@@ -2383,6 +2383,19 @@
           "downloadSizeGB": 6.21,
           "contextWindow": 16384,
           "license": "apache-2.0",
+          "description": "# Clef Flash\n\nClef Flash is a 9B **decision model**, not a chat model: a Qwen3.5-9B backbone (4-bit MLX, group 64) plus a small **joint schema head** that reads the backbone's final hidden states and scores every allowed option of every question in **one forward pass**. Given a state — a plain string or a JSON object — and a schema of typed questions (`choice` with named options, `score` with an ordered scale, or `noul` for yes/no), it returns one answer per question with a probability per option. **It never generates text**, so there is no chat surface for it.\n\nThis is the MLX 4-bit conversion of Cloudflare's **Clef-Flash** (`Cloudflare/clef-flash`, post-trained from `Qwen/Qwen3.5-9B`), published as `mlx-community/clef-flash-4bit` at revision `b5adbe2c`. The backbone is quantized 4-bit affine group 64; the 244 MB joint schema head is copied through unchanged in bf16, with the repo's `clef_mlx.py` as the reference for how both are run. Licensed Apache-2.0 throughout — the model (Cloudflare), the backbone (Qwen), and the MLX conversion.\n\n**Best fit:** the decider for inputs that are long or structured — an invoice with its line items, a ticket thread, a contract clause — where Laya 0.4B's 512 tokens are not enough and CLM 8B's state-against-candidates scoring is not the shape the row wants. **Honest limits:** it is a scorer over the options you declare, not a reader, and it does not compute; 'do the line items add up?' is a pattern it may or may not have learned. Its 16,384-token context is the largest of the three deciders, but the whole prompt is one prefill with no output tokens to amortise it: the repo measures 0.31 s per 1,000 prompt tokens and 7.0 s at 16k on an M5 Max, and peak memory grows with the input — about 7.0 GB at 1k and 8.6 GB at 16k, so 16 GB of Mac RAM is the practical minimum. Cloudflare's sampled Decision Index run puts this 4-bit card at 54.65 against 55.63 for bf16 on the same rows (96.4 % top-answer agreement) — about one point of quantization cost. **Text only in this version:** the checkpoint carries a vision encoder, but MLXUI loads and runs the text path only; images and video are a later phase. The card publishes no language list, and its published benchmarks are English.\n\nIts answers depend on the exact wording of the question and of the option words — test a flow's tags on real examples before relying on it. Where Laya 0.4B is the fast first pass on short inputs and CLM 8B scores a state against candidate actions one text at a time, Clef Flash decides a whole schema of typed questions jointly in a single pass.",
+          "architecture": "Qwen3.5-9B backbone (4-bit, text path) + Clef joint schema head",
+          "languages": null,
+          "lastUpdated": "2026-10-08",
+          "taskTags": [
+            "text-classification"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 6039,
+          "communityLikes": 29,
           "variants": [
             {
               "quantization": "4-bit",
@@ -2393,7 +2406,9 @@
               "hfModelId": "mlx-community/clef-flash-4bit",
               "recommended": true
             }
-          ]
+          ],
+          "descriptionSource": "curated",
+          "summary": "A 9B decision model — one forward pass over a state and a schema of typed questions answers every field jointly, with a 16,384-token context and none of the generation ability of a chat model."
         }
       ]
     },

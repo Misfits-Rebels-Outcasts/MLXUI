@@ -35,6 +35,28 @@ struct ClefCatalogTests {
             hfRepo: "RealityCat", hfModelId: "RealityCat/CLM-v0.1-8B-MLX-8bit")
     }
 
+    // MARK: - Bundled-catalog helpers
+
+    /// The shipped `browser.json`, decoded. `scripts/` and `catalog-audit/` are gitignored like
+    /// `RSI/`, so the tests read the file the app bundles, by repo-relative path (the same
+    /// convention `CatFlowChatModuleTests` uses).
+    private func bundledBrowserData() throws -> BrowserData {
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // MLXUITests
+            .deletingLastPathComponent()   // repo root
+        let data = try Data(contentsOf: repoRoot.appendingPathComponent("MLXUI/Resources/browser.json"))
+        return try JSONDecoder().decode(BrowserData.self, from: data)
+    }
+
+    private func bundledCatalog() throws -> [ModelEntry] {
+        try bundledBrowserData().domains.flatMap(\.allModels)
+    }
+
+    private func bundledClefEntry() throws -> ModelEntry {
+        try #require(bundledCatalog().first { $0.hfModelId == "mlx-community/clef-flash-4bit" },
+                     "the shipped browser.json has no Clef Flash entry")
+    }
+
     /// Shape of `RoutingTests.clmCatalogEntryDecodes`, with the CF-1 numbers
     /// (`RSI/journal/2026-490` §0: 11 files = 6,213,884,601 B → 6.21 GB; × 1.5 → 9.32 GB;
     /// `total_parameters` 9,409,813,744 from `Cloudflare/clef-flash`'s index → 9.4).
@@ -83,11 +105,7 @@ struct ClefCatalogTests {
 
     /// The entry really is in the bundled catalog's `decision` domain, after Laya and CLM.
     @Test func clefIsInTheBundledDecisionDomain() throws {
-        let repoRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // MLXUITests
-            .deletingLastPathComponent()   // repo root
-        let data = try Data(contentsOf: repoRoot.appendingPathComponent("MLXUI/Resources/browser.json"))
-        let catalog = try JSONDecoder().decode(BrowserData.self, from: data)
+        let catalog = try bundledBrowserData()
         let decision = try #require(catalog.domains.first { $0.id == "decision" })
         let ids = decision.allModels.map(\.id)
         #expect(ids == ["aac6fef--laya-mlx", "RealityCat--CLM-v0.1-8B-MLX-8bit", "mlx-community--clef-flash-4bit"])
@@ -118,16 +136,49 @@ struct ClefCatalogTests {
         #expect(variant.qualityPercent == 90)
     }
 
+    /// CF-3's done-when, as a test. `ModelDetailView` always prints `formattedDownloads()` — a "—"
+    /// when `communityDownloads` is nil — and `ComparisonTableView` renders both Speed and Downloads
+    /// as "—"; so every metadata field is pinned here, together with the three nulls the plan
+    /// sanctions (speed, benchmarks, and `languages` per CF-A0 #4).
+    @Test func clefEntryCarriesItsCuratedMetadataAndNoUnsanctionedDash() throws {
+        let clef = try bundledClefEntry()
+        // The fields the two views render, asserted before any `#require`, so a missing catalog
+        // field reports every consequence at once instead of aborting on the first.
+        #expect(clef.descriptionSource == "curated")
+        #expect(clef.architecture == "Qwen3.5-9B backbone (4-bit, text path) + Clef joint schema head")
+        #expect(clef.taskTags == ["text-classification"])
+        #expect(clef.communityDownloads == 6039)   // else ModelDetailView and the comparison print "—"
+        #expect(clef.communityLikes == 29)
+        #expect(clef.lastUpdated == "2026-10-08")
+        // Numbers from HF `GET /api/models/mlx-community/clef-flash-4bit` (2026-10-16), saved as
+        // `RSI/notes/clef/hf/mlx-community_clef-flash-4bit/api-model.json`: downloads 6039, likes 29,
+        // lastModified 2026-10-08 and `sha` `b5adbe2c…` — unchanged since CF-1's fetch.
+        //
+        // Sanctioned nulls.
+        #expect(clef.speedTokensPerSec == nil)     // prefill is not a generation rate (CF-3)
+        #expect(clef.benchmarks == nil)            // the catalog has no quality table for it (CF-3)
+        #expect(clef.languages == nil)             // neither card lists a language (CF-A0 #4)
+        let summary = try #require(clef.summary)
+        #expect(summary.contains("16,384-token context"))
+        let description = try #require(clef.description)
+        #expect(description.hasPrefix("# Clef Flash"))
+        // CF-3's contract, verbatim, plus every content item it asks the description to carry.
+        #expect(description.contains("It never generates text"))
+        #expect(description.contains("16,384-token context"))
+        #expect(description.contains("wording of the question"))
+        #expect(description.contains("Cloudflare") && description.contains("Qwen"))
+        #expect(description.contains("Laya 0.4B") && description.contains("CLM 8B"))
+        #expect(description.contains("7.0 GB") && description.contains("8.6 GB"))   // the 16 GB floor
+        #expect(description.contains("Text only in this version"))                  // gate A1
+        #expect(description.contains("b5adbe2c"))                                   // Qwen3.8 T5
+    }
+
     /// The gap's whole purpose, and the reason CF-2 is safe before CF-8: Browse lists the card,
     /// but no flow row offers it. `TaskModels.derivedModels` filters on `ModelSupport`
     /// (`FlowKit/TaskModels.swift:386`), so this holds even for a model the registry claims —
     /// which Clef is not (`noModuleClaimsClef`), so it is doubly excluded today.
     @Test func clefIsNotOfferedByClassifyGateOrScoreYet() throws {
-        let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // MLXUITests
-            .deletingLastPathComponent()   // repo root
-        let data = try Data(contentsOf: url.appendingPathComponent("MLXUI/Resources/browser.json"))
-        let catalog = try JSONDecoder().decode(BrowserData.self, from: data).domains.flatMap(\.allModels)
+        let catalog = try bundledCatalog()
         // Worst case: pretend every entry is claimable, so only the ModelSupport gap can exclude it.
         let claimable = Set(catalog.map(\.id))
         for task in ["Classify", "Gate", "Score"] {
