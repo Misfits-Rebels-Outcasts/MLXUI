@@ -2402,7 +2402,7 @@
               "format": "mlx-4bit",
               "ramGB": 9.32,
               "downloadSizeGB": 6.21,
-              "qualityPercent": 90,
+              "qualityPercent": 98,
               "hfModelId": "mlx-community/clef-flash-4bit",
               "recommended": true
             }

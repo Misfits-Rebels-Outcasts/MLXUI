@@ -130,10 +130,12 @@ struct ClefCatalogTests {
         #expect(variant.ramGB == 9.32)
         #expect(variant.downloadSizeGB == 6.21)
         #expect(variant.hfModelId == "mlx-community/clef-flash-4bit")
-        // The 4-bit convention: of the 25 `mlx-4bit` variants already in the catalog, 23 say 90
-        // (the two exceptions are Flux and sam3, at 85). Implementer's call, pending owner
-        // confirmation (journal 2026-491).
-        #expect(variant.qualityPercent == 90)
+        // Owner ruling 2026-10-17 ("go with 98", `RSI/DelegateClefBacklog.md` §Status), replacing
+        // CF-2's 90: the conversion's own sampled Decision Index puts this 4-bit card at 54.65
+        // against 55.63 for bf16 on the same rows — 54.65 / 55.63 = 98.2 % → 98. The value is
+        // informational: `qualityPercent` is declared, compared and hashed in `ModelEntry` and read
+        // by no view, so this changes no behaviour.
+        #expect(variant.qualityPercent == 98)
     }
 
     /// CF-3's done-when, as a test. `ModelDetailView` always prints `formattedDownloads()` — a "—"
