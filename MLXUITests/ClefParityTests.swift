@@ -212,9 +212,10 @@ struct ClefParityTests {
 
     /// **(a) CF-5b-FIX-1 — the deciding gate.** Twelve more records on long states — ~4k, ~8k and
     /// a truncating one — every question type. **Owner ruling 2026-10-17:** the long bar is "all labels
-    /// match, every Δp ≤ **0.04**", with `4k noul hold` recorded as the one known residual (Δp 0.0342,
-    /// reference ≈71/29, a boundary record) expected to close with `mlx-swift-lm` 3.32.x. The **short**
-    /// bar is unchanged (all labels, every Δp ≤ 0.03).
+    /// match, every Δp ≤ **0.04**". The one residual is a *distance*, not a decision: `4k noul hold`
+    /// sits at Δp 0.0342 with the reference at ≈71/29 (0.2918 vs ≈0.326) — **both sides say `false`**, so
+    /// its label agrees and no exemption is needed; the bar carries the distance, and 3.32.x is expected
+    /// to close it. The **short** bar is unchanged (all labels, every Δp ≤ 0.03).
     @Test func longAnswersMatchTheReferenceOn12Records() async throws {
         let golden = try golden("answers.json")
         let engine = try await ClefEngine.load(modelDirectory: try modelDirectory())
@@ -228,12 +229,21 @@ struct ClefParityTests {
                 + "dp=\(String(format: "%.4f", row.worst)) label=\(row.matched)")
         }
         print("CLEF-PARITY long \(summary) bands=\(bands.keys.sorted())")
-        // Ruling 2: every label matches except the one recorded residual; every Δp ≤ 0.04.
+        // Ruling 2 as corrected by Review CF-5b-FIX-4: **all** labels match, no exemptions, and the
+        // Δp ≤ 0.04 bar carries the one residual (a distance, not a decision).
         let residuals = summary.rows.filter { !$0.matched }.map { "\($0.band)/\($0.id)" }
-        #expect(residuals.isEmpty || residuals == ["4k/hold"],
-                "labels: residuals \(residuals)")
+        #expect(residuals.isEmpty, "labels: residuals \(residuals)")
         #expect(summary.withinFourHundredths == cases.count,
                 "every Δp ≤ 0.04: \(summary.withinFourHundredths)/\(cases.count), worst \(summary.worst)")
+    }
+
+    /// The option id with the largest probability — first maximum, matching `ClefAnswer`'s own tie rule.
+    private static func argmaxLevel(_ probabilities: [String: Double]) -> String? {
+        var best: (id: String, value: Double)?
+        for (id, value) in probabilities where (best.map { value > $0.value }) ?? true {
+            best = (id, value)
+        }
+        return best?.id
     }
 
     private struct AnswerRow {
@@ -270,26 +280,34 @@ struct ClefParityTests {
             let expectedProbabilities = observed["probabilities"]?.dictionaryValue?
                 .compactMapValues(\.doubleValue)
             var worst = 0.0
+            if let expectedProbabilities {
+                for (index, option) in answer.optionLabels.enumerated() {
+                    worst = max(worst, abs(answer.probabilities[index] - (expectedProbabilities[option] ?? 0)))
+                }
+            }
+
+            // A **label** is the decision the answer makes, per the review of CF-5b-FIX-4:
+            // `choice` and `score` compare the chosen level (argmax), `noul` the side of 0.5. The
+            // probability and score *distances* are checks of their own — CF-5b counted them as labels,
+            // so every noul "label" was really a Δp test until now.
             let labelMatches: Bool
             switch question.type {
             case .choice:
-                if let expectedProbabilities {
-                    for (index, option) in answer.optionLabels.enumerated() {
-                        worst = max(worst, abs(answer.probabilities[index] - (expectedProbabilities[option] ?? 0)))
-                    }
-                }
                 labelMatches = answer.choiceLabel == observed["choice"]?.stringValue
             case .score:
-                if let expectedProbabilities {
-                    for (index, option) in answer.optionLabels.enumerated() {
-                        worst = max(worst, abs(answer.probabilities[index] - (expectedProbabilities[option] ?? 0)))
-                    }
-                }
-                labelMatches = abs((answer.scoreValue ?? -1) - (observed["score"]?.doubleValue ?? -2)) <= 0.05
+                let referenceLevel = Self.argmaxLevel(expectedProbabilities ?? [:])
+                let answerLevel = Self.argmaxLevel(
+                    Dictionary(uniqueKeysWithValues: zip(answer.optionLabels, answer.probabilities)))
+                labelMatches = referenceLevel != nil && answerLevel == referenceLevel
+                // Kept as its own check, not folded into the label.
+                let expectedScore = try #require(observed["score"]?.doubleValue)
+                #expect(
+                    abs((answer.scoreValue ?? -1) - expectedScore) <= 0.05,
+                    "\(label) \(question.id): score \(answer.scoreValue ?? -1) vs \(expectedScore)")
             case .noul:
                 let expected = try #require(observed["noul"]?.doubleValue)
                 worst = abs((answer.noulProbability ?? -1) - expected)
-                labelMatches = worst <= 0.03
+                labelMatches = ((answer.noulProbability ?? -1) >= 0.5) == (expected >= 0.5)
             }
             if labelMatches { summary.labels += 1 }
             if worst <= 0.01 { summary.withinOneHundredth += 1 }
