@@ -39,6 +39,9 @@ let installedModules: [ModelModule.Type] = [
     RerankModule.self,
     LayaModule.self,
     CLMModule.self,
+    // CF-5b: Clef Flash — the third `.decision` family. After CLM because the deciders are
+    // registered in the order their pools list them (Laya first, the default).
+    ClefModule.self,
     SDXLTurboModule.self,
     FluxModule.self,
     SegmentAnythingModule.self,

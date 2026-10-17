@@ -1,0 +1,924 @@
+{
+ "model": "mlx-community/clef-flash-4bit",
+ "revision": "b5adbe2c3a95200d4bf04a0727c8ec457157d5e1",
+ "max_length": 16384,
+ "closest_margins": [
+  0.080547,
+  0.103147,
+  0.107011,
+  0.192383
+ ],
+ "cases": [
+  {
+   "state": "Customer reports a duplicate charge on the September invoice.",
+   "question": {
+    "id": "owner",
+    "type": "choice",
+    "instructions": "Who should pick it up?",
+    "criteria": {
+     "engineering": "",
+     "billing": "Payments",
+     "oncall": "On call"
+    }
+   },
+   "request": {
+    "state": "Customer reports a duplicate charge on the September invoice.",
+    "questions": {
+     "owner": {
+      "type": "choice",
+      "instructions": "Who should pick it up?",
+      "criteria": {
+       "engineering": "",
+       "billing": "Payments",
+       "oncall": "On call"
+      }
+     }
+    }
+   },
+   "observed": {
+    "type": "choice",
+    "choice": "billing",
+    "confidence": 0.8539,
+    "probabilities": {
+     "engineering": 0.0358,
+     "billing": 0.8539,
+     "oncall": 0.1103
+    }
+   },
+   "probabilities_raw": {
+    "billing": 0.8539251685142517,
+    "engineering": 0.035800740122795105,
+    "oncall": 0.1102740541100502
+   },
+   "margin": 0.7436511144042015,
+   "input_tokens": 151
+  },
+  {
+   "state": "INVOICE APX-55120\nFrom: Apex Cloud Services\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-10    Due: 2026-09-11\nPO number: PO-4388\n\nLine items:\n  1 x Annual hosting renewal, business tier   @ 4,800.00  =  4,800.00\nSubtotal: 4,800.00\nVAT 20%: 960.00\nTotal due: GBP 5,760.00\n\nIMPORTANT: we have moved banks. Please pay this invoice to our NEW account today, sort code 04-00-75, account 98112034, and do not use the details you have on file. This change was not announced by post. Payment is needed within 24 hours to avoid suspension of service.\n",
+   "question": {
+    "id": "route",
+    "type": "choice",
+    "instructions": "Which team should handle it?",
+    "criteria": {
+     "finance": "Finance",
+     "ops": "",
+     "support": "Customer support"
+    }
+   },
+   "request": {
+    "state": "INVOICE APX-55120\nFrom: Apex Cloud Services\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-10    Due: 2026-09-11\nPO number: PO-4388\n\nLine items:\n  1 x Annual hosting renewal, business tier   @ 4,800.00  =  4,800.00\nSubtotal: 4,800.00\nVAT 20%: 960.00\nTotal due: GBP 5,760.00\n\nIMPORTANT: we have moved banks. Please pay this invoice to our NEW account today, sort code 04-00-75, account 98112034, and do not use the details you have on file. This change was not announced by post. Payment is needed within 24 hours to avoid suspension of service.\n",
+    "questions": {
+     "route": {
+      "type": "choice",
+      "instructions": "Which team should handle it?",
+      "criteria": {
+       "finance": "Finance",
+       "ops": "",
+       "support": "Customer support"
+      }
+     }
+    }
+   },
+   "observed": {
+    "type": "choice",
+    "choice": "support",
+    "confidence": 0.6822,
+    "probabilities": {
+     "finance": 0.2471,
+     "ops": 0.0708,
+     "support": 0.6822
+    }
+   },
+   "probabilities_raw": {
+    "finance": 0.2470603883266449,
+    "ops": 0.07078398764133453,
+    "support": 0.6821556091308594
+   },
+   "margin": 0.4350952208042145,
+   "input_tokens": 360
+  },
+  {
+   "state": "INVOICE BL-7782\nFrom: Brightline Logistics, Unit 9 Dockside Park, Bristol BS1 6XN\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-05    Due: 2026-09-19\nPO number: PO-4502\n\nLine items:\n  3 x Pallet delivery, Bristol to Leeds     @ 280.00  =  840.00\n  1 x Tail-lift surcharge                   @  95.00  =   95.00\n  1 x Weekend handling                      @ 305.00  =  305.00\nSubtotal: 1,240.00\nVAT 20%: 284.00\nTotal due: GBP 1,704.00\n\nNote: the VAT line and the total do not follow from the subtotal (20% of 1,240.00 is 248.00, which would make the total 1,488.00).\nPay to: Brightline Logistics, sort code 30-11-62, account 11820457 (unchanged, as on file).\n",
+   "question": {
+    "id": "route",
+    "type": "choice",
+    "instructions": "Which team should handle it?",
+    "criteria": {
+     "finance": "Finance",
+     "ops": "",
+     "support": "Customer support"
+    }
+   },
+   "request": {
+    "state": "INVOICE BL-7782\nFrom: Brightline Logistics, Unit 9 Dockside Park, Bristol BS1 6XN\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-05    Due: 2026-09-19\nPO number: PO-4502\n\nLine items:\n  3 x Pallet delivery, Bristol to Leeds     @ 280.00  =  840.00\n  1 x Tail-lift surcharge                   @  95.00  =   95.00\n  1 x Weekend handling                      @ 305.00  =  305.00\nSubtotal: 1,240.00\nVAT 20%: 284.00\nTotal due: GBP 1,704.00\n\nNote: the VAT line and the total do not follow from the subtotal (20% of 1,240.00 is 248.00, which would make the total 1,488.00).\nPay to: Brightline Logistics, sort code 30-11-62, account 11820457 (unchanged, as on file).\n",
+    "questions": {
+     "route": {
+      "type": "choice",
+      "instructions": "Which team should handle it?",
+      "criteria": {
+       "finance": "Finance",
+       "ops": "",
+       "support": "Customer support"
+      }
+     }
+    }
+   },
+   "observed": {
+    "type": "choice",
+    "choice": "finance",
+    "confidence": 0.8348,
+    "probabilities": {
+     "finance": 0.8348,
+     "ops": 0.0624,
+     "support": 0.1029
+    }
+   },
+   "probabilities_raw": {
+    "finance": 0.8347500562667847,
+    "ops": 0.0623885840177536,
+    "support": 0.10286138951778412
+   },
+   "margin": 0.7318886667490005,
+   "input_tokens": 441
+  },
+  {
+   "state": "INVOICE CP-0318\nFrom: Cedar & Pine Catering, 2 Chapel Row, York YO1 7HP\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-08    Due: 2026-10-08\nPO number: (none quoted)\n\nLine items:\n  1 x Team lunch for 18, 4 September         @ 324.00  =  324.00\n  1 x Coffee and pastries, morning session   @  72.00  =   72.00\nSubtotal: 396.00\nVAT 20%: 79.20\nTotal due: GBP 475.20\n\nThe amounts add up. Our contact says the order was placed by phone, so no purchase order number was given.\nPay to: Cedar & Pine Catering, sort code 40-12-09, account 70031588 (unchanged, as on file).\n",
+   "question": {
+    "id": "route",
+    "type": "choice",
+    "instructions": "Which team should handle it?",
+    "criteria": {
+     "finance": "Finance",
+     "ops": "",
+     "support": "Customer support"
+    }
+   },
+   "request": {
+    "state": "INVOICE CP-0318\nFrom: Cedar & Pine Catering, 2 Chapel Row, York YO1 7HP\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-08    Due: 2026-10-08\nPO number: (none quoted)\n\nLine items:\n  1 x Team lunch for 18, 4 September         @ 324.00  =  324.00\n  1 x Coffee and pastries, morning session   @  72.00  =   72.00\nSubtotal: 396.00\nVAT 20%: 79.20\nTotal due: GBP 475.20\n\nThe amounts add up. Our contact says the order was placed by phone, so no purchase order number was given.\nPay to: Cedar & Pine Catering, sort code 40-12-09, account 70031588 (unchanged, as on file).\n",
+    "questions": {
+     "route": {
+      "type": "choice",
+      "instructions": "Which team should handle it?",
+      "criteria": {
+       "finance": "Finance",
+       "ops": "",
+       "support": "Customer support"
+      }
+     }
+    }
+   },
+   "observed": {
+    "type": "choice",
+    "choice": "finance",
+    "confidence": 0.8645,
+    "probabilities": {
+     "finance": 0.8645,
+     "ops": 0.0688,
+     "support": 0.0667
+    }
+   },
+   "probabilities_raw": {
+    "finance": 0.8645498752593994,
+    "ops": 0.06878316402435303,
+    "support": 0.06666693091392517
+   },
+   "margin": 0.7957667112350464,
+   "input_tokens": 385
+  },
+  {
+   "state": "INVOICE HP-1190\nFrom: Harbor Print Co, 51 Quay Street, Hull HU1 1RA\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-12    Due: 2026-10-12\nPO number: PO-4519\n\nLine items:\n  500 x Business cards, two-sided   @ 0.12  =   60.00\n  200 x A5 flyers, gloss            @ 0.45  =   90.00\nSubtotal: 150.00\nVAT 20%: 30.00\nTotal due: GBP 180.00\n\nPay to: Harbor Print Co, sort code 60-83-71, account 22904417 (unchanged, as on file).\n",
+   "question": {
+    "id": "route",
+    "type": "choice",
+    "instructions": "Which team should handle it?",
+    "criteria": {
+     "finance": "Finance",
+     "ops": "",
+     "support": "Customer support"
+    }
+   },
+   "request": {
+    "state": "INVOICE HP-1190\nFrom: Harbor Print Co, 51 Quay Street, Hull HU1 1RA\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-12    Due: 2026-10-12\nPO number: PO-4519\n\nLine items:\n  500 x Business cards, two-sided   @ 0.12  =   60.00\n  200 x A5 flyers, gloss            @ 0.45  =   90.00\nSubtotal: 150.00\nVAT 20%: 30.00\nTotal due: GBP 180.00\n\nPay to: Harbor Print Co, sort code 60-83-71, account 22904417 (unchanged, as on file).\n",
+    "questions": {
+     "route": {
+      "type": "choice",
+      "instructions": "Which team should handle it?",
+      "criteria": {
+       "finance": "Finance",
+       "ops": "",
+       "support": "Customer support"
+      }
+     }
+    }
+   },
+   "observed": {
+    "type": "choice",
+    "choice": "finance",
+    "confidence": 0.9506,
+    "probabilities": {
+     "finance": 0.9506,
+     "ops": 0.0289,
+     "support": 0.0205
+    }
+   },
+   "probabilities_raw": {
+    "finance": 0.9505565166473389,
+    "ops": 0.028929447755217552,
+    "support": 0.020514050498604774
+   },
+   "margin": 0.9216270688921213,
+   "input_tokens": 352
+  },
+  {
+   "state": "INVOICE NW-20931\nFrom: Northwind Office Supply, 14 Mill Lane, Leeds LS1 4AB\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-02    Due: 2026-10-02\nPO number: PO-4471\n\nLine items:\n  12 x A4 copier paper, box of 5 reams   @ 28.50  =  342.00\n   4 x Toner cartridge, black (TN-2420)  @ 61.00  =  244.00\n   1 x Desk organiser set                @ 34.00  =   34.00\nSubtotal: 620.00\nVAT 20%: 124.00\nTotal due: GBP 744.00\n\nPay to: Northwind Office Supply, sort code 20-45-77, account 43917260 (unchanged, as on file).\n",
+   "question": {
+    "id": "route",
+    "type": "choice",
+    "instructions": "Which team should handle it?",
+    "criteria": {
+     "finance": "Finance",
+     "ops": "",
+     "support": "Customer support"
+    }
+   },
+   "request": {
+    "state": "INVOICE NW-20931\nFrom: Northwind Office Supply, 14 Mill Lane, Leeds LS1 4AB\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-02    Due: 2026-10-02\nPO number: PO-4471\n\nLine items:\n  12 x A4 copier paper, box of 5 reams   @ 28.50  =  342.00\n   4 x Toner cartridge, black (TN-2420)  @ 61.00  =  244.00\n   1 x Desk organiser set                @ 34.00  =   34.00\nSubtotal: 620.00\nVAT 20%: 124.00\nTotal due: GBP 744.00\n\nPay to: Northwind Office Supply, sort code 20-45-77, account 43917260 (unchanged, as on file).\n",
+    "questions": {
+     "route": {
+      "type": "choice",
+      "instructions": "Which team should handle it?",
+      "criteria": {
+       "finance": "Finance",
+       "ops": "",
+       "support": "Customer support"
+      }
+     }
+    }
+   },
+   "observed": {
+    "type": "choice",
+    "choice": "finance",
+    "confidence": 0.9166,
+    "probabilities": {
+     "finance": 0.9166,
+     "ops": 0.0449,
+     "support": 0.0384
+    }
+   },
+   "probabilities_raw": {
+    "finance": 0.91664057970047,
+    "ops": 0.044929321855306625,
+    "support": 0.03843007981777191
+   },
+   "margin": 0.8717112578451633,
+   "input_tokens": 397
+  },
+  {
+   "state": "Our webhook endpoint is timing out; retries are piling up.",
+   "question": {
+    "id": "owner",
+    "type": "choice",
+    "instructions": "Who should pick it up?",
+    "criteria": {
+     "engineering": "",
+     "billing": "Payments",
+     "oncall": "On call"
+    }
+   },
+   "request": {
+    "state": "Our webhook endpoint is timing out; retries are piling up.",
+    "questions": {
+     "owner": {
+      "type": "choice",
+      "instructions": "Who should pick it up?",
+      "criteria": {
+       "engineering": "",
+       "billing": "Payments",
+       "oncall": "On call"
+      }
+     }
+    }
+   },
+   "observed": {
+    "type": "choice",
+    "choice": "engineering",
+    "confidence": 0.4897,
+    "probabilities": {
+     "engineering": 0.4897,
+     "billing": 0.1011,
+     "oncall": 0.4092
+    }
+   },
+   "probabilities_raw": {
+    "billing": 0.10106389224529266,
+    "engineering": 0.48974162340164185,
+    "oncall": 0.4091944396495819
+   },
+   "margin": 0.08054718375205994,
+   "input_tokens": 154
+  },
+  {
+   "state": "The mobile app crashes on launch for iOS 26 users.",
+   "question": {
+    "id": "owner",
+    "type": "choice",
+    "instructions": "Who should pick it up?",
+    "criteria": {
+     "engineering": "",
+     "billing": "Payments",
+     "oncall": "On call"
+    }
+   },
+   "request": {
+    "state": "The mobile app crashes on launch for iOS 26 users.",
+    "questions": {
+     "owner": {
+      "type": "choice",
+      "instructions": "Who should pick it up?",
+      "criteria": {
+       "engineering": "",
+       "billing": "Payments",
+       "oncall": "On call"
+      }
+     }
+    }
+   },
+   "observed": {
+    "type": "choice",
+    "choice": "engineering",
+    "confidence": 0.8096,
+    "probabilities": {
+     "engineering": 0.8096,
+     "billing": 0.0429,
+     "oncall": 0.1474
+    }
+   },
+   "probabilities_raw": {
+    "billing": 0.04290953651070595,
+    "engineering": 0.8096434473991394,
+    "oncall": 0.14744703471660614
+   },
+   "margin": 0.6621964126825333,
+   "input_tokens": 154
+  },
+  {
+   "state": "The nightly export has failed three nights running and the dashboard is empty.",
+   "question": {
+    "id": "owner",
+    "type": "choice",
+    "instructions": "Who should pick it up?",
+    "criteria": {
+     "engineering": "",
+     "billing": "Payments",
+     "oncall": "On call"
+    }
+   },
+   "request": {
+    "state": "The nightly export has failed three nights running and the dashboard is empty.",
+    "questions": {
+     "owner": {
+      "type": "choice",
+      "instructions": "Who should pick it up?",
+      "criteria": {
+       "engineering": "",
+       "billing": "Payments",
+       "oncall": "On call"
+      }
+     }
+    }
+   },
+   "observed": {
+    "type": "choice",
+    "choice": "oncall",
+    "confidence": 0.8471,
+    "probabilities": {
+     "engineering": 0.124,
+     "billing": 0.029,
+     "oncall": 0.8471
+    }
+   },
+   "probabilities_raw": {
+    "billing": 0.028984883800148964,
+    "engineering": 0.12395263463258743,
+    "oncall": 0.8470624685287476
+   },
+   "margin": 0.7231098338961601,
+   "input_tokens": 155
+  },
+  {
+   "state": "Customer reports a duplicate charge on the September invoice.",
+   "question": {
+    "id": "urgent",
+    "type": "noul",
+    "instructions": "Does this need attention today?"
+   },
+   "request": {
+    "state": "Customer reports a duplicate charge on the September invoice.",
+    "questions": {
+     "urgent": {
+      "type": "noul",
+      "instructions": "Does this need attention today?"
+     }
+    }
+   },
+   "observed": {
+    "type": "noul",
+    "noul": 0.627
+   },
+   "probabilities_raw": {
+    "true": 0.6270381808280945,
+    "false": 0.3729618489742279
+   },
+   "margin": 0.2540763318538666,
+   "input_tokens": 152
+  },
+  {
+   "state": "INVOICE APX-55120\nFrom: Apex Cloud Services\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-10    Due: 2026-09-11\nPO number: PO-4388\n\nLine items:\n  1 x Annual hosting renewal, business tier   @ 4,800.00  =  4,800.00\nSubtotal: 4,800.00\nVAT 20%: 960.00\nTotal due: GBP 5,760.00\n\nIMPORTANT: we have moved banks. Please pay this invoice to our NEW account today, sort code 04-00-75, account 98112034, and do not use the details you have on file. This change was not announced by post. Payment is needed within 24 hours to avoid suspension of service.\n",
+   "question": {
+    "id": "payable",
+    "type": "noul",
+    "instructions": "Is this invoice payable?"
+   },
+   "request": {
+    "state": "INVOICE APX-55120\nFrom: Apex Cloud Services\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-10    Due: 2026-09-11\nPO number: PO-4388\n\nLine items:\n  1 x Annual hosting renewal, business tier   @ 4,800.00  =  4,800.00\nSubtotal: 4,800.00\nVAT 20%: 960.00\nTotal due: GBP 5,760.00\n\nIMPORTANT: we have moved banks. Please pay this invoice to our NEW account today, sort code 04-00-75, account 98112034, and do not use the details you have on file. This change was not announced by post. Payment is needed within 24 hours to avoid suspension of service.\n",
+    "questions": {
+     "payable": {
+      "type": "noul",
+      "instructions": "Is this invoice payable?"
+     }
+    }
+   },
+   "observed": {
+    "type": "noul",
+    "noul": 0.038
+   },
+   "probabilities_raw": {
+    "true": 0.03803509473800659,
+    "false": 0.9619649052619934
+   },
+   "margin": 0.9239298105239868,
+   "input_tokens": 361
+  },
+  {
+   "state": "INVOICE BL-7782\nFrom: Brightline Logistics, Unit 9 Dockside Park, Bristol BS1 6XN\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-05    Due: 2026-09-19\nPO number: PO-4502\n\nLine items:\n  3 x Pallet delivery, Bristol to Leeds     @ 280.00  =  840.00\n  1 x Tail-lift surcharge                   @  95.00  =   95.00\n  1 x Weekend handling                      @ 305.00  =  305.00\nSubtotal: 1,240.00\nVAT 20%: 284.00\nTotal due: GBP 1,704.00\n\nNote: the VAT line and the total do not follow from the subtotal (20% of 1,240.00 is 248.00, which would make the total 1,488.00).\nPay to: Brightline Logistics, sort code 30-11-62, account 11820457 (unchanged, as on file).\n",
+   "question": {
+    "id": "payable",
+    "type": "noul",
+    "instructions": "Is this invoice payable?"
+   },
+   "request": {
+    "state": "INVOICE BL-7782\nFrom: Brightline Logistics, Unit 9 Dockside Park, Bristol BS1 6XN\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-05    Due: 2026-09-19\nPO number: PO-4502\n\nLine items:\n  3 x Pallet delivery, Bristol to Leeds     @ 280.00  =  840.00\n  1 x Tail-lift surcharge                   @  95.00  =   95.00\n  1 x Weekend handling                      @ 305.00  =  305.00\nSubtotal: 1,240.00\nVAT 20%: 284.00\nTotal due: GBP 1,704.00\n\nNote: the VAT line and the total do not follow from the subtotal (20% of 1,240.00 is 248.00, which would make the total 1,488.00).\nPay to: Brightline Logistics, sort code 30-11-62, account 11820457 (unchanged, as on file).\n",
+    "questions": {
+     "payable": {
+      "type": "noul",
+      "instructions": "Is this invoice payable?"
+     }
+    }
+   },
+   "observed": {
+    "type": "noul",
+    "noul": 0.4484
+   },
+   "probabilities_raw": {
+    "true": 0.4484262764453888,
+    "false": 0.5515737533569336
+   },
+   "margin": 0.1031474769115448,
+   "input_tokens": 442
+  },
+  {
+   "state": "INVOICE CP-0318\nFrom: Cedar & Pine Catering, 2 Chapel Row, York YO1 7HP\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-08    Due: 2026-10-08\nPO number: (none quoted)\n\nLine items:\n  1 x Team lunch for 18, 4 September         @ 324.00  =  324.00\n  1 x Coffee and pastries, morning session   @  72.00  =   72.00\nSubtotal: 396.00\nVAT 20%: 79.20\nTotal due: GBP 475.20\n\nThe amounts add up. Our contact says the order was placed by phone, so no purchase order number was given.\nPay to: Cedar & Pine Catering, sort code 40-12-09, account 70031588 (unchanged, as on file).\n",
+   "question": {
+    "id": "payable",
+    "type": "noul",
+    "instructions": "Is this invoice payable?"
+   },
+   "request": {
+    "state": "INVOICE CP-0318\nFrom: Cedar & Pine Catering, 2 Chapel Row, York YO1 7HP\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-08    Due: 2026-10-08\nPO number: (none quoted)\n\nLine items:\n  1 x Team lunch for 18, 4 September         @ 324.00  =  324.00\n  1 x Coffee and pastries, morning session   @  72.00  =   72.00\nSubtotal: 396.00\nVAT 20%: 79.20\nTotal due: GBP 475.20\n\nThe amounts add up. Our contact says the order was placed by phone, so no purchase order number was given.\nPay to: Cedar & Pine Catering, sort code 40-12-09, account 70031588 (unchanged, as on file).\n",
+    "questions": {
+     "payable": {
+      "type": "noul",
+      "instructions": "Is this invoice payable?"
+     }
+    }
+   },
+   "observed": {
+    "type": "noul",
+    "noul": 0.9305
+   },
+   "probabilities_raw": {
+    "true": 0.9304582476615906,
+    "false": 0.06954174488782883
+   },
+   "margin": 0.8609165027737617,
+   "input_tokens": 386
+  },
+  {
+   "state": "INVOICE HP-1190\nFrom: Harbor Print Co, 51 Quay Street, Hull HU1 1RA\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-12    Due: 2026-10-12\nPO number: PO-4519\n\nLine items:\n  500 x Business cards, two-sided   @ 0.12  =   60.00\n  200 x A5 flyers, gloss            @ 0.45  =   90.00\nSubtotal: 150.00\nVAT 20%: 30.00\nTotal due: GBP 180.00\n\nPay to: Harbor Print Co, sort code 60-83-71, account 22904417 (unchanged, as on file).\n",
+   "question": {
+    "id": "payable",
+    "type": "noul",
+    "instructions": "Is this invoice payable?"
+   },
+   "request": {
+    "state": "INVOICE HP-1190\nFrom: Harbor Print Co, 51 Quay Street, Hull HU1 1RA\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-12    Due: 2026-10-12\nPO number: PO-4519\n\nLine items:\n  500 x Business cards, two-sided   @ 0.12  =   60.00\n  200 x A5 flyers, gloss            @ 0.45  =   90.00\nSubtotal: 150.00\nVAT 20%: 30.00\nTotal due: GBP 180.00\n\nPay to: Harbor Print Co, sort code 60-83-71, account 22904417 (unchanged, as on file).\n",
+    "questions": {
+     "payable": {
+      "type": "noul",
+      "instructions": "Is this invoice payable?"
+     }
+    }
+   },
+   "observed": {
+    "type": "noul",
+    "noul": 0.9344
+   },
+   "probabilities_raw": {
+    "true": 0.9343951344490051,
+    "false": 0.06560484319925308
+   },
+   "margin": 0.868790291249752,
+   "input_tokens": 353
+  },
+  {
+   "state": "INVOICE NW-20931\nFrom: Northwind Office Supply, 14 Mill Lane, Leeds LS1 4AB\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-02    Due: 2026-10-02\nPO number: PO-4471\n\nLine items:\n  12 x A4 copier paper, box of 5 reams   @ 28.50  =  342.00\n   4 x Toner cartridge, black (TN-2420)  @ 61.00  =  244.00\n   1 x Desk organiser set                @ 34.00  =   34.00\nSubtotal: 620.00\nVAT 20%: 124.00\nTotal due: GBP 744.00\n\nPay to: Northwind Office Supply, sort code 20-45-77, account 43917260 (unchanged, as on file).\n",
+   "question": {
+    "id": "payable",
+    "type": "noul",
+    "instructions": "Is this invoice payable?"
+   },
+   "request": {
+    "state": "INVOICE NW-20931\nFrom: Northwind Office Supply, 14 Mill Lane, Leeds LS1 4AB\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-02    Due: 2026-10-02\nPO number: PO-4471\n\nLine items:\n  12 x A4 copier paper, box of 5 reams   @ 28.50  =  342.00\n   4 x Toner cartridge, black (TN-2420)  @ 61.00  =  244.00\n   1 x Desk organiser set                @ 34.00  =   34.00\nSubtotal: 620.00\nVAT 20%: 124.00\nTotal due: GBP 744.00\n\nPay to: Northwind Office Supply, sort code 20-45-77, account 43917260 (unchanged, as on file).\n",
+    "questions": {
+     "payable": {
+      "type": "noul",
+      "instructions": "Is this invoice payable?"
+     }
+    }
+   },
+   "observed": {
+    "type": "noul",
+    "noul": 0.9381
+   },
+   "probabilities_raw": {
+    "true": 0.9381240010261536,
+    "false": 0.06187599524855614
+   },
+   "margin": 0.8762480057775974,
+   "input_tokens": 398
+  },
+  {
+   "state": "Our webhook endpoint is timing out; retries are piling up.",
+   "question": {
+    "id": "urgent",
+    "type": "noul",
+    "instructions": "Does this need attention today?"
+   },
+   "request": {
+    "state": "Our webhook endpoint is timing out; retries are piling up.",
+    "questions": {
+     "urgent": {
+      "type": "noul",
+      "instructions": "Does this need attention today?"
+     }
+    }
+   },
+   "observed": {
+    "type": "noul",
+    "noul": 0.906
+   },
+   "probabilities_raw": {
+    "true": 0.9059898257255554,
+    "false": 0.09401018917560577
+   },
+   "margin": 0.8119796365499496,
+   "input_tokens": 155
+  },
+  {
+   "state": "The API returned 500s for about ten minutes this morning.",
+   "question": {
+    "id": "urgent",
+    "type": "noul",
+    "instructions": "Does this need attention today?"
+   },
+   "request": {
+    "state": "The API returned 500s for about ten minutes this morning.",
+    "questions": {
+     "urgent": {
+      "type": "noul",
+      "instructions": "Does this need attention today?"
+     }
+    }
+   },
+   "observed": {
+    "type": "noul",
+    "noul": 0.4465
+   },
+   "probabilities_raw": {
+    "true": 0.4464946985244751,
+    "false": 0.5535053014755249
+   },
+   "margin": 0.1070106029510498,
+   "input_tokens": 157
+  },
+  {
+   "state": "The mobile app crashes on launch for iOS 26 users.",
+   "question": {
+    "id": "urgent",
+    "type": "noul",
+    "instructions": "Does this need attention today?"
+   },
+   "request": {
+    "state": "The mobile app crashes on launch for iOS 26 users.",
+    "questions": {
+     "urgent": {
+      "type": "noul",
+      "instructions": "Does this need attention today?"
+     }
+    }
+   },
+   "observed": {
+    "type": "noul",
+    "noul": 0.0866
+   },
+   "probabilities_raw": {
+    "true": 0.08663207292556763,
+    "false": 0.9133678674697876
+   },
+   "margin": 0.82673579454422,
+   "input_tokens": 155
+  },
+  {
+   "state": "The nightly export has failed three nights running and the dashboard is empty.",
+   "question": {
+    "id": "urgent",
+    "type": "noul",
+    "instructions": "Does this need attention today?"
+   },
+   "request": {
+    "state": "The nightly export has failed three nights running and the dashboard is empty.",
+    "questions": {
+     "urgent": {
+      "type": "noul",
+      "instructions": "Does this need attention today?"
+     }
+    }
+   },
+   "observed": {
+    "type": "noul",
+    "noul": 0.9363
+   },
+   "probabilities_raw": {
+    "true": 0.9362850189208984,
+    "false": 0.06371500343084335
+   },
+   "margin": 0.8725700154900551,
+   "input_tokens": 156
+  },
+  {
+   "state": "INVOICE APX-55120\nFrom: Apex Cloud Services\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-10    Due: 2026-09-11\nPO number: PO-4388\n\nLine items:\n  1 x Annual hosting renewal, business tier   @ 4,800.00  =  4,800.00\nSubtotal: 4,800.00\nVAT 20%: 960.00\nTotal due: GBP 5,760.00\n\nIMPORTANT: we have moved banks. Please pay this invoice to our NEW account today, sort code 04-00-75, account 98112034, and do not use the details you have on file. This change was not announced by post. Payment is needed within 24 hours to avoid suspension of service.\n",
+   "question": {
+    "id": "urgency",
+    "type": "score",
+    "instructions": "How urgent is it?",
+    "criteria": [
+     "Can wait",
+     "This week",
+     "Today"
+    ]
+   },
+   "request": {
+    "state": "INVOICE APX-55120\nFrom: Apex Cloud Services\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-10    Due: 2026-09-11\nPO number: PO-4388\n\nLine items:\n  1 x Annual hosting renewal, business tier   @ 4,800.00  =  4,800.00\nSubtotal: 4,800.00\nVAT 20%: 960.00\nTotal due: GBP 5,760.00\n\nIMPORTANT: we have moved banks. Please pay this invoice to our NEW account today, sort code 04-00-75, account 98112034, and do not use the details you have on file. This change was not announced by post. Payment is needed within 24 hours to avoid suspension of service.\n",
+    "questions": {
+     "urgency": {
+      "type": "score",
+      "instructions": "How urgent is it?",
+      "criteria": [
+       "Can wait",
+       "This week",
+       "Today"
+      ]
+     }
+    }
+   },
+   "observed": {
+    "type": "score",
+    "score": 1.8862,
+    "confidence": 0.9253,
+    "legend": {
+     "0": "Can wait",
+     "1": "This week",
+     "2": "Today"
+    },
+    "probabilities": {
+     "0": 0.0391,
+     "1": 0.0356,
+     "2": 0.9253
+    }
+   },
+   "probabilities_raw": {
+    "0": 0.03909754380583763,
+    "1": 0.03559872508049011,
+    "2": 0.9253038167953491
+   },
+   "margin": 0.8862062729895115,
+   "input_tokens": 362
+  },
+  {
+   "state": "INVOICE BL-7782\nFrom: Brightline Logistics, Unit 9 Dockside Park, Bristol BS1 6XN\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-05    Due: 2026-09-19\nPO number: PO-4502\n\nLine items:\n  3 x Pallet delivery, Bristol to Leeds     @ 280.00  =  840.00\n  1 x Tail-lift surcharge                   @  95.00  =   95.00\n  1 x Weekend handling                      @ 305.00  =  305.00\nSubtotal: 1,240.00\nVAT 20%: 284.00\nTotal due: GBP 1,704.00\n\nNote: the VAT line and the total do not follow from the subtotal (20% of 1,240.00 is 248.00, which would make the total 1,488.00).\nPay to: Brightline Logistics, sort code 30-11-62, account 11820457 (unchanged, as on file).\n",
+   "question": {
+    "id": "urgency",
+    "type": "score",
+    "instructions": "How urgent is it?",
+    "criteria": [
+     "Can wait",
+     "This week",
+     "Today"
+    ]
+   },
+   "request": {
+    "state": "INVOICE BL-7782\nFrom: Brightline Logistics, Unit 9 Dockside Park, Bristol BS1 6XN\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-05    Due: 2026-09-19\nPO number: PO-4502\n\nLine items:\n  3 x Pallet delivery, Bristol to Leeds     @ 280.00  =  840.00\n  1 x Tail-lift surcharge                   @  95.00  =   95.00\n  1 x Weekend handling                      @ 305.00  =  305.00\nSubtotal: 1,240.00\nVAT 20%: 284.00\nTotal due: GBP 1,704.00\n\nNote: the VAT line and the total do not follow from the subtotal (20% of 1,240.00 is 248.00, which would make the total 1,488.00).\nPay to: Brightline Logistics, sort code 30-11-62, account 11820457 (unchanged, as on file).\n",
+    "questions": {
+     "urgency": {
+      "type": "score",
+      "instructions": "How urgent is it?",
+      "criteria": [
+       "Can wait",
+       "This week",
+       "Today"
+      ]
+     }
+    }
+   },
+   "observed": {
+    "type": "score",
+    "score": 0.7928,
+    "confidence": 0.6583,
+    "legend": {
+     "0": "Can wait",
+     "1": "This week",
+     "2": "Today"
+    },
+    "probabilities": {
+     "0": 0.2744,
+     "1": 0.6583,
+     "2": 0.0673
+    }
+   },
+   "probabilities_raw": {
+    "0": 0.2744285464286804,
+    "1": 0.658319890499115,
+    "2": 0.06725162267684937
+   },
+   "margin": 0.38389134407043457,
+   "input_tokens": 443
+  },
+  {
+   "state": "INVOICE CP-0318\nFrom: Cedar & Pine Catering, 2 Chapel Row, York YO1 7HP\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-08    Due: 2026-10-08\nPO number: (none quoted)\n\nLine items:\n  1 x Team lunch for 18, 4 September         @ 324.00  =  324.00\n  1 x Coffee and pastries, morning session   @  72.00  =   72.00\nSubtotal: 396.00\nVAT 20%: 79.20\nTotal due: GBP 475.20\n\nThe amounts add up. Our contact says the order was placed by phone, so no purchase order number was given.\nPay to: Cedar & Pine Catering, sort code 40-12-09, account 70031588 (unchanged, as on file).\n",
+   "question": {
+    "id": "urgency",
+    "type": "score",
+    "instructions": "How urgent is it?",
+    "criteria": [
+     "Can wait",
+     "This week",
+     "Today"
+    ]
+   },
+   "request": {
+    "state": "INVOICE CP-0318\nFrom: Cedar & Pine Catering, 2 Chapel Row, York YO1 7HP\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-08    Due: 2026-10-08\nPO number: (none quoted)\n\nLine items:\n  1 x Team lunch for 18, 4 September         @ 324.00  =  324.00\n  1 x Coffee and pastries, morning session   @  72.00  =   72.00\nSubtotal: 396.00\nVAT 20%: 79.20\nTotal due: GBP 475.20\n\nThe amounts add up. Our contact says the order was placed by phone, so no purchase order number was given.\nPay to: Cedar & Pine Catering, sort code 40-12-09, account 70031588 (unchanged, as on file).\n",
+    "questions": {
+     "urgency": {
+      "type": "score",
+      "instructions": "How urgent is it?",
+      "criteria": [
+       "Can wait",
+       "This week",
+       "Today"
+      ]
+     }
+    }
+   },
+   "observed": {
+    "type": "score",
+    "score": 0.3054,
+    "confidence": 0.7502,
+    "legend": {
+     "0": "Can wait",
+     "1": "This week",
+     "2": "Today"
+    },
+    "probabilities": {
+     "0": 0.7502,
+     "1": 0.1942,
+     "2": 0.0556
+    }
+   },
+   "probabilities_raw": {
+    "0": 0.7501913905143738,
+    "1": 0.19417618215084076,
+    "2": 0.05563240498304367
+   },
+   "margin": 0.556015208363533,
+   "input_tokens": 387
+  },
+  {
+   "state": "INVOICE HP-1190\nFrom: Harbor Print Co, 51 Quay Street, Hull HU1 1RA\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-12    Due: 2026-10-12\nPO number: PO-4519\n\nLine items:\n  500 x Business cards, two-sided   @ 0.12  =   60.00\n  200 x A5 flyers, gloss            @ 0.45  =   90.00\nSubtotal: 150.00\nVAT 20%: 30.00\nTotal due: GBP 180.00\n\nPay to: Harbor Print Co, sort code 60-83-71, account 22904417 (unchanged, as on file).\n",
+   "question": {
+    "id": "urgency",
+    "type": "score",
+    "instructions": "How urgent is it?",
+    "criteria": [
+     "Can wait",
+     "This week",
+     "Today"
+    ]
+   },
+   "request": {
+    "state": "INVOICE HP-1190\nFrom: Harbor Print Co, 51 Quay Street, Hull HU1 1RA\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-12    Due: 2026-10-12\nPO number: PO-4519\n\nLine items:\n  500 x Business cards, two-sided   @ 0.12  =   60.00\n  200 x A5 flyers, gloss            @ 0.45  =   90.00\nSubtotal: 150.00\nVAT 20%: 30.00\nTotal due: GBP 180.00\n\nPay to: Harbor Print Co, sort code 60-83-71, account 22904417 (unchanged, as on file).\n",
+    "questions": {
+     "urgency": {
+      "type": "score",
+      "instructions": "How urgent is it?",
+      "criteria": [
+       "Can wait",
+       "This week",
+       "Today"
+      ]
+     }
+    }
+   },
+   "observed": {
+    "type": "score",
+    "score": 0.2462,
+    "confidence": 0.8032,
+    "legend": {
+     "0": "Can wait",
+     "1": "This week",
+     "2": "Today"
+    },
+    "probabilities": {
+     "0": 0.8032,
+     "1": 0.1474,
+     "2": 0.0494
+    }
+   },
+   "probabilities_raw": {
+    "0": 0.8031994700431824,
+    "1": 0.147420734167099,
+    "2": 0.04937976598739624
+   },
+   "margin": 0.6557787358760834,
+   "input_tokens": 354
+  },
+  {
+   "state": "INVOICE NW-20931\nFrom: Northwind Office Supply, 14 Mill Lane, Leeds LS1 4AB\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-02    Due: 2026-10-02\nPO number: PO-4471\n\nLine items:\n  12 x A4 copier paper, box of 5 reams   @ 28.50  =  342.00\n   4 x Toner cartridge, black (TN-2420)  @ 61.00  =  244.00\n   1 x Desk organiser set                @ 34.00  =   34.00\nSubtotal: 620.00\nVAT 20%: 124.00\nTotal due: GBP 744.00\n\nPay to: Northwind Office Supply, sort code 20-45-77, account 43917260 (unchanged, as on file).\n",
+   "question": {
+    "id": "urgency",
+    "type": "score",
+    "instructions": "How urgent is it?",
+    "criteria": [
+     "Can wait",
+     "This week",
+     "Today"
+    ]
+   },
+   "request": {
+    "state": "INVOICE NW-20931\nFrom: Northwind Office Supply, 14 Mill Lane, Leeds LS1 4AB\nTo: Accounts Payable, Harbourview Studio Ltd\nDate: 2026-09-02    Due: 2026-10-02\nPO number: PO-4471\n\nLine items:\n  12 x A4 copier paper, box of 5 reams   @ 28.50  =  342.00\n   4 x Toner cartridge, black (TN-2420)  @ 61.00  =  244.00\n   1 x Desk organiser set                @ 34.00  =   34.00\nSubtotal: 620.00\nVAT 20%: 124.00\nTotal due: GBP 744.00\n\nPay to: Northwind Office Supply, sort code 20-45-77, account 43917260 (unchanged, as on file).\n",
+    "questions": {
+     "urgency": {
+      "type": "score",
+      "instructions": "How urgent is it?",
+      "criteria": [
+       "Can wait",
+       "This week",
+       "Today"
+      ]
+     }
+    }
+   },
+   "observed": {
+    "type": "score",
+    "score": 0.5155,
+    "confidence": 0.559,
+    "legend": {
+     "0": "Can wait",
+     "1": "This week",
+     "2": "Today"
+    },
+    "probabilities": {
+     "0": 0.559,
+     "1": 0.3666,
+     "2": 0.0745
+    }
+   },
+   "probabilities_raw": {
+    "0": 0.5589548945426941,
+    "1": 0.3665715754032135,
+    "2": 0.0744735449552536
+   },
+   "margin": 0.1923833191394806,
+   "input_tokens": 399
+  }
+ ]
+}

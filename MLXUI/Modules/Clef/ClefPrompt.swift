@@ -398,6 +398,12 @@ nonisolated struct ClefRequest: Equatable, Sendable {
     /// **Request order** — Python dict order, which is the FIELD numbering (`:191`).
     let questions: [ClefQuestion]
 
+    /// The engine's own entry point (no JSON round trip): a decoded state and typed questions.
+    init(state: ClefJSON, questions: [ClefQuestion]) {
+        self.state = state
+        self.questions = questions
+    }
+
     /// The `questions` object's document order is the port's FIELD order, so this cannot go
     /// through `[String: Any]`.
     init(json: ClefJSON) throws {

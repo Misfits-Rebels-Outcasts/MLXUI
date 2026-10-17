@@ -588,17 +588,21 @@ struct CatFlowCatalogBridgeTests {
     /// 0.4B"` (gate D — CLM joins the pool but is never the default), and CLM is a member of
     /// each derived pool, **last**.
     @MainActor
-    @Test func clmIsLastInEachDerivedPoolWhileLayaStaysTheDefault() throws {
+    /// Gate C1 as ruled (`RSI/DelegateClefBacklog.md` CF-0): the decider pools are Laya first (the
+    /// default), then the language models, then `CLM 8B`, then `Clef Flash` last. CF-5b put Clef in
+    /// the pool, so this test now pins the **whole** tail order rather than CLM's position alone.
+    @Test func clefIsLastInEachDerivedPoolWhileLayaStaysTheDefault() throws {
         let catalog = try loadCatalog()
         let registry = ModelRegistry()
         for module in installedModules { module.register(into: registry) }
         let claimable = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
         for task in ["Classify", "Gate", "Score"] {
             #expect(TaskModels.defaultModel(forTask: task, catalog: catalog, claimableModelIDs: claimable) == "Laya 0.4B",
-                    "\(task) should still default to Laya 0.4B, unchanged by CLM joining")
+                    "\(task) should still default to Laya 0.4B, unchanged by the deciders joining")
             let derived = TaskModels.derivedModels(for: task, catalog: catalog, claimableModelIDs: claimable)
-            #expect(derived.last?.modelEntry?.hfModelId == "RealityCat/CLM-v0.1-8B-MLX-8bit",
-                    "\(task)'s derived pool should end with CLM 8B")
+            let tail = derived.suffix(2).compactMap { $0.modelEntry?.hfModelId }
+            #expect(tail == ["RealityCat/CLM-v0.1-8B-MLX-8bit", "mlx-community/clef-flash-4bit"],
+                    "\(task)'s derived pool should end with CLM 8B then Clef Flash, got \(tail)")
         }
     }
 

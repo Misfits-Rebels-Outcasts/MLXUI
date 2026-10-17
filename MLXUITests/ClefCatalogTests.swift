@@ -197,40 +197,52 @@ struct ClefCatalogTests {
     /// but no flow row offers it. `TaskModels.derivedModels` filters on `ModelSupport`
     /// (`FlowKit/TaskModels.swift:386`), so this holds even for a model the registry claims —
     /// which Clef is not (`noModuleClaimsClef`), so it is doubly excluded today.
-    @Test func clefIsNotOfferedByClassifyGateOrScoreYet() throws {
+    /// **CF-5b's window, pinned.** Removing CF-2's `ModelSupport` gap and having `ClefSDK` claim the
+    /// entry puts Clef Flash in the Classify/Gate/Score derived pools — but `RealExecutor`'s
+    /// `decisionEngineFamilies` still lacks `"Clef"` until CF-7 adds the conformer, so a flow row
+    /// picking it is refused with "isn't available in workflows yet". Review CF-2 note 2 asked for
+    /// exactly this pair of assertions; CF-7 flips the second one to the served state.
+    @Test func clefIsOfferedByClassifyGateAndScoreButNoWorkflowServesItYet() throws {
         let catalog = try bundledCatalog()
-        // Worst case: pretend every entry is claimable, so only the ModelSupport gap can exclude it.
+        // Worst case: pretend every entry is claimable, so only the pool rules can exclude it.
         let claimable = Set(catalog.map(\.id))
         for task in ["Classify", "Gate", "Score"] {
             let pool = TaskModels.derivedModels(for: task, catalog: catalog, claimableModelIDs: claimable)
             #expect(pool.contains { $0.modelEntry?.hfModelId == "aac6fef/laya-mlx" },
                     "\(task)'s pool must be non-empty — otherwise this test proves nothing")
-            #expect(!pool.contains { $0.modelEntry?.id == "mlx-community--clef-flash-4bit" },
-                    "\(task) must not offer Clef Flash until CF-5b lands the runner")
+            #expect(pool.contains { $0.modelEntry?.id == "mlx-community--clef-flash-4bit" },
+                    "\(task) must offer Clef Flash now that ClefSDK claims it")
         }
+        // The other half of the window: no `DecisionEngine` conformer claims the family yet.
+        #expect(!RealExecutor.decisionEngineFamilies.contains("Clef"),
+                "CF-7 adds the conformer; until then the window is open on purpose")
     }
 
-    /// Browse must say "not yet supported" until CF-5b ports the runner.
-    @Test func clefHasSupportGap() {
-        #expect(ModelSupport.unsupportedReason(for: clefEntry()) != nil)
-        // The flag is keyed to Clef only.
+    /// CF-5b removed CF-2's `ModelSupport` gap: the runner exists, so nothing excludes the entry.
+    @Test func clefHasNoSupportGap() {
+        #expect(ModelSupport.unsupportedReason(for: clefEntry()) == nil)
         #expect(ModelSupport.unsupportedReason(for: layaEntry()) == nil)
         #expect(ModelSupport.unsupportedReason(for: clmEntry()) == nil)
     }
 
-    /// No module claims Clef yet: Laya's and CLM's `family ==` guards refuse it, and the
-    /// registry resolves it to nothing. Laya and CLM still resolve to their own SDKs.
-    @Test func noModuleClaimsClef() {
+    /// CF-5b: `ClefSDK` claims the entry by family, so the registry resolves it — while Laya's and
+    /// CLM's own guards still refuse it (the family discriminant does the work, as it does for CLM).
+    @Test func clefModuleClaimsClef() {
         #expect(LayaSDK().claim(clefEntry()) == .no)
         #expect(LayaUI().claim(clefEntry()) == .no)
         #expect(CLMSDK().claim(clefEntry()) == .no)
         #expect(CLMUI().claim(clefEntry()) == .no)
+        #expect(ClefSDK().claim(clefEntry()) == .exact)
+        #expect(ClefUI().claim(clefEntry()) == .exact)
+        // …and it is not a grab-all: the other deciders keep their own entries.
+        #expect(ClefSDK().claim(layaEntry()) == .no)
+        #expect(ClefSDK().claim(clmEntry()) == .no)
 
         let registry = ModelRegistry()
         for module in installedModules {
             module.register(into: registry)
         }
-        #expect(registry.bestModule(for: clefEntry()) == nil)
+        #expect(registry.bestModule(for: clefEntry())?.descriptor.id == "clef")
         #expect(registry.bestModule(for: layaEntry())?.descriptor.id == "laya")
         #expect(registry.bestModule(for: clmEntry())?.descriptor.id == "clm")
     }
