@@ -57,7 +57,8 @@ actor ClefEngine {
 
     /// `systemone` for one record: one `LayaAnswer` per question, in the request's order.
     ///
-    /// `maxLength` is gate F1's 16,384-token budget; `stateTruncated` is the app-side flag
+    /// `maxLength` is gate **F2**'s 8,192-token budget (F1's 16,384 was measured at a 15 GB peak);
+    /// `stateTruncated` is the app-side flag
     /// (CF-A0 #3) and reaches ``ClefAnswer`` from the encoded record.
     func answer(
         state: ClefJSON,

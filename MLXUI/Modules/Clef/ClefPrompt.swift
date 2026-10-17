@@ -506,7 +506,10 @@ nonisolated enum ClefPrompt {
     static let noulFalseDescription = "The proposition is false or the answer is no."
 
     /// Default `max_length` (`:182`, `:493`) — gate F1.
-    static let defaultMaxLength = 16_384
+    /// Gate **F2** (owner ruling 2026-10-17): 8,192 tokens per request. F1's 16,384 was measured at a
+    /// 15,053 MB peak, above this Mac's `MemoryBudget`; 8,192 measures 8,604 MB. The cap returns to
+    /// 16,384 only if an MLX core upgrade is approved (3.32.x would halve the peak in Python).
+    static let defaultMaxLength = 8_192
 
     /// `question_options` (`:73–84`): `(option_id, description)` pairs in **encode order**.
     ///

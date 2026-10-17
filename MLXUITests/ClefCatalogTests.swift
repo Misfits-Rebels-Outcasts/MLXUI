@@ -18,7 +18,7 @@ struct ClefCatalogTests {
             id: "mlx-community--clef-flash-4bit", family: "Clef", displayName: "Clef Flash",
             modelType: .decision, source: .mlx, ramGB: 9.32, downloadSizeGB: 6.21,
             hfRepo: "mlx-community", hfModelId: "mlx-community/clef-flash-4bit",
-            contextWindow: 16384)
+            contextWindow: 8192)
     }
 
     private func layaEntry() -> ModelEntry {
@@ -77,7 +77,7 @@ struct ClefCatalogTests {
             "hfModelId": "mlx-community/clef-flash-4bit",
             "ramGB": 9.32,
             "downloadSizeGB": 6.21,
-            "contextWindow": 16384,
+            "contextWindow": 8192,
             "license": "apache-2.0",
             "variants": [
                 {
@@ -100,7 +100,7 @@ struct ClefCatalogTests {
         #expect(entry.paramCountB == 9.4)
         #expect(entry.ramGB == 9.32)
         #expect(entry.downloadSizeGB == 6.21)
-        #expect(entry.contextWindow == 16384)
+        #expect(entry.contextWindow == 8192)
     }
 
     /// The entry really is in the bundled catalog's `decision` domain, after Laya and CLM.
@@ -168,7 +168,7 @@ struct ClefCatalogTests {
         #expect(clef.benchmarks == nil)            // the catalog has no quality table for it (CF-3)
         #expect(clef.languages == nil)             // neither card lists a language (CF-A0 #4)
         let summary = try #require(clef.summary)
-        #expect(summary.contains("16,384-token context"))
+        #expect(summary.contains("8,192-token context"))
         let description = try #require(clef.description)
         #expect(description.hasPrefix("# Clef Flash"))
         // CF-3-FIX-1 item 3: the summary must not lead with the joint claim — MLXUI asks one question
@@ -178,11 +178,12 @@ struct ClefCatalogTests {
         #expect(summaryLead.contains("one question per call"))
         // CF-3's contract, verbatim, plus every content item it asks the description to carry.
         #expect(description.contains("It never generates text"))
-        #expect(description.contains("16,384-token context"))
+        #expect(description.contains("8,192-token context"))
         #expect(description.contains("wording of the question"))
         #expect(description.contains("Cloudflare") && description.contains("Qwen"))
         #expect(description.contains("Laya 0.4B") && description.contains("CLM 8B"))
-        #expect(description.contains("7.0 GB") && description.contains("8.6 GB"))   // the 16 GB floor
+        // Gate F2: the card now advertises the cap and the peaks measured at it.
+        #expect(description.contains("8.6 GB") && description.contains("15 GB"))   // the 16 GB floor
         #expect(description.contains("Text only in this version"))                  // gate A1
         #expect(description.contains("b5adbe2c"))                                   // Qwen3.8 T5
         // CF-3-FIX-1 items 1–3 (Review CF-3): the Decision Index run is the conversion's, the

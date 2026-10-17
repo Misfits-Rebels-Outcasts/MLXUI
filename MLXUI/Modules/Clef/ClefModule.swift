@@ -5,7 +5,7 @@ import Foundation
 /// `ClefPrompt`/`ClefHead`/`ClefAnswer` port of `clef_mlx.py`'s joint schema head.
 ///
 /// Clef is the third `.decision` family after Laya (0.4B encoder) and CLM (8B encoder): one forward
-/// pass over a 16,384-token prompt, then a small head that answers every question in the request at
+/// pass over an 8,192-token prompt (gate F2), then a small head that answers every question in the request at
 /// once — choice, score and yes/no — with probabilities, never generative text. Runs the **installed**
 /// `mlx-community/clef-flash-4bit` checkpoint (Apache-2.0, 11 files, ~6.2 GB).
 enum ClefModule: ModelModule {

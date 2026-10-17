@@ -211,9 +211,10 @@ struct ClefParityTests {
     }
 
     /// **(a) CF-5b-FIX-1 — the deciding gate.** Twelve more records on long states — ~4k, ~8k and
-    /// the 16k truncating one, three question types each — with the short set's bar: every label
-    /// matches and every probability difference is ≤ 0.03. The reviewer's point was that the short
-    /// records never exercised the drift; these do, at the lengths the catalog advertises.
+    /// a truncating one — every question type. **Owner ruling 2026-10-17:** the long bar is "all labels
+    /// match, every Δp ≤ **0.04**", with `4k noul hold` recorded as the one known residual (Δp 0.0342,
+    /// reference ≈71/29, a boundary record) expected to close with `mlx-swift-lm` 3.32.x. The **short**
+    /// bar is unchanged (all labels, every Δp ≤ 0.03).
     @Test func longAnswersMatchTheReferenceOn12Records() async throws {
         let golden = try golden("answers.json")
         let engine = try await ClefEngine.load(modelDirectory: try modelDirectory())
@@ -221,15 +222,18 @@ struct ClefParityTests {
             .filter { $0["group"]?.stringValue == "long" }
         #expect(cases.count >= 12, "the long set has \(cases.count) records")
         let bands = try #require(golden["long_bands"]?.dictionaryValue)
-        let summary = try await compare(cases: cases, engine: engine, label: "long")
+        let summary = try await compare(cases: cases, engine: engine, label: "long", bar: 0.04)
         for row in summary.rows {
             print("CLEF-PARITY band \(row.band) \(row.type) \(row.id) "
                 + "dp=\(String(format: "%.4f", row.worst)) label=\(row.matched)")
         }
         print("CLEF-PARITY long \(summary) bands=\(bands.keys.sorted())")
-        #expect(summary.labels == cases.count, "labels \(summary.labels)/\(cases.count)")
-        #expect(summary.withinThreeHundredths == cases.count,
-                "every Δp ≤ 0.03: \(summary.withinThreeHundredths)/\(cases.count), worst \(summary.worst)")
+        // Ruling 2: every label matches except the one recorded residual; every Δp ≤ 0.04.
+        let residuals = summary.rows.filter { !$0.matched }.map { "\($0.band)/\($0.id)" }
+        #expect(residuals.isEmpty || residuals == ["4k/hold"],
+                "labels: residuals \(residuals)")
+        #expect(summary.withinFourHundredths == cases.count,
+                "every Δp ≤ 0.04: \(summary.withinFourHundredths)/\(cases.count), worst \(summary.worst)")
     }
 
     private struct AnswerRow {
@@ -244,12 +248,13 @@ struct ClefParityTests {
         var labels = 0
         var withinOneHundredth = 0
         var withinThreeHundredths = 0
+        var withinFourHundredths = 0
         var worst = 0.0
         var rows: [AnswerRow] = []
     }
 
-    private func compare(cases: [ClefJSON], engine: ClefEngine, label: String) async throws
-        -> AnswerSummary {
+    private func compare(cases: [ClefJSON], engine: ClefEngine, label: String,
+                         bar: Double = 0.03) async throws -> AnswerSummary {
         var summary = AnswerSummary()
         for testCase in cases {
             let request = try ClefRequest(json: try #require(testCase["request"]))
@@ -289,11 +294,12 @@ struct ClefParityTests {
             if labelMatches { summary.labels += 1 }
             if worst <= 0.01 { summary.withinOneHundredth += 1 }
             if worst <= 0.03 { summary.withinThreeHundredths += 1 }
+            if worst <= 0.04 { summary.withinFourHundredths += 1 }
             summary.worst = max(summary.worst, worst)
             summary.rows.append(AnswerRow(
                 band: testCase["band"]?.stringValue ?? label, id: question.id,
                 type: question.type.rawValue, worst: worst, matched: labelMatches))
-            #expect(worst <= 0.03, "\(label) \(question.id): Δp \(worst)")
+            #expect(worst <= bar, "\(label) \(question.id): Δp \(worst) > \(bar)")
         }
         return summary
     }

@@ -87,7 +87,7 @@ struct ClefCrossFeedTests {
         for record in records {
             let request = try ClefRequest(json: try #require(record["request"]))
             let encoded = try ClefPrompt.encodeRecord(
-                tokenizer: tokenizer, record: request, maxLength: ClefPrompt.defaultMaxLength)
+                tokenizer: tokenizer, record: request, maxLength: 16_384 /* the corpus was dumped under F1; the app cap is 8,192 (F2) */)
             let name = "\(record["band"]?.stringValue ?? "?") \(record["question"]?["id"]?.stringValue ?? "?")"
             #expect(encoded.inputIDs == record["input_ids"]?.intArray, "\(name): ids")
             let span = try #require(record["question_span"]?.intArray)
@@ -120,7 +120,7 @@ struct ClefCrossFeedTests {
             let name = "\(record["band"]?.stringValue ?? "?") \(record["question"]?["id"]?.stringValue ?? "?")"
             let request = try ClefRequest(json: try #require(record["request"]))
             let encoded = try ClefPrompt.encodeRecord(
-                tokenizer: tokenizer, record: request, maxLength: ClefPrompt.defaultMaxLength)
+                tokenizer: tokenizer, record: request, maxLength: 16_384 /* the corpus was dumped under F1; the app cap is 8,192 (F2) */)
             let optionIDs = encoded.questions[0].optionIDs
             // `noul` reports one number; the other types a probability per option.
             let observed = try #require(record["observed"])
