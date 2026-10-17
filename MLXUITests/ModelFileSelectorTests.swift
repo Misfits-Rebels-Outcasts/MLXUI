@@ -392,4 +392,90 @@ struct ModelFileSelectorTests {
             "tokenizer/tokenizer_config.json",
         ])
     }
+
+    // MARK: - Clef Flash (CF-4)
+
+    @Test func clefRepoDownloadsTheJointHeadAndItsConfigInTreeOrder() {
+        // CF-4, T1. The real `mlx-community/clef-flash-4bit` listing — all 17 files of
+        // `RSI/notes/clef/hf/mlx-community_clef-flash-4bit/tree.json` at revision `b5adbe2c…`, in the
+        // order the Hub's tree API returns them (CF-1 item 5, journal 2026-490 §5) — and the exact 11
+        // files the install must take. The two `joint_head*` files are what the selector used to drop:
+        // the head is not the backbone's weights, and the top-level fallback is suppressed because
+        // this repo *does* have standard weights.
+        let siblings = [
+            ".eval_results/typed-decisions.yaml",
+            ".gitattributes",
+            "LICENSE",
+            "README.md",
+            "__pycache__/clef_mlx.cpython-312.pyc",
+            "chat_template.jinja",
+            "clef_mlx.py",
+            "config.json",
+            "generation_config.json",
+            "joint_head.safetensors",
+            "joint_head_config.json",
+            "model-00001-of-00002.safetensors",
+            "model-00002-of-00002.safetensors",
+            "model.safetensors.index.json",
+            "processor_config.json",
+            "tokenizer.json",
+            "tokenizer_config.json",
+        ]
+        let out = ModelFileSelector.filesToDownload(siblings: siblings)
+        // Order is asserted here, and only here, because the install downloads in this order
+        // (`InstallManager.resolveFiles`: small metadata first, large weights last) and CF-4 asks for
+        // the tree's order rather than a set.
+        #expect(out == [
+            "chat_template.jinja",
+            "config.json",
+            "generation_config.json",
+            "joint_head.safetensors",
+            "joint_head_config.json",
+            "model-00001-of-00002.safetensors",
+            "model-00002-of-00002.safetensors",
+            "model.safetensors.index.json",
+            "processor_config.json",
+            "tokenizer.json",
+            "tokenizer_config.json",
+        ])
+        // Everything else is dropped, and nothing else is missing.
+        #expect(Set(siblings).subtracting(out) == [
+            "clef_mlx.py", "__pycache__/clef_mlx.cpython-312.pyc", ".eval_results/typed-decisions.yaml",
+            "README.md", "LICENSE", ".gitattributes",
+        ])
+    }
+
+    @Test func unrelatedTopLevelWeightsWithAConfigSiblingAreStillDropped() {
+        // CF-4 / CF-A0 #5 — the Clef rule is the **exact name** `joint_head.safetensors`, not a
+        // general "top-level `X.safetensors` whose `X_config.json` sibling exists" rule. This is the
+        // shape that generalisation would have started pulling: a standard sharded repo that also
+        // ships an unrelated root checkpoint with its own config. SDXL-Turbo's redundant root
+        // `sd_xl_turbo_1.0*.safetensors` (SD-DL1) is the catalog's real instance of that shape, and
+        // both files must stay out here.
+        let out = ModelFileSelector.filesToDownload(siblings: [
+            "config.json",
+            "model.safetensors.index.json",
+            "model-00001-of-00002.safetensors",
+            "model-00002-of-00002.safetensors",
+            "sd_xl_turbo_1.0.safetensors",
+            "sd_xl_turbo_1.0_config.json",
+        ])
+        #expect(out == [
+            "config.json",
+            "model.safetensors.index.json",
+            "model-00001-of-00002.safetensors",
+            "model-00002-of-00002.safetensors",
+        ])
+    }
+
+    @Test func jointHeadWithoutStandardWeightsKeepsTheFallbackSelection() {
+        // CF-4 also has to leave a head-only repo alone: with no `model.safetensors` and no index,
+        // `hasStandardWeights` is false, so the new exact-name rule is inert and the pre-existing
+        // top-level fallback keeps `joint_head.safetensors` exactly as it did before this task. The
+        // config joins it only because it is a metadata name now — that is the one intended delta.
+        let out = ModelFileSelector.filesToDownload(siblings: [
+            "README.md", "joint_head.safetensors", "joint_head_config.json",
+        ])
+        #expect(out == ["joint_head.safetensors", "joint_head_config.json"])
+    }
 }

@@ -60,6 +60,12 @@ enum ModelFileSelector {
         // and the per-question-type calibration temperatures (LY-3). Without it LayaEngine
         // (LY-4) has no head weights to load and no calibration to apply.
         "rl_agent_config.json",
+        // Clef's joint schema head config — `hidden_size 4096`, `width 1024`, `routing_layers 2`,
+        // `layers 4`, `heads 16`, `feedforward 4096` (CF-1 item 1). It is the only file that states
+        // the head's dimensions, and it sits beside `joint_head.safetensors`, which is *not* the
+        // backbone's weights — so without this entry the install would fetch neither the head nor
+        // its dimensions and `ClefHead` could not be built (CF-4, readme T1, CF-A0 #5).
+        "joint_head_config.json",
     ]
 
     /// A second HF repo whose files must be bundled into an install, keyed by the catalog
@@ -147,6 +153,18 @@ enum ModelFileSelector {
             if hasSingleModel && l == "model.safetensors" { return true }
             if hasIndex && l == "model.safetensors.index.json" { return true }
             if hasIndex && l.hasPrefix("model-") && l.hasSuffix(".safetensors") { return true }
+
+            // Clef's joint schema head — a top-level `.safetensors` that is not the backbone's
+            // weights and ships *beside* a standard sharded checkpoint. Both other branches miss it:
+            // it matches no standard weight name, and the fallback below is suppressed precisely
+            // because the repo *has* standard weights. Without this line the install takes 9 of the
+            // 11 required files (CF-1 item 5, readme T1) and the engine fails at load.
+            //
+            // **Exact name on purpose** (CF-A0 #5): a general "top-level `X.safetensors` whose
+            // `X_config.json` sibling exists" rule would silently pull unrelated root checkpoints
+            // (SDXL-Turbo's redundant `sd_xl_turbo_1.0*.safetensors`, Wan's VAE) into installs whose
+            // runtime never loads them, and would need a regression story for every repo shape.
+            if hasStandardWeights && l == "joint_head.safetensors" { return true }
 
             // Fallback: non-standard top-level weight name (e.g. kokoro-v1_0.safetensors,
             // Wan2.1_VAE.pth). Covers .safetensors and .pth (PyTorch checkpoint — some repos
