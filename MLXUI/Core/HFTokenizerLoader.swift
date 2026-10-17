@@ -10,7 +10,17 @@ import Tokenizers
 /// `#adaptHuggingFaceTokenizer`.
 struct HFTokenizerLoader: TokenizerLoader {
     func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
-        let upstream = try await AutoTokenizer.from(modelFolder: directory)
+        let upstream: any Tokenizers.Tokenizer
+        do {
+            upstream = try await AutoTokenizer.from(modelFolder: directory)
+        } catch Tokenizers.TokenizerError.unsupportedTokenizer {
+            // Some checkpoints name a `tokenizer_class` the pinned swift-transformers does not
+            // register yet — Clef Flash's `Qwen3_5Tokenizer` is one (journal `2026-496`). Its
+            // `tokenizer.json` is an ordinary BPE model, so the library's documented non-strict path
+            // builds exactly that and only prints a warning, instead of refusing a loadable
+            // checkpoint. Known classes keep the strict path above.
+            upstream = try await AutoTokenizer.from(modelFolder: directory, strict: false)
+        }
         // Strict Qwen3.5-style templates raise on ChatSession's tool-only restart render;
         // pass a sanitized copy instead of the checkpoint's template when needed.
         let override = ChatTemplateSanitizer.sanitizedTemplate(inModelDirectory: directory)

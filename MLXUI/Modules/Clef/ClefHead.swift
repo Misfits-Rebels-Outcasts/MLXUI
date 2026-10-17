@@ -298,11 +298,13 @@ nonisolated final class ClefHead: Module {
             counts.append(question.optionSpans.count)
         }
 
-        // (1, Σ options, W) — every option of every question in one evidence sequence.
+        // (1, Σ options, W) — every option of every question in one evidence sequence. The shared
+        // question vector stays `(W,)`: the reference's `q[i]` is `(1, W)` and broadcasts over rows,
+        // but an explicit `expandedDimensions` here would make each row `(1, W)` and `stacked` would
+        // yield a 4-D tensor whose attention reshape cannot succeed.
         var optionQueries: [MLXArray] = []
         for (index, _) in record.questions.enumerated() {
-            let questionVector = optionQuestionProjection(questionVectors[index])
-                .expandedDimensions(axis: 0)
+            let questionVector = optionQuestionProjection(questionVectors[index])  // (W,)
             for (context, lexical) in zip(optionContexts[index], lexicalOptions[index]) {
                 optionQueries.append(
                     optionContextProjection(context) + optionLexicalProjection(lexical) + questionVector)
