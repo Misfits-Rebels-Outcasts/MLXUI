@@ -195,8 +195,10 @@ struct CLMDeciderTests {
                                            transcript: nil, context: nil, usedFlowContent: nil)
             Issue.record("should have thrown")
         } catch FlowError.stageFailure(_, let message) {
+            // CF-7: the sentence is built from `decisionEngineFamilyOrder` now, so it names
+            // Clef Flash too (the one assertion this cycle had to touch).
             #expect(message == "Other Decider isn't available in workflows yet — "
-                    + "pick Laya 0.4B, CLM 8B, or a language model for this row.")
+                    + "pick Laya 0.4B, CLM 8B, or Clef Flash, or a language model for this row.")
         } catch {
             Issue.record("wrong error type: \(error)")
         }

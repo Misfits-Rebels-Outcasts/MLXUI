@@ -198,26 +198,29 @@ struct ClefCatalogTests {
     /// but no flow row offers it. `TaskModels.derivedModels` filters on `ModelSupport`
     /// (`FlowKit/TaskModels.swift:386`), so this holds even for a model the registry claims —
     /// which Clef is not (`noModuleClaimsClef`), so it is doubly excluded today.
-    /// **CF-5b's window, pinned.** Removing CF-2's `ModelSupport` gap and having `ClefSDK` claim the
-    /// entry puts Clef Flash in the Classify/Gate/Score derived pools — but `RealExecutor`'s
-    /// `decisionEngineFamilies` still lacks `"Clef"` until CF-7 adds the conformer, so a flow row
-    /// picking it is refused with "isn't available in workflows yet". Review CF-2 note 2 asked for
-    /// exactly this pair of assertions; CF-7 flips the second one to the served state.
-    @Test func clefIsOfferedByClassifyGateAndScoreButNoWorkflowServesItYet() throws {
+    /// **CF-7 — the window is closed.** CF-5b pinned the open state (Clef offered by the pools, no
+    /// `DecisionEngine` claiming the family). With `ClefDecisionEngine`, `"Clef"` in
+    /// `decisionEngineFamilies` and a `case "Clef":` in `runDecisionDecider`, the offer and the
+    /// service are the same thing — Review CF-2 note 2 asked for this flip.
+    @Test func clefIsOfferedByClassifyGateAndScoreAndServedByTheExecutorNow() throws {
         let catalog = try bundledCatalog()
-        // Worst case: pretend every entry is claimable, so only the pool rules can exclude it.
         let claimable = Set(catalog.map(\.id))
         for task in ["Classify", "Gate", "Score"] {
             let pool = TaskModels.derivedModels(for: task, catalog: catalog, claimableModelIDs: claimable)
             #expect(pool.contains { $0.modelEntry?.hfModelId == "aac6fef/laya-mlx" },
                     "\(task)'s pool must be non-empty — otherwise this test proves nothing")
             #expect(pool.contains { $0.modelEntry?.id == "mlx-community--clef-flash-4bit" },
-                    "\(task) must offer Clef Flash now that ClefSDK claims it")
+                    "\(task) must offer Clef Flash")
         }
-        // The other half of the window: no `DecisionEngine` conformer claims the family yet.
-        #expect(!RealExecutor.decisionEngineFamilies.contains("Clef"),
-                "CF-7 adds the conformer; until then the window is open on purpose")
+        // The other half of the old window: the family is served now.
+        #expect(RealExecutor.decisionEngineFamilies.contains("Clef"),
+                "CF-7 adds the conformer; the window must be closed")
+        let clef = try #require(catalog.first { $0.id == "mlx-community--clef-flash-4bit" })
+        let row = Row(id: UUID(), task: "Classify", model: clef.displayName, settings: "x", tags: ["a", "b"])
+        #expect(RealExecutor.decisionEngineBoundModel(for: row, catalog: catalog)?.id == clef.id,
+                "a row naming Clef Flash must resolve to a served decider")
     }
+
 
     /// CF-5b removed CF-2's `ModelSupport` gap: the runner exists, so nothing excludes the entry.
     @Test func clefHasNoSupportGap() {

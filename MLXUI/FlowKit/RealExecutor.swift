@@ -55,6 +55,19 @@ nonisolated struct RealExecutor: FlowExecutor {
         }
         return first.answer
     }
+    /// CF-7 — `ClefDecisionEngine`'s only call into the actual engine, same injection shape as
+    /// `askCLM`. The default calls the real `ClefEngineCache`/`ClefEngine.answer` for a single question.
+    var askClef: @Sendable (URL, ClefJSON, ClefQuestionType, ClefJSON, ClefJSON) async throws -> LayaAnswer = {
+        directory, state, type, instructions, criteria in
+        let lease = try await ClefEngineCache.shared.lease(for: directory, holder: .flow)
+        defer { lease.release() }
+        let results = try await lease.value.answer(
+            state: state, questions: [(id: "q", type: type, instructions: instructions, criteria: criteria)])
+        guard let first = results.first else {
+            throw ClefError.invalidQuestion("Clef produced no answer")
+        }
+        return first.answer
+    }
     /// CFM-R9-5: the decider's fired tag, readable after `execute` (reference box so a value
     /// type can report it through the `FlowExecutor` existential, like `MockExecutor`).
     private let tagBox = TagBox()
@@ -713,7 +726,19 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// CL-7: every family a `DecisionEngine` conformer claims — the single source of truth
     /// `decisionEngineBoundModel(for:catalog:)` below checks against. Keep the two in sync: a
     /// third engine needs a case in the switch below **and** an entry in this set.
-    static let decisionEngineFamilies: Set<String> = ["Laya", "CLM"]
+    static let decisionEngineFamilies: Set<String> = ["Laya", "CLM", "Clef"]
+
+    /// The families in the order the refusal sentence lists them, with the model names to use.
+    /// `decisionEngineFamilies` is the set that decides routing; this is only its prose — a test
+    /// asserts the two agree, so a fourth engine cannot leave the sentence stale.
+    static let decisionEngineFamilyOrder: [(family: String, modelName: String)] = [
+        ("Laya", "Laya 0.4B"), ("CLM", "CLM 8B"), ("Clef", "Clef Flash"),
+    ]
+
+    /// The served deciders' names, for `runDecisionDecider`'s `default:` refusal.
+    static var servedDeciderNames: [String] {
+        decisionEngineFamilyOrder.map(\.modelName)
+    }
 
     /// CL-7: whether `row` names a `runnerKind == .decision` entry a `DecisionEngine`
     /// actually serves — resolved the same way `resolveModel`/`runDecisionDecider` would, so
@@ -746,12 +771,19 @@ nonisolated struct RealExecutor: FlowExecutor {
         switch modelEntry.family {
         case "Laya": engine = LayaDecisionEngine(askLaya: askLaya)
         case "CLM": engine = CLMDecisionEngine(askCLM: askCLM)
+        case "Clef": engine = ClefDecisionEngine(askClef: askClef)
         default:
-            // Any future `.decision` family neither conformer claims yet — refuse clearly
-            // rather than guess an engine, naming the row's own model.
+            // Any future `.decision` family no conformer claims yet — refuse clearly rather
+            // than guess an engine, naming the row's own model **and** the models that are
+            // served. The list comes from `decisionEngineFamilyOrder`, not a hard-coded
+            // sentence, so adding an engine updates this refusal by construction.
+            let names = Self.servedDeciderNames
+            let listed = names.count > 1
+                ? names.dropLast().joined(separator: ", ") + ", or " + names.last!
+                : (names.first ?? "a decision model")
             throw FlowError.stageFailure(row: path,
                 message: "\(modelEntry.displayName) isn't available in workflows yet — "
-                    + "pick Laya 0.4B, CLM 8B, or a language model for this row.")
+                    + "pick \(listed), or a language model for this row.")
         }
 
         let tags = Self.declaredTags(row)

@@ -51,6 +51,46 @@ nonisolated struct LayaDecisionEngine: DecisionEngine {
     }
 }
 
+/// CF-7 — the third conformer, Clef Flash. The `CLMDecisionEngine` shape: question *building* stays
+/// here, the call is injected so a test can fake `ClefEngine` without loading a 6 GB checkpoint.
+///
+/// Classify/Gate send a `choice` whose criteria are a JSON **object** `{tag: ""}` per declared tag,
+/// in declared order — the same shape CLM sends and for the same reason (`ClefPrompt.questionOptions`
+/// keys the options by that id, and `""` means "the option text is the tag itself"). Score sends a
+/// `score` whose criteria are the declared tags as an **ordered array** of levels, low → high
+/// (`:83`, `:146` — the reference sorts only a *choice*'s options by id; a score's list is ordered).
+nonisolated struct ClefDecisionEngine: DecisionEngine {
+    /// The only call into the real engine, injected like `askCLM`. The default calls
+    /// `ClefEngineCache`/`ClefEngine.answer` for a single question.
+    let askClef: @Sendable (URL, ClefJSON, ClefQuestionType, ClefJSON, ClefJSON) async throws -> LayaAnswer
+
+    func decide(directory: URL, state: String, ask: DecisionAsk) async throws -> LayaAnswer {
+        let criteria: ClefJSON
+        switch ask.type {
+        case .choice:
+            criteria = .object(ask.tags.map { ClefJSONField(key: $0, value: .string("")) })
+        case .score:
+            criteria = .array(ask.tags.map { .string($0) })
+        case .noul:
+            criteria = .object([])   // unreachable — Classify/Gate/Score never build .noul here
+        }
+        return try await askClef(
+            directory, .string(state), ClefQuestionType(ask.type), .string(ask.instructions), criteria)
+    }
+}
+
+extension ClefQuestionType {
+    /// The shared decider question type → this engine's (`LayaQuestionType` is the wire type
+    /// `DecisionAsk` carries; the two enums have the same three cases).
+    nonisolated init(_ type: LayaQuestionType) {
+        switch type {
+        case .choice: self = .choice
+        case .score: self = .score
+        case .noul: self = .noul
+        }
+    }
+}
+
 /// CL-6 — builds CLM's own question the way CL-5-FIX-1 learned the hard way (`CLMRunView`'s
 /// own copy of this same choice made the identical mistake first): `Classify`/`Gate` send
 /// `choice` criteria as a JSON **object**, `{tag: ""}` per declared tag, in order — an empty
