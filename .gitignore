@@ -44,3 +44,6 @@ Fixtures/CLM/encoder_weights/
 # CL-4a's heads (72MB) — same rule. Byte-identical to the public HF upload; fetch per
 # Fixtures/CLM/PROVENANCE.md. Removed from history 2026-10-03; CLMHeadsTests skips without it.
 Fixtures/CLM/heads_weights/
+
+# CF-5b-FIX-3: hidden-state dumps for the cross-feed diagnosis — regenerable, never goldens.
+Fixtures/Clef/xfeed/
