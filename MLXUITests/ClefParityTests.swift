@@ -1,6 +1,9 @@
 import Darwin
 import Foundation
 import MLX
+import MLXLLM
+import MLXLMCommon
+import MLXNN
 import Testing
 
 @testable import MLXUI
@@ -138,29 +141,33 @@ struct ClefParityTests {
             let request = try request(named: name, in: tokensGolden)
             let record = try ClefPrompt.encodeRecord(
                 tokenizer: tokenizer, record: request, maxLength: maxLength)
-            let expectedFirst64 = try #require(testCase["last_first_64"]?.arrayValue).compactMap(\.doubleValue)
+            // (b) CF-5b-FIX-1: the cosine is over all 4,096 dimensions of the last position, and
+            // over each span's full mean vector — the first-64 measure was thin (Review CF-5b §3).
+            let expectedLast = try #require(testCase["last"]?.arrayValue).compactMap(\.doubleValue)
             let expectedNorm = try #require(testCase["last_norm"]?.doubleValue)
             let expectedSpans = try #require(testCase["spans"]?.arrayValue)
 
             let measured = try await backbone.withHidden(ids: record.inputIDs) { hidden, _ in
                 let last = hidden[hidden.dim(0) - 1, .ellipsis].asType(.float32)
-                let first64 = last[0 ..< 64].asArray(Float.self).map(Double.init)
+                let fullLast = last.asArray(Float.self).map(Double.init)
                 var sum = 0.0
                 for value in last.asArray(Float.self) { sum += Double(value) * Double(value) }
                 var norms: [Double] = []
+                var means: [[Double]] = []
                 var spans: [(kind: String, span: Range<Int>)] = []
                 for question in record.questions {
-                    norms.append(meanNorm(hidden, question.questionSpan))
-                    spans.append(("question", question.questionSpan))
-                    for span in question.optionSpans {
+                    for (kind, span) in [("question", question.questionSpan)]
+                        + question.optionSpans.map { ("option", $0) } {
+                        let mean = hidden[span, .ellipsis].asType(.float32).mean(axis: 0)
+                        means.append(mean.asArray(Float.self).map(Double.init))
                         norms.append(meanNorm(hidden, span))
-                        spans.append(("option", span))
+                        spans.append((kind, span))
                     }
                 }
-                return (first64, sum.squareRoot(), norms, spans.map(\.kind))
+                return (fullLast, sum.squareRoot(), means, spans.map(\.kind), norms)
             }
 
-            let cosineValue = cosine(measured.0, expectedFirst64)
+            let cosineValue = cosine(measured.0, expectedLast)
             #expect(
                 cosineValue >= clefHiddenCosineBar(tokenCount: record.inputIDs.count),
                 "\(name): last-position cosine \(cosineValue)")
@@ -176,26 +183,74 @@ struct ClefParityTests {
             #expect(measured.3 == expectedKinds, "\(name): span kinds")
             for (index, expected) in expectedSpans.enumerated() {
                 let expectedValue = try #require(expected["mean_norm"]?.doubleValue)
+                let expectedMean = try #require(expected["mean"]?.arrayValue).compactMap(\.doubleValue)
+                let meanCosine = cosine(measured.2[index], expectedMean)
+                #expect(meanCosine >= 0.999, "\(name): span \(index) full-vector cosine \(meanCosine)")
                 // Span mean vectors drift with the states that produce them: measured 0.5–0.9%
                 // on the long prompt, versus the last-position vector's 3% angle — same cause.
                 #expect(
-                    abs(measured.2[index] - expectedValue) <= max(1e-2, expectedValue * 1.5e-2),
-                    "\(name): span \(index) norm \(measured.2[index]) vs \(expectedValue)")
+                    abs(measured.4[index] - expectedValue) <= max(1e-2, expectedValue * 1.5e-2),
+                    "\(name): span \(index) norm \(measured.4[index]) vs \(expectedValue)")
             }
         }
     }
 
     // MARK: - answers
 
-    @Test func answersMatchTheReferenceOn24Questions() async throws {
+    /// CF-5b's short-set gate: 24 records of 151–443 tokens.
+    @Test func shortAnswersMatchTheReferenceOn24Questions() async throws {
         let golden = try golden("answers.json")
         let engine = try await ClefEngine.load(modelDirectory: try modelDirectory())
         let cases = try #require(golden["cases"]?.arrayValue)
+            .filter { $0["group"]?.stringValue == "short" }
         #expect(cases.count == 24)
+        let summary = try await compare(cases: cases, engine: engine, label: "short")
+        print("CLEF-PARITY short \(summary)")
+        #expect(summary.labels == 24, "labels \(summary.labels)/24")
+        #expect(summary.withinOneHundredth >= 18, "within 0.01: \(summary.withinOneHundredth)/24")
+    }
 
-        var labelsMatched = 0
+    /// **(a) CF-5b-FIX-1 — the deciding gate.** Twelve more records on long states — ~4k, ~8k and
+    /// the 16k truncating one, three question types each — with the short set's bar: every label
+    /// matches and every probability difference is ≤ 0.03. The reviewer's point was that the short
+    /// records never exercised the drift; these do, at the lengths the catalog advertises.
+    @Test func longAnswersMatchTheReferenceOn12Records() async throws {
+        let golden = try golden("answers.json")
+        let engine = try await ClefEngine.load(modelDirectory: try modelDirectory())
+        let cases = try #require(golden["cases"]?.arrayValue)
+            .filter { $0["group"]?.stringValue == "long" }
+        #expect(cases.count >= 12, "the long set has \(cases.count) records")
+        let bands = try #require(golden["long_bands"]?.dictionaryValue)
+        let summary = try await compare(cases: cases, engine: engine, label: "long")
+        for row in summary.rows {
+            print("CLEF-PARITY band \(row.band) \(row.type) \(row.id) "
+                + "dp=\(String(format: "%.4f", row.worst)) label=\(row.matched)")
+        }
+        print("CLEF-PARITY long \(summary) bands=\(bands.keys.sorted())")
+        #expect(summary.labels == cases.count, "labels \(summary.labels)/\(cases.count)")
+        #expect(summary.withinThreeHundredths == cases.count,
+                "every Δp ≤ 0.03: \(summary.withinThreeHundredths)/\(cases.count), worst \(summary.worst)")
+    }
+
+    private struct AnswerRow {
+        var band: String
+        var id: String
+        var type: String
+        var worst: Double
+        var matched: Bool
+    }
+
+    private struct AnswerSummary {
+        var labels = 0
         var withinOneHundredth = 0
-        var worstOverall = 0.0
+        var withinThreeHundredths = 0
+        var worst = 0.0
+        var rows: [AnswerRow] = []
+    }
+
+    private func compare(cases: [ClefJSON], engine: ClefEngine, label: String) async throws
+        -> AnswerSummary {
+        var summary = AnswerSummary()
         for testCase in cases {
             let request = try ClefRequest(json: try #require(testCase["request"]))
             let question = try #require(request.questions.first)
@@ -207,7 +262,6 @@ struct ClefParityTests {
                     instructions: question.instructions, criteria: question.criteria)])
             let answer = try #require(results.first?.answer, "\(question.id): no answer")
 
-            // `noul` reports a single number (`P(true)`), the other two a probability per option.
             let expectedProbabilities = observed["probabilities"]?.dictionaryValue?
                 .compactMapValues(\.doubleValue)
             var worst = 0.0
@@ -232,13 +286,81 @@ struct ClefParityTests {
                 worst = abs((answer.noulProbability ?? -1) - expected)
                 labelMatches = worst <= 0.03
             }
-            worstOverall = max(worstOverall, worst)
-            if labelMatches { labelsMatched += 1 }
-            if worst <= 0.01 { withinOneHundredth += 1 }
-            #expect(worst <= 0.03, "\(question.id): worst probability difference \(worst)")
+            if labelMatches { summary.labels += 1 }
+            if worst <= 0.01 { summary.withinOneHundredth += 1 }
+            if worst <= 0.03 { summary.withinThreeHundredths += 1 }
+            summary.worst = max(summary.worst, worst)
+            summary.rows.append(AnswerRow(
+                band: testCase["band"]?.stringValue ?? label, id: question.id,
+                type: question.type.rawValue, worst: worst, matched: labelMatches))
+            #expect(worst <= 0.03, "\(label) \(question.id): Δp \(worst)")
         }
-        print("CLEF-PARITY labels \(labelsMatched)/24, within 0.01 \(withinOneHundredth)/24, worst \(worstOverall)")
-        #expect(labelsMatched == 24, "labels \(labelsMatched)/24")
-        #expect(withinOneHundredth >= 18, "within 0.01: \(withinOneHundredth)/24")
+        return summary
+    }
+
+    /// **(c) CF-5b-FIX-1 — an information row, not a gate.** The reviewer asked for the per-layer
+    /// last-position cosine on the empty-state prompt. Swift cannot run the model layer by layer:
+    /// `Qwen35DecoderLayer` is internal to mlx-swift-lm and `loraLayers` exposes it only as `Module`,
+    /// so the reviewer's stated fallback applies — the **embedding output** (reachable as a leaf
+    /// module) and the **final state** are compared here, and `layers.json` carries the reference's
+    /// own 32 intermediate states with each layer's type so the owner can see the shape of the
+    /// divergence. Journal `2026-499` §(c) records the numbers and what remains unmeasurable.
+    @Test func embeddingAndFinalStatesBracketTheDivergence() async throws {
+        let layersGolden = try golden("layers.json")
+        let tokensGolden = try golden("tokens.json")
+        let maxLength = tokensGolden["max_length"]?.intValue ?? ClefPrompt.defaultMaxLength
+        let tokenizer = ClefMLXTokenizer(
+            upstream: try await HFTokenizerLoader().load(from: try modelDirectory()))
+        let directory = try modelDirectory()
+        let head = try ClefHead.load(
+            configURL: directory.appendingPathComponent("joint_head_config.json"),
+            weightsURL: directory.appendingPathComponent("joint_head.safetensors"))
+        let backbone = try await ClefBackbone.load(
+            modelDirectory: directory, hiddenSize: head.config.hiddenSize)
+
+        let request = try ClefRequest(json: try #require(layersGolden["request"]))
+        let record = try ClefPrompt.encodeRecord(
+            tokenizer: tokenizer, record: request, maxLength: maxLength)
+        #expect(record.inputIDs == layersGolden["input_ids"]?.intArray, "the layer golden's prompt")
+
+        let states = try #require(layersGolden["layers"]?.arrayValue)
+        let expectedEmbedding = try #require(states.first?["last"]?.arrayValue).compactMap(\.doubleValue)
+        let expectedFinal = try #require(states.last?["last"]?.arrayValue).compactMap(\.doubleValue)
+        let fullAttention = states.filter { $0["kind"]?.stringValue == "full_attention" }
+            .compactMap { $0["index"]?.intValue }
+        print("CLEF-PARITY layers: \(states.count) states, full-attention at \(fullAttention)")
+
+        let measured = try await backbone.withHidden(ids: record.inputIDs) { hidden, _ in
+            let last = hidden[hidden.dim(0) - 1, .ellipsis].asType(.float32)
+            return last.asArray(Float.self).map(Double.init)
+        }
+        // The embedding rows are the same weights in both runtimes: this must be ~1.0, and it
+        // confirms the ids and the embedding lookup before any layer math runs.
+        let embeddingCosine = try await embeddingCosine(backbone: backbone, ids: record.inputIDs,
+                                                        expected: expectedEmbedding)
+        let finalCosine = cosine(measured, expectedFinal)
+        print("CLEF-PARITY cosine embedding=\(embeddingCosine) final=\(finalCosine)")
+        // (c) is "information for the owner's ruling, not a gate" (Review CF-5b). Printing the two
+        // endpoints is the deliverable; the values are recorded in journal `2026-499` §(c).
+        _ = embeddingCosine
+        _ = finalCosine
+    }
+
+    /// The embedding output's last position, reached through the leaf-module table (the one piece of
+    /// the forward pass that is public).
+    private func embeddingCosine(backbone: ClefBackbone, ids: [Int], expected: [Double]) async throws
+        -> Double {
+        let measured: [Double] = try await backbone.container.perform { context in
+            guard let model = context.model as? Qwen35Model else { return [] }
+            let leaf = model.leafModules().flattened()
+                .first { $0.0.hasSuffix("model.embed_tokens") }?.1 as? Embedding
+            guard let leaf else { return [] }
+            let tokens = MLXArray(ids.map(Int32.init)).expandedDimensions(axis: 0)
+            let states = leaf(tokens)
+            let last = states[0, states.dim(1) - 1, .ellipsis].asType(.float32)
+            return last.asArray(Float.self).map(Double.init)
+        }
+        guard !measured.isEmpty else { return 0 }
+        return cosine(measured, expected)
     }
 }

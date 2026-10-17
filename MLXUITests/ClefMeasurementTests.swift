@@ -51,17 +51,24 @@ struct ClefMeasurementTests {
         let eightK = try await engine.answer(state: Self.state(words: 8_000), questions: [Self.question])
         let peakAfterEightK = Memory.peakMemory
 
+        // (d) CF-5b-FIX-1: the 16,384-token budget gate F1 ships is the number CF-8's `ram_gb`
+        // needs — the ~8k figure was not it.
+        let sixteenK = try await engine.answer(state: Self.state(words: 16_000), questions: [Self.question])
+        let peakAfterSixteenK = Memory.peakMemory
+
         let megabytes = { (bytes: Int) in Double(bytes) / 1_048_576 }
         print(
             "CLEF-MEASURE loadSeconds=\(String(format: "%.1f", loadSeconds)) "
                 + "peakAfterLoad=\(String(format: "%.0f", megabytes(peakAfterLoad)))MB "
                 + "peakAfter1k=\(String(format: "%.0f", megabytes(peakAfterOneK)))MB "
                 + "peakAfter8k=\(String(format: "%.0f", megabytes(peakAfterEightK)))MB "
+                + "peakAfter16k=\(String(format: "%.0f", megabytes(peakAfterSixteenK)))MB "
                 + "tokensSpent=\(await engine.tokensSpent)")
 
         #expect(loadSeconds > 0)
         #expect(peakAfterLoad > 1_000_000_000, "a 6.2 GB checkpoint must show up in peak memory")
         #expect(peakAfterEightK >= peakAfterLoad)
-        #expect(oneK.count == 1 && eightK.count == 1)
+        #expect(oneK.count == 1 && eightK.count == 1 && sixteenK.count == 1)
+        #expect(peakAfterSixteenK >= peakAfterEightK)
     }
 }
