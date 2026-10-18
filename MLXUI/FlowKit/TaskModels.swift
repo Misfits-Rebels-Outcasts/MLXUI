@@ -268,7 +268,10 @@ nonisolated enum TaskModels {
                                     "Qwen3.8 27B 3-bit",
                                     // Q38-6 (RSI/DelegateQwen38Backlog.md): the official 4-bit
                                     // card, appended after the 3-bit (rule 8) -- the seed does not move.
-                                    "Qwen3.8 27B"]
+                                    "Qwen3.8 27B",
+                                    // MM-W (RSI/backlog.md, MM-0 C ruled 2026-10-17): MiMo V2.6 9B,
+                                    // appended **last** -- the seed ("Ministral 3B") must not move.
+                                    "MiMo V2.6 9B"]
 
     /// A task's model pool (display names) — preference ordering for the seed, nothing more.
     static func models(forTask task: String) -> [String] {

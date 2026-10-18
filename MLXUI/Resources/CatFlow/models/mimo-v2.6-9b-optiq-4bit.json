@@ -1,0 +1,36 @@
+{
+  "id": "mlx-community/MiMo-V2.6-Distill-Qwen-9B-OptiQ-4bit",
+  "display": "MiMo V2.6 9B",
+  "kind": "local",
+  "engine": "mlx-lm",
+  "tasks": [
+    "Generate",
+    "Decide"
+  ],
+  "settings": {
+    "temperature": {
+      "type": "number",
+      "min": 0.0,
+      "max": 2.0,
+      "default": 0.6,
+      "maps_to": "temp"
+    },
+    "max_tokens": {
+      "type": "number",
+      "min": 1,
+      "max": 32768,
+      "default": 2048,
+      "maps_to": "max_tokens"
+    }
+  },
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 7.10,
+    "ram_gb": 10.70
+  },
+  "source": "https://huggingface.co/mlx-community/MiMo-V2.6-Distill-Qwen-9B-OptiQ-4bit",
+  "license": "MIT",
+  "manifest_version": 1,
+  "pinned": true,
+  "notes": "MLXUI-authored (RSI/backlog.md, group \"MiMo V2.6 9B\", MM-W) -- catflow-mlx has no manifest for this model, so this was written from qwen3.5-9b-4bit.json's shape. temperature default 0.6 matches the checkpoint's generation_config.json (temp 0.6; its top_k 20 and top_p 0.95 are not settings here). max_tokens is not seeded from the 262144-token context window, the same as Qwen3.5 9B. resources.disk_gb is browser.json's downloadSizeGB (7.10, total_size of the safetensors index) and resources.ram_gb is its ramGB 10.70 (MM-0 B, owner 2026-10-17: the 1.5x rule at the real 6.34 bits per weight of the OptiQ mixed 4/8-bit quant), not a Python-measured number. Verified against mlx-community/MiMo-V2.6-Distill-Qwen-9B-OptiQ-4bit revision 60061fc7499d25ce238e0687154557e504ea690a."
+}

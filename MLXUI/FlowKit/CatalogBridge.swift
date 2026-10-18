@@ -327,6 +327,21 @@ nonisolated enum CatalogBridge {
             equivalence: .same,
             manifestFile: "qwen3.8-27b-4bit.json",
             modelType: .llm),
+        // MM-W (RSI/backlog.md, group "MiMo V2.6 9B") -- MiMo V2.6 9B, the OptiQ mixed 4/8-bit
+        // `qwen3_5` text model from MM1. MM-0 A (owner, 2026-10-17): the display name is
+        // "MiMo V2.6 9B". `.same` onto the one catalog card; catflow-mlx has no manifest for it, so
+        // `mimo-v2.6-9b-optiq-4bit.json` is MLXUI-authored from `qwen3.5-9b-4bit.json`'s shape (see
+        // its own "notes"). `modelType: .llm` is explicit, following the shared-`qwen3_5` precedent,
+        // so the architecture string can never resolve through the ambiguous hfModelId match.
+        // Appended **last** to `TaskModels.llmModels` (MM-0 C), so the seed ("Ministral 3B") does
+        // not move. Needs no new task: `servedRefNamePrefixes` / `taskKinds` are untouched.
+        BridgeEntry(
+            display: "MiMo V2.6 9B",
+            pinnedID: "mlx-community/MiMo-V2.6-Distill-Qwen-9B-OptiQ-4bit",
+            candidates: ["mlx-community/MiMo-V2.6-Distill-Qwen-9B-OptiQ-4bit"],
+            equivalence: .same,
+            manifestFile: "mimo-v2.6-9b-optiq-4bit.json",
+            modelType: .llm),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {

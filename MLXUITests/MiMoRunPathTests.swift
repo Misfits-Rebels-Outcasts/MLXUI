@@ -251,11 +251,18 @@ struct MiMoRunPathTests {
         #expect(ChatTemplateSanitizer.sanitized(try template()) == nil)
     }
 
+    /// The installed model's folder when its `tokenizer.json` is present here, else nil.
+    nonisolated static func installedModelDirectory() -> URL? {
+        let dir = ModelStore.shared.directory(forModelID: id)   // `ModelStore` is nonisolated
+        return FileManager.default.fileExists(atPath: dir.appendingPathComponent("tokenizer.json").path) ? dir : nil
+    }
+
     /// The full app path (`HFTokenizerLoader` → `applyChatTemplate` with tools and
-    /// `LLMEngine.noThinkingContext`) when the model is installed here; self-skips otherwise.
-    @Test func theInstalledTokenizerRendersWithToolsAndThinkingOff() async throws {
-        let dir = ModelStore.shared.directory(forModelID: Self.id)
-        guard FileManager.default.fileExists(atPath: dir.appendingPathComponent("tokenizer.json").path) else { return }
+    /// `LLMEngine.noThinkingContext`) when the model is installed here. `.enabled(if:)` (MM3
+    /// follow-up, owner 2026-10-19) makes the run report "skipped" instead of passing silently.
+    @Test(.enabled(if: installedModelDirectory() != nil))
+    func theInstalledTokenizerRendersWithToolsAndThinkingOff() async throws {
+        let dir = try #require(Self.installedModelDirectory())
         let tokenizer = try await HFTokenizerLoader().load(from: dir)
         let messages: [[String: any Sendable]] = [["role": "user", "content": "Weather in Paris?"]]
         let tool: [String: any Sendable] = [
