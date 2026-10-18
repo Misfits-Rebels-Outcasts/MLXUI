@@ -116,7 +116,7 @@ struct FlowGalleryView: View {
                     Label("Import Flow", systemImage: "square.and.arrow.down")
                 }
                 .help("Copy a flow folder (.cat plus its audio, text, etc.) into My Workflows")
-                .disabled(true) //comeback
+                .disabled(false) //comeback
 
             }
             LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
