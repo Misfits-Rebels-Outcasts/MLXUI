@@ -56,8 +56,8 @@ private let clefParityModelDirectory: URL? = {
 /// cosine is now **1.0** on the empty-state prompt, the final hidden state matches the reference exactly,
 /// and the long-answer parity went from 6/12 to 12/12 labels (journals `2026-501`, `2026-502`, `2026-505`).
 /// The bars stay as a **tolerance** — the residual is per-position minima on the longest states (0.687 at
-/// 4k, 0.834 at 8k), which is sampling noise, not a dtype fault — and the *answers* gate is still what
-/// decides whether a drift of this size changes anything.
+/// 4k, 0.834 at 8k), a residual **expected to close with `mlx-swift-lm` 3.32.x** — and the *answers* gate
+/// is still what decides whether a drift of this size changes anything.
 private func clefHiddenCosineBar(tokenCount: Int) -> Double { tokenCount > 4096 ? 0.96 : 0.99 }
 
 private let clefParityReady = clefParityFixtures != nil && clefParityModelDirectory != nil
