@@ -47,13 +47,17 @@ private let clefParityModelDirectory: URL? = {
     return nil
 }()
 
-/// The contract asked for cosine ≥ 0.9999 (CLM's bar). Measured here, the two runtimes agree to
-/// **0.9997** on a normal prompt but only **0.9677** on the sixteen-thousand-token one: `Qwen35`'s
-/// linear-attention (state-space) layers accumulate in bf16, and a recurrence compounds the
-/// round-off over 16k steps in a way a projection head never does. That is a runtime difference, not
-/// a weight or prompt difference — the token ids are identical. This bar is an **implementer's call,
-/// pending owner confirmation** (journal `2026-498` §Questions for the owner); the *answers* gate is
-/// what decides whether a drift of this size changes anything.
+/// The contract asked for cosine ≥ 0.9999 (CLM's bar). Measured on `mlx-swift-lm` **3.31.3**, the two
+/// runtimes agreed to **0.9997** on a normal prompt but only **0.9677** on the sixteen-thousand-token one.
+/// **That was not bf16 recurrence drift — it was a bug**: 3.31.3 kept `Qwen35`'s gated-delta
+/// (state-space) layers in the wrong dtype, so long inputs converged to slightly different hidden states
+/// in every `qwen3_5` checkpoint. `mlx-swift-lm` **3.31.4** fixes it ("fix gated delta state precision —
+/// fp32 state"; the same fix Python's mlx 0.32 carries) and the branch is pinned there: the last-position
+/// cosine is now **1.0** on the empty-state prompt, the final hidden state matches the reference exactly,
+/// and the long-answer parity went from 6/12 to 12/12 labels (journals `2026-501`, `2026-502`, `2026-505`).
+/// The bars stay as a **tolerance** — the residual is per-position minima on the longest states (0.687 at
+/// 4k, 0.834 at 8k), which is sampling noise, not a dtype fault — and the *answers* gate is still what
+/// decides whether a drift of this size changes anything.
 private func clefHiddenCosineBar(tokenCount: Int) -> Double { tokenCount > 4096 ? 0.96 : 0.99 }
 
 private let clefParityReady = clefParityFixtures != nil && clefParityModelDirectory != nil
