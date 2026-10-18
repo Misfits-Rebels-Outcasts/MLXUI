@@ -39,8 +39,9 @@ final class AppState {
     static let hideMyWorkspace = true //comeback x
 
     /// Set to `true` to hide the "Rerank" domain (and its one model, Qwen3-Reranker-0.6B)
-    /// from Browse → Infrastructure. The Infrastructure section itself still renders while
-    /// Embeddings has models. Mirrors `hideVideoGeneration`.
+    /// from Browse → Infrastructure, which holds only the embedding and rerank domains (the
+    /// decision models have their own Deciders section). The Infrastructure section itself
+    /// still renders while Embeddings has models. Mirrors `hideVideoGeneration`.
     static let hideQwenReranker = true
 
     /// Set to `true` to hide the "Qwen3.5-9B" model badge from Browse → Chat & Text. Only
