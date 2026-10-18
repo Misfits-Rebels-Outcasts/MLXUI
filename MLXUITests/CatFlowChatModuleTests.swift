@@ -71,7 +71,10 @@ struct CatFlowChatModuleTests {
         //        same ruling — C1 sets its ramGB to 26.0; D1 hides it in Browse), 42 → 43.
         // CF-2: bundled catalog gained the mlx-community/clef-flash-4bit `.decision` entry
         //       (RSI/DelegateClefBacklog.md CF-2, CF-0 ruled 2026-10-03 A1–G1), 43 → 44.
-        #expect(entries.count == 44, "bundled catalog drifted: \(entries.count) entries")
+        // MM1: bundled catalog gained the mlx-community/MiMo-V2.6-Distill-Qwen-9B-OptiQ-4bit `.llm`
+        //      entry (RSI/backlog.md MM1, MM-0 ruled 2026-10-17), 44 → 45. Implementer's call,
+        //      pending owner confirmation, to follow this list's convention: a bumped count, not an edited golden.
+        #expect(entries.count == 45, "bundled catalog drifted: \(entries.count) entries")
 
         let withChat = registry(includingChat: true)
         let withoutChat = registry(includingChat: false)
@@ -91,8 +94,8 @@ struct CatFlowChatModuleTests {
             }
             checked += 1
         }
-        #expect(checked == 44)
-        #expect(llmChecked == 12)   // Q38-5: the 4-bit card is the 12th .llm entry
+        #expect(checked == 45)
+        #expect(llmChecked == 13)   // MM1: MiMo V2.6 9B is the 13th .llm entry (Q38-5's 4-bit card was the 12th)
     }
 
     // MARK: - Helpers

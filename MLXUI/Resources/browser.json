@@ -210,6 +210,53 @@
           "summary": "The mlx-community 4-bit MLX conversion of Qwen3.5-9B's language tower — a hybrid-attention (24 linear / 8 full) text model with up to 262K advertised context. The vision tower in this same download is exposed as a separate entry once install-path sharing lands (MoC-6)."
         },
         {
+          "id": "mlx-community--MiMo-V2.6-Distill-Qwen-9B-OptiQ-4bit",
+          "family": "MiMo",
+          "displayName": "MiMo V2.6 9B",
+          "paramSize": "9B",
+          "paramCountB": 9.0,
+          "modelType": "llm",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/MiMo-V2.6-Distill-Qwen-9B-OptiQ-4bit",
+          "ramGB": 10.7,
+          "downloadSizeGB": 7.1,
+          "contextWindow": 262144,
+          "license": "mit",
+          "licenseUrl": "https://huggingface.co/mlx-community/MiMo-V2.6-Distill-Qwen-9B-OptiQ-4bit",
+          "description": "Xiaomi's MiMo-V2.6 distilled into the Qwen3.5-9B architecture (Qwen/Qwen3.5-9B → XiaomiMiMo/MiMo-V2.6-Distill-Qwen-9B), converted by mlx-community as an OptiQ mixed-precision quant: 4-bit predominant, with 134 of 250 tensors kept at 8-bit and 116 at 4-bit (group size 64, 6.34 bits per weight, 7.10 GB on disk). The per-layer bit map was transferred from mlx-community/Qwen3.5-9B-OptiQ-4bit, not measured on this model. Text-only: the config names an image token, but the download carries no vision weights. Runs through MLXLLM's `qwen3_5` → `Qwen35Model` text runner.\n\nThe hybrid attention schedule keeps long context affordable: of 32 transformer layers only 8 hold a full KV cache, and the other 24 use a constant-size linear-attention recurrent state. The card advertises up to 262,144 tokens; how much a given Mac can hold alongside the weights depends on its available RAM.\n\nRAM figure: 9.0B × 6.34/8 × 1.5 ≈ 10.70 GB at the real bits per weight; the nominal 4.5 bpw would undercount at about 7.6 GB. No benchmark exists for this model in this app — speed and quality are unmeasured. Licensed MIT.",
+          "architecture": "Qwen3_5ForConditionalGeneration",
+          "languages": null,
+          "lastUpdated": "2026-09-27",
+          "taskTags": [
+            "text-generation"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": true,
+          "communityDownloads": 7961,
+          "communityLikes": 18,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 10.7,
+              "downloadSizeGB": 7.1,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/MiMo-V2.6-Distill-Qwen-9B-OptiQ-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/MiMo-V2.6-Distill-Qwen-9B-OptiQ-4bit",
+          "summary": "Xiaomi's MiMo-V2.6 distilled into the Qwen3.5-9B architecture, as an OptiQ mixed 4/8-bit MLX quant (6.34 bits per weight) — a text-only, hybrid-attention model with up to 262K advertised context."
+        },
+        {
           "id": "lukaskremla--Qwen3.8-27B-3bit-MLX",
           "family": "Qwen3.8",
           "displayName": "Qwen3.8-27B (3-bit)",
