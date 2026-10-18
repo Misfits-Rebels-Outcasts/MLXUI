@@ -88,4 +88,46 @@ struct MiMoCatalogEntryTests {
         #expect(ModelSupport.unsupportedReason(for: e) == nil)
         #expect(e.runnerKind == .llm)
     }
+
+    // MARK: - MM2 — what ModelDetailView and ComparisonTableView read
+
+    /// MM2 done-when: every field the detail tiles and the comparison rows read is present, so a
+    /// "—" can only come from a genuinely null field (speed — unmeasured — and benchmarks).
+    @Test func detailAndComparisonFieldsArePopulated() throws {
+        let e = try entry()
+        #expect(e.contextWindow == 262144)               // Context tile / row ("262K")
+        #expect(e.lastUpdated == "2026-09-27")           // Updated tile
+        #expect(e.communityDownloads != nil)
+        #expect(e.formattedDownloads() != "—")           // Downloads tile / row
+        #expect(DataNormalizer.normalizeLicense(e.license) == "MIT")
+        #expect(DataNormalizer.normalizeArchitecture(e.architecture) == "Qwen3_5")
+        // The genuinely null ones, which the views render as an absent tile / "—":
+        #expect(e.speedTokensPerSec == nil)
+        #expect(e.benchmarks == nil)
+    }
+
+    /// The About section only renders when the description differs from the card summary, and the
+    /// summary is what Browse cards show. Both must be real prose, and the unverified "agentic /
+    /// tool-use" tag claims from the card must not be repeated (MM2 contract).
+    @Test func summaryAndDescriptionAreDistinctProseWithoutUnverifiedClaims() throws {
+        let e = try entry()
+        let summary = try #require(e.summary)
+        let description = try #require(e.description)
+        #expect(!summary.isEmpty)
+        #expect(description != e.displaySummary)
+        #expect(e.descriptionSource == Self.hfID)
+        for text in [summary, description] {
+            let lower = text.lowercased()
+            #expect(!lower.contains("agentic"))
+            #expect(!lower.contains("tool-use"))
+            #expect(!lower.contains("tool use"))
+        }
+        // Lineage, hybrid attention, OptiQ provenance, license, no benchmarks.
+        #expect(description.contains("XiaomiMiMo/MiMo-V2.6-Distill-Qwen-9B"))
+        #expect(description.contains("24") && description.contains("8 hold a full KV cache"))
+        #expect(description.contains("transferred from mlx-community/Qwen3.5-9B-OptiQ-4bit"))
+        #expect(description.contains("not measured on this model"))
+        #expect(description.contains("MIT"))
+        #expect(description.contains("unmeasured"))
+    }
 }
