@@ -98,4 +98,33 @@ struct ClefWorkflowWiringTests {
                     "\(task) must not offer a decision engine")
         }
     }
+
+    // MARK: - The seed table itself (CF-8-FIX-1) — not just the derived pool
+
+    /// Gate C1 as ruled: `"Clef Flash"` is appended **last** to Classify/Gate/Score in
+    /// `TaskModels.taskModels`, after CLM 8B, and `"Laya 0.4B"` stays first — the rule is about the
+    /// table, so the table is what this asserts. The derived-pool test above would pass even if the
+    /// table lost the entry (the pool also reflects the live catalog), which is exactly the gap
+    /// Review CF-8 found.
+    @MainActor
+    @Test func clefIsAppendedLastInTheSeedTableAndLayaStaysFirst() throws {
+        for task in ["Classify", "Gate", "Score"] {
+            let seed = TaskModels.seededModels(forTask: task)
+            #expect(seed.first == "Laya 0.4B", "\(task): Laya 0.4B is the seed (gate D)")
+            #expect(seed.contains("CLM 8B"), "\(task): CLM 8B is in the seed (CL-7)")
+            #expect(seed.last == "Clef Flash", "\(task): Clef Flash is appended **last** (gate C1)")
+            // The two deciders sit after every LLM, in the order they joined.
+            let clmIndex = try #require(seed.firstIndex(of: "CLM 8B"))
+            let clefIndex = try #require(seed.firstIndex(of: "Clef Flash"))
+            #expect(clefIndex == clmIndex + 1, "\(task): Clef Flash directly follows CLM 8B")
+            #expect(seed.lastIndex(of: "Laya 0.4B") == 0, "\(task): Laya appears only as the seed")
+        }
+        // The default is unchanged — the reason the append matters ("joins the pool, never the default").
+        let catalog = try loadCatalog()
+        for task in ["Classify", "Gate", "Score"] {
+            #expect(TaskModels.defaultModel(forTask: task, catalog: catalog,
+                                            claimableModelIDs: claimable(catalog)) == "Laya 0.4B",
+                    "\(task) still defaults to Laya 0.4B")
+        }
+    }
 }

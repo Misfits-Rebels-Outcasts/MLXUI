@@ -185,6 +185,13 @@ nonisolated enum TaskModels {
     /// `models_for_task` — a task's usual model pool (display names), ported from
     /// `catalog/models.py::TASK_MODELS`. **Preference ordering only since CFM-R14-2** — the
     /// pool never filters; it orders the default seed. Candidates come from `derivedModels`.
+    /// The seed table itself, for tests that must pin the **ruled order** (CF-8-FIX-1) rather than
+    /// the derived pool — the pool also reflects the live catalog, so a table regression there would
+    /// hide behind whichever models the catalog happens to hold.
+    static func seededModels(forTask task: String) -> [String] {
+        taskModels[task] ?? []
+    }
+
     private static let taskModels: [String: [String]] = [
         "Transcribe": ["Whisper Tiny", "Whisper Small", "Whisper Large v3", "Voxtral Mini 4B Realtime"],
         "Embed": ["BGE-M3"],
@@ -213,9 +220,12 @@ nonisolated enum TaskModels {
         // CL-7 (RSI/DelegateCLMBacklog.md, gate D): `"CLM 8B"` is **appended**, after the LLMs —
         // it joins the pool but is never the default; `defaultModel(forTask:)` for all three
         // stays `"Laya 0.4B"`, unchanged by this addition.
-        "Classify": ["Laya 0.4B"] + llmModels + ["CLM 8B"],
-        "Gate": ["Laya 0.4B"] + llmModels + ["CLM 8B"],
-        "Score": ["Laya 0.4B"] + llmModels + ["CLM 8B"],
+        // CF-8 (RSI/DelegateClefBacklog.md, gate C1): `"Clef Flash"` is **appended last**, after
+        // CLM — same discipline, the seed does not move; `defaultModel(forTask:)` for all three
+        // stays `"Laya 0.4B"`.
+        "Classify": ["Laya 0.4B"] + llmModels + ["CLM 8B", "Clef Flash"],
+        "Gate": ["Laya 0.4B"] + llmModels + ["CLM 8B", "Clef Flash"],
+        "Score": ["Laya 0.4B"] + llmModels + ["CLM 8B", "Clef Flash"],
         // MoC-6-2 (RSI/DelegateMoCBacklog.md): appended last, same discipline as MoC-2-4 —
         // the seed ("LFM2-VL 1.6B") does not move.
         "Describe Image": ["LFM2-VL 1.6B", "Gemma 3 4B", "Qwen3.5 9B Vision"],
