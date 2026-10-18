@@ -184,6 +184,24 @@ private struct ServerHeader: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
             }
+            Divider()
+            // SC-6 (gates F–H, implementer's call, pending owner confirmation)
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Dedicated server mode").font(.callout.weight(.medium))
+                    Text(ServerScreenModel.dedicatedCaption(on: screen.dedicatedOn, capacityBytes: controller.budgetBytes))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 12)
+                Toggle("Dedicated server mode", isOn: Binding(
+                    get: { screen.dedicatedOn },
+                    set: { on in Task { await controller.setDedicatedMode(on); await refresh() } }))
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .disabled(!screen.dedicatedOn && !screen.canDedicate)
+                    .help(screen.canDedicate || screen.dedicatedOn ? "Dedicated server mode" : "Serve a model first")
+            }
         }
         .padding(ServerStyle.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)

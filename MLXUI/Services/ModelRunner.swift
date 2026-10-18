@@ -596,6 +596,12 @@ final class ModelRunner {
             return true
         }
 
+        // SC-7 (gate F): in Dedicated server mode no model loads here. false = nothing sent, so the composer keeps what was typed.
+        if let refusal = RunAdmission.canLoadModel(surface: .chat) {
+            errorMessage = refusal.sentence
+            return false
+        }
+
         errorMessage = nil
 
         // Prior turns become the model's rehydrated history; the new prompt goes on top.

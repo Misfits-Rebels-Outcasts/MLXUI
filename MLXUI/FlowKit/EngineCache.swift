@@ -335,6 +335,8 @@ nonisolated final class LeasingStage: PipelineStage, @unchecked Sendable {
 
     func run(_ input: Media, progress: @Sendable @escaping (Double) -> Void) async throws -> Media {
         let probe = self.probe
+        // SC-7 (gate F): in Dedicated server mode a Run window runs nothing; the sentence reaches the view's error bar.
+        if let refusal = RunAdmission.canLoadModel(surface: .runWindow) { throw refusal }
         // SC-5a (gate D): ask before pushing out a model other apps are being served. Cancel = the run doesn't start
         // (a `CancellationError`, which the Run views already treat as "stopped", not as a failure).
         if let confirmer {

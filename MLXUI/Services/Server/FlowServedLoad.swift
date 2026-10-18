@@ -56,8 +56,12 @@ nonisolated struct FlowServedLoadGate: Sendable {
     let reloadSeconds: @Sendable ([String]) async -> Int?
     var decisions: ServedLoadDecisions = .shared
     var isEnabled: @Sendable () -> Bool = { LocalServerGate.isEnabled }
+    var refusal: @Sendable () -> RunAdmission.Refusal? = { RunAdmission.canLoadModel(surface: .flowRow) }
 
     func callAsFunction(path: String, model: ModelEntry) async throws {
+        // SC-7 (gate F): in Dedicated server mode a model row fails with the sentence — also an armed firing's, which is
+        // logged as a failed run and skipped (it doesn't queue). Asked before anything else, whatever the bytes.
+        if let refusal = refusal() { throw FlowError.stageFailure(row: path, message: refusal.sentence) }
         guard isEnabled() else { return }                                     // gate closed: no check at all
         let bytes = await bytesNeeded(model)
         guard bytes > 0 else { return }

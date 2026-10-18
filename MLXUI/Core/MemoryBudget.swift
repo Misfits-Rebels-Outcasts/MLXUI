@@ -69,7 +69,7 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     /// **SC-2b (owner, 2026-10-12): in a DEBUG build only**, the launch argument `-MLXUIMemoryBudgetGiB <n>` sets it
     /// to `n` GiB, so a contention check can be run on a Mac with plenty of room (SC-6 owns a runtime-adjustable
     /// budget). The argument, its key and this branch are inside `#if DEBUG`: a release build neither contains the
-    /// string nor reads `UserDefaults` for it, and nothing else changes `capacityBytes`.
+    /// string nor reads `UserDefaults` for it, and only Dedicated server mode (SC-6, `setCapacity`) changes `capacityBytes` afterwards.
     static func sharedCapacity(totalRAMGB: Double, defaults: UserDefaults = .standard) -> Int64 {
         #if DEBUG
         if let gib = debugOverrideGiB(defaults: defaults) { return Int64(gib * 1_073_741_824) }
@@ -99,7 +99,12 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     /// Eviction priority of prompt-cache snapshots: below every weights holder (PC-1, ruling A1).
     static let snapshotPriority = -1
 
-    let capacityBytes: Int64
+    /// The capacity right now. Mutable since SC-6 (Dedicated server mode raises it and puts it back); read under the
+    /// ledger's lock so a check never sees it half-way through a change.
+    var capacityBytes: Int64 { withLock { capacity } }
+    /// What the budget was created with — the figure Dedicated mode goes back to.
+    let baseCapacityBytes: Int64
+    private var capacity: Int64
 
     private struct Weak {
         weak var participant: (any MemoryBudgetParticipant)?
@@ -135,7 +140,8 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     private let cacheClearer: MLXCacheClearer
 
     init(capacityBytes: Int64, cacheClearer: MLXCacheClearer = .shared) {
-        self.capacityBytes = capacityBytes
+        self.capacity = capacityBytes
+        self.baseCapacityBytes = capacityBytes
         self.cacheClearer = cacheClearer
     }
 
@@ -244,6 +250,53 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
         case tooLarge
         /// Only entries in use (or loads in flight) stood in the way for the whole bound.
         case busy([Blocker])
+    }
+
+    // MARK: - Runtime capacity (SC-6, gate G)
+
+    /// Dedicated server mode's share of RAM (gate G, planner's recommendation 0.75 — implementer's call, pending owner
+    /// confirmation). The ordinary share is `EngineCache.defaultBudget`'s 0.6.
+    static let dedicatedFraction = 0.75
+
+    /// The raised capacity for a Mac with `totalRAMGB`: `max(4 GB, RAM × 0.75)`, never below `base` (a DEBUG override
+    /// or a tiny Mac keeps whatever is larger).
+    static func dedicatedCapacity(totalRAMGB: Double, base: Int64) -> Int64 {
+        max(base, Int64(max(4, totalRAMGB * dedicatedFraction) * 1_073_741_824))
+    }
+
+    /// Change the capacity. A **raise** wakes waiters (room appeared). A **lower** leaves what is booked alone — call
+    /// `enforceCapacity()` to evict down to it. Returns whether it changed.
+    @discardableResult
+    func setCapacity(_ bytes: Int64) -> Bool {
+        guard bytes > 0 else { return false }
+        let (changed, toResume): (Bool, [CheckedContinuation<Void, Never>]) = withLock {
+            guard capacity != bytes else { return (false, []) }
+            let raised = bytes > capacity
+            capacity = bytes
+            guard raised else { return (true, []) }
+            settled &+= 1
+            return (true, takeWaitersLocked())
+        }
+        toResume.forEach { $0.resume() }
+        return changed
+    }
+
+    /// After a lower: evict least-recently-used entries — snapshots first, then the participants' weights — until what
+    /// is booked fits. Pinned and in-use entries are skipped by the participants, so this may stop short (they free
+    /// when released or unpinned; the controller re-pins against the new capacity first).
+    func enforceCapacity() async {
+        while usedBytes > capacityBytes {
+            var freed = false
+            for participant in liveParticipants().sorted(by: { $0.evictionPriority < $1.evictionPriority }) {
+                if await participant.evictLeastRecentlyUsed() { freed = true; break }
+            }
+            if !freed { return }
+            cacheClearer.clearNow()
+        }
+    }
+
+    private func liveParticipants() -> [any MemoryBudgetParticipant] {
+        withLock { participants.compactMap { $0.participant } }
     }
 
     /// Bytes currently held (resident + in flight) across every participant.
@@ -404,7 +457,7 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
             if deadline != nil, Task.isCancelled { return .busy(currentBlockers(ignoring: ignore)) }
             let (added, held, seen) = withLock { () -> (Bool, Int64, UInt64) in
                 let held = ledger.filter { !snapshots.contains($0.key) }.values.reduce(0, +)
-                guard held + bytes <= capacityBytes else { return (false, held, settled) }
+                guard held + bytes <= capacity else { return (false, held, settled) }
                 ledger[reservation.id] = bytes
                 pending.insert(reservation.id)
                 return (true, held, settled)
@@ -432,7 +485,7 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
                                                            pinnedBlocks: pinned == .never, finalize: {
                 // last look, in the same lock section as the verdict: it may fit after all
                 let held = ledger.filter { !snapshots.contains($0.key) }.values.reduce(0, +)
-                guard held + bytes <= capacityBytes else { return }
+                guard held + bytes <= capacity else { return }
                 ledger[reservation.id] = bytes
                 pending.insert(reservation.id)
                 granted = true
@@ -634,7 +687,7 @@ nonisolated final class MemoryBudget: @unchecked Sendable {
     private func tryAddCapturingSettled(_ reservation: Reservation, bytes: Int64) -> (fits: Bool, seen: UInt64) {
         withLock {
             let used = ledger.values.reduce(0, +)
-            guard used + bytes <= capacityBytes else { return (false, settled) }
+            guard used + bytes <= capacity else { return (false, settled) }
             ledger[reservation.id] = bytes
             pending.insert(reservation.id)
             return (true, settled)

@@ -21,7 +21,12 @@ nonisolated struct ServeEnvironment: Sendable {
     var keepAliveSeconds: Double = 1.0
     /// S1-5c: the whole shared memory budget (`MemoryBudget.shared`). A served model larger than this
     /// is refused with a 503 rather than loaded to thrash.
-    var memoryCapacityBytes: Int64 = MemoryBudget.shared.capacityBytes
+    /// SC-6: read live (Dedicated mode changes the budget at run time) unless a test pinned a figure.
+    var memoryCapacityOverride: Int64?
+    var memoryCapacityBytes: Int64 {
+        get { memoryCapacityOverride ?? MemoryBudget.shared.capacityBytes }
+        set { memoryCapacityOverride = newValue }
+    }
     /// S2-4: the context window `/v1/models` reports for a model id, or `nil` when the checkpoint
     /// declares none. Injected because it reads `config.json`; the live value reads the same
     /// `ModelContextWindow` the pre-count uses, and 8,192 for Apple Foundation Models.

@@ -262,6 +262,8 @@ final class LayaRunModel {
             let start = Date()
             do {
                 let question = try definition.resolve()
+                // SC-7 (gate F): in Dedicated server mode the pass doesn't start; the sentence is the error.
+                if let refusal = RunAdmission.canLoadModel(surface: .runWindow) { throw refusal }
                 // SC-5a (gate D): ask before pushing out a served model. Cancel: the pass doesn't start, no error.
                 if let confirmer {
                     let needed = await LayaEngineCache.shared.bytesNeeded(directory: directory)

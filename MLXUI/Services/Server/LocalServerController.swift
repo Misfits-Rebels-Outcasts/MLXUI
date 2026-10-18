@@ -251,7 +251,17 @@ final class LocalServerController {
     @ObservationIgnored private let evictModel: (String) async -> Void
     /// PC-1: the prompt cache's snapshots of an uninstalled model go with its weights (F11).
     @ObservationIgnored private let evictPromptCache: (String) async -> Void
-    @ObservationIgnored let budgetBytes: Int64
+    /// The budget the pins and the memory bar are measured against. Mutable since SC-6: Dedicated mode raises it.
+    private(set) var budgetBytes: Int64
+    /// SC-6: the budget Dedicated mode raises and restores (`MemoryBudget.shared` unless a test injects one).
+    @ObservationIgnored private let budget: MemoryBudget
+    @ObservationIgnored private let totalRAMGB: Double
+    /// SC-6: the figure `budgetBytes` goes back to, and whether the raised budget is in effect now. `syncBudget` does
+    /// nothing unless the mode's state differs from this, so an ordinary launch or option flip never touches the budget.
+    @ObservationIgnored private let baseBudgetBytes: Int64
+    @ObservationIgnored private var raisedBudgetApplied = false
+    /// SC-6 (gate G): the stored Dedicated-server-mode switch, mirrored here so SwiftUI observes it.
+    private(set) var dedicatedMode: Bool
     /// SC-1: the pool served models are preloaded into (`nil` = no preloading: unit tests that don't inject one).
     @ObservationIgnored let preloadPool: (any ServePreloading)?
     /// SC-4b: the memory ledgers the Server screen's bar reads (budget, pool, prompt-cache snapshots).
@@ -289,7 +299,8 @@ final class LocalServerController {
              let directory = ModelStore.shared.directory(forHFModelID: hfModelID)
              await PromptCacheShared.store.evict(directory: ModelContainerPool.key(for: directory))
          },
-         budgetBytes: Int64 = MemoryBudget.shared.capacityBytes,
+         budget: MemoryBudget = .shared, budgetBytes: Int64? = nil,
+         totalRAMGB: Double = SystemInfo.detect().totalRAMGB,
          preloadPool: (any ServePreloading)? = TestEnvironment.isRunningTests ? nil : ModelContainerPool.shared,
          ledger: @escaping @Sendable () async -> MemoryLedgerSample = {
              MemoryLedgerSample(used: MemoryBudget.shared.usedBytes,
@@ -303,7 +314,11 @@ final class LocalServerController {
         self.catalogLoaded = catalogLoaded
         self.evictModel = evict
         self.evictPromptCache = evictPromptCache
-        self.budgetBytes = budgetBytes
+        self.budget = budget
+        self.baseBudgetBytes = budgetBytes ?? budget.capacityBytes
+        self.budgetBytes = baseBudgetBytes
+        self.totalRAMGB = totalRAMGB
+        self.dedicatedMode = DedicatedMode.isOn(in: defaults)
         self.preloadPool = preloadPool
         self.ledger = ledger
         self.enabled = defaults.object(forKey: Self.enabledKey) as? Bool ?? true
@@ -354,6 +369,7 @@ final class LocalServerController {
         await apply()
         if on { startPreloads() } else { cancelPreload(id) }
         await recomputePins()
+        await endDedicatedIfIdle()
         if on, !hasShownConnect {
             hasShownConnect = true
             defaults.set(true, forKey: Self.connectShownKey)
@@ -368,6 +384,7 @@ final class LocalServerController {
         guard LocalServerGate.isAvailable else { return }
         LocalServerOption.set(on, in: defaults)
         optionEnabled = on
+        await syncBudget()          // SC-6: the mode is in force only while serving is enabled
         if on {
             await autoStart()
         } else {
@@ -382,9 +399,53 @@ final class LocalServerController {
     func setServerEnabled(_ on: Bool) async {
         guard LocalServerGate.isEnabled else { return }
         setEnabled(on)
+        // SC-6: Dedicated mode is a Mac that serves; with the server off it would only block, so it ends with it.
+        if !on, dedicatedMode { await setDedicatedMode(false) }
         await apply()
         if on { startPreloads() } else { cancelAllPreloads() }
         await recomputePins()
+    }
+
+    // MARK: - Dedicated server mode (SC-6, gates F–H: implementer's call, pending owner confirmation)
+
+    /// Whether the mode is in force: the stored switch and the Local Server enabled.
+    var dedicatedActive: Bool { dedicatedMode && LocalServerGate.isEnabled }
+
+    /// **On:** turn the server on, raise the budget to `MemoryBudget.dedicatedFraction` of RAM, preload every reachable
+    /// served model and pin what fits (`RunAdmission` then refuses every other load). **Off:** put the budget back,
+    /// evicting unpinned weights until it fits; the served list and the pins stay as SC-A keeps them.
+    func setDedicatedMode(_ on: Bool) async {
+        guard LocalServerGate.isEnabled else { return }
+        if on, reachableIDs.isEmpty { return }          // nothing to serve: the mode would only block the Mac
+        DedicatedMode.set(on, in: defaults)
+        dedicatedMode = on
+        if on { setEnabled(true) }
+        await syncBudget()
+        await apply()
+        if on { startPreloads() }
+        await recomputePins()
+    }
+
+    /// The mode needs something to serve: when the last reachable model is un-served or uninstalled, it ends.
+    private func endDedicatedIfIdle() async {
+        if dedicatedMode, reachableIDs.isEmpty { await setDedicatedMode(false) }
+    }
+
+    /// Make the budget match the mode (also run at launch and when the Enable option changes): raise it while the mode
+    /// is in force, otherwise restore the base. A lower re-pins against the new figure first, then evicts down to it.
+    private func syncBudget() async {
+        guard dedicatedActive != raisedBudgetApplied else { return }
+        raisedBudgetApplied = dedicatedActive
+        let target = dedicatedActive
+            ? MemoryBudget.dedicatedCapacity(totalRAMGB: totalRAMGB, base: baseBudgetBytes)
+            : baseBudgetBytes
+        let lowering = target < budget.capacityBytes
+        budget.setCapacity(target)
+        budgetBytes = target
+        if lowering {
+            await recomputePins()
+            await budget.enforceCapacity()
+        }
     }
 
     /// A new port applies on restart: the setting is saved now; a running server restarts so the
@@ -403,6 +464,7 @@ final class LocalServerController {
     /// Launch: drop served models that are no longer installed (deleted outside the app), then
     /// resume serving if any reachable model was left served (gate permitting).
     func autoStart() async {
+        await syncBudget()          // SC-6: a Mac left in Dedicated mode comes back with the raised budget
         await reconcileServed()
         guard LocalServerPolicy.shouldAutoStart(gateAvailable: LocalServerGate.isEnabled, enabled: enabled,
                                                 servedCount: reachableIDs.count) else { return }
@@ -443,6 +505,7 @@ final class LocalServerController {
         }
         await apply()
         await recomputePins()
+        await endDedicatedIfIdle()
     }
 
     private func isInstalledLLM(_ hfModelID: String) -> Bool {

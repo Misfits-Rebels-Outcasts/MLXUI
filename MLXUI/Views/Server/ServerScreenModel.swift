@@ -90,6 +90,17 @@ struct ServerScreenModel: Equatable {
     var memory: ServeMemoryReading?
     var diskFact: String
     var lowDiskWarning: String?
+    /// SC-6: Dedicated server mode is in force.
+    var dedicatedOn = false
+    /// SC-6: the switch can be turned on — something is reachable to serve (turning it off is always allowed).
+    var canDedicate = false
+
+    /// SC-6: the line under the switch. Plain facts (R51): what it does and what it costs the rest of the app.
+    static func dedicatedCaption(on: Bool, capacityBytes: Int64) -> String {
+        let gib = String(format: "%.1f GB", Double(capacityBytes) / 1_073_741_824)
+        return on ? "On · models can't be run on this Mac; \(gib) is reserved for serving."
+                  : "Keeps every served model ready, gives serving more memory, and stops chat, Run windows and flows from loading models."
+    }
 
     // MARK: Derivations (pure)
 
@@ -171,7 +182,8 @@ extension LocalServerController {
             runState: runState, statusSentence: statusSentence, address: address, switchOn: enabled,
             rows: rows, stats: statsRows, memory: memory,
             diskFact: ServeDisk.factText(freeBytes: freeDiskBytes),
-            lowDiskWarning: ServeDisk.warning(freeBytes: freeDiskBytes))
+            lowDiskWarning: ServeDisk.warning(freeBytes: freeDiskBytes),
+            dedicatedOn: dedicatedActive, canDedicate: !reachableIDs.isEmpty)
     }
 
     /// The memory bar from the ledgers: kept-ready served weights come from the pool's own per-model bookings; the
