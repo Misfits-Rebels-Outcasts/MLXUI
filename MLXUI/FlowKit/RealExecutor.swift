@@ -777,13 +777,14 @@ nonisolated struct RealExecutor: FlowExecutor {
             // than guess an engine, naming the row's own model **and** the models that are
             // served. The list comes from `decisionEngineFamilyOrder`, not a hard-coded
             // sentence, so adding an engine updates this refusal by construction.
-            let names = Self.servedDeciderNames
-            let listed = names.count > 1
-                ? names.dropLast().joined(separator: ", ") + ", or " + names.last!
-                : (names.first ?? "a decision model")
+            // One series, ending in "or a language model" — no force-unwrap, no second "or":
+            // "pick Laya 0.4B, CLM 8B, Clef Flash, or a language model for this row."
+            let listed = Self.servedDeciderNames.joined(separator: ", ")
             throw FlowError.stageFailure(row: path,
                 message: "\(modelEntry.displayName) isn't available in workflows yet — "
-                    + "pick \(listed), or a language model for this row.")
+                    + (listed.isEmpty
+                        ? "pick a language model for this row."
+                        : "pick \(listed), or a language model for this row."))
         }
 
         let tags = Self.declaredTags(row)
