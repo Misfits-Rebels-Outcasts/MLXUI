@@ -1,0 +1,15 @@
+{
+  "id": "mlx-community/clef-flash-4bit",
+  "display": "Clef Flash",
+  "kind": "local",
+  "engine": "clef-mlx",
+  "tasks": ["Classify", "Gate", "Score"],
+  "settings": {},
+  "capabilities": { "constrained_decoding": true },
+  "resources": { "disk_gb": 6.21, "ram_gb": 8.5 },
+  "source": "https://huggingface.co/mlx-community/clef-flash-4bit",
+  "checksum": "sha256:19cdcec8c81dc9212be320fff47462ab342fbc1278be4368fb3da71241cf5ba0",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true
+}

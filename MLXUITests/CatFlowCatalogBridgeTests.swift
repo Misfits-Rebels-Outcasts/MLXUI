@@ -164,8 +164,9 @@ struct CatFlowCatalogBridgeTests {
             _ = display
         }
         // Q38-3: the bridge table gained "Qwen3.8 27B 3-bit"
-        // (`lukaskremla--Qwen3.8-27B-3bit-MLX`), 23 -> 24; Q38-6 added "Qwen3.8 27B", 24 -> 25.
-        #expect(CatalogBridge.entries.count == 25)
+        // (`lukaskremla--Qwen3.8-27B-3bit-MLX`), 23 -> 24; Q38-6 added "Qwen3.8 27B", 24 -> 25;
+        // CF-8 added "Clef Flash", 25 -> 26.
+        #expect(CatalogBridge.entries.count == 26)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
@@ -394,8 +395,9 @@ struct CatFlowCatalogBridgeTests {
             Issue.record("\(display) should resolve: \(reason)")
         }
         // Q38-3: the bridge table gained "Qwen3.8 27B 3-bit"
-        // (`lukaskremla--Qwen3.8-27B-3bit-MLX`), 23 -> 24; Q38-6 added "Qwen3.8 27B", 24 -> 25.
-        #expect(CatalogBridge.entries.count == 25)
+        // (`lukaskremla--Qwen3.8-27B-3bit-MLX`), 23 -> 24; Q38-6 added "Qwen3.8 27B", 24 -> 25;
+        // CF-8 added "Clef Flash", 25 -> 26.
+        #expect(CatalogBridge.entries.count == 26)
     }
 
     // MARK: - MoC-4-4: Qwen3 Reranker 0.6B joins the bridge, the model on MoC-3's seam

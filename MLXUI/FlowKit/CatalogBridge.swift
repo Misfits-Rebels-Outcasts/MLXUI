@@ -283,6 +283,17 @@ nonisolated enum CatalogBridge {
             candidates: ["RealityCat/CLM-v0.1-8B-MLX-8bit"],
             equivalence: .same,
             manifestFile: "clm-v0.1-8b-8bit.json"),
+        // CF-8 (RSI/DelegateClefBacklog.md) — Clef Flash, the third decision encoder on the CL
+        // seam (CF-7's `ClefDecisionEngine`). Resolves exactly: the catalog card and the catflow
+        // manifest id are the same repo. "Clef Flash" is appended to
+        // `taskModels["Classify"/"Gate"/"Score"]` (gate C1) — it joins the pool last and is never
+        // the default; `defaultModel(forTask:)` for those three stays "Laya 0.4B".
+        BridgeEntry(
+            display: "Clef Flash",
+            pinnedID: "mlx-community/clef-flash-4bit",
+            candidates: ["mlx-community/clef-flash-4bit"],
+            equivalence: .same,
+            manifestFile: "clef-flash-4bit.json"),
         // Q38-3 (RSI/DelegateQwen38Backlog.md) -- the 3-bit Qwen3.8 27B card from Q38-2. B1 as
         // ruled by the owner 2026-10-03: its **own** display name ("Qwen3.8 27B 3-bit"), `.same`
         // equivalence, resolving to exactly the one catalog card, which is byte-identical to this
