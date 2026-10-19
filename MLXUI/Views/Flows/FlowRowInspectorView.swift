@@ -361,12 +361,31 @@ struct FlowRowInspectorView: View {
             Text(Self.instructionBoxLabel(for: task))
                 .font(.subheadline.weight(.semibold))
             let instruction = quotedInstruction(row.settings)
+            let fedBy = model.generatePromptSource(for: rowID)
             TextField("…", text: Binding(
                 get: { instruction ?? "" },
                 set: { model.setInstruction($0.isEmpty ? nil : $0, for: rowID) }
             ), axis: .vertical)
             .lineLimit(2...5)
             .textFieldStyle(.roundedBorder)
+            .foregroundStyle(fedBy == nil ? .primary : .secondary)
+            // RP-3: a fed Generate row ignores its typed prompt — grey the box (still editable)
+            // and say which row gives it the prompt.
+            if let fedBy {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(fedBy.note)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button("Use my prompt instead") { model.useMyPromptInstead(for: rowID) }
+                        .controlSize(.small)
+                }
+            } else if let chain = model.startsNewChainNote(for: rowID) {
+                Text(chain)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             let suggestions = FlowEditorModel.suggestedInstructions(for: task)
             if !suggestions.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {

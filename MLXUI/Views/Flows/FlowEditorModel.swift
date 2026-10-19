@@ -333,6 +333,17 @@ final class FlowEditorModel {
         }
     }
 
+    /// The RP-2 default prompt of a Generate row (unquoted) — also what RP-3's "Use my prompt
+    /// instead" fills in when the typed prompt is empty, so the row is never left promptless.
+    nonisolated static func defaultPrompt(forTask task: String) -> String? {
+        switch task {
+        case "Generate Image": return "a cozy reading nook by a rainy window, warm light"
+        case "Generate Sound": return "calm ambient background music, soft piano, no drums"
+        case "Generate Video": return "waves rolling onto a sandy beach at sunset, slow camera pan"
+        default: return nil
+        }
+    }
+
     /// HU-1 — a freshly added human row would otherwise show **E501** (`FlowValidator
     /// .checkHumanRows`) the moment it's added, with no field on it yet to fix that from
     /// (`knownSettingKeys` had no case for either human task until HU-3). `wait=forever` is
@@ -355,9 +366,8 @@ final class FlowEditorModel {
         case "Ask Human": return "wait=forever"
         // RP-2, owner ruling G1 (2026-10-19): a row that supplies its own input arrives with
         // a usable value; the user overwrites it in the Step tab. Web rows get none.
-        case "Generate Image": return FlowSettingsEditor.quote("a cozy reading nook by a rainy window, warm light")
-        case "Generate Sound": return FlowSettingsEditor.quote("calm ambient background music, soft piano, no drums")
-        case "Generate Video": return FlowSettingsEditor.quote("waves rolling onto a sandy beach at sunset, slow camera pan")
+        case "Generate Image", "Generate Sound", "Generate Video":
+            return defaultPrompt(forTask: task).map { FlowSettingsEditor.quote($0) }
         case "Template": return FlowSettingsEditor.quote("Type the text this row starts with.")
         case "Range": return "1..3"      // bare, as the corpus writes it (`1. Range   3..6`)
         default: return nil
@@ -440,6 +450,94 @@ final class FlowEditorModel {
             selectedRowID = copy.id
             reaimClauseTargets(before: before, after: document.rows)
         }
+    }
+
+    // MARK: - RP-3: a Generate row's typed prompt that a row above makes redundant
+
+    /// Where a fed Generate row's prompt really comes from. The runtime uses upstream text when
+    /// a row is fed and the row's own quoted prompt only when it isn't, so a typed prompt on a
+    /// fed row is silently ignored (RP-3, owner ruling 2026-10-20, "go with your cheaper version").
+    struct GeneratePromptSource: Equatable {
+        enum Kind: Equatable { case rowAbove, reference }
+        let kind: Kind
+        let sourceRowID: UUID
+        /// "Not used — the row above (2 · Summarize) gives this row its prompt."
+        let note: String
+    }
+
+    nonisolated static let generateTasks: Set<String> = ["Generate Image", "Generate Sound", "Generate Video"]
+
+    /// The row that gives `rowID` its prompt while the row also carries its own, or nil. Only
+    /// the three Generate rows, only when the typed prompt is non-empty, and only when the feed
+    /// is text: auto-chain (the row's own `chainBreak` is the blank line above it — the runtime
+    /// and validator read this row's flag, not the previous row's) or a `(n)` ref to a row that
+    /// makes text. Read-only: opening a file never rewrites it.
+    func generatePromptSource(for rowID: UUID) -> GeneratePromptSource? {
+        guard let row = row(withID: rowID), let task = row.task, Self.generateTasks.contains(task),
+              let entry = RowSources.entry(for: task),
+              RowSources.ownValue(of: row, entry: entry) != nil else { return nil }
+        if let first = row.refs.first {
+            guard case .rowRef(let id) = first, !isSlotUnset(for: rowID, slot: 1),
+                  let target = self.row(withID: id),
+                  Self.isCompatible(from: target, to: row, context: signatureContext),
+                  target.task.flatMap({ TaskCatalog.get($0) }) != nil else { return nil }
+            let number = displayNumber(of: id) ?? "?"
+            return GeneratePromptSource(
+                kind: .reference, sourceRowID: id,
+                note: "Not used — row \(number) · \(FlowRowSummary.taskName(for: target)) gives this row its prompt.")
+        }
+        let scope = scopeRows(containing: rowID)
+        guard !row.chainBreak, let index = scope.firstIndex(where: { $0.id == rowID }), index > 0 else { return nil }
+        let above = scope[index - 1]
+        guard above.task != nil, Self.isCompatible(from: above, to: row, context: signatureContext) else { return nil }
+        let number = displayNumber(of: above.id) ?? "?"
+        return GeneratePromptSource(
+            kind: .rowAbove, sourceRowID: above.id,
+            note: "Not used — the row above (\(number) · \(FlowRowSummary.taskName(for: above))) gives this row its prompt.")
+    }
+
+    /// "Use my prompt instead": make the typed prompt the one that runs. One `commitChange`, so
+    /// one undo restores it. A ref is removed (and, if the row above also makes text, a chain
+    /// break set so it cannot fall back to being fed); an auto-chain gets the break
+    /// (`setChainBreak`'s mutation). An empty prompt gets the RP-2 default first.
+    func useMyPromptInstead(for rowID: UUID) {
+        guard let row = row(withID: rowID), let task = row.task, Self.generateTasks.contains(task) else { return }
+        let scope = scopeRows(containing: rowID)
+        let index = scope.firstIndex(where: { $0.id == rowID }) ?? 0
+        let aboveMakesText = index > 0 && scope[index - 1].task != nil
+            && Self.isCompatible(from: scope[index - 1], to: row, context: signatureContext)
+        commitChange {
+            replaceRow(id: rowID) { r in
+                if let entry = RowSources.entry(for: task), RowSources.ownValue(of: r, entry: entry) == nil,
+                   let dflt = Self.defaultPrompt(forTask: task) {
+                    r.settings = FlowSettingsEditor.replaceInstruction(dflt, in: r.settings)
+                }
+                if !r.refs.isEmpty {
+                    r.refs = []
+                    if aboveMakesText && index > 0 { r.chainBreak = true }
+                } else if index > 0 {
+                    r.chainBreak = true
+                }
+            }
+        }
+    }
+
+    /// "Starts a new chain. Rows 1–2 still run but don't feed this row." — shown while a
+    /// Generate row starts a chain by a blank line above it and the row ending the chain above
+    /// feeds nothing else (no row refs it), i.e. the switch left rows that run for nothing.
+    func startsNewChainNote(for rowID: UUID) -> String? {
+        guard let row = row(withID: rowID), let task = row.task, Self.generateTasks.contains(task),
+              row.chainBreak, row.refs.isEmpty else { return nil }
+        let scope = scopeRows(containing: rowID)
+        guard let index = scope.firstIndex(where: { $0.id == rowID }), index > 0 else { return nil }
+        let last = scope[index - 1]
+        let referenced = allRows().contains { $0.refs.contains(.rowRef(last.id)) }
+        guard !referenced else { return nil }
+        var start = index - 1
+        while start > 0, !scope[start].chainBreak { start -= 1 }
+        guard let to = displayNumber(of: last.id), let from = displayNumber(of: scope[start].id) else { return nil }
+        let rows = from == to ? "Row \(to) still runs" : "Rows \(from)–\(to) still run"
+        return "Starts a new chain. \(rows) but \(from == to ? "doesn't" : "don't") feed this row."
     }
 
     /// Set/clear a row's chain break (the blank line).
