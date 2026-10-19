@@ -154,36 +154,15 @@ final class FlowEditorModel {
         return Shape.singleCompatible(accepts: accepts, given: given, rk: rk)
     }
 
-    /// Starting nodes for an empty flow (answer `c8`): the file-reading source tasks, the
-    /// triggers, `Template`, and anyKind-accepting tasks — restricted to what `canRun`
-    /// accepts and what can usefully sit at row 1 (CFM-R8-FIX-7): the hidden primitives and
-    /// the `human`/`staged`/`net`/`agent`/`trigger` classes are out.
+    /// Starting nodes for an empty flow (answer `c8`): the tasks `RowSources` says are offered
+    /// there, in catalog order. RP-1 (`RSI/DelegateRowPortsBacklog.md`, G1 2026-10-19) replaced
+    /// the old shape-based filter, whose `.anyKind` arm let in Save/frame/latent rows that throw
+    /// with no input. `Human Input` (HR-2) is now an ordinary table entry. The picker's
+    /// `hideNotSupportedSteps` still removes anything this build cannot run.
     nonisolated static func startingNodes() -> [TaskDescriptor] {
         let advanced: Set<String> = ["Generate", "Decide"]
         return TaskCatalog.allTasks().filter { desc in
-            if advanced.contains(desc.name) { return false }
-            // HR-2 (`RSI/DelegateHumanRowBacklog.md`) — a single-task exception to the
-            // `.human` class refusal just below, admitted by name rather than by widening the
-            // class: `TaskCatalog.swift:234`/`:235`'s signature difference is the reason —
-            // `Ask Human` gives `.sameAsInput` (a passthrough that fires a tag and cannot
-            // source content at row 1), `Human Input` gives `t(.text)` (it produces text of
-            // its own). `FlowRunner.rowClassRefusal` (`:233`) already returns `nil` for the
-            // whole `.human` class (`:217` — "model / human / trigger / staged … in scope"),
-            // so this function's own doc comment ("restricted to what `canRun` accepts")
-            // still holds for this one addition.
-            if desc.name == "Human Input" { return true }
-            switch desc.taskClass {
-            case .human, .staged, .net, .agent, .trigger: return false
-            case .instant, .model: break
-            }
-            switch desc.accepts {
-            case .single(.file), .single(.folder), .single(.occurrence), .listOf(.file):
-                return true
-            case .anyKind:
-                return true
-            default:
-                return desc.name == "Template"
-            }
+            !advanced.contains(desc.name) && RowSources.isOfferedOnEmptyFlow(desc.name)
         }
     }
 
@@ -1071,7 +1050,7 @@ final class FlowEditorModel {
         //
         // **Not folded into the generic row-1 branch below, and evaluated first, deliberately
         // (HR-2 hazard):** HR-2 adds `Human Input` to `startingNodes()` so the step picker can
-        // offer it, but that branch's own guard is `!startingNodes().contains(task)` — once
+        // offer it, but that branch's own guard is `!RowSources.contains(task)` (RP-1; it was `!startingNodes().contains`) — once
         // `Human Input` is a starting node, that guard goes false for it and the whole branch,
         // including its own settings-based read, would silently stop running for `Human Input`
         // specifically. That would mean a `timeout=`-without-`wait=forever` row 1 — the exact
@@ -1091,7 +1070,7 @@ final class FlowEditorModel {
             return nil
         }
         if r.refs.isEmpty, r.blockKind == nil,
-           let task = r.task, !Self.startingNodes().contains(where: { $0.name == task }),
+           let task = r.task, !RowSources.contains(task),
            previousRow(before: rowID) == nil {
             // WA-3: this branch is right for a flow being built from scratch and wrong for
             // a **used** flow, whose row 1 is fed by its caller — restricted to the flow's

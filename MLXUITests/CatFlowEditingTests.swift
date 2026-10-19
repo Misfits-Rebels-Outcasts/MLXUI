@@ -103,7 +103,10 @@ struct CatFlowEditingTests {
         #expect(starts.contains("Read Audio"))
         #expect(starts.contains("Read Images"))
         #expect(starts.contains("Template"))
-        #expect(starts.contains("Save Text"))       // anyKind, instant
+        // RP-1, owner ruling G1 (2026-10-19; `RSI/DelegateRowPortsBacklog.md`): `Save Text`
+        // moves from expected-in to expected-out. It accepts anything but needs an input, so
+        // offering it on an empty flow promised a row that throws.
+        #expect(!starts.contains("Save Text"))
         // HR-2: `Human Input` is a single-task exception to the `.human` class refusal —
         // it produces text of its own (`t(.text)`); `Ask Human` (`.sameAsInput`) still can't
         // source content and must stay out.
