@@ -26,6 +26,11 @@ nonisolated enum RowSources {
         /// Whether an empty flow's + Add step offers it. Web rows need the `network` flag
         /// (CFM-R8-FIX-7); `Read Video`/`Read Index`/`Read Context` have no seeded sample.
         let offeredOnEmptyFlow: Bool
+        /// RP-1-FIX-1: the row reads only its own settings and ignores any upstream row, so it
+        /// is never offered as a step *after* a row, never counts as fed, and when added below
+        /// a row it starts a new chain (a blank line above it in the `.cat`). The catalog
+        /// declares `Range` `.anyKind`, which says "accepts anything", not "uses it".
+        var takesNoUpstreamInput: Bool = false
     }
 
     /// The table, in no particular order — `startingNodes()` keeps catalog order.
@@ -37,7 +42,7 @@ nonisolated enum RowSources {
         let own: [Entry] = [
             Entry(task: "Human Input", value: .question, offeredOnEmptyFlow: true),
             Entry(task: "Template", value: .pattern, offeredOnEmptyFlow: true),
-            Entry(task: "Range", value: .range, offeredOnEmptyFlow: true),
+            Entry(task: "Range", value: .range, offeredOnEmptyFlow: true, takesNoUpstreamInput: true),
         ]
         // Not offered (no seeded sample), but they source themselves from their own settings, so row 1 must not
         // warn about them (they were exempt before RP-1, and `Read Index kb.index` is a
@@ -58,6 +63,9 @@ nonisolated enum RowSources {
 
     /// Whether `task` can sit at row 1 on its own value — the warning's exemption.
     static func contains(_ task: String) -> Bool { entry(for: task) != nil }
+
+    /// Whether `task` ignores any upstream row (see `Entry.takesNoUpstreamInput`).
+    static func takesNoUpstreamInput(_ task: String) -> Bool { entry(for: task)?.takesNoUpstreamInput ?? false }
 
     /// Whether an empty flow's picker offers `task`.
     static func isOfferedOnEmptyFlow(_ task: String) -> Bool { entry(for: task)?.offeredOnEmptyFlow ?? false }
@@ -97,10 +105,10 @@ nonisolated enum RowSources {
     }
 
     /// Whether something upstream supplies the row's input: an explicit ref, or the row above
-    /// auto-chaining a compatible shape. `Range` is never fed — `RangeTool` reads only its
-    /// own settings, so an upstream row does not give it a range.
+    /// auto-chaining a compatible shape. a `takesNoUpstreamInput` row is never fed — `RangeTool` reads only its
+    /// own settings, so an upstream row does not give it a range (`takesNoUpstreamInput`).
     static func isFed(_ row: Row, previous: Row?) -> Bool {
-        if row.task == "Range" { return false }
+        if let task = row.task, takesNoUpstreamInput(task) { return false }
         if !row.refs.isEmpty { return true }
         guard let previous, !previous.chainBreak,
               let to = row.task.flatMap({ TaskCatalog.get($0) }),

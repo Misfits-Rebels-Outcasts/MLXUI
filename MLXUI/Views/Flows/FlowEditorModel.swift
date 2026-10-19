@@ -140,6 +140,8 @@ final class FlowEditorModel {
         return TaskCatalog.allTasks().filter { desc in
             if !includeAdvanced && advanced.contains(desc.name) { return false }
             if includeAdvanced { return true }
+            // RP-1-FIX-1: `.anyKind` accepts the output but a `Range` row would ignore it.
+            if RowSources.takesNoUpstreamInput(desc.name) { return false }
             return acceptsFirstSlot(desc.accepts, given: given, rk: desc.refKind)
         }
     }
@@ -269,6 +271,7 @@ final class FlowEditorModel {
                 document.rows.append(newRow)
             }
             selectedRowID = newRow.id
+            startNewChainIfItIgnoresUpstream(newRow.id)
             // BG-1 (R2, `RSI/DelegateBasicImageFlowsBacklog.md`): a seeded model must be
             // **pinned** in the same edit that adds the row. `setModel` has always called
             // `reconcileModelsBlock()`; this seed path did not, so a fresh `Generate Image`
@@ -279,6 +282,17 @@ final class FlowEditorModel {
             reconcileModelsBlock()
             reaimClauseTargets(before: before, after: document.rows)
         }
+    }
+
+    /// RP-1-FIX-1 — a row that takes no upstream input (`RowSources`) added below another row
+    /// gets `chainBreak`, so the saved `.cat` has a blank line above it and it does not read
+    /// as chained to a row it ignores. Called inside the add's `commitChange`, so one undo
+    /// removes row and break together. A row that is first in its scope is left alone.
+    private func startNewChainIfItIgnoresUpstream(_ rowID: UUID) {
+        guard let task = row(withID: rowID)?.task, RowSources.takesNoUpstreamInput(task),
+              let index = scopeRows(containing: rowID).firstIndex(where: { $0.id == rowID }),
+              index > 0 else { return }
+        replaceRow(id: rowID) { $0.chainBreak = true }
     }
 
     /// Insert a block row (`<each>` / `<parallel>` / `<list>`) below the selection with one
@@ -312,6 +326,7 @@ final class FlowEditorModel {
             let newRow = Row(id: UUID(), task: name, model: model, settings: seedValue, refs: [])
             insertChild(newRow, into: blockID, below: selectedRowID)
             selectedRowID = newRow.id
+            startNewChainIfItIgnoresUpstream(newRow.id)
             // BG-1 — same pin-on-seed rule as `add(task:)`, for the block-child seed path.
             reconcileModelsBlock()
             reaimClauseTargets(before: before, after: document.rows)
@@ -1084,7 +1099,7 @@ final class FlowEditorModel {
             let isFlowRowOne = document.rows.first?.id == rowID
             let fedByCaller = isFlowRowOne && isCalledByWorkspaceSibling
             let previous = previousRow(before: rowID)
-            let fed = r.task == "Range" ? false
+            let fed = RowSources.takesNoUpstreamInput(r.task ?? "") ? false
                 : (!r.refs.isEmpty || fedByCaller
                     || previous.map { Self.isCompatible(from: $0, to: r, context: signatureContext) } ?? false)
             if !fed { return sentence }

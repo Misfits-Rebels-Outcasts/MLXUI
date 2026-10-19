@@ -207,6 +207,62 @@ struct CatFlowRowSourcesTests {
         #expect(FlowInputAdvisory.advisory(for: fed, scope: scope()) == nil)
     }
 
+    // MARK: - RP-1-FIX-1: Range takes no upstream input
+
+    @Test func onlyRangeTakesNoUpstreamInputToday() {
+        #expect(RowSources.entries.filter(\.takesNoUpstreamInput).map(\.task) == ["Range"])
+    }
+
+    @Test func theAfterARowPickerNeverOffersRangeButTheOtherListsDo() {
+        let outputs: [Shape?] = [.single(.text), .single(.audio), .single(.image),
+                                 .listOf(.text), .sameAsInput, .anyKind, nil]
+        for output in outputs {
+            let names = FlowEditorModel.stepsAccepting(output).map(\.name)
+            #expect(!names.contains("Range"), "\(String(describing: output))")
+            #expect(!FlowEditorModel.stepsAccepting(output, includeAdvanced: false).isEmpty)
+        }
+        #expect(FlowEditorModel.startingNodes().map(\.name).contains("Range"))
+        #expect(FlowEditorModel.stepsAccepting(.single(.text), includeAdvanced: true).map(\.name).contains("Range"))
+    }
+
+    @Test @MainActor func rangeAddedBelowRowsStartsANewChainAndRoundTrips() throws {
+        let (editor, _) = try fixture("Template", settings: "\"hello\"")
+        editor.add(task: "Range")
+        #expect(editor.document.rows.count == 2)
+        let added = try #require(editor.document.rows.last)
+        #expect(added.task == "Range" && added.settings == "1..3" && added.chainBreak)
+
+        let text = CatSerializer.serialize(editor.document)
+        let lines = text.components(separatedBy: "\n")
+        let at = try #require(lines.firstIndex { $0.contains("Range") })
+        #expect(lines[at - 1].isEmpty, "no blank line above Range:\n\(text)")
+
+        let reparsed = try CatParser.parse(text)
+        #expect(reparsed.rows.last?.task == "Range")
+        #expect(reparsed.rows.last?.chainBreak == true)
+        #expect(CatSerializer.serialize(reparsed) == text)
+
+        // One undo removes the row and its break together.
+        editor.undo()
+        #expect(editor.document.rows.count == 1)
+    }
+
+    @Test @MainActor func rangeAddedFirstOrOnAnEmptyFlowHasNoBreak() throws {
+        let (editor, _) = try fixture("Range", settings: nil, empty: true)
+        editor.add(task: "Range")
+        #expect(editor.document.rows.first?.chainBreak == false)
+        #expect(!CatSerializer.serialize(editor.document).contains("\n\n1."))
+    }
+
+    @Test @MainActor func galleryFlow66KeepsRangeAtRowOneUnchanged() throws {
+        let doc = try GalleryLoader.loadDocument(flowID: "66-SeedSweep")
+        let first = try #require(doc.rows.first)
+        #expect(first.task == "Range" && first.settings == "3..6" && !first.chainBreak)
+        let editor = FlowEditorModel(name: "g66", document: doc,
+                                     workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory))
+        #expect(editor.warning(for: first.id) == nil)
+    }
+
     // MARK: - Consistency: the table must not claim what the runtime can't do
 
     @MainActor @Test func everyListedRowRunsWithNoInput() async throws {
