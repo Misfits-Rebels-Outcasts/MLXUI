@@ -13,25 +13,35 @@ nonisolated enum FlowInputAdvisory {
     /// nil when every `Read *` row's file is present or supplied by a matching upstream.
     /// Mirrors `FlowPreflight.setupAdvisory`'s "first, not all" contract — one banner, one row.
     static func advisory(for document: FlowDocument, scope: FlowScope) -> FlowPreflight.RowAdvisory? {
-        for row in allRows(document.rows) {
-            guard let task = row.task, SampleSeed.readTaskNames.contains(task) else { continue }
-            guard FlowInputFile.isMissing(for: row, document: document, scope: scope),
-                  let url = FlowInputFile.target(for: row, document: document, scope: scope)
-            else { continue }
-            let reason = task == "Read Index"
-                ? "\(task) needs its index built first — run the builder flow, then try again."
-                : "\(task) needs '\(url.lastPathComponent)', which isn't in the flow's folder yet."
-            return FlowPreflight.RowAdvisory(task: task, reason: reason, action: nil)
-        }
-        return nil
+        advisory(in: document.rows, document: document, scope: scope, prefix: "")
     }
 
-    private static func allRows(_ rows: [Row]) -> [Row] {
-        var out: [Row] = []
-        for row in rows {
-            out.append(row)
-            out.append(contentsOf: allRows(row.children))
+    /// Document order, depth-first. RP-2: besides a missing `Read *` file, the first
+    /// prompt-driven generator with no prompt and nothing upstream — same sentence as the
+    /// editor's warning (`RowSources.missingValueSentence`), so Run says it before row 1 fails.
+    private static func advisory(in rows: [Row], document: FlowDocument, scope: FlowScope,
+                                 prefix: String) -> FlowPreflight.RowAdvisory? {
+        for (i, row) in rows.enumerated() {
+            let path = prefix.isEmpty ? "\(i + 1)" : "\(prefix).\(i + 1)"
+            if let task = row.task {
+                if SampleSeed.readTaskNames.contains(task),
+                   FlowInputFile.isMissing(for: row, document: document, scope: scope),
+                   let url = FlowInputFile.target(for: row, document: document, scope: scope) {
+                    let reason = task == "Read Index"
+                        ? "\(task) needs its index built first — run the builder flow, then try again."
+                        : "\(task) needs '\(url.lastPathComponent)', which isn't in the flow's folder yet."
+                    return FlowPreflight.RowAdvisory(task: task, reason: reason, action: nil)
+                }
+                if RowSources.entry(for: task)?.value == .prompt,
+                   let sentence = RowSources.missingValueSentence(for: row, path: path),
+                   !RowSources.isFed(row, previous: i > 0 ? rows[i - 1] : nil) {
+                    return FlowPreflight.RowAdvisory(task: task, reason: sentence, action: nil)
+                }
+            }
+            if let found = advisory(in: row.children, document: document, scope: scope, prefix: path) {
+                return found
+            }
         }
-        return out
+        return nil
     }
 }

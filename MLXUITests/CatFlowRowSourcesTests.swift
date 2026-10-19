@@ -14,15 +14,14 @@ struct CatFlowRowSourcesTests {
             .domains.flatMap { $0.allModels }
     }
 
-    /// Settings that stand in for the row's own value. RP-2 moves these to
-    /// `FlowEditorModel.defaultSettings(forTask:)` / `SampleSeed`.
+    /// The settings the row arrives with from + Add step (RP-2): a `SampleSeed` sample or
+    /// `FlowEditorModel.defaultSettings`. Rows the table offers no default for (the web rows,
+    /// and Read Video / Index / Context) get a hand-written value: the consistency test is
+    /// about the executor's input path, so they need *a* value, not the editor's.
     private func ownSettings(for entry: RowSources.Entry) -> String? {
         if let seed = SampleSeed.seedValue(for: entry.task) { return seed }
+        if let dflt = FlowEditorModel.defaultSettings(forTask: entry.task) { return dflt }
         switch entry.task {
-        case "Generate Image", "Generate Sound", "Generate Video": return "\"a prompt\""
-        case "Human Input": return "\"What should I use?\"; wait=forever"
-        case "Template": return "\"hello\""
-        case "Range": return "1..3"
         case "Web Fetch", "HTTP Get", "Fetch Feed", "Download File":
             return "url=\"http://127.0.0.1:1/\""       // refused at once; never leaves the Mac
         case "Web Search": return "query=\"mlx\""
@@ -59,14 +58,15 @@ struct CatFlowRowSourcesTests {
                   "Classify", "Gate", "Score", "Judge", "Think",
                   "Load Checkpoint", "Init Latent",
                   "Web Fetch", "HTTP Get", "Fetch Feed", "Download File", "Web Search",
-                  "Read Video", "Read Index", "Read Context", "Generate", "Decide"] {
+                  "Read Video", "Read Index", "Read Context", "Store Query", "Store Read",
+                  "Generate", "Decide"] {
             #expect(!starts.contains(t), "\(t)")
         }
     }
 
     // MARK: - The warning
 
-    @MainActor private func fixture(_ task: String, settings: String?) throws -> (FlowEditorModel, Row) {
+    @MainActor private func fixture(_ task: String, settings: String?, empty: Bool = false) throws -> (FlowEditorModel, Row) {
         let catalog = try loadCatalog()
         let registry = ModelRegistry()
         for module in installedModules { module.register(into: registry) }
@@ -77,7 +77,7 @@ struct CatFlowRowSourcesTests {
         let row = Row(id: UUID(), task: task, model: model, settings: settings, refs: [])
         let editor = FlowEditorModel(
             name: "rp1",
-            document: FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [row]),
+            document: FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: empty ? [] : [row]),
             workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory))
         editor.modelCatalog = catalog
         editor.claimableModelIDs = claimable
@@ -87,7 +87,10 @@ struct CatFlowRowSourcesTests {
     @Test @MainActor func aSourceRowAtRowOneHasNoWarning() throws {
         for (task, settings) in [("Generate Sound", "\"calm\""),
                                  ("Web Fetch", "url=\"https://example.com\""),
-                                 ("Read Index", "kb.index")] {
+                                 ("Read Index", "kb.index"),
+                                 // Owner ruling 2026-10-19: reads a file named in its own settings.
+                                 ("Store Query", "orders.db; table=orders"),
+                                 ("Store Read", "orders.db; table=orders")] {
             let (editor, row) = try fixture(task, settings: settings)
             #expect(editor.warning(for: row.id) == nil, "\(task)")
         }
@@ -96,6 +99,112 @@ struct CatFlowRowSourcesTests {
     @Test @MainActor func aSummarizeRowAtRowOneStillSaysNothingFeedsIt() throws {
         let (editor, row) = try fixture("Summarize", settings: nil)
         #expect(editor.warning(for: row.id)?.contains("needs an input — nothing feeds it") == true)
+    }
+
+    // MARK: - RP-2: defaults on add
+
+    private static let defaults: [(task: String, settings: String)] = [
+        ("Generate Image", "\"a cozy reading nook by a rainy window, warm light\""),
+        ("Generate Sound", "\"calm ambient background music, soft piano, no drums\""),
+        ("Generate Video", "\"waves rolling onto a sandy beach at sunset, slow camera pan\""),
+        ("Template", "\"Type the text this row starts with.\""),
+        ("Range", "1..3"),
+    ]
+
+    @Test @MainActor func addingEachTableTaskSeedsExactlyTheTablesDefaultAndUndoRemovesBoth() throws {
+        for (task, expected) in Self.defaults {
+            let (editor, _) = try fixture(task, settings: nil, empty: true)
+            editor.add(task: task)
+            #expect(editor.document.rows.count == 1)
+            #expect(editor.document.rows.first?.settings == expected, "\(task)")
+            editor.undo()
+            #expect(editor.document.rows.isEmpty, "\(task) undo")
+        }
+        // Web rows get no default URL.
+        for web in ["Web Fetch", "HTTP Get", "Fetch Feed", "Download File", "Web Search"] {
+            #expect(FlowEditorModel.defaultSettings(forTask: web) == nil)
+        }
+    }
+
+    @Test @MainActor func addingInsideABlockSeedsTheSameDefault() throws {
+        let (editor, _) = try fixture("Range", settings: nil, empty: true)
+        editor.insertBlock(kind: .each, name: "x", after: nil)
+        let block = try #require(editor.document.rows.first)
+        editor.addChild(task: "Range", into: block.id)
+        let added = try #require(editor.document.rows.first?.children.last)
+        #expect(added.task == "Range" && added.settings == "1..3")
+    }
+
+    @Test @MainActor func everyDefaultRowIsWarningFreeAtRowOne() throws {
+        for (task, _) in Self.defaults {
+            let (editor, _) = try fixture(task, settings: nil, empty: true)
+            editor.add(task: task)
+            let row = try #require(editor.document.rows.first)
+            #expect(editor.warning(for: row.id) == nil, "\(task)")
+            #expect(editor.saveBlockReason == nil, "\(task) blocks Save")
+        }
+    }
+
+    // MARK: - RP-2: warnings that say what is missing
+
+    @Test @MainActor func clearingAGeneratorsPromptShowsThePromptSentenceAndRefillingClearsIt() throws {
+        let (editor, row) = try fixture("Generate Sound", settings: "\"calm\"")
+        editor.setInstruction(nil, for: row.id)
+        #expect(editor.warning(for: row.id)
+                == "Row 1 needs a prompt — type one in the Step tab, or connect a row that makes text.")
+        editor.setInstruction("calm", for: row.id)
+        #expect(editor.warning(for: row.id) == nil)
+    }
+
+    @Test @MainActor func eachValueKindHasItsOwnSentence() {
+        func sentence(_ task: String, _ settings: String?) -> String? {
+            RowSources.missingValueSentence(for: Row(task: task, settings: settings), path: "3")
+        }
+        #expect(sentence("Read Text", nil)
+                == "Row 3 needs a file — choose one in the Step tab, or connect a row that makes one.")
+        #expect(sentence("Template", "\"\"") == "Row 3 needs text — type it in the Step tab.")
+        #expect(sentence("Range", nil) == "Row 3 needs a range — e.g. 1..3.")
+        #expect(sentence("Web Fetch", nil) == "Row 3 needs a URL — add url= in the Step tab.")
+        #expect(sentence("Web Search", nil) == "Row 3 needs a search — add query= in the Step tab.")
+        #expect(sentence("Human Input", nil) == nil)
+        #expect(sentence("Generate Image", "\"x\"") == nil)
+    }
+
+    @Test @MainActor func aGeneratorFedByAnUpstreamTextRowWithNoPromptShowsNoWarning() throws {
+        let (editor, _) = try fixture("Template", settings: "\"a lighthouse\"")
+        editor.add(task: "Generate Image")          // pins its seeded model, as + Add step does
+        let gen = try #require(editor.document.rows.last)
+        editor.setInstruction(nil, for: gen.id)
+        let cleared = try #require(editor.row(withID: gen.id))
+        #expect(RowSources.missingValueSentence(for: cleared, path: "2") != nil)   // promptless, yet fed
+        #expect(editor.warning(for: gen.id) == nil, "\(editor.warning(for: gen.id) ?? "")")
+        #expect(FlowInputAdvisory.advisory(for: editor.document, scope: scope()) == nil)
+    }
+
+    // MARK: - RP-2: the pre-run advisory
+
+    private func scope() -> FlowScope {
+        FlowScope(identity: "rp2", workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory),
+                  locationID: "rp2")
+    }
+
+    @Test func theAdvisoryNamesAPromptlessGeneratorAndOnlyTheFirst() {
+        let a = Row(task: "Generate Image", settings: nil)
+        let b = Row(task: "Generate Sound", settings: nil)
+        let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [a, b])
+        let advisory = FlowInputAdvisory.advisory(for: doc, scope: scope())
+        #expect(advisory?.task == "Generate Image")
+        #expect(advisory?.reason
+                == "Row 1 needs a prompt — type one in the Step tab, or connect a row that makes text.")
+    }
+
+    @Test func theAdvisoryStaysNilWhenTheGeneratorHasAPromptOrIsFed() {
+        let withPrompt = FlowDocument(version: "0.8", headerKeyword: "mlxflow",
+                                      rows: [Row(task: "Generate Image", settings: "\"a cat\"")])
+        #expect(FlowInputAdvisory.advisory(for: withPrompt, scope: scope()) == nil)
+        let fed = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [
+            Row(task: "Template", settings: "\"a cat\""), Row(task: "Generate Image", settings: nil)])
+        #expect(FlowInputAdvisory.advisory(for: fed, scope: scope()) == nil)
     }
 
     // MARK: - Consistency: the table must not claim what the runtime can't do

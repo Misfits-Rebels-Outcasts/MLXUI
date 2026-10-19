@@ -338,6 +338,13 @@ final class FlowEditorModel {
         switch task {
         case "Human Input": return "\(FlowSettingsEditor.quote("What should I use?")); wait=forever"
         case "Ask Human": return "wait=forever"
+        // RP-2, owner ruling G1 (2026-10-19): a row that supplies its own input arrives with
+        // a usable value; the user overwrites it in the Step tab. Web rows get none.
+        case "Generate Image": return FlowSettingsEditor.quote("a cozy reading nook by a rainy window, warm light")
+        case "Generate Sound": return FlowSettingsEditor.quote("calm ambient background music, soft piano, no drums")
+        case "Generate Video": return FlowSettingsEditor.quote("waves rolling onto a sandy beach at sunset, slow camera pan")
+        case "Template": return FlowSettingsEditor.quote("Type the text this row starts with.")
+        case "Range": return "1..3"      // bare, as the corpus writes it (`1. Range   3..6`)
         default: return nil
         }
     }
@@ -1068,6 +1075,19 @@ final class FlowEditorModel {
                 return "Row 1 has nothing to fall back on — if nobody answers, this row produces nothing."
             }
             return nil
+        }
+        // RP-2 (`RSI/DelegateRowPortsBacklog.md`) — a table row whose own value is missing and
+        // that nothing feeds says what is missing, instead of the generic sentence. Top-level
+        // rows only: a block child's input is the block's (`blockInputs`), a different question.
+        if r.blockKind == nil, childIndex(rowID) == nil,
+           let sentence = RowSources.missingValueSentence(for: r, path: path) {
+            let isFlowRowOne = document.rows.first?.id == rowID
+            let fedByCaller = isFlowRowOne && isCalledByWorkspaceSibling
+            let previous = previousRow(before: rowID)
+            let fed = r.task == "Range" ? false
+                : (!r.refs.isEmpty || fedByCaller
+                    || previous.map { Self.isCompatible(from: $0, to: r, context: signatureContext) } ?? false)
+            if !fed { return sentence }
         }
         if r.refs.isEmpty, r.blockKind == nil,
            let task = r.task, !RowSources.contains(task),

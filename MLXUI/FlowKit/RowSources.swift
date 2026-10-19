@@ -39,10 +39,12 @@ nonisolated enum RowSources {
             Entry(task: "Template", value: .pattern, offeredOnEmptyFlow: true),
             Entry(task: "Range", value: .range, offeredOnEmptyFlow: true),
         ]
-        // Not offered, but they source themselves from their own settings, so row 1 must not
+        // Not offered (no seeded sample), but they source themselves from their own settings, so row 1 must not
         // warn about them (they were exempt before RP-1, and `Read Index kb.index` is a
         // legitimate row 1).
-        let unseededReads = ["Read Video", "Read Index", "Read Context"]
+        // Rule (owner, 2026-10-19): a row that reads a file named in its own settings is
+        // exempt — `Store Query orders.db; table=orders` is the same shape as `Read Index`.
+        let unseededReads = ["Read Video", "Read Index", "Read Context", "Store Query", "Store Read"]
             .map { Entry(task: $0, value: .file, offeredOnEmptyFlow: false) }
         let web = ["Web Fetch", "HTTP Get", "Fetch Feed", "Download File"]
             .map { Entry(task: $0, value: .url, offeredOnEmptyFlow: false) }
@@ -59,4 +61,51 @@ nonisolated enum RowSources {
 
     /// Whether an empty flow's picker offers `task`.
     static func isOfferedOnEmptyFlow(_ task: String) -> Bool { entry(for: task)?.offeredOnEmptyFlow ?? false }
+
+    // MARK: - RP-2: the row's own value, and what to say when it is missing
+
+    /// The row's own value (a file, prompt, pattern, range, url or query), trimmed; nil when
+    /// empty or absent. `.question` is `Human Input`'s, which has its own HR-1 handling.
+    static func ownValue(of row: Row, entry: Entry) -> String? {
+        let s = FlowSettings(row.settings)
+        let raw: String?
+        switch entry.value {
+        case .file: raw = s.pathValue()
+        case .prompt, .pattern, .range, .question: raw = s.firstBare()
+        case .url: raw = s.value(for: "url") ?? s.firstBare()
+        case .query: raw = s.value(for: "query") ?? s.firstBare()
+        }
+        guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    /// The non-blocking sentence for a table row whose own value is missing, or nil when the
+    /// row has its value (or is `Human Input`, whose missing question is not a warning).
+    /// `path` is the row's display number.
+    static func missingValueSentence(for row: Row, path: String) -> String? {
+        guard let task = row.task, let entry = entry(for: task),
+              ownValue(of: row, entry: entry) == nil else { return nil }
+        switch entry.value {
+        case .prompt: return "Row \(path) needs a prompt — type one in the Step tab, or connect a row that makes text."
+        case .file: return "Row \(path) needs a file — choose one in the Step tab, or connect a row that makes one."
+        case .pattern: return "Row \(path) needs text — type it in the Step tab."
+        case .range: return "Row \(path) needs a range — e.g. 1..3."
+        case .url: return "Row \(path) needs a URL — add url= in the Step tab."
+        case .query: return "Row \(path) needs a search — add query= in the Step tab."
+        case .question: return nil
+        }
+    }
+
+    /// Whether something upstream supplies the row's input: an explicit ref, or the row above
+    /// auto-chaining a compatible shape. `Range` is never fed — `RangeTool` reads only its
+    /// own settings, so an upstream row does not give it a range.
+    static func isFed(_ row: Row, previous: Row?) -> Bool {
+        if row.task == "Range" { return false }
+        if !row.refs.isEmpty { return true }
+        guard let previous, !previous.chainBreak,
+              let to = row.task.flatMap({ TaskCatalog.get($0) }),
+              let from = previous.task.flatMap({ TaskCatalog.get($0) }) else { return false }
+        let given: Shape = from.gives == .sameAsInput ? .anyKind : from.gives
+        return Shape.bundleCompatible(accepts: to.accepts, given: [given], rk: to.refKind)
+    }
 }
