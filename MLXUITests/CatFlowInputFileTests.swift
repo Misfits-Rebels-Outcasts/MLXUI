@@ -122,15 +122,16 @@ struct CatFlowInputFileTests {
         #expect(FlowInputFile.target(for: refd, document: doc, scope: scope) == nil)
     }
 
-    /// `chainBreak` on the *preceding* row stops the auto-chain (the blank-line rule) — the
-    /// row after it is no longer "fed by upstream" and must check its own path again.
+    /// `chainBreak` on the row itself (the blank line above it) stops the auto-chain — the row
+    /// is no longer "fed by upstream" and must check its own path again. RP-3-FIX-1 (owner
+    /// go-ahead 2026-10-20): this used to put the flag on the *preceding* row.
     @Test func chainBreakStopsAutoChainSoTheRowChecksItsOwnPath() throws {
         let base = tempRoot()
         defer { try? FileManager.default.removeItem(at: base) }
         let scope = makeScope(root: base)
-        var files = row("Read Files", settings: "docs/; pattern=*.pdf")
-        files.chainBreak = true
-        let pdf = row("Read PDF", settings: "stale.pdf")
+        let files = row("Read Files", settings: "docs/; pattern=*.pdf")
+        var pdf = row("Read PDF", settings: "stale.pdf")
+        pdf.chainBreak = true
         let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [files, pdf])
         #expect(FlowInputFile.target(for: pdf, document: doc, scope: scope) != nil)
     }

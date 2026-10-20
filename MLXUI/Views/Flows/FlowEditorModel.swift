@@ -1670,12 +1670,12 @@ final class FlowEditorModel {
     }
 
     /// The previous row in the same scope (auto-chain source), honoring `chainBreak`
-    /// (CFM-R8-FIX-6): a blank line breaks the chain, so no upstream.
-    private func previousRow(before id: UUID) -> Row? {
+    /// (CFM-R8-FIX-6): a blank line breaks the chain, so no upstream. `chainBreak` is the blank
+    /// line above the **row itself** (RP-3-FIX-1), so it is `id`'s own flag that cuts the chain.
+    func previousRow(before id: UUID) -> Row? {   // internal for CatFlowChainBreakOwnFlagTests
         let scope = scopeRows(containing: id)
         guard let index = scope.firstIndex(where: { $0.id == id }), index > 0 else { return nil }
-        let previous = scope[index - 1]
-        return previous.chainBreak ? nil : previous
+        return scope[index].chainBreak ? nil : scope[index - 1]
     }
 
     /// Whether `target`'s output can feed `row`'s accepts as a bundle (CFM-R8-FIX-2).

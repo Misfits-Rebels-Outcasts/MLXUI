@@ -76,10 +76,11 @@ nonisolated enum FlowInputFile {
     }
 
     /// The immediately preceding top-level row, honoring `chainBreak` (a blank line stops the
-    /// chain — the same rule `FlowEditorModel`'s own auto-chain uses).
+    /// chain — the same rule `FlowEditorModel`'s own auto-chain uses). `chainBreak` is the blank
+    /// line above **this** row (RP-3-FIX-1), so it is `row`'s flag that cuts the chain.
     private static func previousTopLevelRow(before row: Row, in document: FlowDocument) -> Row? {
         guard let index = document.rows.firstIndex(where: { $0.id == row.id }), index > 0 else { return nil }
         let previous = document.rows[index - 1]
-        return previous.chainBreak ? nil : previous
+        return row.chainBreak ? nil : previous
     }
 }

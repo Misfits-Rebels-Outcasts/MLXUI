@@ -868,9 +868,11 @@ struct CatFlowEditingTests {
         let r2 = row("Summarize", model: "Ministral 3B")
         let model = try wiredEditor(rows: [r1, r2])
         #expect(model.warning(for: r2.id) == nil)   // auto-chains from r1
-        model.setChainBreak(true, for: r1.id)
+        // RP-3-FIX-1 (owner go-ahead 2026-10-20): `chainBreak` is the blank line above the row
+        // itself, so it is r2's own flag that breaks the chain (this used to set r1's).
+        model.setChainBreak(true, for: r2.id)
         #expect(model.warning(for: r2.id) != nil)   // blank line breaks the chain
-        model.setChainBreak(false, for: r1.id)
+        model.setChainBreak(false, for: r2.id)
         #expect(model.warning(for: r2.id) == nil)
     }
 

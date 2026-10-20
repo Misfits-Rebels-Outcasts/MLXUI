@@ -110,7 +110,7 @@ nonisolated enum RowSources {
     static func isFed(_ row: Row, previous: Row?) -> Bool {
         if let task = row.task, takesNoUpstreamInput(task) { return false }
         if !row.refs.isEmpty { return true }
-        guard let previous, !previous.chainBreak,
+        guard let previous, !row.chainBreak,   // the blank line above *this* row (RP-3-FIX-1)
               let to = row.task.flatMap({ TaskCatalog.get($0) }),
               let from = previous.task.flatMap({ TaskCatalog.get($0) }) else { return false }
         let given: Shape = from.gives == .sameAsInput ? .anyKind : from.gives
