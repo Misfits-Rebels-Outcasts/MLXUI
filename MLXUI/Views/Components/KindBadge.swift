@@ -179,7 +179,7 @@ struct KindRail: View {
     @ViewBuilder
     private var inputSide: some View {
         let sources = inputs.map(\.source)
-        let rowInputs = inputs.filter { if case .row = $0.source { return true } else { return false } }
+        let rowInputs = inputs.filter(\.source.isRowLike)
         HStack(spacing: 3) {
             ForEach(Array(rowInputs.enumerated()), id: \.offset) { _, input in
                 SourceChip(input: input, onHover: onHoverSource, onSelect: onSelectSource)
@@ -198,7 +198,7 @@ struct KindRail: View {
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 5).padding(.vertical, 1)
                         .overlay(Capsule().stroke(style: StrokeStyle(lineWidth: 1, dash: [3, 2])).foregroundStyle(.secondary))
-                case .above, .row:
+                case .above, .row, .path, .blockInput:
                     EmptyView()
                 }
             } else {
@@ -210,7 +210,7 @@ struct KindRail: View {
     private func isSpecial(_ source: RailInputSource) -> Bool {
         switch source {
         case .own, .missing: return true
-        case .above, .row: return false
+        case .above, .row, .path, .blockInput: return false
         }
     }
 }
@@ -230,5 +230,16 @@ private struct SourceChip: View {
             .contentShape(Capsule())
             .onHover { inside in if let target = input.target { onHover(inside ? target : nil) } }
             .onTapGesture { if let target = input.target { onSelect(target) } }
+            .help(input.tooltip ?? "")
+    }
+}
+
+extension RailInputSource {
+    /// A "from …" chip (as opposed to the own / missing / above states).
+    var isRowLike: Bool {
+        switch self {
+        case .row, .path, .blockInput: return true
+        case .above, .own, .missing:   return false
+        }
     }
 }

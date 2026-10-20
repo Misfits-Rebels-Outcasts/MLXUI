@@ -159,12 +159,67 @@ struct CatFlowKindRailTests {
         let block = try #require(e.document.rows.first { $0.blockKind == .parallel })
         let summarize = try #require(block.children.first)
         let inputs = e.railInputs(for: summarize.id)
-        #expect(inputs.map(\.source) == [.row(1)])
-        // `(input:1)` is the block's first input: with no refs on the block, the row above it.
+        // KR-2-FIX-1: `(input:1)` is the block's first input — here the row above the block (2).
+        #expect(inputs.map(\.source) == [.row(2)])
+        #expect(inputs.first?.source.label == "from 2")
+        #expect(inputs.first?.tooltip == "block input 1 — row 2's output")
         #expect(inputs.first?.target == e.document.rows[1].id)
         // Rewrite has no ref and no blank line above it: fed by the row above in its chain.
         let rewrite = block.children[2]
         #expect(e.railInputs(for: rewrite.id).map(\.source) == [.above])
+    }
+
+    @Test @MainActor func everyParallelChildInMeetingMinutesReadsFrom2() throws {
+        let e = try editor(forGallery: "02-MeetingMinutes")
+        let block = try #require(e.document.rows.first { $0.blockKind == .parallel })
+        for child in block.children where child.refs == [.inputRef(1)] {
+            #expect(e.railInputs(for: child.id).map(\.source.label) == ["from 2"])
+        }
+    }
+
+    @Test @MainActor func aTopLevelInputRefKeepsItsNumber() throws {
+        let e = try parsedEditor("mlxflow 0.8\n1. Read Text   a.txt\n2. Summarize   (input:1)   Qwen3 8B; \"x\"\n")
+        let inputs = e.railInputs(for: e.document.rows[1].id)
+        #expect(inputs.map(\.source) == [.row(1)])
+        #expect(inputs.first?.tooltip == nil)
+        #expect(inputs.first?.target == nil)
+    }
+
+    @Test @MainActor func aBundleBlocksInputsResolveEachToItsOwnRowOrFallBack() throws {
+        let e = try parsedEditor("""
+        mlxflow 0.8
+        1. Read Text   a.txt
+        2. Read Text   b.txt
+        3. <list pair>   (1,2)
+             1. Template   (input:2,input:1)   "{1} {2}"
+             2. Template   (input:3)   "{1}"
+        """)
+        let block = e.document.rows[2]
+        let first = e.railInputs(for: block.children[0].id)
+        #expect(first.map(\.source) == [.row(2), .row(1)])
+        #expect(first.map(\.target) == [e.document.rows[1].id, e.document.rows[0].id])
+        // input 3 of a 2-ref bundle isn't one row: "from block input 3", same tooltip pattern.
+        let beyond = e.railInputs(for: block.children[1].id)
+        #expect(beyond.map(\.source) == [.blockInput(3)])
+        #expect(beyond.first?.source.label == "from block input 3")
+        #expect(beyond.first?.tooltip == "block input 3 — not from a single row")
+        #expect(beyond.first?.target == nil)
+    }
+
+    @Test @MainActor func aNestedBlocksRefFollowsTheChainOutward() throws {
+        let e = try parsedEditor("""
+        mlxflow 0.8
+        1. Read Text   a.txt
+        2. Read Text   b.txt
+        3. <list outer>   (1)
+             1. <list inner>   (input:1)
+                  1. Summarize   (input:1)   Qwen3 8B; "x"
+        """)
+        let inner = e.document.rows[2].children[0]
+        let leaf = inner.children[0]
+        // leaf (input:1) → inner's input 1 → inner ref (input:1) → outer's input 1 → outer ref (1) → row 1
+        #expect(e.railInputs(for: leaf.id).map(\.source) == [.row(1)])
+        #expect(e.railInputs(for: leaf.id).first?.target == e.document.rows[0].id)
     }
 
     @Test @MainActor func twoRefsKeepBothInOrderWithTheirTargets() throws {

@@ -7,8 +7,13 @@ import Foundation
 nonisolated enum RailInputSource: Equatable, Sendable {
     /// Fed by the row directly above (or, for the first row of a block chain, by the block's input).
     case above
-    /// A numbered ref, as the file writes it: `(N)` or `(input:N)`.
+    /// A numbered ref: `(N)`, a top-level `(input:N)`, or a block-scoped ref resolved to the
+    /// number of the row it actually comes from (KR-2-FIX-1).
     case row(Int)
+    /// The same, for a source that lives inside a nested block ("3.1").
+    case path(String)
+    /// A block input that doesn't come from a single row.
+    case blockInput(Int)
     /// A starting row using its own value; the word names it ("prompt", "file", "question", …).
     case own(String)
     /// Unfed, and no value of its own.
@@ -19,6 +24,8 @@ nonisolated enum RailInputSource: Equatable, Sendable {
         switch self {
         case .above:        return ""
         case .row(let n):   return "from \(n)"
+        case .path(let p):  return "from \(p)"
+        case .blockInput(let n): return "from block input \(n)"
         case .own(let w):   return "own \(w)"
         case .missing:      return "no input"
         }
@@ -31,8 +38,11 @@ nonisolated enum RailInputSources {
     /// with the blank line honoured (`FlowEditorModel.previousRow(before:)`); `inBlock` says the
     /// row is a block child, whose chain start is fed by the block's input rather than by a row.
     /// `number` maps a ref's row id to the number the file writes; an unresolvable ref is `.missing`.
+    /// `blockInput` says what `(input:p)` reads as — by default `.row(p)` (top level); inside a block
+    /// the editor passes the row that input resolves to.
     static func sources(of row: Row, previous: Row?, inBlock: Bool = false,
-                        number: (UUID) -> Int?) -> [RailInputSource] {
+                        number: (UUID) -> Int?,
+                        blockInput: (Int) -> RailInputSource = { .row($0) }) -> [RailInputSource] {
         let task = row.task
         // A row that reads only its own settings ignores whatever is upstream.
         let ignoresUpstream = task.map(RowSources.takesNoUpstreamInput) ?? false
@@ -41,7 +51,7 @@ nonisolated enum RailInputSources {
             for ref in row.refs {
                 switch ref {
                 case .rowRef(let id):    fromRefs.append(number(id).map(RailInputSource.row) ?? .missing)
-                case .inputRef(let p):   fromRefs.append(.row(p))
+                case .inputRef(let p):   fromRefs.append(blockInput(p))
                 case .paramRef:          break
                 }
             }

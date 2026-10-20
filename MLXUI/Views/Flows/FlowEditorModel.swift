@@ -1114,11 +1114,12 @@ final class FlowEditorModel {
         "E201", "E202", "E203", "E204", "E205", "E206", "E207", "E208", "E209", "E401", "E403",
     ]
 
-    /// KR-2: one input chip's worth of display — what it says and which row it names (for the
-    /// hover highlight and click-to-select), when that is known.
+    /// KR-2: one input chip's worth of display — what it says, which row it names (for the
+    /// hover highlight and click-to-select) and, for a block-scoped ref, the tooltip.
     struct RailInput: Equatable {
         let source: RailInputSource
         let target: UUID?
+        var tooltip: String? = nil
     }
 
     /// KR-2: the editor's own sentence when it is about the row's input, else nil — the rail's
@@ -1128,43 +1129,78 @@ final class FlowEditorModel {
         return detail.message
     }
 
+    private func parentBlock(of id: UUID) -> Row? { Self.findParent(of: id, in: document.rows) }
+
+    private nonisolated static func findParent(of id: UUID, in rows: [Row]) -> Row? {
+        for r in rows {
+            if r.children.contains(where: { $0.id == id }) { return r }
+            if let found = findParent(of: id, in: r.children) { return found }
+        }
+        return nil
+    }
+
+    /// KR-2-FIX-1: the row a block's `p`-th input actually comes from — the one resolver behind
+    /// both the chip's number and its hover/click target. The block's `p`-th ref when it has refs
+    /// (a ref that is itself `(input:q)` is followed outward to the enclosing block); with no refs,
+    /// the row above it, or, when nothing is above it in its own scope, the enclosing block's
+    /// input. `nil` when the input doesn't come from one row (out of range, a parameter, no source).
+    private func blockInputTarget(_ p: Int, of block: Row) -> UUID? {
+        if !block.refs.isEmpty {
+            guard p >= 1, p <= block.refs.count else { return nil }
+            switch block.refs[p - 1] {
+            case .rowRef(let id):   return row(withID: id)?.id
+            case .inputRef(let q):  return parentBlock(of: block.id).flatMap { blockInputTarget(q, of: $0) }
+            case .paramRef:         return nil
+            }
+        }
+        guard p == 1 else { return nil }
+        if let above = previousRow(before: block.id) { return above.id }
+        return parentBlock(of: block.id).flatMap { blockInputTarget(1, of: $0) }
+    }
+
     /// KR-2: the sources of a row's input, each with the row it points at.
     func railInputs(for rowID: UUID) -> [RailInput] {
         guard let r = row(withID: rowID) else { return [] }
-        let parent = childIndexOf(rowID).flatMap { row(withID: $0.blockID) }
+        let parent = parentBlock(of: rowID)
+        // What a chip says for `(input:p)` inside a block: the displayed number of the row it
+        // resolves to, else "block input p". Top level has no block, so `(input:p)` keeps its number.
+        var resolved: [Int: UUID?] = [:]
         let sources = RailInputSources.sources(
             of: r, previous: previousRow(before: rowID), inBlock: parent != nil,
-            number: { id in displayNumber(of: id).flatMap { $0.split(separator: ".").last }.flatMap { Int($0) } })
-        // Only `.row` sources carry a target; they appear in ref order, so zip them with the refs.
-        var refTargets: [UUID?] = []
-        for ref in r.refs {
-            switch ref {
-            case .rowRef(let id):
-                refTargets.append(row(withID: id) != nil ? id : nil)
-            case .inputRef(let p):
-                // `(input:p)` names the block's p-th input: its p-th ref, or — with no refs — the row above the block.
-                if let parent {
-                    if p >= 1, p <= parent.refs.count, case .rowRef(let id) = parent.refs[p - 1] {
-                        refTargets.append(row(withID: id) != nil ? id : nil)
-                    } else if parent.refs.isEmpty, p == 1 {
-                        refTargets.append(previousRow(before: parent.id)?.id)
-                    } else {
-                        refTargets.append(nil)
-                    }
-                } else {
-                    refTargets.append(nil)
-                }
-            case .paramRef:
-                break
+            number: { id in displayNumber(of: id).flatMap { $0.split(separator: ".").last }.flatMap { Int($0) } },
+            blockInput: { p in
+                guard let parent else { return .row(p) }
+                let target = blockInputTarget(p, of: parent)
+                resolved[p] = target
+                guard let target, let path = displayNumber(of: target) else { return .blockInput(p) }
+                return Int(path).map(RailInputSource.row) ?? .path(path)
+            })
+        func tooltip(_ source: RailInputSource, input p: Int) -> String? {
+            guard parent != nil else { return nil }
+            switch source {
+            case .row(let n):       return "block input \(p) — row \(n)'s output"
+            case .path(let path):   return "block input \(p) — row \(path)'s output"
+            default:                return "block input \(p) — not from a single row"
             }
         }
         // The ref path yields exactly one source per non-param ref, in order; any other source
         // (above / own / missing) names no row.
-        guard sources.count == refTargets.count,
-              !r.refs.isEmpty, !(r.task.map(RowSources.takesNoUpstreamInput) ?? false) else {
+        let refs = r.refs.filter { if case .paramRef = $0 { return false } else { return true } }
+        guard sources.count == refs.count, !refs.isEmpty,
+              !(r.task.map(RowSources.takesNoUpstreamInput) ?? false) else {
             return sources.map { RailInput(source: $0, target: nil) }
         }
-        return zip(sources, refTargets).map { RailInput(source: $0, target: $1) }
+        return zip(sources, refs).map { source, ref in
+            switch ref {
+            case .rowRef(let id):
+                return RailInput(source: source, target: row(withID: id) != nil ? id : nil)
+            case .inputRef(let p):
+                return RailInput(source: source, target: parent == nil ? nil : (resolved[p] ?? nil),
+                                 tooltip: tooltip(source, input: p))
+            case .paramRef:
+                return RailInput(source: source, target: nil)
+            }
+        }
     }
 
     // MARK: - The input picker (CFM-R8-FIX-1/2)
