@@ -1074,11 +1074,39 @@ final class FlowEditorModel {
         return Self.signature(of: r, context: signatureContext)?.gives
     }
 
-    /// KR-1: a row's (accepts, gives) for the kind rail — the same resolution the editor's
-    /// checks use, nil when the row can't be typed (unknown task). No logic of its own.
+    /// KR-1: a row's (accepts, gives) for the kind rail — nil when the row can't be typed.
+    ///
+    /// KR-1-FIX-1: a `<parallel>` block is the one case where `signature(of:)` (last child's
+    /// gives — the inexact shortcut `shapes.py::signature` flags as SPEC-Q37) is not what the
+    /// validator resolves. The rail uses the validator's answer: the block's declared signature
+    /// when it has one, else `TupleOf` of each chain's tail kind (`parallelBundleGives`), `.anyKind`
+    /// when any tail is unknown. `signature(of:)` and its other callers are untouched.
     func rowSignature(_ rowID: UUID) -> (accepts: Shape, gives: Shape)? {
         guard let r = row(withID: rowID) else { return nil }
-        return Self.signature(of: r, context: signatureContext)
+        return railSignature(of: r)
+    }
+
+    private func railSignature(of row: Row) -> (accepts: Shape, gives: Shape)? {
+        let base = Self.signature(of: row, context: signatureContext)
+        guard row.blockKind == .parallel else { return base }
+        // An unresolvable tail makes `signature(of:)` nil for the block; the block still has a
+        // known shape on the rail (`.anyKind` slots), so its accepts falls back to the first child's.
+        var accepts = base?.accepts ?? row.children.first.flatMap { railSignature(of: $0)?.accepts } ?? .anyKind
+        var gives: Shape?
+        if let declared = row.declaredSignature {
+            let parsed = FlowValidator.parseDeclaredSignature(declared)
+            if let a = parsed.0 { accepts = a }
+            gives = parsed.1
+        }
+        if gives == nil {
+            let chains = FlowValidator.parallelChains(chainBreaks: row.children.map(\.chainBreak))
+            let kinds = chains.compactMap { chain -> Kind? in
+                guard let tail = chain.last, let tailGives = railSignature(of: row.children[tail - 1])?.gives else { return nil }
+                return Shape.baseKind(tailGives)
+            }
+            gives = !chains.isEmpty && kinds.count == chains.count ? .tupleOf(kinds) : .anyKind
+        }
+        return (accepts, gives ?? .anyKind)
     }
 
     // MARK: - The input picker (CFM-R8-FIX-1/2)

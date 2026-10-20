@@ -67,14 +67,53 @@ struct CatFlowKindRailTests {
         let e = try editor(forGallery: "02-MeetingMinutes")
         let block = try #require(e.document.rows.first { $0.blockKind == .parallel })
         let sig = try #require(e.rowSignature(block.id))
-        // The rail shows whatever the editor resolves for the block — the backlog's
-        // `text → [text, text, text]` is the block's *declared* signature, which
-        // `signature(of:)` deliberately ignores (see its doc comment).
+        // KR-1-FIX-1: the validator's answer (one slot per chain), also the row's own declared one.
         #expect(sig.accepts == .single(.text))
-        #expect(sig.gives == .single(.text))
+        #expect(sig.gives == .tupleOf([.text, .text, .text]))
+        #expect(block.declaredSignature == "text -> [text, text, text]")
         let child = try #require(block.children.first)
         let childSig = try #require(e.rowSignature(child.id))
         #expect(childSig.accepts == .single(.text) && childSig.gives == .single(.text))
+    }
+
+    @Test @MainActor func undeclaredParallelBlockBuildsTheTupleFromItsChainTails() throws {
+        let text = """
+        mlxflow 0.8
+        1. Read Text   a.txt
+        2. <parallel p>
+             1. Summarize   (input:1)   Qwen3 8B; "a"
+
+             2. Summarize   (input:1)   Qwen3 8B; "b"
+             3. Rewrite                 Ministral 3B; "c"
+        3. Save Text   out.txt
+        """
+        let doc = try CatParser.parse(text)
+        let e = FlowEditorModel(name: "p", document: doc,
+                                workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory))
+        let block = try #require(e.document.rows.first { $0.blockKind == .parallel })
+        #expect(block.declaredSignature == nil)
+        // two chains: [1] and [2, 3] — tails Summarize (text) and Rewrite (text)
+        #expect(e.rowSignature(block.id)?.gives == .tupleOf([.text, .text]))
+        // a plain row is untouched, and so is the shared inference
+        let read = try #require(e.document.rows.first)
+        #expect(e.rowSignature(read.id)?.gives == .single(.text))
+        #expect(e.outputShape(for: block.id) == .single(.text))
+    }
+
+    @Test @MainActor func parallelWithAnUnknownTailGivesAnyKind() throws {
+        let text = """
+        mlxflow 0.8
+        1. Read Text   a.txt
+        2. <parallel p>
+             1. Summarize   (input:1)   Qwen3 8B; "a"
+
+             2. Frobnicate  (input:1)
+        """
+        let doc = try CatParser.parse(text)
+        let e = FlowEditorModel(name: "p", document: doc,
+                                workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory))
+        let block = try #require(e.document.rows.first { $0.blockKind == .parallel })
+        #expect(e.rowSignature(block.id)?.gives == .anyKind)
     }
 
     @Test @MainActor func rowSignatureIsNilForAnUnknownRowID() throws {
