@@ -690,10 +690,14 @@ final class FlowEditorModel {
                 // so the blank line goes in here, in the same undo step, and the lint has no
                 // reason to fire. Pointing back at the row above clears it. Anything else
                 // (bundles, anyKind, row 1) is left as it was.
-                if refs.count == 1, case .rowRef(let target) = refs[0], !isUnsetSlot(refs[0]), let aboveID {
+                // RP-4-FIX-1 (owner rule 2026-10-20): the row directly above is written with no
+                // brackets — (n) is only for other rows — so picking it removes the ref (plain
+                // auto-chain) and clears the blank line in the same undo step.
+                if refs.count == 1, case .rowRef(let target) = refs[0], !isUnsetSlot(refs[0]), let aboveID, aboveFits {
                     if target == aboveID {
+                        row.refs = []
                         row.chainBreak = false
-                    } else if aboveFits {
+                    } else {
                         row.chainBreak = true
                     }
                 }
