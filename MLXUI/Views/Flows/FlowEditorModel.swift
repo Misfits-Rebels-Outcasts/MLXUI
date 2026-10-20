@@ -605,6 +605,8 @@ final class FlowEditorModel {
     /// and `structuralIssues()` blocks Save with an honest message, never a silent success
     /// or a confusing "(input:N) only makes sense inside a block" parser error.
     func setReference(to targetID: UUID?, slot: Int = 1, for rowID: UUID) {
+        let aboveID = rowAbove(rowID)?.id
+        let aboveFits = aboveFitsSingleInput(rowID)
         commitChange {
             replaceRow(id: rowID) { row in
                 var refs = row.refs
@@ -620,8 +622,39 @@ final class FlowEditorModel {
                 // many slots are meaningfully occupied," the way `slotsToDraw` relies on.
                 while let last = refs.last, isUnsetSlot(last) { refs.removeLast() }
                 row.refs = refs
+                // RP-4 (owner 2026-10-20: "just quietly add the blank line"): a single `(n)` that
+                // is not the row above, while the row above would also fit, is exactly what
+                // FlowValidator's ambiguous-auto-chain lint flags (Python parity, left alone) —
+                // so the blank line goes in here, in the same undo step, and the lint has no
+                // reason to fire. Pointing back at the row above clears it. Anything else
+                // (bundles, anyKind, row 1) is left as it was.
+                if refs.count == 1, case .rowRef(let target) = refs[0], !isUnsetSlot(refs[0]), let aboveID {
+                    if target == aboveID {
+                        row.chainBreak = false
+                    } else if aboveFits {
+                        row.chainBreak = true
+                    }
+                }
             }
         }
+    }
+
+    /// The row directly above `rowID` in its scope, ignoring `chainBreak`.
+    private func rowAbove(_ rowID: UUID) -> Row? {
+        let scope = scopeRows(containing: rowID)
+        guard let index = scope.firstIndex(where: { $0.id == rowID }), index > 0 else { return nil }
+        return scope[index - 1]
+    }
+
+    /// Whether the row above's output is single-compatible with `rowID`'s accepts — the same
+    /// test as FlowValidator.checkAmbiguousAutoChain (never `anyKind`).
+    private func aboveFitsSingleInput(_ rowID: UUID) -> Bool {
+        guard let row = row(withID: rowID), let above = rowAbove(rowID),
+              let accepts = Self.signature(of: row, context: signatureContext)?.accepts,
+              let gives = Self.signature(of: above, context: signatureContext)?.gives else { return false }
+        if case .anyKind = accepts { return false }
+        let given: Shape = gives == .sameAsInput ? .anyKind : gives
+        return Shape.singleCompatible(accepts: accepts, given: given, rk: row.task.flatMap { TaskCatalog.get($0)?.refKind })
     }
 
     /// A fresh id `setReference` can hand to a slot with nothing chosen yet — see the
