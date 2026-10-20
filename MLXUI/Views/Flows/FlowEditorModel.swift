@@ -1074,6 +1074,13 @@ final class FlowEditorModel {
         return Self.signature(of: r, context: signatureContext)?.gives
     }
 
+    /// KR-1: a row's (accepts, gives) for the kind rail — the same resolution the editor's
+    /// checks use, nil when the row can't be typed (unknown task). No logic of its own.
+    func rowSignature(_ rowID: UUID) -> (accepts: Shape, gives: Shape)? {
+        guard let r = row(withID: rowID) else { return nil }
+        return Self.signature(of: r, context: signatureContext)
+    }
+
     // MARK: - The input picker (CFM-R8-FIX-1/2)
 
     /// The rows a given input slot of `rowID` may point at — same scope, **strictly

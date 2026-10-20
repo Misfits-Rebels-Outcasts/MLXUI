@@ -25,6 +25,9 @@ struct FlowSerializedRow: View {
     /// CFM-R11-2 visibility: this row's ✓ came from the flow's output cache this run, not a
     /// fresh computation — show it so a run's cache hits are obvious.
     var cached: Bool = false
+    /// KR-1: the row's `accepts → gives`, drawn as the kind rail. `nil` (the setting is off, or
+    /// the row can't be typed) draws nothing at all.
+    var signature: (accepts: Shape, gives: Shape)? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -47,6 +50,9 @@ struct FlowSerializedRow: View {
                     .simultaneousGesture(TapGesture().onEnded { onSelect() })
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            if let signature {
+                KindRail(accepts: signature.accepts, gives: signature.gives)
+            }
             if cached {
                 Text("cached")
                     .font(.caption2)

@@ -73,6 +73,8 @@ struct FlowListView: View {
     /// Properties tab is browse-only, but needs the same candidate/input/number resolution
     /// the editor uses. Never mutated (the flow list has no edit affordance).
     @State private var inspectModel: FlowEditorModel?
+    /// KR-1: Settings → Models → Flows, and View → Show Row Kinds.
+    @AppStorage("flowShowsKindRail") private var showsKindRail = true
     /// The refusal reason this flow can't run, derived from `FlowRunner.canRun(doc)` — not
     /// blindly trusted from `_metadata.json` (B3). `nil` = runnable.
     @State private var notRunnableReason: String?
@@ -547,7 +549,8 @@ struct FlowListView: View {
                                          collapsedBlocks.insert(row.id)
                                      }
                                  },
-                                 cached: session.cacheHitRows.contains(row.id))
+                                 cached: session.cacheHitRows.contains(row.id),
+                                 signature: showsKindRail ? inspectModel?.rowSignature(row.id) : nil)
     }
 
     /// CFM-R12-3 item 3 / CFM-R12-FIX-3: a collapsed block's header dot aggregates its

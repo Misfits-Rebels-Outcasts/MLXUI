@@ -13,6 +13,7 @@ struct ModelsSettingsView: View {
     @State private var status: String = ""
     @State private var storageSizeBytes: Int?
     @State private var cacheSizeBytes: Int64?
+    @AppStorage("flowShowsKindRail") private var showsKindRail = true
 
     var body: some View {
         Form {
@@ -58,6 +59,13 @@ struct ModelsSettingsView: View {
                     Spacer()
                     Button("Reveal in Finder") { revealModelsInFinder() }
                 }
+            }
+
+            Section("Flows") {
+                Toggle("Show what each row takes and gives", isOn: $showsKindRail)
+                Text("Adds input → output kinds beside each row in AI Workflows.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Flow Cache") {
