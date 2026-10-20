@@ -289,9 +289,13 @@ final class FlowEditorModel {
     /// as chained to a row it ignores. Called inside the add's `commitChange`, so one undo
     /// removes row and break together. A row that is first in its scope is left alone.
     private func startNewChainIfItIgnoresUpstream(_ rowID: UUID) {
-        guard let task = row(withID: rowID)?.task, RowSources.takesNoUpstreamInput(task),
+        guard let task = row(withID: rowID)?.task,
               let index = scopeRows(containing: rowID).firstIndex(where: { $0.id == rowID }),
               index > 0 else { return }
+        // RP-5 (owner 2026-10-20): a Generate row arrives with "Use my prompt" ticked, which is
+        // a blank line above it, whenever the row above would otherwise feed it.
+        guard RowSources.takesNoUpstreamInput(task)
+                || (Self.generateTasks.contains(task) && promptFeed(for: rowID) != nil) else { return }
         replaceRow(id: rowID) { $0.chainBreak = true }
     }
 
@@ -473,9 +477,16 @@ final class FlowEditorModel {
     /// and validator read this row's flag, not the previous row's) or a `(n)` ref to a row that
     /// makes text. Read-only: opening a file never rewrites it.
     func generatePromptSource(for rowID: UUID) -> GeneratePromptSource? {
-        guard let row = row(withID: rowID), let task = row.task, Self.generateTasks.contains(task),
+        guard let row = row(withID: rowID), let task = row.task,
               let entry = RowSources.entry(for: task),
               RowSources.ownValue(of: row, entry: entry) != nil else { return nil }
+        return promptFeed(for: rowID)
+    }
+
+    /// The text feed of a Generate row whether or not it carries a typed prompt — what the
+    /// RP-5 checkbox derives its state from (no stored flag, nothing in the file).
+    private func promptFeed(for rowID: UUID) -> GeneratePromptSource? {
+        guard let row = row(withID: rowID), let task = row.task, Self.generateTasks.contains(task) else { return nil }
         if let first = row.refs.first {
             guard case .rowRef(let id) = first, !isSlotUnset(for: rowID, slot: 1),
                   let target = self.row(withID: id),
@@ -496,11 +507,62 @@ final class FlowEditorModel {
             note: "Not used — the row above (\(number) · \(FlowRowSummary.taskName(for: above))) gives this row its prompt.")
     }
 
-    /// "Use my prompt instead": make the typed prompt the one that runs. One `commitChange`, so
+    /// RP-5 — the "Use my prompt" checkbox, derived from the file every time: ticked when no
+    /// text feeds the row (row 1 of its scope, a blank line above it, or nothing above that
+    /// makes text), unticked when it is fed. nil for any other task.
+    func usesOwnPrompt(for rowID: UUID) -> Bool? {
+        guard let task = row(withID: rowID)?.task, Self.generateTasks.contains(task) else { return nil }
+        return promptFeed(for: rowID) == nil
+    }
+
+    /// What unticking would pick: the row above when it makes text, else the nearest earlier
+    /// text row in the scope. nil when no earlier row makes text (checkbox stays ticked).
+    private func upstreamPromptSource(for rowID: UUID) -> (id: UUID, isRowAbove: Bool)? {
+        guard let row = row(withID: rowID) else { return nil }
+        let scope = scopeRows(containing: rowID)
+        guard let index = scope.firstIndex(where: { $0.id == rowID }), index > 0 else { return nil }
+        for (offset, candidate) in scope[0..<index].enumerated().reversed() {
+            guard candidate.task != nil, Self.isCompatible(from: candidate, to: row, context: signatureContext) else { continue }
+            return (candidate.id, offset == index - 1)
+        }
+        return nil
+    }
+
+    /// Whether the checkbox can be unticked ("No earlier row makes text." when it cannot).
+    func canUseUpstreamPrompt(for rowID: UUID) -> Bool { upstreamPromptSource(for: rowID) != nil }
+
+    /// The Input picker's label for a Generate row fed by plain auto-chain ("row above · 2 Summarize").
+    func autoChainInputLabel(for rowID: UUID) -> String? {
+        guard let feed = promptFeed(for: rowID), feed.kind == .rowAbove, let target = row(withID: feed.sourceRowID) else { return nil }
+        return "row above · \(displayNumber(of: target.id) ?? "?") \(FlowRowSummary.taskName(for: target))"
+    }
+
+    /// Tick or untick "Use my prompt" — one `commitChange`, so one undo. Unticking keeps the
+    /// typed prompt (re-ticking restores it): the row above when it makes text (plain
+    /// auto-chain, blank line cleared), else the nearest earlier text row as `(n)` (the blank
+    /// line is left as the file has it); nothing is changed when no earlier row makes text.
+    /// Ticking is the old RP-3 button action.
+    func setUsesOwnPrompt(_ on: Bool, for rowID: UUID) {
+        guard let current = usesOwnPrompt(for: rowID), current != on else { return }
+        if on { useMyPromptInstead(for: rowID); return }
+        guard let source = upstreamPromptSource(for: rowID) else { return }
+        commitChange {
+            replaceRow(id: rowID) { r in
+                if source.isRowAbove {
+                    r.refs = []
+                    r.chainBreak = false
+                } else {
+                    r.refs = [.rowRef(source.id)]
+                }
+            }
+        }
+    }
+
+    /// Ticking "Use my prompt" (RP-3's button action, kept as the checkbox's tick path): make the typed prompt the one that runs. One `commitChange`, so
     /// one undo restores it. A ref is removed (and, if the row above also makes text, a chain
     /// break set so it cannot fall back to being fed); an auto-chain gets the break
     /// (`setChainBreak`'s mutation). An empty prompt gets the RP-2 default first.
-    func useMyPromptInstead(for rowID: UUID) {
+    private func useMyPromptInstead(for rowID: UUID) {
         guard let row = row(withID: rowID), let task = row.task, Self.generateTasks.contains(task) else { return }
         let scope = scopeRows(containing: rowID)
         let index = scope.firstIndex(where: { $0.id == rowID }) ?? 0

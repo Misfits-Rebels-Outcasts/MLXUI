@@ -54,6 +54,7 @@ struct CatFlowChainBreakOwnFlagTests {
             // Contrast: without the blank line the row above feeds it, so no warning.
             let fed = try built(["Read Text", g])
             let frow = try #require(fed.document.rows.last)
+            fed.setChainBreak(false, for: frow.id)      // RP-5: + Add step now arrives ticked (blank line); this row must be fed
             fed.setInstruction(nil, for: frow.id); fed.setSetting(key: "seed", value: "1", for: frow.id)
             #expect(fed.warning(for: frow.id) == nil, "\(g): \(fed.warning(for: frow.id) ?? "nil")")
         }

@@ -153,7 +153,9 @@ struct FlowRowInspectorView: View {
                         if let task = row.task, task.hasPrefix("Save") {
                             saveFilenameField(row)
                         }
+                        // RP-5: while "Use my prompt" is ticked nothing feeds the row, so the picker is off.
                         inputs(row)
+                            .disabled(model.usesOwnPrompt(for: rowID) == true)
                         if let task = row.task, isHumanClass(task) {
                             humanWaitPolicySection(task, row: row)
                         }
@@ -369,17 +371,29 @@ struct FlowRowInspectorView: View {
             .lineLimit(2...5)
             .textFieldStyle(.roundedBorder)
             .foregroundStyle(fedBy == nil ? .primary : .secondary)
-            // RP-3: a fed Generate row ignores its typed prompt — grey the box (still editable)
-            // and say which row gives it the prompt.
-            if let fedBy {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(fedBy.note)
+            // RP-5: "Use my prompt" is derived from the file (ticked = nothing feeds the row);
+            // unticking picks a text source and keeps the typed prompt.
+            if let own = model.usesOwnPrompt(for: rowID) {
+                let canUntick = model.canUseUpstreamPrompt(for: rowID)
+                Toggle("Use my prompt", isOn: Binding(
+                    get: { own },
+                    set: { model.setUsesOwnPrompt($0, for: rowID) }
+                ))
+                .toggleStyle(.checkbox)
+                .disabled(own && !canUntick)
+                if own && !canUntick {
+                    Text("No earlier row makes text.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Button("Use my prompt instead") { model.useMyPromptInstead(for: rowID) }
-                        .controlSize(.small)
                 }
+            }
+            // RP-3: a fed Generate row ignores its typed prompt — say which row gives it the
+            // prompt (the box above is greyed, still editable).
+            if let fedBy {
+                Text(fedBy.note)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             } else if let chain = model.startsNewChainNote(for: rowID) {
                 Text(chain)
                     .font(.caption)
@@ -657,6 +671,7 @@ struct FlowRowInspectorView: View {
     }
 
     private func currentInputLabel(slot: Int) -> String {
+        if slot == 1, row?.refs.isEmpty == true, let auto = model.autoChainInputLabel(for: rowID) { return auto }   // RP-5
         guard let row = row, slot >= 1, slot <= row.refs.count,
               case .rowRef(let id) = row.refs[slot - 1] else {
             return "None"

@@ -6,6 +6,9 @@ import Foundation
 /// version") — a fed Generate row ignores its typed prompt; the Step tab says so and offers
 /// "Use my prompt instead". These pin the model side (`generatePromptSource`,
 /// `useMyPromptInstead`, `startsNewChainNote`); the SwiftUI is a thin reader of them.
+/// RP-5 (owner 2026-10-20: "'Use my prompt instead' could be check box") turned the button into
+/// the "Use my prompt" checkbox: these tests now drive it through `setUsesOwnPrompt(true, …)`,
+/// the checkbox's tick path, which is the old button action unchanged.
 struct CatFlowGeneratePromptSourceTests {
 
     @MainActor private func editor(_ text: String) throws -> FlowEditorModel {
@@ -81,7 +84,7 @@ struct CatFlowGeneratePromptSourceTests {
         let e = try editor(chain("Generate Sound"))
         let id = e.document.rows[2].id
         let original = e.catText
-        e.useMyPromptInstead(for: id)
+        e.setUsesOwnPrompt(true, for: id)
 
         let text = e.catText
         #expect(text.contains("\n\n3. Generate Sound"), "\(text)")
@@ -103,7 +106,7 @@ struct CatFlowGeneratePromptSourceTests {
         """)
         let id = e.document.rows[2].id
         let original = e.catText
-        e.useMyPromptInstead(for: id)
+        e.setUsesOwnPrompt(true, for: id)
         let row = try #require(e.row(withID: id))
         #expect(row.refs.isEmpty && row.chainBreak)
         #expect(e.generatePromptSource(for: id) == nil)
@@ -120,7 +123,7 @@ struct CatFlowGeneratePromptSourceTests {
         3. Generate Image   (1)   "my own prompt"
         """)
         let id = e.document.rows[2].id
-        e.useMyPromptInstead(for: id)
+        e.setUsesOwnPrompt(true, for: id)
         let row = try #require(e.row(withID: id))
         #expect(row.refs.isEmpty && !row.chainBreak)
     }
@@ -130,7 +133,7 @@ struct CatFlowGeneratePromptSourceTests {
             let e = try editor(chain(g))
             let id = e.document.rows[2].id
             e.setInstruction(nil, for: id)
-            e.useMyPromptInstead(for: id)
+            e.setUsesOwnPrompt(true, for: id)
             let row = try #require(e.row(withID: id))
             #expect(row.chainBreak)
             #expect(row.settings == FlowEditorModel.defaultSettings(forTask: g), "\(g)")
@@ -159,7 +162,7 @@ struct CatFlowGeneratePromptSourceTests {
         let e = try editor(chain("Generate Sound"))
         let id = e.document.rows[2].id
         #expect(e.startsNewChainNote(for: id) == nil)               // still fed: no switch yet
-        e.useMyPromptInstead(for: id)
+        e.setUsesOwnPrompt(true, for: id)
         #expect(e.startsNewChainNote(for: id) == "Starts a new chain. Rows 1–2 still run but don't feed this row.")
 
         // Something else uses row 2's output → it still feeds something → no line.

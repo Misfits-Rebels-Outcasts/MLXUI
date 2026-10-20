@@ -174,6 +174,9 @@ struct CatFlowRowSourcesTests {
         let (editor, _) = try fixture("Template", settings: "\"a lighthouse\"")
         editor.add(task: "Generate Image")          // pins its seeded model, as + Add step does
         let gen = try #require(editor.document.rows.last)
+        // RP-5 (owner 2026-10-20): a Generate row now arrives with "Use my prompt" ticked, i.e. a
+        // blank line above it; this test is about a *fed* generator, so untick it first.
+        editor.setUsesOwnPrompt(false, for: gen.id)
         editor.setInstruction(nil, for: gen.id)
         let cleared = try #require(editor.row(withID: gen.id))
         #expect(RowSources.missingValueSentence(for: cleared, path: "2") != nil)   // promptless, yet fed
