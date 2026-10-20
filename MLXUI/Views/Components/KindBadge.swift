@@ -151,6 +151,11 @@ struct KindRail: View {
     var outputHighlighted = false
     var onHoverSource: (UUID?) -> Void = { _ in }
     var onSelectSource: (UUID) -> Void = { _ in }
+    /// KR-3: the row's result, shown after the output chip once it has one; clicking it opens the
+    /// inspector's Output tab (`onSelectOutput`) — the viewer that already exists.
+    var preview: RailPreview?
+    var thumbnail: CGImage?
+    var onSelectOutput: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 4) {
@@ -170,6 +175,9 @@ struct KindRail: View {
                         Capsule().stroke(Color.accentColor, lineWidth: 1.5)
                     }
                 }
+            if let preview {
+                ResultPreviewChip(preview: preview, thumbnail: thumbnail, onSelect: onSelectOutput)
+            }
         }
         .fixedSize()
         .padding(.top, 2)
@@ -241,5 +249,40 @@ extension RailInputSource {
         case .row, .path, .blockInput: return true
         case .above, .own, .missing:   return false
         }
+    }
+}
+
+/// KR-3: the result preview beside the output chip.
+private struct ResultPreviewChip: View {
+    let preview: RailPreview
+    let thumbnail: CGImage?
+    let onSelect: () -> Void
+
+    var body: some View {
+        HStack(spacing: 3) {
+            switch preview {
+            case .image:
+                if let thumbnail {
+                    Image(decorative: thumbnail, scale: 2)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 16, height: 16)
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                } else {
+                    Image(systemName: "photo").font(.caption2).foregroundStyle(.secondary)
+                }
+            default:
+                Text(preview.label ?? "")
+                    .font(.caption2)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: 150, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 5).padding(.vertical, 1)
+        .background(.quaternary.opacity(0.5), in: Capsule())
+        .contentShape(Capsule())
+        .onTapGesture(perform: onSelect)
+        .help(preview.tooltip ?? "Show this result in the Output tab")
     }
 }

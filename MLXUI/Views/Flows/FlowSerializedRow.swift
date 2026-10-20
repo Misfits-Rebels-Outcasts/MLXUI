@@ -35,6 +35,10 @@ struct FlowSerializedRow: View {
     var outputHighlighted = false
     var onHoverSource: (UUID?) -> Void = { _ in }
     var onSelectSource: (UUID) -> Void = { _ in }
+    /// KR-3: the row's result preview (set only when the setting is on and the row succeeded).
+    var preview: RailPreview?
+    var thumbnail: CGImage?
+    var onSelectOutput: () -> Void = {}
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -60,7 +64,8 @@ struct FlowSerializedRow: View {
             if let signature {
                 KindRail(accepts: signature.accepts, gives: signature.gives, inputs: inputs,
                          mismatch: mismatch, outputHighlighted: outputHighlighted,
-                         onHoverSource: onHoverSource, onSelectSource: onSelectSource)
+                         onHoverSource: onHoverSource, onSelectSource: onSelectSource,
+                         preview: preview, thumbnail: thumbnail, onSelectOutput: onSelectOutput)
             }
             if cached {
                 Text("cached")

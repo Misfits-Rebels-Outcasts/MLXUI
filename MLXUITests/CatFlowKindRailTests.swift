@@ -260,4 +260,107 @@ struct CatFlowKindRailTests {
         // A healthy row has neither.
         #expect(bad.inputMismatch(for: bad.document.rows[0].id) == nil)
     }
+
+    // MARK: - KR-3: result previews
+
+    private let probe = RailPreviewProbe(audioDuration: { $0.lastPathComponent == "a.wav" ? 72.4 : nil },
+                                         tableShape: { $0.lastPathComponent == "t.json" ? (12, 3) : nil })
+
+    private func asset(_ kind: Kind, value: String? = nil, path: String? = nil, count: Int = 1) -> Asset {
+        Asset(items: (0..<count).map { _ in
+            Item(kind: kind, value: value, path: path.map { URL(fileURLWithPath: "/tmp/\($0)") }, sourceText: nil)
+        })
+    }
+
+    @Test func previewModelHasOneFormPerKind() {
+        #expect(RailPreviews.preview(for: asset(.text, value: "Hello"), probe: probe) == .text("Hello"))
+        // long text: first 24 characters, one line, ellipsis
+        let long = RailPreviews.preview(for: asset(.text, value: "line one\nline two is much longer than that"), probe: probe)
+        #expect(long == .text("line one line two is muc…"))
+        #expect(long?.label?.contains("\n") == false)
+        #expect(RailPreviews.preview(for: asset(.text, value: "   \n "), probe: probe) == nil)
+        #expect(RailPreviews.preview(for: asset(.image, path: "p.png"), probe: probe)
+                == .image(URL(fileURLWithPath: "/tmp/p.png")))
+        #expect(RailPreviews.preview(for: asset(.audio, path: "a.wav"), probe: probe) == .audio(duration: 72.4))
+        #expect(RailPreview.audio(duration: 72.4).label == "1:12")
+        // audio whose header can't be read: nothing, not a guess
+        #expect(RailPreviews.preview(for: asset(.audio, path: "other.wav"), probe: probe) == nil)
+        #expect(RailPreviews.preview(for: asset(.table, path: "t.json"), probe: probe) == .table(rows: 12, columns: 3))
+        #expect(RailPreview.table(rows: 12, columns: 3).label == "12 × 3")
+        #expect(RailPreviews.preview(for: asset(.status, value: "saved to out.txt"), probe: probe) == .status("saved to out.txt"))
+        #expect(RailPreview.status("x").label == "✓")
+        // kinds with nothing honest to show
+        #expect(RailPreviews.preview(for: asset(.vector, value: "v"), probe: probe) == nil)
+        #expect(RailPreviews.preview(for: Asset(items: []), probe: probe) == nil)
+    }
+
+    @Test func listsAndTuplesShowTheCountNotPreviews() {
+        let three = RailPreviews.preview(for: asset(.text, value: "x", count: 3), probe: probe)
+        #expect(three == .count(3, .text))
+        #expect(three?.label == "3 texts")
+        #expect(RailPreview.count(2, .audio).label == "2 audio clips")
+        let mixed = Asset(items: [Item(kind: .text, value: "a", path: nil, sourceText: nil),
+                                  Item(kind: .vector, value: "b", path: nil, sourceText: nil)])
+        #expect(RailPreviews.preview(for: mixed, probe: probe) == nil)
+    }
+
+    @Test @MainActor func settingOffDoesNoPreviewWork() async {
+        let store = RailPreviewStore()
+        let id = UUID()
+        await store.request(rowID: id, asset: asset(.text, value: "hi"), enabled: false, probe: probe)
+        #expect(store.buildCount == 0)
+        #expect(store.previews.isEmpty && store.thumbnails.isEmpty)
+        // on: built once, and asking again reuses it
+        await store.request(rowID: id, asset: asset(.text, value: "hi"), enabled: true, probe: probe)
+        await store.request(rowID: id, asset: asset(.text, value: "hi"), enabled: true, probe: probe)
+        #expect(store.buildCount == 1)
+        #expect(store.previews[id] == .text("hi"))
+        // no result yet: nothing to build
+        await store.request(rowID: UUID(), asset: nil, enabled: true, probe: probe)
+        #expect(store.buildCount == 1)
+    }
+
+    @Test @MainActor func aNewRunOrANewResultClearsThePreviews() async {
+        let store = RailPreviewStore()
+        let a = UUID(), b = UUID()
+        await store.request(rowID: a, asset: asset(.text, value: "one"), enabled: true, probe: probe)
+        await store.request(rowID: b, asset: asset(.text, value: "two"), enabled: true, probe: probe)
+        #expect(store.previews.count == 2)
+        // a row finishing again drops only its own preview, and the next request rebuilds it
+        store.invalidate(a)
+        #expect(store.previews[a] == nil && store.previews[b] != nil)
+        await store.request(rowID: a, asset: asset(.text, value: "uno"), enabled: true, probe: probe)
+        #expect(store.previews[a] == .text("uno"))
+        // a new run clears everything
+        let before = store.generation
+        store.clear()
+        #expect(store.previews.isEmpty && store.thumbnails.isEmpty)
+        #expect(store.generation == before + 1)
+        // Clear Run does too
+        await store.request(rowID: a, asset: asset(.text, value: "x"), enabled: true, probe: probe)
+        let session = FlowRunSession()
+        await session.railPreviews.request(rowID: a, asset: asset(.text, value: "x"), enabled: true, probe: probe)
+        session.clearRun(doc: FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: []))
+        #expect(session.railPreviews.previews.isEmpty)
+    }
+
+    @Test @MainActor func anImageResultGetsADownscaledThumbnail() async throws {
+        // a real 64×64 PNG written to a temp file
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("kr3-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let rep = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 64, pixelsHigh: 64, bitsPerSample: 8,
+                                                samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        let png = try #require(rep.representation(using: .png, properties: [:]))
+        let url = dir.appendingPathComponent("p.png")
+        try png.write(to: url)
+        let store = RailPreviewStore()
+        let id = UUID()
+        let result = Asset(items: [Item(kind: .image, value: nil, path: url, sourceText: nil)])
+        await store.request(rowID: id, asset: result, enabled: true)
+        #expect(store.previews[id] == .image(url))
+        let thumb = try #require(store.thumbnails[id])
+        #expect(thumb.width <= 32 && thumb.height <= 32)
+    }
 }

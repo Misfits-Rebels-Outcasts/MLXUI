@@ -557,7 +557,19 @@ struct FlowListView: View {
                                  mismatch: showsKindRail ? inspectModel?.inputMismatch(for: row.id) : nil,
                                  outputHighlighted: showsKindRail && hoveredRailSource == row.id,
                                  onHoverSource: { hoveredRailSource = $0 },
-                                 onSelectSource: { session.selectedRowID = $0 })
+                                 onSelectSource: { session.selectedRowID = $0 },
+                                 preview: showsKindRail && session.status(for: row.id) == .succeeded
+                                     ? session.railPreviews.previews[row.id] : nil,
+                                 thumbnail: showsKindRail ? session.railPreviews.thumbnails[row.id] : nil,
+                                 onSelectOutput: { session.selectedRowID = row.id; inspectorTab = .output })
+        // KR-3: build the row's result preview from what the session already holds — and only
+        // with the setting on (off: `request` returns before touching anything).
+        .task(id: RailPreviewKey(rowID: row.id, generation: session.railPreviews.generation,
+                                 version: session.railPreviews.versions[row.id, default: 0],
+                                 hasResult: session.outputs[row.id] != nil)) {
+            await session.railPreviews.request(rowID: row.id, asset: session.outputs[row.id],
+                                               enabled: showsKindRail)
+        }
     }
 
     /// CFM-R12-3 item 3 / CFM-R12-FIX-3: a collapsed block's header dot aggregates its

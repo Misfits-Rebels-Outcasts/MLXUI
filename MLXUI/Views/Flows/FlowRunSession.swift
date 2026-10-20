@@ -27,6 +27,8 @@ final class FlowRunSession {
     private(set) var cacheHitRows: Set<UUID> = []
     /// The last finished output per row id (the inspector's content source).
     private(set) var outputs: [UUID: Asset] = [:]
+    /// KR-3: result previews for the kind rail, derived from `outputs` and dropped with them.
+    let railPreviews = RailPreviewStore()
     /// A `CatalogBridge` substitution note per row id (CFM-R2-2 rule 3), or absent.
     private(set) var substitutionNotes: [UUID: String] = [:]
     /// The row the inspector pane is bound to (nil = nothing selected).
@@ -195,6 +197,7 @@ final class FlowRunSession {
         withdrawServedLoadQuestion()
 
         let startIndex = resume ? firstGrayIndex(in: doc) : 0
+        railPreviews.clear()        // KR-3: a new run starts; no preview outlives its result
         RunMetrics.resetPeak()      // R11-1: measure this run, not the process lifetime
         if startIndex == 0 { cacheHitRows = [] }
         let resumeOutputs = resume ? outputs : [:]
@@ -319,6 +322,7 @@ final class FlowRunSession {
         rowStates = Dictionary(Self.flattenedRows(doc.rows).map { ($0.id, RowState()) },
                              uniquingKeysWith: { a, _ in a })
         outputs = [:]
+        railPreviews.clear()
         selectedRowID = nil
         parked = nil
         withdrawServedLoadQuestion()
@@ -356,6 +360,7 @@ final class FlowRunSession {
             }
         case .finished(let id, let asset):
             outputs[id] = asset
+            railPreviews.invalidate(id)     // KR-3: a fresh result replaces any preview of the old one
             // DA-10-FIX-2: an `<each on_error=skip>` body row reuses the same row id across
             // items — a later item's own `.finished` must not paint over an earlier item's
             // skip on this run. Once any item skipped, the dot stays △ for the rest of the
