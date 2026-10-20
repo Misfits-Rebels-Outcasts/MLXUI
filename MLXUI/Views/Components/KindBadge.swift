@@ -136,20 +136,99 @@ struct ShapeChip: View {
 }
 
 /// The kind rail: `accepts → gives` for one row, drawn at the trailing edge of the row, outside
-/// its horizontal scroll. Information only — no gesture, so the row's own selection and context
-/// menu are untouched.
+/// its horizontal scroll. Information plus two small affordances: hovering a "from N" chip
+/// highlights row N's output chip, and clicking it selects row N. It never edits a ref
+/// (`inputMenu(for:slot:)` stays the place for that), and the rest of the rail has no gesture, so
+/// the row's own selection and context menu are untouched.
 struct KindRail: View {
     let accepts: Shape
     let gives: Shape
+    /// KR-2: where the input comes from. Empty (the Add Step picker) draws just the accepts chip.
+    var inputs: [FlowEditorModel.RailInput] = []
+    /// KR-2: the editor's sentence when it is about this row's input — red outline + tooltip.
+    var mismatch: String?
+    /// KR-2: another row's "from N" chip is hovered and names this row.
+    var outputHighlighted = false
+    var onHoverSource: (UUID?) -> Void = { _ in }
+    var onSelectSource: (UUID) -> Void = { _ in }
 
     var body: some View {
         HStack(spacing: 4) {
-            ShapeChip(shape: accepts)
+            inputSide
+                .padding(.horizontal, mismatch == nil ? 0 : 3)
+                .overlay {
+                    if mismatch != nil {
+                        RoundedRectangle(cornerRadius: 6).stroke(Color.red, lineWidth: 1)
+                    }
+                }
+                .help(mismatch ?? "")
             Image(systemName: "arrow.right").font(.caption2).foregroundStyle(.secondary)
             ShapeChip(shape: gives, incoming: accepts)
+                .padding(2)
+                .overlay {
+                    if outputHighlighted {
+                        Capsule().stroke(Color.accentColor, lineWidth: 1.5)
+                    }
+                }
         }
         .fixedSize()
         .padding(.top, 2)
         .help("\(accepts.signatureText) → \(gives.signatureText)")
+    }
+
+    @ViewBuilder
+    private var inputSide: some View {
+        let sources = inputs.map(\.source)
+        let rowInputs = inputs.filter { if case .row = $0.source { return true } else { return false } }
+        HStack(spacing: 3) {
+            ForEach(Array(rowInputs.enumerated()), id: \.offset) { _, input in
+                SourceChip(input: input, onHover: onHoverSource, onSelect: onSelectSource)
+            }
+            if let special = sources.first(where: isSpecial) {
+                switch special {
+                case .own(let word):
+                    Text("own \(word)")
+                        .font(.caption2)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Color.accentColor.opacity(0.25), in: Capsule())
+                        .help("This row uses the value typed in its own settings.")
+                case .missing:
+                    Text("no input")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .overlay(Capsule().stroke(style: StrokeStyle(lineWidth: 1, dash: [3, 2])).foregroundStyle(.secondary))
+                case .above, .row:
+                    EmptyView()
+                }
+            } else {
+                ShapeChip(shape: accepts)
+            }
+        }
+    }
+
+    private func isSpecial(_ source: RailInputSource) -> Bool {
+        switch source {
+        case .own, .missing: return true
+        case .above, .row: return false
+        }
+    }
+}
+
+/// A "from N" chip: hover highlights row N's output chip, click selects row N.
+private struct SourceChip: View {
+    let input: FlowEditorModel.RailInput
+    let onHover: (UUID?) -> Void
+    let onSelect: (UUID) -> Void
+
+    var body: some View {
+        Text(input.source.label)
+            .font(.caption2)
+            .foregroundStyle(Color.accentColor)
+            .padding(.horizontal, 5).padding(.vertical, 1)
+            .background(Color.accentColor.opacity(0.12), in: Capsule())
+            .contentShape(Capsule())
+            .onHover { inside in if let target = input.target { onHover(inside ? target : nil) } }
+            .onTapGesture { if let target = input.target { onSelect(target) } }
     }
 }

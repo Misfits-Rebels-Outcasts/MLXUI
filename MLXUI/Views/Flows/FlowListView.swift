@@ -75,6 +75,8 @@ struct FlowListView: View {
     @State private var inspectModel: FlowEditorModel?
     /// KR-1: Settings → Models → Flows, and View → Show Row Kinds.
     @AppStorage("flowShowsKindRail") private var showsKindRail = true
+    /// KR-2: the row a hovered "from N" chip names.
+    @State private var hoveredRailSource: UUID?
     /// The refusal reason this flow can't run, derived from `FlowRunner.canRun(doc)` — not
     /// blindly trusted from `_metadata.json` (B3). `nil` = runnable.
     @State private var notRunnableReason: String?
@@ -550,7 +552,12 @@ struct FlowListView: View {
                                      }
                                  },
                                  cached: session.cacheHitRows.contains(row.id),
-                                 signature: showsKindRail ? inspectModel?.rowSignature(row.id) : nil)
+                                 signature: showsKindRail ? inspectModel?.rowSignature(row.id) : nil,
+                                 inputs: showsKindRail ? inspectModel?.railInputs(for: row.id) ?? [] : [],
+                                 mismatch: showsKindRail ? inspectModel?.inputMismatch(for: row.id) : nil,
+                                 outputHighlighted: showsKindRail && hoveredRailSource == row.id,
+                                 onHoverSource: { hoveredRailSource = $0 },
+                                 onSelectSource: { session.selectedRowID = $0 })
     }
 
     /// CFM-R12-3 item 3 / CFM-R12-FIX-3: a collapsed block's header dot aggregates its

@@ -28,6 +28,13 @@ struct FlowSerializedRow: View {
     /// KR-1: the row's `accepts → gives`, drawn as the kind rail. `nil` (the setting is off, or
     /// the row can't be typed) draws nothing at all.
     var signature: (accepts: Shape, gives: Shape)? = nil
+    /// KR-2: the input sources, the mismatch sentence, the hover highlight and the two actions.
+    /// Hover and click here only highlight and select; this row never edits a ref.
+    var inputs: [FlowEditorModel.RailInput] = []
+    var mismatch: String?
+    var outputHighlighted = false
+    var onHoverSource: (UUID?) -> Void = { _ in }
+    var onSelectSource: (UUID) -> Void = { _ in }
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -51,7 +58,9 @@ struct FlowSerializedRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if let signature {
-                KindRail(accepts: signature.accepts, gives: signature.gives)
+                KindRail(accepts: signature.accepts, gives: signature.gives, inputs: inputs,
+                         mismatch: mismatch, outputHighlighted: outputHighlighted,
+                         onHoverSource: onHoverSource, onSelectSource: onSelectSource)
             }
             if cached {
                 Text("cached")

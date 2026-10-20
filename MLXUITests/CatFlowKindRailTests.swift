@@ -120,4 +120,89 @@ struct CatFlowKindRailTests {
         let e = try editor(forGallery: "01-SpokenSummary")
         #expect(e.rowSignature(UUID()) == nil)
     }
+
+    // MARK: - KR-2: input sources
+
+    @MainActor private func parsedEditor(_ text: String) throws -> FlowEditorModel {
+        FlowEditorModel(name: "kr2", document: try CatParser.parse(text),
+                        workspace: FlowWorkspace(root: FileManager.default.temporaryDirectory))
+    }
+
+    @Test @MainActor func aRowFedByTheRowAboveIsAbove() throws {
+        let e = try parsedEditor("mlxflow 0.8\n1. Read Audio   memo.m4a\n2. Transcribe   Whisper Large v3; lang=en\n")
+        #expect(e.railInputs(for: e.document.rows[1].id).map(\.source) == [.above])
+    }
+
+    @Test @MainActor func aStartingRowWithItsOwnValueIsOwnNotMissing() throws {
+        let e = try parsedEditor("mlxflow 0.8\n1. Read Audio   memo.m4a\n")
+        #expect(e.railInputs(for: e.document.rows[0].id).map(\.source) == [.own("file")])
+        // Generate Image as row 1 with the default prompt the editor seeds.
+        let g = try parsedEditor("mlxflow 0.8")
+        g.add(task: "Generate Image")
+        let row = try #require(g.document.rows.first)
+        #expect(g.railInputs(for: row.id).map(\.source) == [.own("prompt")])
+    }
+
+    @Test @MainActor func anUnfedRowWithNoValueIsMissing() throws {
+        let e = try parsedEditor("mlxflow 0.8\n1. Summarize   Qwen3 8B; \"TL;DR\"\n")
+        #expect(e.railInputs(for: e.document.rows[0].id).map(\.source) == [.missing])
+        // A starting row whose own value was cleared is missing too.
+        let g = try parsedEditor("mlxflow 0.8")
+        g.add(task: "Generate Image")
+        let row = try #require(g.document.rows.first)
+        g.setInstruction(nil, for: row.id); g.setSetting(key: "seed", value: "1", for: row.id)
+        #expect(g.railInputs(for: row.id).map(\.source) == [.missing])
+    }
+
+    @Test @MainActor func inputRefsResolveToRowNAndPointAtTheBlocksSource() throws {
+        let e = try editor(forGallery: "02-MeetingMinutes")
+        let block = try #require(e.document.rows.first { $0.blockKind == .parallel })
+        let summarize = try #require(block.children.first)
+        let inputs = e.railInputs(for: summarize.id)
+        #expect(inputs.map(\.source) == [.row(1)])
+        // `(input:1)` is the block's first input: with no refs on the block, the row above it.
+        #expect(inputs.first?.target == e.document.rows[1].id)
+        // Rewrite has no ref and no blank line above it: fed by the row above in its chain.
+        let rewrite = block.children[2]
+        #expect(e.railInputs(for: rewrite.id).map(\.source) == [.above])
+    }
+
+    @Test @MainActor func twoRefsKeepBothInOrderWithTheirTargets() throws {
+        let e = try parsedEditor("mlxflow 0.8\n1. Read Text   a.txt\n2. Read Text   b.txt\n\n3. Template (2,1)   \"{1} {2}\"\n")
+        let rows = e.document.rows
+        let inputs = e.railInputs(for: rows[2].id)
+        #expect(inputs.map(\.source) == [.row(2), .row(1)])
+        #expect(inputs.map(\.target) == [rows[1].id, rows[0].id])
+    }
+
+    @Test @MainActor func pureSourceFunctionCoversTheFourStates() throws {
+        func row(_ line: String) throws -> Row {
+            try #require(try CatParser.parse("mlxflow 0.8\n" + line + "\n").rows.first)
+        }
+        let prev = try row("1. Read Audio   memo.m4a")
+        let fed = try row("2. Transcribe   Whisper Large v3")
+        #expect(RailInputSources.sources(of: fed, previous: prev, number: { _ in nil }) == [.above])
+        let own = try row("1. Read Audio   memo.m4a")
+        #expect(RailInputSources.sources(of: own, previous: nil, number: { _ in nil }) == [.own("file")])
+        let none = try row("1. Summarize   Qwen3 8B; \"x\"")
+        #expect(RailInputSources.sources(of: none, previous: nil, number: { _ in nil }) == [.missing])
+        #expect(RailInputSource.row(3).label == "from 3")
+    }
+
+    // MARK: - KR-2: the mismatch outline
+
+    @Test @MainActor func mismatchIsTheEditorsOwnSentenceAndOnlyForInputProblems() throws {
+        // A text row cannot feed Transcribe: the editor's input sentence becomes the tooltip.
+        let bad = try parsedEditor("mlxflow 0.8\n1. Read Text   a.txt\n2. Transcribe   Whisper Large v3\n")
+        let id = bad.document.rows[1].id
+        let warning = try #require(bad.warning(for: id))
+        #expect(bad.inputMismatch(for: id) == warning)
+        // A model problem is a warning but not an input problem: no outline.
+        let model = try parsedEditor("mlxflow 0.8\n1. Read Text   a.txt\n2. Summarize   Nonexistent 1B; \"x\"\n")
+        let mid = model.document.rows[1].id
+        #expect(model.warning(for: mid) != nil)
+        #expect(model.inputMismatch(for: mid) == nil)
+        // A healthy row has neither.
+        #expect(bad.inputMismatch(for: bad.document.rows[0].id) == nil)
+    }
 }

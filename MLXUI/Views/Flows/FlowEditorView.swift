@@ -591,6 +591,8 @@ struct FlowEditorView: View {
     @State private var collapsedBlocks: Set<UUID> = []
     /// KR-1: Settings → Models → Flows, and View → Show Row Kinds.
     @AppStorage("flowShowsKindRail") private var showsKindRail = true
+    /// KR-2: the row a hovered "from N" chip names.
+    @State private var hoveredRailSource: UUID?
     /// CFM-R12-3 item 5: the block header awaiting a Remove all / Keep the steps decision.
     @State private var blockPendingRemoval: UUID?
 
@@ -627,7 +629,12 @@ struct FlowEditorView: View {
                     .onTapGesture { model.selectedRowID = row.id }
                 }
                 if showsKindRail, let sig = model.rowSignature(row.id) {
-                    KindRail(accepts: sig.accepts, gives: sig.gives)
+                    KindRail(accepts: sig.accepts, gives: sig.gives,
+                             inputs: model.railInputs(for: row.id),
+                             mismatch: model.inputMismatch(for: row.id),
+                             outputHighlighted: hoveredRailSource == row.id,
+                             onHoverSource: { hoveredRailSource = $0 },
+                             onSelectSource: { model.selectedRowID = $0 })
                         .contentShape(Rectangle())
                         .onTapGesture { model.selectedRowID = row.id }
                 }

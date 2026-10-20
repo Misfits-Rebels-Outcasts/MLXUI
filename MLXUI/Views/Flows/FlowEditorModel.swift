@@ -1109,6 +1109,64 @@ final class FlowEditorModel {
         return (accepts, gives ?? .anyKind)
     }
 
+    /// Validator codes whose sentence is about a row's input (refs, chaining, bundle shape).
+    private nonisolated static let inputIssueCodes: Set<String> = [
+        "E201", "E202", "E203", "E204", "E205", "E206", "E207", "E208", "E209", "E401", "E403",
+    ]
+
+    /// KR-2: one input chip's worth of display — what it says and which row it names (for the
+    /// hover highlight and click-to-select), when that is known.
+    struct RailInput: Equatable {
+        let source: RailInputSource
+        let target: UUID?
+    }
+
+    /// KR-2: the editor's own sentence when it is about the row's input, else nil — the rail's
+    /// red outline and its tooltip (verbatim).
+    func inputMismatch(for rowID: UUID) -> String? {
+        guard let detail = warningDetail(for: rowID), detail.aboutInput else { return nil }
+        return detail.message
+    }
+
+    /// KR-2: the sources of a row's input, each with the row it points at.
+    func railInputs(for rowID: UUID) -> [RailInput] {
+        guard let r = row(withID: rowID) else { return [] }
+        let parent = childIndexOf(rowID).flatMap { row(withID: $0.blockID) }
+        let sources = RailInputSources.sources(
+            of: r, previous: previousRow(before: rowID), inBlock: parent != nil,
+            number: { id in displayNumber(of: id).flatMap { $0.split(separator: ".").last }.flatMap { Int($0) } })
+        // Only `.row` sources carry a target; they appear in ref order, so zip them with the refs.
+        var refTargets: [UUID?] = []
+        for ref in r.refs {
+            switch ref {
+            case .rowRef(let id):
+                refTargets.append(row(withID: id) != nil ? id : nil)
+            case .inputRef(let p):
+                // `(input:p)` names the block's p-th input: its p-th ref, or — with no refs — the row above the block.
+                if let parent {
+                    if p >= 1, p <= parent.refs.count, case .rowRef(let id) = parent.refs[p - 1] {
+                        refTargets.append(row(withID: id) != nil ? id : nil)
+                    } else if parent.refs.isEmpty, p == 1 {
+                        refTargets.append(previousRow(before: parent.id)?.id)
+                    } else {
+                        refTargets.append(nil)
+                    }
+                } else {
+                    refTargets.append(nil)
+                }
+            case .paramRef:
+                break
+            }
+        }
+        // The ref path yields exactly one source per non-param ref, in order; any other source
+        // (above / own / missing) names no row.
+        guard sources.count == refTargets.count,
+              !r.refs.isEmpty, !(r.task.map(RowSources.takesNoUpstreamInput) ?? false) else {
+            return sources.map { RailInput(source: $0, target: nil) }
+        }
+        return zip(sources, refTargets).map { RailInput(source: $0, target: $1) }
+    }
+
     // MARK: - The input picker (CFM-R8-FIX-1/2)
 
     /// The rows a given input slot of `rowID` may point at — same scope, **strictly
@@ -1217,7 +1275,12 @@ final class FlowEditorModel {
     /// The one-line warning under a row, or nil when fine: a ref issue from the validator
     /// (E203/E204/E205/E401/E403…), a model-class row with no runnable model (h3), or a
     /// no-ref row whose auto-chain upstream is incompatible.
-    func warning(for rowID: UUID) -> String? {
+    func warning(for rowID: UUID) -> String? { warningDetail(for: rowID)?.message }
+
+    /// KR-2: `warning(for:)` plus whether the sentence is about the row's **input** (a ref or
+    /// chaining problem, or a missing own value) — the kind rail outlines the input chip for
+    /// those only. Tagged at each return, so the rail never judges compatibility itself.
+    func warningDetail(for rowID: UUID) -> (message: String, aboutInput: Bool)? {
         guard let r = row(withID: rowID) else { return nil }
         let path = displayNumber(of: rowID) ?? "?"
 
@@ -1237,7 +1300,7 @@ final class FlowEditorModel {
             && TaskCatalog.get(r.task ?? "")?.taskClass == .model
             && !isRunnableModel(r.model, for: r.task ?? "")
         if let first = ownIssues.first, !isUnresolvableUnrunnableModel {
-            return "\(first.message)"
+            return ("\(first.message)", Self.inputIssueCodes.contains(first.code))
         }
 
         if r.task != nil, r.blockKind == nil, let desc = TaskCatalog.get(r.task ?? "") {
@@ -1246,7 +1309,7 @@ final class FlowEditorModel {
                 // named is legitimate — its deterministic fast path needs none. Still warn
                 // when a model IS named but doesn't resolve.
                 if !(r.model == nil && TaskModels.isModelOptional(r.task ?? "")) {
-                    return "Row \(path) needs a model — pick one that runs on this Mac."
+                    return ("Row \(path) needs a model — pick one that runs on this Mac.", false)
                 }
             }
             // HU: `.human` used to be in this "can't complete" bucket, but CFM-R10-Human
@@ -1259,14 +1322,14 @@ final class FlowEditorModel {
             // wasn't told either, so every net row showed the same false warning.
             if desc.taskClass != .instant, desc.taskClass != .model, desc.taskClass != .human,
                desc.taskClass != .net {
-                return "Row \(path) is a \(desc.taskClass.rawValue) row, which this version of Flows can't complete."
+                return ("Row \(path) is a \(desc.taskClass.rawValue) row, which this version of Flows can't complete.", false)
             }
             // ES-UI-1: `Extract Structured`'s settings string *is* its column list. An empty or
             // unparseable one fails only at run time (`parseSchema` raises) — flag it here so
             // clearing the editor's "Columns to extract" field is never a silent break.
             if desc.refName == "engines.llm.extract_structured",
                (try? ExtractStructuredStage.parseSchema(r.settings)) == nil {
-                return "Row \(path) needs a column list — e.g. \"merchant, date, total\"."
+                return ("Row \(path) needs a column list — e.g. \"merchant, date, total\".", false)
             }
         }
 
@@ -1288,7 +1351,7 @@ final class FlowEditorModel {
             })
             if !edgeTargets.contains(position),
                !Self.isCompatible(from: previous, to: r, context: signatureContext) {
-                return "Row \(path) can't take row \(displayNumber(of: previous.id) ?? "?")'s output — add an input reference."
+                return ("Row \(path) can't take row \(displayNumber(of: previous.id) ?? "?")'s output — add an input reference.", true)
             }
         }
         // HR-1 (`RSI/DelegateHumanRowBacklog.md`) — a `Human Input` row at row 1 that carries
@@ -1319,7 +1382,7 @@ final class FlowEditorModel {
             // different sentence about the missing fallback, not the false one about a
             // missing input; it blocks nothing (no `saveBlockReason` change).
             if FlowInterpreter.hasTimeout(r), !FlowInterpreter.waitsForever(r) {
-                return "Row 1 has nothing to fall back on — if nobody answers, this row produces nothing."
+                return ("Row 1 has nothing to fall back on — if nobody answers, this row produces nothing.", false)
             }
             return nil
         }
@@ -1334,7 +1397,7 @@ final class FlowEditorModel {
             let fed = RowSources.takesNoUpstreamInput(r.task ?? "") ? false
                 : (!r.refs.isEmpty || fedByCaller
                     || previous.map { Self.isCompatible(from: $0, to: r, context: signatureContext) } ?? false)
-            if !fed { return sentence }
+            if !fed { return (sentence, true) }
         }
         if r.refs.isEmpty, r.blockKind == nil,
            let task = r.task, !RowSources.contains(task),
@@ -1347,7 +1410,7 @@ final class FlowEditorModel {
             if isFlowRowOne && isCalledByWorkspaceSibling {
                 return nil
             }
-            return "Row \(path) needs an input — nothing feeds it."
+            return ("Row \(path) needs an input — nothing feeds it.", true)
         }
         return nil
     }
