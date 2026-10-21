@@ -97,6 +97,38 @@ struct Gemma4WorkflowWiringTests {
         }
     }
 
+    /// MP1-W-FIX-1: the type-aware `displayName(for:)` changed what the Describe Image menu **offers** for the Qwen3.5
+    /// Vision card ("Qwen3.5 9B" → "Qwen3.5 9B Vision"). It must not change what an **already saved** row resolves to.
+    /// Before the fix that card was offered as "Qwen3.5 9B", so a saved `.cat` row can name it that way; `resolve`
+    /// was never touched and maps that name to the Qwen3.5 9B **text** card (`modelType: .llm`), exactly as it did,
+    /// so no existing flow silently changes model. The explicit "Qwen3.5 9B Vision" row still resolves to the vision card.
+    @Test func aSavedRowNamingTheOldQwenVisionDisplayStillResolvesToTheSameCardAsBefore() throws {
+        let catalog = try loadCatalog()
+        guard case .runnable(let old, let oldEquivalence, let oldNote) = CatalogBridge.resolve("Qwen3.5 9B", catalog: catalog) else {
+            Issue.record("\"Qwen3.5 9B\" should still resolve"); return
+        }
+        #expect(old.modelEntry?.id == "mlx-community--Qwen3.5-9B-MLX-4bit")
+        #expect(old.modelEntry?.modelType == .llm)
+        #expect(oldEquivalence == .same)
+        #expect(oldNote == nil)
+        // The forward table for that display is the one it always was.
+        #expect(CatalogBridge.entry(for: "Qwen3.5 9B")?.modelType == .llm)
+        #expect(CatalogBridge.entry(for: "Qwen3.5 9B")?.manifestFile == "qwen3.5-9b-4bit.json")
+
+        guard case .runnable(let vision, _, _) = CatalogBridge.resolve("Qwen3.5 9B Vision", catalog: catalog) else {
+            Issue.record("\"Qwen3.5 9B Vision\" should still resolve"); return
+        }
+        #expect(vision.modelEntry?.id == "mlx-community--Qwen3.5-9B-MLX-4bit-vision")
+        #expect(vision.modelEntry?.modelType == .vision)
+        // Same for the other pairs that share a repo: a pinned display resolves to the card it names.
+        for (display, id) in [(Self.llmDisplay, "mlx-community--gemma-4-e4b-it-4bit"),
+                              (Self.visionDisplay, "mlx-community--gemma-4-e4b-it-4bit-vision")] {
+            if case .runnable(let slot, _, _) = CatalogBridge.resolve(display, catalog: catalog) {
+                #expect(slot.modelEntry?.id == id, "\(display)")
+            } else { Issue.record("\(display) should resolve") }
+        }
+    }
+
     // MARK: - the manifests
 
     /// AM-W step 6: both manifests must be in the **app bundle**, not just in `Resources/`.
@@ -110,7 +142,7 @@ struct Gemma4WorkflowWiringTests {
         let temperature = try #require(llm.settings["temperature"])
         #expect(temperature.min == 0.0)
         #expect(temperature.max == 2.0)
-        #expect(temperature.defaultValue == .number(1.0))        // generation_config.json temperature 1.0
+        #expect(temperature.defaultValue == .number(0.6))        // owner ruling 2026-10-21: 0.6 like the other LLM manifests
         let maxTokens = try #require(llm.settings["max_tokens"])
         #expect(maxTokens.min == 1)
         #expect(maxTokens.max == 32768)
@@ -133,6 +165,10 @@ struct Gemma4WorkflowWiringTests {
             #expect(notes.contains("MLXUI-authored"), "\(file)")
             #expect(notes.contains("475b9088d29754a3379866cf5aeb6b41acd313c2"), "\(file)")
             #expect(!notes.lowercased().contains("audio input"), "\(file)")
+            if file == "gemma-4-e4b-it-4bit.json" {
+                // The reason for 0.6 rather than generation_config.json's 1.0 is recorded where the next reader looks.
+                #expect(notes.contains("0.6") && notes.contains("top_k 64") && notes.contains("top_p 0.95"), "\(file)")
+            }
         }
     }
 
