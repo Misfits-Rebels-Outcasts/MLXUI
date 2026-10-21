@@ -18,6 +18,10 @@ import Foundation
 ///   then holds one call); `gpt_oss` never reaches this code — its format has no parser, so the
 ///   server flattens its tool traffic (S2-1's `unsupportedFormat`).
 ///
+/// **Gemma 4** (`gemma4`, MP1-S) loops too (`{%- for tool_call in message['tool_calls'] -%}`, template line 244) and
+/// raises nothing, so it needs neither flag; today it never reaches this path anyway (its tool support is
+/// `.unknown`, see `ToolCallFormatTable`).
+///
 /// The other nine families **loop** over every call (`{%- for tool_call in message.tool_calls %}` —
 /// `qwen3_5` ×4, `qwen3`, `qwen2`, `mistral3` ×2) and are left alone: their history is already what
 /// their template wants, and splitting it would change prompts that work.

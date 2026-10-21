@@ -130,6 +130,21 @@ nonisolated enum ToolCallFormatTable {
         // gemma-3-1b-it-qat (`gemma3_text`); bare `gemma3` is Gemma 3's VLM spelling and was not
         // read, so it stays unknown rather than inheriting the 1B's answer.
         if t == "gemma2" || t.hasPrefix("gemma3_text") { return .templateIgnoresTools }
+        // Gemma 4 (`gemma4`; MP1-S, `RSI/journal/2026-543-mp1-s-gemma4-serve.md`): deliberately `.unknown`. The
+        // template renders tools (`<|tool>declaration:…<tool|>`, line 198) and writes calls as
+        // `<|tool_call>call:name{key:<|"|>v<|"|>,…}<tool_call|>` (lines 244–246), and mlx-swift-lm 3.31.4's
+        // `ToolCallFormat.infer` does map `gemma4*` → `.gemma4` with those exact tags. But that parser reads a
+        // value up to the next comma, so a nested array or object — `tags:[<|"|>a<|"|>,<|"|>b<|"|>]`, which
+        // coding-agent tool schemas use all the time — comes back as a garbled string with the rest dropped, and
+        // even a bare number or boolean (`days:3`, `metric:true`) comes back as the *string* "3" / "true"
+        // (`deserializeJSON` refuses a JSON fragment). Only string arguments round-trip. That is not an exact
+        // match, and a wrong argument is worse than an ignored `tools` array. (The tool declaration the template
+        // renders also differs from Python's by whitespace under swift-jinja: a second, smaller reason.)
+        // `Gemma4ServeTests` (the round-trip tests) pins the evidence; re-read
+        // it, and flip this line, when a parser that reads nested values exists (no parser is written in the Model
+        // Pack, readme T1). https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit/raw/main/chat_template.jinja
+        // (revision 475b9088d2…, fetched 2026-10-21).
+        if t.hasPrefix("gemma4") { return .unknown }
         return .unknown
     }
 
@@ -179,6 +194,12 @@ nonisolated enum ToolCallFormatTable {
         // trips `Conversation roles must alternate user/assistant/...`, so it is first-only for
         // us. https://huggingface.co/mlx-community/gemma-3-1b-it-qat-4bit/raw/main/tokenizer_config.json
         if t.hasPrefix("gemma3_text") { return .firstOnly }
+        // Gemma 4: the template reads `messages[0]` when its role is `system` or `developer` (line 179) and
+        // renders any later `system` message as its own `<|turn>system` turn; it contains no
+        // `raise_exception` at all, so nothing needs hoisting and the client's order is kept (`.anywhere`,
+        // stated rather than left to the default).
+        // https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit/raw/main/chat_template.jinja
+        if t.hasPrefix("gemma4") { return .anywhere }
         // gpt-oss: `{%- if messages[0].role == "developer" or messages[0].role == "system" %}`
         // renders `<|start|>developer<|message|>…`; a system at index > 0 matches no branch and
         // is emitted nowhere — silent content loss, so hoist it.

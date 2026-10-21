@@ -33,7 +33,40 @@ cases = [
                           {"role": "user", "content": "Thanks. One more: 5 squared?"}]),
     case("d_system_image_text", [{"role": "system", "content": "Be brief."},
                                  {"role": "user", "content": img}]),
+    # MP1-S: the Local Server path. The conversation the serve-equals-chat test sends both ways.
+    case("e_serve_conversation", [{"role": "system", "content": "Be brief."},
+                                  {"role": "user", "content": "Hi"},
+                                  {"role": "assistant", "content": "Hello!"},
+                                  {"role": "user", "content": "Name a river."}]),
+    # MP1-S: tools declared, and thinking switched on (the control MP1-S leaves off).
+    case("f_tools_declared", [{"role": "user", "content": "What is the weather in Tokyo?"}],
+         tools=[{"type": "function", "function": {
+             "name": "get_weather", "description": "Get the weather for a city.",
+             "parameters": {"type": "object",
+                            "properties": {"city": {"type": "string", "description": "City name"},
+                                           "days": {"type": "integer"}},
+                            "required": ["city"]}}}]),
+    case("g_thinking_on", [{"role": "user", "content": "Hi"}], enable_thinking=True),
 ]
+
+def call_history(name, arguments):
+    """user -> assistant tool call -> tool result, the shape ServeMessageAssembly hands the template when a
+    family accepts tools (MLXChatBackend.rawMessages: content "", arguments as an object)."""
+    return [{"role": "user", "content": "Go."},
+            {"role": "assistant", "content": "",
+             "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": name, "arguments": arguments}}]},
+            {"role": "tool", "content": "ok", "tool_call_id": "call_1"}]
+
+# MP1-S: the evidence for the tool-support decision. Each case renders one assistant tool call exactly as the
+# template writes it; the Swift test parses that text with mlx-swift-lm's `.gemma4` parser and compares.
+for label, arguments in [
+        ("flat_scalars", {"city": "Tokyo", "days": 3, "metric": True}),
+        ("string_with_specials", {"q": "a, b: {c} and \"d\""}),
+        ("array_value", {"tags": ["a", "b"], "n": 1}),
+        ("object_value", {"opts": {"k": 1, "j": "x"}}),
+        ("array_of_objects", {"edits": [{"path": "a.txt", "line": 3}, {"path": "b.txt", "line": 9}]}),
+        ("no_arguments", {})]:
+    cases.append(case("h_call_" + label, call_history("do_thing", arguments)))
 out = {
     "provenance": {
         "generator": "Fixtures/Gemma4/make_prompt_goldens.py",

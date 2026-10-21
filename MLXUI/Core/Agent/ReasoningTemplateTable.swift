@@ -64,6 +64,15 @@ nonisolated enum ReasoningTemplateTable {
         // https://huggingface.co/mlx-community/Qwen3-8B-4bit/raw/main/tokenizer_config.json
         // (`chat_template`, lines 81–86)
         if t == "qwen3" { return .modelEmitted }
+        // Gemma 4 (`gemma4`; MP1-S): `.none`, deliberately. The template does read `enable_thinking` (line
+        // 182 writes `<|think|>` into the system turn), but its thinking comes back as
+        // `<|channel>thought\n…<channel|>` (lines 148–152, 240; Google's `response_schema` in
+        // `tokenizer_config.json` says the same), not `<think>…</think>`. `ServeReasoningSplitter` only knows the
+        // latter, so honouring the control would put the raw channel text into `content`. Until a splitter for
+        // the channel form exists the control is ignored for this family, never a `400`, exactly as for every other
+        // family without a think block. https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit/raw/main/chat_template.jinja
+        // (revision 475b9088d2…, fetched 2026-10-21). `Gemma4ServeTests` pins the splitter's behaviour on that text.
+        if t.hasPrefix("gemma4") { return .none }
         // Everything else has no think block: Qwen2.5, Llama 3.1, Ministral 3 / Devstral, Gemma 2,
         // Gemma 3 1B, and gpt-oss. gpt-oss is the interesting one: its template reads
         // `reasoning_effort` four times, but that shapes *harmony channels*, not a `<think>` block,

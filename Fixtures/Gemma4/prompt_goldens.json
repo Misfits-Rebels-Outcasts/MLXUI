@@ -101,6 +101,311 @@
         "add_generation_prompt": true
       },
       "expected": "<bos><|turn>system\nBe brief.<turn|>\n<|turn>user\n<|image|>What is this?<turn|>\n<|turn>model\n"
+    },
+    {
+      "name": "e_serve_conversation",
+      "context": {
+        "bos_token": "<bos>",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Be brief."
+          },
+          {
+            "role": "user",
+            "content": "Hi"
+          },
+          {
+            "role": "assistant",
+            "content": "Hello!"
+          },
+          {
+            "role": "user",
+            "content": "Name a river."
+          }
+        ],
+        "add_generation_prompt": true
+      },
+      "expected": "<bos><|turn>system\nBe brief.<turn|>\n<|turn>user\nHi<turn|>\n<|turn>model\nHello!<turn|>\n<|turn>user\nName a river.<turn|>\n<|turn>model\n"
+    },
+    {
+      "name": "f_tools_declared",
+      "context": {
+        "bos_token": "<bos>",
+        "messages": [
+          {
+            "role": "user",
+            "content": "What is the weather in Tokyo?"
+          }
+        ],
+        "add_generation_prompt": true,
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "get_weather",
+              "description": "Get the weather for a city.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string",
+                    "description": "City name"
+                  },
+                  "days": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "city"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "expected": "<bos><|turn>system\n<|tool>declaration:get_weather{description:<|\"|>Get the weather for a city.<|\"|>,parameters:{properties:{city:{description:<|\"|>City name<|\"|>,type:<|\"|>STRING<|\"|>},days:{type:<|\"|>INTEGER<|\"|>}},required:[<|\"|>city<|\"|>],type:<|\"|>OBJECT<|\"|>}}<tool|><turn|>\n<|turn>user\nWhat is the weather in Tokyo?<turn|>\n<|turn>model\n"
+    },
+    {
+      "name": "g_thinking_on",
+      "context": {
+        "bos_token": "<bos>",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hi"
+          }
+        ],
+        "add_generation_prompt": true,
+        "enable_thinking": true
+      },
+      "expected": "<bos><|turn>system\n<|think|>\n<turn|>\n<|turn>user\nHi<turn|>\n<|turn>model\n"
+    },
+    {
+      "name": "h_call_flat_scalars",
+      "context": {
+        "bos_token": "<bos>",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Go."
+          },
+          {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+              {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                  "name": "do_thing",
+                  "arguments": {
+                    "city": "Tokyo",
+                    "days": 3,
+                    "metric": true
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "content": "ok",
+            "tool_call_id": "call_1"
+          }
+        ],
+        "add_generation_prompt": true
+      },
+      "expected": "<bos><|turn>user\nGo.<turn|>\n<|turn>model\n<|tool_call>call:do_thing{city:<|\"|>Tokyo<|\"|>,days:3,metric:true}<tool_call|><|tool_response>response:do_thing{value:<|\"|>ok<|\"|>}<tool_response|>"
+    },
+    {
+      "name": "h_call_string_with_specials",
+      "context": {
+        "bos_token": "<bos>",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Go."
+          },
+          {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+              {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                  "name": "do_thing",
+                  "arguments": {
+                    "q": "a, b: {c} and \"d\""
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "content": "ok",
+            "tool_call_id": "call_1"
+          }
+        ],
+        "add_generation_prompt": true
+      },
+      "expected": "<bos><|turn>user\nGo.<turn|>\n<|turn>model\n<|tool_call>call:do_thing{q:<|\"|>a, b: {c} and \"d\"<|\"|>}<tool_call|><|tool_response>response:do_thing{value:<|\"|>ok<|\"|>}<tool_response|>"
+    },
+    {
+      "name": "h_call_array_value",
+      "context": {
+        "bos_token": "<bos>",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Go."
+          },
+          {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+              {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                  "name": "do_thing",
+                  "arguments": {
+                    "tags": [
+                      "a",
+                      "b"
+                    ],
+                    "n": 1
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "content": "ok",
+            "tool_call_id": "call_1"
+          }
+        ],
+        "add_generation_prompt": true
+      },
+      "expected": "<bos><|turn>user\nGo.<turn|>\n<|turn>model\n<|tool_call>call:do_thing{n:1,tags:[<|\"|>a<|\"|>,<|\"|>b<|\"|>]}<tool_call|><|tool_response>response:do_thing{value:<|\"|>ok<|\"|>}<tool_response|>"
+    },
+    {
+      "name": "h_call_object_value",
+      "context": {
+        "bos_token": "<bos>",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Go."
+          },
+          {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+              {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                  "name": "do_thing",
+                  "arguments": {
+                    "opts": {
+                      "k": 1,
+                      "j": "x"
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "content": "ok",
+            "tool_call_id": "call_1"
+          }
+        ],
+        "add_generation_prompt": true
+      },
+      "expected": "<bos><|turn>user\nGo.<turn|>\n<|turn>model\n<|tool_call>call:do_thing{opts:{j:<|\"|>x<|\"|>,k:1}}<tool_call|><|tool_response>response:do_thing{value:<|\"|>ok<|\"|>}<tool_response|>"
+    },
+    {
+      "name": "h_call_array_of_objects",
+      "context": {
+        "bos_token": "<bos>",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Go."
+          },
+          {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+              {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                  "name": "do_thing",
+                  "arguments": {
+                    "edits": [
+                      {
+                        "path": "a.txt",
+                        "line": 3
+                      },
+                      {
+                        "path": "b.txt",
+                        "line": 9
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "content": "ok",
+            "tool_call_id": "call_1"
+          }
+        ],
+        "add_generation_prompt": true
+      },
+      "expected": "<bos><|turn>user\nGo.<turn|>\n<|turn>model\n<|tool_call>call:do_thing{edits:[{line:3,path:<|\"|>a.txt<|\"|>},{line:9,path:<|\"|>b.txt<|\"|>}]}<tool_call|><|tool_response>response:do_thing{value:<|\"|>ok<|\"|>}<tool_response|>"
+    },
+    {
+      "name": "h_call_no_arguments",
+      "context": {
+        "bos_token": "<bos>",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Go."
+          },
+          {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+              {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                  "name": "do_thing",
+                  "arguments": {}
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "content": "ok",
+            "tool_call_id": "call_1"
+          }
+        ],
+        "add_generation_prompt": true
+      },
+      "expected": "<bos><|turn>user\nGo.<turn|>\n<|turn>model\n<|tool_call>call:do_thing{}<tool_call|><|tool_response>response:do_thing{value:<|\"|>ok<|\"|>}<tool_response|>"
     }
   ]
 }
