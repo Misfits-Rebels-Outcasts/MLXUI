@@ -50,15 +50,19 @@ struct Gemma4CatalogTests {
         #expect(llm.family == "gemma" && vision.family == "gemma")
     }
 
-    /// The pinned `api.json` lives under the gitignored `RSI/`, so it exists in the owner's main folder
-    /// (and beside a sibling worktree) but not in a clean clone. When it's absent this checks nothing
-    /// beyond the literal above rather than failing a checkout that never had it.
-    @Test func hfModelIdEqualsThePinnedAPIJSONId() throws {
+    /// The pinned `api.json` lives under the gitignored `RSI/`: it exists in the owner's main folder (and
+    /// beside a sibling worktree) but not in a clean clone, where this reports "skipped", not "passed".
+    private static let pinnedAPIJSON: URL? = {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         let rel = "RSI/notes/modelpack/hf/mlx-community_gemma-4-e4b-it-4bit/api.json"
-        let candidates = [root, root.deletingLastPathComponent().appendingPathComponent("PipelineStudio")]
+        return [root, root.deletingLastPathComponent().appendingPathComponent("PipelineStudio")]
             .map { $0.appendingPathComponent(rel) }
-        guard let url = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else { return }
+            .first { FileManager.default.fileExists(atPath: $0.path) }
+    }()
+
+    @Test(.enabled(if: Gemma4CatalogTests.pinnedAPIJSON != nil))
+    func hfModelIdEqualsThePinnedAPIJSONId() throws {
+        let url = try #require(Self.pinnedAPIJSON)
         let api = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let pinned = try #require(api["id"] as? String)
         let leaves = try loadLeaves()
