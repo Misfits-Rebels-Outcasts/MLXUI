@@ -178,27 +178,28 @@ struct Gemma4ResolutionTests {
         try Template(template, with: .init(lstripBlocks: true, trimBlocks: true))
     }
 
-    /// Runs of newlines collapsed to one: the structure of the prompt, ignoring the whitespace difference that
-    /// `commentWhitespaceControlIsIgnoredBySwiftJinja` pins.
-    private func collapsed(_ s: String) -> String {
-        s.replacing(/\n+/, with: "\n")
+    /// The template as the app renders it: through `ChatTemplateSanitizer` (which applies the `-` on comment
+    /// tags swift-jinja ignores, MP1-3-FIX-1) and the swift-transformers options. The Python-reference parity
+    /// for this lives in `CommentWhitespaceControlTests`.
+    private func render(_ context: [String: Value]) throws -> String {
+        let template = try pinnedTemplate()
+        return try compile(ChatTemplateSanitizer.sanitized(template) ?? template).render(context)
     }
 
-    @Test func pinnedTemplateRendersAPlainTurnAndNeedsNoSanitizing() throws {
-        let template = try pinnedTemplate()
-        // `ChatTemplateSanitizer` only strips Qwen3.5's no-user-query guard; this template has none.
-        #expect(ChatTemplateSanitizer.sanitized(template) == nil)
-        let out = try compile(template).render([
+    @Test func pinnedTemplateIsFixedByTheSanitizerAndRendersAPlainTurn() throws {
+        // Ten dashed comments: the sanitizer now has something to apply (it had nothing before MP1-3-FIX-1).
+        #expect(ChatTemplateSanitizer.sanitized(try pinnedTemplate()) != nil)
+        let out = try render([
             "bos_token": "<bos>",
             "messages": [["role": "user", "content": "Hello"]],
             "add_generation_prompt": true,
         ])
         // No `enable_thinking` in the context → no system turn, no thinking switch in the prompt.
-        #expect(collapsed(out) == "<bos>\n<|turn>user\nHello<turn|>\n<|turn>model\n", "got \(out.debugDescription)")
+        #expect(out == "<bos><|turn>user\nHello<turn|>\n<|turn>model\n", "got \(out.debugDescription)")
     }
 
     @Test func pinnedTemplateRendersASystemTurnAndAnImagePlaceholder() throws {
-        let out = try compile(try pinnedTemplate()).render([
+        let out = try render([
             "bos_token": "<bos>",
             "messages": [
                 ["role": "system", "content": "Be brief."],
@@ -206,39 +207,19 @@ struct Gemma4ResolutionTests {
             ],
             "add_generation_prompt": true,
         ])
-        #expect(collapsed(out) == "<bos><|turn>system\nBe brief.<turn|>\n<|turn>user\n<|image|>What is this?<turn|>\n<|turn>model\n",
+        #expect(out == "<bos><|turn>system\nBe brief.<turn|>\n<|turn>user\n<|image|>What is this?<turn|>\n<|turn>model\n",
                 "got \(out.debugDescription)")
-    }
-
-    /// FINDING (MP1-3, for the owner): swift-jinja 2.3.6 ignores the `-` whitespace control on comment tags
-    /// (`{#- … -#}`). Jinja spec / Python give `"AB"` for the first template below; swift-jinja gives
-    /// `"A\n\nB"`. The Gemma 4 template has two such comments, so the prompt the app builds carries one extra
-    /// `\n` after `<bos>` and one after a system turn compared with the Python reference. Whether that
-    /// changes output quality needs a real-model look (journal 2026-540 has the command). Python jinja2 with
-    /// `trim_blocks`/`lstrip_blocks` was run on this pinned template on 2026-10-21 and gives exactly the strings the
-    /// two tests above expect before collapsing. This test records the
-    /// current behaviour; if swift-jinja is fixed it fails, which is good news: tighten the two tests above to
-    /// exact equality then. Implementer's call, pending owner confirmation.
-    @Test func commentWhitespaceControlIsIgnoredBySwiftJinja() throws {
-        #expect(try compile("A\n\n{#- c -#}\nB").render([:]) == "A\n\nB")   // Python: "AB"
-        let plain = try compile(try pinnedTemplate()).render([
-            "bos_token": "<bos>",
-            "messages": [["role": "user", "content": "Hello"]],
-            "add_generation_prompt": true,
-        ])
-        #expect(plain == "<bos>\n<|turn>user\nHello<turn|>\n<|turn>model\n")   // Python: no "\n" after <bos>
     }
 
     /// Thinking is opt-in via `enable_thinking`; MP1-S decides what MLXUI does with it. Recorded here so the
     /// smoke row's "no thinking tags in the visible text" has a stated cause: the default prompt never asks.
     @Test func thinkingIsOffUnlessTheContextAsksForIt() throws {
-        let template = try pinnedTemplate()
         let base: [String: Value] = ["bos_token": "<bos>",
                                      "messages": [["role": "user", "content": "Hi"]],
                                      "add_generation_prompt": true]
-        #expect(!(try compile(template).render(base)).contains("<|think|>"))
+        #expect(!(try render(base)).contains("<|think|>"))
         var on = base
         on["enable_thinking"] = true
-        #expect(try compile(template).render(on).contains("<|think|>"))
+        #expect(try render(on).contains("<|think|>"))
     }
 }

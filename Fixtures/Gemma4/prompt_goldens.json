@@ -1,0 +1,106 @@
+{
+  "provenance": {
+    "generator": "Fixtures/Gemma4/make_prompt_goldens.py",
+    "generated": "2026-10-21",
+    "python": "3.13.3",
+    "jinja2": "3.1.6",
+    "environment": "ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)",
+    "template": "Fixtures/Gemma4/chat_template.jinja",
+    "templateSHA256": "2f1b4d75d067bae3fe44e676721c7f077d243bc007156cb9c2f8b5836613d082",
+    "model": "mlx-community/gemma-4-e4b-it-4bit @ 475b9088d29754a3379866cf5aeb6b41acd313c2"
+  },
+  "cases": [
+    {
+      "name": "a_one_user_turn",
+      "context": {
+        "bos_token": "<bos>",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "add_generation_prompt": true
+      },
+      "expected": "<bos><|turn>user\nHello<turn|>\n<|turn>model\n"
+    },
+    {
+      "name": "b_system_and_user",
+      "context": {
+        "bos_token": "<bos>",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Be brief."
+          },
+          {
+            "role": "user",
+            "content": "Name three rivers in Europe."
+          }
+        ],
+        "add_generation_prompt": true
+      },
+      "expected": "<bos><|turn>system\nBe brief.<turn|>\n<|turn>user\nName three rivers in Europe.<turn|>\n<|turn>model\n"
+    },
+    {
+      "name": "c_multi_turn",
+      "context": {
+        "bos_token": "<bos>",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a careful assistant."
+          },
+          {
+            "role": "user",
+            "content": "What is 2+2?"
+          },
+          {
+            "role": "assistant",
+            "content": "4."
+          },
+          {
+            "role": "user",
+            "content": "And times 3?"
+          },
+          {
+            "role": "assistant",
+            "content": "12."
+          },
+          {
+            "role": "user",
+            "content": "Thanks. One more: 5 squared?"
+          }
+        ],
+        "add_generation_prompt": true
+      },
+      "expected": "<bos><|turn>system\nYou are a careful assistant.<turn|>\n<|turn>user\nWhat is 2+2?<turn|>\n<|turn>model\n4.<turn|>\n<|turn>user\nAnd times 3?<turn|>\n<|turn>model\n12.<turn|>\n<|turn>user\nThanks. One more: 5 squared?<turn|>\n<|turn>model\n"
+    },
+    {
+      "name": "d_system_image_text",
+      "context": {
+        "bos_token": "<bos>",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Be brief."
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image"
+              },
+              {
+                "type": "text",
+                "text": "What is this?"
+              }
+            ]
+          }
+        ],
+        "add_generation_prompt": true
+      },
+      "expected": "<bos><|turn>system\nBe brief.<turn|>\n<|turn>user\n<|image|>What is this?<turn|>\n<|turn>model\n"
+    }
+  ]
+}
