@@ -108,12 +108,38 @@ struct Gemma4CatalogTests {
         let leaves = try loadLeaves()
         for id in [Self.llmID, Self.visionID] {
             let e = try entry(id, in: leaves)
+            // An explicit negation ("so there is no audio input") is the one allowed mention.
             let text = [e.description, e.summary].compactMap { $0 }.joined(separator: " ").lowercased()
+                .replacingOccurrences(of: "no audio input", with: "")
             for claim in ["audio input", "speech", "voice", "transcri"] {
                 #expect(!text.contains(claim), "\(id): must not claim or offer \(claim)")
             }
         }
         let vision = try entry(Self.visionID, in: leaves)
         #expect(vision.taskTags == ["image-text-to-text"])
+    }
+
+    /// MP1-2: tool use and thinking are MP1-S's to decide, so the copy claims neither; benchmarks stay null
+    /// because the pinned README states none; and every field the detail/comparison views show is present.
+    @Test func metadataRendersWithoutGapsAndClaimsNoToolsThinkingOrBenchmarks() throws {
+        let leaves = try loadLeaves()
+        for id in [Self.llmID, Self.visionID] {
+            let e = try entry(id, in: leaves)
+            let text = [e.description, e.summary].compactMap { $0 }.joined(separator: " ").lowercased()
+            for claim in ["tool", "thinking", "reasoning", "function call", "benchmark score", "mmlu", "%"] {
+                #expect(!text.contains(claim), "\(id): must not claim \(claim)")
+            }
+            #expect(e.benchmarks == nil)
+            #expect(!(e.description ?? "").isEmpty && !(e.summary ?? "").isEmpty)
+            #expect(DataNormalizer.normalizeLicense(e.license) == "Gemma License")
+            #expect(DataNormalizer.normalizeArchitecture(e.architecture) == "Gemma4")
+            #expect(e.lastUpdated == "2026-07-06")
+            #expect(e.communityDownloads != nil && e.communityLikes != nil)
+        }
+        let llm = try entry(Self.llmID, in: leaves)
+        let vision = try entry(Self.visionID, in: leaves)
+        #expect(llm.taskTags == ["text-generation"])
+        #expect(vision.taskTags == ["image-text-to-text"])
+        #expect(vision.description?.contains("Image and text input only") == true)
     }
 }
