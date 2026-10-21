@@ -75,7 +75,7 @@ struct CatFlowChatModuleTests {
         //      entry (RSI/backlog.md MM1, MM-0 ruled 2026-10-17), 44 → 45. Implementer's call,
         //      pending owner confirmation, to follow this list's convention: a bumped count, not an edited golden.
         // MP1-1: bundled catalog gained the two Gemma 4 E4B entries (`.llm` + `.vision`, one shared
-        //        mlx-community/gemma-4-E4B-it-4bit install; RSI/DelegateModelPackBacklog.md MP-0 E, ruled
+        //        mlx-community/gemma-4-e4b-it-4bit install; RSI/DelegateModelPackBacklog.md MP-0 E, ruled
         //        2026-10-21), 45 → 47. Same convention: a bumped count, not an edited golden.
         #expect(entries.count == 47, "bundled catalog drifted: \(entries.count) entries")
 

@@ -257,8 +257,8 @@
           "summary": "Xiaomi's MiMo-V2.6 distilled into the Qwen3.5-9B architecture, as an OptiQ mixed 4/8-bit MLX quant (6.34 bits per weight) — a text-only, hybrid-attention model with up to 262K advertised context."
         },
         {
-          "id": "mlx-community--gemma-4-E4B-it-4bit",
-          "family": "Gemma 4",
+          "id": "mlx-community--gemma-4-e4b-it-4bit",
+          "family": "gemma",
           "displayName": "Gemma 4 E4B",
           "paramSize": "E4B",
           "paramCountB": 7.9,
@@ -270,7 +270,7 @@
           ],
           "minMacOSVersion": "13.0",
           "hfRepo": "mlx-community",
-          "hfModelId": "mlx-community/gemma-4-E4B-it-4bit",
+          "hfModelId": "mlx-community/gemma-4-e4b-it-4bit",
           "ramGB": 7.77,
           "downloadSizeGB": 5.18,
           "contextWindow": 131072,
@@ -296,11 +296,11 @@
               "ramGB": 7.77,
               "downloadSizeGB": 5.18,
               "qualityPercent": 90,
-              "hfModelId": "mlx-community/gemma-4-E4B-it-4bit",
+              "hfModelId": "mlx-community/gemma-4-e4b-it-4bit",
               "recommended": true
             }
           ],
-          "descriptionSource": "mlx-community/gemma-4-E4B-it-4bit",
+          "descriptionSource": "mlx-community/gemma-4-e4b-it-4bit",
           "summary": "Google's Gemma 4 E4B instruction-tuned model, 4-bit MLX, for text chat. Same download as the Vision entry."
         },
         {
@@ -1038,8 +1038,8 @@
           "descriptionSource": "curated"
         },
         {
-          "id": "mlx-community--gemma-4-E4B-it-4bit-vision",
-          "family": "Gemma 4",
+          "id": "mlx-community--gemma-4-e4b-it-4bit-vision",
+          "family": "gemma",
           "displayName": "Gemma 4 E4B Vision",
           "paramSize": "E4B",
           "paramCountB": 7.9,
@@ -1051,13 +1051,13 @@
           ],
           "minMacOSVersion": "13.0",
           "hfRepo": "mlx-community",
-          "hfModelId": "mlx-community/gemma-4-E4B-it-4bit",
+          "hfModelId": "mlx-community/gemma-4-e4b-it-4bit",
           "ramGB": 7.77,
           "downloadSizeGB": 5.18,
           "contextWindow": 131072,
           "license": "gemma",
           "licenseUrl": null,
-          "description": "The same download as the `Gemma 4 E4B` entry in Chat & Text (`mlx-community/gemma-4-E4B-it-4bit`), exposed here for image questions through MLXVLM's `gemma4` runner. Image and text input only. Installing either entry installs both, once. Licensed under the Gemma terms (`license: gemma` on the model card). Speed and quality are unmeasured in this app.",
+          "description": "The same download as the `Gemma 4 E4B` entry in Chat & Text (`mlx-community/gemma-4-e4b-it-4bit`), exposed here for image questions through MLXVLM's `gemma4` runner. Image and text input only. Installing either entry installs both, once. Licensed under the Gemma terms (`license: gemma` on the model card). Speed and quality are unmeasured in this app.",
           "architecture": "Gemma4ForConditionalGeneration",
           "languages": null,
           "lastUpdated": "2026-07-06",
@@ -1077,11 +1077,11 @@
               "ramGB": 7.77,
               "downloadSizeGB": 5.18,
               "qualityPercent": 90,
-              "hfModelId": "mlx-community/gemma-4-E4B-it-4bit",
+              "hfModelId": "mlx-community/gemma-4-e4b-it-4bit",
               "recommended": true
             }
           ],
-          "descriptionSource": "mlx-community/gemma-4-E4B-it-4bit",
+          "descriptionSource": "mlx-community/gemma-4-e4b-it-4bit",
           "summary": "The vision half of Gemma 4 E4B's shared download, for asking questions about an image. Installing either entry installs both."
         }
       ]

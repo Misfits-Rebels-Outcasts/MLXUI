@@ -3,14 +3,15 @@ import Foundation
 @testable import MLXUI
 
 /// MP1-1 (`RSI/DelegateModelPackBacklog.md`): Gemma 4 E4B is two catalog entries — Chat & Text and
-/// Vision & OCR — over one `mlx-community/gemma-4-E4B-it-4bit` install (MP-0 E, ruled 2026-10-21).
+/// Vision & OCR — over one `mlx-community/gemma-4-e4b-it-4bit` install (MP-0 E, ruled 2026-10-21).
 /// Every number asserted here comes from the pinned HF files in
-/// `RSI/notes/modelpack/hf/mlx-community_gemma-4-E4B-it-4bit/` (revision 475b9088d2…).
+/// `RSI/notes/modelpack/hf/mlx-community_gemma-4-e4b-it-4bit/` (revision 475b9088d2…).
+/// MP1-1-FIX-1: ids use HF's canonical casing (`api.json` `id`, readme T11), all lowercase here.
 struct Gemma4CatalogTests {
 
-    private static let repo = "mlx-community/gemma-4-E4B-it-4bit"
-    private static let llmID = "mlx-community--gemma-4-E4B-it-4bit"
-    private static let visionID = "mlx-community--gemma-4-E4B-it-4bit-vision"
+    private static let repo = "mlx-community/gemma-4-e4b-it-4bit"
+    private static let llmID = "mlx-community--gemma-4-e4b-it-4bit"
+    private static let visionID = "mlx-community--gemma-4-e4b-it-4bit-vision"
 
     private func loadLeaves() throws -> [DomainNode] {
         let repoRoot = URL(fileURLWithPath: #filePath)
@@ -37,6 +38,32 @@ struct Gemma4CatalogTests {
         #expect(llm.hfModelId == Self.repo)
         #expect(vision.hfModelId == Self.repo)
         #expect(llm.source == .mlx && vision.source == .mlx)
+    }
+
+    @Test func idsAndFamilyFollowHFCanonicalCasingAndTheGemmaPrecedent() throws {
+        let leaves = try loadLeaves()
+        let llm = try entry(Self.llmID, in: leaves)
+        let vision = try entry(Self.visionID, in: leaves)
+        #expect(llm.hfModelId == "mlx-community/gemma-4-e4b-it-4bit")
+        #expect(Self.visionID == Self.llmID + "-vision")
+        // Existing Gemma 2/3 entries use family "gemma" (confirmed by owner 2026-10-21).
+        #expect(llm.family == "gemma" && vision.family == "gemma")
+    }
+
+    /// The pinned `api.json` lives under the gitignored `RSI/`, so it exists in the owner's main folder
+    /// (and beside a sibling worktree) but not in a clean clone. When it's absent this checks nothing
+    /// beyond the literal above rather than failing a checkout that never had it.
+    @Test func hfModelIdEqualsThePinnedAPIJSONId() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let rel = "RSI/notes/modelpack/hf/mlx-community_gemma-4-e4b-it-4bit/api.json"
+        let candidates = [root, root.deletingLastPathComponent().appendingPathComponent("PipelineStudio")]
+            .map { $0.appendingPathComponent(rel) }
+        guard let url = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else { return }
+        let api = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        let pinned = try #require(api["id"] as? String)
+        let leaves = try loadLeaves()
+        #expect(try entry(Self.llmID, in: leaves).hfModelId == pinned)
+        #expect(try entry(Self.visionID, in: leaves).hfModelId == pinned)
     }
 
     @Test func numbersMatchThePinnedRepo() throws {
