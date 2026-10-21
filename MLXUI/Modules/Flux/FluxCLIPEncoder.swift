@@ -61,8 +61,11 @@ nonisolated final class FluxCLIPTextModel: Module {
         let mask = FluxCLIPEncoder.causalMask(batch: hidden.dim(0), seqLen: seqLen).asType(hidden.dtype)
         hidden = encoder(hidden, mask: mask)
         hidden = finalLayerNorm(hidden)
-        let eosIndex = argMax(tokens, axis: -1)[0]
-        return hidden[0, eosIndex]
+        // Pool at the EOS position. A bare-Int / MLXArray subscript lowers to a Gather with a 0-d
+        // index, which aborts under Metal API Validation (LY-5, journal 2026-336) — so take the
+        // position as a host Int and use width-1 Range slices (Slice, not Gather). Result: (768,).
+        let eosIndex = argMax(tokens[0..<1], axis: -1).item(Int.self)
+        return hidden[0..<1, eosIndex..<(eosIndex + 1)].squeezed(axes: [0, 1])
     }
 }
 
