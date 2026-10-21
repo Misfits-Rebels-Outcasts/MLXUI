@@ -1579,11 +1579,17 @@ extension FlowValidator {
     }
 
     static func parallelChains(_ children: [ParsedRow]) -> [[Int]] {
+        parallelChains(chainBreaks: children.map(\.chainBreak))
+    }
+
+    /// The chain grouping itself, on the one fact it needs — each child's blank-line flag — so
+    /// the editor's `Row` (KR-1-FIX-1) groups exactly as the validator's `ParsedRow` does.
+    static func parallelChains(chainBreaks: [Bool]) -> [[Int]] {
         var chains: [[Int]] = []
         var current: [Int] = []
-        for (i, child) in children.enumerated() {
+        for (i, chainBreak) in chainBreaks.enumerated() {
             let position = i + 1
-            if child.chainBreak && !current.isEmpty {
+            if chainBreak && !current.isEmpty {
                 chains.append(current)
                 current = []
             }

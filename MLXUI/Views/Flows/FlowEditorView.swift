@@ -589,6 +589,10 @@ struct FlowEditorView: View {
     }
 
     @State private var collapsedBlocks: Set<UUID> = []
+    /// KR-1: Settings → Models → Flows, and View → Show Row Kinds.
+    @AppStorage("flowShowsKindRail") private var showsKindRail = true
+    /// KR-2: the row a hovered "from N" chip names.
+    @State private var hoveredRailSource: UUID?
     /// CFM-R12-3 item 5: the block header awaiting a Remove all / Keep the steps decision.
     @State private var blockPendingRemoval: UUID?
 
@@ -624,6 +628,26 @@ struct FlowEditorView: View {
                     }
                     .onTapGesture { model.selectedRowID = row.id }
                 }
+                if showsKindRail, let sig = model.rowSignature(row.id) {
+                    KindRail(accepts: sig.accepts, gives: sig.gives,
+                             inputs: model.railInputs(for: row.id),
+                             mismatch: model.inputMismatch(for: row.id),
+                             outputHighlighted: hoveredRailSource == row.id,
+                             onHoverSource: { hoveredRailSource = $0 },
+                             onSelectSource: { model.selectedRowID = $0 },
+                             preview: resultPreview(for: row),
+                             thumbnail: session.railPreviews.thumbnails[row.id],
+                             onSelectOutput: { model.selectedRowID = row.id; inspectorTab = .output })
+                        .contentShape(Rectangle())
+                        .onTapGesture { model.selectedRowID = row.id }
+                        .task(id: RailPreviewKey(rowID: row.id, generation: session.railPreviews.generation,
+                                                 version: session.railPreviews.versions[row.id, default: 0],
+                                                 hasResult: session.outputs[row.id] != nil)) {
+                            // KR-3: only with the setting on — off means nothing is decoded.
+                            await session.railPreviews.request(rowID: row.id, asset: session.outputs[row.id],
+                                                               enabled: showsKindRail)
+                        }
+                }
             }
             .padding(.vertical, 3)
             .padding(.leading, CGFloat(depth) * 20)
@@ -651,6 +675,11 @@ struct FlowEditorView: View {
             }
         }
         .listRowBackground(rowBackground(for: row))
+    }
+
+    /// KR-3: the row's result preview — only for a row that succeeded in this session.
+    private func resultPreview(for row: Row) -> RailPreview? {
+        session.status(for: row.id) == .succeeded ? session.railPreviews.previews[row.id] : nil
     }
 
     /// R12-3 item 5: removing a block header asks — Remove all / Keep the steps / Cancel.

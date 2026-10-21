@@ -1074,6 +1074,135 @@ final class FlowEditorModel {
         return Self.signature(of: r, context: signatureContext)?.gives
     }
 
+    /// KR-1: a row's (accepts, gives) for the kind rail — nil when the row can't be typed.
+    ///
+    /// KR-1-FIX-1: a `<parallel>` block is the one case where `signature(of:)` (last child's
+    /// gives — the inexact shortcut `shapes.py::signature` flags as SPEC-Q37) is not what the
+    /// validator resolves. The rail uses the validator's answer: the block's declared signature
+    /// when it has one, else `TupleOf` of each chain's tail kind (`parallelBundleGives`), `.anyKind`
+    /// when any tail is unknown. `signature(of:)` and its other callers are untouched.
+    func rowSignature(_ rowID: UUID) -> (accepts: Shape, gives: Shape)? {
+        guard let r = row(withID: rowID) else { return nil }
+        return railSignature(of: r)
+    }
+
+    private func railSignature(of row: Row) -> (accepts: Shape, gives: Shape)? {
+        let base = Self.signature(of: row, context: signatureContext)
+        guard row.blockKind == .parallel else { return base }
+        // An unresolvable tail makes `signature(of:)` nil for the block; the block still has a
+        // known shape on the rail (`.anyKind` slots), so its accepts falls back to the first child's.
+        var accepts = base?.accepts ?? row.children.first.flatMap { railSignature(of: $0)?.accepts } ?? .anyKind
+        var gives: Shape?
+        if let declared = row.declaredSignature {
+            let parsed = FlowValidator.parseDeclaredSignature(declared)
+            if let a = parsed.0 { accepts = a }
+            gives = parsed.1
+        }
+        if gives == nil {
+            let chains = FlowValidator.parallelChains(chainBreaks: row.children.map(\.chainBreak))
+            let kinds = chains.compactMap { chain -> Kind? in
+                guard let tail = chain.last, let tailGives = railSignature(of: row.children[tail - 1])?.gives else { return nil }
+                return Shape.baseKind(tailGives)
+            }
+            gives = !chains.isEmpty && kinds.count == chains.count ? .tupleOf(kinds) : .anyKind
+        }
+        return (accepts, gives ?? .anyKind)
+    }
+
+    /// Validator codes whose sentence is about a row's input (refs, chaining, bundle shape).
+    private nonisolated static let inputIssueCodes: Set<String> = [
+        "E201", "E202", "E203", "E204", "E205", "E206", "E207", "E208", "E209", "E401", "E403",
+    ]
+
+    /// KR-2: one input chip's worth of display — what it says, which row it names (for the
+    /// hover highlight and click-to-select) and, for a block-scoped ref, the tooltip.
+    struct RailInput: Equatable {
+        let source: RailInputSource
+        let target: UUID?
+        var tooltip: String? = nil
+    }
+
+    /// KR-2: the editor's own sentence when it is about the row's input, else nil — the rail's
+    /// red outline and its tooltip (verbatim).
+    func inputMismatch(for rowID: UUID) -> String? {
+        guard let detail = warningDetail(for: rowID), detail.aboutInput else { return nil }
+        return detail.message
+    }
+
+    private func parentBlock(of id: UUID) -> Row? { Self.findParent(of: id, in: document.rows) }
+
+    private nonisolated static func findParent(of id: UUID, in rows: [Row]) -> Row? {
+        for r in rows {
+            if r.children.contains(where: { $0.id == id }) { return r }
+            if let found = findParent(of: id, in: r.children) { return found }
+        }
+        return nil
+    }
+
+    /// KR-2-FIX-1: the row a block's `p`-th input actually comes from — the one resolver behind
+    /// both the chip's number and its hover/click target. The block's `p`-th ref when it has refs
+    /// (a ref that is itself `(input:q)` is followed outward to the enclosing block); with no refs,
+    /// the row above it, or, when nothing is above it in its own scope, the enclosing block's
+    /// input. `nil` when the input doesn't come from one row (out of range, a parameter, no source).
+    private func blockInputTarget(_ p: Int, of block: Row) -> UUID? {
+        if !block.refs.isEmpty {
+            guard p >= 1, p <= block.refs.count else { return nil }
+            switch block.refs[p - 1] {
+            case .rowRef(let id):   return row(withID: id)?.id
+            case .inputRef(let q):  return parentBlock(of: block.id).flatMap { blockInputTarget(q, of: $0) }
+            case .paramRef:         return nil
+            }
+        }
+        guard p == 1 else { return nil }
+        if let above = previousRow(before: block.id) { return above.id }
+        return parentBlock(of: block.id).flatMap { blockInputTarget(1, of: $0) }
+    }
+
+    /// KR-2: the sources of a row's input, each with the row it points at.
+    func railInputs(for rowID: UUID) -> [RailInput] {
+        guard let r = row(withID: rowID) else { return [] }
+        let parent = parentBlock(of: rowID)
+        // What a chip says for `(input:p)` inside a block: the displayed number of the row it
+        // resolves to, else "block input p". Top level has no block, so `(input:p)` keeps its number.
+        var resolved: [Int: UUID?] = [:]
+        let sources = RailInputSources.sources(
+            of: r, previous: previousRow(before: rowID), inBlock: parent != nil,
+            number: { id in displayNumber(of: id).flatMap { $0.split(separator: ".").last }.flatMap { Int($0) } },
+            blockInput: { p in
+                guard let parent else { return .row(p) }
+                let target = blockInputTarget(p, of: parent)
+                resolved[p] = target
+                guard let target, let path = displayNumber(of: target) else { return .blockInput(p) }
+                return Int(path).map(RailInputSource.row) ?? .path(path)
+            })
+        func tooltip(_ source: RailInputSource, input p: Int) -> String? {
+            guard parent != nil else { return nil }
+            switch source {
+            case .row(let n):       return "block input \(p) — row \(n)'s output"
+            case .path(let path):   return "block input \(p) — row \(path)'s output"
+            default:                return "block input \(p) — not from a single row"
+            }
+        }
+        // The ref path yields exactly one source per non-param ref, in order; any other source
+        // (above / own / missing) names no row.
+        let refs = r.refs.filter { if case .paramRef = $0 { return false } else { return true } }
+        guard sources.count == refs.count, !refs.isEmpty,
+              !(r.task.map(RowSources.takesNoUpstreamInput) ?? false) else {
+            return sources.map { RailInput(source: $0, target: nil) }
+        }
+        return zip(sources, refs).map { source, ref in
+            switch ref {
+            case .rowRef(let id):
+                return RailInput(source: source, target: row(withID: id) != nil ? id : nil)
+            case .inputRef(let p):
+                return RailInput(source: source, target: parent == nil ? nil : (resolved[p] ?? nil),
+                                 tooltip: tooltip(source, input: p))
+            case .paramRef:
+                return RailInput(source: source, target: nil)
+            }
+        }
+    }
+
     // MARK: - The input picker (CFM-R8-FIX-1/2)
 
     /// The rows a given input slot of `rowID` may point at — same scope, **strictly
@@ -1182,7 +1311,12 @@ final class FlowEditorModel {
     /// The one-line warning under a row, or nil when fine: a ref issue from the validator
     /// (E203/E204/E205/E401/E403…), a model-class row with no runnable model (h3), or a
     /// no-ref row whose auto-chain upstream is incompatible.
-    func warning(for rowID: UUID) -> String? {
+    func warning(for rowID: UUID) -> String? { warningDetail(for: rowID)?.message }
+
+    /// KR-2: `warning(for:)` plus whether the sentence is about the row's **input** (a ref or
+    /// chaining problem, or a missing own value) — the kind rail outlines the input chip for
+    /// those only. Tagged at each return, so the rail never judges compatibility itself.
+    func warningDetail(for rowID: UUID) -> (message: String, aboutInput: Bool)? {
         guard let r = row(withID: rowID) else { return nil }
         let path = displayNumber(of: rowID) ?? "?"
 
@@ -1202,7 +1336,7 @@ final class FlowEditorModel {
             && TaskCatalog.get(r.task ?? "")?.taskClass == .model
             && !isRunnableModel(r.model, for: r.task ?? "")
         if let first = ownIssues.first, !isUnresolvableUnrunnableModel {
-            return "\(first.message)"
+            return ("\(first.message)", Self.inputIssueCodes.contains(first.code))
         }
 
         if r.task != nil, r.blockKind == nil, let desc = TaskCatalog.get(r.task ?? "") {
@@ -1211,7 +1345,7 @@ final class FlowEditorModel {
                 // named is legitimate — its deterministic fast path needs none. Still warn
                 // when a model IS named but doesn't resolve.
                 if !(r.model == nil && TaskModels.isModelOptional(r.task ?? "")) {
-                    return "Row \(path) needs a model — pick one that runs on this Mac."
+                    return ("Row \(path) needs a model — pick one that runs on this Mac.", false)
                 }
             }
             // HU: `.human` used to be in this "can't complete" bucket, but CFM-R10-Human
@@ -1224,14 +1358,14 @@ final class FlowEditorModel {
             // wasn't told either, so every net row showed the same false warning.
             if desc.taskClass != .instant, desc.taskClass != .model, desc.taskClass != .human,
                desc.taskClass != .net {
-                return "Row \(path) is a \(desc.taskClass.rawValue) row, which this version of Flows can't complete."
+                return ("Row \(path) is a \(desc.taskClass.rawValue) row, which this version of Flows can't complete.", false)
             }
             // ES-UI-1: `Extract Structured`'s settings string *is* its column list. An empty or
             // unparseable one fails only at run time (`parseSchema` raises) — flag it here so
             // clearing the editor's "Columns to extract" field is never a silent break.
             if desc.refName == "engines.llm.extract_structured",
                (try? ExtractStructuredStage.parseSchema(r.settings)) == nil {
-                return "Row \(path) needs a column list — e.g. \"merchant, date, total\"."
+                return ("Row \(path) needs a column list — e.g. \"merchant, date, total\".", false)
             }
         }
 
@@ -1253,7 +1387,7 @@ final class FlowEditorModel {
             })
             if !edgeTargets.contains(position),
                !Self.isCompatible(from: previous, to: r, context: signatureContext) {
-                return "Row \(path) can't take row \(displayNumber(of: previous.id) ?? "?")'s output — add an input reference."
+                return ("Row \(path) can't take row \(displayNumber(of: previous.id) ?? "?")'s output — add an input reference.", true)
             }
         }
         // HR-1 (`RSI/DelegateHumanRowBacklog.md`) — a `Human Input` row at row 1 that carries
@@ -1284,7 +1418,7 @@ final class FlowEditorModel {
             // different sentence about the missing fallback, not the false one about a
             // missing input; it blocks nothing (no `saveBlockReason` change).
             if FlowInterpreter.hasTimeout(r), !FlowInterpreter.waitsForever(r) {
-                return "Row 1 has nothing to fall back on — if nobody answers, this row produces nothing."
+                return ("Row 1 has nothing to fall back on — if nobody answers, this row produces nothing.", false)
             }
             return nil
         }
@@ -1299,7 +1433,7 @@ final class FlowEditorModel {
             let fed = RowSources.takesNoUpstreamInput(r.task ?? "") ? false
                 : (!r.refs.isEmpty || fedByCaller
                     || previous.map { Self.isCompatible(from: $0, to: r, context: signatureContext) } ?? false)
-            if !fed { return sentence }
+            if !fed { return (sentence, true) }
         }
         if r.refs.isEmpty, r.blockKind == nil,
            let task = r.task, !RowSources.contains(task),
@@ -1312,7 +1446,7 @@ final class FlowEditorModel {
             if isFlowRowOne && isCalledByWorkspaceSibling {
                 return nil
             }
-            return "Row \(path) needs an input — nothing feeds it."
+            return ("Row \(path) needs an input — nothing feeds it.", true)
         }
         return nil
     }

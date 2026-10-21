@@ -73,6 +73,10 @@ struct FlowListView: View {
     /// Properties tab is browse-only, but needs the same candidate/input/number resolution
     /// the editor uses. Never mutated (the flow list has no edit affordance).
     @State private var inspectModel: FlowEditorModel?
+    /// KR-1: Settings → Models → Flows, and View → Show Row Kinds.
+    @AppStorage("flowShowsKindRail") private var showsKindRail = true
+    /// KR-2: the row a hovered "from N" chip names.
+    @State private var hoveredRailSource: UUID?
     /// The refusal reason this flow can't run, derived from `FlowRunner.canRun(doc)` — not
     /// blindly trusted from `_metadata.json` (B3). `nil` = runnable.
     @State private var notRunnableReason: String?
@@ -547,7 +551,25 @@ struct FlowListView: View {
                                          collapsedBlocks.insert(row.id)
                                      }
                                  },
-                                 cached: session.cacheHitRows.contains(row.id))
+                                 cached: session.cacheHitRows.contains(row.id),
+                                 signature: showsKindRail ? inspectModel?.rowSignature(row.id) : nil,
+                                 inputs: showsKindRail ? inspectModel?.railInputs(for: row.id) ?? [] : [],
+                                 mismatch: showsKindRail ? inspectModel?.inputMismatch(for: row.id) : nil,
+                                 outputHighlighted: showsKindRail && hoveredRailSource == row.id,
+                                 onHoverSource: { hoveredRailSource = $0 },
+                                 onSelectSource: { session.selectedRowID = $0 },
+                                 preview: showsKindRail && session.status(for: row.id) == .succeeded
+                                     ? session.railPreviews.previews[row.id] : nil,
+                                 thumbnail: showsKindRail ? session.railPreviews.thumbnails[row.id] : nil,
+                                 onSelectOutput: { session.selectedRowID = row.id; inspectorTab = .output })
+        // KR-3: build the row's result preview from what the session already holds — and only
+        // with the setting on (off: `request` returns before touching anything).
+        .task(id: RailPreviewKey(rowID: row.id, generation: session.railPreviews.generation,
+                                 version: session.railPreviews.versions[row.id, default: 0],
+                                 hasResult: session.outputs[row.id] != nil)) {
+            await session.railPreviews.request(rowID: row.id, asset: session.outputs[row.id],
+                                               enabled: showsKindRail)
+        }
     }
 
     /// CFM-R12-3 item 3 / CFM-R12-FIX-3: a collapsed block's header dot aggregates its

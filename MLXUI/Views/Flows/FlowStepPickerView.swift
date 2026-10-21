@@ -49,9 +49,7 @@ struct FlowStepPickerView: View {
                                         .font(.caption)
                                         .foregroundStyle(.orange)
                                 }
-                                Text(signature(task))
-                                    .font(.caption.monospaced())
-                                    .foregroundStyle(.secondary)
+                                KindRail(accepts: task.accepts, gives: task.gives)
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
@@ -95,8 +93,4 @@ struct FlowStepPickerView: View {
         }
     }
 
-    /// The task's `accepts → gives` signature line.
-    private func signature(_ task: TaskDescriptor) -> String {
-        "\(task.accepts.signatureText) → \(task.gives.signatureText)"
-    }
 }

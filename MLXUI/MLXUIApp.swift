@@ -14,6 +14,8 @@ struct MLXUIApp: App {
         }
     }
     @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
+    /// KR-1: the same key as Settings → Models → Flows.
+    @AppStorage("flowShowsKindRail") private var showsKindRail = true
 
 
     @State private var appState = AppState()
@@ -207,6 +209,9 @@ struct MLXUIApp: App {
                     appState.presentOpenCatPanel()
                 }
                 .keyboardShortcut("o", modifiers: .command)
+            }
+            CommandGroup(after: .toolbar) {
+                Toggle("Show Row Kinds", isOn: $showsKindRail)
             }
             CommandMenu("Find") {
                 Button("Find Models...") {

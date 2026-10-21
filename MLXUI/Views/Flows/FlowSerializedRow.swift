@@ -25,6 +25,20 @@ struct FlowSerializedRow: View {
     /// CFM-R11-2 visibility: this row's ✓ came from the flow's output cache this run, not a
     /// fresh computation — show it so a run's cache hits are obvious.
     var cached: Bool = false
+    /// KR-1: the row's `accepts → gives`, drawn as the kind rail. `nil` (the setting is off, or
+    /// the row can't be typed) draws nothing at all.
+    var signature: (accepts: Shape, gives: Shape)? = nil
+    /// KR-2: the input sources, the mismatch sentence, the hover highlight and the two actions.
+    /// Hover and click here only highlight and select; this row never edits a ref.
+    var inputs: [FlowEditorModel.RailInput] = []
+    var mismatch: String?
+    var outputHighlighted = false
+    var onHoverSource: (UUID?) -> Void = { _ in }
+    var onSelectSource: (UUID) -> Void = { _ in }
+    /// KR-3: the row's result preview (set only when the setting is on and the row succeeded).
+    var preview: RailPreview?
+    var thumbnail: CGImage?
+    var onSelectOutput: () -> Void = {}
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -47,6 +61,12 @@ struct FlowSerializedRow: View {
                     .simultaneousGesture(TapGesture().onEnded { onSelect() })
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            if let signature {
+                KindRail(accepts: signature.accepts, gives: signature.gives, inputs: inputs,
+                         mismatch: mismatch, outputHighlighted: outputHighlighted,
+                         onHoverSource: onHoverSource, onSelectSource: onSelectSource,
+                         preview: preview, thumbnail: thumbnail, onSelectOutput: onSelectOutput)
+            }
             if cached {
                 Text("cached")
                     .font(.caption2)
