@@ -228,7 +228,8 @@ nonisolated enum TaskModels {
         "Score": ["Laya 0.4B"] + llmModels + ["CLM 8B", "Clef Flash"],
         // MoC-6-2 (RSI/DelegateMoCBacklog.md): appended last, same discipline as MoC-2-4 —
         // the seed ("LFM2-VL 1.6B") does not move.
-        "Describe Image": ["LFM2-VL 1.6B", "Gemma 3 4B", "Qwen3.5 9B Vision"],
+        // MP1-W: "Gemma 4 E4B Vision" appended last again -- the seed does not move.
+        "Describe Image": ["LFM2-VL 1.6B", "Gemma 3 4B", "Qwen3.5 9B Vision", "Gemma 4 E4B Vision"],
         // DA-7 (RSI/DelegateDeciderBacklog.md) — `GLM-OCR` **promoted to first**, the deliberate
         // opposite of MoC-2-4's "append last, seed unmoved". Decision C (do not promote, ruled
         // 2026-09-05) was amended on the evidence its own wording asked for: smoke 9b-S2b's
@@ -271,7 +272,10 @@ nonisolated enum TaskModels {
                                     "Qwen3.8 27B",
                                     // MM-W (RSI/backlog.md, MM-0 C ruled 2026-10-17): MiMo V2.6 9B,
                                     // appended **last** -- the seed ("Ministral 3B") must not move.
-                                    "MiMo V2.6 9B"]
+                                    "MiMo V2.6 9B",
+                                    // MP1-W (RSI/DelegateModelPackBacklog.md, MP-0 E ruled 2026-10-21):
+                                    // Gemma 4 E4B, appended **last** -- the seed ("Ministral 3B") must not move.
+                                    "Gemma 4 E4B"]
 
     /// A task's model pool (display names) — preference ordering for the seed, nothing more.
     static func models(forTask task: String) -> [String] {
@@ -415,7 +419,7 @@ nonisolated enum TaskModels {
     /// `Qwen3-VL-4B-Instruct` with `models: { Qwen3-VL-4B-Instruct = mlx-community/... }`
     /// reads like a flow; the raw id version read like a dump.
     static func displayName(for model: ModelEntry) -> String {
-        CatalogBridge.entry(forCandidate: model.hfModelId)?.display ?? model.displayName
+        CatalogBridge.entry(forCandidate: model.hfModelId, modelType: model.modelType)?.display ?? model.displayName
     }
 
     /// The default model for a model-class task — the **first pool-named derived candidate**

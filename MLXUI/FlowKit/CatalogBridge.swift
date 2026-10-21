@@ -342,6 +342,29 @@ nonisolated enum CatalogBridge {
             equivalence: .same,
             manifestFile: "mimo-v2.6-9b-optiq-4bit.json",
             modelType: .llm),
+        // MP1-W (RSI/DelegateModelPackBacklog.md, MP-0 E ruled 2026-10-21) -- Gemma 4 E4B, the
+        // `gemma4` text model, and its vision half: two displays, one install (the Qwen3.5 9B
+        // precedent, MoC-5/MoC-6). Both resolve `.same` onto the cards that share the one
+        // `mlx-community/gemma-4-e4b-it-4bit` repo, so `modelType` is explicit on both (a nil would
+        // fall back to the ambiguous hfModelId match, `BridgeEntry.modelType`'s doc comment). No
+        // catflow-mlx manifest exists for either, so both are MLXUI-authored (see their own
+        // "notes"). "Gemma 4 E4B" is appended **last** to `TaskModels.llmModels` and "Gemma 4 E4B
+        // Vision" last to `"Describe Image"`, so neither seed moves. Image + text only: the audio
+        // tower is dropped at load, so there is no audio task.
+        BridgeEntry(
+            display: "Gemma 4 E4B",
+            pinnedID: "mlx-community/gemma-4-e4b-it-4bit",
+            candidates: ["mlx-community/gemma-4-e4b-it-4bit"],
+            equivalence: .same,
+            manifestFile: "gemma-4-e4b-it-4bit.json",
+            modelType: .llm),
+        BridgeEntry(
+            display: "Gemma 4 E4B Vision",
+            pinnedID: "mlx-community/gemma-4-e4b-it-4bit",
+            candidates: ["mlx-community/gemma-4-e4b-it-4bit"],
+            equivalence: .same,
+            manifestFile: "gemma-4-e4b-it-4bit-vision.json",
+            modelType: .vision),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {
@@ -353,6 +376,14 @@ nonisolated enum CatalogBridge {
     /// (CFM-R14-2). `nil` when the model is unbridged (then its `hfModelId` is the name).
     static func entry(forCandidate candidateID: String) -> BridgeEntry? {
         entries.first { $0.candidates.contains(candidateID) }
+    }
+
+    /// MP1-W: the same reverse lookup, but for a card that **shares its repo with another card** (Qwen3.5 9B /
+    /// Qwen3.5 9B Vision, Gemma 4 E4B / Gemma 4 E4B Vision): a row that pins a `modelType` only answers for a
+    /// card of that type, so the Vision card is named by the Vision row, not by the text row that happens to
+    /// list the repo first. A row with no `modelType` answers for any card, exactly as before.
+    static func entry(forCandidate candidateID: String, modelType: ModelType) -> BridgeEntry? {
+        entries.first { $0.candidates.contains(candidateID) && ($0.modelType == nil || $0.modelType == modelType) }
     }
 
     /// Resolve a display name to an installable `ModelEntry`. `catalog` is the flat list
