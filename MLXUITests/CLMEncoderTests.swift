@@ -120,10 +120,10 @@ struct CLMEncoderTests {
     private static let repetitiveTextCosineFloor = 0.9997
     private static let ordinaryTextCosineFloor = 0.9999
 
-    @Test func embeddingsMatchGoldenCosine() async throws {
-        let golden: [String: EmbeddingsGoldenCase] = try loadGolden("embeddings")
+    /// The six corpus texts through `CLMEncoder`, in `names` order.
+    private func embedAllTexts() async throws -> (names: [String], vectors: [[Float]]) {
         let container = try await loadContainer()
-        let names = Array(Self.texts.keys)
+        let names = Array(Self.texts.keys).sorted()
         let vectors: [[Float]] = await container.perform { context in
             let ids = names.map { CLMEncoder.ids(for: Self.texts[$0]!, tokenizer: context.tokenizer).ids }
             let embeddings = CLMEncoder.embed(idLists: ids, context: context)
@@ -132,12 +132,41 @@ struct CLMEncoderTests {
                 embeddings[row ..< row + 1].squeezed(axis: 0).asArray(Float.self)
             }
         }
+        return (names, vectors)
+    }
+
+    /// WW2-3-1 (owner 2026-10-22, journal 552 §3): this branch's own embeddings
+    /// (`Fixtures/CLM/swift-snapshot-mlx-swift-0.32.3/embeddings.json`); cosine >= 1 - 1e-5 for every text.
+    @Test func embeddingsMatchTheBranchSnapshot() async throws {
+        let (names, vectors) = try await embedAllTexts()
+        let url = SwiftSnapshot.url("CLM", "embeddings.json")
+        if SwiftSnapshot.isRecording {
+            var object: [String: Any] = [:]
+            for (name, vector) in zip(names, vectors) { object[name] = vector.map(Double.init) }
+            try SwiftSnapshot.write(object, to: url)
+            return
+        }
+        let stored = try #require(try SwiftSnapshot.read(url) as? [String: [Double]], "no snapshot at \(url.path)")
+        #expect(Set(stored.keys) == Set(names))
+        for (name, vector) in zip(names, vectors) {
+            let was = try #require(stored[name])
+            #expect(was.count == vector.count, "\(name): dim")
+            let cos = SwiftSnapshot.cosine(vector.map(Double.init), was)
+            #expect(cos >= 1 - SwiftSnapshot.cosineTolerance, "\(name): cosine \(cos) vs snapshot")
+        }
+    }
+
+    @Test func embeddingsMatchGoldenCosine() async throws {
+        let golden: [String: EmbeddingsGoldenCase] = try loadGolden("embeddings")
+        let (names, vectors) = try await embedAllTexts()
         for (index, name) in names.enumerated() {
             let expected = try #require(golden[name])
             let vector = vectors[index]
             #expect(vector.count == expected.dim, "\(name): dim mismatch")
 
-            let floor = name == "repetitive_2048" ? Self.repetitiveTextCosineFloor : Self.ordinaryTextCosineFloor
+            // owner 2026-10-22, mlx core 0.32.2 drift, journal 552: long_over_2048 floor 0.9999 -> 0.99985.
+            let floor = name == "repetitive_2048" ? Self.repetitiveTextCosineFloor
+                : name == "long_over_2048" ? 0.99985 : Self.ordinaryTextCosineFloor
             let cos = cosine(vector.map(Double.init), expected.vector)
             #expect(cos >= floor, "\(name): cosine \(cos) below \(floor)")
 

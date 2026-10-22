@@ -21,9 +21,12 @@ import MLXLMCommon
 /// lost; the agent chat path (`ModelRunner`) still uses the tool-call path deliberately and is
 /// still exposed — an upstream report is the real fix (journal `2026-230`).
 ///
-/// - `ToolCallProcessorUpstreamBehavior` — pins the upstream bug the engines route around
-///   (hermetic, no weights). If these start failing, mlx-swift-lm changed `ToolCallProcessor`
-///   and the bypass may no longer be needed.
+/// - `ToolCallProcessorUpstreamBehavior` — hermetic, no weights. Until mlx-swift-lm 3.31 it pinned the
+///   upstream bug the engines route around. **WW2-3-1 (owner-approved 2026-10-22):** mlx-swift-lm 3.32
+///   rewrote `ToolCallProcessor` (the `leadingToken` mechanism went in a56aee36, #548) and the stream is
+///   now lossless (journal 2026-551 §4), so the four drop tests pin the *fixed* output; an upstream
+///   regression of the drop shows up here. The controls are unchanged. The OCR bypass stays for now
+///   (separate backlog item, after WW2-R).
 /// - `OCRDetokenizationIsLossless` — the golden for the fix: on GLM-OCR's real vocab, the new
 ///   engine path (`decode(tokenIds:)` over the whole stream) round-trips every `>`, while the
 ///   old path (`NaiveStreamingDetokenizer` + `ToolCallProcessor`) drops them.
@@ -41,25 +44,25 @@ import MLXLMCommon
     }
 
     /// The real-world trigger: GLM-OCR's tokenizer has an atomic token `'><'` (id 2582) emitted
-    /// between `…</td` and `td>…`. Detokenized it is the chunk `"><"`, and its `>` is dropped.
-    @Test func atomicGreaterLessTokenLosesItsGreater_glm4() {
+    /// between `…</td` and `td>…`. Detokenized it is the chunk `"><"`; 3.31 dropped its `>`, 3.32 keeps it.
+    @Test func atomicGreaterLessTokenKeepsItsGreater_glm4() {
         let got = streamThrough(ToolCallProcessor(format: .glm4),
                                 chunks: ["</td", "><", "td>$168.00"])
-        #expect(got == "</td<td>$168.00")
+        #expect(got == "</td><td>$168.00")
     }
 
     /// `.json` is the default (`toolCallFormat ?? .json`) and uses the same `<tool_call>` tag.
-    @Test func atomicGreaterLessTokenLosesItsGreater_jsonDefault() {
+    @Test func atomicGreaterLessTokenKeepsItsGreater_jsonDefault() {
         let got = streamThrough(ToolCallProcessor(format: .json),
                                 chunks: ["</thead", "><", "tbody>"])
-        #expect(got == "</thead<tbody>")
+        #expect(got == "</thead><tbody>")
     }
 
-    /// The `'"><'` token (id 4279) — same story, two characters lost (`">`).
-    @Test func atomicQuoteGreaterLessTokenLosesQuoteGreater() {
+    /// The `'"><'` token (id 4279) — same story; 3.31 lost two characters (`">`), 3.32 loses none.
+    @Test func atomicQuoteGreaterLessTokenKeepsQuoteGreater() {
         let got = streamThrough(ToolCallProcessor(format: .glm4),
                                 chunks: ["<table class=\"table table-bordered", "\"><", "thead>"])
-        #expect(got == "<table class=\"table table-bordered<thead>")
+        #expect(got == "<table class=\"table table-bordered\"><thead>")
     }
 
     /// The selectivity the spike observed: the `'></'` token (id 2631) survives — `</` fails
@@ -70,12 +73,12 @@ import MLXLMCommon
         #expect(got == "<td>a></tr>")
     }
 
-    /// A chunk split mid-tag-name (`…"><t` | `head>`) loses the leadingToken too — not only the
-    /// atomic `'><'` token; any chunk whose first `<` is followed by `t`/`o`/… does it.
-    @Test func chunkSplitInsideOpeningTagNameAlsoDrops() {
+    /// A chunk split mid-tag-name (`…"><t` | `head>`): 3.31 lost the leading text here too — not only the
+    /// atomic `'><'` token. 3.32 keeps it.
+    @Test func chunkSplitInsideOpeningTagNameKeepsLeadingText() {
         let got = streamThrough(ToolCallProcessor(format: .glm4),
                                 chunks: ["\"><t", "head><tr>"])
-        #expect(got == "<thead><tr>")
+        #expect(got == "\"><thead><tr>")
     }
 
     /// Control: the whole run of adjacent tags in one chunk (no boundary at `<t…`) is

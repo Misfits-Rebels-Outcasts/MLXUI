@@ -162,18 +162,62 @@ struct CLMEngineTests {
             let swiftLabel = swiftBest?.0 ?? ""
             let swiftProb = swiftBest?.1 ?? 0
 
-            if swiftLabel != item.argmaxLabel {
+            // owner 2026-10-22, mlx core 0.32.2 drift, journal 552: a known-flip item may disagree on argmax.
+            if swiftLabel != item.argmaxLabel && !item.isKnownFlip {
                 let flip = item.isKnownFlip ? " (known flip)" : ""
                 disagreements.append(
                     "\(item.requestID)/\(item.questionID)\(flip): argmax \(swiftLabel) vs \(item.argmaxLabel)")
             }
             let diff = abs(swiftProb - item.argmaxProbability)
             if diff <= 0.01 { within001 += 1 }
+            // owner 2026-10-22, mlx core 0.32.2 drift, journal 552: max diff 0.03 -> 0.035.
             #expect(
-                diff <= 0.03,
+                diff <= 0.035,
                 "\(item.requestID)/\(item.questionID): prob \(swiftProb) vs \(item.argmaxProbability)")
         }
         #expect(disagreements.isEmpty, "argmax disagreements: \(disagreements.joined(separator: "; "))")
-        #expect(within001 >= 18, "only \(within001)/24 questions within 0.01 probability difference")
+        // owner 2026-10-22, mlx core 0.32.2 drift, journal 552: within-0.01 floor 18 -> 14.
+        #expect(within001 >= 14, "only \(within001)/24 questions within 0.01 probability difference")
+    }
+
+    /// WW2-3-1 (owner 2026-10-22, journal 552 §3): this branch's own 24 answers
+    /// (`Fixtures/CLM/swift-snapshot-mlx-swift-0.32.3/answers.json`) — tight, so a Swift-side change shows
+    /// even inside the Python margins above. Probability <= 1e-4, no argmax change, same labels.
+    @Test func swiftAnswersMatchTheBranchSnapshot() async throws {
+        let golden = try loadGolden()
+        let engine = try await CLMEngine.load(modelDirectory: modelDirectory())
+        var recorded: [[String: Any]] = []
+        for item in golden {
+            let type = try #require(LayaQuestionType(rawValue: item.type))
+            let results = try await engine.answer(
+                state: item.stateJSON,
+                questions: [(
+                    id: item.questionID, type: type,
+                    instructions: item.instructionsJSON, criteria: item.criteriaJSON
+                )])
+            let answer = try #require(results.first?.answer, "\(item.requestID)/\(item.questionID): no answer")
+            recorded.append([
+                "key": "\(item.requestID)/\(item.questionID)",
+                "labels": answer.optionLabels,
+                "probabilities": answer.probabilities,
+            ])
+        }
+        let url = SwiftSnapshot.url("CLM", "answers.json")
+        if SwiftSnapshot.isRecording { try SwiftSnapshot.write(recorded, to: url); return }
+
+        let stored = try #require(try SwiftSnapshot.read(url) as? [[String: Any]], "no snapshot at \(url.path)")
+        #expect(stored.count == recorded.count)
+        for (now, was) in zip(recorded, stored) {
+            let key = was["key"] as? String ?? "?"
+            #expect(now["key"] as? String == key, "\(key): order")
+            #expect(now["labels"] as? [String] == was["labels"] as? [String], "\(key): labels")
+            let a = now["probabilities"] as? [Double] ?? []
+            let b = was["probabilities"] as? [Double] ?? []
+            #expect(a.count == b.count, "\(key): option count")
+            for (x, y) in zip(a, b) {
+                #expect(abs(x - y) <= SwiftSnapshot.probabilityTolerance, "\(key): prob \(x) vs \(y)")
+            }
+            #expect(a.firstIndex(of: a.max() ?? 0) == b.firstIndex(of: b.max() ?? 0), "\(key): argmax changed")
+        }
     }
 }

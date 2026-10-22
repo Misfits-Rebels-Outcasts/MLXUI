@@ -60,8 +60,11 @@ private let clefGoldensReady = clefFixtureDirectory != nil && clefModelDirectory
 /// absolute number is unreachable for any implementation that is not bit-exact in bf16, so the gate
 /// is stated in the units bf16 actually has: ≈4 ulps on a logit, 1e-3 on a probability, and an
 /// **identical argmax** — the thing a decision is made from.
-private let clefLogitTolerance = 2e-3
-private let clefProbabilityTolerance = 1e-3
+/// owner 2026-10-22, mlx core 0.32.2 drift, journal 552: logit tolerance is a fixed absolute 1e-2 (worst observed
+/// 7.8e-3); probability tolerance 2e-3 (was 2e-3 / 1e-3). Small logits inherit error from larger intermediates,
+/// so a per-value ulp bound does not hold. Tight Swift-side drift detection is the snapshot test's job.
+private let clefLogitTolerance = 1e-2
+private let clefProbabilityTolerance = 2e-3
 
 /// Reading the generator's JSON through the port's own parser keeps the fixture's number kinds
 /// (`int` vs `float`) and object order intact — which is exactly what the port must reproduce.
@@ -112,6 +115,11 @@ struct ClefGoldenTests {
         for index in values.indices where values[index] > values[best] { best = index }
         _ = first
         return best
+    }
+
+    /// Option indices best-first (ties by index), the order a top-k read is made from.
+    private static func ranking(_ values: [Double]) -> [Int] {
+        values.indices.sorted { values[$0] != values[$1] ? values[$0] > values[$1] : $0 < $1 }
     }
 
     /// The reference takes `lexical_lookup` as a parameter (`:370`), and calls it once per option
@@ -263,6 +271,8 @@ struct ClefGoldenTests {
                         "\(name): logit \(offset) \(pair.0) vs \(pair.1)")
                 }
                 #expect(Self.argmax(actual) == Self.argmax(expectedLogits), "\(name): argmax")
+                // owner 2026-10-22, mlx core 0.32.2 drift, journal 552: the whole option order, not only the argmax.
+                #expect(Self.ranking(actual) == Self.ranking(expectedLogits), "\(name): top-k order")
 
                 // …and the same probabilities the reference's own softmax produced.
                 let expectedProbabilities = try #require(expected["probabilities"]?.arrayValue).compactMap(\.doubleValue)
@@ -272,6 +282,50 @@ struct ClefGoldenTests {
                         abs(pair.0 - pair.1) <= clefProbabilityTolerance,
                         "\(name): P \(offset) \(pair.0) vs \(pair.1)")
                 }
+            }
+        }
+    }
+
+    /// WW2-3-1 (owner 2026-10-22, journal 552 §3): this branch's own head logits and probabilities for the same
+    /// three cases (`Fixtures/Clef/swift-snapshot-mlx-swift-0.32.3/head.json`); probability <= 1e-4, no ranking change.
+    @Test func headMatchesTheBranchSnapshot() throws {
+        let golden = try headGolden()
+        let modelDirectory = try modelDirectory()
+        let inputs = try MLX.loadArrays(url: try #require(clefFixtureDirectory).appendingPathComponent("head_inputs.safetensors"))
+        let head = try ClefHead.load(
+            configURL: modelDirectory.appendingPathComponent("joint_head_config.json"),
+            weightsURL: modelDirectory.appendingPathComponent("joint_head.safetensors"))
+
+        var recorded: [String: Any] = [:]
+        for testCase in try #require(golden["cases"]?.arrayValue) {
+            let name = testCase["name"]?.stringValue ?? "?"
+            let record = try decodedRecord(from: testCase)
+            let hiddenKey = try #require(testCase["hidden_key"]?.stringValue)
+            let hidden = try #require(inputs[hiddenKey])
+            let lexical = try lexicalCursor(for: testCase, inputs: inputs)
+            let logits = head(hidden: hidden, record: record, lexicalLookup: lexical.makeLookup())
+            recorded[name] = logits.map { vector in
+                [
+                    "logits": vector.asArray(Float.self).map(Double.init),
+                    "probabilities": softmax(vector).asArray(Float.self).map(Double.init),
+                ]
+            }
+        }
+        let url = SwiftSnapshot.url("Clef", "head.json")
+        if SwiftSnapshot.isRecording { try SwiftSnapshot.write(recorded, to: url); return }
+
+        let stored = try #require(try SwiftSnapshot.read(url) as? [String: [[String: [Double]]]], "no snapshot at \(url.path)")
+        #expect(Set(stored.keys) == Set(recorded.keys))
+        for (name, was) in stored {
+            let now = try #require(recorded[name] as? [[String: [Double]]])
+            #expect(now.count == was.count, "\(name): question count")
+            for (index, pair) in zip(now, was).enumerated() {
+                let a = pair.0["probabilities"] ?? [], b = pair.1["probabilities"] ?? []
+                #expect(a.count == b.count, "\(name)/\(index): option count")
+                for (x, y) in zip(a, b) {
+                    #expect(abs(x - y) <= SwiftSnapshot.probabilityTolerance, "\(name)/\(index): P \(x) vs \(y)")
+                }
+                #expect(Self.ranking(pair.0["logits"] ?? []) == Self.ranking(pair.1["logits"] ?? []), "\(name)/\(index): ranking")
             }
         }
     }
