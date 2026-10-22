@@ -34,6 +34,9 @@ struct RealModelToolFormatTests {
         ("mlx-community/Qwen2.5-14B-Instruct-4bit", .json),
         ("mlx-community/gpt-oss-20b-MXFP4-Q8", .json),
         ("mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit", .mistral),
+        // WW2-3-2 (owner 2026-10-22): the two catalog chat models the table was missing.
+        ("mlx-community/gemma-4-e4b-it-4bit", .gemma4),
+        ("mlx-community/MiMo-V2.6-Distill-Qwen-9B-OptiQ-4bit", .qwen35),
     ]
 
     private static func directory(_ repo: String) -> URL? {

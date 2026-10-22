@@ -502,6 +502,11 @@ nonisolated struct MLXChatBackend: ServeBackend {
                 maxTokens: request.effectiveMaxTokens,
                 temperature: Float(sampling.temperature),
                 topP: Float(sampling.topP))
+            // Owner ruling 2026-10-22 (WW2-3-2): mlx-swift-lm 3.32 defaults to `.balanced` prefill chunking; the
+            // prompt cache's own prefill (`PromptCheckpointing.prefill`) steps by a fixed 512, as 3.31 did.
+            // `.remainder` restores main's 512-step chunk boundaries, so cache-on and cache-off prefill identically.
+            // Parity, not a tuning choice. This is the only `GenerateParameters` the prompt cache must match.
+            parameters.prefill.chunking = .remainder
 
             // PC-2 — the one seam. Everything below this block is unchanged: the stream is just
             // generated from a prefilled cache and the tail instead of from the whole prompt.
