@@ -57,7 +57,9 @@ nonisolated final class DotsOCR: Module, VLMModel, KVCacheDimensionProvider {
         return merged.reshaped(1, L, D)
     }
 
-    func prepare(_ input: LMInput, cache: [KVCache], windowSize: Int?) throws -> PrepareResult {
+    func prepare(
+        _ input: LMInput, cache: [KVCache], state: LMOutput.State?, prefill: PrefillParameters
+    ) throws -> PrepareResult {
         let dtype = visionTower.patchEmbed.patchifier.proj.weight.dtype
         var pixels: MLXArray?
         var frames: [THW] = []

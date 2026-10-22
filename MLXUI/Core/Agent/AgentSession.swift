@@ -12,8 +12,8 @@
 //  unit-tested without loading a model.
 //
 //  TOOL-CALL FORMAT (wired in AG1, rewritten in S2-1): the generate path selects the parser from
-//  `ModelConfiguration.toolCallFormat ?? .json`. `LLMModelFactory` already infers that format from
-//  the checkpoint at load (`ToolCallFormat.infer(from:configData:)`), and `ModelContainerPool` adds
+//  `ModelConfiguration.toolCallFormat ?? .json`. `LLMModelFactory` already resolves that format from
+//  the checkpoint at load (package-internal since mlx-swift-lm 3.32), and `ModelContainerPool` adds
 //  the app's overrides on top — see `ToolCallFormatTable`. The app no longer keeps its own family
 //  table here, and `Self.toolCallFormat(forModelType:)` below is only the no-`config.json`
 //  convenience kept for AG0's test.
@@ -235,16 +235,16 @@ nonisolated final class AgentSession {
     /// Tool-call parser format for a given `modelType` string from the checkpoint config.
     ///
     /// **S2-1: this no longer keeps a table of its own.** mlx-swift-lm's `LLMModelFactory` already
-    /// runs `ToolCallFormat.infer(from:configData:)` at load (`LLMModelFactory.swift:543`), so the
+    /// resolves the format at load (package-internal since 3.32), so the
     /// app's own row — `qwen3_5` → `.xmlFunction` — only duplicated upstream (readme F3b; keeping
     /// the duplicate is what the S2-1 contract forbids). The answer now comes from
-    /// `ToolCallFormatTable.resolved`, which defers to upstream and applies the app's overrides on
-    /// top — none for any catalog model, see that table.
+    /// `ToolCallFormatTable.resolved`, which carries only the app's overrides — none for any
+    /// catalog model, see that table; the container supplies the rest.
     ///
     /// Kept, unchanged in meaning, because AG0's test pins it and because it is the convenience for
     /// a caller with no `config.json` in hand. Without that data the `llama` family cannot be told
-    /// apart (Llama 3 needs `vocab_size` / `rope_scaling`), and upstream's `infer` returns `nil`
-    /// for it in exactly the same way.
+    /// apart (Llama 3 needs `vocab_size` / `rope_scaling`), and this convenience returns `nil`
+    /// for it.
     ///
     /// Known gap (unchanged): Qwen3-Coder and Qwen3-30B-A3B both report `qwen3_moe`, so the Coder
     /// variant can't be told apart from `modelType` alone — it would need the model id. Left as-is

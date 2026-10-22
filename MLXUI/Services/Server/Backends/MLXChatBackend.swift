@@ -645,7 +645,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
         if outcome.bypass == nil {
             let key = PromptCacheModelKey(
                 directory: directory,
-                parameters: "kvBits=nil;maxKVSize=nil;prefillStepSize=\(parameters.prefillStepSize)")
+                parameters: "kvBits=nil;maxKVSize=nil;prefillStepSize=\(parameters.prefill.resolvedStepSize())")
             let toolsArgument: [[String: any Sendable]]? = tools.isEmpty ? nil : tools
             // Probe renders: the same shape (raw `.messages` vs `Chat.Message`), the same `tools`
             // and the same context attempt as the real prompt (T5).

@@ -118,7 +118,7 @@ struct PromptCacheRealModelTests {
             var d = 0
             while d < offIDs.count, d < onIDs.count, offIDs[d] == onIDs[d] { d += 1 }
             let forced = prompt + Array(offIDs[0..<min(d, offIDs.count)])
-            let cache = context.model.newCache(parameters: nil)
+            let cache = try context.model.newCache(parameters: nil)
             try PromptCheckpointing.prefill(forced, from: 0, to: forced.count - 1, cache: cache, context: context, step: 512)
             let last = MLXArray([forced[forced.count - 1]])[.newAxis, 0...]
             let logits = context.model(LMInput.Text(tokens: last), cache: cache, state: nil).logits[0, -1, 0...].asType(.float32)

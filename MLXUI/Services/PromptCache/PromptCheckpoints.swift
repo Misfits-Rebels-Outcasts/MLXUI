@@ -103,7 +103,7 @@ nonisolated enum PromptCheckpointing {
         messages: [ServeMessage],
         tokens: [Int],
         render: ([ServeMessage]) async throws -> [Int],
-        newCache: () -> Cache,
+        newCache: () throws -> Cache,
         isTrimmable: (Cache) -> Bool,
         restore: (PromptCacheHit<Snapshot>) -> Cache?,
         prefill: (_ from: Int, _ to: Int, _ cache: Cache) throws -> Void,
@@ -148,7 +148,7 @@ nonisolated enum PromptCheckpointing {
                                                             systemEndProbe: systemEndProbe, minimumLength: store.minimumReuse)
 
         // 3. prefill segment by segment; store each snapshot only after its segment is evaluated.
-        if !wanted.isEmpty, working == nil { working = newCache() }
+        if !wanted.isEmpty, working == nil { working = try newCache() }
         for target in wanted {
             guard let cache = working else { break }
             _ = lap()
@@ -205,7 +205,7 @@ nonisolated enum PromptCheckpointing {
     ) async throws -> PreparedPrompt {
         try await plan(
             store: store, key: key, messages: messages, tokens: tokens, render: render,
-            newCache: { context.model.newCache(parameters: parameters) },
+            newCache: { try context.model.newCache(parameters: parameters) },
             isTrimmable: { canTrimPromptCache($0) },
             restore: { hit in
                 let copy = hit.makeCopy()           // made here, inside the caller's `perform` (PC-1 carry-over 3)
@@ -216,7 +216,7 @@ nonisolated enum PromptCheckpointing {
             },
             prefill: { from, to, cache in
                 try prefill(tokens, from: from, to: to, cache: cache, context: context,
-                            step: parameters.prefillStepSize)
+                            step: parameters.prefill.resolvedStepSize())
             },
             snapshot: { cache in
                 let snapshot = KVSnapshot(caches: cache.map { $0.copy() })     // evaluated by prefill (T3)

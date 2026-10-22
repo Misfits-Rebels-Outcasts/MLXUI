@@ -81,7 +81,7 @@ struct DotsOCRMLXTests {
                                        * cfg.visionConfig.patchSize * cfg.visionConfig.patchSize])
 
         let input = LMInput(text: .init(tokens: ids), image: .init(pixels: pixels, frames: [grid]))
-        let cache = model.newCache(parameters: nil)
+        let cache = try model.newCache(parameters: nil)
 
         let result = try model.prepare(input, cache: cache, windowSize: nil)
         guard case let .logits(out) = result else {

@@ -159,9 +159,9 @@ struct DeepSeekOCRMLXTests {
         let input = LMInput(
             text: .init(tokens: ids),
             image: .init(pixels: pixels, frames: frames))
-        let cache = model.newCache(parameters: nil)
+        let cache = try model.newCache(parameters: nil)
 
-        let result = try model.prepare(input, cache: cache, windowSize: nil)
+        let result = try model.prepare(input, cache: cache, state: nil, prefill: PrefillParameters())
         guard case let .logits(out) = result else {
             Issue.record("prepare should return .logits")
             return

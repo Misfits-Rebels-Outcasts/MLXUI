@@ -68,15 +68,13 @@ nonisolated enum ToolCallFormatTable {
         return nil
     }
 
-    /// The format the loaded container actually uses: the app's override when there is one, else
-    /// upstream's `ToolCallFormat.infer`, else `nil` — the container's own `.json` default.
+    /// The app's own override when there is one, else `nil` — the loaded container's own resolved
+    /// format applies (mlx-swift-lm 3.32 resolves it at load from the model type and the checkpoint's
+    /// chat template; that resolution is package-internal, so the app no longer repeats it).
     ///
-    /// `configData` is the checkpoint's `config.json`; `llama` needs it to tell Llama 3 from
-    /// Llama 2 exactly as upstream does. Passing `nil` is legal and leaves the Llama sub-family
-    /// undecided.
+    /// `configData` is the checkpoint's `config.json`, passed through to `override`.
     static func resolved(forModelType modelType: String, configData: Data?) -> ToolCallFormat? {
         override(forModelType: modelType, configData: configData)
-            ?? ToolCallFormat.infer(from: modelType, configData: configData)
     }
 
     // MARK: - Does a `tools` array do anything for this family?
