@@ -373,8 +373,6 @@ nonisolated struct MLXChatBackend: ServeBackend {
         // renders just that tool when the client sent it (`renderedTools`), since a model can't be
         // forced — best effort, implementer's call, pending owner confirmation.
         let tools = effectiveTools(request)
-        let format = ToolCallFormatTable.resolved(forModelType: checkpointModelType,
-                                                 configData: ModelContainerPool.configData(directory: directory)) ?? .json
         let hasToolHistory = Self.hasToolHistory(messages)
         // S2-3: thinking is OFF unless the request asked for it *and* the family's template reads
         // `enable_thinking` — the same shape as the tools gate above, and the same default S1 had.
@@ -523,6 +521,12 @@ nonisolated struct MLXChatBackend: ServeBackend {
 
             // The scanner exists only when a tool call could actually be produced; `tools` empty
             // means the family can't use them or the client asked for `tool_choice: "none"`.
+            // Owner ruling 2026-10-22 (WW2-2-FIX-1): the format is the *loaded container's*, read here
+            // inside `perform` — mlx-swift-lm 3.32 resolves it at load from the model, `tool_parser_type`
+            // and the chat template, and `ModelContainerPool` installs any app override onto the
+            // container, so overrides still win. It is not derived from `model_type` by the app.
+            // The scanner is the only consumer of a format on the serve path.
+            let format = context.configuration.toolCallFormat ?? .json
             var scanner: ServeToolCallScanner? = tools.isEmpty
                 ? nil : ServeToolCallScanner(format: format, tools: tools)
             var callIndex = 0

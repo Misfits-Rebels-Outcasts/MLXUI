@@ -103,16 +103,8 @@ struct AgentToolTests {
             approve: { _, _ in true }, onEvent: { _ in })
         if case .failed = result { } else { Issue.record("expected .failed, got \(result)") }
     }
-
-    // MARK: tool-call format mapping
-
-    /// Only Qwen3.5 takes the XML form. Plain Qwen2/Qwen3 emit the default JSON
-    /// `<tool_call>{…}</tool_call>`, and parsing those with the XML parser drops the
-    /// call silently — the failure looks like "the model just didn't call the tool".
-    @Test func onlyQwen35UsesXMLFunctionFormat() {
-        #expect(AgentSession.toolCallFormat(forModelType: "qwen3_5") == .xmlFunction)
-        #expect(AgentSession.toolCallFormat(forModelType: "qwen2") == nil)
-        #expect(AgentSession.toolCallFormat(forModelType: "qwen3") == nil)
-        #expect(AgentSession.toolCallFormat(forModelType: "llama") == nil)
-    }
 }
+
+// The `model_type` → tool-call format mapping that was pinned here (qwen3_5 → .xmlFunction, qwen2/qwen3/llama → nil)
+// was mlx-swift-lm 3.31's; 3.32 resolves it inside the container. Retargeted (WW2-2-FIX-1, owner-approved
+// 2026-10-22) to `RealModelToolFormatTests`, which asserts the loaded container's format (WW2-3 G1).
