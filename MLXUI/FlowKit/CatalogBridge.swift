@@ -342,6 +342,18 @@ nonisolated enum CatalogBridge {
             equivalence: .same,
             manifestFile: "mimo-v2.6-9b-optiq-4bit.json",
             modelType: .llm),
+        // MP1-W (RSI/DelegateModelPackBacklog.md, MP-0 E ruled 2026-10-21) -- Gemma 4 E4B, the
+        // `gemma4` text model. No catflow-mlx manifest exists, so it is MLXUI-authored (see its
+        // "notes"), appended **last** to `TaskModels.llmModels` so the seed does not move. Its
+        // "Gemma 4 E4B Vision" twin was withdrawn by MP1-R-FIX-1 (owner ruling 2026-10-22):
+        // mlx-swift-lm 3.31.4's MLXVLM `Gemma4` cannot load the checkpoint; see `RSI/backlog.md`.
+        BridgeEntry(
+            display: "Gemma 4 E4B",
+            pinnedID: "mlx-community/gemma-4-e4b-it-4bit",
+            candidates: ["mlx-community/gemma-4-e4b-it-4bit"],
+            equivalence: .same,
+            manifestFile: "gemma-4-e4b-it-4bit.json",
+            modelType: .llm),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {
@@ -353,6 +365,14 @@ nonisolated enum CatalogBridge {
     /// (CFM-R14-2). `nil` when the model is unbridged (then its `hfModelId` is the name).
     static func entry(forCandidate candidateID: String) -> BridgeEntry? {
         entries.first { $0.candidates.contains(candidateID) }
+    }
+
+    /// MP1-W: the same reverse lookup, but for a card that **shares its repo with another card** (Qwen3.5 9B /
+    /// Qwen3.5 9B Vision, Gemma 4 E4B / Gemma 4 E4B Vision): a row that pins a `modelType` only answers for a
+    /// card of that type, so the Vision card is named by the Vision row, not by the text row that happens to
+    /// list the repo first. A row with no `modelType` answers for any card, exactly as before.
+    static func entry(forCandidate candidateID: String, modelType: ModelType) -> BridgeEntry? {
+        entries.first { $0.candidates.contains(candidateID) && ($0.modelType == nil || $0.modelType == modelType) }
     }
 
     /// Resolve a display name to an installable `ModelEntry`. `catalog` is the flat list

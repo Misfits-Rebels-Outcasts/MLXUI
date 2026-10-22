@@ -74,7 +74,11 @@ struct CatFlowChatModuleTests {
         // MM1: bundled catalog gained the mlx-community/MiMo-V2.6-Distill-Qwen-9B-OptiQ-4bit `.llm`
         //      entry (RSI/backlog.md MM1, MM-0 ruled 2026-10-17), 44 → 45. Implementer's call,
         //      pending owner confirmation, to follow this list's convention: a bumped count, not an edited golden.
-        #expect(entries.count == 45, "bundled catalog drifted: \(entries.count) entries")
+        // MP1-1: bundled catalog gained the two Gemma 4 E4B entries (`.llm` + `.vision`, one shared
+        //        mlx-community/gemma-4-e4b-it-4bit install; RSI/DelegateModelPackBacklog.md MP-0 E, ruled
+        //        2026-10-21), 45 → 47. Same convention: a bumped count, not an edited golden.
+        //        MP1-R-FIX-1 withdrew the `.vision` twin (owner ruling 2026-10-22), 47 → 46.
+        #expect(entries.count == 46, "bundled catalog drifted: \(entries.count) entries")
 
         let withChat = registry(includingChat: true)
         let withoutChat = registry(includingChat: false)
@@ -94,8 +98,8 @@ struct CatFlowChatModuleTests {
             }
             checked += 1
         }
-        #expect(checked == 45)
-        #expect(llmChecked == 13)   // MM1: MiMo V2.6 9B is the 13th .llm entry (Q38-5's 4-bit card was the 12th)
+        #expect(checked == 46)
+        #expect(llmChecked == 14)   // MP1-1: Gemma 4 E4B is the 14th .llm entry (MM1: MiMo V2.6 9B was the 13th)
     }
 
     // MARK: - Helpers

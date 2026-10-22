@@ -167,7 +167,9 @@ struct CatFlowCatalogBridgeTests {
         // (`lukaskremla--Qwen3.8-27B-3bit-MLX`), 23 -> 24; Q38-6 added "Qwen3.8 27B", 24 -> 25;
         // CF-8 added "Clef Flash", 25 -> 26; MM-W added "MiMo V2.6 9B", 26 -> 27 (implementer's call,
         // pending owner confirmation: a bumped count, as each earlier row did, not an edited golden).
-        #expect(CatalogBridge.entries.count == 27)
+        // MP1-W added "Gemma 4 E4B", 27 -> 28 (same call, same convention); its Vision twin was withdrawn by
+        // MP1-R-FIX-1 (owner ruling 2026-10-22), which is why this is 28 and not 29.
+        #expect(CatalogBridge.entries.count == 28)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
@@ -399,7 +401,9 @@ struct CatFlowCatalogBridgeTests {
         // (`lukaskremla--Qwen3.8-27B-3bit-MLX`), 23 -> 24; Q38-6 added "Qwen3.8 27B", 24 -> 25;
         // CF-8 added "Clef Flash", 25 -> 26; MM-W added "MiMo V2.6 9B", 26 -> 27 (implementer's call,
         // pending owner confirmation: a bumped count, as each earlier row did, not an edited golden).
-        #expect(CatalogBridge.entries.count == 27)
+        // MP1-W added "Gemma 4 E4B", 27 -> 28 (same call, same convention); its Vision twin was withdrawn by
+        // MP1-R-FIX-1 (owner ruling 2026-10-22), which is why this is 28 and not 29.
+        #expect(CatalogBridge.entries.count == 28)
     }
 
     // MARK: - MoC-4-4: Qwen3 Reranker 0.6B joins the bridge, the model on MoC-3's seam
@@ -716,8 +720,9 @@ struct CatFlowCatalogBridgeTests {
             #expect(TaskModels.defaultModel(forTask: task, catalog: catalog, claimableModelIDs: claimable) == "Ministral 3B",
                     "\(task) should still seed Ministral 3B after Qwen3.8 27B 3-bit was appended")
             // Q38-6 appended "Qwen3.8 27B" after it; MM-W then appended "MiMo V2.6 9B" last (implementer's
-            // call, pending owner confirmation), so the 3-bit is now third-to-last.
-            #expect(TaskModels.models(forTask: task).dropLast(2).last == "Qwen3.8 27B 3-bit",
+            // call, pending owner confirmation), so the 3-bit is now third-to-last. MP1-W then appended
+            // "Gemma 4 E4B" last (same call), so it is fourth-to-last.
+            #expect(TaskModels.models(forTask: task).dropLast(3).last == "Qwen3.8 27B 3-bit",
                     "\(task): Qwen3.8 27B 3-bit should directly precede the 4-bit in the pool")
         }
 
@@ -797,10 +802,11 @@ struct CatFlowCatalogBridgeTests {
             #expect(TaskModels.defaultModel(forTask: task, catalog: catalog, claimableModelIDs: claimable) == "Ministral 3B",
                     "\(task) should still seed Ministral 3B after Qwen3.8 27B was appended")
             // MM-W appended "MiMo V2.6 9B" after it (implementer's call, pending owner confirmation), so
-            // Qwen3.8 27B is now second-to-last; the last slot is MiMo's (MiMoWorkflowWiringTests).
+            // Qwen3.8 27B was second-to-last; MP1-W then appended "Gemma 4 E4B" (same call), so it is now
+            // third-to-last (MiMo and Gemma 4 sit after it: MiMoWorkflowWiringTests, Gemma4WorkflowWiringTests).
             let pool = TaskModels.models(forTask: task)
-            #expect(pool.dropLast().last == "Qwen3.8 27B", "\(task): Qwen3.8 27B should be the second-to-last pool name")
-            #expect(pool.dropLast(2).last == "Qwen3.8 27B 3-bit",
+            #expect(pool.dropLast(2).last == "Qwen3.8 27B", "\(task): Qwen3.8 27B should be the third-to-last pool name")
+            #expect(pool.dropLast(3).last == "Qwen3.8 27B 3-bit",
                     "\(task): Qwen3.8 27B should come after the 3-bit")
         }
 

@@ -1,0 +1,36 @@
+{
+  "id": "mlx-community/gemma-4-e4b-it-4bit",
+  "display": "Gemma 4 E4B",
+  "kind": "local",
+  "engine": "mlx-lm",
+  "tasks": [
+    "Generate",
+    "Decide"
+  ],
+  "settings": {
+    "temperature": {
+      "type": "number",
+      "min": 0.0,
+      "max": 2.0,
+      "default": 0.6,
+      "maps_to": "temp"
+    },
+    "max_tokens": {
+      "type": "number",
+      "min": 1,
+      "max": 32768,
+      "default": 2048,
+      "maps_to": "max_tokens"
+    }
+  },
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 5.18,
+    "ram_gb": 7.77
+  },
+  "source": "https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit",
+  "license": "gemma",
+  "manifest_version": 1,
+  "pinned": true,
+  "notes": "MLXUI-authored (RSI/DelegateModelPackBacklog.md MP1-W) -- catflow-mlx has no manifest for this model, so this was written from qwen3.5-9b-4bit.json's shape. temperature default 0.6 (owner ruling 2026-10-21), matching the other LLM manifests. The checkpoint's generation_config.json says 1.0, but that assumes top_k 64 and top_p 0.95, which flow LLM rows do not apply, so 1.0 alone would sample the full distribution. max_tokens is not seeded from the 131072-token context window, the same as Qwen3.5 9B. resources.disk_gb is browser.json's downloadSizeGB (5.18, the 10-file tree) and resources.ram_gb is its ramGB 7.77 (download size x 1.5, MP-0 G: an estimate, not a measurement). Same download as the 'Gemma 4 E4B Vision' manifest (MoC-5's install-path sharing). Verified against mlx-community/gemma-4-e4b-it-4bit revision 475b9088d29754a3379866cf5aeb6b41acd313c2."
+}

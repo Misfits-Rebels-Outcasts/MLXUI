@@ -271,7 +271,10 @@ nonisolated enum TaskModels {
                                     "Qwen3.8 27B",
                                     // MM-W (RSI/backlog.md, MM-0 C ruled 2026-10-17): MiMo V2.6 9B,
                                     // appended **last** -- the seed ("Ministral 3B") must not move.
-                                    "MiMo V2.6 9B"]
+                                    "MiMo V2.6 9B",
+                                    // MP1-W (RSI/DelegateModelPackBacklog.md, MP-0 E ruled 2026-10-21):
+                                    // Gemma 4 E4B, appended **last** -- the seed ("Ministral 3B") must not move.
+                                    "Gemma 4 E4B"]
 
     /// A task's model pool (display names) — preference ordering for the seed, nothing more.
     static func models(forTask task: String) -> [String] {
@@ -415,7 +418,7 @@ nonisolated enum TaskModels {
     /// `Qwen3-VL-4B-Instruct` with `models: { Qwen3-VL-4B-Instruct = mlx-community/... }`
     /// reads like a flow; the raw id version read like a dump.
     static func displayName(for model: ModelEntry) -> String {
-        CatalogBridge.entry(forCandidate: model.hfModelId)?.display ?? model.displayName
+        CatalogBridge.entry(forCandidate: model.hfModelId, modelType: model.modelType)?.display ?? model.displayName
     }
 
     /// The default model for a model-class task — the **first pool-named derived candidate**

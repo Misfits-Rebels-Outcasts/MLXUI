@@ -102,9 +102,11 @@ struct MiMoWorkflowWiringTests {
         for task in llmModelsKeyedTasks {
             #expect(TaskModels.defaultModel(forTask: task, catalog: catalog, claimableModelIDs: claimable) == "Ministral 3B",
                     "\(task) should still seed Ministral 3B after \(Self.display) was appended")
+            // MP1-W then appended "Gemma 4 E4B" after it (implementer's call, pending owner confirmation), so MiMo
+            // is now second-to-last; the last slot is Gemma 4's (Gemma4WorkflowWiringTests).
             let pool = TaskModels.models(forTask: task)
-            #expect(pool.last == Self.display, "\(task): \(Self.display) should be the last pool name")
-            #expect(pool.dropLast().last == "Qwen3.8 27B", "\(task): \(Self.display) should follow Qwen3.8 27B")
+            #expect(pool.dropLast().last == Self.display, "\(task): \(Self.display) should be the second-to-last pool name")
+            #expect(pool.dropLast(2).last == "Qwen3.8 27B", "\(task): \(Self.display) should follow Qwen3.8 27B")
         }
         let derived = TaskModels.derivedModels(for: "Generate", catalog: catalog, claimableModelIDs: claimable)
         #expect(derived.contains { $0.displayName == Self.display }, "the Generate menu should offer \(Self.display)")
