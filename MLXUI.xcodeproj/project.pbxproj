@@ -8,12 +8,10 @@
 
 /* Begin PBXBuildFile section */
 		0718A3D6A9E337B70A0A4ACC /* FlyingFox in Frameworks */ = {isa = PBXBuildFile; productRef = 7581BDCDEF9D6AC66DEB05B6 /* FlyingFox */; };
-		2032034F301B7DB30003B32E /* MLXAudioTTS in Frameworks */ = {isa = PBXBuildFile; productRef = 20320349301B7DB30003B32E /* MLXAudioTTS */; };
 		20320350301B7DB30003B32E /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 20320345301B7DB30003B32E /* WhisperKit */; };
 		20320351301B7DB30003B32E /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = 2032034A301B7DB30003B32E /* MLXVLM */; };
 		20320352301B7DB30003B32E /* PaddleOCRVL in Frameworks */ = {isa = PBXBuildFile; productRef = 2032034C301B7DB30003B32E /* PaddleOCRVL */; };
 		20320353301B7DB30003B32E /* MLXEmbedders in Frameworks */ = {isa = PBXBuildFile; productRef = 2032034B301B7DB30003B32E /* MLXEmbedders */; };
-		20320354301B7DB30003B32E /* MLXAudioSTT in Frameworks */ = {isa = PBXBuildFile; productRef = 20320347301B7DB30003B32E /* MLXAudioSTT */; };
 		20320355301B7DB30003B32E /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 20320343301B7DB30003B32E /* MLXLLM */; };
 		20320356301B7DB30003B32E /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 20320341301B7DB30003B32E /* MLX */; };
 		203CC01D2FF0E29F007A6D30 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 203CC01C2FF0E29F007A6D30 /* WhisperKit */; };
@@ -24,6 +22,8 @@
 		20ED052A2FF2A3C6009036F2 /* MLXAudioSTT in Frameworks */ = {isa = PBXBuildFile; productRef = 20ED05292FF2A3C6009036F2 /* MLXAudioSTT */; };
 		20F5D7BF2FF61BCF005F7423 /* PaddleOCRVL in Frameworks */ = {isa = PBXBuildFile; productRef = 20F5D7BE2FF61BCF005F7423 /* PaddleOCRVL */; };
 		20FAFC272FF4866E00DC6CCD /* MLXEmbedders in Frameworks */ = {isa = PBXBuildFile; productRef = 20FAFC262FF4866E00DC6CCD /* MLXEmbedders */; };
+		20FF10C53089E5A10020BA09 /* MLXAudioSTT in Frameworks */ = {isa = PBXBuildFile; productRef = 20FF10C43089E5A10020BA09 /* MLXAudioSTT */; };
+		20FF10C73089E5B30020BA09 /* MLXAudioTTS in Frameworks */ = {isa = PBXBuildFile; productRef = 20FF10C63089E5B30020BA09 /* MLXAudioTTS */; };
 		C468348EB515C71477067511 /* FlyingFox in Frameworks */ = {isa = PBXBuildFile; productRef = 1B6BACEF19D0F63DEF97E9B2 /* FlyingFox */; };
 /* End PBXBuildFile section */
 
@@ -82,12 +82,12 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2032034F301B7DB30003B32E /* MLXAudioTTS in Frameworks */,
 				20320350301B7DB30003B32E /* WhisperKit in Frameworks */,
+				20FF10C73089E5B30020BA09 /* MLXAudioTTS in Frameworks */,
+				20FF10C53089E5A10020BA09 /* MLXAudioSTT in Frameworks */,
 				20320351301B7DB30003B32E /* MLXVLM in Frameworks */,
 				20320352301B7DB30003B32E /* PaddleOCRVL in Frameworks */,
 				20320353301B7DB30003B32E /* MLXEmbedders in Frameworks */,
-				20320354301B7DB30003B32E /* MLXAudioSTT in Frameworks */,
 				20320355301B7DB30003B32E /* MLXLLM in Frameworks */,
 				20320356301B7DB30003B32E /* MLX in Frameworks */,
 				0718A3D6A9E337B70A0A4ACC /* FlyingFox in Frameworks */,
@@ -176,12 +176,12 @@
 				20320341301B7DB30003B32E /* MLX */,
 				20320343301B7DB30003B32E /* MLXLLM */,
 				20320345301B7DB30003B32E /* WhisperKit */,
-				20320347301B7DB30003B32E /* MLXAudioSTT */,
-				20320349301B7DB30003B32E /* MLXAudioTTS */,
 				2032034A301B7DB30003B32E /* MLXVLM */,
 				2032034B301B7DB30003B32E /* MLXEmbedders */,
 				2032034C301B7DB30003B32E /* PaddleOCRVL */,
 				7581BDCDEF9D6AC66DEB05B6 /* FlyingFox */,
+				20FF10C43089E5A10020BA09 /* MLXAudioSTT */,
+				20FF10C63089E5B30020BA09 /* MLXAudioTTS */,
 			);
 			productName = MLXUI;
 			productReference = 2032035B301B7DB30003B32E /* MLXUI Pro.app */;
@@ -627,14 +627,6 @@
 				minimumVersion = 1.0.0;
 			};
 		};
-		20320348301B7DB30003B32E /* XCRemoteSwiftPackageReference "mlx-audio-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/Blaizzy/mlx-audio-swift";
-			requirement = {
-				branch = main;
-				kind = branch;
-			};
-		};
 		203CC0132FF0DFAA007A6D30 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
@@ -647,8 +639,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/Blaizzy/mlx-audio-swift";
 			requirement = {
-				branch = main;
-				kind = branch;
+				kind = revision;
+				revision = 580e952adda0cd6bdc5c04f402822adbb61525c8;
 			};
 		};
 		B00000010001FEB616500 /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
@@ -698,16 +690,6 @@
 			package = 20320346301B7DB30003B32E /* XCRemoteSwiftPackageReference "WhisperKit" */;
 			productName = WhisperKit;
 		};
-		20320347301B7DB30003B32E /* MLXAudioSTT */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 20320348301B7DB30003B32E /* XCRemoteSwiftPackageReference "mlx-audio-swift" */;
-			productName = MLXAudioSTT;
-		};
-		20320349301B7DB30003B32E /* MLXAudioTTS */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 20320348301B7DB30003B32E /* XCRemoteSwiftPackageReference "mlx-audio-swift" */;
-			productName = MLXAudioTTS;
-		};
 		2032034A301B7DB30003B32E /* MLXVLM */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 20320344301B7DB30003B32E /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
@@ -750,6 +732,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B00000020001FEB616500 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
 			productName = MLXEmbedders;
+		};
+		20FF10C43089E5A10020BA09 /* MLXAudioSTT */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 20ED05282FF2A3C6009036F2 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */;
+			productName = MLXAudioSTT;
+		};
+		20FF10C63089E5B30020BA09 /* MLXAudioTTS */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 20ED05282FF2A3C6009036F2 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */;
+			productName = MLXAudioTTS;
 		};
 		7581BDCDEF9D6AC66DEB05B6 /* FlyingFox */ = {
 			isa = XCSwiftPackageProductDependency;
