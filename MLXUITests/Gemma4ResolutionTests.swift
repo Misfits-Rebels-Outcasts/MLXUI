@@ -3,16 +3,17 @@ import Foundation
 import Jinja
 @testable import MLXUI
 
-/// MP1-3 (`RSI/DelegateModelPackBacklog.md`) — Gemma 4 E4B is SUPPORTED: `gemma4` is registered in
-/// mlx-swift-lm 3.31.4's LLM *and* VLM factories, so there is no port. These tests pin the wiring around
-/// that: the registry resolution, the absence of a `ModelSupport` flag, the one shared install (the
-/// MoC-5 path Qwen3.5 9B uses), the directory both engines load from, and the files the installer fetches.
-/// None of them runs the model; that is smoke rows in `RSI/evals/smoke-checklist.md` (MP — Model Pack).
+/// MP1-3 (`RSI/DelegateModelPackBacklog.md`) — Gemma 4 E4B is SUPPORTED as a chat model: `gemma4` is registered in
+/// mlx-swift-lm 3.31.4's LLM factory, so there is no port. These tests pin the wiring around that: the registry
+/// resolution, the absence of a `ModelSupport` flag, the install, the directory the chat engine loads from, and
+/// the files the installer fetches. None of them runs the model; that is smoke rows in
+/// `RSI/evals/smoke-checklist.md` (MP — Model Pack). MP1-R-FIX-1 (owner ruling 2026-10-22) withdrew the Vision
+/// twin: the VLM factory registers `gemma4` but its `Gemma4.swift` declares k_proj/v_proj on the KV-shared
+/// layers 24–41 that the checkpoint does not ship, so the load fails (`RSI/backlog.md`).
 @MainActor
 struct Gemma4ResolutionTests {
 
     private static let llmID = "mlx-community--gemma-4-e4b-it-4bit"
-    private static let visionID = "mlx-community--gemma-4-e4b-it-4bit-vision"
 
     private func loadBrowserData() throws -> BrowserData {
         let repoRoot = URL(fileURLWithPath: #filePath)
@@ -22,11 +23,8 @@ struct Gemma4ResolutionTests {
         return try JSONDecoder().decode(BrowserData.self, from: Data(contentsOf: url))
     }
 
-    private func pair(from data: BrowserData) throws -> (llm: ModelEntry, vision: ModelEntry) {
-        let catalog = data.domains.flatMap { $0.allModels }
-        let llm = try #require(catalog.first { $0.id == Self.llmID })
-        let vision = try #require(catalog.first { $0.id == Self.visionID })
-        return (llm, vision)
+    private func llmEntry(from data: BrowserData) throws -> ModelEntry {
+        try #require(data.domains.flatMap { $0.allModels }.first { $0.id == Self.llmID })
     }
 
     private func fullRegistry() -> ModelRegistry {
@@ -50,104 +48,65 @@ struct Gemma4ResolutionTests {
 
     // MARK: - Registry resolution
 
-    @Test func llmEntryResolvesToChatAndVisionEntryToVLM() throws {
-        let (llm, vision) = try pair(from: loadBrowserData())
+    @Test func llmEntryResolvesToChat() throws {
+        let llm = try llmEntry(from: loadBrowserData())
         let registry = fullRegistry()
 
         let chat = try #require(registry.bestModule(for: llm))
         #expect(chat.descriptor.id == "chat")
         #expect(chat.sdk.claim(llm) == .exact)
-
-        let vlm = try #require(registry.bestModule(for: vision))
-        #expect(vlm.descriptor.id == "vlm")
-        #expect(vlm.sdk.claim(vision) == .exact)
-
         #expect(llm.runnerKind == .llm)
-        #expect(vision.runnerKind == .vision)
     }
 
-    @Test func eachEntryIsClaimedByExactlyItsOwnModule() throws {
-        let (llm, vision) = try pair(from: loadBrowserData())
-        for (entry, owner) in [(llm, "chat"), (vision, "vlm")] {
-            // `ModelRegistry.modules` is private, so ask each module on its own: a registry holding only
-            // that module resolves the entry iff the module's SDK claims it.
-            let claimants = installedModules.filter { module in
-                let solo = ModelRegistry()
-                module.register(into: solo)
-                return solo.bestModule(for: entry) != nil
-            }.map { $0.descriptor.id }
-            #expect(claimants == [owner], "\(entry.id) is claimed by \(claimants), expected only [\(owner)]")
-        }
+    @Test func theEntryIsClaimedByExactlyOneModule() throws {
+        let llm = try llmEntry(from: loadBrowserData())
+        // `ModelRegistry.modules` is private, so ask each module on its own: a registry holding only
+        // that module resolves the entry iff the module's SDK claims it.
+        let claimants = installedModules.filter { module in
+            let solo = ModelRegistry()
+            module.register(into: solo)
+            return solo.bestModule(for: llm) != nil
+        }.map { $0.descriptor.id }
+        #expect(claimants == ["chat"], "\(llm.id) is claimed by \(claimants), expected only [chat]")
     }
 
-    @Test func stagesHaveTheRightShapes() throws {
-        let (llm, vision) = try pair(from: loadBrowserData())
+    @Test func stageHasTheRightShape() throws {
+        let llm = try llmEntry(from: loadBrowserData())
         let chat = try ChatSDK().makeStage(for: llm, config: .default)
         #expect(chat.accepts == .text && chat.produces == .text)
         #expect(chat.id == llm.id)
-        let vlm = try VLMSDK().makeStage(for: vision, config: .default)
-        #expect(vlm.accepts == .image && vlm.produces == .text)
-        #expect(vlm.id == "vlm.\(vision.id)")
     }
 
-    @Test func neitherEntryIsFlaggedInModelSupport() throws {
-        let (llm, vision) = try pair(from: loadBrowserData())
-        #expect(ModelSupport.unsupportedReason(for: llm) == nil)
-        #expect(ModelSupport.unsupportedReason(for: vision) == nil)
+    @Test func theEntryIsNotFlaggedInModelSupport() throws {
+        #expect(ModelSupport.unsupportedReason(for: try llmEntry(from: loadBrowserData())) == nil)
     }
 
-    // MARK: - Shared install (MoC-5)
+    // MARK: - Install
 
-    @Test func installingOneCardMakesBothReadInstalled() throws {
-        let (store, cleanup) = makeTempStore()
-        defer { cleanup() }
-        let (llm, vision) = try pair(from: loadBrowserData())
-        #expect(llm.hfModelId == vision.hfModelId)
-        #expect(vision.id != ModelStore.repoSlug(for: vision.hfModelId))   // the diverging-id case MoC-5 exists for
-        #expect(llm.id == ModelStore.repoSlug(for: llm.hfModelId))
-        let manager = InstallManager(store: store)
-
-        #expect(!manager.isInstalled(llm) && !manager.isInstalled(vision))
-        try simulateInstalled(llm.hfModelId, in: store)
-        #expect(manager.isInstalled(llm))
-        #expect(manager.isInstalled(vision), "the vision card shares the llm card's download")
-    }
-
-    @Test func installingEitherCardInstallsTheOther() throws {
-        // The marker is keyed by repo, so it does not matter which card triggered the download.
-        let (store, cleanup) = makeTempStore()
-        defer { cleanup() }
-        let (llm, vision) = try pair(from: loadBrowserData())
-        try simulateInstalled(vision.hfModelId, in: store)   // as if the Vision card had been installed
-        let manager = InstallManager(store: store)
-        #expect(manager.isInstalled(vision) && manager.isInstalled(llm))
-    }
-
-    @Test func bothSurviveARelaunchAndRecordTheRepoPath() throws {
+    @Test func theEntrySurvivesARelaunchAndRecordsTheRepoPath() throws {
         let (store, cleanup) = makeTempStore()
         defer { cleanup() }
         let data = try loadBrowserData()
-        let (llm, vision) = try pair(from: data)
+        let llm = try llmEntry(from: data)
         let catalog = data.domains.flatMap { $0.allModels }
+        #expect(llm.id == ModelStore.repoSlug(for: llm.hfModelId))
+        let manager = InstallManager(store: store)
+
+        #expect(!manager.isInstalled(llm))
         try simulateInstalled(llm.hfModelId, in: store)
+        #expect(manager.isInstalled(llm))
 
-        let verified = InstallManager(store: store).loadInstalled(modelIDs: [llm.id, vision.id], catalog: catalog)
-        #expect(verified == [llm.id, vision.id])
+        let verified = InstallManager(store: store).loadInstalled(modelIDs: [llm.id], catalog: catalog)
+        #expect(verified == [llm.id])
 
-        InstallManager(store: store).saveRegistry(installedIDs: [llm.id, vision.id], browserData: data)
+        InstallManager(store: store).saveRegistry(installedIDs: [llm.id], browserData: data)
         let registry = try JSONDecoder().decode(InstalledModels.self, from: Data(contentsOf: store.installedRegistryURL))
-        let slug = ModelStore.repoSlug(for: llm.hfModelId)
-        #expect(registry.models[llm.id]?.path == "models/\(slug)")
-        #expect(registry.models[vision.id]?.path == "models/\(slug)")
+        #expect(registry.models[llm.id]?.path == "models/\(ModelStore.repoSlug(for: llm.hfModelId))")
     }
 
-    @Test func bothEnginesLoadFromTheSharedDirectory() throws {
-        let (llm, vision) = try pair(from: loadBrowserData())
-        // ChatSDK loads `LLMEngine.modelDirectory(for: llm.id)`; VLMSDK loads the directory keyed by hfModelId.
-        let chatDir = LLMEngine.modelDirectory(for: llm.id)
-        let vlmDir = VLMEngine.installedModelDirectory(hfModelID: vision.hfModelId)
-        #expect(chatDir == vlmDir)
-        #expect(chatDir.lastPathComponent == "mlx-community--gemma-4-e4b-it-4bit")
+    @Test func theChatEngineLoadsFromTheRepoDirectory() throws {
+        let llm = try llmEntry(from: loadBrowserData())
+        #expect(LLMEngine.modelDirectory(for: llm.id).lastPathComponent == "mlx-community--gemma-4-e4b-it-4bit")
     }
 
     // MARK: - What the installer fetches

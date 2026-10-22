@@ -167,8 +167,9 @@ struct CatFlowCatalogBridgeTests {
         // (`lukaskremla--Qwen3.8-27B-3bit-MLX`), 23 -> 24; Q38-6 added "Qwen3.8 27B", 24 -> 25;
         // CF-8 added "Clef Flash", 25 -> 26; MM-W added "MiMo V2.6 9B", 26 -> 27 (implementer's call,
         // pending owner confirmation: a bumped count, as each earlier row did, not an edited golden).
-        // MP1-W added "Gemma 4 E4B" and "Gemma 4 E4B Vision", 27 -> 29 (same call, same convention).
-        #expect(CatalogBridge.entries.count == 29)
+        // MP1-W added "Gemma 4 E4B", 27 -> 28 (same call, same convention); its Vision twin was withdrawn by
+        // MP1-R-FIX-1 (owner ruling 2026-10-22), which is why this is 28 and not 29.
+        #expect(CatalogBridge.entries.count == 28)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
@@ -400,8 +401,9 @@ struct CatFlowCatalogBridgeTests {
         // (`lukaskremla--Qwen3.8-27B-3bit-MLX`), 23 -> 24; Q38-6 added "Qwen3.8 27B", 24 -> 25;
         // CF-8 added "Clef Flash", 25 -> 26; MM-W added "MiMo V2.6 9B", 26 -> 27 (implementer's call,
         // pending owner confirmation: a bumped count, as each earlier row did, not an edited golden).
-        // MP1-W added "Gemma 4 E4B" and "Gemma 4 E4B Vision", 27 -> 29 (same call, same convention).
-        #expect(CatalogBridge.entries.count == 29)
+        // MP1-W added "Gemma 4 E4B", 27 -> 28 (same call, same convention); its Vision twin was withdrawn by
+        // MP1-R-FIX-1 (owner ruling 2026-10-22), which is why this is 28 and not 29.
+        #expect(CatalogBridge.entries.count == 28)
     }
 
     // MARK: - MoC-4-4: Qwen3 Reranker 0.6B joins the bridge, the model on MoC-3's seam

@@ -343,14 +343,10 @@ nonisolated enum CatalogBridge {
             manifestFile: "mimo-v2.6-9b-optiq-4bit.json",
             modelType: .llm),
         // MP1-W (RSI/DelegateModelPackBacklog.md, MP-0 E ruled 2026-10-21) -- Gemma 4 E4B, the
-        // `gemma4` text model, and its vision half: two displays, one install (the Qwen3.5 9B
-        // precedent, MoC-5/MoC-6). Both resolve `.same` onto the cards that share the one
-        // `mlx-community/gemma-4-e4b-it-4bit` repo, so `modelType` is explicit on both (a nil would
-        // fall back to the ambiguous hfModelId match, `BridgeEntry.modelType`'s doc comment). No
-        // catflow-mlx manifest exists for either, so both are MLXUI-authored (see their own
-        // "notes"). "Gemma 4 E4B" is appended **last** to `TaskModels.llmModels` and "Gemma 4 E4B
-        // Vision" last to `"Describe Image"`, so neither seed moves. Image + text only: the audio
-        // tower is dropped at load, so there is no audio task.
+        // `gemma4` text model. No catflow-mlx manifest exists, so it is MLXUI-authored (see its
+        // "notes"), appended **last** to `TaskModels.llmModels` so the seed does not move. Its
+        // "Gemma 4 E4B Vision" twin was withdrawn by MP1-R-FIX-1 (owner ruling 2026-10-22):
+        // mlx-swift-lm 3.31.4's MLXVLM `Gemma4` cannot load the checkpoint; see `RSI/backlog.md`.
         BridgeEntry(
             display: "Gemma 4 E4B",
             pinnedID: "mlx-community/gemma-4-e4b-it-4bit",
@@ -358,13 +354,6 @@ nonisolated enum CatalogBridge {
             equivalence: .same,
             manifestFile: "gemma-4-e4b-it-4bit.json",
             modelType: .llm),
-        BridgeEntry(
-            display: "Gemma 4 E4B Vision",
-            pinnedID: "mlx-community/gemma-4-e4b-it-4bit",
-            candidates: ["mlx-community/gemma-4-e4b-it-4bit"],
-            equivalence: .same,
-            manifestFile: "gemma-4-e4b-it-4bit-vision.json",
-            modelType: .vision),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {

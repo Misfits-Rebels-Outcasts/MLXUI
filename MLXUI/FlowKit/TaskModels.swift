@@ -228,8 +228,7 @@ nonisolated enum TaskModels {
         "Score": ["Laya 0.4B"] + llmModels + ["CLM 8B", "Clef Flash"],
         // MoC-6-2 (RSI/DelegateMoCBacklog.md): appended last, same discipline as MoC-2-4 —
         // the seed ("LFM2-VL 1.6B") does not move.
-        // MP1-W: "Gemma 4 E4B Vision" appended last again -- the seed does not move.
-        "Describe Image": ["LFM2-VL 1.6B", "Gemma 3 4B", "Qwen3.5 9B Vision", "Gemma 4 E4B Vision"],
+        "Describe Image": ["LFM2-VL 1.6B", "Gemma 3 4B", "Qwen3.5 9B Vision"],
         // DA-7 (RSI/DelegateDeciderBacklog.md) — `GLM-OCR` **promoted to first**, the deliberate
         // opposite of MoC-2-4's "append last, seed unmoved". Decision C (do not promote, ruled
         // 2026-09-05) was amended on the evidence its own wording asked for: smoke 9b-S2b's

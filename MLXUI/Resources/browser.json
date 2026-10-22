@@ -276,7 +276,7 @@
           "contextWindow": 131072,
           "license": "gemma",
           "licenseUrl": null,
-          "description": "Google's Gemma 4 E4B instruction-tuned model (`google/gemma-4-E4B-it`), converted to MLX by mlx-community and run here as a text chat model through MLXLLM's `gemma4` runner. Text in, text out: this entry does not load the checkpoint's vision or audio towers.\n\nThe 4-bit weights are affine with group size 64. The model has 42 layers: most use sliding-window attention over 512 tokens and 7 use full attention, and the context window is 131,072 tokens. The download is 5.18 GB; the RAM figure (7.77 GB) is an estimate, the download size × 1.5, not a measurement. It is the same download as `Gemma 4 E4B Vision` in Vision & OCR, so installing either shows the other as Installed, with no second download.\n\nLicensed under the Gemma terms (`license: gemma` on the model card). The model card gives no benchmark figures, and speed and quality have not been measured in this app.",
+          "description": "Google's Gemma 4 E4B instruction-tuned model (`google/gemma-4-E4B-it`), converted to MLX by mlx-community and run here as a text chat model through MLXLLM's `gemma4` runner. Text in, text out: this entry does not load the checkpoint's vision or audio towers.\n\nThe 4-bit weights are affine with group size 64. The model has 42 layers: most use sliding-window attention over 512 tokens and 7 use full attention, and the context window is 131,072 tokens. The download is 5.18 GB; the RAM figure (7.77 GB) is an estimate, the download size × 1.5, not a measurement.\n\nLicensed under the Gemma terms (`license: gemma` on the model card). The model card gives no benchmark figures, and speed and quality have not been measured in this app.",
           "architecture": "Gemma4ForConditionalGeneration",
           "languages": null,
           "lastUpdated": "2026-07-06",
@@ -301,7 +301,7 @@
             }
           ],
           "descriptionSource": "mlx-community/gemma-4-e4b-it-4bit",
-          "summary": "Google's Gemma 4 E4B instruction-tuned model, 4-bit MLX, for text chat with a 131K-token context window. Same download as the Vision entry."
+          "summary": "Google's Gemma 4 E4B instruction-tuned model, 4-bit MLX, for text chat with a 131K-token context window."
         },
         {
           "id": "lukaskremla--Qwen3.8-27B-3bit-MLX",
@@ -1036,53 +1036,6 @@
           ],
           "summary": "Google's Gemma 3 12B (instruction-tuned), a mid-size multimodal open model for text and vision.",
           "descriptionSource": "curated"
-        },
-        {
-          "id": "mlx-community--gemma-4-e4b-it-4bit-vision",
-          "family": "gemma",
-          "displayName": "Gemma 4 E4B Vision",
-          "paramSize": "E4B",
-          "paramCountB": 7.9,
-          "modelType": "vision",
-          "source": "mlx",
-          "format": "mlx-4bit",
-          "platforms": [
-            "macOS 13+"
-          ],
-          "minMacOSVersion": "13.0",
-          "hfRepo": "mlx-community",
-          "hfModelId": "mlx-community/gemma-4-e4b-it-4bit",
-          "ramGB": 7.77,
-          "downloadSizeGB": 5.18,
-          "contextWindow": 131072,
-          "license": "gemma",
-          "licenseUrl": null,
-          "description": "The same download as the `Gemma 4 E4B` entry in Chat & Text (`mlx-community/gemma-4-e4b-it-4bit`), exposed here for questions about an image through MLXVLM's `gemma4` runner. Image and text input only: the checkpoint's audio tower is not loaded, so there is no audio input. Installing either entry installs both, once.\n\nThe 4-bit weights are affine with group size 64. The model has 42 layers: most use sliding-window attention over 512 tokens and 7 use full attention, and the context window is 131,072 tokens. The download is 5.18 GB; the RAM figure (7.77 GB) is an estimate, the download size × 1.5, not a measurement.\n\nLicensed under the Gemma terms (`license: gemma` on the model card). The model card gives no benchmark figures, and speed and quality have not been measured in this app.",
-          "architecture": "Gemma4ForConditionalGeneration",
-          "languages": null,
-          "lastUpdated": "2026-07-06",
-          "taskTags": [
-            "image-text-to-text"
-          ],
-          "benchmarks": null,
-          "speedTokensPerSec": null,
-          "speedHardware": null,
-          "speedEstimated": true,
-          "communityDownloads": 30128,
-          "communityLikes": 39,
-          "variants": [
-            {
-              "quantization": "4-bit",
-              "format": "mlx-4bit",
-              "ramGB": 7.77,
-              "downloadSizeGB": 5.18,
-              "qualityPercent": 90,
-              "hfModelId": "mlx-community/gemma-4-e4b-it-4bit",
-              "recommended": true
-            }
-          ],
-          "descriptionSource": "mlx-community/gemma-4-e4b-it-4bit",
-          "summary": "The vision half of Gemma 4 E4B's shared download, for asking questions about an image (image + text in, text out). Installing either entry installs both."
         }
       ]
     },
