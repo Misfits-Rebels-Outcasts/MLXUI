@@ -97,27 +97,91 @@ install in the catalog are the same models your workflows use — no separate se
 <!-- Items marked *(hidden in-app)* are built but switched off behind an in-app flag right
      now — pruning candidates if you don't want to announce them before they're switched on. -->
 
+### Chat workspace — give a chat a folder, files and a side panel
+
+Chats can now work on real files. Each conversation gets its own granted folder, a **+** menu to
+attach files (drag-and-drop works too), and a right sidebar with **Context** (what the model
+was told) and **Session** (what it did). Attachments are read inline within a budget, and images
+go through OCR when the model can't see them. **Files in this chat** lists everything touched,
+with previews, a **diff** for every edit, and a marker on anything still waiting for approval.
+One click turns an available file into one that is in this chat.
+
+- **`edit_file` tools** — the agent can make exact-string edits to files in granted folders (CRLF
+  and symlink aware). The approval sheet shows precisely what will change before you accept.
+- **Export a chat** — Markdown (reasoning folded away, tool calls quoted) or full-fidelity JSON,
+  from the chat header or the conversation list. Works for every chat model.
+
+### Four new models
+
+- **Qwen3.8 27B** — a 27B hybrid model: a 3-bit build (~12.7 GB, suits 18–24 GB Macs)
+  and an official 4-bit build. Text-only; usable in Browse, chat and AI Workflows.
+- **MiMo V2.6 9B** — a 9B model (OptiQ 4/8-bit), text-only, in Browse, chat,
+  AI Workflows and the Local Server.
+- **Gemma 4 E4B** — chat-only for now. The vision build is withheld until the upstream
+  `mlx-swift-lm` Gemma 4 vision loader handles the KV-shared layers.
+- **Clef Flash** — a 9B **decision model** on the same seam as Laya and CLM, with a joint
+  schema head, a native Swift/MLX port of its backbone, and its own Run UI. It joins the
+  **Classify**, **Gate** and **Score** rows. Decision models now have their own **Deciders**
+  section in Browse (Laya 0.4B, CLM 8B, Clef Flash).
+
+### AI Workflows — kind rail, smarter row defaults and a basic gallery
+
+- **Kind rail** — an optional strip showing what kind of file flows between rows (text, image,
+  audio, …). It shows where a row's input comes from, outlines a mismatch, and previews each
+  row's result as it finishes.
+- **Rows that start a flow now help you.** The empty-flow picker is driven by what a row can
+  accept, new rows get sensible defaults, and warnings name exactly what is missing. Generate
+  Image / Video / Sound rows have a **Use my prompt** checkbox, and picking a non-adjacent input
+  row sets the wiring for you in a single undo step.
+- **Upscale is a real step** — with `scale=` honoured (1–4×) and SeedVR2 3B as its model.
+- **Basic gallery** — new beginner-friendly sample flows ship with sample inputs.
+- **Import Flow** is on, and models that share a repo now show their own names in row menus.
+
+### Sturdier runtime
+
+An MLX error inside a Run window or a chat turn no longer takes the app down — it stops the turn
+and says what happened. Served and in-flow models share one memory budget with real-size
+accounting, so a load can't be freed while something is still using it, and refusals name who
+holds the model.
+
 ### Local Server — let other apps on your Mac use your models
 
 Turn on **Serve** on any installed chat model's page and other apps on the same Mac can talk to
-it through an OpenAI-compatible endpoint (`/v1/chat/completions`, `/v1/models`, `/health`) at
-`http://127.0.0.1:1212/v1`. Point Xcode's locally hosted provider, OpenCode, a Python client, or
-plain `curl` at it. The **Connect your app** sheet gives a copy-paste setup for each, and
-**Settings → Local Server** has the on/off switch, the port, the list of served models, and a
-metadata-only log of recent requests.
+it at `http://127.0.0.1:1212`. Three wire formats share one pipeline, so the tools you already
+use work unchanged:
 
+| Endpoint | For |
+|---|---|
+| `/v1/chat/completions` · `/v1/models` · `/health` | OpenAI-compatible clients — Xcode's locally hosted provider, OpenCode, Continue, Python, plain `curl` |
+| `/v1/messages` (+ `/count_tokens`) | **Claude Code** (Anthropic Messages dialect) |
+| `/v1/responses` | **Codex** (OpenAI Responses dialect, including `previous_response_id`) |
+
+The **Connect your app** sheet gives a copy-paste setup block for every client, with plain facts
+about the model (usable context on this Mac, whether it can call tools). **Settings → Local
+Server** has the on/off switch, the port, the served models, and a metadata-only request log.
+
+- **Tool calling for coding agents.** Tool calls are returned to the client app — MLXUI never
+  runs them. Streaming, reasoning (`reasoning_content`, off unless the request asks) and
+  `cached_tokens` usage work across the three dialects.
+- **Prompt cache.** Requests that share a prefix (a system prompt, a growing agent
+  conversation) only prefill the new tail. Snapshots live in RAM only, never on disk, and always
+  yield memory to model weights.
+- **No request can freeze your Mac.** Before prefill, a memory-admission check estimates what a
+  request needs and either refuses it (`context_too_large_for_memory`), clamps the reply, or
+  evicts other idle models first. A prompt past the model's window is a clean `400`.
+- **Dedicated server mode.** Raise the memory budget, preload and pin every served model so
+  the first request doesn't wait for a load. A new **Local Server screen** and Home status card
+  show what is loaded, what is pinned and how requests are doing. Starting a flow or chat that
+  would push out a served model asks first.
 - **Loopback only, opt-in.** It listens on `127.0.0.1` / `[::1]` and rejects any request that
-  isn't addressed to localhost. It adds no outbound traffic.
+  isn't addressed to localhost, any `Origin`, and bodies over 8 MB. It adds no outbound traffic.
 - **Your local models only.** Installed MLX chat models, plus Apple Foundation Models where
   available. A remote-provider model (Claude, GPT, …) is never served, so your API keys are
   never exposed through localhost.
 - **Content is never logged.** The request log keeps time, status, model, token counts and
   duration — not prompts or replies.
 - **Keeps running with the window closed** while it is serving; un-serve everything and the
-  app quits as usual. A served model that doesn't fit in memory is flagged, and uninstalling a
-  served model removes it from the list and frees its weights.
-- **Chat only for now** — tool calling for coding agents (OpenCode, Claude Code, Codex) is
-  coming in a later update.
+  app quits as usual.
 
 ### Keychain — fewer prompts, clearer consent
 
@@ -265,7 +329,7 @@ your explicit approval before it runs.
 | `transcribe_audio` | Transcribe an audio URL with any installed Whisper model | — |
 | `ocr_image` | Extract text from an image URL using any installed OCR model | — |
 | `read_file` · `list_directory` · `search_files` | Browse and read inside folders you explicitly grant | — |
-| `write_file` | Write files inside granted folders | ✅ |
+| `write_file` · `edit_file` | Write or exact-string edit files inside granted folders (diff shown) | ✅ |
 | `write_clipboard` | Copy text to the clipboard | ✅ |
 | `run_shell` *(Direct build only)* | Run any shell command on your Mac | ✅ |
 
@@ -304,7 +368,7 @@ Prism ML's [Ternary-Bonsai-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2
   - Embeddings → text input + vector output
   - Image generation (Flux, SDXL-Turbo) → text prompt + on-device generated image
   - Music generation (MusicGen) → text description + on-device generated WAV
-  - Decision (Laya) → typed question + confidence-scored answer, no generated text
+  - Decision (Laya, CLM, Clef Flash) → typed question + confidence-scored answer, no generated text
 - **Pipeline runner** — chain models together (transcribe → summarize → speak) in a
   single workflow
 - **Command palette (⌘K)** — find and run any model instantly
@@ -330,7 +394,7 @@ Every model listed here is downloadable and has a working Run UI.
 | **Embeddings** (4) | all-MiniLM-L6, embeddinggemma, ModernBERT-embed, bge-m3 | 18M – 568M |
 | **Image Generation** (2) | FLUX.1-Lite-8B, **SDXL-Turbo** | 3.5B – 8B |
 | **Music Generation** (1) | **MusicGen-small** | 615M (float32, ~2.5 GB) |
-| **Decision** (1) | **Laya 0.4B** | 0.4B |
+| **Decision** (3) | **Laya 0.4B**, **CLM 8B**, **Clef Flash** | 0.4B – 9B |
 
 The full `browser.json` catalog tracks **~435 models** from mlx-community. New models
 and Run UIs are added with every release.
@@ -351,7 +415,7 @@ and Run UIs are added with every release.
 | Image | Diffusion (Flux) | ✅ | ✅ | ✅ | Flux (native MLX) |
 | Image | Diffusion (SDXL-Turbo) | ✅ | ✅ | ✅ | SDXL-Turbo (native MLX) |
 | Audio | Music generation (MusicGen) | ✅ | ✅ | ✅ | MusicGen (native MLX) |
-| Text | Decision / classification (Laya) | ✅ | ✅ | ✅ | Laya (native MLX ModernBERT + decision head) |
+| Text | Decision / classification (Laya, CLM, Clef Flash) | ✅ | ✅ | ✅ | Native MLX encoders + decision heads |
 
 ✅ = built &emsp; ⬜ = available for contribution
 
@@ -486,7 +550,7 @@ Every model in the catalog should eventually have a working Run button.
 - [x] Embeddings Run UI (including ModernBERT standalone)
 - [x] Pipeline runner (audio → transcribe → summarize → speak)
 - [x] Command palette (⌘K) and keyboard shortcuts
-- [x] Agentic chat — 9 local tools (web fetch, compute, MLX model calls, file access, shell)
+- [x] Agentic chat — 10 local tools (web fetch, compute, MLX model calls, file access, shell)
 - [x] Ternary-Bonsai-27B — 27B 2-bit hybrid attention model in ~8.4 GB RAM
 - [x] Dual build targets — App Store (sandboxed) + Direct Distribution (notarized standalone)
 - [x] Image generation Run UI — FLUX.1-Lite-8B: text prompt → on-device image via native MLX Flux module
@@ -506,8 +570,15 @@ Every model in the catalog should eventually have a working Run button.
       auto-resume after install, Flow inspector tab, Human Input/Ask Human polish, Row-text
       Template editor, and a concurrency-safety pass across FlowKit/Core/Modules
 
+- [x] Local Server: tool calling, Claude Code (`/v1/messages`) and Codex (`/v1/responses`)
+      dialects, prompt cache, memory admission and dedicated server mode
+- [x] Chat workspace: per-chat folders, attachments with OCR, Context/Session sidebar, file
+      previews and diffs, `edit_file`, and Markdown/JSON chat export
+- [x] Clef Flash decision model, Qwen3.8 27B, MiMo V2.6 9B and Gemma 4 E4B (chat) in the catalog
+- [x] AI Workflows: kind rail, row-source defaults, Upscale step and a basic sample gallery
+
 ### In progress
-- [ ] Local Server: tool calling for coding agents (OpenCode, Claude Code, Codex)
+- [ ] Local Server: MCP and served flows, then embeddings/audio endpoints and LAN access
 - [ ] Visual pipeline builder UI
 - [ ] Improved gated-model auth flow
 
