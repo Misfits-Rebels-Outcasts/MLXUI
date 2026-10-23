@@ -34,6 +34,18 @@ enum KokoroEngine {
         speed: Float = 1.0,
         modelDirectory: URL
     ) async throws -> AudioBuffer {
+        // WW2-3-6: load, generate and read on the one audio thread — see `MLXAudioThread` for why.
+        try await MLXAudioThread.run {
+            try await synthesizeOnAudioThread(text, voice: voice, speed: speed, modelDirectory: modelDirectory)
+        }
+    }
+
+    private nonisolated static func synthesizeOnAudioThread(
+        _ text: String,
+        voice: String,
+        speed: Float,
+        modelDirectory: URL
+    ) async throws -> AudioBuffer {
         do {
             let model = try await KokoroModel.fromModelDirectory(
                 modelDirectory, textProcessor: KokoroMultilingualProcessor())
@@ -45,7 +57,7 @@ enum KokoroEngine {
                 for chunk in subChunks(segment) {
                     let audio = try await model.generate(
                         text: chunk, voice: voice, refAudio: nil, refText: nil, language: nil)
-                    allSamples.append(contentsOf: audio.asArray(Float.self))
+                    allSamples.append(contentsOf: try MLXErrorGuard.read(audio, as: Float.self))   // WW2-3-6 (C): never read a failed array
                     sampleRate = model.sampleRate
                 }
             }

@@ -26,6 +26,18 @@ enum MLXAudioTTSEngine {
         referenceAudio: AudioBuffer? = nil,
         modelDirectory: URL
     ) async throws -> AudioBuffer {
+        // WW2-3-6: load, generate and read on the one audio thread — see `MLXAudioThread` for why.
+        try await MLXAudioThread.run {
+            try await synthesizeOnAudioThread(text, voice: voice, referenceAudio: referenceAudio, modelDirectory: modelDirectory)
+        }
+    }
+
+    private nonisolated static func synthesizeOnAudioThread(
+        _ text: String,
+        voice: String?,
+        referenceAudio: AudioBuffer?,
+        modelDirectory: URL
+    ) async throws -> AudioBuffer {
         do {
             let model = try await TTS.loadModel(modelRepo: modelDirectory.path)
             let refArray: MLXArray? = referenceAudio.map { buffer in
@@ -34,7 +46,7 @@ enum MLXAudioTTSEngine {
             }
             let audio = try await model.generate(
                 text: text, voice: voice, refAudio: refArray, refText: nil, language: nil)
-            return AudioBuffer(samples: audio.asArray(Float.self), sampleRate: model.sampleRate)
+            return AudioBuffer(samples: try MLXErrorGuard.read(audio, as: Float.self), sampleRate: model.sampleRate)   // WW2-3-6 (C)
         } catch {
             throw StageError.engineFailure(stage: "MLXAudio TTS", underlying: error)
         }

@@ -76,6 +76,24 @@ nonisolated enum MLXErrorGuard {
         error is MLXError
     }
 
+    // MARK: - The read-site guard (WW2-3-6, journal 2026-557 §3C)
+
+    /// Read a library-produced array — evaluate it under `withError` first, then require data, then read.
+    ///
+    /// **Why a helper.** `withError` (and the process-wide fallback) *record* an MLX error and let the code carry on, so
+    /// a failed `eval` leaves an array with no buffer and the next `asArray` dereferences it: a segfault, not an error
+    /// (Part B, B10: `There is no Stream(gpu, N) in current thread`, then SIGSEGV in `Buffer::raw_ptr()`). This reads
+    /// only after the evaluation succeeded: an MLX error is thrown as ``MLXError`` with MLX's own message, and an array
+    /// with no elements is thrown as an error too — upstream's zero-size read is itself a crash (mlx-swift #486). Use
+    /// it at every site that reads an array whose graph this app did not build (the audio engines' `generate`).
+    static func read<T: HasDType>(_ array: MLXArray, as type: T.Type = T.self) throws -> [T] {
+        try withError { eval(array) }
+        guard array.size > 0 else {
+            throw MLXError.caught("the model returned an empty result")
+        }
+        return array.asArray(type)
+    }
+
     // MARK: - The Run-UI entry point (MLX-ERR-2)
 
     /// Wrap a **Run UI's** engine call.

@@ -109,88 +109,82 @@ struct MLXThreadStreamTests {
     }
 }
 
-// MARK: - Real-model, app-context probes (gated on an installed Kokoro: TEST_RUNNER_MLXUI_TEST_MODELS_DIR)
+// MARK: - Real-model, app-context probes (gated on installed weights: TEST_RUNNER_MLXUI_TEST_MODELS_DIR)
 
-/// One dedicated OS thread that runs every job enqueued on it — a `TaskExecutor`. The candidate fix for library
-/// calls that return lazy thread-bound results (journal 2026-557 §3): run load, `generate`, `eval` and the read
-/// on this one thread, started from anywhere.
-final class PinnedThreadExecutor: TaskExecutor, @unchecked Sendable {
-    private let condition = NSCondition()
-    private var jobs: [UnownedJob] = []
-    private var thread: Thread?
-
-    init(name: String = "pinned-mlx") {
-        let thread = Thread { [unowned self] in
-            while true {
-                condition.lock()
-                while jobs.isEmpty { condition.wait() }
-                let job = jobs.removeFirst()
-                condition.unlock()
-                job.runSynchronously(on: asUnownedTaskExecutor())
-            }
-        }
-        thread.name = name
-        thread.start()
-        self.thread = thread
-    }
-
-    func enqueue(_ job: consuming ExecutorJob) {
-        let unowned = UnownedJob(job)
-        condition.lock()
-        jobs.append(unowned)
-        condition.signal()
-        condition.unlock()
-    }
-}
-
+/// The shape the Run UI gives the engines: awaited from a main-actor `Task`, inside `MLXErrorGuard.guardedRun`
+/// (`TTSRunModel.synthesize`). Both audio engines now run their body on `MLXAudioThread`; these fail if that stops
+/// working (or if the engine reads a failed array again — that would segfault the host, which is the old crash).
 @MainActor
-struct KokoroThreadingProbeTests {
+struct AudioEngineMainActorProbeTests {
     nonisolated private static let modelsDir = ProcessInfo.processInfo.environment["MLXUI_TEST_MODELS_DIR"]
-    nonisolated private static let kokoroSlug = "mlx-community--Kokoro-82M-bf16"
-    nonisolated static var kokoroDir: URL? {
+
+    nonisolated static func installed(_ slug: String) -> URL? {
         guard let root = modelsDir else { return nil }
-        let url = URL(fileURLWithPath: root).appendingPathComponent(kokoroSlug)
+        let url = URL(fileURLWithPath: root).appendingPathComponent(slug)
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
-    /// The Part B (B10) crash, as the app hits it: the Run UI awaits the engine from the main actor; `generate` builds
-    /// its audio on another thread; the main thread's `eval` raises. Stops at the error — never reads the array.
-    @Test(.enabled(if: KokoroThreadingProbeTests.kokoroDir != nil))
+    /// The raw behaviour the engines work around: `generate` awaited from the main actor returns a lazy array that the
+    /// main thread cannot evaluate on mlx-swift 0.32. Stops at the error — never reads the array.
+    @Test(.enabled(if: AudioEngineMainActorProbeTests.installed("mlx-community--Kokoro-82M-bf16") != nil))
     func kokoroGenerateFromTheMainActorRaisesTheStreamError() async throws {
-        let dir = try #require(Self.kokoroDir)
+        let dir = try #require(Self.installed("mlx-community--Kokoro-82M-bf16"))
         let model = try await KokoroModel.fromModelDirectory(dir, textProcessor: KokoroMultilingualProcessor())
         let audio = try await model.generate(text: "Local models run entirely on this Mac.", voice: "af_heart",
                                              refAudio: nil, refText: nil, language: nil)
-        #expect(audio.shape == [76200] || audio.shape.count == 1, "generate returns a lazy 1-D float vector")
+        #expect(audio.ndim == 1, "generate returns a lazy 1-D float vector")
         do {
             try withError { eval(audio) }
-            Issue.record("expected the stream error on mlx-swift 0.32 (if it no longer raises, the audit in 2026-557 changes)")
+            Issue.record("expected the stream error on mlx-swift 0.32 (if it no longer raises, the audit in 2026-557 changes: `MLXAudioThread` can go)")
         } catch let error as MLXError {
             guard case .caught(let message) = error else { return }
             #expect(message.contains("no Stream"), "\(message)")
         }
     }
 
-    /// The candidate fix, verified: the real `KokoroEngine.synthesize`, awaited from the main actor, runs through a
-    /// `@concurrent` wrapper under a pinned-thread executor and returns real audio (twice, same thread).
-    @Test(.enabled(if: KokoroThreadingProbeTests.kokoroDir != nil))
-    func theRealEngineOnAPinnedThreadReturnsAudioFromTheMainActor() async throws {
-        let dir = try #require(Self.kokoroDir)
-        let executor = PinnedThreadExecutor()
-        let first = try await withTaskExecutorPreference(executor) {
-            try await Self.synthesizeOffMain(text: "Local models run entirely on this Mac.", dir: dir)
+    /// `KokoroEngine.synthesize` from the main actor: real audio, no MLX error recorded anywhere, and the same call twice.
+    @Test(.enabled(if: AudioEngineMainActorProbeTests.installed("mlx-community--Kokoro-82M-bf16") != nil))
+    func kokoroSynthesizeFromTheMainActorReturnsAudio() async throws {
+        let dir = try #require(Self.installed("mlx-community--Kokoro-82M-bf16"))
+        MLXErrorGuard.installFallback()
+        MLXErrorGuard.resetFallbackMessage()
+        for text in ["Local models run entirely on this Mac.", "Hello"] {
+            let audio = try await MLXErrorGuard.guardedRun {
+                try await KokoroEngine.synthesize(text, voice: KokoroEngine.defaultVoice, speed: 1.0, modelDirectory: dir)
+            }
+            #expect(audio.samples.count > 1000, "\(text)")
+            #expect(audio.sampleRate == 24_000)
+            #expect(audio.samples.contains { $0 != 0 }, "not silence")
         }
-        #expect(first.samples > 0)
-        #expect(first.thread == "pinned-mlx")
-        let second = try await withTaskExecutorPreference(executor) {
-            try await Self.synthesizeOffMain(text: "Hello", dir: dir)
-        }
-        #expect(second.samples > 0)
-        #expect(second.thread == "pinned-mlx")
+        #expect(MLXErrorGuard.lastFallbackMessage() == nil)
     }
 
-    @concurrent nonisolated static func synthesizeOffMain(text: String, dir: URL) async throws -> (samples: Int, thread: String) {
-        let audio = try await KokoroEngine.synthesize(text, voice: KokoroEngine.defaultVoice, speed: 1.0, modelDirectory: dir)
-        return (audio.samples.count, Thread.current.name ?? "?")
+    /// `MLXAudioTTSEngine.synthesize` from the main actor, for each installed non-Kokoro family.
+    @Test(arguments: ["mlx-community--Qwen3-TTS-12Hz-0.6B-Base-bf16", "mlx-community--chatterbox-fp16"])
+    func mlxAudioTTSSynthesizeFromTheMainActorReturnsAudio(slug: String) async throws {
+        guard let dir = Self.installed(slug) else {
+            print("AUDIOPROBE \(slug): not installed — skipped")
+            return
+        }
+        MLXErrorGuard.installFallback()
+        MLXErrorGuard.resetFallbackMessage()
+        // chatterbox clones a voice and refuses to run without a reference clip; a Kokoro-made sentence stands in.
+        var reference: AudioBuffer?
+        if slug.contains("chatterbox") {
+            guard let kokoro = Self.installed("mlx-community--Kokoro-82M-bf16") else {
+                print("AUDIOPROBE \(slug): needs Kokoro for a reference clip — skipped")
+                return
+            }
+            reference = try await KokoroEngine.synthesize("This is a short reference voice sample.", voice: KokoroEngine.defaultVoice,
+                                                          speed: 1.0, modelDirectory: kokoro)
+        }
+        let audio = try await MLXErrorGuard.guardedRun { [reference] in
+            try await MLXAudioTTSEngine.synthesize("Local models run entirely on this Mac.", voice: nil,
+                                                   referenceAudio: reference, modelDirectory: dir)
+        }
+        print("AUDIOPROBE \(slug): \(audio.samples.count) samples @ \(audio.sampleRate)")
+        #expect(audio.samples.count > 1000)
+        #expect(audio.samples.contains { $0 != 0 }, "not silence")
+        #expect(MLXErrorGuard.lastFallbackMessage() == nil)
     }
 }

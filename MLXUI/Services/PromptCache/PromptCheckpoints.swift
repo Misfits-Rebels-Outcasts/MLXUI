@@ -219,7 +219,8 @@ nonisolated enum PromptCheckpointing {
                             step: parameters.prefill.resolvedStepSize())
             },
             snapshot: { cache in
-                let snapshot = KVSnapshot(caches: cache.map { $0.copy() })     // evaluated by prefill (T3)
+                let snapshot = KVSnapshot(caches: cache.map { $0.copy() })     // the source is evaluated by prefill (T3)
+                eval(snapshot.caches)       // WW2-3-6 (A): the copy is lazy slices; evaluate at the producer, before the actor holds it
                 return (snapshot, snapshot.bytes, canTrimPromptCache(snapshot.caches))
             },
             // The same sum as `KVSnapshot.bytes`, taken from the live cache without copying it.
