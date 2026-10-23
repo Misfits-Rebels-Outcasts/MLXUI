@@ -207,6 +207,15 @@ final class AppState {
     /// the nonisolated path can read").
     var claimableModelIDs: Set<String> = []
     var installedModels: InstalledModels?
+
+    /// WW3-1-FIX-1: what flows read as "installed" — `installedModelIDs` (the registry, which uninstall counts
+    /// references against and which stays untouched) plus every card whose download's marker exists, so a card that
+    /// shares a download with an installed one is ready (see `InstallManager.readyModelIDs`). Every flow-facing
+    /// reader uses this; `installedModelIDs` itself is for the registry and the "installed" lists.
+    var flowReadyModelIDs: Set<String> {
+        installManager.readyModelIDs(registered: installedModelIDs,
+                                     catalog: browserData?.domains.flatMap { $0.allModels } ?? [])
+    }
     private let installedURL: URL
 
     // Search
@@ -348,7 +357,7 @@ final class AppState {
         for flow in galleryEntries {
             if let doc = try? GalleryLoader.loadDocument(flowID: flow.flowID),
                FlowRunnability.refusalReason(for: doc, catalog: catalog,
-                                             installed: installedModelIDs,
+                                             installed: flowReadyModelIDs,
                                              totalRAMGB: systemInfo.totalRAMGB,
                                              claimableModelIDs: claimableModelIDs) != nil {
                 blocked.insert(flow.flowID)
@@ -374,7 +383,7 @@ final class AppState {
                 blocked.insert(entry.flowID)
                 continue
             }
-            let preflight = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: installedModelIDs,
+            let preflight = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: flowReadyModelIDs,
                                               totalRAMGB: systemInfo.totalRAMGB, claimableModelIDs: claimableModelIDs)
             if FlowPreflight.blockedReason(preflight, totalRAMGB: systemInfo.totalRAMGB) != nil {
                 blocked.insert(entry.flowID)

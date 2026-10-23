@@ -210,6 +210,26 @@ final class InstallManager {
         return installed
     }
 
+    /// WW3-1-FIX-1: the ids a **flow** may treat as installed — the one rule, so flows agree with Browse
+    /// (`isInstalled`). A cataloged card is ready when it is registered *or* its repo's `.installed` marker exists,
+    /// whichever card installed it. Two catalog cards can share one download (`Gemma 4 E4B` / `…-vision`,
+    /// `Qwen3.5-9B-MLX-4bit` / `…-vision`, MoC-5) but `installed.json` registers only the card that was installed, so
+    /// asking the registry alone left the sibling `.needsDownload` ("Install Required Models") beside a Browse card
+    /// reading "Installed".
+    ///
+    /// **Read-only, and not what `uninstall` consults.** `AppState.installedModelIDs` (the registry) stays the
+    /// reference count (MoC-5-2): putting a marker-derived sibling in *that* set would make a shared download
+    /// undeletable. This returns a new set for the readers (preflight, executor) and never writes one.
+    func readyModelIDs(registered: Set<String>, catalog: [ModelEntry]) -> Set<String> {
+        var ready = registered
+        for card in catalog where !ready.contains(card.id) {
+            if FileManager.default.fileExists(atPath: store.installedMarker(forHFModelID: card.hfModelId).path) {
+                ready.insert(card.id)
+            }
+        }
+        return ready
+    }
+
     // MARK: - Download Logic
 
     /// `repo` is the slug `install` already computed — threaded through rather than
