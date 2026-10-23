@@ -86,7 +86,7 @@ nonisolated enum WanVideoEngine {
         let decoded = try await loadAndDecode(dir: dir, latent: latent, progress: { _, _ in })
         progress(0.98)
 
-        guard let image = cgImage(from: decoded, frameIndex: 0) else {
+        guard let image = try cgImage(from: decoded, frameIndex: 0) else {
             throw WanVideoEngineError.vaeDecodeFailed
         }
         progress(1.0)
@@ -147,7 +147,7 @@ nonisolated enum WanVideoEngine {
         let nDecoded = decoded.dim(1)
         var frames: [CGImage] = []
         for f in 0 ..< nDecoded {
-            if let img = cgImage(from: decoded, frameIndex: f) { frames.append(img) }
+            if let img = try cgImage(from: decoded, frameIndex: f) { frames.append(img) }
         }
         guard !frames.isEmpty else { throw WanVideoEngineError.vaeDecodeFailed }
         progress(1.0, "Done — \(frames.count) frames")
@@ -169,26 +169,26 @@ nonisolated enum WanVideoEngine {
         let t5Params = WanT5Encoder.sanitize(t5Raw)
         let t5       = WanT5Encoder()
         try t5.update(parameters: ModuleParameters.unflattened(t5Params), verify: .none)
-        eval(t5)
+        try withError { eval(t5) }
         progress(1.0, "Encoding text…")
 
         let tokenIDs    = tokenize(prompt, model: spModel, maxLen: maxTextLen)
         let tokenTensor = MLXArray(tokenIDs).reshaped([1, tokenIDs.count])
         let textCond    = t5(tokenTensor)
-        eval(textCond)
+        try MLXErrorGuard.evaluate(textCond)
 
         let negText = negPrompt.isEmpty ? "" : negPrompt
         let negIDs  = tokenize(negText, model: spModel, maxLen: maxTextLen)
         let negToks = MLXArray(negIDs).reshaped([1, negIDs.count])
         let negCond = t5(negToks)
-        eval(negCond)
+        try MLXErrorGuard.evaluate(negCond)
 
 #if DEBUG
-        let tcF = textCond.asType(.float32); eval(tcF)
-        let ncF = negCond.asType(.float32);  eval(ncF)
-        func stdOf(_ a: MLXArray) -> Float { sqrt(pow(a - a.mean(), 2).mean()).item(Float.self) }
-        print("[WAN-DBG] textCond: mean=\(String(format:"%.3f",tcF.mean().item(Float.self))) std=\(String(format:"%.3f",stdOf(tcF))) shape=\(textCond.shape)")
-        print("[WAN-DBG] negCond:  mean=\(String(format:"%.3f",ncF.mean().item(Float.self))) std=\(String(format:"%.3f",stdOf(ncF))) shape=\(negCond.shape)")
+        let tcF = textCond.asType(.float32); try MLXErrorGuard.evaluate(tcF)
+        let ncF = negCond.asType(.float32);  try MLXErrorGuard.evaluate(ncF)
+        func stdOf(_ a: MLXArray) -> Float { sqrt(pow(a - a.mean(), 2).mean()).safeItem() }
+        print("[WAN-DBG] textCond: mean=\(String(format:"%.3f",tcF.mean().safeItem())) std=\(String(format:"%.3f",stdOf(tcF))) shape=\(textCond.shape)")
+        print("[WAN-DBG] negCond:  mean=\(String(format:"%.3f",ncF.mean().safeItem())) std=\(String(format:"%.3f",stdOf(ncF))) shape=\(negCond.shape)")
 #endif
 
         // t5Raw, t5Params, t5 released here; textCond/negCond are materialized and safe.
@@ -214,20 +214,20 @@ nonisolated enum WanVideoEngine {
         let ditParams = WanDiT.sanitize(ditRaw)
         let dit       = WanDiT()
         try dit.update(parameters: ModuleParameters.unflattened(ditParams), verify: .none)
-        eval(dit)
+        try withError { eval(dit) }
         progress(0.0, "Denoising — step 0/\(numSteps)…")
 
         let rng    = seed.map { MLXRandom.key($0) }
             ?? MLXRandom.key(UInt64(Date().timeIntervalSince1970 * 1000))
         var latent = MLXRandom.normal([1, latT, latH, latW, 16], key: rng).asType(.bfloat16)
-        eval(latent)
+        try MLXErrorGuard.evaluate(latent)
 
         let sigmas = WanSampler.buildSigmas(numSteps: numSteps)
 
 #if DEBUG
-        let latInit = latent.asType(.float32); eval(latInit)
-        func stdOf(_ a: MLXArray) -> Float { sqrt(pow(a - a.mean(), 2).mean()).item(Float.self) }
-        print("[WAN-DBG] init latent: mean=\(String(format:"%.3f",latInit.mean().item(Float.self))) std=\(String(format:"%.3f",stdOf(latInit)))")
+        let latInit = latent.asType(.float32); try MLXErrorGuard.evaluate(latInit)
+        func stdOf(_ a: MLXArray) -> Float { sqrt(pow(a - a.mean(), 2).mean()).safeItem() }
+        print("[WAN-DBG] init latent: mean=\(String(format:"%.3f",latInit.mean().safeItem())) std=\(String(format:"%.3f",stdOf(latInit)))")
 #endif
 
         for i in 0 ..< numSteps {
@@ -238,7 +238,7 @@ nonisolated enum WanVideoEngine {
 
             let u = dit(latent, timestep: tSingle, textCond: negCond)
             let c = dit(latent, timestep: tSingle, textCond: textCond)
-            eval(u); eval(c)
+            try MLXErrorGuard.evaluate(u); try MLXErrorGuard.evaluate(c)
 
             // Dynamic CFG: diff_std grows throughout denoising and can peak anywhere in
             // σ=0.3–0.7 depending on seed. Ramp from full cfgScale at σ≥0.9 to a 1.5 floor
@@ -257,13 +257,13 @@ nonisolated enum WanVideoEngine {
 #endif
 
             latent = WanSampler.eulerStep(x: latent, noisePred: noisePred, sigmaFrom: sigmaFrom, sigmaTo: sigmaTo)
-            eval(latent)
+            try MLXErrorGuard.evaluate(latent)
 
 #if DEBUG
             // Per-step latent divergence tracker (remove with other [WAN-DBG] prints when working)
-            let lF2  = latent.asType(.float32); eval(lF2)
+            let lF2  = latent.asType(.float32); try MLXErrorGuard.evaluate(lF2)
             let lstd = stdOf(lF2)
-            let lmn  = lF2.mean().item(Float.self)
+            let lmn  = lF2.mean().safeItem()
             print("[STEP-DBG] step\(String(format:"%02d",i)): σ=\(String(format:"%.4f",sigmaFrom))→\(String(format:"%.4f",sigmaTo)) latent_mean=\(String(format:"%.4f",lmn)) std=\(String(format:"%.4f",lstd))")
 #endif
 
@@ -272,8 +272,8 @@ nonisolated enum WanVideoEngine {
         }
 
 #if DEBUG
-        let latF = latent.asType(.float32); eval(latF)
-        print("[WAN-DBG] final latent: mean=\(String(format:"%.3f",latF.mean().item(Float.self))) std=\(String(format:"%.3f",stdOf(latF))) min=\(String(format:"%.3f",latF.min().item(Float.self))) max=\(String(format:"%.3f",latF.max().item(Float.self)))")
+        let latF = latent.asType(.float32); try MLXErrorGuard.evaluate(latF)
+        print("[WAN-DBG] final latent: mean=\(String(format:"%.3f",latF.mean().safeItem())) std=\(String(format:"%.3f",stdOf(latF))) min=\(String(format:"%.3f",latF.min().safeItem())) max=\(String(format:"%.3f",latF.max().safeItem()))")
 #endif
 
         // ditRaw, ditParams, dit released here; latent is materialized and safe.
@@ -293,7 +293,7 @@ nonisolated enum WanVideoEngine {
         printDroppedVAEKeys(vaeRaw)
         let vae = WanVAEDecoder()
         try vae.update(parameters: ModuleParameters.unflattened(vaeParams), verify: .none)
-        eval(vae)
+        try withError { eval(vae) }
         progress(1.0, "Decoding frames…")
 
         var latentVAE = latent.asType(.float32) * MLXArray(vatStdF) + MLXArray(vatMeanF)
@@ -304,21 +304,21 @@ nonisolated enum WanVideoEngine {
         if let postQuant = try loadPostQuantConv(vaeRaw) {
             latentVAE = postQuant(latentVAE)
         }
-        eval(latentVAE)
+        try MLXErrorGuard.evaluate(latentVAE)
 
 #if DEBUG
-        let vInMean = latentVAE.mean().item(Float.self)
-        let vInStd  = sqrt(pow(latentVAE - latentVAE.mean(), 2).mean()).item(Float.self)
+        let vInMean = latentVAE.mean().safeItem()
+        let vInStd  = sqrt(pow(latentVAE - latentVAE.mean(), 2).mean()).safeItem()
         print("[WAN-DBG] latentVAE: mean=\(String(format:"%.3f",vInMean)) std=\(String(format:"%.3f",vInStd))")
 #endif
 
         let decoded = vae(latentVAE)
-        eval(decoded)
+        try MLXErrorGuard.evaluate(decoded)
 
 #if DEBUG
-        let decMean = decoded.mean().item(Float.self)
-        let decStd  = sqrt(pow(decoded - decoded.mean(), 2).mean()).item(Float.self)
-        print("[WAN-DBG] decoded: mean=\(String(format:"%.3f",decMean)) std=\(String(format:"%.3f",decStd)) min=\(String(format:"%.3f",decoded.min().item(Float.self))) max=\(String(format:"%.3f",decoded.max().item(Float.self)))")
+        let decMean = decoded.mean().safeItem()
+        let decStd  = sqrt(pow(decoded - decoded.mean(), 2).mean()).safeItem()
+        print("[WAN-DBG] decoded: mean=\(String(format:"%.3f",decMean)) std=\(String(format:"%.3f",decStd)) min=\(String(format:"%.3f",decoded.min().safeItem())) max=\(String(format:"%.3f",decoded.max().safeItem()))")
 #endif
 
         // vaeRaw, vaeParams, vae, postQuant released here; decoded is materialized and safe.
@@ -507,12 +507,12 @@ nonisolated enum WanVideoEngine {
         return Array(ids.prefix(maxLen)).map(Int32.init)
     }
 
-    private static func cgImage(from decoded: MLXArray, frameIndex: Int) -> CGImage? {
+    private static func cgImage(from decoded: MLXArray, frameIndex: Int) throws -> CGImage? {
         // decoded: [1, T, H, W, 3] in [-1, 1]  (float32)
         let frame  = decoded[0, frameIndex, 0..., 0..., 0...]   // [H, W, 3]
         let pixels = ((frame + 1.0) * 127.5).asType(.uint8)
         let H = pixels.dim(0), W = pixels.dim(1)
-        let byteArray: [UInt8] = pixels.asArray(UInt8.self)
+        let byteArray: [UInt8] = try MLXErrorGuard.read(pixels, as: UInt8.self)      // WW2-3-8: never a bare read of a failed array
         let data = Data(byteArray)
         guard let provider = CGDataProvider(data: data as CFData) else { return nil }
         return CGImage(

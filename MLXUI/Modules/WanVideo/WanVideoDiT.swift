@@ -188,13 +188,13 @@ nonisolated final class WanDiT: Module {
             WanDiT.dbgDone = true
             func std(_ a: MLXArray) -> Float {
                 let f = a.asType(.float32); eval(f)
-                return sqrt(pow(f - f.mean(), 2).mean()).item(Float.self)
+                return sqrt(pow(f - f.mean(), 2).mean()).safeItem()
             }
-            func mn(_ a: MLXArray) -> Float { a.asType(.float32).mean().item(Float.self) }
+            func mn(_ a: MLXArray) -> Float { a.asType(.float32).mean().safeItem() }
 
             // block0 modulation = shared timeProj(silu(temb)) → [B, 6, dim]
             let b0temb = mods.asType(.float32); eval(b0temb)
-            print("[DIT-DBG] block0 temb (timeProj mods): mean=\(String(format:"%.4f",mn(b0temb))) std=\(String(format:"%.4f",std(b0temb))) min=\(String(format:"%.4f",b0temb.min().item(Float.self))) max=\(String(format:"%.4f",b0temb.max().item(Float.self)))")
+            print("[DIT-DBG] block0 temb (timeProj mods): mean=\(String(format:"%.4f",mn(b0temb))) std=\(String(format:"%.4f",std(b0temb))) min=\(String(format:"%.4f",b0temb.min().safeItem())) max=\(String(format:"%.4f",b0temb.max().safeItem()))")
 
             let st0rows = blocks[0].shiftTable.asType(.float32).reshaped([-1, c.dim])  // [6, dim]
             let gateBias = st0rows[2]
@@ -220,11 +220,11 @@ nonisolated final class WanDiT: Module {
         if dbgThisCall {
             func fmtStd(_ a: MLXArray) -> String {
                 let f = a.asType(.float32); eval(f)
-                let s = sqrt(pow(f - f.mean(), 2).mean()).item(Float.self)
+                let s = sqrt(pow(f - f.mean(), 2).mean()).safeItem()
                 return String(format:"%.4f", s)
             }
             func fmtMn(_ a: MLXArray) -> String {
-                String(format:"%.4f", a.asType(.float32).mean().item(Float.self))
+                String(format:"%.4f", a.asType(.float32).mean().safeItem())
             }
             print("[DIT-DBG] h after all blocks: std=\(fmtStd(h))")
 

@@ -118,12 +118,12 @@ nonisolated final class CLMHeadPair: @unchecked Sendable {
             }
             try head.update(parameters: ModuleParameters.unflattened(stripped), verify: .all)
         }
-        eval(state, action)
+        try withError { eval(state, action) }
 
         guard let logitScaleArray = weights["logit_scale"] else {
             throw CLMHeadsError.invalidConfig("heads weights are missing logit_scale")
         }
-        let logitScale = logitScaleArray.item(Float.self)
+        let logitScale = try MLXErrorGuard.item(logitScaleArray, as: Float.self)      // WW2-3-8
         self.state = state
         self.action = action
         self.logitScale = logitScale

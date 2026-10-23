@@ -69,7 +69,7 @@ extension SegmentAnythingStage {
                 points: [[0.5, 0.5]],
                 labels: [1],
                 modelID: modelID)
-            guard let mask = SegmentAnythingEngine.renderBinaryMask(
+            guard let mask = try SegmentAnythingEngine.renderBinaryMask(
                 masks: masks, iouScores: iouScores,
                 width: cgImage.width, height: cgImage.height) else {
                 throw SegmentAnythingError.maskRenderFailed

@@ -89,7 +89,7 @@ nonisolated enum SegmentAnythingEngine {
         if let pe = positionEmbeddings { model.backbone.embeddings.positionEmbeddings = pe }
         if let gm = gaussianMatrix { model.promptEncoder.gaussianMatrix = gm }
         if let nm = noMemEmbed { model.noMemEmbed = nm }
-        eval(model)
+        try withError { eval(model) }
         return model
     }
 
@@ -204,7 +204,7 @@ nonisolated enum SegmentAnythingEngine {
         let featS1 = model.maskDecoder.convS1(levels[1])  // [1, 144, 144, 64]
         let imageEmbed = levels[2] + model.noMemEmbed.reshaped([1, 1, 1, 256])  // [1, 72, 72, 256]
         let imagePe = model.promptEncoder.densePositionalEncoding()
-        eval(featS0, featS1, imageEmbed, imagePe)
+        try MLXErrorGuard.evaluate(featS0, featS1, imageEmbed, imagePe)
         return SAM3ImageFeatures(imageEmbedding: imageEmbed, highResFeatures: [featS0, featS1], imagePe: imagePe)
     }
 
@@ -232,19 +232,19 @@ nonisolated enum SegmentAnythingEngine {
         let multiMasks = stacked((1 ..< 4).map { masks[0..., $0, 0..., 0...] }, axis: 1)  // [1,3,288,288]
         let multiIou = stacked((1 ..< 4).map { iou[0..., $0] }, axis: 1)                  // [1,3]
         let masksOut = multiMasks.transposed(0, 2, 3, 1)  // [1, 288, 288, 3]
-        eval(masksOut, multiIou)
+        try MLXErrorGuard.evaluate(masksOut, multiIou)
         return (masksOut, multiIou)
     }
 
     // MARK: Mask rendering
 
     /// The highest-IoU mask of a `decodeMasks` result, as raw logits (float, un-thresholded).
-    private static func topMaskLogits(masks: MLXArray, iouScores: MLXArray) -> (logits: [Float], w: Int, h: Int) {
-        let scores = iouScores[0].asArray(Float.self)
+    private static func topMaskLogits(masks: MLXArray, iouScores: MLXArray) throws -> (logits: [Float], w: Int, h: Int) {
+        let scores = try MLXErrorGuard.read(iouScores[0], as: Float.self)      // WW2-3-8
         let bestIdx = scores.enumerated().max(by: { $0.element < $1.element })?.offset ?? 0
         let (h, w) = (masks.dim(1), masks.dim(2))
         let logits = masks[0, 0..., 0..., bestIdx]
-        return (logits.asArray(Float.self), w, h)
+        return (try MLXErrorGuard.read(logits, as: Float.self), w, h)
     }
 
     /// Bilinear resize (align_corners=false, matching `F.interpolate(mode="bilinear")`).
@@ -276,8 +276,8 @@ nonisolated enum SegmentAnythingEngine {
 
     static func renderBinaryMask(
         masks: MLXArray, iouScores: MLXArray, width: Int, height: Int
-    ) -> CGImage? {
-        let (logits, w, h) = topMaskLogits(masks: masks, iouScores: iouScores)
+    ) throws -> CGImage? {
+        let (logits, w, h) = try topMaskLogits(masks: masks, iouScores: iouScores)
         let resized = bilinearResize(logits, srcW: w, srcH: h, dstW: width, dstH: height)
         let binary = resized.map { $0 > 0 ? Float(1.0) : Float(0.0) }
         return renderBinaryMask(binary: binary, maskWidth: width, maskHeight: height, width: width, height: height)
@@ -306,9 +306,9 @@ nonisolated enum SegmentAnythingEngine {
 
     static func renderTopMask(
         masks: MLXArray, iouScores: MLXArray, sourceImage: CGImage
-    ) -> CGImage {
+    ) throws -> CGImage {
         let W = sourceImage.width, H = sourceImage.height
-        let (logits, w, h) = topMaskLogits(masks: masks, iouScores: iouScores)
+        let (logits, w, h) = try topMaskLogits(masks: masks, iouScores: iouScores)
         let resized = bilinearResize(logits, srcW: w, srcH: h, dstW: W, dstH: H)
 
         guard let ctx = CGContext(

@@ -95,6 +95,56 @@ struct MLXThreadStreamTests {
         #expect(samples.count == 64 * 64)
     }
 
+    // MARK: the read helpers (WW2-3-8) — a failed array is never read
+
+    /// `read` throws the MLX error instead of dereferencing the buffer-less array (the Kokoro / SeedVR2 segfault).
+    @Test func readThrowsInsteadOfReadingAFailedArray() async {
+        let box = await buildOnThreadBoundStream()
+        do {
+            _ = try MLXErrorGuard.read(box.array, as: Float.self)
+            Issue.record("`read` should have thrown for an array this thread cannot evaluate")
+        } catch let error as MLXError {
+            guard case .caught(let message) = error else { return }
+            #expect(message.contains("no Stream"), "\(message)")
+        } catch { Issue.record("expected an MLXError, got \(error)") }
+    }
+
+    @Test func itemReadRowsAndEvaluateThrowOnAFailedArrayToo() async {
+        let one = await buildOnThreadBoundStream()
+        #expect(throws: MLXError.self) { _ = try MLXErrorGuard.item(one.array.sum(), as: Float.self) }
+        let two = await buildOnThreadBoundStream()
+        #expect(throws: MLXError.self) { _ = try MLXErrorGuard.readRows(two.array, as: Float.self) }
+        let three = await buildOnThreadBoundStream()
+        #expect(throws: MLXError.self) { try MLXErrorGuard.evaluate(three.array) }
+        let four = await buildOnThreadBoundStream()
+        #expect(throws: MLXError.self) { try MLXErrorGuard.evaluate([four.array]) }
+    }
+
+    @Test func theHelpersReadAGoodArrayExactly() throws {
+        let a = MLXArray([1, 2, 3, 4, 5, 6] as [Float]).reshaped([2, 3])
+        #expect(try MLXErrorGuard.read(a, as: Float.self) == [1, 2, 3, 4, 5, 6])
+        #expect(try MLXErrorGuard.readRows(a, as: Float.self) == [[1, 2, 3], [4, 5, 6]])
+        #expect(try MLXErrorGuard.item(a.sum(), as: Float.self) == 21)
+        try MLXErrorGuard.evaluate(a, a + 1)
+        #expect(MLXArray(3).safeItem() == 3)
+    }
+
+    @Test func anEmptyOrMisShapedResultIsAnErrorNotARead() {
+        #expect(throws: MLXError.self) { _ = try MLXErrorGuard.read(MLXArray.zeros([0]), as: Float.self) }
+        #expect(throws: MLXError.self) { _ = try MLXErrorGuard.readRows(MLXArray.zeros([4]), as: Float.self) }
+        #expect(throws: MLXError.self) { _ = try MLXErrorGuard.item(MLXArray.zeros([2]), as: Float.self) }
+    }
+
+    /// The test seam the per-engine probes use: one injected failure, thrown once, then back to normal.
+    @Test func theInjectionSeamThrowsOnceAndThenReadsNormally() throws {
+        let a = MLXArray([1, 2] as [Float])
+        MLXErrorGuard.injectFailureForTesting("boom")
+        #expect(throws: MLXError.self) { _ = try MLXErrorGuard.read(a, as: Float.self) }
+        #expect(MLXErrorGuard.injectedFailureWasConsumedForTesting())
+        #expect(try MLXErrorGuard.read(a, as: Float.self) == [1, 2])
+        MLXErrorGuard.clearInjectedFailureForTesting()
+    }
+
     /// The fix pattern's core: an array evaluated at its producer, before it crosses, can then be read anywhere —
     /// including one built on a thread-bound stream, which raised above when left lazy.
     @Test func anArrayEvaluatedAtTheProducerIsSafeToReadOnTheMainActor() async {

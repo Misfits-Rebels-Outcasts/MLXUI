@@ -80,7 +80,7 @@ actor ClefEngine {
             // The reference's `predict` softmaxes in float32 (`:489`, `:509`); the head itself is
             // bfloat16, so the cast is the same one `logits()` makes.
             let logits = head(hidden: hidden, record: record, lexicalLookup: { rows($0) })
-            return logits.map { softmax($0.asType(.float32)).asArray(Float.self).map(Double.init) }
+            return try logits.map { try MLXErrorGuard.read(softmax($0.asType(.float32)), as: Float.self).map(Double.init) }      // WW2-3-8
         }
 
         var results: [(id: String, answer: LayaAnswer)] = []
