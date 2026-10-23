@@ -328,12 +328,12 @@ final class LayaEngine {
         let (logits, _) = model(
             inputIds: batch.inputIds, attentionMask: batch.attentionMask, markerPos: batch.markerPos,
             markerMask: batch.markerMask, qtype: batch.qtype)
-        eval(logits)
+        try MLXErrorGuard.evaluate(logits)
 
         var answers: [LayaAnswer] = []
         for (row, question) in questions.enumerated() {
             let k = items[row].markers.count
-            let rowLogits = logits[row].asArray(Float.self)
+            let rowLogits = try MLXErrorGuard.read(logits[row], as: Float.self)      // WW2-3-8
             let bucket = LayaCalibration.temperatureBucket(type: question.type, optionCount: k)
             let scale = temperatureByOptions[bucket] ?? temperature[Int(question.type.qtypeIndex)]
             let z = rowLogits.prefix(k).map { Double($0) / Double(scale) }

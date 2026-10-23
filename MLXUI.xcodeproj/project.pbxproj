@@ -608,7 +608,7 @@
 			repositoryURL = "https://github.com/ml-explore/mlx-swift";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 0.31.4;
+				minimumVersion = 0.32.3;
 			};
 		};
 		20320344301B7DB30003B32E /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
@@ -616,7 +616,7 @@
 			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 3.31.4;
+				minimumVersion = 3.32.3;
 			};
 		};
 		20320346301B7DB30003B32E /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
@@ -640,7 +640,7 @@
 			repositoryURL = "https://github.com/Blaizzy/mlx-audio-swift";
 			requirement = {
 				kind = revision;
-				revision = 580e952adda0cd6bdc5c04f402822adbb61525c8;
+				revision = 5c4c12b699234f55d1816dfdb36f7016086a49bb;
 			};
 		};
 		B00000010001FEB616500 /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
@@ -648,7 +648,7 @@
 			repositoryURL = "https://github.com/ml-explore/mlx-swift";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 0.31.4;
+				minimumVersion = 0.32.3;
 			};
 		};
 		B00000020001FEB616500 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
@@ -656,7 +656,7 @@
 			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 3.31.4;
+				minimumVersion = 3.32.3;
 			};
 		};
 		E9F5B8A1FB68ED44DDCDC445 /* XCRemoteSwiftPackageReference "FlyingFox" */ = {

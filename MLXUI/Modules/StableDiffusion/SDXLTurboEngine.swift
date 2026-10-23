@@ -72,7 +72,7 @@ enum SDXLTurboEngine {
     ) async throws {
         let raw = try await loadShardSet(dir, subdir: subdir, totalBytes: totalBytes, progress: progress)
         try model.update(parameters: ModuleParameters.unflattened(raw), verify: .none)
-        eval(model)
+        try withError { eval(model) }
     }
 
     // MARK: - Generate
@@ -119,7 +119,7 @@ enum SDXLTurboEngine {
         let openSeq = openClip(openIds)        // [1, 77, 1280]
         let encoderStates = concatenated([clipSeq, openSeq], axis: 2)   // [1, 77, 2048]
         let pooled = openClip.pooled(openIds)  // [1, 1280] — text_time added conditioning
-        eval(clipSeq, openSeq, encoderStates, pooled)
+        try MLXErrorGuard.evaluate(clipSeq, openSeq, encoderStates, pooled)
         progress(0.55)
 
         // 3. Initial latent (NHWC, fp16 to match the weights).
@@ -140,9 +140,9 @@ enum SDXLTurboEngine {
                 encoderHiddenStates: encoderStates,
                 textEmbeds: pooled,
                 timeIDs: timeIDs)
-            eval(noise)
+            try MLXErrorGuard.evaluate(noise)
             latent = scheduler.step(noisePred: noise, sample: latent, t: t, tPrev: tPrev)
-            eval(latent)
+            try MLXErrorGuard.evaluate(latent)
             progress(0.55 + 0.40 * Double(i + 1) / Double(numSteps))
         }
 
@@ -165,7 +165,7 @@ enum SDXLTurboEngine {
         let h = nchw.dim(2), w = nchw.dim(3)
         let nhwc = nchw.transposed(0, 2, 3, 1).asType(.float32)
         let clamped = Self.denormalize(nhwc)
-        let bytes = (clamped * 255).asType(.uint8).asArray(UInt8.self)
+        let bytes = try MLXErrorGuard.read((clamped * 255).asType(.uint8), as: UInt8.self)      // WW2-3-8
 
         var rgba = [UInt8](repeating: 255, count: h * w * 4)
         for p in 0 ..< (h * w) {

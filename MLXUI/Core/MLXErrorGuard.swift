@@ -76,6 +76,96 @@ nonisolated enum MLXErrorGuard {
         error is MLXError
     }
 
+    // MARK: - The read-site guard (WW2-3-6, journal 2026-557 §3C)
+
+    /// Read a library-produced array — evaluate it under `withError` first, then require data, then read.
+    ///
+    /// **Why a helper.** `withError` (and the process-wide fallback) *record* an MLX error and let the code carry on, so
+    /// a failed `eval` leaves an array with no buffer and the next `asArray` dereferences it: a segfault, not an error
+    /// (Part B, B10: `There is no Stream(gpu, N) in current thread`, then SIGSEGV in `Buffer::raw_ptr()`). This reads
+    /// only after the evaluation succeeded: an MLX error is thrown as ``MLXError`` with MLX's own message, and an array
+    /// with no elements is thrown as an error too — upstream's zero-size read is itself a crash (mlx-swift #486). Use
+    /// it at every site that reads an array whose graph this app did not build (the audio engines' `generate`).
+    static func read<T: HasDType>(_ array: MLXArray, as type: T.Type = T.self) throws -> [T] {
+        try throwIfInjected()
+        try withError { eval(array) }
+        guard array.size > 0 else {
+            throw MLXError.caught("the model returned an empty result")
+        }
+        return array.asArray(type)
+    }
+
+    // MARK: Test seam (precedent: `PromptCacheAllowlist.overrideForTesting`)
+
+    private static let injectionLock = NSLock()
+    private nonisolated(unsafe) static var injectedFailure: String?
+    private nonisolated(unsafe) static var injectedFailureConsumed = false
+
+    /// **Tests only** (WW2-3-8). The next call to `read`, `readRows`, `item` or `evaluate` — from whichever thread — throws
+    /// `MLXError.caught(message)` instead of touching MLX, once. The per-engine probes use it to prove an engine's
+    /// evaluate/read sites turn a recorded MLX error into a thrown row error, without having to provoke a real
+    /// out-of-memory.
+    static func injectFailureForTesting(_ message: String = "injected MLX error (test)") {
+        injectionLock.lock(); defer { injectionLock.unlock() }
+        injectedFailure = message
+        injectedFailureConsumed = false
+    }
+
+    /// Whether the injected failure was thrown (an engine reached a guarded site).
+    static func injectedFailureWasConsumedForTesting() -> Bool {
+        injectionLock.lock(); defer { injectionLock.unlock() }
+        return injectedFailureConsumed
+    }
+
+    static func clearInjectedFailureForTesting() {
+        injectionLock.lock(); defer { injectionLock.unlock() }
+        injectedFailure = nil
+        injectedFailureConsumed = false
+    }
+
+    private static func throwIfInjected() throws {
+        injectionLock.lock()
+        let message = injectedFailure
+        if message != nil { injectedFailure = nil; injectedFailureConsumed = true }
+        injectionLock.unlock()
+        if let message { throw MLXError.caught(message) }
+    }
+
+    /// A `[rows, columns]` array as one `[T]` per row (embedding engines), read like ``read(_:as:)``: evaluate under
+    /// `withError`, require data, then read once.
+    static func readRows<T: HasDType>(_ array: MLXArray, as type: T.Type = T.self) throws -> [[T]] {
+        guard array.ndim == 2 else {
+            throw MLXError.caught("expected a [rows, columns] result, the model returned shape \(array.shape)")
+        }
+        let flat = try read(array, as: type)
+        let rows = array.dim(0), columns = array.dim(1)
+        return (0 ..< rows).map { Array(flat[($0 * columns) ..< (($0 + 1) * columns)]) }
+    }
+
+    /// One scalar from an array, with the same discipline as ``read(_:as:)``: evaluate under `withError` first, then read.
+    /// Throws ``MLXError`` instead of reading an array whose evaluation failed.
+    static func item<T: HasDType>(_ array: MLXArray, as type: T.Type = T.self) throws -> T {
+        try throwIfInjected()
+        try withError { eval(array) }
+        guard array.size == 1 else {
+            throw MLXError.caught("expected a single value, the model returned \(array.size)")
+        }
+        return array.item(type)
+    }
+
+    /// Evaluate at an engine's stage boundary and **throw** if MLX reports an error — instead of the recording
+    /// `eval(_:)` that lets the engine carry on with failed arrays (WW2-3-8; the SeedVR2 out-of-memory crash, B18).
+    static func evaluate(_ arrays: MLXArray...) throws {
+        try throwIfInjected()
+        try withError { eval(arrays) }
+    }
+
+    /// Array form of ``evaluate(_:)`` for a collection built at run time (a diffusion loop's rows, a list of heads).
+    static func evaluate(_ arrays: [MLXArray]) throws {
+        try throwIfInjected()
+        try withError { eval(arrays) }
+    }
+
     // MARK: - The Run-UI entry point (MLX-ERR-2)
 
     /// Wrap a **Run UI's** engine call.
@@ -260,5 +350,13 @@ extension MLXErrorGuard {
     /// Bridge for the C trampoline (which cannot see `private` members).
     fileprivate static func recordFallback(_ message: String) {
         recorder.record(message)
+    }
+}
+
+extension MLXArray {
+    /// A scalar for **diagnostic output only** (the `[WAN-DBG]` / SeedVR2 range prints): a failed evaluation gives NaN
+    /// instead of a crash. Production reads go through `MLXErrorGuard.read` / `.item`, which throw.
+    nonisolated func safeItem() -> Float {
+        (try? MLXErrorGuard.item(self, as: Float.self)) ?? .nan
     }
 }

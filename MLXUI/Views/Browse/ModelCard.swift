@@ -26,7 +26,7 @@ struct ModelCard: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(appState.isInComparison(model) ? Color.blue : Color.clear, lineWidth: 2)
         )
-        .opacity(model.exceedsRAM(appState.filterRAMLimitGB) ? 0.4 : 1.0)
+        .opacity(model.exceedsRAM(appState.filterRAMLimitGB) || ModelSupport.osRequirement(for: model) != nil ? 0.4 : 1.0)
         .onHover { isHovered = $0 }
     }
 
@@ -157,6 +157,11 @@ struct ModelCard: View {
                         .onTapGesture {
                             appState.runModel(model)
                         }
+                } else if let needs = ModelSupport.osRequirement(for: model) {
+                    Label(ModelSupport.osRequirementTitle(needs), systemImage: "xmark.circle")   // WW2-3-7
+                        .font(.caption2).foregroundStyle(.red)
+                        .frame(maxWidth: .infinity).padding(.vertical, 5)
+                        .background(.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
                 } else if model.exceedsRAM(appState.systemInfo.totalRAMGB) {
                     Label("Needs \(String(format: "%.0f", model.ramGB)) GB", systemImage: "xmark.circle")
                         .font(.caption2).foregroundStyle(.red)

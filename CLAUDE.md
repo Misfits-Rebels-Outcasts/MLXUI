@@ -321,9 +321,9 @@ Remote Swift Packages (Xcode-managed):
 
 | Package | Pin | Notes |
 |---|---|---|
-| `ml-explore/mlx-swift` | 0.31.4 | breaking API changes have shipped in patch releases |
-| `ml-explore/mlx-swift-lm` | 3.31.3 | provides `MLX`, `MLXLLM`, `MLXVLM`, `MLXEmbedders` |
-| `Blaizzy/mlx-audio-swift` | branch `main` | `MLXAudioSTT`, `MLXAudioTTS` — tags ≤ v0.1.2 pin mlx-swift-lm 2.x |
+| `ml-explore/mlx-swift` | 0.32.3 | breaking API changes have shipped in patch releases |
+| `ml-explore/mlx-swift-lm` | 3.32.3 | provides `MLX`, `MLXLLM`, `MLXVLM`, `MLXEmbedders` |
+| `Blaizzy/mlx-audio-swift` | revision `5c4c12b` | `MLXAudioSTT`, `MLXAudioTTS` — tags ≤ v0.1.2 pin mlx-swift-lm 2.x |
 | `argmaxinc/WhisperKit` | 1.0.0 | CoreML ASR, **superseded** by the MLX path; still linked |
 | `swhitty/FlyingFox` | 0.26.2 | HTTP server for the Local Server (MIT, no external deps; approved 2026-09-27, see `RSI/policies.md`). Wired into both app targets. |
 

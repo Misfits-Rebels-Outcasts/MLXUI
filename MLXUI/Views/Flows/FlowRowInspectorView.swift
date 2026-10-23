@@ -316,7 +316,9 @@ struct FlowRowInspectorView: View {
             HStack {
                 Text(slot.displayName)
                 Spacer()
-                if let note = slot.resourceNote {
+                if let needs = slot.modelEntry.flatMap({ ModelSupport.osRequirement(for: $0) }) {
+                    Text(needs).foregroundStyle(.orange)                    // WW2-3-7: shown dimmed, not offered
+                } else if let note = slot.resourceNote {
                     Text(note)
                         .foregroundStyle(overRAM ? .orange : .secondary)
                 }
@@ -330,10 +332,14 @@ struct FlowRowInspectorView: View {
     /// whose key you're about to paste in, and refusing at pick time would be a lie. A
     /// cataloged model that doesn't fit this Mac's RAM disables too (CFM-R14-3, unchanged).
     /// `nonisolated static` so it's unit-testable with a fixture slot, without a View.
-    nonisolated static func isModelButtonEnabled(_ slot: ModelSlot, installedModelIDs: Set<String>,
-                                                 totalRAMGB: Double) -> Bool {
+    nonisolated static func isModelButtonEnabled(
+        _ slot: ModelSlot, installedModelIDs: Set<String>, totalRAMGB: Double,
+        osVersion: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion
+    ) -> Bool {
         if case .unavailable = slot.readiness(installedModelIDs: installedModelIDs) { return false }
         if (slot.modelEntry?.ramGB ?? 0) > totalRAMGB { return false }
+        // WW2-3-7: a model that needs a newer macOS (Kokoro on < 15) is dimmed, not selectable.
+        if let entry = slot.modelEntry, ModelSupport.osRequirement(for: entry, osVersion: osVersion) != nil { return false }
         return true
     }
 

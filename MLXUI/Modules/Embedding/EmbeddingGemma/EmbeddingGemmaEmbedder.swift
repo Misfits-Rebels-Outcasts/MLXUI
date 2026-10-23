@@ -352,8 +352,7 @@ nonisolated final class EmbeddingGemmaEmbedder: Module {
             })   // [B, L]
 
             let pooled = model.pooledEmbeddings(inputs: ids, attentionMask: mask)
-            pooled.eval()
-            return (0 ..< pooled.dim(0)).map { pooled[$0].asArray(Float.self) }
+            return try MLXErrorGuard.readRows(pooled, as: Float.self)      // WW2-3-8
         } catch {
             throw StageError.engineFailure(stage: "EmbeddingGemma", underlying: error)
         }

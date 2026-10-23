@@ -71,7 +71,7 @@ enum FluxEngine {
     ) async throws {
         let raw = try await loadShardSet(dir, subdir: subdir, totalBytes: totalBytes, progress: progress)
         try model.update(parameters: ModuleParameters.unflattened(raw), verify: .none)
-        eval(model)
+        try withError { eval(model) }
     }
 
     // MARK: - Generate
@@ -124,7 +124,7 @@ enum FluxEngine {
 
         let txt = t5(t5Ids)
         let vec = clip(clipIds)
-        eval(txt, vec)
+        try MLXErrorGuard.evaluate(txt, vec)
         progress(0.55)
 
         // 3. Initial latent + packing (latent 64×64 for a 512×512 image).
@@ -148,10 +148,10 @@ enum FluxEngine {
                 img: xT, imgIDs: xIDs, txt: txt, txtIDs: txtIDs, vec: vec,
                 timestep: timeStep, guidance: guidance)
             xT = FluxSampler.step(pred: pred, xT: xT, t: t, tPrev: tPrev)
-            if i % 5 == 0 { eval(xT) }
+            if i % 5 == 0 { try MLXErrorGuard.evaluate(xT) }
             progress(0.55 + 0.40 * Double(i + 1) / Double(numSteps))
         }
-        eval(xT)
+        try MLXErrorGuard.evaluate(xT)
 
         // 5. Unpack + VAE decode → NCHW image.
         let latent = FluxSampler.unpackLatents(xT, h: latentH, w: latentW)
@@ -173,7 +173,7 @@ enum FluxEngine {
         let h = nchw.dim(2), w = nchw.dim(3)
         let nhwc = nchw.transposed(0, 2, 3, 1).asType(.float32)
         let clamped = Self.denormalize(nhwc)
-        let bytes = (clamped * 255).asType(.uint8).asArray(UInt8.self)
+        let bytes = try MLXErrorGuard.read((clamped * 255).asType(.uint8), as: UInt8.self)      // WW2-3-8
 
         var rgba = [UInt8](repeating: 255, count: h * w * 4)
         for p in 0 ..< (h * w) {

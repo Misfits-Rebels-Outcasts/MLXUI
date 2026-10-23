@@ -156,7 +156,7 @@ nonisolated final class WanVAEDecoder: Module {
         // [VAE-DBG] Per-stage std tracking (P3) — collapses or explosions isolate the faulty stage.
         func s(_ a: MLXArray, _ tag: String) -> MLXArray {
             let f = a.asType(.float32); eval(f)
-            let std = sqrt(pow(f - f.mean(), 2).mean()).item(Float.self)
+            let std = sqrt(pow(f - f.mean(), 2).mean()).safeItem()
             print("[VAE-DBG] \(tag): std=\(String(format:"%.4f", std)) shape=\(a.shape)")
             return a
         }

@@ -41,7 +41,7 @@ nonisolated enum ToolCallFormatTable {
     /// "upstream decides" and is the normal answer; `ModelContainerPool.loadFromDisk` installs a
     /// non-nil value on the loaded container, and it is the only place in the app that sets one.
     ///
-    /// **Empty for all 12 catalog chat models (measured 2026-10-06).** Upstream's inference was
+    /// **Empty for all 12 catalog chat models when measured (2026-10-06); see the one entry below.** Upstream's inference was
     /// checked against each family's own chat template and was right — or as right as the nine
     /// `ToolCallFormat` cases allow — everywhere:
     ///
@@ -63,20 +63,32 @@ nonisolated enum ToolCallFormatTable {
     ///
     /// So the S1 workaround this replaces — `qwen3_5` → `.xmlFunction` applied here — was a
     /// duplicate of a row upstream already had (readme F3b).
+    ///
+    /// **One override since WW2-3-3 (owner-approved 2026-10-23): `qwen3_5*` → `.xmlFunction`.** mlx-swift-lm 3.32
+    /// declares `.qwen35` for the family (xml + framed Hermes-JSON), but `Qwen35ToolCallParser.parse` returns nil
+    /// for a call to a function that isn't in the request's `tools` (`isDeclaredTool`); `.xmlFunction` — main's
+    /// served format (mlx-swift-lm 3.31, `Qwen3Next`'s declaration) — parses it. Evidence, SV-8 re-run on
+    /// Qwen3.5-9B, 2026-10-23 (`RSI/journal/2026-556`): Codex offered no `apply_patch`, the model called it anyway,
+    /// `.qwen35` left the literal `<tool_call><function=apply_patch>…` as the reply and Codex ended the turn with
+    /// `calc.py` unchanged; the same session's `exec_command` calls (declared) parsed under both. Under
+    /// `.xmlFunction` the call reaches the client, which answers "unsupported call" and the model recovers (SV-8,
+    /// 2026-10-10, journal 2026-448). `ServeQwen35ReplayTests` replays that text through each dialect's own tools
+    /// list under both formats. What this gives up: the Hermes-JSON payload (`<tool_call>{"name":…}`), which
+    /// `.xmlFunction` returns as text (also pinned there); it was not what main served either.
     static func override(forModelType modelType: String, configData: Data?) -> ToolCallFormat? {
-        _ = configData          // no catalog family needs a value the checkpoint doesn't supply
+        _ = configData
+        let t = modelType.lowercased()
+        if t.hasPrefix("qwen3_5") || t.hasPrefix("qwen3.5") { return .xmlFunction }
         return nil
     }
 
-    /// The format the loaded container actually uses: the app's override when there is one, else
-    /// upstream's `ToolCallFormat.infer`, else `nil` — the container's own `.json` default.
+    /// The app's own override when there is one, else `nil` — the loaded container's own resolved
+    /// format applies (mlx-swift-lm 3.32 resolves it at load from the model type and the checkpoint's
+    /// chat template; that resolution is package-internal, so the app no longer repeats it).
     ///
-    /// `configData` is the checkpoint's `config.json`; `llama` needs it to tell Llama 3 from
-    /// Llama 2 exactly as upstream does. Passing `nil` is legal and leaves the Llama sub-family
-    /// undecided.
+    /// `configData` is the checkpoint's `config.json`, passed through to `override`.
     static func resolved(forModelType modelType: String, configData: Data?) -> ToolCallFormat? {
         override(forModelType: modelType, configData: configData)
-            ?? ToolCallFormat.infer(from: modelType, configData: configData)
     }
 
     // MARK: - Does a `tools` array do anything for this family?

@@ -361,7 +361,11 @@ nonisolated final class KVSnapshot: @unchecked Sendable {
     let caches: [KVCache]
     init(caches: [KVCache]) { self.caches = caches }
 
-    func copied() -> KVSnapshot { KVSnapshot(caches: caches.map { $0.copy() }) }
+    func copied() -> KVSnapshot {
+        let copy = KVSnapshot(caches: caches.map { $0.copy() })
+        eval(copy.caches)       // WW2-3-6 (A): evaluate at the producer; a copy is never handed on as an unevaluated graph
+        return copy
+    }
 
     /// Sum of the layers' state arrays — what the budget is charged.
     var bytes: Int64 { Int64(caches.reduce(0) { $0 + $1.state.reduce(0) { $0 + $1.nbytes } }) }

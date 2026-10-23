@@ -14,7 +14,7 @@ let package = Package(
         .library(name: "PaddleOCRVL", targets: ["PaddleOCRVL"])
     ],
     dependencies: [
-        .package(url: "https://github.com/ml-explore/mlx-swift", .upToNextMinor(from: "0.31.4")),
+        .package(url: "https://github.com/ml-explore/mlx-swift", .upToNextMinor(from: "0.32.3")),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.0.0")
     ],
     targets: [

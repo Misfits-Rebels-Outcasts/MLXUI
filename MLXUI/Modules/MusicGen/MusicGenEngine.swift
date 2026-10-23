@@ -35,7 +35,7 @@ nonisolated enum MusicGenEngine {
         }
         let raw = try MLX.loadArrays(url: url)
         try model.update(parameters: ModuleParameters.unflattened(raw), verify: .none)
-        eval(model)
+        try withError { eval(model) }
     }
 
     // MARK: - Public entry point
@@ -92,7 +92,7 @@ nonisolated enum MusicGenEngine {
         let ids = MLXArray(tokenIDs).expandedDimensions(axis: 0)   // [1, seq]
         let t5Hidden = encoder(ids)                                 // [1, seq, 768]
         let conditioning = decoder.encToDecProj(t5Hidden)           // [1, seq, 1024]
-        eval(conditioning)
+        try MLXErrorGuard.evaluate(conditioning)
         progress(0.25)
 
         // 3. Autoregressive loop with CFG. The decoder has no KV cache, so feed the full prefix
@@ -133,21 +133,21 @@ nonisolated enum MusicGenEngine {
             rows.append(next)
 
             if offset % 10 == 0 {
-                eval(rows)
+                try MLXErrorGuard.evaluate(rows)
                 progress(0.25 + 0.60 * Double(offset + 1) / Double(maxSteps))
             }
         }
-        eval(rows)
+        try MLXErrorGuard.evaluate(rows)
         progress(0.85)
 
         // 4. Undo the delay (reference epilogue) then decode.
         let codes = Self.undoDelay(rows, codebooks: codebooks)      // [T', codebooks] int32
         let waveform = encodec.decode(codes)
-        eval(waveform)
+        try MLXErrorGuard.evaluate(waveform)
         progress(0.95)
 
         // 5. WAV output.
-        let samples = waveform.asArray(Float.self)
+        let samples = try MLXErrorGuard.read(waveform, as: Float.self)      // WW2-3-8
         return AudioBuffer(samples: samples, sampleRate: 32_000)
     }
 

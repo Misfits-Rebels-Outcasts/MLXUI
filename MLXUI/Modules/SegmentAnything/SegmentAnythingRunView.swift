@@ -49,11 +49,8 @@ final class SegmentAnythingRunModel {
 
         Task {
             do {
-                // MLX-ERR-2: the whole three-step engine sequence sits in one guard, because
-                // `renderTopMask` **cannot throw** — it forces its evaluation inside
-                // (`topMaskLogits` → `.asArray`), so only a `guarded` block's exit check can ever
-                // see an MLX error raised there. Guarding just the `try await` calls would leave
-                // that path showing a result.
+                // MLX-ERR-2: the whole three-step engine sequence sits in one guard. WW2-3-8: the read inside
+                // `renderTopMask` (`topMaskLogits`) now goes through `MLXErrorGuard.read`, so it throws as well.
                 let composite = try await MLXErrorGuard.guardedRun {
                     progress = 0.1
                     let features = try await SegmentAnythingEngine.encodeImage(source, modelID: modelID)
@@ -64,8 +61,8 @@ final class SegmentAnythingRunModel {
                         labels: labels,
                         modelID: modelID)
                     progress = 0.9
-                    return SegmentAnythingEngine.renderTopMask(masks: masks, iouScores: iouScores,
-                                                               sourceImage: source)
+                    return try SegmentAnythingEngine.renderTopMask(masks: masks, iouScores: iouScores,
+                                                                   sourceImage: source)
                 }
                 resultImage = composite
                 isRunning = false

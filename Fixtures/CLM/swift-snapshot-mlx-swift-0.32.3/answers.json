@@ -1,0 +1,326 @@
+[
+ {
+  "key": "td-tr_invoice_processing_000044/disposition",
+  "labels": [
+   "approve",
+   "hold",
+   "manual_review",
+   "reject"
+  ],
+  "probabilities": [
+   0.4572522470145263,
+   0.47541058201850983,
+   0.0005791159179529938,
+   0.0667580550490109
+  ]
+ },
+ {
+  "key": "td-tr_invoice_processing_000160/disposition",
+  "labels": [
+   "approve",
+   "hold",
+   "manual_review",
+   "reject"
+  ],
+  "probabilities": [
+   0.49266818508619376,
+   0.42737831933499093,
+   0.000488567228492897,
+   0.07946492835032248
+  ]
+ },
+ {
+  "key": "td-tr_agent_trace_observability_000085/risk",
+  "labels": [
+   "0",
+   "1",
+   "2",
+   "3"
+  ],
+  "probabilities": [
+   0.005963879146005245,
+   0.41265258881921085,
+   0.14261905275928213,
+   0.4387644792755018
+  ]
+ },
+ {
+  "key": "td-tr_invoice_processing_000194/discrepancy_severity",
+  "labels": [
+   "0",
+   "1",
+   "2",
+   "3"
+  ],
+  "probabilities": [
+   0.00013663346536412657,
+   0.4434474200586472,
+   0.03853672721948727,
+   0.5178792192565014
+  ]
+ },
+ {
+  "key": "readme/urgency",
+  "labels": [
+   "false",
+   "true"
+  ],
+  "probabilities": [
+   0.1440148214558538,
+   0.8559851785441462
+  ]
+ },
+ {
+  "key": "readme/department",
+  "labels": [
+   "billing",
+   "technical"
+  ],
+  "probabilities": [
+   0.988998332677123,
+   0.011001667322877086
+  ]
+ },
+ {
+  "key": "readme/frustration",
+  "labels": [
+   "0",
+   "1",
+   "2"
+  ],
+  "probabilities": [
+   8.505760300231706e-07,
+   2.1428905142854578e-05,
+   0.999977720518827
+  ]
+ },
+ {
+  "key": "readme-t0.5/department",
+  "labels": [
+   "billing",
+   "technical"
+  ],
+  "probabilities": [
+   0.988998332677123,
+   0.011001667322877086
+  ]
+ },
+ {
+  "key": "object-state/action",
+  "labels": [
+   "remind",
+   "call",
+   "escalate",
+   "wait"
+  ],
+  "probabilities": [
+   0.018255118490953966,
+   0.7240943000993466,
+   0.25723833912605376,
+   0.00041224228364586943
+  ]
+ },
+ {
+  "key": "array-state/bug",
+  "labels": [
+   "false",
+   "true"
+  ],
+  "probabilities": [
+   0.011998223626028988,
+   0.988001776373971
+  ]
+ },
+ {
+  "key": "unicode/lang",
+  "labels": [
+   "ja",
+   "es",
+   "en"
+  ],
+  "probabilities": [
+   0.2842760414026633,
+   0.6404607205010255,
+   0.07526323809631122
+  ]
+ },
+ {
+  "key": "code/passes",
+  "labels": [
+   "false",
+   "true"
+  ],
+  "probabilities": [
+   0.5348433247371654,
+   0.46515667526283455
+  ]
+ },
+ {
+  "key": "no-state/q",
+  "labels": [
+   "a",
+   "b",
+   "c"
+  ],
+  "probabilities": [
+   0.45528978987837954,
+   0.08289080677444927,
+   0.46181940334717114
+  ]
+ },
+ {
+  "key": "score-5/sat",
+  "labels": [
+   "0",
+   "1",
+   "2",
+   "3",
+   "4"
+  ],
+  "probabilities": [
+   0.0007926257131076453,
+   0.2415917915707522,
+   0.00041024363943051,
+   0.0038674535916509113,
+   0.7533378854850588
+  ]
+ },
+ {
+  "key": "td-tr_agent_trace_observability_000274/action",
+  "labels": [
+   "continue",
+   "human_review",
+   "observe",
+   "stop"
+  ],
+  "probabilities": [
+   0.007953069414962075,
+   0.9782689923759953,
+   0.006372717929180018,
+   0.007405220279862656
+  ]
+ },
+ {
+  "key": "td-tr_agent_trace_observability_000274/needs_review",
+  "labels": [
+   "false",
+   "true"
+  ],
+  "probabilities": [
+   0.0013346548073206919,
+   0.9986653451926794
+  ]
+ },
+ {
+  "key": "td-tr_agent_trace_observability_000274/outcome",
+  "labels": [
+   "failure",
+   "harmful",
+   "partial",
+   "success"
+  ],
+  "probabilities": [
+   0.01157028141237416,
+   0.00011647903794282691,
+   0.5649575532507919,
+   0.4233556862988911
+  ]
+ },
+ {
+  "key": "td-tr_agent_trace_observability_000274/risk",
+  "labels": [
+   "0",
+   "1",
+   "2",
+   "3"
+  ],
+  "probabilities": [
+   0.06200226744408841,
+   0.6428675469911845,
+   0.0864359200070234,
+   0.20869426555770346
+  ]
+ },
+ {
+  "key": "td-tr_agent_trace_observability_000274/urgency",
+  "labels": [
+   "0",
+   "1",
+   "2",
+   "3"
+  ],
+  "probabilities": [
+   0.09811492288170637,
+   0.010856028825915036,
+   0.19380055874785415,
+   0.6972284895445244
+  ]
+ },
+ {
+  "key": "td-invoice_processing_000066/discrepancy_severity",
+  "labels": [
+   "0",
+   "1",
+   "2",
+   "3"
+  ],
+  "probabilities": [
+   5.1614710348426996e-05,
+   0.5411923130884625,
+   0.02909444246252666,
+   0.42966162973866245
+  ]
+ },
+ {
+  "key": "td-invoice_processing_000066/disposition",
+  "labels": [
+   "approve",
+   "hold",
+   "manual_review",
+   "reject"
+  ],
+  "probabilities": [
+   0.39967240671361204,
+   0.4891371521748472,
+   0.0004547158757704736,
+   0.11073572523577029
+  ]
+ },
+ {
+  "key": "td-invoice_processing_000066/duplicate",
+  "labels": [
+   "false",
+   "true"
+  ],
+  "probabilities": [
+   0.43353503317924114,
+   0.566464966820759
+  ]
+ },
+ {
+  "key": "td-invoice_processing_000066/matches_order",
+  "labels": [
+   "false",
+   "true"
+  ],
+  "probabilities": [
+   0.08947249767916256,
+   0.9105275023208373
+  ]
+ },
+ {
+  "key": "td-invoice_processing_000066/urgency",
+  "labels": [
+   "0",
+   "1",
+   "2",
+   "3"
+  ],
+  "probabilities": [
+   0.014851742446200557,
+   0.005981225665677073,
+   0.013253837543753333,
+   0.9659131943443692
+  ]
+ }
+]

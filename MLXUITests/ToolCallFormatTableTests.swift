@@ -38,68 +38,31 @@ private let llama31Config = configJSON([
     "model_type": "llama", "vocab_size": 128256,
     "rope_scaling": ["rope_type": "llama3"],
 ])
-private let llama2Config = configJSON(["model_type": "llama", "vocab_size": 32000])
 private let qwen35Config = configJSON(["model_type": "qwen3_5", "text_config": ["vocab_size": 248320]])
 
 // MARK: - Format resolution
 
-/// The mapping, for every `model_type` the catalog's 12 chat models report.
+/// The app's side of the mapping, for every `model_type` the catalog's 12 chat models report.
 ///
-/// `nil` means "upstream decides" (the container's own `.json` default), **not** ".json applied by
-/// the app": mlx-swift-lm 3.31.3 calls `ToolCallFormat.infer(from:configData:)` itself at load
-/// (`LLMModelFactory.swift:543`), and the app adds an override only where that is wrong or
-/// missing (readme F3b). Asserting `override == nil` alongside `resolved` is what pins that.
+/// The app carries **one** override (WW2-3-3, owner-approved 2026-10-23): `qwen3_5` → `.xmlFunction`, because 3.32's
+/// `.qwen35` refuses a call to an undeclared tool (`ServeQwen35ReplayTests`). Every other catalog family defers to the
+/// container. Since mlx-swift-lm 3.32 the app no longer repeats upstream's `model_type` → format resolution (it is
+/// package-internal and also reads `tool_parser_type` and the chat template), so `ToolCallFormatTable.resolved` is the
+/// override alone.
+/// WW2-2-FIX-1, owner-approved 2026-10-22: the per-family format expectations that pinned 3.31's mapping
+/// moved to `RealModelToolFormatTests` (WW2-3 G1), which asserts the loaded container's own format.
 struct ToolCallFormatMappingTests {
 
-    /// Every catalog chat model resolves the way upstream's own inference does, with no app
-    /// override anywhere.
+    /// Only `qwen3_5` needs an app override; every other catalog chat model's resolved format is the container's own.
     @Test func everyCatalogChatModelDefersToUpstream() {
         for (repo, modelType) in catalogChatModels {
             let config = modelType == "llama" ? llama31Config : qwen35Config
-            #expect(ToolCallFormatTable.override(forModelType: modelType, configData: config) == nil,
-                    "\(repo) (\(modelType)) must not need an app override")
-            #expect(ToolCallFormatTable.resolved(forModelType: modelType, configData: config)
-                        == ToolCallFormat.infer(from: modelType, configData: config),
-                    "\(repo) (\(modelType)) must resolve exactly as upstream infers")
+            let expected: ToolCallFormat? = modelType == "qwen3_5" ? .xmlFunction : nil
+            #expect(ToolCallFormatTable.override(forModelType: modelType, configData: config) == expected,
+                    "\(repo) (\(modelType)) override")
+            #expect(ToolCallFormatTable.resolved(forModelType: modelType, configData: config) == expected,
+                    "\(repo) (\(modelType)): the app leaves the format to the container unless it overrides")
         }
-    }
-
-    /// The resolved value per family, spelled out — this is the table S2-2 and S2-4 read.
-    @Test func catalogFamiliesResolveToTheirDocumentedFormats() {
-        #expect(ToolCallFormatTable.resolved(forModelType: "qwen3_5", configData: qwen35Config) == .xmlFunction)
-        #expect(ToolCallFormatTable.resolved(forModelType: "mistral3", configData: nil) == .mistral)
-        #expect(ToolCallFormatTable.resolved(forModelType: "llama", configData: llama31Config) == .llama3)
-        // Upstream returns nil for these → the container's `.json` default (`Evaluate.swift:1445`).
-        for modelType in ["qwen3", "qwen2", "gemma2", "gemma3_text", "gpt_oss"] {
-            #expect(ToolCallFormatTable.resolved(forModelType: modelType, configData: nil) == nil,
-                    "\(modelType) should be left to the `.json` default")
-        }
-    }
-
-    /// Non-catalog families upstream knows about still pass through untouched.
-    @Test func nonCatalogUpstreamFamiliesStillPassThrough() {
-        #expect(ToolCallFormatTable.resolved(forModelType: "lfm2", configData: nil) == .lfm2)
-        #expect(ToolCallFormatTable.resolved(forModelType: "glm4_moe", configData: nil) == .glm4)
-        #expect(ToolCallFormatTable.resolved(forModelType: "nemotron_h", configData: nil) == .xmlFunction)
-        #expect(ToolCallFormatTable.resolved(forModelType: "phi3", configData: nil) == nil)
-    }
-
-    /// Llama 3 is told from Llama 2 only by `config.json` — exactly as upstream does it. Without
-    /// that data the answer stays `nil`, which is what the AG0 convenience documents.
-    @Test func llamaNeedsConfigDataToReachLlama3() {
-        #expect(ToolCallFormatTable.resolved(forModelType: "llama", configData: llama31Config) == .llama3)
-        #expect(ToolCallFormatTable.resolved(forModelType: "llama", configData: llama2Config) == nil)
-        #expect(ToolCallFormatTable.resolved(forModelType: "llama", configData: nil) == nil)
-        #expect(AgentSession.toolCallFormat(forModelType: "llama") == nil)
-    }
-
-    /// The rope-only Llama 3 signal works when `vocab_size` is absent.
-    @Test func llama3IsAlsoDetectedFromRopeScalingAlone() {
-        let ropeOnly = configJSON([
-            "model_type": "llama", "vocab_size": 32000,
-            "rope_scaling": ["rope_type": "llama3"],
-        ])
-        #expect(ToolCallFormatTable.resolved(forModelType: "llama", configData: ropeOnly) == .llama3)
     }
 }
 
@@ -277,9 +240,12 @@ struct RecordedToolCallTests {
         let pool = ModelContainerPool(budgetBytes: 40 << 30)
         let container = try await pool.container(directory: dir, architecture: nil)
 
-        // Upstream decides for `qwen3` (there is no app override): nil → the container's `.json`
-        // default. Pinned here on a real load, which is what F3b corrected.
-        #expect(await container.configuration.toolCallFormat == nil)
+        // Upstream decides for `qwen3` (there is no app override). mlx-swift-lm 3.31 left it nil (the container's
+        // `.json` default); 3.32 resolves `.json` explicitly — the accepted 3.31 → 3.32 change (WW2-3-3, owner
+        // 2026-10-23). Pinned here on a real load, and the resolved format is printed so a future change is visible.
+        let resolved = await container.configuration.toolCallFormat
+        print("RECORDED qwen3 resolved toolCallFormat = \(resolved.map { "\($0)" } ?? "nil")")
+        #expect(resolved == .json)
 
         try await container.perform { context in
             let input = try await context.processor.prepare(

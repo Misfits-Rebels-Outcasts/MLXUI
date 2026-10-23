@@ -140,8 +140,7 @@ nonisolated final class ModernBERTEmbedder: Module {
             let meanPooled = summed / counts
             let l2 = MLX.sqrt((meanPooled * meanPooled).sum(axis: -1, keepDims: true))
             let normalized = meanPooled / MLX.maximum(l2, MLXArray(Float(1e-9)))
-            normalized.eval()
-            return (0 ..< normalized.dim(0)).map { normalized[$0].asArray(Float.self) }
+            return try MLXErrorGuard.readRows(normalized, as: Float.self)      // WW2-3-8
         } catch {
             throw StageError.engineFailure(stage: "ModernBERT Embedding", underlying: error)
         }

@@ -43,8 +43,9 @@ struct Gemma4ServeTests {
     @Test func tableAnswersAreTheDocumentedOnes() {
         #expect(ToolCallFormatTable.toolSupport(forModelType: Self.modelType) == .unknown)
         #expect(ToolCallFormatTable.acceptsTools(forModelType: Self.modelType) == false)
-        // Left to mlx-swift-lm: 3.31.4 maps `gemma4*` to `.gemma4` (the intake read 3.31.3, where it fell to `.json`).
-        #expect(ToolCallFormatTable.resolved(forModelType: Self.modelType, configData: nil) == .gemma4)
+        // Left to mlx-swift-lm. The container's format (`.gemma4` under 3.31.4) is asserted in
+        // `RealModelToolFormatTests` (WW2-3 G1); the app resolves nothing of its own.
+        #expect(ToolCallFormatTable.resolved(forModelType: Self.modelType, configData: nil) == nil)
         #expect(ToolCallFormatTable.override(forModelType: Self.modelType, configData: nil) == nil)
         #expect(ToolCallFormatTable.systemPlacement(forModelType: Self.modelType) == .anywhere)
         #expect(ToolCallHistoryTable.oneCallPerTurn(forModelType: Self.modelType) == false)

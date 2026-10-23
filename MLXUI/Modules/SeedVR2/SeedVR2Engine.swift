@@ -10,6 +10,8 @@ enum SeedVR2EngineError: Error, LocalizedError {
     case emptyWeights(String)
     case imagePrepFailed
     case decodeOutputFailed
+    /// WW2-3-8: refused before loading (`SeedVR2Preflight`).
+    case imageTooLarge(SeedVR2Preflight.TooLarge)
 
     var errorDescription: String? {
         switch self {
@@ -17,6 +19,7 @@ enum SeedVR2EngineError: Error, LocalizedError {
         case .emptyWeights(let f):   return "SeedVR2: no arrays in '\(f)'"
         case .imagePrepFailed:       return "SeedVR2: failed to prepare input image"
         case .decodeOutputFailed:    return "SeedVR2: VAE decode produced nil CGImage"
+        case .imageTooLarge(let t):  return SeedVR2Preflight.message(t)
         }
     }
 }
@@ -77,6 +80,10 @@ nonisolated enum SeedVR2Engine {
         modelID: String,
         progress: @Sendable (Double) -> Void
     ) async throws -> CGImage {
+        // WW2-3-8: refuse an image the decode can't fit in memory, before loading anything (journal 2026-560).
+        if let tooLarge = SeedVR2Preflight.check(width: image.width, height: image.height, scale: scale) {
+            throw SeedVR2EngineError.imageTooLarge(tooLarge)
+        }
         let dir = ModelStore.shared.directory(forModelID: modelID)
         guard FileManager.default.fileExists(atPath: dir.path) else {
             throw StageError.modelNotInstalled(id: modelID)
@@ -98,7 +105,7 @@ nonisolated enum SeedVR2Engine {
 
         // 2. Load text embedding (pos_emb.safetensors — fixed [58, 5120] array)
         let textEmb = try loadPosEmb(dir: dir)
-        eval(textEmb)
+        try MLXErrorGuard.evaluate(textEmb)
         progress(0.12)
 
         // 3. VAE encode input image; release VAE weights
@@ -122,7 +129,7 @@ nonisolated enum SeedVR2Engine {
         })
         progress(0.98)
 
-        guard let cgFull = tensorToCGImage(pixels) else {
+        guard let cgFull = try tensorToCGImage(pixels) else {
             throw SeedVR2EngineError.decodeOutputFailed
         }
         // Crop padding back to true target size
@@ -143,12 +150,12 @@ nonisolated enum SeedVR2Engine {
         let weights = try loadSafetensors(dir: dir, name: "vae.safetensors")
         let vae = SeedVR2VAE()
         try vae.update(parameters: ModuleParameters.unflattened(weights), verify: .none)
-        eval(vae)
+        try withError { eval(vae) }
         print("[SeedVR2] VAE weight coverage: \(weights.count) vae tensors")
         progress(0.5)
 
         let enc = vae.encode(input)
-        eval(enc)
+        try MLXErrorGuard.evaluate(enc)
         progress(1.0)
         return enc
     }
@@ -169,7 +176,7 @@ nonisolated enum SeedVR2Engine {
             weights["\(path).scales"] != nil ? (64, 8, QuantizationMode.affine) : nil
         }
         try transformer.update(parameters: ModuleParameters.unflattened(weights), verify: .none)
-        eval(transformer)
+        try withError { eval(transformer) }
         print("[SeedVR2] weight coverage: \(weights.count) transformer tensors")
         progress(0.25)
 
@@ -181,8 +188,8 @@ nonisolated enum SeedVR2Engine {
         func rng(_ a: MLXArray) -> String {
             let f = a.asType(.float32)
             eval(f)
-            let mn = f.min(keepDims: false).item(Float.self)
-            let mx = f.max(keepDims: false).item(Float.self)
+            let mn = f.min(keepDims: false).safeItem()
+            let mx = f.max(keepDims: false).safeItem()
             return "[\(String(format: "%.3f", mn)), \(String(format: "%.3f", mx))]"
         }
         print("[SeedVR2-D] encoded    : \(rng(encoded))")
@@ -194,10 +201,10 @@ nonisolated enum SeedVR2Engine {
             let modelInput = MLX.concatenated([latents, condition], axis: 1)  // [1, 33, 1, h, w]
             let tTensor    = MLXArray(t).asType(.bfloat16)
             let noisePred  = transformer(modelInput, textEmb: textEmb, timestep: tTensor)
-            eval(noisePred)
+            try MLXErrorGuard.evaluate(noisePred)
             print("[SeedVR2-D] noisePred  : \(rng(noisePred))")
             latents = scheduler.step(noisePred: noisePred, timestepIdx: idx, latents: latents)
-            eval(latents)
+            try MLXErrorGuard.evaluate(latents)
             print("[SeedVR2-D] denoised   : \(rng(latents))")
             progress(0.25 + 0.75 * Double(idx + 1) / Double(scheduler.timesteps.count))
             await Task.yield()
@@ -214,11 +221,11 @@ nonisolated enum SeedVR2Engine {
         let weights = try loadSafetensors(dir: dir, name: "vae.safetensors")
         let vae = SeedVR2VAE()
         try vae.update(parameters: ModuleParameters.unflattened(weights), verify: .none)
-        eval(vae)
+        try withError { eval(vae) }
         progress(0.5)
 
         let decoded = vae.decode(latent)
-        eval(decoded)
+        try MLXErrorGuard.evaluate(decoded)      // WW2-3-8: an out-of-memory decode throws here, it is not read
         progress(1.0)
         return decoded
     }
@@ -320,14 +327,14 @@ nonisolated enum SeedVR2Engine {
     }
 
     /// [1, 3, 1, H, W] in [-1, 1] → CGImage.
-    private static func tensorToCGImage(_ t: MLXArray) -> CGImage? {
+    private static func tensorToCGImage(_ t: MLXArray) throws -> CGImage? {
         // t: [1, 3, 1, H, W] → [H, W, 3] float
         let frame = t[0, 0..., 0, 0..., 0...]          // [3, H, W]
                     .transposed(1, 2, 0)                // [H, W, 3]
         let clipped = MLX.clip(frame * 127.5 + 127.5, min: MLXArray(0.0), max: MLXArray(255.0))
         let pixels = clipped.asType(.uint8)
         let H = pixels.dim(0), W = pixels.dim(1)
-        let arr: [UInt8] = pixels.asArray(UInt8.self)
+        let arr: [UInt8] = try MLXErrorGuard.read(pixels, as: UInt8.self)      // WW2-3-8: never a bare read of a failed array
         guard let provider = CGDataProvider(data: Data(arr) as CFData) else { return nil }
         return CGImage(
             width: W, height: H,

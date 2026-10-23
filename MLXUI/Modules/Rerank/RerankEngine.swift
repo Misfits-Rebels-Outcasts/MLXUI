@@ -55,7 +55,7 @@ enum RerankEngine {
                 let input = MLXArray(ids, [1, ids.count])
                 let logits = context.model(input, cache: nil).asType(.float32)
                 let lastPosition = ids.count - 1
-                let row = logits[0, lastPosition].asArray(Float.self)
+                let row = try MLXErrorGuard.read(logits[0, lastPosition], as: Float.self)      // WW2-3-8
                 let logitYes = Double(row[yesID])
                 let logitNo = Double(row[noID])
                 // softmax([logit_no, logit_yes])[1], numerically stable.

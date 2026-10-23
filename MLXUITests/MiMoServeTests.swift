@@ -60,7 +60,9 @@ struct MiMoServeTests {
         #expect(type == "qwen3_5")
         #expect(ToolCallFormatTable.toolSupport(forModelType: type) == .supported)
         #expect(ToolCallFormatTable.toolSupport(forModelType: type).acceptsTools)
-        #expect(ToolCallFormatTable.resolved(forModelType: type, configData: try configData) == .xmlFunction)
+        // The format: 3.32 declares `.qwen35` upstream; since WW2-3-3 the table overrides `qwen3_5` back to main's
+        // `.xmlFunction` (owner 2026-10-23, `ServeQwen35ReplayTests`); asserted on a real load in `RealModelToolFormatTests`.
+        #expect(ToolCallFormatTable.override(forModelType: type, configData: try configData) == .xmlFunction)
         // `system` placement inherits `.firstOnly` (harmless for this template, which allows `system`
         // anywhere); the history tables stay clear of it: it renders every call, so no split.
         #expect(ToolCallFormatTable.systemPlacement(forModelType: type) == .firstOnly)
@@ -84,7 +86,9 @@ struct MiMoServeTests {
     /// The model's own call syntax, one character at a time (the real streaming shape), becomes calls
     /// with typed arguments and nothing leaks into the content.
     @Test func theScannerReadsMiMosCallsTokenByToken() throws {
-        let format = try #require(ToolCallFormatTable.resolved(forModelType: try modelType(), configData: try configData))
+        // MiMo's template writes `<tool_call><function=…>`, the xmlFunction dialect; given directly now that the
+        // app no longer derives a format from model_type (WW2-2-FIX-1). This test is about the scanner.
+        let format = ToolCallFormat.xmlFunction
         let text = "<tool_call><function=get_weather><parameter=location>Paris</parameter></function></tool_call>"
             + "<tool_call><function=get_weather><parameter=location>Rome</parameter></function></tool_call>"
         var scanner = ServeToolCallScanner(format: format, tools: [Self.weatherTool])

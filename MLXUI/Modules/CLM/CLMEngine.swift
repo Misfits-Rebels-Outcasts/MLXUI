@@ -67,13 +67,10 @@ actor CLMEngine {
             let missingTexts = missing
             let localHeads = heads
             let (rows, tokenCount, truncatedFlags): ([[Float]], Int, [Bool]) =
-                await container.perform { context in
+                try await container.perform { context in
                     let (embeddings, spent, truncated) = CLMEncoder.embed(texts: missingTexts, context: context)
                     let projected = localHeads.project(embeddings, which: which)
-                    eval(projected)
-                    let rows = (0 ..< projected.dim(0)).map { row in
-                        projected[row ..< row + 1].squeezed(axis: 0).asArray(Float.self)
-                    }
+                    let rows = try MLXErrorGuard.readRows(projected, as: Float.self)      // WW2-3-8
                     return (rows, spent, truncated)
                 }
             tokensSpent += tokenCount

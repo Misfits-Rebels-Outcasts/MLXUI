@@ -28,6 +28,32 @@ nonisolated enum ModelSupport {
         // Clef Flash (decision) → ClefEngine ported in CF-5b (journal/2026-498); CF-2's gap is gone.
     ]
 
+    /// WW2-3-7 (owner ruling 2026-10-23; the WW6 "show it, don't fail it" rule): the OS a model's runner needs, shown
+    /// **dimmed** — Browse card, detail, Run UI and the flow Model menu — instead of offered and then refused.
+    ///
+    /// Only **Kokoro**: on macOS < 15 its audio can't be read safely (`MLXAudioThread` needs `TaskExecutor`, macOS 15+; the
+    /// array mlx-audio-swift's `interpolate1d` returns can't be evaluated off its thread under mlx-swift 0.32, journal
+    /// 2026-557/558). The other TTS families don't use the pattern and stay available. The read guard
+    /// (`MLXErrorGuard.read`) stays, so a run that is attempted anyway fails with an error, never a crash.
+    /// **Remove this gate when upstream fixes `interpolate1d`** (links: `RSI/notes/ww2/upstream-issues.md`).
+    ///
+    /// `osVersion` is injectable so tests can stand in for macOS 14.
+    static func osRequirement(forID id: String,
+                              osVersion: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion) -> String? {
+        guard id.lowercased().contains("kokoro"), osVersion.majorVersion < 15 else { return nil }
+        return "needs macOS 15"
+    }
+
+    static func osRequirement(for model: ModelEntry,
+                              osVersion: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion) -> String? {
+        osRequirement(forID: model.id + " " + model.hfModelId, osVersion: osVersion)
+    }
+
+    /// "needs macOS 15" → "Needs macOS 15", for a label or sentence start.
+    static func osRequirementTitle(_ needs: String) -> String {
+        needs.prefix(1).uppercased() + String(needs.dropFirst())
+    }
+
     /// A human-readable reason this model can't run yet, or `nil` if it should run.
     static func unsupportedReason(for model: ModelEntry) -> String? {
         let haystack = (model.id + " " + model.hfModelId).lowercased()

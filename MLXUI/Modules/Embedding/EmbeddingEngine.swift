@@ -30,7 +30,7 @@ enum EmbeddingEngine {
             let loader = HFTokenizerLoader()
             let container = try await EmbedderModelFactory.shared.loadContainer(
                 from: modelDirectory, using: loader)
-            return await container.perform { context in
+            return try await container.perform { context in
                 let tokenizer = context.tokenizer
                 let encoded = texts.map { tokenizer.encode(text: $0, addSpecialTokens: true) }
                 let maxLength = encoded.reduce(into: 1) { acc, elem in acc = max(acc, elem.count) }
@@ -43,8 +43,7 @@ enum EmbeddingEngine {
                 let output = context.model(
                     padded, positionIds: nil, tokenTypeIds: tokenTypes, attentionMask: mask)
                 let pooled = context.pooling(output, normalize: true, applyLayerNorm: true)
-                pooled.eval()
-                return pooled.map { $0.asArray(Float.self) }
+                return try MLXErrorGuard.readRows(pooled, as: Float.self)      // WW2-3-8
             }
         } catch let error as StageError {
             throw error

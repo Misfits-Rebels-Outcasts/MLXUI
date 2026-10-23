@@ -84,7 +84,9 @@ nonisolated final class DeepSeekOCR: Module, VLMModel, KVCacheDimensionProvider 
         return merged.reshaped(1, L, D)
     }
 
-    func prepare(_ input: LMInput, cache: [KVCache], windowSize: Int?) throws -> PrepareResult {
+    func prepare(
+        _ input: LMInput, cache: [KVCache], state: LMOutput.State?, prefill: PrefillParameters
+    ) throws -> PrepareResult {
         let embeddings = inputEmbeddings(inputIds: input.text.tokens, image: input.image)
         let logits = languageModel(nil, cache: cache, inputEmbedding: embeddings)
         return .logits(LMOutput(logits: logits))
