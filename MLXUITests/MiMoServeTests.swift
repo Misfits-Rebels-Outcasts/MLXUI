@@ -60,9 +60,9 @@ struct MiMoServeTests {
         #expect(type == "qwen3_5")
         #expect(ToolCallFormatTable.toolSupport(forModelType: type) == .supported)
         #expect(ToolCallFormatTable.toolSupport(forModelType: type).acceptsTools)
-        // The format itself (was `.xmlFunction` from 3.31's model_type mapping) is the container's under 3.32;
-        // asserted in `RealModelToolFormatTests` (WW2-3 G1). No override either way.
-        #expect(ToolCallFormatTable.override(forModelType: type, configData: try configData) == nil)
+        // The format: 3.32 declares `.qwen35` upstream; since WW2-3-3 the table overrides `qwen3_5` back to main's
+        // `.xmlFunction` (owner 2026-10-23, `ServeQwen35ReplayTests`); asserted on a real load in `RealModelToolFormatTests`.
+        #expect(ToolCallFormatTable.override(forModelType: type, configData: try configData) == .xmlFunction)
         // `system` placement inherits `.firstOnly` (harmless for this template, which allows `system`
         // anywhere); the history tables stay clear of it: it renders every call, so no split.
         #expect(ToolCallFormatTable.systemPlacement(forModelType: type) == .firstOnly)

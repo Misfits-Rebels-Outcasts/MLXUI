@@ -18,14 +18,15 @@ import MLXLMCommon
 struct RealModelToolFormatTests {
     static let modelsDir = ProcessInfo.processInfo.environment["MLXUI_TEST_MODELS_DIR"]
 
-    /// The effective format per catalog chat model: main's (mlx-swift-lm 3.31.4) — except `qwen3_5`, which
-    /// 3.32 declares as `.qwen35` (a superset of xml + framed JSON); an accepted upstream change provided
-    /// SV-6/7/8 pass in WW2-3. `nil` on main meant "the container's `.json` default", so it is `.json` here.
+    /// The effective format per catalog chat model: main's (mlx-swift-lm 3.31.4). `nil` on main meant "the
+    /// container's `.json` default", so it is `.json` here. `qwen3_5` is `.xmlFunction`: 3.32 declares `.qwen35`
+    /// upstream, but that parser refuses a call to an undeclared tool (SV-8, WW2-3-3), so
+    /// `ToolCallFormatTable.override` restores main's served format (owner-approved 2026-10-23).
     static let expected: [(repo: String, format: ToolCallFormat)] = [
-        ("prism-ml/Ternary-Bonsai-27B-mlx-2bit", .qwen35),
-        ("mlx-community/Qwen3.5-9B-MLX-4bit", .qwen35),
-        ("lukaskremla/Qwen3.8-27B-3bit-MLX", .qwen35),
-        ("mlx-community/Qwen3.8-27B-4bit", .qwen35),
+        ("prism-ml/Ternary-Bonsai-27B-mlx-2bit", .xmlFunction),
+        ("mlx-community/Qwen3.5-9B-MLX-4bit", .xmlFunction),
+        ("lukaskremla/Qwen3.8-27B-3bit-MLX", .xmlFunction),
+        ("mlx-community/Qwen3.8-27B-4bit", .xmlFunction),
         ("mlx-community/gemma-3-1b-it-qat-4bit", .json),
         ("mlx-community/Ministral-3-3B-Instruct-2512-4bit", .mistral),
         ("mlx-community/Qwen3-8B-4bit", .json),
@@ -36,7 +37,7 @@ struct RealModelToolFormatTests {
         ("mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit", .mistral),
         // WW2-3-2 (owner 2026-10-22): the two catalog chat models the table was missing.
         ("mlx-community/gemma-4-e4b-it-4bit", .gemma4),
-        ("mlx-community/MiMo-V2.6-Distill-Qwen-9B-OptiQ-4bit", .qwen35),
+        ("mlx-community/MiMo-V2.6-Distill-Qwen-9B-OptiQ-4bit", .xmlFunction),
     ]
 
     private static func directory(_ repo: String) -> URL? {

@@ -36,12 +36,15 @@ nonisolated enum PromptCacheAllowlist {
     /// - `qwen3` — Qwen3-8B. `qwen3_5` — Qwen3.5-9B; Qwen3.8-27B's configs say `qwen3_5`
     ///   (`RSI/notes/qwen38/hf`), and Ternary-Bonsai-27B is `qwen3_5` too (HF 2026-10-08:
     ///   `text_config` `qwen3_5_text`, `full_attention_interval` 4). `gemma3_text` — Gemma 3 1B.
-    /// - `llama` — Llama-3.1-8B. `gemma2` — gemma-2-9b.
+    /// - `llama` — Llama-3.1-8B.
     /// - `mistral3` — Ministral-3-3B. Ministral and Devstral are both `mistral3` with
     ///   `text_config.model_type` `ministral3` and `sliding_window: null` (HF 2026-10-08), so a
     ///   `text_config` key could not separate them anyway.
     /// - Still off: `gpt_oss`, `qwen2` (and every other type) until a real-model test passes.
-    static let tested: Set<String> = ["qwen3", "qwen3_5", "gemma3_text", "llama", "gemma2", "mistral3"]
+    /// - **`gemma2` is off again (WW2-3-3, owner-approved 2026-10-23: "cache off, never wrong").** On the WW2 branch
+    ///   gemma-2-9b's new-session case diverged cache-on vs cache-off at the first token (gap 0.516, `is` vs `are`,
+    ///   not a near-tie). Cause not established; it stays off until it is explained (journal 2026-556).
+    static let tested: Set<String> = ["qwen3", "qwen3_5", "gemma3_text", "llama", "mistral3"]
 
     static func allows(_ modelType: String) -> Bool { (overrideForTesting ?? tested).contains(modelType) }
 }
