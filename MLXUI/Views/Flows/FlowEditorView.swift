@@ -495,7 +495,7 @@ struct FlowEditorView: View {
                                          rowID: model.selectedRowID ?? UUID(),
                                          catalog: appState.browserData?.domains.flatMap { $0.allModels } ?? [],
                                          totalRAMGB: appState.systemInfo.totalRAMGB,
-                                         installedModelIDs: appState.installedModelIDs,
+                                         installedModelIDs: appState.flowReadyModelIDs,
                                          claimableModelIDs: appState.claimableModelIDs,
                                          resolvePromptSupport: { appState.registry.bestModule(for: $0)?.sdk.promptSupport ?? .none },
                                          editable: true)
@@ -899,7 +899,7 @@ struct FlowEditorView: View {
         }
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
         let result = FlowPreflight.run(model.document, catalog: catalog,
-                                       installedModelIDs: appState.installedModelIDs,
+                                       installedModelIDs: appState.flowReadyModelIDs,
                                        totalRAMGB: appState.systemInfo.totalRAMGB,
                                        claimableModelIDs: appState.claimableModelIDs)
         session.prepareInstall(result, doc: model.document, scope: workspaceRef != nil ? makeScope() : nil)
@@ -919,7 +919,7 @@ struct FlowEditorView: View {
     private func prepareInstall() {
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
         session.prepareInstall(FlowPreflight.run(model.document, catalog: catalog,
-                                                 installedModelIDs: appState.installedModelIDs,
+                                                 installedModelIDs: appState.flowReadyModelIDs,
                                                  totalRAMGB: appState.systemInfo.totalRAMGB,
                                                  claimableModelIDs: appState.claimableModelIDs),
                                doc: model.document, scope: workspaceRef != nil ? makeScope() : nil)

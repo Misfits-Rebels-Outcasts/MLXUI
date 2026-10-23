@@ -377,7 +377,7 @@ struct FlowListView: View {
                                              rowID: session.selectedRowID ?? UUID(),
                                              catalog: appState.browserData?.domains.flatMap { $0.allModels } ?? [],
                                              totalRAMGB: appState.systemInfo.totalRAMGB,
-                                             installedModelIDs: appState.installedModelIDs,
+                                             installedModelIDs: appState.flowReadyModelIDs,
                                              claimableModelIDs: appState.claimableModelIDs,
                                              resolvePromptSupport: { appState.registry.bestModule(for: $0)?.sdk.promptSupport ?? .none },
                                              editable: false,
@@ -803,7 +803,7 @@ struct FlowListView: View {
         // Preflight decides installs; the session gates Run until models exist.
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
         let result = FlowPreflight.run(doc, catalog: catalog,
-                                       installedModelIDs: appState.installedModelIDs,
+                                       installedModelIDs: appState.flowReadyModelIDs,
                                        totalRAMGB: appState.systemInfo.totalRAMGB,
                                        claimableModelIDs: appState.claimableModelIDs)
         session.prepareInstall(result, doc: doc, scope: workspaceRef != nil ? makeScope() : nil)
@@ -978,7 +978,7 @@ struct FlowListView: View {
     private func assess(_ doc: FlowDocument) -> FlowReassessment {
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
         return FlowReassessment.compute(
-            doc: doc, catalog: catalog, installed: appState.installedModelIDs,
+            doc: doc, catalog: catalog, installed: appState.flowReadyModelIDs,
             totalRAMGB: appState.systemInfo.totalRAMGB, claimableModelIDs: appState.claimableModelIDs,
             refusalScope: workspaceRef != nil ? makeScope() : nil, inputScope: makeScope())
     }

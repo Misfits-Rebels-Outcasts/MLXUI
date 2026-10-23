@@ -2,9 +2,8 @@ import Testing
 import Foundation
 @testable import MLXUI
 
-/// MP1-1 (`RSI/DelegateModelPackBacklog.md`): Gemma 4 E4B is a Chat & Text catalog entry over
-/// `mlx-community/gemma-4-e4b-it-4bit`. MP1-R-FIX-1 (owner ruling 2026-10-22) withdrew its Vision & OCR twin:
-/// MLXVLM's `Gemma4.swift` in mlx-swift-lm 3.31.4 cannot load this checkpoint (see `RSI/backlog.md`).
+/// MP1-1 (`RSI/DelegateModelPackBacklog.md`): Gemma 4 E4B is two catalog entries — Chat & Text and
+/// Vision & OCR — over one `mlx-community/gemma-4-e4b-it-4bit` install (MP-0 E, ruled 2026-10-21).
 /// Every number asserted here comes from the pinned HF files in
 /// `RSI/notes/modelpack/hf/mlx-community_gemma-4-e4b-it-4bit/` (revision 475b9088d2…).
 /// MP1-1-FIX-1: ids use HF's canonical casing (`api.json` `id`, readme T11), all lowercase here.
@@ -12,6 +11,7 @@ struct Gemma4CatalogTests {
 
     private static let repo = "mlx-community/gemma-4-e4b-it-4bit"
     private static let llmID = "mlx-community--gemma-4-e4b-it-4bit"
+    private static let visionID = "mlx-community--gemma-4-e4b-it-4bit-vision"
 
     private func loadLeaves() throws -> [DomainNode] {
         let repoRoot = URL(fileURLWithPath: #filePath)
@@ -25,30 +25,29 @@ struct Gemma4CatalogTests {
         try #require(leaves.flatMap { $0.models ?? [] }.first { $0.id == id }, "\(id) is not in the bundled catalog")
     }
 
-    @Test func entryDecodes() throws {
+    @Test func bothEntriesDecodeAndShareOneInstall() throws {
         let leaves = try loadLeaves()
         let llm = try entry(Self.llmID, in: leaves)
+        let vision = try entry(Self.visionID, in: leaves)
 
         #expect(llm.modelType == .llm)
+        #expect(vision.modelType == .vision)
         #expect(llm.displayName == "Gemma 4 E4B")
+        #expect(vision.displayName == "Gemma 4 E4B Vision")
+        // The shared-install key (MoC-5) is the repo id, so it must be identical.
         #expect(llm.hfModelId == Self.repo)
-        #expect(llm.source == .mlx)
+        #expect(vision.hfModelId == Self.repo)
+        #expect(llm.source == .mlx && vision.source == .mlx)
     }
 
-    /// MP1-R-FIX-1: the Vision twin is withdrawn until mlx-swift-lm's VLM Gemma 4 loads this checkpoint.
-    @Test func visionEntryIsWithdrawn() throws {
-        let leaves = try loadLeaves()
-        let ids = leaves.flatMap { $0.models ?? [] }.map(\.id)
-        #expect(!ids.contains { $0.hasPrefix(Self.llmID) && $0 != Self.llmID })
-        #expect(!ids.contains(Self.llmID + "-vision"))
-    }
-
-    @Test func idAndFamilyFollowHFCanonicalCasingAndTheGemmaPrecedent() throws {
+    @Test func idsAndFamilyFollowHFCanonicalCasingAndTheGemmaPrecedent() throws {
         let leaves = try loadLeaves()
         let llm = try entry(Self.llmID, in: leaves)
+        let vision = try entry(Self.visionID, in: leaves)
         #expect(llm.hfModelId == "mlx-community/gemma-4-e4b-it-4bit")
+        #expect(Self.visionID == Self.llmID + "-vision")
         // Existing Gemma 2/3 entries use family "gemma" (confirmed by owner 2026-10-21).
-        #expect(llm.family == "gemma")
+        #expect(llm.family == "gemma" && vision.family == "gemma")
     }
 
     /// The pinned `api.json` lives under the gitignored `RSI/`: it exists in the owner's main folder (and
@@ -68,11 +67,12 @@ struct Gemma4CatalogTests {
         let pinned = try #require(api["id"] as? String)
         let leaves = try loadLeaves()
         #expect(try entry(Self.llmID, in: leaves).hfModelId == pinned)
+        #expect(try entry(Self.visionID, in: leaves).hfModelId == pinned)
     }
 
     @Test func numbersMatchThePinnedRepo() throws {
         let leaves = try loadLeaves()
-        for id in [Self.llmID] {
+        for id in [Self.llmID, Self.visionID] {
             let e = try entry(id, in: leaves)
             #expect(e.downloadSizeGB == 5.18, "\(id): 5,179,241,512 bytes in the pinned tree")
             #expect(e.ramGB == 7.77, "\(id): MP-0 G, 5.18 × 1.5 (an estimate, not measured)")
@@ -88,23 +88,25 @@ struct Gemma4CatalogTests {
         }
     }
 
-    @Test func entryLandsInItsLeafAfterMiMo() throws {
+    @Test func entriesLandInTheirLeavesAfterTheirNeighbours() throws {
         let leaves = try loadLeaves()
         let llmLeaf = try #require(leaves.first { $0.id == "llm" })
         let visionLeaf = try #require(leaves.first { $0.id == "vision" })
         let llmIDs = (llmLeaf.models ?? []).map(\.id)
         let visionIDs = (visionLeaf.models ?? []).map(\.id)
 
-        // Backlog MP1-1: llm leaf after MiMo.
+        // Backlog MP1-1: llm leaf after MiMo, vision leaf after gemma-3-12b-it-4bit.
         let mimo = try #require(llmIDs.firstIndex(of: "mlx-community--MiMo-V2.6-Distill-Qwen-9B-OptiQ-4bit"))
         #expect(llmIDs[mimo + 1] == Self.llmID)
-        #expect(!visionIDs.contains(Self.llmID))
+        let gemma3 = try #require(visionIDs.firstIndex(of: "mlx-community--gemma-3-12b-it-4bit"))
+        #expect(visionIDs[gemma3 + 1] == Self.visionID)
+        #expect(!llmIDs.contains(Self.visionID) && !visionIDs.contains(Self.llmID))
     }
 
     @Test func descriptionsClaimNoAudioInput() throws {
         // Gemma4.swift (VLM) drops audio_tower / embed_audio at sanitize: image + text only in MLXUI.
         let leaves = try loadLeaves()
-        for id in [Self.llmID] {
+        for id in [Self.llmID, Self.visionID] {
             let e = try entry(id, in: leaves)
             // An explicit negation ("so there is no audio input") is the one allowed mention.
             let text = [e.description, e.summary].compactMap { $0 }.joined(separator: " ").lowercased()
@@ -113,13 +115,15 @@ struct Gemma4CatalogTests {
                 #expect(!text.contains(claim), "\(id): must not claim or offer \(claim)")
             }
         }
+        let vision = try entry(Self.visionID, in: leaves)
+        #expect(vision.taskTags == ["image-text-to-text"])
     }
 
     /// MP1-2: tool use and thinking are MP1-S's to decide, so the copy claims neither; benchmarks stay null
     /// because the pinned README states none; and every field the detail/comparison views show is present.
     @Test func metadataRendersWithoutGapsAndClaimsNoToolsThinkingOrBenchmarks() throws {
         let leaves = try loadLeaves()
-        for id in [Self.llmID] {
+        for id in [Self.llmID, Self.visionID] {
             let e = try entry(id, in: leaves)
             let text = [e.description, e.summary].compactMap { $0 }.joined(separator: " ").lowercased()
             for claim in ["tool", "thinking", "reasoning", "function call", "benchmark score", "mmlu", "%"] {
@@ -133,6 +137,9 @@ struct Gemma4CatalogTests {
             #expect(e.communityDownloads != nil && e.communityLikes != nil)
         }
         let llm = try entry(Self.llmID, in: leaves)
+        let vision = try entry(Self.visionID, in: leaves)
         #expect(llm.taskTags == ["text-generation"])
+        #expect(vision.taskTags == ["image-text-to-text"])
+        #expect(vision.description?.contains("Image and text input only") == true)
     }
 }

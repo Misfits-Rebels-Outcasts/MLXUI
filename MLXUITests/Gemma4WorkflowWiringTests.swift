@@ -2,18 +2,16 @@ import Foundation
 import Testing
 @testable import MLXUI
 
-/// MP1-W — "Gemma 4 E4B" is reachable from AI Workflows: a `CatalogBridge` row (`.same`, explicit `.llm`),
-/// an MLXUI-authored curated manifest, and a last-slot append to `TaskModels.llmModels`
+/// MP1-W — "Gemma 4 E4B" and "Gemma 4 E4B Vision" are reachable from AI Workflows: two `CatalogBridge`
+/// rows (`.same`, explicit `.llm` / `.vision`, both pinned to the one shared repo), two MLXUI-authored curated
+/// manifests, and a last-slot append to `TaskModels.llmModels` and to `"Describe Image"`
 /// (`RSI/DelegateModelPackBacklog.md`, MP-0 E ruled 2026-10-21). No new task: `servedRefNamePrefixes` and
-/// `taskKinds` are untouched. MP1-R-FIX-1 (owner ruling 2026-10-22) withdrew the "Gemma 4 E4B Vision" row, its
-/// manifest and its `"Describe Image"` slot (mlx-swift-lm 3.31.4's VLM `Gemma4` cannot load the checkpoint); the
-/// tests below pin that it is gone. The type-aware `displayName(for:)` fix (MP1-W) stays: it still names the
-/// Qwen3.5 9B Vision card (MoC-6-2).
+/// `taskKinds` are untouched. The Qwen3.5 9B / Qwen3.5 9B Vision pair (MoC-6-2) is the precedent.
 /// Written to extend, not edit, `MiMoWorkflowWiringTests` and the `CatFlowCatalogBridgeTests` pool guards.
 struct Gemma4WorkflowWiringTests {
 
     private static let llmDisplay = "Gemma 4 E4B"
-    private static let withdrawnVisionDisplay = "Gemma 4 E4B Vision"
+    private static let visionDisplay = "Gemma 4 E4B Vision"
     private static let hfID = "mlx-community/gemma-4-e4b-it-4bit"
 
     private var repoRoot: URL {
@@ -34,47 +32,56 @@ struct Gemma4WorkflowWiringTests {
 
     // MARK: - the bridge rows
 
-    @Test func theRowIsSameAndPinnedToTheRepo() throws {
-        let entry = try #require(CatalogBridge.entry(for: Self.llmDisplay))
-        #expect(entry.pinnedID == Self.hfID)
-        #expect(entry.candidates == [Self.hfID])
-        #expect(entry.equivalence == .same)
-        #expect(entry.manifestFile == "gemma-4-e4b-it-4bit.json")
-        #expect(entry.modelType == .llm)
-    }
-
-    @Test func theDisplayResolvesToItsCard() throws {
-        let catalog = try loadCatalog()
-        switch CatalogBridge.resolve(Self.llmDisplay, catalog: catalog) {
-        case .runnable(let slot, let equivalence, let note):
-            #expect(slot.modelEntry?.id == "mlx-community--gemma-4-e4b-it-4bit")
-            #expect(slot.modelEntry?.modelType == .llm)
-            #expect(slot.modelEntry?.hfModelId == Self.hfID)
-            #expect(slot.modelEntry?.ramGB == 7.77)
-            #expect(equivalence == .same)
-            #expect(note == nil)
-        case .notRunnable(let name, let reason, _):
-            Issue.record("\(name) should resolve: \(reason)")
+    @Test func bothRowsAreSameAndPinnedToTheSharedRepo() throws {
+        let llm = try #require(CatalogBridge.entry(for: Self.llmDisplay))
+        let vision = try #require(CatalogBridge.entry(for: Self.visionDisplay))
+        for (entry, file, type) in [(llm, "gemma-4-e4b-it-4bit.json", ModelType.llm),
+                                    (vision, "gemma-4-e4b-it-4bit-vision.json", ModelType.vision)] {
+            #expect(entry.pinnedID == Self.hfID)
+            #expect(entry.candidates == [Self.hfID])
+            #expect(entry.equivalence == .same)
+            #expect(entry.manifestFile == file)
+            #expect(entry.modelType == type)
         }
     }
 
-    /// MP1-R-FIX-1: the Vision twin is withdrawn everywhere a flow could reach it.
-    @Test func theVisionTwinIsWithdrawn() throws {
-        #expect(CatalogBridge.entry(for: Self.withdrawnVisionDisplay) == nil)
-        #expect(CatalogBridge.entries.filter { $0.candidates.contains(Self.hfID) }.map(\.display) == [Self.llmDisplay])
-        #expect(!TaskModels.models(forTask: "Describe Image").contains(Self.withdrawnVisionDisplay))
-        #expect(CuratedManifest.load(manifestFile: "gemma-4-e4b-it-4bit-vision.json") == nil)
-        #expect(!(try loadCatalog().contains { $0.id == "mlx-community--gemma-4-e4b-it-4bit-vision" }))
+    /// The two displays share one hfModelId, so each must resolve to **its own** card (by `modelType`), never to
+    /// its sibling, and neither is notRunnable.
+    @Test func eachDisplayResolvesToItsOwnCard() throws {
+        let catalog = try loadCatalog()
+        for (display, type, id) in [(Self.llmDisplay, ModelType.llm, "mlx-community--gemma-4-e4b-it-4bit"),
+                                    (Self.visionDisplay, ModelType.vision, "mlx-community--gemma-4-e4b-it-4bit-vision")] {
+            switch CatalogBridge.resolve(display, catalog: catalog) {
+            case .runnable(let slot, let equivalence, let note):
+                #expect(slot.modelEntry?.id == id, "\(display)")
+                #expect(slot.modelEntry?.modelType == type)
+                #expect(slot.modelEntry?.hfModelId == Self.hfID)
+                #expect(slot.modelEntry?.ramGB == 7.77)
+                #expect(equivalence == .same)
+                #expect(note == nil)
+            case .notRunnable(let name, let reason, _):
+                Issue.record("\(name) should resolve: \(reason)")
+            }
+        }
+    }
+
+    /// Two rows list this repo (the Qwen3.5 pair does the same), and the reverse lookup the derived pool uses
+    /// returns the first, the text one. That is the existing behaviour for a shared repo; recorded, not changed.
+    @Test func theReverseLookupReturnsTheFirstOfTheTwoRows() {
+        #expect(CatalogBridge.entries.filter { $0.candidates.contains(Self.hfID) }.map(\.display)
+                == [Self.llmDisplay, Self.visionDisplay])
+        #expect(CatalogBridge.entry(forCandidate: Self.hfID)?.display == Self.llmDisplay)
     }
 
     /// Two cards sharing one repo must each be named by **their own** bridge row. `TaskModels.displayName(for:)`
-    /// used to take the first row listing the repo, so the Qwen3.5 Vision card was offered in the Describe Image
-    /// menu as "Qwen3.5 9B", a name that resolves to the text card: picking it wrote a row `CatalogBridge` could
-    /// not run as image Q&A (MoC-6-2). MP1-W fixed that; the Gemma 4 pair that exposed it is gone (MP1-R-FIX-1).
+    /// used to take the first row listing the repo, so the Vision card was offered in the Describe Image menu as
+    /// "Gemma 4 E4B", a name that resolves to the text card: picking it wrote a row `CatalogBridge` could not
+    /// run as image Q&A. The Qwen3.5 9B pair (MoC-6-2) had the same defect; it is fixed by the same change.
     @Test func eachSharedRepoCardIsNamedByItsOwnBridgeRow() throws {
         let catalog = try loadCatalog()
         let pairs: [(id: String, display: String)] = [
             ("mlx-community--gemma-4-e4b-it-4bit", Self.llmDisplay),
+            ("mlx-community--gemma-4-e4b-it-4bit-vision", Self.visionDisplay),
             ("mlx-community--Qwen3.5-9B-MLX-4bit", "Qwen3.5 9B"),
             ("mlx-community--Qwen3.5-9B-MLX-4bit-vision", "Qwen3.5 9B Vision"),
         ]
@@ -113,12 +120,19 @@ struct Gemma4WorkflowWiringTests {
         }
         #expect(vision.modelEntry?.id == "mlx-community--Qwen3.5-9B-MLX-4bit-vision")
         #expect(vision.modelEntry?.modelType == .vision)
+        // Same for the other pairs that share a repo: a pinned display resolves to the card it names.
+        for (display, id) in [(Self.llmDisplay, "mlx-community--gemma-4-e4b-it-4bit"),
+                              (Self.visionDisplay, "mlx-community--gemma-4-e4b-it-4bit-vision")] {
+            if case .runnable(let slot, _, _) = CatalogBridge.resolve(display, catalog: catalog) {
+                #expect(slot.modelEntry?.id == id, "\(display)")
+            } else { Issue.record("\(display) should resolve") }
+        }
     }
 
     // MARK: - the manifests
 
-    /// AM-W step 6: the manifest must be in the **app bundle**, not just in `Resources/`.
-    @Test func theManifestLoadsFromTheAppBundle() throws {
+    /// AM-W step 6: both manifests must be in the **app bundle**, not just in `Resources/`.
+    @Test func bothManifestsLoadFromTheAppBundle() throws {
         let llm = try #require(CuratedManifest.load(manifestFile: "gemma-4-e4b-it-4bit.json"))
         #expect(llm.id == Self.hfID)
         #expect(llm.display == Self.llmDisplay)
@@ -133,10 +147,17 @@ struct Gemma4WorkflowWiringTests {
         #expect(maxTokens.min == 1)
         #expect(maxTokens.max == 32768)
         #expect(maxTokens.defaultValue == .number(2048))
+
+        let vision = try #require(CuratedManifest.load(manifestFile: "gemma-4-e4b-it-4bit-vision.json"))
+        #expect(vision.id == Self.hfID)
+        #expect(vision.display == Self.visionDisplay)
+        #expect(vision.engine == "mlx-vlm")
+        #expect(vision.tasks == ["Describe Image"])
+        #expect(vision.settings.isEmpty)
     }
 
-    @Test func theManifestSaysItIsMLXUIAuthoredAndCiteTheRevision() throws {
-        for file in ["gemma-4-e4b-it-4bit.json"] {
+    @Test func manifestsSayTheyAreMLXUIAuthoredAndCiteTheRevision() throws {
+        for file in ["gemma-4-e4b-it-4bit.json", "gemma-4-e4b-it-4bit-vision.json"] {
             // `CuratedManifest` does not decode `notes`, so read the shipped JSON itself.
             let url = repoRoot.appendingPathComponent("MLXUI/Resources/CatFlow/models/\(file)")
             let json = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
@@ -153,8 +174,8 @@ struct Gemma4WorkflowWiringTests {
 
     @Test func manifestResourcesMatchTheCatalogCards() throws {
         let catalog = try loadCatalog().filter { $0.hfModelId == Self.hfID }
-        #expect(catalog.count == 1)
-        for file in ["gemma-4-e4b-it-4bit.json"] {
+        #expect(catalog.count == 2)
+        for file in ["gemma-4-e4b-it-4bit.json", "gemma-4-e4b-it-4bit-vision.json"] {
             let manifest = try #require(CuratedManifest.load(manifestFile: file))
             for card in catalog {
                 #expect(manifest.resources?.ramGB == card.ramGB, "\(file)")
@@ -180,21 +201,23 @@ struct Gemma4WorkflowWiringTests {
             let pool = TaskModels.models(forTask: task)
             #expect(pool.last == Self.llmDisplay, "\(task): last pool name")
             #expect(pool.dropLast().last == "MiMo V2.6 9B", "\(task): should follow MiMo V2.6 9B")
-            #expect(!pool.contains(Self.withdrawnVisionDisplay), "\(task)")
+            #expect(!pool.contains(Self.visionDisplay), "\(task): the vision half belongs to Describe Image only")
         }
         let derived = TaskModels.derivedModels(for: "Generate", catalog: catalog, claimableModelIDs: claimable)
         #expect(derived.contains { $0.displayName == Self.llmDisplay }, "the Generate menu should offer \(Self.llmDisplay)")
     }
 
-    /// Describe Image is back to its pre-MP1 pool: the seed ("LFM2-VL 1.6B") never moved, and no Gemma 4 name is in it.
+    /// "Gemma 4 E4B Vision" is appended **last** to Describe Image: the seed ("LFM2-VL 1.6B") does not move.
     @MainActor
-    @Test func describeImageIsUnchangedByThisPack() throws {
+    @Test func visionHalfIsLastInDescribeImageWithoutMovingTheSeed() throws {
         let catalog = try loadCatalog()
         let claimable = claimableIDs(catalog)
-        #expect(TaskModels.models(forTask: "Describe Image") == ["LFM2-VL 1.6B", "Gemma 3 4B", "Qwen3.5 9B Vision"])
+        #expect(TaskModels.models(forTask: "Describe Image")
+                == ["LFM2-VL 1.6B", "Gemma 3 4B", "Qwen3.5 9B Vision", Self.visionDisplay])
         #expect(TaskModels.defaultModel(forTask: "Describe Image", catalog: catalog, claimableModelIDs: claimable) == "LFM2-VL 1.6B")
+        #expect(!TaskModels.models(forTask: "Describe Image").contains(Self.llmDisplay))
         let derived = TaskModels.derivedModels(for: "Describe Image", catalog: catalog, claimableModelIDs: claimable)
-        #expect(!derived.contains { $0.displayName.contains("Gemma 4") })
+        #expect(derived.contains { $0.displayName == Self.visionDisplay }, "the Describe Image menu should offer \(Self.visionDisplay)")
     }
 
     /// The seeds of the deciders keyed on the same array do not move, and no other task's pool gained a Gemma 4 name.
@@ -208,13 +231,14 @@ struct Gemma4WorkflowWiringTests {
         }
         let llmKeyed: Set<String> = ["Generate", "Summarize", "Translate", "Answer", "Rewrite", "Draft", "Ask", "Title",
                                      "Critique", "Verify", "Revise", "Merge", "Text to Table", "Classify", "Gate", "Score"]
-        for task in TaskCatalog.catalog.keys where !llmKeyed.contains(task) {
+        for task in TaskCatalog.catalog.keys where !llmKeyed.contains(task) && task != "Describe Image" {
             #expect(!TaskModels.models(forTask: task).contains { $0.hasPrefix("Gemma 4") }, "\(task)")
         }
     }
 
-    /// No new task: the task the model joins already exists and is served.
+    /// No new task: both tasks the models join already exist and are served.
     @Test func joinsOnlyExistingTasks() {
         #expect(TaskCatalog.catalog["Generate"] != nil)
+        #expect(TaskCatalog.catalog["Describe Image"] != nil)
     }
 }

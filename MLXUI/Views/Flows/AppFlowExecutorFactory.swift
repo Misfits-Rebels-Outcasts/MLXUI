@@ -20,7 +20,7 @@ import Foundation
     ) -> RealExecutor {
         let blobDir = scope.directory.appendingPathComponent(".blobs", isDirectory: true)
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
-        let installed = appState.installedModelIDs
+        let installed = appState.flowReadyModelIDs
 
         let cache = EngineCache.shared
         let makeStage: @Sendable (ModelEntry, StageConfig) async throws -> any PipelineStage = { model, config in
