@@ -52,6 +52,18 @@ struct ModelDetailView: View {
                         .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
                 }
 
+                // WW2-3-7: shown, not failed — a model that needs a newer macOS is dimmed with the reason.
+                if let needs = ModelSupport.osRequirement(for: model) {
+                    Label("\(ModelSupport.osRequirementTitle(needs)): this model's audio can't be run safely on this macOS.",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+                }
+
                 Divider()
 
                 // Quick Info — columns are `.leading` so short tiles (RAM, License, Updated)
@@ -227,6 +239,8 @@ struct ModelDetailView: View {
                 Label("Run", systemImage: "play.fill").frame(minWidth: 100)
             }
             .buttonStyle(.borderedProminent)
+            .disabled(ModelSupport.osRequirement(for: model) != nil)      // WW2-3-7
+            .help(ModelSupport.osRequirement(for: model).map { "This model " + $0 + "." } ?? "")
             Button { appState.uninstallModel(model) } label: {
                 Label("Uninstall", systemImage: "trash").frame(minWidth: 100)
             }

@@ -26,6 +26,7 @@ struct TTSRunView: View {
         VStack(alignment: .leading, spacing: 14) {
             header
             Divider()
+            if let needs = osRequirement { osBanner(needs) }
             inputs
             options
             if model.isRunning { runningRow }
@@ -43,6 +44,20 @@ struct TTSRunView: View {
     }
 
     // MARK: - Sections
+
+    /// WW2-3-7: Kokoro on macOS < 15 is shown, not failed (`ModelSupport.osRequirement`).
+    private var osRequirement: String? { ModelSupport.osRequirement(forID: modelID) }
+
+    private func osBanner(_ needs: String) -> some View {
+        Label("\(ModelSupport.osRequirementTitle(needs)): this model's audio can't be run safely on this macOS.",
+              systemImage: "exclamationmark.triangle.fill")
+            .font(.caption)
+            .foregroundStyle(.orange)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+    }
 
     private var header: some View {
         HStack(spacing: 8) {
@@ -128,7 +143,7 @@ struct TTSRunView: View {
             Spacer()
             Button(model.isRunning ? "Synthesizing…" : "Synthesize") { run() }
                 .keyboardShortcut(.defaultAction)
-                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isRunning)
+                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isRunning || osRequirement != nil)
         }
     }
 
