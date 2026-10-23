@@ -11,14 +11,14 @@ import Foundation
 ///
 /// **Remove when upstream fixes it.** Delete this file and its two call sites (`KokoroEngine.synthesize`,
 /// `MLXAudioTTSEngine.synthesize`) once mlx-audio-swift evaluates before returning or stops using the mixed subscript, or
-/// mlx-swift stops recording it on a thread-bound stream. The issue links go in `RSI/notes/ww2/upstream-issues.md` when
-/// posted; `MLXThreadStreamTests` fails when the underlying behaviour changes, which is the cue to revisit.
+/// mlx-swift stops recording it on a thread-bound stream. Upstream issues: not yet reported; drafts in
+/// `RSI/notes/ww2/upstream-issues.md` (owner 2026-10-23). `MLXThreadStreamTests` fails when the underlying behaviour changes, which is the cue to revisit.
 ///
 /// macOS 15+ only (`TaskExecutor`): on macOS 14 `run` just runs the body, and the hazard stays for the main-actor Run UI.
 /// **Owner ruling 2026-10-23 (WW2-3-7, "show it, don't fail it"):** on macOS < 15 **Kokoro** — the only family using the
 /// pattern — is shown dimmed with "needs macOS 15" (Browse card, detail, Run UI, flow Model menu; `ModelSupport.osRequirement`)
 /// and the read guard (`MLXErrorGuard.read`) stays, so an attempted run is an error, never a crash. Remove that gate with
-/// this file when upstream fixes `interpolate1d`. Issue links: `RSI/notes/ww2/upstream-issues.md` (to be filled in once posted).
+/// this file when upstream fixes `interpolate1d`. Upstream issues: not yet reported; drafts in `RSI/notes/ww2/upstream-issues.md` (owner 2026-10-23).
 nonisolated enum MLXAudioThread {
     /// Run `operation` — load, `generate`, evaluate, read — on the audio thread. Safe to call from any actor.
     static func run<T: Sendable>(_ operation: @escaping @Sendable () async throws -> T) async throws -> T {
