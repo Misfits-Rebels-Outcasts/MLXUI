@@ -1857,6 +1857,79 @@
           ],
           "descriptionSource": "openai/whisper-large-v3",
           "summary": "Whisper is a state-of-the-art model for automatic speech recognition (ASR) and speech translation, proposed in the paper"
+        },
+        {
+          "id": "mlx-community--parakeet-tdt-0.6b-v3",
+          "family": "Parakeet",
+          "displayName": "parakeet-tdt-0.6b-v3",
+          "paramSize": "0.6271B",
+          "paramCountB": 0.6271,
+          "modelType": "asr",
+          "source": "mlx",
+          "format": "mlx-fp32",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/parakeet-tdt-0.6b-v3",
+          "ramGB": 3.77,
+          "downloadSizeGB": 2.51,
+          "contextWindow": null,
+          "license": "cc-by-4.0",
+          "licenseUrl": null,
+          "description": "# parakeet-tdt-0.6b-v3\n\nMLX conversion of [nvidia/parakeet-tdt-0.6b-v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), a FastConformer speech-to-text model covering 25 European languages.\n\nRAM figure is an estimate (download size × 1.5), not a measurement.",
+          "architecture": null,
+          "languages": [
+            "en",
+            "es",
+            "fr",
+            "de",
+            "bg",
+            "hr",
+            "cs",
+            "da",
+            "nl",
+            "et",
+            "fi",
+            "el",
+            "hu",
+            "it",
+            "lv",
+            "lt",
+            "mt",
+            "pl",
+            "pt",
+            "ro",
+            "sk",
+            "sl",
+            "sv",
+            "ru",
+            "uk"
+          ],
+          "lastUpdated": "2025-08-16",
+          "taskTags": [
+            "automatic-speech-recognition"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 2562184,
+          "communityLikes": 67,
+          "variants": [
+            {
+              "quantization": "fp32",
+              "format": "mlx-fp32",
+              "ramGB": 3.77,
+              "downloadSizeGB": 2.51,
+              "qualityPercent": 100,
+              "hfModelId": "mlx-community/parakeet-tdt-0.6b-v3",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/parakeet-tdt-0.6b-v3",
+          "summary": "MLX conversion of nvidia/parakeet-tdt-0.6b-v3, a FastConformer speech-to-text model for 25 European languages."
         }
       ]
     },
