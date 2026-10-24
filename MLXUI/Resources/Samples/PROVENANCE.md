@@ -8,7 +8,7 @@ copyrighted works.
 
 | File | Provenance |
 |---|---|
-| `sample-audio.m4a` | Copied from `catflow-mlx/gallery_fixtures/01-SpokenSummary/memo.m4a` — a generated ~6 s speech clip (same audio `01-SpokenSummary` ships). |
+| `sample-audio.m4a` | Copied from `catflow-mlx/gallery_fixtures/01-SpokenSummary/memo.m4a` — a generated speech clip, 13.9 s (measured with `afinfo`, 2026-10-24) (same audio `01-SpokenSummary` ships). |
 | `sample-text.txt` | Written fresh for this feature. |
 | `sample-image.png` | Copied from `catflow-mlx/gallery_fixtures/21-PhotoWebPrep/vacation/photo-01.png` — a generated photo. |
 | `sample-images/sample-img-01/02/03.png` | Copied from `21-PhotoWebPrep/vacation/photo-01/02/03.png` — generated photos. |

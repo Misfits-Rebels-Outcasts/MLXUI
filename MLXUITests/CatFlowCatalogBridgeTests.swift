@@ -168,7 +168,8 @@ struct CatFlowCatalogBridgeTests {
         // CF-8 added "Clef Flash", 25 -> 26; MM-W added "MiMo V2.6 9B", 26 -> 27 (implementer's call,
         // pending owner confirmation: a bumped count, as each earlier row did, not an edited golden).
         // MP1-W added "Gemma 4 E4B" and "Gemma 4 E4B Vision", 27 -> 29 (same call, same convention).
-        #expect(CatalogBridge.entries.count == 29)
+        // MP2-W added "Parakeet TDT 0.6B v3", 29 -> 30 (owner ruling AE, 2026-10-24; same convention).
+        #expect(CatalogBridge.entries.count == 30)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
@@ -401,7 +402,8 @@ struct CatFlowCatalogBridgeTests {
         // CF-8 added "Clef Flash", 25 -> 26; MM-W added "MiMo V2.6 9B", 26 -> 27 (implementer's call,
         // pending owner confirmation: a bumped count, as each earlier row did, not an edited golden).
         // MP1-W added "Gemma 4 E4B" and "Gemma 4 E4B Vision", 27 -> 29 (same call, same convention).
-        #expect(CatalogBridge.entries.count == 29)
+        // MP2-W added "Parakeet TDT 0.6B v3", 29 -> 30 (owner ruling AE, 2026-10-24; same convention).
+        #expect(CatalogBridge.entries.count == 30)
     }
 
     // MARK: - MoC-4-4: Qwen3 Reranker 0.6B joins the bridge, the model on MoC-3's seam

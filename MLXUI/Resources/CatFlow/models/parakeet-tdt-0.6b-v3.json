@@ -1,0 +1,20 @@
+{
+  "id": "mlx-community/parakeet-tdt-0.6b-v3",
+  "display": "Parakeet TDT 0.6B v3",
+  "kind": "local",
+  "engine": "mlx-audio-swift",
+  "tasks": [
+    "Transcribe"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 2.51,
+    "ram_gb": 3.77
+  },
+  "source": "https://huggingface.co/mlx-community/parakeet-tdt-0.6b-v3",
+  "license": "CC-BY-4.0",
+  "manifest_version": 1,
+  "pinned": true,
+  "notes": "MLXUI-authored (RSI/DelegateModelPackBacklog.md MP2-W) -- catflow-mlx has no manifest for this model, so this was written in the shape of voxtral-mini-4b-realtime-2602-4bit.json. It has no checksum field, as the other MLXUI-authored manifests (the Gemma 4 pair, MiMo, Qwen3.8) have none: there is no catflow source manifest to inherit one from and the field is documentary. settings is empty on purpose (readme T4): the engine takes no language and returns text only, so no lang or timestamps setting is offered. resources.disk_gb is browser.json's downloadSizeGB (2.51) and resources.ram_gb is its ramGB 3.77 (download size x 1.5, MP-0 G: an estimate, not a measurement). Verified against mlx-community/parakeet-tdt-0.6b-v3 revision ed2b7e8c15f9aaa0b5772e2efb986255eaef7e15. Original model by NVIDIA (nvidia/parakeet-tdt-0.6b-v3), CC-BY-4.0."
+}
