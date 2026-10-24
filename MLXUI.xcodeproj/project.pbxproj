@@ -19,6 +19,8 @@
 		20AACD442FEBC4C50098B372 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = B00000030001FEB616500 /* MLX */; };
 		20AACD452FEBC4C50098B372 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = B00000040001FEB616500 /* MLXLLM */; };
 		20B366A22FF3373F00682B99 /* MLXAudioTTS in Frameworks */ = {isa = PBXBuildFile; productRef = 20B366A12FF3373F00682B99 /* MLXAudioTTS */; };
+		20E10626308C6FDD00EDD404 /* MLXGuidedGeneration in Frameworks */ = {isa = PBXBuildFile; productRef = 20E10625308C6FDD00EDD404 /* MLXGuidedGeneration */; };
+		20E10628308C6FEF00EDD404 /* MLXGuidedGeneration in Frameworks */ = {isa = PBXBuildFile; productRef = 20E10627308C6FEF00EDD404 /* MLXGuidedGeneration */; };
 		20ED052A2FF2A3C6009036F2 /* MLXAudioSTT in Frameworks */ = {isa = PBXBuildFile; productRef = 20ED05292FF2A3C6009036F2 /* MLXAudioSTT */; };
 		20F5D7BF2FF61BCF005F7423 /* PaddleOCRVL in Frameworks */ = {isa = PBXBuildFile; productRef = 20F5D7BE2FF61BCF005F7423 /* PaddleOCRVL */; };
 		20FAFC272FF4866E00DC6CCD /* MLXEmbedders in Frameworks */ = {isa = PBXBuildFile; productRef = 20FAFC262FF4866E00DC6CCD /* MLXEmbedders */; };
@@ -86,6 +88,7 @@
 				20FF10C73089E5B30020BA09 /* MLXAudioTTS in Frameworks */,
 				20FF10C53089E5A10020BA09 /* MLXAudioSTT in Frameworks */,
 				20320351301B7DB30003B32E /* MLXVLM in Frameworks */,
+				20E10628308C6FEF00EDD404 /* MLXGuidedGeneration in Frameworks */,
 				20320352301B7DB30003B32E /* PaddleOCRVL in Frameworks */,
 				20320353301B7DB30003B32E /* MLXEmbedders in Frameworks */,
 				20320355301B7DB30003B32E /* MLXLLM in Frameworks */,
@@ -109,6 +112,7 @@
 				203CC01D2FF0E29F007A6D30 /* WhisperKit in Frameworks */,
 				20913E352FF390DC0005E86D /* MLXVLM in Frameworks */,
 				20F5D7BF2FF61BCF005F7423 /* PaddleOCRVL in Frameworks */,
+				20E10626308C6FDD00EDD404 /* MLXGuidedGeneration in Frameworks */,
 				20FAFC272FF4866E00DC6CCD /* MLXEmbedders in Frameworks */,
 				20ED052A2FF2A3C6009036F2 /* MLXAudioSTT in Frameworks */,
 				20AACD452FEBC4C50098B372 /* MLXLLM in Frameworks */,
@@ -182,6 +186,7 @@
 				7581BDCDEF9D6AC66DEB05B6 /* FlyingFox */,
 				20FF10C43089E5A10020BA09 /* MLXAudioSTT */,
 				20FF10C63089E5B30020BA09 /* MLXAudioTTS */,
+				20E10627308C6FEF00EDD404 /* MLXGuidedGeneration */,
 			);
 			productName = MLXUI;
 			productReference = 2032035B301B7DB30003B32E /* MLXUI Pro.app */;
@@ -234,6 +239,7 @@
 				20FAFC262FF4866E00DC6CCD /* MLXEmbedders */,
 				20F5D7BE2FF61BCF005F7423 /* PaddleOCRVL */,
 				1B6BACEF19D0F63DEF97E9B2 /* FlyingFox */,
+				20E10625308C6FDD00EDD404 /* MLXGuidedGeneration */,
 			);
 			productName = MLXUI;
 			productReference = 207EF2A32FEB616500A0AC5F /* MLXUI.app */;
@@ -718,6 +724,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 20ED05282FF2A3C6009036F2 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */;
 			productName = MLXAudioTTS;
+		};
+		20E10625308C6FDD00EDD404 /* MLXGuidedGeneration */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B00000020001FEB616500 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXGuidedGeneration;
+		};
+		20E10627308C6FEF00EDD404 /* MLXGuidedGeneration */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B00000020001FEB616500 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXGuidedGeneration;
 		};
 		20ED05292FF2A3C6009036F2 /* MLXAudioSTT */ = {
 			isa = XCSwiftPackageProductDependency;
