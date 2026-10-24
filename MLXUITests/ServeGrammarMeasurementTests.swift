@@ -387,7 +387,8 @@ struct ServeSchemaDepthProbeTests {
             + String(repeating: #"},"required":["c"]}"#, count: depth)
         print("DEPTH n=\(depth) jsonContainers=\(depth * 2 + 1) starting")
         let start = ContinuousClock.now
-        _ = try ServeGrammarCache.compile(vocabulary: vocabulary, format: .jsonSchema(schema))
+        // On the compile thread (ruling AV): the edge is the one the shipping path has, not a pool thread's.
+        _ = try await ServeGrammarCompileThread.shared.run { _ = try ServeGrammarCache.compile(vocabulary: vocabulary, format: .jsonSchema(schema)) }
         let d = ContinuousClock.now - start
         print("DEPTH n=\(depth) jsonContainers=\(depth * 2 + 1) ms=\(Int((Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) * 1000)) ok")
     }
@@ -436,6 +437,28 @@ struct ServeSchemaBoundCombinationTests {
             do { _ = try ServeGrammarCache.compile(vocabulary: vocabulary, format: .jsonSchema(schema)) } catch { failure = " error=\(String(describing: error).prefix(160))" }
             let d = ContinuousClock.now - start
             print("BOUND4 label=\"\(label)\" ms=\(Int((Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) * 1000)) bytes=\(schema.utf8.count)\(failure)")
+        }
+    }
+}
+
+/// Ruling AW: a self-referential schema compiles on the real Gemma 4 vocabulary without crashing and inside the 1 s budget.
+@Suite(.serialized, .enabled(if: grammarMeasurementDirectory != nil))
+struct ServeRecursiveRefMeasurementTests {
+    @Test func recursiveRefsCompileInsideTheBudgetOnTheRealVocabulary() async throws {
+        let directory = try #require(grammarMeasurementDirectory)
+        let tokenizer = try await HFTokenizerLoader().load(from: directory)
+        let vocabulary = try ServeGrammarVocabulary(directory: directory, tokenizer: tokenizer, eosTokenID: 106)
+        let schemas = [
+            ("tree", ##"{"type":"object","properties":{"name":{"type":"string"},"children":{"type":"array","items":{"$ref":"#"}}},"required":["name","children"]}"##),
+            ("defs", ##"{"$defs":{"node":{"type":"object","properties":{"next":{"anyOf":[{"$ref":"#/$defs/node"},{"type":"null"}]}},"required":["next"]}},"$ref":"#/$defs/node"}"##),
+        ]
+        for (label, schema) in schemas {
+            let start = ContinuousClock.now
+            _ = try await ServeGrammarCompileThread.shared.run { _ = try ServeGrammarCache.compile(vocabulary: vocabulary, format: .jsonSchema(schema)) }
+            let d = ContinuousClock.now - start
+            let ms = Int((Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) * 1000)
+            print("RECURSIVE-REF label=\(label) cold_ms=\(ms)")
+            #expect(ms < 1000, "\(label) compiled in \(ms) ms")
         }
     }
 }

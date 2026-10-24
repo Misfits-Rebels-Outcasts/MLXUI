@@ -234,7 +234,19 @@ struct ServeSchemaCheckTests {
         let evil = String(repeating: "[", count: 100_000) + String(repeating: "]", count: 100_000)
         if case .ok = ServeSchemaCheck.check(evil) { Issue.record("must not be accepted") }
         let deepObjects = String(repeating: #"{"items":"#, count: 5000) + "{}" + String(repeating: "}", count: 5000)
-        _ = ServeSchemaCheck.check(deepObjects)             // must return (Foundation's parser has its own depth limit)
+        _ = ServeSchemaCheck.check(deepObjects)             // must return; the pre-parse scan refuses it (test below)
+    }
+
+    @Test func aHostileNestingIsRefusedByAnIterativeScanBeforeFoundationParsesIt() {
+        // The test host died inside JSONSerialization (newJSONObject recursion) on the 5,000-deep case before the scan existed.
+        let deep = String(repeating: #"{"items":"#, count: 5000) + "{}" + String(repeating: "}", count: 5000)
+        let found = Self.findings(deep)
+        #expect(found.first?.kind == .tooDeep(allowed: Bounds.maxJSONDepth))
+        #expect(ServeSchemaCheck.rawNesting(deep, stopAfter: Bounds.maxRawNesting) == Bounds.maxRawNesting + 1, "the scan stops as soon as it is over")
+        #expect(ServeSchemaCheck.estimatedCompileMs(deep) == nil)
+        // brackets inside strings don't count, and an escaped quote doesn't end the string
+        let quoted = #"{"description":"[[[[[[[[[[ \" {{{{{{{{{{","type":"string"}"#
+        #expect(ServeSchemaCheck.rawNesting(quoted, stopAfter: 1000) == 1)
     }
 
     @Test func theSchemaSizeIsBoundedBeforeItIsParsed() {

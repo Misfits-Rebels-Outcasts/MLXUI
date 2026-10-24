@@ -98,16 +98,24 @@ actor ServeGrammarCache {
 
     /// A constraint at its initial state for this request: an idle one, else a fresh compile.
     /// - Throws: `GrammarError` — `.invalidJSONSchema` for a schema xgrammar rejects (WW4-1-2 turns it into a 400).
-    func lease(vocabulary: ServeGrammarVocabulary, format: ServeGrammarFormat) throws -> ServeGrammarLease {
+    /// A fresh compile runs on `ServeGrammarCompileThread` (ruling AV). If the caller is cancelled while it compiles, the new
+    /// constraint is parked as idle (it is untouched) and `CancellationError` is thrown: nothing is leased that the caller
+    /// will not release.
+    func lease(vocabulary: ServeGrammarVocabulary, format: ServeGrammarFormat) async throws -> ServeGrammarLease {
         let key = Self.key(vocabulary: vocabulary, format: format)
         if var stack = idle[key], let constraint = stack.popLast() {
             idle[key] = stack.isEmpty ? nil : stack
             if stack.isEmpty { idleRecency.removeAll { $0 == key } } else { Self.touch(key, in: &idleRecency) }
             return ServeGrammarLease(constraint: constraint, key: key)
         }
-        let constraint = try Self.compile(vocabulary: vocabulary, format: format)
+        let box = try await ServeGrammarCompileThread.shared.run { Compiled(constraint: try Self.compile(vocabulary: vocabulary, format: format)) }
         compiles += 1
-        return ServeGrammarLease(constraint: constraint, key: key)
+        let lease = ServeGrammarLease(constraint: box.constraint, key: key)
+        if Task.isCancelled {
+            release(lease, committedTokens: 0, reusable: true)
+            throw CancellationError()
+        }
+        return lease
     }
 
     /// Give a leased constraint back. `committedTokens` is how many tokens the matcher accepted (the stop token included); they
@@ -135,6 +143,8 @@ actor ServeGrammarCache {
     nonisolated static func compile(vocabulary: ServeGrammarVocabulary, format: ServeGrammarFormat) throws -> GrammarConstraint {
         try GrammarConstraint(tokenizer: vocabulary.tokenizer, jsonSchema: format.schemaText, fastForward: false)
     }
+
+    private struct Compiled: @unchecked Sendable { let constraint: GrammarConstraint }
 
     static func key(vocabulary: ServeGrammarVocabulary, format: ServeGrammarFormat) -> String {
         let digest = SHA256.hash(data: Data(format.schemaText.utf8))

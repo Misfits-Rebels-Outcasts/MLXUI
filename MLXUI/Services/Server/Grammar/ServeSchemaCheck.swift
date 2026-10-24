@@ -46,10 +46,16 @@ nonisolated enum ServeSchemaCheck {
         static let schemaBytes = 80_000
         /// `anyOf` / `oneOf` branches — ok at 400 (884 ms), over at 512 (1012 ms).
         static let branches = 400
-        /// JSON nesting depth (`{`/`[` containers). The test host compiled a schema 81 containers deep (551 ms) and died with
-        /// SIGBUS (stack overflow in xgrammar's recursive copy) at 101, in a Debug build on a cooperative-pool thread, the same
-        /// stack the server compiles on. 60 leaves a margin under the deepest one measured to work.
+        /// JSON nesting depth (`{`/`[` containers) of the schema's own structure. On a cooperative-pool thread xgrammar's
+        /// recursive copy died with SIGBUS at 101 containers; compiles now run on `ServeGrammarCompileThread` (16 MB stack,
+        /// ruling AV), where 801 containers compiled without a crash, so the stack edge is above that and is no longer the
+        /// binding limit. Compile *time* is: 121 containers ≈ 0.75 s, 201 ≈ 1.4 s, 301 ≈ 2.8 s, 501 ≈ 9.8 s, 801 ≈ 38 s
+        /// (about quadratic). 60 is far under both, and 30 levels of nested objects is deeper than any real schema.
         static let maxJSONDepth = 60
+        /// Raw `{`/`[` nesting of the text, checked by an iterative scan **before** Foundation parses it: `JSONSerialization`
+        /// recurses on the caller's stack and a 5,000-deep schema overflowed it (SIGBUS, journal 2026-572 addendum). Higher than
+        /// `maxJSONDepth` because values the walk never descends into (`enum`, `const`, `default`) may nest without cost.
+        static let maxRawNesting = 128
         /// The whole schema's estimated cold compile (`CostModel`), in milliseconds. Bounds are per construct and **do not
         /// add up to a safe whole**: every construct at its own bound, in one schema, took 4,492 ms, and half of each took 2,676 ms.
         /// The worst measured schema the estimate accepts took 1,830 ms (enum 5000 + 175 properties).
@@ -148,6 +154,9 @@ nonisolated enum ServeSchemaCheck {
         if bytes > Bounds.schemaBytes {
             return .refused([Finding(pointer: "", keyword: "(schema)", kind: .tooLarge(bytes: bytes, allowed: Bounds.schemaBytes))])
         }
+        if Self.rawNesting(text, stopAfter: Bounds.maxRawNesting) > Bounds.maxRawNesting {
+            return .refused([Finding(pointer: "", keyword: "(nesting)", kind: .tooDeep(allowed: Bounds.maxJSONDepth))])
+        }
         guard let data = text.data(using: .utf8),
               let root = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
             return .malformed("it is not valid JSON")
@@ -168,9 +177,32 @@ nonisolated enum ServeSchemaCheck {
 
     }
 
+    /// Deepest `{`/`[` nesting in `text`, outside strings, counted without recursion; returns as soon as it exceeds `stopAfter`.
+    static func rawNesting(_ text: String, stopAfter limit: Int) -> Int {
+        var depth = 0, deepest = 0
+        var inString = false, escaped = false
+        for byte in text.utf8 {
+            if inString {
+                if escaped { escaped = false } else if byte == 0x5C { escaped = true } else if byte == 0x22 { inString = false }
+                continue
+            }
+            switch byte {
+            case 0x22: inString = true
+            case 0x7B, 0x5B:
+                depth += 1
+                if depth > deepest { deepest = depth }
+                if deepest > limit { return deepest }
+            case 0x7D, 0x5D: depth = max(0, depth - 1)
+            default: break
+            }
+        }
+        return deepest
+    }
+
     /// The estimated cold compile of a schema that passed `check`, in milliseconds (for tests and the journal).
     static func estimatedCompileMs(_ text: String) -> Double? {
-        guard let data = text.data(using: .utf8),
+        guard rawNesting(text, stopAfter: Bounds.maxRawNesting) <= Bounds.maxRawNesting,
+              let data = text.data(using: .utf8),
               let root = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else { return nil }
         var walker = Walker()
         walker.visit(root, pointer: "", depth: 1)
@@ -183,6 +215,8 @@ nonisolated enum ServeSchemaCheck {
         var findings: [Finding] = []
         var cost = CostModel()
         private var tooDeepReported = false
+        /// Set once the depth limit is crossed: the walk stops there instead of visiting the rest of an over-deep schema.
+        private var halted = false
 
         mutating func add(_ pointer: String, _ keyword: String, _ kind: Finding.Kind) {
             findings.append(Finding(pointer: pointer, keyword: keyword, kind: kind))
@@ -190,10 +224,11 @@ nonisolated enum ServeSchemaCheck {
 
         /// `depth` counts JSON containers from the root, the thing xgrammar's recursive copy pays for.
         mutating func visit(_ node: Any, pointer: String, depth: Int) {
-            guard let object = node as? [String: Any] else { return }          // `true` / `false` constrain nothing we need to check
+            guard !halted, let object = node as? [String: Any] else { return }  // `true` / `false` constrain nothing we need to check
             if depth > Bounds.maxJSONDepth {
                 if !tooDeepReported {
                     tooDeepReported = true
+                    halted = true
                     add(pointer, "(nesting)", .tooDeep(allowed: Bounds.maxJSONDepth))
                 }
                 return

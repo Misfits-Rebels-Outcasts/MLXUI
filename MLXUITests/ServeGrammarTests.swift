@@ -433,3 +433,96 @@ struct ServeGrammarEOSTests {
         #expect(Self.pick([], tokenizerEOS: 1, [:]) == nil)
     }
 }
+
+// MARK: - WW4-1-3 commit 1: the compile thread (ruling AV) and recursive `$ref` (ruling AW)
+
+struct ServeGrammarCompileThreadTests {
+    @Test func compilesRunOnTheNamedThreadWithTheLargeStack() async throws {
+        let (name, onMain, stack) = try await ServeGrammarCompileThread.shared.run {
+            (Thread.current.name ?? "", Thread.isMainThread, Thread.current.stackSize)
+        }
+        #expect(name == "ServeGrammarCompileThread")
+        #expect(!onMain)
+        #expect(stack >= ServeGrammarCompileThread.stackBytes)
+    }
+
+    @Test func aSchemaPastTheOldCrashDepthCompilesThroughTheLeasePath() async throws {
+        // 201 containers: the old test-host thread died with SIGBUS at 101 (journal 2026-572).
+        let depth = 100
+        let schema = String(repeating: #"{"type":"object","properties":{"c":"#, count: depth) + #"{"type":"string"}"#
+            + String(repeating: #"},"required":["c"]}"#, count: depth)
+        let lease = try await ServeGrammarCache().lease(vocabulary: try FakeVocab.vocabulary(), format: .jsonSchema(schema))
+        #expect(!(try lease.constraint.computeMask().isTerminated))
+    }
+
+    @Test func aJobStillQueuedWhenItsCallerIsCancelledNeverRuns() async throws {
+        let thread = ServeGrammarCompileThread.shared
+        let gate = DispatchSemaphore(value: 0)
+        let started = DispatchSemaphore(value: 0)
+        let ran = RanFlag()
+        let blocker = Task { try await thread.run { started.signal(); gate.wait() } }
+        await Task.detached { started.wait() }.value        // the blocker occupies the thread
+        let queued = Task { try await thread.run { ran.set() } }
+        try await Task.sleep(for: .milliseconds(50))
+        queued.cancel()
+        gate.signal()
+        _ = try await blocker.value
+        do { _ = try await queued.value; Issue.record("the cancelled job should throw") } catch is CancellationError {}
+        #expect(!ran.value)
+    }
+
+    @Test func aRequestCancelledDuringACompileLeavesTheConstraintIdleAndLeasesNothing() async throws {
+        let cache = ServeGrammarCache()
+        let vocabulary = try FakeVocab.vocabulary()
+        let thread = ServeGrammarCompileThread.shared
+        let gate = DispatchSemaphore(value: 0), started = DispatchSemaphore(value: 0)
+        let blocker = Task { try await thread.run { started.signal(); gate.wait() } }
+        await Task.detached { started.wait() }.value
+        let request = Task { try await cache.lease(vocabulary: vocabulary, format: .jsonSchema(#"{"type":"object"}"#)) }
+        try await Task.sleep(for: .milliseconds(50))
+        request.cancel()
+        gate.signal()
+        _ = try await blocker.value
+        do { _ = try await request.value; Issue.record("a cancelled lease should throw") } catch is CancellationError {}
+        let idle = await cache.idleConstraints
+        #expect(idle == 0, "cancelled before the compile ran: nothing compiled, nothing idle")
+    }
+
+    private final class RanFlag: @unchecked Sendable {
+        private let lock = NSLock(); private var flag = false
+        func set() { lock.lock(); flag = true; lock.unlock() }
+        var value: Bool { lock.lock(); defer { lock.unlock() }; return flag }
+    }
+}
+
+struct ServeRecursiveRefTests {
+    private static let tree = ##"{"type":"object","properties":{"name":{"type":"string"},"children":{"type":"array","items":{"$ref":"#"}}},"required":["name","children"]}"##
+    private static let defs = ##"{"$defs":{"node":{"type":"object","properties":{"next":{"anyOf":[{"$ref":"#/$defs/node"},{"type":"null"}]}},"required":["next"]}},"$ref":"#/$defs/node"}"##
+
+    private static func accepts(_ schema: String, _ document: String) async throws -> Bool {
+        let constraint = try await ServeGrammarCache().lease(vocabulary: try FakeVocab.vocabulary(), format: .jsonSchema(schema)).constraint
+        for character in document {
+            guard let id = FakeVocab.ids[character], FakeVocab.allowed(try constraint.computeMask(), id) else { return false }
+            _ = try constraint.commitToken(Int32(id))
+        }
+        return FakeVocab.allowed(try constraint.computeMask(), FakeVocab.eos)
+    }
+
+    @Test func aSelfReferentialTreePassesTheCheckAndTheWalkTerminates() {
+        #expect(ServeSchemaCheck.check(Self.tree) == .ok)
+        #expect(ServeSchemaCheck.check(Self.defs) == .ok)
+        #expect((ServeSchemaCheck.estimatedCompileMs(Self.tree) ?? .infinity) < Double(ServeSchemaCheck.Bounds.estimatedCompileMs))
+    }
+
+    @Test func aSelfReferentialTreeCompilesAndGuidesNestedDocuments() async throws {
+        let start = ContinuousClock.now
+        #expect(try await Self.accepts(Self.tree, #"{"name":"a","children":[{"name":"b","children":[{"name":"c","children":[]}]}]}"#))
+        #expect(ContinuousClock.now - start < .seconds(1))
+        #expect(!(try await Self.accepts(Self.tree, #"{"name":"a","children":[{"name":1,"children":[]}]}"#)))
+    }
+
+    @Test func aMutuallyRecursiveDefsSchemaCompilesAndGuides() async throws {
+        #expect(try await Self.accepts(Self.defs, #"{"next":{"next":{"next":null}}}"#))
+        #expect(!(try await Self.accepts(Self.defs, #"{"next":{"nxt":null}}"#)))
+    }
+}
