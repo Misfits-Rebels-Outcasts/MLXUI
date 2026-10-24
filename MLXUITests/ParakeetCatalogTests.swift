@@ -60,4 +60,12 @@ struct ParakeetCatalogTests {
         #expect(description.contains("RAM figure is an estimate (download size × 1.5)"))
         #expect(description.contains("Timestamps"))
     }
+
+    // MP2-2-FIX-1 (owner ruling N, 2026-10-24): ASRStage returns `.text` only, so the card
+    // doesn't promise timestamps in the app.
+    @Test func cardDoesNotPromiseTimestampsInTheApp() throws {
+        let e = try parakeet()
+        #expect(!(e.summary ?? "").lowercased().contains("timestamp"))
+        #expect((e.description ?? "").contains("MLXUI shows the transcript text."))
+    }
 }
