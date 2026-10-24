@@ -35,13 +35,27 @@ nonisolated struct IncrementalDetokenizer {
         guard readOffset < ids.count else { return "" }
         let prefixText = decode(Array(ids[prefixOffset..<readOffset]))
         let newText = decode(Array(ids[prefixOffset...]))
-        let prefixCount = prefixText.unicodeScalars.count
+        // The new text starts where the old text stops. Normally the old window is a prefix of the new one; but a tokenizer's
+        // decode may re-normalise across the boundary (`clean_up_tokenization_spaces` turns " ," into ","), shrinking the old
+        // text by a scalar. Slicing by the OLD length would then swallow the first scalar of the new text — WW4-1-3 found a
+        // JSON comma lost this way (journal 2026-573). The common prefix is the boundary either way.
+        let prefixCount = Self.commonPrefixCount(prefixText, newText)
         guard newText.unicodeScalars.count > prefixCount,
               !(holdingIncomplete && newText.hasSuffix("\u{FFFD}")) else { return "" }
         let tail = String(String.UnicodeScalarView(newText.unicodeScalars.dropFirst(prefixCount)))
         prefixOffset = readOffset
         readOffset = ids.count
         return tail
+    }
+}
+
+extension IncrementalDetokenizer {
+    /// How many leading scalars `a` and `b` share.
+    fileprivate static func commonPrefixCount(_ a: String, _ b: String) -> Int {
+        var count = 0
+        var left = a.unicodeScalars.makeIterator(), right = b.unicodeScalars.makeIterator()
+        while let x = left.next(), let y = right.next(), x == y { count += 1 }
+        return count
     }
 }
 
