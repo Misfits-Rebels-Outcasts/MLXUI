@@ -1873,12 +1873,12 @@
           "minMacOSVersion": "13.0",
           "hfRepo": "mlx-community",
           "hfModelId": "mlx-community/parakeet-tdt-0.6b-v3",
-          "ramGB": 3.77,
+          "ramGB": 6.6,
           "downloadSizeGB": 2.51,
           "contextWindow": null,
           "license": "cc-by-4.0",
           "licenseUrl": null,
-          "description": "# Parakeet TDT 0.6B v3\n\nAn [MLX](https://github.com/ml-explore/mlx) conversion of [nvidia/parakeet-tdt-0.6b-v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), NVIDIA's FastConformer speech-to-text model with a token-and-duration transducer (TDT) decoder.\n\n## Languages\n\n25 European languages: Bulgarian, Croatian, Czech, Danish, Dutch, English, Estonian, Finnish, French, German, Greek, Hungarian, Italian, Latvian, Lithuanian, Maltese, Polish, Portuguese, Romanian, Russian, Slovak, Slovenian, Spanish, Swedish and Ukrainian.\n\n## Timestamps\n\nThe TDT decoder predicts how many audio frames each token spans, so every recognised token carries timing information. MLXUI shows the transcript text.\n\n## Key Details\n\n| | |\n|---|---|\n| **Parameters** | 0.63B |\n| **Weights** | fp32 (as converted) |\n| **Base model** | [nvidia/parakeet-tdt-0.6b-v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) |\n| **Input** | 16 kHz mono audio |\n| **License** | CC-BY-4.0 |\n\n## Attribution\n\nOriginal model by NVIDIA, licensed under [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/). The MLX conversion is by mlx-community. The weights were converted to the MLX format.\n\nRAM figure is an estimate (download size × 1.5), not a measurement.",
+          "description": "# Parakeet TDT 0.6B v3\n\nAn [MLX](https://github.com/ml-explore/mlx) conversion of [nvidia/parakeet-tdt-0.6b-v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), NVIDIA's FastConformer speech-to-text model with a token-and-duration transducer (TDT) decoder.\n\n## Languages\n\n25 European languages: Bulgarian, Croatian, Czech, Danish, Dutch, English, Estonian, Finnish, French, German, Greek, Hungarian, Italian, Latvian, Lithuanian, Maltese, Polish, Portuguese, Romanian, Russian, Slovak, Slovenian, Spanish, Swedish and Ukrainian.\n\n## Timestamps\n\nThe TDT decoder predicts how many audio frames each token spans, so every recognised token carries timing information. MLXUI shows the transcript text.\n\n## Key Details\n\n| | |\n|---|---|\n| **Parameters** | 0.63B |\n| **Weights** | fp32 (as converted) |\n| **Base model** | [nvidia/parakeet-tdt-0.6b-v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) |\n| **Input** | 16 kHz mono audio |\n| **License** | CC-BY-4.0 |\n\n## Attribution\n\nOriginal model by NVIDIA, licensed under [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/). The MLX conversion is by mlx-community. The weights were converted to the MLX format.\n\nRAM figure is measured: in-app peak 6.10 GiB (6.55 GB), MLXUI-Direct, 588 s clip, 120 s chunks, 2026-10-24; flat with clip length (journal 566). It replaces the download × 1.5 estimate (3.77 GB) for this entry only.",
           "architecture": null,
           "languages": [
             "en",
@@ -1921,7 +1921,7 @@
             {
               "quantization": "fp32",
               "format": "mlx-fp32",
-              "ramGB": 3.77,
+              "ramGB": 6.6,
               "downloadSizeGB": 2.51,
               "qualityPercent": 100,
               "hfModelId": "mlx-community/parakeet-tdt-0.6b-v3",
