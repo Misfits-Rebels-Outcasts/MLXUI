@@ -16,6 +16,8 @@ nonisolated enum ConnectSnippets {
         case claudeCode = "Claude Code"
         case codex = "Codex"
         case xcode = "Xcode"
+        /// WW5-1 (ruling BN, C10).
+        case swiftFoundationModels = "Swift (Foundation Models)"
         case python = "Python"
         /// S2-5. `continue` is a Swift keyword, so the case is spelt out; the raw value is what the
         /// sheet shows.
@@ -81,10 +83,12 @@ nonisolated enum ConnectSnippets {
         case .xcode:
             return """
             1. Open Xcode ▸ Settings ▸ Intelligence.
-            2. Click Add Chat Provider… and choose Locally Hosted.
+            2. Click Add a Chat Provider and choose Locally Hosted.
             3. Set Port to \(port).
             Model: \(modelID)
             """
+        case .swiftFoundationModels:
+            return swiftFoundationModels(base: base, model: model)
         case .python:
             return """
             from openai import OpenAI
@@ -101,6 +105,33 @@ nonisolated enum ConnectSnippets {
         case .continueDev:
             return continueConfig(base: base, model: model)
         }
+    }
+
+    // MARK: - Swift / Foundation Models (C10)
+
+    /// The newest tag of apple/foundation-models-utilities when this was written (2026-10-24): only pre-releases
+    /// exist (`1.1.0-beta1`, `1.0.0-beta5`…), so the block pins the exact tag and says so. Its Package.swift needs macOS 27.
+    static let foundationModelsUtilitiesTag = "1.1.0-beta1"
+    static let needsMacOS27Line = "Needs macOS 27 on the client Mac."
+
+    /// WW5-1 (ruling BN, R51/R56: plain facts). `supportsGuidedGeneration` is written **explicitly** for every model,
+    /// because the library's default is `true` and this server answers `400 structured_output_unsupported` for a
+    /// family that is not on the structured-output allow-list. It is the one snippet that varies with
+    /// `ModelFacts.structuredOutput`.
+    private static func swiftFoundationModels(base: String, model: ModelFacts) -> String {
+        """
+        // Swift package (pre-release; pin this exact tag):
+        //   .package(url: "https://github.com/apple/foundation-models-utilities", exact: "\(foundationModelsUtilitiesTag)")
+        // \(needsMacOS27Line)
+        import FoundationModels
+        import FoundationModelsUtilities
+
+        let model = ChatCompletionsLanguageModel(
+            name: "\(jsonEscaped(model.modelID))",
+            url: URL(string: "\(base)")!,
+            supportsGuidedGeneration: \(model.structuredOutput))
+        let session = LanguageModelSession(model: model)
+        """
     }
 
     // MARK: - OpenCode (C2)
@@ -313,6 +344,7 @@ nonisolated enum ConnectSnippets {
         case .claudeCode: return URL(string: "https://code.claude.com/docs/en/env-vars")
         case .codex: return URL(string: "https://developers.openai.com/codex/config-reference")
         case .xcode: return URL(string: "https://developer.apple.com/videos/play/wwdc2026/232/")
+        case .swiftFoundationModels: return URL(string: "https://github.com/apple/foundation-models-utilities")
         case .python: return URL(string: "https://github.com/openai/openai-python")
         case .continueDev: return URL(string: "https://docs.continue.dev/reference")
         }

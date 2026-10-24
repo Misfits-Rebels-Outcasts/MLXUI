@@ -136,8 +136,10 @@ struct ServeStructuredFactConnectTests {
 
     /// The fact is shown on the sheet and by `/v1/models`; it is not part of any client's snippet, so every snippet is
     /// byte-identical whatever the flag says (the existing snapshot tests keep passing unchanged).
+    /// WW5-1 (ruling BN, 2026-10-24): the one exception is the Swift (Foundation Models) block, which writes
+    /// `supportsGuidedGeneration` from the fact; its own tests are `SwiftFoundationModelsSnippetTests`.
     @Test func noClientSnippetChangesWithTheFact() {
-        for harness in ConnectSnippets.Harness.allCases {
+        for harness in ConnectSnippets.Harness.allCases where harness != .swiftFoundationModels {
             for tools in [true, false] {
                 var on = ConnectSnippets.ModelFacts(modelID: "mlx-community/Qwen3-8B-4bit", supportsTools: tools,
                                                     contextLength: 40_960, thinkingAvailable: tools)
@@ -152,5 +154,77 @@ struct ServeStructuredFactConnectTests {
 
     @Test func aPlainFactsValueSaysNo() {
         #expect(ConnectSnippets.ModelFacts.plain("m").structuredOutput == false)
+    }
+}
+
+/// WW5-1 (ruling BN, copy row C10): the Swift (Foundation Models) block.
+struct SwiftFoundationModelsSnippetTests {
+    private func block(id: String, structured: Bool) -> String {
+        var facts = ConnectSnippets.ModelFacts(modelID: id, supportsTools: true, contextLength: 131_072, thinkingAvailable: false)
+        facts.structuredOutput = structured
+        return ConnectSnippets.text(for: .swiftFoundationModels, port: 1212, model: facts)
+    }
+
+    @Test func aStructuredOutputModelWritesTrueExplicitly() {
+        #expect(block(id: "mlx-community/gemma-4-e4b-it-4bit", structured: true) == """
+        // Swift package (pre-release; pin this exact tag):
+        //   .package(url: "https://github.com/apple/foundation-models-utilities", exact: "1.1.0-beta1")
+        // Needs macOS 27 on the client Mac.
+        import FoundationModels
+        import FoundationModelsUtilities
+
+        let model = ChatCompletionsLanguageModel(
+            name: "mlx-community/gemma-4-e4b-it-4bit",
+            url: URL(string: "http://127.0.0.1:1212/v1")!,
+            supportsGuidedGeneration: true)
+        let session = LanguageModelSession(model: model)
+        """)
+    }
+
+    @Test func aModelWithoutItWritesFalseExplicitly() {
+        let text = block(id: "mlx-community/Llama-3.1-8B-Instruct-4bit", structured: false)
+        #expect(text.contains("supportsGuidedGeneration: false)"))
+        #expect(text.contains(#"name: "mlx-community/Llama-3.1-8B-Instruct-4bit","#))
+        #expect(text.contains("Needs macOS 27 on the client Mac."))
+    }
+
+    @Test func thePlainSheetTextNeverOmitsTheArgument() {
+        #expect(ConnectSnippets.text(for: .swiftFoundationModels, port: 1212, modelID: "m").contains("supportsGuidedGeneration: false"))
+    }
+
+    @Test func theBlockFollowsThePort() {
+        let text = ConnectSnippets.text(for: .swiftFoundationModels, port: 4321, modelID: "m")
+        #expect(text.contains("http://127.0.0.1:4321/v1"))
+    }
+
+    /// WW5-1 (owner 2026-10-24): the flag is pinned from the checkpoint's `model_type` through the real allow-list
+    /// (`allows(configData:)`, the same reader the backend's 400 uses): true for gemma4 and qwen3, false otherwise.
+    @Test func theFlagFollowsTheModelTypeThroughTheAllowList() {
+        for (modelType, expected) in [("gemma4", true), ("qwen3", true), ("qwen3_5", false), ("qwen2", false),
+                                      ("llama", false), ("gemma3", false), ("gemma2", false), ("mistral3", false),
+                                      ("gpt_oss", false)] {
+            let config = Data(#"{"model_type": "\#(modelType)"}"#.utf8)
+            var facts = ConnectSnippets.ModelFacts.plain("mlx-community/x")
+            facts.structuredOutput = ServeStructuredOutputFamilies.allows(configData: config)
+            let text = ConnectSnippets.text(for: .swiftFoundationModels, port: 1212, model: facts)
+            #expect(text.contains("supportsGuidedGeneration: \(expected))"), "\(modelType)")
+            #expect(!text.contains("supportsGuidedGeneration: \(!expected))"), "\(modelType)")
+        }
+    }
+
+    /// The exemption in `noClientSnippetChangesWithTheFact` is real and only this block: it differs, the others do not.
+    @Test func onlyTheSwiftBlockDiffersWithTheFact() {
+        var on = ConnectSnippets.ModelFacts.plain("m"); on.structuredOutput = true
+        var off = on; off.structuredOutput = false
+        let differing = ConnectSnippets.Harness.allCases.filter {
+            ConnectSnippets.text(for: $0, port: 1212, model: on) != ConnectSnippets.text(for: $0, port: 1212, model: off)
+        }
+        #expect(differing == [.swiftFoundationModels])
+    }
+
+    /// Xcode 27's own wording (owner, 2026-10-24): "Add a Chat Provider" ▸ "Locally Hosted".
+    @Test func theXcodeBlockUsesXcode27sWording() {
+        let text = ConnectSnippets.text(for: .xcode, port: 1212, modelID: "m")
+        #expect(text.contains("Add a Chat Provider"))
     }
 }
