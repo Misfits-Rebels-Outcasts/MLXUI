@@ -59,6 +59,9 @@ nonisolated enum OpenAIChatDialect {
         if let options = object["stream_options"] as? [String: Any] {
             request.includeUsage = (options["include_usage"] as? Bool) ?? false
         }
+        // WW4-1-4: `response_format` text / absent is `.none`; the 400s name this dialect's own field.
+        request.structure = try ServeStructureDecoding.chatResponseFormat(object["response_format"])
+        request.structureNames = .chatCompletions
         return request
     }
 

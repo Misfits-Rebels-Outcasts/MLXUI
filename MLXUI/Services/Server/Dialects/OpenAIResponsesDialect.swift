@@ -105,7 +105,11 @@ nonisolated enum OpenAIResponsesDialect {
         if let limit = request.maxTokens, limit < 1 {
             throw invalid("'max_output_tokens' must be at least 1.", code: "invalid_max_output_tokens", param: "max_output_tokens")
         }
-        // Accepted and ignored, never a 400 (R38): metadata, user, include, text, prompt_cache_key,
+        // WW4-1-4: `text.format` json_schema / json_object constrain the reply; `text.format` text, an absent format and
+        // the rest of `text` (`verbosity`, …) are no-ops — also alongside tools (ruling AO).
+        request.structure = try ServeStructureDecoding.responsesText(object["text"])
+        request.structureNames = .responses
+        // Accepted and ignored, never a 400 (R38): metadata, user, include, prompt_cache_key,
         // parallel_tool_calls, service_tier, truncation, client_metadata, safety_identifier, background.
         return Decoded(request: request, droppedHostedTools: tools.dropped, ignoredInputItems: input.ignored,
                        previousResponseID: previousResponseID, store: store,

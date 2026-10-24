@@ -30,3 +30,15 @@ nonisolated enum ServeStructure: Sendable, Equatable {
         }
     }
 }
+
+/// WW4-1-4 — how a dialect spells the field that carried the format, for the 400s that name it. `schemaParam` is the path
+/// ServeSchemaCheck prefixes to every JSON pointer, so the client can find the construct in its own request.
+nonisolated struct ServeStructureNames: Sendable, Equatable {
+    /// The field itself: `response_format` / `text.format`.
+    let field: String
+    /// The field's schema: `response_format.json_schema.schema` / `text.format.schema`.
+    let schemaParam: String
+
+    static let chatCompletions = ServeStructureNames(field: "response_format", schemaParam: "response_format.json_schema.schema")
+    static let responses = ServeStructureNames(field: "text.format", schemaParam: "text.format.schema")
+}

@@ -9,19 +9,16 @@ import MLXLMCommon
 private struct TokenizerBox: @unchecked Sendable { let value: any MLXLMCommon.Tokenizer }
 
 extension MLXChatBackend {
-    /// The `param` named in the 400s until each dialect supplies its own (WW4-1-4).
-    static let structureParam = "response_format"
-
     func prepareStructure(_ request: ServeRequest) async throws -> ServeGrammarGrant? {
         let structure = request.structure
         guard structure.isConstrained else { return nil }
 
         // Ruling AX: only families verified on real weights.
         guard ServeStructuredOutputFamilies.allows(modelType: checkpointModelType) else {
-            throw ServeStructureCheck.unsupportedModelRefusal(model: request.model)
+            throw ServeStructureCheck.unsupportedModelRefusal(model: request.model, field: request.structureNames.field)
         }
         // The pure refusals first (schema, tools + format) — they cost no tokenizer.
-        if let refusal = ServeStructureCheck.validate(structure: structure, param: Self.structureParam,
+        if let refusal = ServeStructureCheck.validate(structure: structure, param: request.structureNames.schemaParam, field: request.structureNames.field,
                                                       honouredTools: !effectiveTools(request).isEmpty,
                                                       effectiveMaxTokens: request.effectiveMaxTokens, minimumTokens: { nil }) {
             throw refusal
@@ -50,7 +47,7 @@ extension MLXChatBackend {
             let lease = try await grammarCache.lease(vocabulary: vocabulary, format: format)
             return ServeGrammarGrant(cache: grammarCache, lease: lease, vocabulary: vocabulary, format: format, closingReserve: closingReserve)
         } catch let error as GrammarError {
-            throw ServeStructureCheck.error(from: error, param: Self.structureParam)
+            throw ServeStructureCheck.error(from: error, param: request.structureNames.schemaParam)
         }
     }
 }

@@ -68,9 +68,9 @@ nonisolated enum ServeStructureCheck {
 
     /// Ruling AX: a model whose family hasn't been verified on real weights answers a JSON format request with this 400,
     /// naming the model, rather than running unverified.
-    static func unsupportedModelRefusal(model: String) -> ServeError {
+    static func unsupportedModelRefusal(model: String, field: String = "response_format") -> ServeError {
         ServeError(status: 400,
-                   message: "Structured output (response_format json_object / json_schema) isn't available for the model '\(model)' "
+                   message: "Structured output (\(field) json_object / json_schema) isn't available for the model '\(model)' "
                        + "on this server yet: it has not been checked with this feature. Use a model that supports it, or "
                        + "ask for the format in the prompt.",
                    code: unsupportedModelCode)
@@ -80,11 +80,11 @@ nonisolated enum ServeStructureCheck {
 
     /// `honouredTools`: the request carries tools the model's family will actually be shown (`backend.effectiveTools` is not
     /// empty) — a family that ignores `tools`, or `tool_choice: "none"`, is unaffected.
-    static func combinationRefusal(structure: ServeStructure, honouredTools: Bool) -> ServeError? {
+    static func combinationRefusal(structure: ServeStructure, honouredTools: Bool, field: String = "response_format") -> ServeError? {
         guard structure.isConstrained, honouredTools else { return nil }
         return ServeError(status: 400,
                           message: "tools can't be combined with a JSON response format on this server: a tool call is not JSON "
-                              + "the format allows. Send either tools or response_format {\"type\": \"json_object\" | "
+                              + "the format allows. Send either tools or \(field) {\"type\": \"json_object\" | "
                               + "\"json_schema\"}, or use tool_choice \"none\".",
                           code: unsupportedCombinationCode)
     }
@@ -114,16 +114,16 @@ nonisolated enum ServeStructureCheck {
 
     /// The first refusal, in the order above, or `nil`. `minimumTokens` is a closure so a request that fails earlier never
     /// pays for a tokenizer walk; `json_object`'s smallest reply (`{}`) is never worth refusing for.
-    static func validate(structure: ServeStructure, param: String, honouredTools: Bool, effectiveMaxTokens: Int,
-                         minimumTokens: () -> Int?) -> ServeError? {
+    static func validate(structure: ServeStructure, param: String, field: String = "response_format", honouredTools: Bool,
+                         effectiveMaxTokens: Int, minimumTokens: () -> Int?) -> ServeError? {
         switch structure {
         case .none:
             return nil
         case .jsonObject:
-            return combinationRefusal(structure: structure, honouredTools: honouredTools)
+            return combinationRefusal(structure: structure, honouredTools: honouredTools, field: field)
         case .jsonSchema(_, let schema, _):
             if let refusal = schemaRefusal(schema, param: param) { return refusal }
-            if let refusal = combinationRefusal(structure: structure, honouredTools: honouredTools) { return refusal }
+            if let refusal = combinationRefusal(structure: structure, honouredTools: honouredTools, field: field) { return refusal }
             return replyBudgetRefusal(effectiveMaxTokens: effectiveMaxTokens, minimumTokens: minimumTokens())
         }
     }

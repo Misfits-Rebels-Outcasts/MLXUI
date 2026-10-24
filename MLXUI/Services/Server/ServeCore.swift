@@ -144,6 +144,8 @@ nonisolated struct ServeRequest: Sendable, Equatable {
     /// WW4-1-2: what shape the reply must have (`response_format` / `text.format`, decoded by the dialect in WW4-1-4).
     /// `.none` is also what `{"type": "text"}` decodes to — a no-op, never constrained and never refused (owner ruling AO).
     var structure: ServeStructure = .none
+    /// WW4-1-4: what the dialect calls the field that carried `structure`, so a refusal names the client's own parameter.
+    var structureNames: ServeStructureNames = .chatCompletions
 
     var effectiveMaxTokens: Int { maxTokens ?? Self.defaultMaxTokens }
 
@@ -211,7 +213,7 @@ extension ServeBackend {
 
     /// A backend that can't constrain its output answers a JSON format request with the same 400 an unchecked MLX family gets.
     func prepareStructure(_ request: ServeRequest) async throws -> ServeGrammarGrant? {
-        if request.structure.isConstrained { throw ServeStructureCheck.unsupportedModelRefusal(model: request.model) }
+        if request.structure.isConstrained { throw ServeStructureCheck.unsupportedModelRefusal(model: request.model, field: request.structureNames.field) }
         return nil
     }
 
