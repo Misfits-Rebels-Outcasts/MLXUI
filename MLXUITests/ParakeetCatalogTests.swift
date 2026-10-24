@@ -48,4 +48,16 @@ struct ParakeetCatalogTests {
         #expect(MLXWhisperSDK().claim(e) == .no)
         #expect(VoxtralSDK().claim(e) == .no)
     }
+
+    // MP2-2: display name (owner ruling L, 2026-10-24) and NVIDIA / CC-BY-4.0 attribution (MP-0 H).
+    @Test func displayNameAndAttribution() throws {
+        let e = try parakeet()
+        #expect(e.displayName == "Parakeet TDT 0.6B v3")
+        let description = e.description ?? ""
+        #expect(description.contains("Original model by NVIDIA, licensed under"))
+        #expect(description.contains("CC-BY-4.0"))
+        #expect(description.contains("nvidia/parakeet-tdt-0.6b-v3"))
+        #expect(description.contains("RAM figure is an estimate (download size × 1.5)"))
+        #expect(description.contains("Timestamps"))
+    }
 }
