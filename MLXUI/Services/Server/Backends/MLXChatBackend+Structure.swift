@@ -29,11 +29,13 @@ extension MLXChatBackend {
         guard let tokenizer = await ServePromptCounter.shared.tokenizer(for: directory) else {
             throw ServeStructureCheck.unavailable
         }
-        if case .jsonSchema(_, let schema, _) = structure,
-           let refusal = ServeStructureCheck.replyBudgetRefusal(
-            effectiveMaxTokens: request.effectiveMaxTokens,
-            minimumTokens: ServeStructureCheck.minimumReplyTokens(schema: schema, tokenizer: tokenizer)) {
-            throw refusal
+        var closingReserve: Int?
+        if case .jsonSchema(_, let schema, _) = structure {
+            let minimum = ServeStructureCheck.minimumReplyTokens(schema: schema, tokenizer: tokenizer)
+            if let refusal = ServeStructureCheck.replyBudgetRefusal(effectiveMaxTokens: request.effectiveMaxTokens, minimumTokens: minimum) {
+                throw refusal
+            }
+            if closingBiasEnabled { closingReserve = minimum }
         }
         // Ruling AT: the stop token is read from the model's own files, with the loader's precedence.
         guard let eos = ServeGrammarEOS.pick(directory: directory, tokenizer: tokenizer),
@@ -46,7 +48,7 @@ extension MLXChatBackend {
                 try ServeGrammarVocabulary(directory: directory, tokenizer: box.value, eosTokenID: eos)
             }
             let lease = try await grammarCache.lease(vocabulary: vocabulary, format: format)
-            return ServeGrammarGrant(cache: grammarCache, lease: lease, vocabulary: vocabulary, format: format)
+            return ServeGrammarGrant(cache: grammarCache, lease: lease, vocabulary: vocabulary, format: format, closingReserve: closingReserve)
         } catch let error as GrammarError {
             throw ServeStructureCheck.error(from: error, param: Self.structureParam)
         }

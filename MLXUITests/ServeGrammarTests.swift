@@ -526,3 +526,60 @@ struct ServeRecursiveRefTests {
         #expect(!(try await Self.accepts(Self.defs, #"{"next":{"nxt":null}}"#)))
     }
 }
+
+// MARK: - WW4-1-3 commit 3: the soft-zone closing bias
+
+struct ServeClosingBiasTests {
+    /// The processor after `prefix` was fed, armed for a 20-token reply with a 5-token reserve (the zone starts at token 15).
+    private static func processor(feeding prefix: String, armed: Bool = true) async throws -> ServeGrammarProcessor {
+        let vocabulary = try FakeVocab.vocabulary()
+        let format = ServeGrammarFormat.jsonSchema(#"{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}"#)
+        let lease = try await ServeGrammarCache().lease(vocabulary: vocabulary, format: format)
+        let processor = ServeGrammarProcessor(constraint: lease.constraint, vocabulary: vocabulary, format: format)
+        if armed { processor.enableClosingBias(maxTokens: 20, reserve: 5) }
+        for character in prefix { processor.didSample(token: MLXArray(Int32(FakeVocab.ids[character]!))) }
+        return processor
+    }
+
+    private static func logits(_ processor: ServeGrammarProcessor) throws -> [Float] {
+        try MLXErrorGuard.read(processor.process(logits: MLXArray.zeros([1, FakeVocab.count])), as: Float.self)
+    }
+
+    private static let midString = #"{"name":"abcdefgh"#             // 16 tokens: the zone has begun
+    private static let early = #"{"name":"ab"#                       // 11 tokens: it has not
+
+    @Test func theVocabularyCarriesTheLibrarysTiers() throws {
+        let bias = try FakeVocab.vocabulary().closingBias
+        #expect(bias[FakeVocab.ids["\""]!] == 100 && bias[FakeVocab.ids["}"]!] == 100 && bias[FakeVocab.ids["]"]!] == 100)
+        #expect(bias[FakeVocab.ids["7"]!] == 100)
+        #expect(bias[FakeVocab.ids["a"]!] == 0 && bias[FakeVocab.ids[","]!] == 0)
+        #expect(bias[FakeVocab.eos] == 200)
+    }
+
+    @Test func insideTheLastReserveTokensTheClosingTokensAreNudged() async throws {
+        let out = try Self.logits(try await Self.processor(feeding: Self.midString))
+        #expect(out[FakeVocab.ids["\""]!] == 100, "the quote that closes the string is boosted")
+        #expect(out[FakeVocab.ids["a"]!] == 0, "ordinary string content is not")
+        #expect(out[FakeVocab.eos] == -Float.infinity, "the stop token stays forbidden until the document is whole")
+    }
+
+    @Test func beforeTheZoneAndWhenNotArmedNothingChanges() async throws {
+        let early = try Self.logits(try await Self.processor(feeding: Self.early))
+        #expect(early[FakeVocab.ids["\""]!] == 0)
+        let unarmed = try Self.logits(try await Self.processor(feeding: Self.midString, armed: false))
+        #expect(unarmed[FakeVocab.ids["\""]!] == 0)
+    }
+
+    @Test func theBiasNeverAllowsWhatTheGrammarForbids() async throws {
+        // After the string is closed only `}` (or `,`/whitespace) may follow; `]` is forbidden and stays so with +100.
+        let out = try Self.logits(try await Self.processor(feeding: Self.midString + "\""))
+        #expect(out[FakeVocab.ids["]"]!] == -Float.infinity)
+        #expect(out[FakeVocab.ids["}"]!] == 100, "the closing brace the grammar allows is boosted")
+    }
+
+    @Test func aProcessorCopyKeepsTheZone() async throws {
+        let copy = try await Self.processor(feeding: Self.midString).copy()
+        let out = try Self.logits(copy)
+        #expect(out[FakeVocab.ids["\""]!] == 100)
+    }
+}

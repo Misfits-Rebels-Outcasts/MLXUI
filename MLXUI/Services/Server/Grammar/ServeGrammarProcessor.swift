@@ -41,6 +41,10 @@ nonisolated class ServeGrammarProcessor: LogitProcessor, @unchecked Sendable {
     private var whitespace: WhitespaceRunTracker
     /// Every token the matcher accepted, in order: `copy()` replays it, and its count is what a rollback undoes.
     private var history: [Int32] = []
+    /// WW4-1-3: the closing bias is on for the last `closingReserve` tokens before `maxTokens` (the library loop's soft zone;
+    /// the hard zone is deliberately not ported — it can force valid but meaningless JSON). Both nil = off.
+    private var maxTokens: Int?
+    private var closingReserve: Int?
 
     init(constraint: GrammarConstraint, vocabulary: ServeGrammarVocabulary, format: ServeGrammarFormat) {
         self.constraint = constraint
@@ -56,6 +60,8 @@ nonisolated class ServeGrammarProcessor: LogitProcessor, @unchecked Sendable {
         format = other.format
         whitespace = other.whitespace
         history = other.history
+        maxTokens = other.maxTokens
+        closingReserve = other.closingReserve
         terminated = other.terminated
         failed = other.failed
         failureMessage = other.failureMessage
@@ -70,6 +76,19 @@ nonisolated class ServeGrammarProcessor: LogitProcessor, @unchecked Sendable {
             failed = true
             failureMessage = "the grammar could not be copied"
         }
+    }
+
+    /// Turn the soft-zone closing bias on for a generation limited to `maxTokens` tokens. `reserve` is the smallest valid reply's
+    /// token count (`CompletionReserve`). Call before the first token.
+    func enableClosingBias(maxTokens: Int, reserve: Int) {
+        lock.lock(); defer { lock.unlock() }
+        self.maxTokens = maxTokens
+        closingReserve = reserve
+    }
+
+    private func inClosingZoneLocked() -> Bool {
+        guard let maxTokens, let closingReserve else { return false }
+        return history.count >= maxTokens - closingReserve
     }
 
     // MARK: - Outcome (read by the backend after the stream ends)
@@ -95,7 +114,12 @@ nonisolated class ServeGrammarProcessor: LogitProcessor, @unchecked Sendable {
         if whitespace.isActive, !terminated, !failed {
             out = out + Self.padded(vocabulary.whitespaceBias, to: width, with: 0).asType(logits.dtype)
         }
-        if let mask = maskLocked(width: width) { out = out + mask.asType(logits.dtype) }
+        let mask = maskLocked(width: width)
+        // Soft zone only, and only while the grammar exposes a real mask (an unconditional splice has nothing to nudge).
+        if inClosingZoneLocked(), !terminated, !failed, pending?.needsApply == true {
+            out = out + Self.padded(vocabulary.closingBias, to: width, with: 0).asType(logits.dtype)
+        }
+        if let mask { out = out + mask.asType(logits.dtype) }
         return out
     }
 

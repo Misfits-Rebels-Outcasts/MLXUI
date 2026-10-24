@@ -56,6 +56,10 @@ nonisolated struct ServeGrammarVocabulary: @unchecked Sendable {
     /// `-200` at each whitespace token, `0` elsewhere, one entry per vocabulary token — plain floats, so no `MLXArray` is
     /// built on the thread that builds this (the iterator runs on two threads; see `ServeGrammarProcessor`).
     let whitespaceBias: [Float]
+    /// WW4-1-3 (soft-zone closing bias): the library's `ClosingTokenBias` tiers as plain floats — `+200` at the stop token, `+100`
+    /// at `"`, `}`, `]` and the single digits, `0` elsewhere. Added to the logits in the last few tokens of a reply so the model
+    /// closes the document it is in; the grammar mask still decides what is allowed (the stop token only where the document is whole).
+    let closingBias: [Float]
 
     var vocabularyCount: Int { tokenizer.vocabSize }
 
@@ -68,7 +72,13 @@ nonisolated struct ServeGrammarVocabulary: @unchecked Sendable {
         var bias = [Float](repeating: 0, count: vocab.count)
         for id in whitespaceTokenIDs where id >= 0 && id < bias.count { bias[id] = ServeGrammarProcessor.whitespacePenalty }
         self.whitespaceBias = bias
+        var closing = [Float](repeating: 0, count: vocab.count)
+        for (id, token) in vocab.enumerated() where Self.closingTokens.contains(token) { closing[id] = 100 }
+        if eosTokenID >= 0, eosTokenID < closing.count { closing[eosTokenID] = 200 }
+        self.closingBias = closing
     }
+
+    private static let closingTokens: Set<String> = ["\"", "}", "]", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
 
     /// From a loaded tokenizer. Synchronous and CPU-heavy (a walk of the whole vocabulary, then xgrammar's tables): the cache
     /// runs it off the main actor.

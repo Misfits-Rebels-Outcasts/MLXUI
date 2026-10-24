@@ -227,6 +227,30 @@ struct ServeStructuredRealModelTests {
         #expect(cut.usage?.structuredOutcome == .incomplete)
     }
 
+    // MARK: 6. the soft-zone closing bias (commit 3)
+
+    @Test func theClosingBiasFinishesMoreRepliesInsideATightLimitAndNeverBreaksOne() async throws {
+        let (_, backend, _) = try Self.make()
+        let prompts = ["Plan a birthday party.", "Write a task for fixing a leaking tap.", "Create a to-do for moving flat.",
+                       "A task about learning to swim.", "Plan a week of meals.", "Task: renew a passport.",
+                       "Organise a team offsite.", "Prepare a conference talk."]
+        var completeWith = 0, completeWithout = 0, brokenWith = 0
+        for (index, prompt) in prompts.enumerated() {
+            for enabled in [true, false] {
+                var b = backend
+                b.closingBiasEnabled = enabled
+                let result = try await Self.run(Self.request(prompt, structured: true, temperature: 0, maxTokens: 130, seed: index), backend: b)
+                let complete = result.usage?.structuredOutcome == .complete
+                if enabled { completeWith += complete ? 1 : 0 } else { completeWithout += complete ? 1 : 0 }
+                if enabled, complete, !Self.isValidTask(result.text) { brokenWith += 1 }
+                print("STRUCT bias #\(index) enabled=\(enabled) outcome=\(String(describing: result.usage?.structuredOutcome)) tokens=\(result.usage?.completionTokens ?? -1) valid=\(Self.isValidTask(result.text))")
+            }
+        }
+        print("STRUCT bias complete with=\(completeWith)/8 without=\(completeWithout)/8 brokenWhenComplete=\(brokenWith)")
+        #expect(brokenWith == 0, "a reply the bias closed must still be a valid instance")
+        #expect(completeWith >= completeWithout)
+    }
+
     // MARK: diagnostics (opt in: MLXUI_TEST_STRUCT_DIAGNOSE=n runs up to n requests, stops at the first invalid reply)
 
     @Test(.enabled(if: ProcessInfo.processInfo.environment["MLXUI_TEST_STRUCT_DIAGNOSE"] != nil))

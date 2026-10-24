@@ -16,24 +16,30 @@ import MLXLMCommon
 nonisolated final class ServeGrammarGrant: @unchecked Sendable {
     let vocabulary: ServeGrammarVocabulary
     let format: ServeGrammarFormat
+    /// The smallest valid reply's token count, when known (a schema, not `json_object`); nil = no closing bias.
+    let closingReserve: Int?
     private let cache: ServeGrammarCache
     private let lease: ServeGrammarLease
     private let lock = NSLock()
     private var processor: ServeGrammarProcessor?
     private var finished = false
 
-    init(cache: ServeGrammarCache, lease: ServeGrammarLease, vocabulary: ServeGrammarVocabulary, format: ServeGrammarFormat) {
+    init(cache: ServeGrammarCache, lease: ServeGrammarLease, vocabulary: ServeGrammarVocabulary, format: ServeGrammarFormat,
+         closingReserve: Int? = nil) {
+        self.closingReserve = closingReserve
         self.cache = cache
         self.lease = lease
         self.vocabulary = vocabulary
         self.format = format
     }
 
-    /// The logit processor for the one generation this grant serves (the same instance on every call).
-    func makeProcessor() -> ServeGrammarProcessor {
+    /// The logit processor for the one generation this grant serves (the same instance on every call). `maxTokens` (the reply
+    /// limit) arms the soft-zone closing bias when the grant has a reserve.
+    func makeProcessor(maxTokens: Int? = nil) -> ServeGrammarProcessor {
         lock.lock(); defer { lock.unlock() }
         if let processor { return processor }
         let made = ServeGrammarProcessor(constraint: lease.constraint, vocabulary: vocabulary, format: format)
+        if let maxTokens, let closingReserve { made.enableClosingBias(maxTokens: maxTokens, reserve: closingReserve) }
         processor = made
         return made
     }

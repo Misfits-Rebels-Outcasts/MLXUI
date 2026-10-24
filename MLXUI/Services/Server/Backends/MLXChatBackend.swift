@@ -243,6 +243,10 @@ nonisolated struct MLXChatBackend: ServeBackend {
     /// WW4-1-3: where grammar vocabularies and compiled constraints live. Tests give a backend its own.
     var grammarCache: ServeGrammarCache = .shared
 
+    /// WW4-1-3 (ruling AO 3): the soft-zone closing bias. A property so the real-model check can compare with and without it;
+    /// the whole feature is one droppable commit.
+    var closingBiasEnabled = true
+
     init(directory: URL, footprintBytes: Int64? = nil, architecture: String? = nil,
          pool: ModelContainerPool = .shared, roomBytes: Int64 = ServeMemoryAdmission.room()) {
         self.directory = directory
@@ -566,7 +570,7 @@ nonisolated struct MLXChatBackend: ServeBackend {
                     continuation.yield(.error(ServeStructureCheck.unavailable))
                     return
                 }
-                let made = grammar.makeProcessor()
+                let made = grammar.makeProcessor(maxTokens: replyLimit)
                 processor = made
                 components = GenerationComponents(logitProcessorFactory: { made })
             }
