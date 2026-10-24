@@ -52,6 +52,8 @@ struct RequestLogList: View {
         // failed and the request ran without it, a marker, so a broken cache can't hide as "no hit".
         if entry.cachedTokens > 0 { parts.append("reused \(entry.cachedTokens)") }
         if entry.cacheFellBack { parts.append("cache fell back") }
+        // WW4-1-3: whether a structured-output reply reached the end of its grammar — a flag, never the document.
+        if let structured = entry.structuredOutcome { parts.append("structured: \(structured.rawValue)") }
         return parts.joined(separator: "  ")
     }
 }

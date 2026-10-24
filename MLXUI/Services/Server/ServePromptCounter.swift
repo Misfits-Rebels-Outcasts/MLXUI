@@ -56,7 +56,8 @@ actor ServePromptCounter {
     /// For tests and for the journal's measurement: how many tokenizers are resident.
     var cachedCount: Int { tokenizers.count }
 
-    private func tokenizer(for directory: URL) async -> (any MLXLMCommon.Tokenizer)? {
+    /// Also the structured-output path's tokenizer (WW4-1-3): one cache for the count and the grammar.
+    func tokenizer(for directory: URL) async -> (any MLXLMCommon.Tokenizer)? {
         let key = directory.standardizedFileURL.path
         if let cached = tokenizers[key] {
             touch(key)

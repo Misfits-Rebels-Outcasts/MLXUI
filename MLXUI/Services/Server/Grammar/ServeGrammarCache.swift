@@ -52,6 +52,7 @@ actor ServeGrammarCache {
 
     private var vocabularies: [String: ServeGrammarVocabulary] = [:]
     private var vocabularyRecency: [String] = []     // most recent first
+    private var building: [String: Task<ServeGrammarVocabulary, Error>] = [:]
     private var idle: [String: [GrammarConstraint]] = [:]
     private var idleRecency: [String] = []
     private let vocabularyCapacity: Int
@@ -74,25 +75,41 @@ actor ServeGrammarCache {
     var cachedKeys: Int { idle.count }
     var idleConstraints: Int { idle.values.reduce(0) { $0 + $1.count } }
 
-    /// The model's vocabulary, built on first use. `build` runs inside the actor, so a second request for the same model waits
-    /// for the first instead of building it twice.
-    func vocabulary(key: String, build: () throws -> ServeGrammarVocabulary) throws -> ServeGrammarVocabulary {
+    /// The model's vocabulary, built on first use — on the compile thread (a walk of ~260k tokens, ~1.3 s), not on the actor
+    /// or the caller's thread. A second request for the same model while it builds awaits the same build instead of starting
+    /// another. A caller cancelled meanwhile gets `CancellationError`; the vocabulary still lands in the cache.
+    func vocabulary(key: String, build: @escaping @Sendable () throws -> ServeGrammarVocabulary) async throws -> ServeGrammarVocabulary {
         if let cached = vocabularies[key] {
             Self.touch(key, in: &vocabularyRecency)
             return cached
         }
-        let built = try build()
-        vocabularyBuilds += 1
-        if vocabularies.count >= vocabularyCapacity, let oldest = vocabularyRecency.last {
-            vocabularies[oldest] = nil
-            vocabularyRecency.removeLast()
-            // Constraints compiled against the evicted vocabulary can't be used with a new one (their key starts with it).
-            let stale = idle.keys.filter { $0.hasPrefix(oldest + "|") }
-            for key in stale { idle[key] = nil }
-            idleRecency.removeAll { stale.contains($0) }
+        let task: Task<ServeGrammarVocabulary, Error>
+        if let running = building[key] {
+            task = running
+        } else {
+            task = Task { try await ServeGrammarCompileThread.shared.run(build) }
+            building[key] = task
         }
-        vocabularies[key] = built
+        let built: ServeGrammarVocabulary
+        do { built = try await task.value } catch {
+            if building[key] != nil, vocabularies[key] == nil { building[key] = nil }
+            throw error
+        }
+        if building[key] != nil {
+            building[key] = nil
+            vocabularyBuilds += 1
+            if vocabularies.count >= vocabularyCapacity, let oldest = vocabularyRecency.last {
+                vocabularies[oldest] = nil
+                vocabularyRecency.removeLast()
+                // Constraints compiled against the evicted vocabulary can't be used with a new one (their key starts with it).
+                let stale = idle.keys.filter { $0.hasPrefix(oldest + "|") }
+                for key in stale { idle[key] = nil }
+                idleRecency.removeAll { stale.contains($0) }
+            }
+            vocabularies[key] = built
+        }
         Self.touch(key, in: &vocabularyRecency)
+        if Task.isCancelled { throw CancellationError() }
         return built
     }
 

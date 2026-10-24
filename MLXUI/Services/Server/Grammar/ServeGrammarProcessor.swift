@@ -80,6 +80,8 @@ nonisolated class ServeGrammarProcessor: LogitProcessor, @unchecked Sendable {
     var failure: String? { lock.lock(); defer { lock.unlock() }; return failureMessage }
     /// Tokens the matcher accepted (the stop token included) — what `ServeGrammarCache.release` rolls back.
     var committedTokens: Int { lock.lock(); defer { lock.unlock() }; return history.count }
+    /// The accepted tokens themselves (tests and the real-model diagnostics; never logged).
+    var committedHistory: [Int32] { lock.lock(); defer { lock.unlock() }; return history }
 
     // MARK: - LogitProcessor
 

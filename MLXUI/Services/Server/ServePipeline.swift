@@ -49,6 +49,9 @@ nonisolated struct ServePrepared: Sendable {
     /// The S2-6 render's count of the prompt, when the backend could make one (S3-2c). Additive: the
     /// OpenAI route ignores it; the Anthropic stream seeds `message_start.usage.input_tokens` with it.
     var promptTokens: Int? = nil
+    /// WW4-1-3: the leased grammar constraint of a structured-output request, compiled before the queue place was taken.
+    /// Whoever ends the request finishes it (`ServeGrammarGrant.finish`, idempotent).
+    var grammar: ServeGrammarGrant? = nil
 }
 
 /// Everything a non-streaming generation produced.
@@ -92,13 +95,29 @@ nonisolated enum ServePipeline {
         case .failure(let failure): return .failure(failure)
         case .success(let value): resolved = value
         }
+        // WW4-1-3 (ruling AS): a structured-output request is checked and its grammar compiled HERE — before it takes a queue
+        // place, and long before it takes the generation slot or the model lease — so a slow compile blocks nobody else.
+        // A request cancelled mid-compile never took anything that needs giving back (the lease parks the constraint idle).
+        var grammar: ServeGrammarGrant?
+        if resolved.request.structure.isConstrained {
+            do {
+                grammar = try await resolved.backend.prepareStructure(resolved.request)
+            } catch let refusal as ServeError {
+                return .failure(ServeFailure(refusal))
+            } catch is CancellationError {
+                return .failure(ServeFailure(ServeError(status: 499, message: "Client closed the request.", code: "client_closed")))
+            } catch {
+                return .failure(ServeFailure(ServeStructureCheck.unavailable))
+            }
+        }
         guard let ticket = await environment.queue.reserve(model: resolved.request.model) else {
+            await grammar?.finish(clean: true)                       // never used: the constraint goes back idle
             return .failure(ServeFailure(ServeError(status: 503, message: "The server is busy with other requests for this model. Try again shortly.",
                                                     type: "server_error", code: "server_busy"),
                                          retryAfterSeconds: 2))
         }
         return .success(ServePrepared(request: resolved.request, backend: resolved.backend, ticket: ticket,
-                                      promptTokens: resolved.promptTokens))
+                                      promptTokens: resolved.promptTokens, grammar: grammar))
     }
 
     /// S3-2: the prompt's token count for `/v1/messages/count_tokens` — the same resolution, `tools`
@@ -185,6 +204,8 @@ nonisolated enum ServePipeline {
         // S2-3: thinking is on only when the client asked *and* the family's template reads
         // `enable_thinking`. Nothing is refused either way — a family without thinking simply
         // ignores the request (decision 2) — so the log records what actually happened.
+        // WW4-1-3 (ruling AO): a JSON format forces thinking off — a `<think>` block is not JSON the grammar allows.
+        if request.structure.isConstrained { request.reasoning = false }
         tracker.reasoningOn = ReasoningTemplateTable.thinkingOn(requested: request.reasoning,
                                                                  forModelType: modelType)
         // S2-3b: an unrecognised `reasoning_effort` is honoured as "on" and named in the log — a
@@ -275,13 +296,14 @@ nonisolated enum ServePipeline {
         let queuedAt = environment.now()
         do { try await queue.waitTurn(ticket) } catch {
             await queue.release(ticket)
+            await prepared.grammar?.finish(clean: false)
             return .failure(ServeFailure(internalError))
         }
         tracker.turnGranted(waitedSince: queuedAt)
         var collected = ServeCollected()
         var failure: ServeError?
         do {
-            for try await event in prepared.backend.generate(prepared.request) {
+            for try await event in prepared.backend.generate(prepared.request, grammar: prepared.grammar) {
                 switch event {
                 case .textDelta(let piece): tracker.contentArrived(); collected.text += piece
                 case .reasoningDelta(let piece): tracker.contentArrived(); collected.reasoning += piece      // S2-3
@@ -297,6 +319,7 @@ nonisolated enum ServePipeline {
         }
         tracker.generationEnded()
         await queue.release(ticket)
+        await prepared.grammar?.finish(clean: false)                 // no-op when the backend already finished it cleanly
         if let failure { return .failure(ServeFailure(failure, retryAfterSeconds: failure.retryAfterSeconds)) }
 
         tracker.usage = collected.usage
@@ -328,6 +351,7 @@ nonisolated enum ServePipeline {
         let ticket = prepared.ticket
         let request = prepared.request
         let backend = prepared.backend
+        let grammar = prepared.grammar
         let keepAlive = initial.keepAlive
         let write: @Sendable ([UInt8]) -> Void = { chunk in continuation.yield(chunk); clock.touch() }
 
@@ -337,6 +361,7 @@ nonisolated enum ServePipeline {
             let queuedAt = environment.now()
             do { try await queue.waitTurn(ticket) } catch {
                 await queue.release(ticket)
+                await grammar?.finish(clean: false)
                 _ = tracker.fail(internalError)
                 return
             }
@@ -346,7 +371,7 @@ nonisolated enum ServePipeline {
             var failure: ServeError?
             var toolCallCount = 0
             do {
-                for try await event in backend.generate(request) {
+                for try await event in backend.generate(request, grammar: grammar) {
                     switch event {
                     case .textDelta, .reasoningDelta:
                         tracker.contentArrived()
@@ -366,6 +391,7 @@ nonisolated enum ServePipeline {
             }
             tracker.generationEnded()
             await queue.release(ticket)
+            await grammar?.finish(clean: false)                      // no-op when the backend already finished it cleanly
 
             if Task.isCancelled {                                          // the client went away
                 _ = tracker.fail(ServeError(status: 499, message: "Client closed the request.", code: "client_closed"))
@@ -527,6 +553,7 @@ nonisolated final class RequestTracker: @unchecked Sendable {
             ignoredInputItems: ignoredInputItems,
             ttftSeconds: ttft, queueWaitSeconds: queueWait, loadWaitSeconds: usage?.loadSeconds,
             decodeTokensPerSecond: decodeRate,
-            promptTokensReused: usage.flatMap { $0.promptCacheApplied ? $0.cachedTokens : nil }))
+            promptTokensReused: usage.flatMap { $0.promptCacheApplied ? $0.cachedTokens : nil },
+            structuredOutcome: usage?.structuredOutcome))
     }
 }

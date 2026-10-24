@@ -16,6 +16,8 @@ nonisolated enum ServeStructureCheck {
     static let invalidSchemaCode = "invalid_json_schema"
     static let unsupportedCombinationCode = "unsupported_combination"
     static let maxTokensTooSmallCode = "max_tokens_too_small_for_schema"
+    /// A JSON format asked of a model that isn't on the structured-output allow-list (ruling AX).
+    static let unsupportedModelCode = "structured_output_unsupported"
     /// What a failure that isn't the client's schema is reported as (never xgrammar's own words — S2's rule that a backend
     /// failure doesn't leak its internals).
     static let unavailableCode = "structured_output_unavailable"
@@ -57,9 +59,21 @@ nonisolated enum ServeStructureCheck {
                               message: "\(param) was rejected: \(text.isEmpty ? "it is not a valid JSON Schema" : text)",
                               code: invalidSchemaCode)
         default:
-            return ServeError(status: 500, message: "Structured output couldn't be set up for this model.",
-                              type: "server_error", code: unavailableCode)
+            return unavailable
         }
+    }
+
+    static let unavailable = ServeError(status: 500, message: "Structured output couldn't be set up for this model.",
+                                        type: "server_error", code: unavailableCode)
+
+    /// Ruling AX: a model whose family hasn't been verified on real weights answers a JSON format request with this 400,
+    /// naming the model, rather than running unverified.
+    static func unsupportedModelRefusal(model: String) -> ServeError {
+        ServeError(status: 400,
+                   message: "Structured output (response_format json_object / json_schema) isn't available for the model '\(model)' "
+                       + "on this server yet: it has not been checked with this feature. Use a model that supports it, or "
+                       + "ask for the format in the prompt.",
+                   code: unsupportedModelCode)
     }
 
     // MARK: - 2. tools + a JSON format

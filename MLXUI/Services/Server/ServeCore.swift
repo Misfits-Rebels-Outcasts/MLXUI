@@ -11,6 +11,12 @@ nonisolated enum ServeFinishReason: String, Sendable, Equatable {
     case toolCalls = "tool_calls"
 }
 
+/// WW4-1-3: how a structured-output reply ended — the grammar reached its end (`complete`: the reply is a whole valid document)
+/// or the reply stopped first (`incomplete`: a length cut, a client `stop`, or the matcher refusing a token). A flag only.
+nonisolated enum ServeStructuredOutcome: String, Sendable, Equatable {
+    case complete, incomplete
+}
+
 nonisolated struct ServeUsage: Sendable, Equatable {
     var promptTokens: Int
     var completionTokens: Int
@@ -26,6 +32,8 @@ nonisolated struct ServeUsage: Sendable, Equatable {
     /// SC-3: the prompt cache was in play for this request (so `cachedTokens == 0` means a miss, not "no cache").
     /// Never on the wire.
     var promptCacheApplied: Bool = false
+    /// WW4-1-3: set only on a structured-output request. Never on the wire; the request log shows it.
+    var structuredOutcome: ServeStructuredOutcome?
     var totalTokens: Int { promptTokens + completionTokens }
 }
 
@@ -184,6 +192,14 @@ nonisolated protocol ServeBackend: Sendable {
     /// What a request on this model costs in memory (S3-5a, R47). `nil` = exempt: Apple Foundation Models
     /// (the OS's memory, not ours), test doubles, or a checkpoint whose config can't be read.
     var memoryProfile: ServeMemoryProfile? { get }
+
+    /// WW4-1-3: everything a structured-output request needs *before* it takes a queue place or a model lease — the allow-list,
+    /// the schema checks, the grammar's vocabulary and its compile (all on the compile thread). `.success(nil)` for a request
+    /// that is not structured; throws the `ServeError` to answer with, or `CancellationError`. The grant it returns must reach `generate(_:grammar:)` or be finished by the caller.
+    func prepareStructure(_ request: ServeRequest) async throws -> ServeGrammarGrant?
+
+    /// `generate` with the grammar grant `prepareStructure` produced.
+    func generate(_ request: ServeRequest, grammar: ServeGrammarGrant?) -> AsyncThrowingStream<ServeEvent, Error>
 }
 
 extension ServeBackend {
@@ -192,6 +208,16 @@ extension ServeBackend {
     var contextLimit: Int? { nil }
     func countPromptTokens(_ request: ServeRequest) async throws -> Int? { nil }
     var memoryProfile: ServeMemoryProfile? { nil }
+
+    /// A backend that can't constrain its output answers a JSON format request with the same 400 an unchecked MLX family gets.
+    func prepareStructure(_ request: ServeRequest) async throws -> ServeGrammarGrant? {
+        if request.structure.isConstrained { throw ServeStructureCheck.unsupportedModelRefusal(model: request.model) }
+        return nil
+    }
+
+    func generate(_ request: ServeRequest, grammar: ServeGrammarGrant?) -> AsyncThrowingStream<ServeEvent, Error> {
+        generate(request)
+    }
 }
 
 // MARK: - Queue
@@ -328,6 +354,8 @@ nonisolated struct RequestLogEntry: Sendable, Equatable {
     var decodeTokensPerSecond: Double? = nil
     /// Prompt tokens served from the prompt cache; nil when the cache wasn't applicable to this request.
     var promptTokensReused: Int? = nil
+    /// WW4-1-3: `complete` / `incomplete` on a structured-output request, nil otherwise. A flag, never the document (rule 13).
+    var structuredOutcome: ServeStructuredOutcome? = nil
 }
 
 /// A bounded in-memory log the Connect sheet / Settings pane will read (S1-5).

@@ -35,13 +35,27 @@ nonisolated struct IncrementalDetokenizer {
         guard readOffset < ids.count else { return "" }
         let prefixText = decode(Array(ids[prefixOffset..<readOffset]))
         let newText = decode(Array(ids[prefixOffset...]))
-        let prefixCount = prefixText.unicodeScalars.count
+        // The new text starts where the old text stops. Normally the old window is a prefix of the new one; but a tokenizer's
+        // decode may re-normalise across the boundary (`clean_up_tokenization_spaces` turns " ," into ","), shrinking the old
+        // text by a scalar. Slicing by the OLD length would then swallow the first scalar of the new text — WW4-1-3 found a
+        // JSON comma lost this way (journal 2026-573). The common prefix is the boundary either way.
+        let prefixCount = Self.commonPrefixCount(prefixText, newText)
         guard newText.unicodeScalars.count > prefixCount,
               !(holdingIncomplete && newText.hasSuffix("\u{FFFD}")) else { return "" }
         let tail = String(String.UnicodeScalarView(newText.unicodeScalars.dropFirst(prefixCount)))
         prefixOffset = readOffset
         readOffset = ids.count
         return tail
+    }
+}
+
+extension IncrementalDetokenizer {
+    /// How many leading scalars `a` and `b` share.
+    fileprivate static func commonPrefixCount(_ a: String, _ b: String) -> Int {
+        var count = 0
+        var left = a.unicodeScalars.makeIterator(), right = b.unicodeScalars.makeIterator()
+        while let x = left.next(), let y = right.next(), x == y { count += 1 }
+        return count
     }
 }
 
@@ -226,6 +240,9 @@ nonisolated struct MLXChatBackend: ServeBackend {
     /// set it; PC-3 turns `reusedTokens` into `usage.cached_tokens` and the request log.
     var promptCacheObserver: (@Sendable (PromptCacheOutcome) -> Void)? = nil
 
+    /// WW4-1-3: where grammar vocabularies and compiled constraints live. Tests give a backend its own.
+    var grammarCache: ServeGrammarCache = .shared
+
     init(directory: URL, footprintBytes: Int64? = nil, architecture: String? = nil,
          pool: ModelContainerPool = .shared, roomBytes: Int64 = ServeMemoryAdmission.room()) {
         self.directory = directory
@@ -315,10 +332,14 @@ nonisolated struct MLXChatBackend: ServeBackend {
     }
 
     func generate(_ request: ServeRequest) -> AsyncThrowingStream<ServeEvent, Error> {
+        generate(request, grammar: nil)
+    }
+
+    func generate(_ request: ServeRequest, grammar: ServeGrammarGrant?) -> AsyncThrowingStream<ServeEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    try await run(request, into: continuation)
+                    try await run(request, grammar: grammar, into: continuation)
                     continuation.finish()
                 } catch is CancellationError {
                     continuation.finish()
@@ -331,8 +352,13 @@ nonisolated struct MLXChatBackend: ServeBackend {
         }
     }
 
-    private func run(_ request: ServeRequest,
+    private func run(_ request: ServeRequest, grammar: ServeGrammarGrant?,
                      into continuation: AsyncThrowingStream<ServeEvent, Error>.Continuation) async throws {
+        // WW4-1-3: a structured request that arrives without its grammar is never run unconstrained.
+        if request.structure.isConstrained, grammar == nil {
+            continuation.yield(.error(ServeStructureCheck.unavailable))
+            return
+        }
         // S3-5c: MLX's buffer pool is capped while a server generation runs and restored after it.
         ServeMLXMemory.shared.begin()
         defer { ServeMLXMemory.shared.end() }
@@ -341,12 +367,20 @@ nonisolated struct MLXChatBackend: ServeBackend {
         // from here, and with no handler that was a `fatalError` — the app died mid-request with
         // no sentence for the client. Guarded, it comes back through the existing error path as
         // a normal failed request.
-        try await MLXErrorGuard.guarded {
-            try await runInner(request, into: continuation)
+        // Ruling AS: the grammar lease is given back on every path. `runInner` finishes it as reusable only after a clean
+        // end; an error, a cancellation or an early refusal lands here and drops the constraint (idempotent after that).
+        do {
+            try await MLXErrorGuard.guarded {
+                try await runInner(request, grammar: grammar, into: continuation)
+            }
+        } catch {
+            await grammar?.finish(clean: false)
+            throw error
         }
+        await grammar?.finish(clean: false)
     }
 
-    private func runInner(_ request: ServeRequest,
+    private func runInner(_ request: ServeRequest, grammar: ServeGrammarGrant?,
                           into continuation: AsyncThrowingStream<ServeEvent, Error>.Continuation) async throws {
         let runStart = ContinuousClock.now
         // SC-2a: leased for the whole request, so a model load or another request's working set can't evict it
@@ -381,8 +415,9 @@ nonisolated struct MLXChatBackend: ServeBackend {
         // vocabulary (`minimal`) is not in their list, so a forwarded value would kill the render
         // and silently turn thinking off. The templates have no budget control to set anyway.
         // Implementer's call, pending owner confirmation.
-        let thinking = ReasoningTemplateTable.thinkingOn(requested: request.reasoning,
-                                                         forModelType: checkpointModelType)
+        // WW4-1-3 (ruling AO): a structured reply is never a thinking one.
+        let thinking = grammar == nil && ReasoningTemplateTable.thinkingOn(requested: request.reasoning,
+                                                                           forModelType: checkpointModelType)
         let renderContext: [String: any Sendable] = ["enable_thinking": thinking]
         let containerSeconds = Self.seconds(ContinuousClock.now - runStart)
         try await container.perform { context in
@@ -520,9 +555,24 @@ nonisolated struct MLXChatBackend: ServeBackend {
             // S3.1b: a trade lowered the limit before the first output token; it only ever goes down.
             let replyLimit = request.effectiveMaxTokens - prepared.outcome.replyTokensTraded
             parameters.maxTokens = replyLimit
+            // WW4-1-3: the grammar rides the library's own `components:` seam. The stop token the grammar forces must be one
+            // the loaded model's loop stops on (ruling AT); if the loaded configuration disagrees with the pre-lease pick the
+            // request fails closed rather than loop on a forced token.
+            var components = GenerationComponents()
+            var processor: ServeGrammarProcessor?
+            if let grammar {
+                guard ServeGrammarEOS.pickIsStopToken(grammar.vocabulary.eosTokenID, configuration: context.configuration,
+                                                      tokenizer: context.tokenizer) else {
+                    continuation.yield(.error(ServeStructureCheck.unavailable))
+                    return
+                }
+                let made = grammar.makeProcessor()
+                processor = made
+                components = GenerationComponents(logitProcessorFactory: { made })
+            }
             let stream = try MLXLMCommon.generateTokens(
                 input: prepared.cache == nil ? input : LMInput(tokens: MLXArray(prepared.tailTokens)),
-                cache: prepared.cache, parameters: parameters, context: context)
+                cache: prepared.cache, parameters: parameters, context: context, components: components)
 
             // The scanner exists only when a tool call could actually be produced; `tools` empty
             // means the family can't use them or the client asked for `tool_choice: "none"`.
@@ -615,12 +665,34 @@ nonisolated struct MLXChatBackend: ServeBackend {
             var usage = ServeUsage(
                 promptTokens: promptTokens, completionTokens: completionTokens, outcome: prepared.outcome)
             usage.loadSeconds = loadSeconds
-            continuation.yield(.usage(usage))
             // S2-2: a turn that produced calls ends as `tool_calls`, whatever the sampler said.
-            let finish: ServeFinishReason = callIndex > 0 ? .toolCalls
+            var finish: ServeFinishReason = callIndex > 0 ? .toolCalls
                 : (hitLimit && !stoppedByClient ? .length : .stop)
+            if let processor, let grammar {
+                // WW4-1-3: the finish reason comes from the grammar. `stop` only when the document is whole; a cut reply
+                // is `length` (or the client's own `stop`), never a quiet `stop` over half a document.
+                let ending = Self.structuredEnding(terminated: processor.isTerminated, matcherFailed: processor.failure != nil,
+                                                   stoppedByClient: stoppedByClient)
+                usage.structuredOutcome = ending.outcome
+                finish = ending.finish
+                // Reusable only if the generation loop ended on its own; a `stop` match broke out of the stream early.
+                await grammar.finish(clean: Self.grammarIsReusable(stoppedByClient: stoppedByClient, matcherFailed: processor.failure != nil))
+            }
+            continuation.yield(.usage(usage))
             continuation.yield(.finish(finish))
         }
+    }
+
+    /// WW4-1-3: how a structured reply ended, from the grammar alone.
+    nonisolated static func structuredEnding(terminated: Bool, matcherFailed: Bool, stoppedByClient: Bool)
+        -> (outcome: ServeStructuredOutcome, finish: ServeFinishReason) {
+        let complete = terminated && !matcherFailed
+        return (complete ? .complete : .incomplete, complete || stoppedByClient ? .stop : .length)
+    }
+
+    /// WW4-1-3 (ruling AS): a constraint goes back to the idle pool only when nothing can still be using it.
+    nonisolated static func grammarIsReusable(stoppedByClient: Bool, matcherFailed: Bool) -> Bool {
+        !stoppedByClient && !matcherFailed
     }
 
     /// Whether the reply ended at its limit — compared against the **lowered** limit when S3.1b traded reply room for a
