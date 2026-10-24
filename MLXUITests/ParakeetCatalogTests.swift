@@ -25,8 +25,10 @@ struct ParakeetCatalogTests {
         #expect(e.source == .mlx)
         #expect(e.license == "cc-by-4.0")
         #expect(e.downloadSizeGB == 2.51)
-        // MP-0 G: ramGB is an estimate, download size × 1.5.
-        #expect(abs(e.ramGB - e.downloadSizeGB * 1.5) < 0.01)
+        // MP2-R-FIX-1 (owner rulings AF and AI, 2026-10-24): ramGB is the measured in-app peak (6.10 GiB = 6.55 GB), replacing
+        // MP-0 G's download × 1.5 estimate (3.77) for this entry only; the description cites the measurement.
+        #expect(e.ramGB == 6.6)
+        #expect((e.description ?? "").contains("in-app peak 6.10 GiB (6.55 GB)"))
         #expect(e.languages?.count == 25)
     }
 
@@ -57,7 +59,7 @@ struct ParakeetCatalogTests {
         #expect(description.contains("Original model by NVIDIA, licensed under"))
         #expect(description.contains("CC-BY-4.0"))
         #expect(description.contains("nvidia/parakeet-tdt-0.6b-v3"))
-        #expect(description.contains("RAM figure is an estimate (download size × 1.5)"))
+        #expect(description.contains("RAM figure is measured: in-app peak 6.10 GiB (6.55 GB), MLXUI-Direct, 588 s clip, 120 s chunks, 2026-10-24"))
         #expect(description.contains("Timestamps"))
     }
 

@@ -10,11 +10,11 @@
   "capabilities": {},
   "resources": {
     "disk_gb": 2.51,
-    "ram_gb": 3.77
+    "ram_gb": 6.6
   },
   "source": "https://huggingface.co/mlx-community/parakeet-tdt-0.6b-v3",
   "license": "CC-BY-4.0",
   "manifest_version": 1,
   "pinned": true,
-  "notes": "MLXUI-authored (RSI/DelegateModelPackBacklog.md MP2-W) -- catflow-mlx has no manifest for this model, so this was written in the shape of voxtral-mini-4b-realtime-2602-4bit.json. It has no checksum field, as the other MLXUI-authored manifests (the Gemma 4 pair, MiMo, Qwen3.8) have none: there is no catflow source manifest to inherit one from and the field is documentary. settings is empty on purpose (readme T4): the engine takes no language and returns text only, so no lang or timestamps setting is offered. resources.disk_gb is browser.json's downloadSizeGB (2.51) and resources.ram_gb is its ramGB 3.77 (download size x 1.5, MP-0 G: an estimate, not a measurement). Verified against mlx-community/parakeet-tdt-0.6b-v3 revision ed2b7e8c15f9aaa0b5772e2efb986255eaef7e15. Original model by NVIDIA (nvidia/parakeet-tdt-0.6b-v3), CC-BY-4.0."
+  "notes": "MLXUI-authored (RSI/DelegateModelPackBacklog.md MP2-W) -- catflow-mlx has no manifest for this model, so this was written in the shape of voxtral-mini-4b-realtime-2602-4bit.json. It has no checksum field, as the other MLXUI-authored manifests (the Gemma 4 pair, MiMo, Qwen3.8) have none: there is no catflow source manifest to inherit one from and the field is documentary. settings is empty on purpose (readme T4): the engine takes no language and returns text only, so no lang or timestamps setting is offered. resources.disk_gb is browser.json's downloadSizeGB (2.51) and resources.ram_gb is its ramGB 6.6, a measured figure (in-app peak 6.10 GiB = 6.55 GB, MLXUI-Direct, 588 s clip, 120 s chunks, 2026-10-24, flat with clip length, journal 2026-566), replacing MP-0 G's download x 1.5 estimate (3.77) for this entry only (ruling AF, 2026-10-24); MP-0 G still governs unmeasured entries (ruling AJ). Verified against mlx-community/parakeet-tdt-0.6b-v3 revision ed2b7e8c15f9aaa0b5772e2efb986255eaef7e15. Original model by NVIDIA (nvidia/parakeet-tdt-0.6b-v3), CC-BY-4.0."
 }

@@ -70,7 +70,7 @@ struct ParakeetWorkflowWiringTests {
         case .runnable(let slot, let equivalence, let note):
             #expect(slot.modelEntry?.id == Self.cardID)
             #expect(slot.modelEntry?.modelType == .asr)
-            #expect(slot.modelEntry?.ramGB == 3.77)
+            #expect(slot.modelEntry?.ramGB == 6.6)
             #expect(equivalence == .same)
             #expect(note == nil)
         case .notRunnable(let name, let reason, _):
@@ -93,7 +93,7 @@ struct ParakeetWorkflowWiringTests {
         #expect(manifest.tasks == ["Transcribe"])
         #expect(manifest.settings.isEmpty, "T4: the engine takes no language or timestamps setting")
         #expect(manifest.resources?.diskGB == 2.51)
-        #expect(manifest.resources?.ramGB == 3.77)
+        #expect(manifest.resources?.ramGB == 6.6)
     }
 
     @Test func manifestResourcesMatchTheCatalogCard() throws {
@@ -117,7 +117,10 @@ struct ParakeetWorkflowWiringTests {
         #expect(notes.contains("MLXUI-authored"))
         #expect(notes.contains("ed2b7e8c15f9aaa0b5772e2efb986255eaef7e15"))
         #expect(notes.contains("no checksum field"))
-        #expect(notes.contains("estimate"))
+        // MP2-R-FIX-1 (rulings AF, AI, AJ): the manifest cites the measurement, not the MP-0 G estimate.
+        #expect(notes.contains("measured figure"))
+        #expect(notes.contains("in-app peak 6.10 GiB = 6.55 GB"))
+        #expect(notes.contains("MP-0 G still governs unmeasured entries"))
     }
 
     // MARK: - the pool
