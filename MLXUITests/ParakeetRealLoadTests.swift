@@ -77,50 +77,70 @@ struct ParakeetMainActorProbeTests {
     }
 }
 
-/// MP2-3-FIX-2 measurement (owner ruling X). Owner-run and gated twice: on the installed weights and on
-/// `MLXUI_TEST_PARAKEET_LONG_CLIP=<audio file>` (the ~10-minute clip; passed to the host as
-/// `TEST_RUNNER_MLXUI_TEST_PARAKEET_LONG_CLIP`). `MLXUI_TEST_PARAKEET_OUT=<folder>` receives the transcript.
-/// Run alone, with nothing else loaded, while an external sampler logs the host's memory. A skipped run does not count.
+/// MP2-3-FIX-2 measurement (owner rulings X, Y, Z of 2026-10-24). Owner-run, one run at a time, nothing else loaded.
+/// Gated on the installed weights and `MLXUI_TEST_PARAKEET_MEASURE=1` (host env: `TEST_RUNNER_…`). Inputs:
+/// `MLXUI_TEST_PARAKEET_LONG_CLIP=<audio file>` (default: the bundled sample) and `MLXUI_TEST_PARAKEET_CHUNK=<seconds>`
+/// (default: `ParakeetEngine.chunkSeconds`; a test-only override, the engine constant is unchanged).
+/// The host is sandboxed, so nothing is written to disk: everything is printed to the log (`PARAKEETMEASURE …`).
+/// MLX's own counters are read (a) right after `ParakeetModel.fromDirectory` and (b) right after `generate`, after
+/// `Memory.clearCache()` and a peak reset, so the load floor is separate from the transcription. `peakMemory` is the
+/// peak of *active* MLX memory since the reset (it excludes the buffer cache).
 struct ParakeetLongClipMeasurement {
-    nonisolated static let clip: URL? = {
-        guard let path = ProcessInfo.processInfo.environment["MLXUI_TEST_PARAKEET_LONG_CLIP"],
-              FileManager.default.fileExists(atPath: path) else { return nil }
-        return URL(fileURLWithPath: path)
-    }()
-    nonisolated static var outFolder: URL? {
-        ProcessInfo.processInfo.environment["MLXUI_TEST_PARAKEET_OUT"].map { URL(fileURLWithPath: $0) }
+    nonisolated static let env = ProcessInfo.processInfo.environment
+
+    nonisolated static var clip: URL {
+        if let path = env["MLXUI_TEST_PARAKEET_LONG_CLIP"] { return URL(fileURLWithPath: path) }
+        return URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("MLXUI/Resources/Samples/sample-audio.m4a")
     }
 
-    nonisolated static func samples() throws -> [Float] {
-        let buffer = try AudioFileReader.read(try #require(clip))
-        return try AudioResampler.resample(buffer, to: 16_000).samples
+    nonisolated static func line(_ label: String, _ s: Memory.Snapshot) -> String {
+        func gib(_ b: Int) -> String { String(format: "%.3f GiB", Double(b) / 1_073_741_824) }
+        return "PARAKEETMEASURE \(label): active \(s.activeMemory) B (\(gib(s.activeMemory))), cache \(s.cacheMemory) B (\(gib(s.cacheMemory))), peak \(s.peakMemory) B (\(gib(s.peakMemory)))"
     }
 
-    /// Through `ParakeetEngine` (120 s chunks).
-    @Test(.enabled(if: ParakeetRealLoad.directory != nil && clip != nil))
-    func chunkedTranscriptOfTheLongClip() async throws {
+    @Test(.enabled(if: ParakeetRealLoad.directory != nil && env["MLXUI_TEST_PARAKEET_MEASURE"] == "1"))
+    func measureLoadAndTranscribe() async throws {
         let dir = try #require(ParakeetRealLoad.directory)
-        let samples = try Self.samples()
-        let started = Date()
-        let text = try await ParakeetEngine.transcribe(samples, modelDirectory: dir)
-        let elapsed = Date().timeIntervalSince(started)
-        print("PARAKEETLONG chunked \(samples.count / 16_000) s of audio, \(String(format: "%.1f", elapsed)) s elapsed, \(text.split(separator: " ").count) words")
-        if let out = Self.outFolder { try text.write(to: out.appendingPathComponent("chunked.txt"), atomically: true, encoding: .utf8) }
-        #expect(!text.isEmpty)
-    }
+        let buffer = try AudioFileReader.read(Self.clip)
+        let samples = try AudioResampler.resample(buffer, to: 16_000).samples
+        let audio = MLXArray(samples)
+        let chunk = Self.env["MLXUI_TEST_PARAKEET_CHUNK"].flatMap(Float.init) ?? ParakeetEngine.chunkSeconds
+        let seconds = samples.count / 16_000
 
-    /// The pre-FIX-2 behaviour (the model's own 1200 s default: one pass), for the word-level diff only.
-    @Test(.enabled(if: ParakeetRealLoad.directory != nil && clip != nil && ProcessInfo.processInfo.environment["MLXUI_TEST_PARAKEET_ONEPASS"] == "1"))
-    func onePassReferenceTranscriptOfTheLongClip() async throws {
-        let dir = try #require(ParakeetRealLoad.directory)
-        let samples = try Self.samples()
-        let started = Date()
+        eval(audio)
+        Memory.clearCache()
+        Memory.peakMemory = 0   // the setter ignores the value and resets the peak
+        print(Self.line("start", Memory.snapshot()))
+
+        let t0 = Date()
         let model = try ParakeetModel.fromDirectory(dir)
-        let text = model.generate(audio: MLXArray(samples), generationParameters: model.defaultGenerationParameters)
-            .text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let elapsed = Date().timeIntervalSince(started)
-        print("PARAKEETLONG onepass \(String(format: "%.1f", elapsed)) s elapsed, \(text.split(separator: " ").count) words")
-        if let out = Self.outFolder { try text.write(to: out.appendingPathComponent("onepass.txt"), atomically: true, encoding: .utf8) }
+        let loadSeconds = Date().timeIntervalSince(t0)
+        print(Self.line("afterLoad", Memory.snapshot()) + String(format: ", %.1f s", loadSeconds))
+
+        let base = model.defaultGenerationParameters
+        let params = STTGenerateParameters(
+            maxTokens: base.maxTokens, temperature: base.temperature, topP: base.topP, topK: base.topK,
+            verbose: base.verbose, language: base.language, chunkDuration: chunk,
+            minChunkDuration: base.minChunkDuration, repetitionPenalty: base.repetitionPenalty,
+            repetitionContextSize: base.repetitionContextSize, kvBits: base.kvBits,
+            kvGroupSize: base.kvGroupSize, quantizedKVStart: base.quantizedKVStart)
+        let t1 = Date()
+        let output = model.generate(audio: audio, generationParameters: params)
+        let text = output.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let generateSeconds = Date().timeIntervalSince(t1)
+        print(Self.line("afterGenerate", Memory.snapshot()) + String(format: ", %.1f s", generateSeconds))
+
+        print("PARAKEETMEASURE summary: clip \(Self.clip.lastPathComponent), \(seconds) s of audio, chunk \(chunk) s, "
+              + String(format: "load %.1f s, generate %.1f s", loadSeconds, generateSeconds)
+              + ", \(text.split(separator: " ").count) words")
+        // Sentence timing from the model, to place chunk boundaries (every `chunk - 2` s of audio) in the transcript.
+        for (i, seg) in (output.segments ?? []).enumerated() {
+            print("PARAKEETMEASURE seg \(i): " + seg.map { "\($0.key)=\($0.value)" }.sorted().joined(separator: " | "))
+        }
+        print("PARAKEETMEASURE transcript-begin")
+        print(text)
+        print("PARAKEETMEASURE transcript-end")
         #expect(!text.isEmpty)
     }
 }
