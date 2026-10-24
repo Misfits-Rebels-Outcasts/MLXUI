@@ -365,6 +365,16 @@ nonisolated enum CatalogBridge {
             equivalence: .same,
             manifestFile: "gemma-4-e4b-it-4bit-vision.json",
             modelType: .vision),
+        // MP2-W (RSI/DelegateModelPackBacklog.md, MP2-W; owner rulings V and AE, 2026-10-24) -- Parakeet TDT
+        // 0.6B v3, the `Transcribe` row's fifth model. `.same`: the card's repo is the pinned repo. No catflow-mlx
+        // manifest exists for it, so `parakeet-tdt-0.6b-v3.json` is MLXUI-authored (see its "notes"). Appended
+        // **last** to the `"Transcribe"` pool, so the seed ("Whisper Tiny") does not move.
+        BridgeEntry(
+            display: "Parakeet TDT 0.6B v3",
+            pinnedID: "mlx-community/parakeet-tdt-0.6b-v3",
+            candidates: ["mlx-community/parakeet-tdt-0.6b-v3"],
+            equivalence: .same,
+            manifestFile: "parakeet-tdt-0.6b-v3.json"),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {

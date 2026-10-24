@@ -167,3 +167,71 @@ struct ParakeetLongClipMeasurement {
         }
     }
 }
+
+/// MP2-W — a real two-row flow through the real executor (owner instruction, 2026-10-24): `Read Audio` of the bundled
+/// sample, then `Transcribe` with the model named exactly as a `.cat` writes it. Owner-run, gated on the installed
+/// weights (the same `MLXUI_TEST_PARAKEET_DIR` as the other real-load tests); a skipped run does not count.
+/// Real: the parser, `FlowRunner`, `RealExecutor`, the bridge resolution, `Read Audio`, `ASRStage`, `ParakeetEngine`. Not
+/// the SDK's `makeStage` (it reads `ModelStore.shared`, the test host's container): see the factory comment.
+struct ParakeetFlowRealRunTests {
+    @Test(.enabled(if: ParakeetRealLoad.directory != nil))
+    func twoRowFlowTranscribesTheSampleWithParakeet() async throws {
+        let dir = try #require(ParakeetRealLoad.directory)
+        let repoRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let catalogData = try Data(contentsOf: repoRoot.appendingPathComponent("MLXUI/Resources/browser.json"))
+        let catalog = try JSONDecoder().decode(BrowserData.self, from: catalogData).domains.flatMap { $0.allModels }
+        let parakeet = try #require(catalog.first { $0.id == "mlx-community--parakeet-tdt-0.6b-v3" })
+
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("parakeet-flow-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let workspace = FlowWorkspace(root: base.appendingPathComponent("flows"))
+        let flowDir = workspace.directory(for: "parakeet-flow")
+        try FileManager.default.createDirectory(at: flowDir, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: repoRoot.appendingPathComponent("MLXUI/Resources/Samples/sample-audio.m4a"),
+                                         to: flowDir.appendingPathComponent("sample-audio.m4a"))
+
+        let registry = await MainActor.run { () -> ModelRegistry in
+            let registry = ModelRegistry()
+            for module in installedModules { module.register(into: registry) }
+            return registry
+        }
+        let blobs = base.appendingPathComponent("blobs")
+        let executor = RealExecutor(
+            workspace: workspace, flowID: "parakeet-flow", blobDirectory: blobs,
+            makeModelStage: { model, _ in
+                // The registry must hand this card to the Parakeet module. `ParakeetSDK.makeStage` reads
+                // `ModelStore.shared`, which in this sandboxed test host is the container, not the owner's install,
+                // so the stage itself is the engine's own path on the override directory.
+                let moduleID = await MainActor.run { registry.bestModule(for: model)?.descriptor.id }
+                guard moduleID == "parakeet" else { throw StageError.unsupportedModel(id: model.id, kind: model.runnerKind) }
+                return ASRStage(id: "parakeet.\(model.id)", name: "Parakeet ASR") { samples in
+                    try await ParakeetEngine.transcribe(samples, modelDirectory: dir)
+                }
+            },
+            installedModelIDs: [parakeet.id], catalog: catalog)
+
+        let doc = try CatParser.parse("""
+        mlxflow 0.8
+        1. Read Audio   sample-audio.m4a
+        2. Transcribe   Parakeet TDT 0.6B v3
+        """)
+        let row2 = try #require(doc.rows.last)
+        let context = FlowRunner.RunContext(flowID: "parakeet-flow", workspace: workspace, blobDirectory: blobs, executor: executor)
+
+        let started = Date()
+        var output: String?
+        var failure: String?
+        for await event in FlowRunner().run(doc, context: context) {
+            switch event {
+            case .finished(let id, let asset) where id == row2.id: output = asset.items.first?.value
+            case .failed(_, let error): failure = "\(error)"
+            default: break
+            }
+        }
+        let elapsed = Date().timeIntervalSince(started)
+        print("PARAKEETFLOW elapsed \(String(format: "%.1f", elapsed)) s, failure: \(failure ?? "none")")
+        print("PARAKEETFLOW output: \(output ?? "nil")")
+        #expect(failure == nil)
+        #expect(ParakeetRealLoad.readsTheMemo(output ?? ""), "\(output ?? "nil")")
+    }
+}
