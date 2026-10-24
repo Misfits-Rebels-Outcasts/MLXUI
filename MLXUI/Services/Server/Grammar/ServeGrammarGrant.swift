@@ -74,9 +74,12 @@ nonisolated final class ServeGrammarGrant: @unchecked Sendable {
 /// 400 `structured_output_unsupported`. A family is added here only when WW4-1-3's owner-run real-model check has passed
 /// for it, and the journal says so.
 nonisolated enum ServeStructuredOutputFamilies {
-    /// `model_type`s. `gemma4`: verified 2026-10-24 on gemma-4-e4b-it-4bit (journal 2026-573: stop token, 30/30 parses, cache equality, leases). `qwen3` is ruling AX's second
-    /// family but is NOT here: Qwen3-8B-4bit was not installed when the check was due.
-    static let verified: Set<String> = ["gemma4"]
+    /// `model_type`s. `gemma4`: verified 2026-10-24 on gemma-4-e4b-it-4bit (journal 2026-573: stop token, 30/30 parses, cache equality, leases).
+    /// `qwen3`: verified 2026-10-24 on mlx-community--Qwen3-8B-4bit (journal 2026-575), Debug build, one model loaded —
+    /// stop token 151645 `<|im_end|>` (tokenizer EOS = config stop set = the loaded configuration's), schema replies 30/30 valid and
+    /// complete (one compile, 30 resets), greedy cache-off = cache-on (second run reused 1277 prompt tokens), guided 24.7 vs 29.9
+    /// tok/s (ratio 0.83), clean lease kept and cancelled lease dropped, `max_tokens` cut reported incomplete.
+    static let verified: Set<String> = ["gemma4", "qwen3"]
 
     /// Tests lift the gate for a candidate family (`MLXUI_TEST_STRUCT_CANDIDATE=1` in the real-model suite) — that is how a
     /// family earns its place.

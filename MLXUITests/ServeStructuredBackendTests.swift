@@ -184,9 +184,10 @@ struct ServeStructuredEndingTests {
         #expect(!MLXChatBackend.grammarIsReusable(stoppedByClient: false, matcherFailed: true))
     }
 
-    @Test func theAllowListIsGemma4UntilAFamilyIsCheckedOnRealWeights() {
+    @Test func theAllowListIsGemma4AndQwen3UntilAFamilyIsCheckedOnRealWeights() {
         #expect(ServeStructuredOutputFamilies.allows(modelType: "gemma4"))
-        for other in ["qwen3", "qwen3_5", "llama", "gemma3", "gemma3_text", "mistral", ""] {
+        #expect(ServeStructuredOutputFamilies.allows(modelType: "qwen3"))
+        for other in ["qwen3_5","llama", "gemma3", "gemma3_text", "mistral", ""] {
             #expect(!ServeStructuredOutputFamilies.allows(modelType: other), "\(other) is not verified")
         }
     }
