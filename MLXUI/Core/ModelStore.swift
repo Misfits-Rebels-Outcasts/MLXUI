@@ -11,9 +11,12 @@
 //                             Library/Application Support/AI Browser/
 //    Direct (un-sandboxed)  ~/Library/Application Support/AI Browser/
 //
-//  One type means the Direct edition's "adopt the App Store container if it
-//  exists, instead of re-downloading 30 GB of weights" behaviour is a single
-//  override rather than seventeen. See Design/dual-distribution.md §2 and §6.
+//  One type means every path is built in one place. The Direct edition does NOT
+//  adopt the App Store container today: the two editions keep separate stores, and
+//  a user with both downloads every model twice. Design/dual-distribution.md §2
+//  and §6 describe an adoption override that was never built; the only seam for
+//  one is `init(baseDirectory:)`, which only tests use. See RSI/backlog.md,
+//  "Direct edition doesn't adopt the App Store container's models".
 //
 //  Layout (unchanged — see CLAUDE.md § "Install & storage"):
 //
