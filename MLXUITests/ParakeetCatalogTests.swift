@@ -38,7 +38,9 @@ struct ParakeetCatalogTests {
         let data = try Data(contentsOf: repoRoot.appendingPathComponent("MLXUI/Resources/browser.json"))
         let catalog = try JSONDecoder().decode(BrowserData.self, from: data)
         let asr = try #require(catalog.domains.first { $0.id == "asr" })
-        #expect(asr.allModels.last?.hfModelId == "mlx-community/parakeet-tdt-0.6b-v3")
+        // MP3-1: Qwen3-ASR was appended after it (each phase appends last), so Parakeet is now second to last.
+        // Implementer's call, pending owner confirmation: the assertion follows the append, as the count guards do.
+        #expect(asr.allModels.dropLast().last?.hfModelId == "mlx-community/parakeet-tdt-0.6b-v3")
     }
 
     @Test func familyCollidesWithNeitherWhisperNorVoxtral() throws {

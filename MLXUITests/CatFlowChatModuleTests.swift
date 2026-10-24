@@ -79,7 +79,9 @@ struct CatFlowChatModuleTests {
         //        2026-10-21), 45 → 47. Same convention: a bumped count, not an edited golden.
         // MP2-1: bundled catalog gained the mlx-community/parakeet-tdt-0.6b-v3 `.asr` entry
         //        (RSI/DelegateModelPackBacklog.md MP2-1, MP-0 ruled 2026-10-21), 47 → 48. Same convention.
-        #expect(entries.count == 48, "bundled catalog drifted: \(entries.count) entries")
+        // MP3-1: bundled catalog gained the mlx-community/Qwen3-ASR-1.7B-8bit `.asr` entry
+        //        (RSI/DelegateModelPackBacklog.md MP3-1, MP-0 ruled 2026-10-21), 48 → 49. Same convention.
+        #expect(entries.count == 49, "bundled catalog drifted: \(entries.count) entries")
 
         let withChat = registry(includingChat: true)
         let withoutChat = registry(includingChat: false)
@@ -99,7 +101,7 @@ struct CatFlowChatModuleTests {
             }
             checked += 1
         }
-        #expect(checked == 48)
+        #expect(checked == 49)
         #expect(llmChecked == 14)   // MP1-1: Gemma 4 E4B is the 14th .llm entry (MM1: MiMo V2.6 9B was the 13th)
     }
 
