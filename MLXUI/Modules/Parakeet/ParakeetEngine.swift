@@ -9,12 +9,35 @@ import MLXAudioSTT
 /// vocabulary comes from the config's `joint.vocabulary`, so `tokenizer.model` is unused.
 /// Isolates the `MLXAudioSTT` Parakeet import here.
 ///
-/// Long audio: default generation parameters (`chunkDuration` 1200 s), i.e. one pass for
-/// anything under 20 minutes (owner ruling P, 2026-10-24).
+/// Long audio: the library's own chunking (hard-coded 2 s overlap, token merging) at
+/// `chunkSeconds`, not its 1200 s default (owner ruling X, 2026-10-24).
 ///
 /// The engine returns text, not arrays, so there is no `MLXErrorGuard.read` here; the Run UI wraps
 /// the call in `MLXErrorGuard.guardedRun`.
 enum ParakeetEngine {
+    /// Owner ruling X (2026-10-24): one pass over a 10-minute clip peaked at 13.0 GB on an 18 GiB Mac
+    /// (journal 2026-566), and one pass up to 20 minutes can exhaust a 19 GB Mac. 120 s is a starting
+    /// value, not a tuned one: the journal's chunked measurement decides.
+    nonisolated static let chunkSeconds: Float = 120
+
+    /// The model's own defaults with only `chunkDuration` replaced.
+    nonisolated static func generationParameters(from base: STTGenerateParameters) -> STTGenerateParameters {
+        STTGenerateParameters(
+            maxTokens: base.maxTokens,
+            temperature: base.temperature,
+            topP: base.topP,
+            topK: base.topK,
+            verbose: base.verbose,
+            language: base.language,
+            chunkDuration: chunkSeconds,
+            minChunkDuration: base.minChunkDuration,
+            repetitionPenalty: base.repetitionPenalty,
+            repetitionContextSize: base.repetitionContextSize,
+            kvBits: base.kvBits,
+            kvGroupSize: base.kvGroupSize,
+            quantizedKVStart: base.quantizedKVStart)
+    }
+
     /// Transcribe 16 kHz mono float samples using the installed model directory.
     /// Loads the model per call (matches the other engines).
     nonisolated static func transcribe(_ samples: [Float], modelDirectory: URL) async throws -> String {
@@ -22,7 +45,7 @@ enum ParakeetEngine {
             let model = try ParakeetModel.fromDirectory(modelDirectory)
             let output = model.generate(
                 audio: MLXArray(samples),
-                generationParameters: model.defaultGenerationParameters)
+                generationParameters: generationParameters(from: model.defaultGenerationParameters))
             return output.text.trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {
             throw StageError.engineFailure(stage: "Parakeet ASR", underlying: error)

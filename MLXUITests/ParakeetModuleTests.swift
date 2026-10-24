@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import MLXAudioSTT
 @testable import MLXUI
 
 /// MP2-3: the Parakeet module's resolution and install selection, with no weights needed.
@@ -79,5 +80,19 @@ struct ParakeetModuleTests {
                         "tokenizer.model", "tokenizer.vocab", "vocab.txt"]
         let picked = Set(ModelFileSelector.filesToDownload(siblings: siblings))
         #expect(picked == ["config.json", "model.safetensors", "tokenizer.model"])
+    }
+
+    // MP2-3-FIX-2 (owner ruling X, 2026-10-24): long audio is chunked at 120 s, everything else stays the model's default.
+    @Test func engineChunksLongAudioAt120SecondsAndChangesNothingElse() {
+        let base = STTGenerateParameters(maxTokens: 8192, temperature: 0.0, topP: 0.95, topK: 0, verbose: false,
+                                         language: "en", chunkDuration: 1200.0, minChunkDuration: 1.0)
+        let tuned = ParakeetEngine.generationParameters(from: base)
+        #expect(tuned.chunkDuration == 120)
+        #expect(ParakeetEngine.chunkSeconds == 120)
+        #expect(tuned.maxTokens == base.maxTokens && tuned.temperature == base.temperature)
+        #expect(tuned.topP == base.topP && tuned.topK == base.topK && tuned.language == base.language)
+        #expect(tuned.minChunkDuration == base.minChunkDuration)
+        #expect(tuned.repetitionPenalty == base.repetitionPenalty)
+        #expect(tuned.repetitionContextSize == base.repetitionContextSize)
     }
 }

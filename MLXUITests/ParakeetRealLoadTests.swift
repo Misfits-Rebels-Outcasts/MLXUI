@@ -1,4 +1,6 @@
 import Foundation
+import MLX
+import MLXAudioSTT
 import Testing
 @testable import MLXUI
 
@@ -72,5 +74,53 @@ struct ParakeetMainActorProbeTests {
             #expect(ParakeetRealLoad.readsTheMemo(text), "\(text)")
         }
         #expect(MLXErrorGuard.lastFallbackMessage() == nil)
+    }
+}
+
+/// MP2-3-FIX-2 measurement (owner ruling X). Owner-run and gated twice: on the installed weights and on
+/// `MLXUI_TEST_PARAKEET_LONG_CLIP=<audio file>` (the ~10-minute clip; passed to the host as
+/// `TEST_RUNNER_MLXUI_TEST_PARAKEET_LONG_CLIP`). `MLXUI_TEST_PARAKEET_OUT=<folder>` receives the transcript.
+/// Run alone, with nothing else loaded, while an external sampler logs the host's memory. A skipped run does not count.
+struct ParakeetLongClipMeasurement {
+    nonisolated static let clip: URL? = {
+        guard let path = ProcessInfo.processInfo.environment["MLXUI_TEST_PARAKEET_LONG_CLIP"],
+              FileManager.default.fileExists(atPath: path) else { return nil }
+        return URL(fileURLWithPath: path)
+    }()
+    nonisolated static var outFolder: URL? {
+        ProcessInfo.processInfo.environment["MLXUI_TEST_PARAKEET_OUT"].map { URL(fileURLWithPath: $0) }
+    }
+
+    nonisolated static func samples() throws -> [Float] {
+        let buffer = try AudioFileReader.read(try #require(clip))
+        return try AudioResampler.resample(buffer, to: 16_000).samples
+    }
+
+    /// Through `ParakeetEngine` (120 s chunks).
+    @Test(.enabled(if: ParakeetRealLoad.directory != nil && clip != nil))
+    func chunkedTranscriptOfTheLongClip() async throws {
+        let dir = try #require(ParakeetRealLoad.directory)
+        let samples = try Self.samples()
+        let started = Date()
+        let text = try await ParakeetEngine.transcribe(samples, modelDirectory: dir)
+        let elapsed = Date().timeIntervalSince(started)
+        print("PARAKEETLONG chunked \(samples.count / 16_000) s of audio, \(String(format: "%.1f", elapsed)) s elapsed, \(text.split(separator: " ").count) words")
+        if let out = Self.outFolder { try text.write(to: out.appendingPathComponent("chunked.txt"), atomically: true, encoding: .utf8) }
+        #expect(!text.isEmpty)
+    }
+
+    /// The pre-FIX-2 behaviour (the model's own 1200 s default: one pass), for the word-level diff only.
+    @Test(.enabled(if: ParakeetRealLoad.directory != nil && clip != nil && ProcessInfo.processInfo.environment["MLXUI_TEST_PARAKEET_ONEPASS"] == "1"))
+    func onePassReferenceTranscriptOfTheLongClip() async throws {
+        let dir = try #require(ParakeetRealLoad.directory)
+        let samples = try Self.samples()
+        let started = Date()
+        let model = try ParakeetModel.fromDirectory(dir)
+        let text = model.generate(audio: MLXArray(samples), generationParameters: model.defaultGenerationParameters)
+            .text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let elapsed = Date().timeIntervalSince(started)
+        print("PARAKEETLONG onepass \(String(format: "%.1f", elapsed)) s elapsed, \(text.split(separator: " ").count) words")
+        if let out = Self.outFolder { try text.write(to: out.appendingPathComponent("onepass.txt"), atomically: true, encoding: .utf8) }
+        #expect(!text.isEmpty)
     }
 }
