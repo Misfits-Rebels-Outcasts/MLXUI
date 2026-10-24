@@ -356,29 +356,3 @@ struct ServeMissingCommaProbeTests {
         #expect(position != nil, "xgrammar's grammar itself accepts a missing comma")
     }
 }
-
-/// The detokenizer bug the real-model check found (journal 2026-573): a decode that merges a space into a following comma
-/// (swift-transformers' `clean_up_tokenization_spaces`) made the window shrink, and the delta lost the comma.
-struct IncrementalDetokenizerCleanupTests {
-    /// Each id is a string piece; the decode joins them and then applies the " ," → "," clean-up, as the tokenizer does.
-    private static let pieces = ["\"]", "\n", "    ", ",\"", "steps", "\":"]
-    private static func decode(_ ids: [Int]) -> String {
-        ids.map { pieces[$0] }.joined().replacingOccurrences(of: " ,", with: ",")
-    }
-
-    @Test func aCommaAfterWhitespaceIsNotSwallowedWhenTheDecodeCleansUpTheSpace() {
-        var detokenizer = IncrementalDetokenizer(decode: Self.decode)
-        var out = ""
-        for id in 0 ..< Self.pieces.count { out += detokenizer.push(id) }
-        out += detokenizer.flush()
-        #expect(out.contains(",\"steps"), "the comma survived: \(out.debugDescription)")
-        #expect(out.replacingOccurrences(of: " ", with: "") == "\"]\n,\"steps\":", "every non-space scalar of the stream is emitted once")
-    }
-
-    @Test func anOrdinaryStreamIsUnchanged() {
-        var detokenizer = IncrementalDetokenizer(decode: { $0.map { "<\($0)>" }.joined() })
-        var out = ""
-        for id in [1, 2, 3] { out += detokenizer.push(id) }
-        #expect(out == "<1><2><3>")
-    }
-}

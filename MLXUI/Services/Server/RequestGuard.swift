@@ -51,9 +51,49 @@ nonisolated struct ServeRequestHead: Sendable, Equatable {
 /// so a request carrying `Transfer-Encoding` would slip past the size cap and desynchronise the
 /// connection — it is refused with 411; and an unparseable `Content-Length` is a 400.
 ///
+/// S-FIX-2 (ruling AZ): the **body**, once read, is refused with a 400 if its raw `{`/`[` nesting passes `maxNesting` — before any
+/// route parses it. Every dialect calls `JSONSerialization.jsonObject` on the whole body, and that recurses on the caller's stack:
+/// on the cooperative-pool thread FlyingFox handles a request on (512 KB), a body of nested objects overflowed it and killed the
+/// app at about 475 levels (Debug build; 450 survived), on every endpoint. A legitimate request (Claude Code's tool schemas
+/// included) nests a few dozen levels at most. The scan is iterative and stops as soon as it is over the cap.
+///
 /// Per design §4 / P2 this guard is always on and not user-configurable.
 nonisolated struct RequestGuard: Sendable {
     static let maxBodyBytes = 8 * 1024 * 1024
+    /// Nested `{`/`[` levels a request body may have (S-FIX-2).
+    static let maxNesting = 128
+
+    /// The deepest `{`/`[` nesting in `body`, outside strings (a `\` escapes the next byte, so `\"` doesn't end a string), counted
+    /// without recursion; returns as soon as it exceeds `limit`. Bytes, not characters: no UTF-8 continuation byte is ever a
+    /// quote, a backslash or a bracket.
+    static func nesting(of body: Data, stopAfter limit: Int) -> Int {
+        var depth = 0, deepest = 0
+        var inString = false, escaped = false
+        for byte in body {
+            if inString {
+                if escaped { escaped = false } else if byte == 0x5C { escaped = true } else if byte == 0x22 { inString = false }
+                continue
+            }
+            switch byte {
+            case 0x22: inString = true
+            case 0x7B, 0x5B:
+                depth += 1
+                if depth > deepest { deepest = depth }
+                if deepest > limit { return deepest }
+            case 0x7D, 0x5D: depth = max(0, depth - 1)
+            default: break
+            }
+        }
+        return deepest
+    }
+
+    /// `nil` when the body may be parsed; otherwise the 400 to send.
+    func checkBody(_ body: Data) -> ServeError? {
+        guard Self.nesting(of: body, stopAfter: Self.maxNesting) > Self.maxNesting else { return nil }
+        return ServeError(status: 400,
+                          message: "request JSON is nested more than \(Self.maxNesting) levels deep",
+                          code: "request_too_deeply_nested")
+    }
 
     let port: UInt16
 
