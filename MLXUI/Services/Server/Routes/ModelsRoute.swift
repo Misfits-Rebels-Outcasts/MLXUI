@@ -29,7 +29,7 @@ nonisolated enum ServedModels {
 
 nonisolated enum ModelsRoute {
     /// The OpenAI list body:
-    /// `{"object":"list","data":[{"id","object":"model","created","owned_by":"mlxui","context_length"}]}`.
+    /// `{"object":"list","data":[{"id","object":"model","created","owned_by":"mlxui","context_length","structured_output"}]}`.
     ///
     /// `context_length` is **additive** (S2-4) — OpenAI's list doesn't define one, so it is ignored
     /// by a strict client and read by the ones that look for it. The two shapes followed are
@@ -44,18 +44,24 @@ nonisolated enum ModelsRoute {
 
     /// `contextLength` is injected (it reads a checkpoint's `config.json`, i.e. the disk) so this
     /// stays a pure function of its inputs in tests.
-    static func body(ids: [String], created: Int, contextLength: @Sendable (String) -> Int?) -> Data {
+    ///
+    /// `structuredOutput` (WW4-1-5, ruling BI) is likewise **additive** and a plain fact: `true` when the model's family is on the
+    /// structured-output allow-list (`ServeStructuredOutputFamilies`), `false` for everything else — other MLX models, Apple
+    /// Foundation Models, anything unknown. It is present on every entry, never omitted.
+    static func body(ids: [String], created: Int, contextLength: @Sendable (String) -> Int?,
+                     structuredOutput: @Sendable (String) -> Bool = { _ in false }) -> Data {
         struct Model: Encodable {
             let id: String
             let object = "model"
             let created: Int
             let owned_by = "mlxui"
             let context_length: Int?
+            let structured_output: Bool
         }
         struct List: Encodable { let object = "list"; let data: [Model] }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        let list = List(data: ids.map { Model(id: $0, created: created, context_length: contextLength($0)) })
+        let list = List(data: ids.map { Model(id: $0, created: created, context_length: contextLength($0), structured_output: structuredOutput($0)) })
         return (try? encoder.encode(list)) ?? Data()
     }
 }

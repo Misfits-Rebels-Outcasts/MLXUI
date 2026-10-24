@@ -86,6 +86,13 @@ nonisolated enum ServeStructuredOutputFamilies {
     nonisolated(unsafe) static var overrideForTesting: Set<String>?
 
     static func allows(modelType: String) -> Bool { (overrideForTesting ?? verified).contains(modelType) }
+
+    /// WW4-1-5: the same answer from a checkpoint's `config.json` — what `/v1/models` and the Connect sheet report as a plain
+    /// fact. `MLXChatBackend` reads its `model_type` from the same file with the same reader, so the fact and the backend's
+    /// `structured_output_unsupported` 400 cannot disagree (a test builds both from one directory).
+    static func allows(configData: Data?) -> Bool {
+        allows(modelType: ModelContainerPool.modelTypeString(configData: configData) ?? "")
+    }
 }
 
 nonisolated extension ServeGrammarEOS {

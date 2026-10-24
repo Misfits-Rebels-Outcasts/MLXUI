@@ -40,6 +40,7 @@ struct ConnectAppSheet: View {
                     Button("Copy") { copy(modelID, label: "model") }
                 }
                 Text(contextLine).font(.caption).foregroundStyle(.secondary)
+                Text(structuredOutputLine).font(.caption).foregroundStyle(.secondary)
             }
 
             // R59: a menu, so it stays one line however many clients there are (the segmented control no longer
@@ -113,6 +114,13 @@ struct ConnectAppSheet: View {
         }
         let facts = ServeModelFacts.connectFacts(hfModelID: modelID)
         return ConnectSnippets.contextLine(contextLength: facts.contextLength, usable: facts.usableTokens)    // R56
+    }
+
+    /// WW4-1-5 (ruling BI): whether the model can be asked for JSON that matches a schema — one plain line, the same fact
+    /// `/v1/models` reports as `structured_output`. Apple Foundation Models can't.
+    private var structuredOutputLine: String {
+        if modelID == ServedModels.appleFoundationID { return ConnectSnippets.structuredOutputLine(false) }
+        return ConnectSnippets.structuredOutputLine(ServeModelFacts.connectFacts(hfModelID: modelID).structuredOutput)
     }
 
     private func row(_ title: String, _ value: String) -> some View {

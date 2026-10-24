@@ -31,6 +31,9 @@ nonisolated struct ServeEnvironment: Sendable {
     /// declares none. Injected because it reads `config.json`; the live value reads the same
     /// `ModelContextWindow` the pre-count uses, and 8,192 for Apple Foundation Models.
     var modelContextLength: @Sendable (String) -> Int? = { _ in nil }
+    /// WW4-1-5: whether `/v1/models` reports `structured_output: true` for a model id. Injected like `modelContextLength`
+    /// (the live value reads `config.json`); the default is `false`, the honest answer for a double.
+    var modelStructuredOutput: @Sendable (String) -> Bool = { _ in false }
     var now: @Sendable () -> Date = { Date() }
     /// S3-3c: the `previous_response_id` store, RAM only (rule 13). A class, so every copy of the environment shares it.
     var responseStore: ResponseStore = ResponseStore()
@@ -54,7 +57,20 @@ nonisolated struct ServeEnvironment: Sendable {
                 }) else { return nil }
                 return mlxBackend(for: entry)
             },
-            modelContextLength: { id in liveModelContextLength(id) })
+            modelContextLength: { id in liveModelContextLength(id) },
+            modelStructuredOutput: { id in liveModelStructuredOutput(id) })
+    }
+
+    /// WW4-1-5: `structured_output` for `/v1/models` — the allow-list's answer for the checkpoint's own `model_type`
+    /// (`ServeStructuredOutputFamilies.allows(configData:)`); `false` for Apple Foundation Models and for an id that is not an
+    /// installed MLX chat model.
+    static func liveModelStructuredOutput(_ id: String) -> Bool {
+        if id == ServedModels.appleFoundationID { return false }
+        guard let entry = InstalledModelIndex.loadInstalled().entries.first(where: {
+            $0.kind == .llm && $0.hfModelId == id
+        }) else { return false }
+        return ServeStructuredOutputFamilies.allows(configData: ModelContainerPool.configData(
+            directory: ModelStore.shared.directory(forHFModelID: entry.hfModelId)))
     }
 
     /// S2-4: what `live()`'s `/v1/models` reports as a model's `context_length` — Apple Foundation
@@ -152,7 +168,8 @@ nonisolated enum ServeAPI {
                                        installed: environment.installed(),
                                        appleFoundation: environment.appleFoundationReadiness())
             return json(200, ModelsRoute.body(ids: ids, created: environment.created,
-                                              contextLength: environment.modelContextLength))
+                                              contextLength: environment.modelContextLength,
+                                              structuredOutput: environment.modelStructuredOutput))
         default:
             return error(ServeError(status: 404, message: "Unknown endpoint \(head.method) \(head.path).",
                                     code: "not_found"), path: head.path)

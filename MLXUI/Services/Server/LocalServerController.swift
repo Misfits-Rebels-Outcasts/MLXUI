@@ -127,7 +127,8 @@ nonisolated enum ServeModelFacts {
             supportsTools: ToolCallFormatTable.toolSupport(forModelType: modelType).acceptsTools,
             contextLength: window,
             thinkingAvailable: ReasoningTemplateTable.readsEnableThinking(forModelType: modelType),
-            usableTokens: ServeMemoryAdmission.usableTokens(profile: profile, contextLength: window))
+            usableTokens: ServeMemoryAdmission.usableTokens(profile: profile, contextLength: window),
+            structuredOutput: ServeStructuredOutputFamilies.allows(modelType: modelType))
     }
 }
 

@@ -39,6 +39,9 @@ nonisolated enum ConnectSnippets {
         /// Claude Code and Codex blocks tell the client, so it compacts before the server would refuse. `nil` means
         /// "not computed" and falls back to `contextLength` (see `usable`).
         var usableTokens: Int? = nil
+        /// WW4-1-5 (ruling BI): is this model's family on the structured-output allow-list? A plain fact, shown as one line on
+        /// the sheet and as `structured_output` on `/v1/models`; it is not part of any snippet.
+        var structuredOutput: Bool = false
 
         /// What a client app may send: the memory-aware figure, else the model's own window, else unknown.
         var usable: Int? { usableTokens ?? contextLength }
@@ -327,6 +330,11 @@ nonisolated enum ConnectSnippets {
         var line = "Context length: \(formatted(contextLength)) tokens"
         if let usable, usable < contextLength { line += " (this Mac holds about \(formatted(usable)))" }   // R56
         return line + "."
+    }
+
+    /// WW4-1-5 (ruling BI, copy row C9): the second plain fact about a model. Words only: no badge, no rating, no colour.
+    static func structuredOutputLine(_ supported: Bool) -> String {
+        "Structured output (JSON schema): " + (supported ? "yes" : "no")
     }
 
     /// `max_position_embeddings` from a checkpoint's `config.json` (top level, or inside
