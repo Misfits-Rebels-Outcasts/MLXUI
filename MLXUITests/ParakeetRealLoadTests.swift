@@ -99,24 +99,13 @@ struct ParakeetLongClipMeasurement {
         return "PARAKEETMEASURE \(label): active \(s.activeMemory) B (\(gib(s.activeMemory))), cache \(s.cacheMemory) B (\(gib(s.cacheMemory))), peak \(s.peakMemory) B (\(gib(s.peakMemory)))"
     }
 
-    @Test(.enabled(if: ParakeetRealLoad.directory != nil && env["MLXUI_TEST_PARAKEET_MEASURE"] == "1"))
-    func measureLoadAndTranscribe() async throws {
-        let dir = try #require(ParakeetRealLoad.directory)
-        let buffer = try AudioFileReader.read(Self.clip)
-        let samples = try AudioResampler.resample(buffer, to: 16_000).samples
-        let audio = MLXArray(samples)
-        let chunk = Self.env["MLXUI_TEST_PARAKEET_CHUNK"].flatMap(Float.init) ?? ParakeetEngine.chunkSeconds
-        let seconds = samples.count / 16_000
-
-        eval(audio)
-        Memory.clearCache()
-        Memory.peakMemory = 0   // the setter ignores the value and resets the peak
-        print(Self.line("start", Memory.snapshot()))
-
+    /// Direct path: load, generate, then `Memory.clearCache()`, with the three counters at each point. The model is a
+    /// local here, so it is released when this returns.
+    nonisolated static func directPhase(dir: URL, audio: MLXArray, chunk: Float, seconds: Int) throws -> String {
         let t0 = Date()
         let model = try ParakeetModel.fromDirectory(dir)
         let loadSeconds = Date().timeIntervalSince(t0)
-        print(Self.line("afterLoad", Memory.snapshot()) + String(format: ", %.1f s", loadSeconds))
+        print(line("afterLoad", Memory.snapshot()) + String(format: ", %.1f s", loadSeconds))
 
         let base = model.defaultGenerationParameters
         let params = STTGenerateParameters(
@@ -129,9 +118,11 @@ struct ParakeetLongClipMeasurement {
         let output = model.generate(audio: audio, generationParameters: params)
         let text = output.text.trimmingCharacters(in: .whitespacesAndNewlines)
         let generateSeconds = Date().timeIntervalSince(t1)
-        print(Self.line("afterGenerate", Memory.snapshot()) + String(format: ", %.1f s", generateSeconds))
+        print(line("afterGenerate", Memory.snapshot()) + String(format: ", %.1f s", generateSeconds))
+        Memory.clearCache()
+        print(line("afterClearCache", Memory.snapshot()))
 
-        print("PARAKEETMEASURE summary: clip \(Self.clip.lastPathComponent), \(seconds) s of audio, chunk \(chunk) s, "
+        print("PARAKEETMEASURE summary: clip \(clip.lastPathComponent), \(seconds) s of audio, chunk \(chunk) s, "
               + String(format: "load %.1f s, generate %.1f s", loadSeconds, generateSeconds)
               + ", \(text.split(separator: " ").count) words")
         // Sentence timing from the model, to place chunk boundaries (every `chunk - 2` s of audio) in the transcript.
@@ -141,6 +132,38 @@ struct ParakeetLongClipMeasurement {
         print("PARAKEETMEASURE transcript-begin")
         print(text)
         print("PARAKEETMEASURE transcript-end")
+        return text
+    }
+
+    @Test(.enabled(if: ParakeetRealLoad.directory != nil && env["MLXUI_TEST_PARAKEET_MEASURE"] == "1"))
+    func measureLoadAndTranscribe() async throws {
+        let dir = try #require(ParakeetRealLoad.directory)
+        let buffer = try AudioFileReader.read(Self.clip)
+        let once = try AudioResampler.resample(buffer, to: 16_000).samples
+        // MLXUI_TEST_PARAKEET_REPEAT=3 concatenates the clip in memory (~29 min for the 588 s clip); no new file.
+        let repeats = Self.env["MLXUI_TEST_PARAKEET_REPEAT"].flatMap(Int.init) ?? 1
+        let samples = (1..<max(repeats, 1)).reduce(once) { acc, _ in acc + once }
+        let audio = MLXArray(samples)
+        let chunk = Self.env["MLXUI_TEST_PARAKEET_CHUNK"].flatMap(Float.init) ?? ParakeetEngine.chunkSeconds
+
+        eval(audio)
+        Memory.clearCache()
+        Memory.peakMemory = 0   // the setter ignores the value and resets the peak
+        print(Self.line("start", Memory.snapshot()))
+        let text = try Self.directPhase(dir: dir, audio: audio, chunk: chunk, seconds: samples.count / 16_000)
         #expect(!text.isEmpty)
+
+        // The engine's own path (owner ruling AB: it returns the cache itself), after the model above is released:
+        // what the app keeps after one transcription.
+        if Self.env["MLXUI_TEST_PARAKEET_ENGINE_PHASE"] == "1" {
+            Memory.clearCache()
+            Memory.peakMemory = 0
+            print(Self.line("engineStart", Memory.snapshot()))
+            let t2 = Date()
+            let engineText = try await ParakeetEngine.transcribe(samples, modelDirectory: dir)
+            print(Self.line("engineAfterTranscribe", Memory.snapshot()) + String(format: ", %.1f s", Date().timeIntervalSince(t2)))
+            print("PARAKEETMEASURE engineWords \(engineText.split(separator: " ").count)")
+            #expect(!engineText.isEmpty)
+        }
     }
 }

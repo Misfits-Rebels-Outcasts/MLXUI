@@ -42,14 +42,25 @@ enum ParakeetEngine {
     /// Loads the model per call (matches the other engines).
     nonisolated static func transcribe(_ samples: [Float], modelDirectory: URL) async throws -> String {
         do {
-            let model = try ParakeetModel.fromDirectory(modelDirectory)
-            let output = model.generate(
-                audio: MLXArray(samples),
-                generationParameters: generationParameters(from: model.defaultGenerationParameters))
-            return output.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = try generate(samples, modelDirectory: modelDirectory)
+            // Owner ruling AB (2026-10-24): return MLX's buffer cache once the text is read. It stood at
+            // 2.6-4.6 GiB after `generate` (journal 2026-566), Activity Monitor counts it as the app's memory,
+            // and this engine reloads the model per call, so keeping it saves nothing. Cleared *after* the
+            // model is released (it is local to `generate`): clearing while it was alive left its own 1.2 GiB
+            // of weights to land in the cache on return (measured, journal 2026-566).
+            Memory.clearCache()
+            return text
         } catch {
             throw StageError.engineFailure(stage: "Parakeet ASR", underlying: error)
         }
+    }
+
+    nonisolated private static func generate(_ samples: [Float], modelDirectory: URL) throws -> String {
+        let model = try ParakeetModel.fromDirectory(modelDirectory)
+        let output = model.generate(
+            audio: MLXArray(samples),
+            generationParameters: generationParameters(from: model.defaultGenerationParameters))
+        return output.text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// The installed-model directory for a catalog id, mirroring `InstallManager`'s layout
