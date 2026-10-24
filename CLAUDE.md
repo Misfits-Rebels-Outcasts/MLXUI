@@ -283,8 +283,27 @@ You normally edit Swift here, not the catalog; when you do edit it, decode must 
 
 ## Install & storage
 
-Files land under `~/Library/Application Support/AI Browser/` (both editions — the Direct build is
-un-sandboxed, so the path is the same, not a container). Built **only** via `Core/ModelStore.swift`:
+Files land under `Application Support/AI Browser/`, and **where that is depends on the edition**.
+`ModelStore.shared` resolves `.applicationSupportDirectory`, so the sandbox decides:
+
+| Edition | Base directory |
+|---|---|
+| App Store `MLXUI` (sandboxed) | `~/Library/Containers/net.connectcode.mlxui/Data/Library/Application Support/AI Browser/` |
+| Direct `MLXUI-Direct` (un-sandboxed) | `~/Library/Application Support/AI Browser/` |
+
+The two are separate stores: a model installed in one edition is not visible to the other. A shell
+(or a Claude Code session) cannot read the container — macOS answers "Operation not permitted" —
+so to look at an App Store install, have the owner copy it out (`cp -Rc` is a free clone on APFS).
+`ModelStore` has no container-adoption behaviour today: its header comment and
+`Design/dual-distribution.md` describe the Direct edition adopting the App Store container instead
+of re-downloading, but the code only offers the seam — `init(baseDirectory:)` — and only tests use it.
+
+**Owner-run real-load tests point at the Direct path.** Several suites read
+`~/Library/Application Support/AI Browser/models/…` directly (e.g. `ServeGrammarMeasurementTests`,
+`RealSizesMeasureTests`, the Clef suites), and the opt-in ones take a `TEST_RUNNER_MLXUI_TEST_*_DIR`
+environment variable naming a checkpoint folder (e.g. `…_STRUCT_DIR`, `…_PARAKEET_DIR`). A model
+installed only through the App Store app is not at those paths; copy it out and point the variable
+at the copy. Built **only** via `Core/ModelStore.swift`:
 
 ```
 installed.json            registry (version + per-model metadata)
