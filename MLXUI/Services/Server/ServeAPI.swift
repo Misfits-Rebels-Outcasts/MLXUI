@@ -131,6 +131,14 @@ nonisolated enum ServeAPI {
             return .full(Self.error(ServeError(status: 400, message: "The request body couldn't be read.",
                                                code: "invalid_body"), path: head.path))
         }
+        // S-FIX-2: refuse a deeply nested body before any dialect parses it (see `RequestGuard.checkBody`). Logged as metadata only —
+        // no model, no tokens, no content.
+        if let rejection = requestGuard.checkBody(data) {
+            environment.requestLog.record(RequestLogEntry(
+                time: environment.now(), userAgent: head.userAgent, model: nil, promptTokens: nil, completionTokens: nil,
+                durationSeconds: 0, status: rejection.status, toolsIgnored: false))
+            return .full(Self.error(rejection, path: head.path))
+        }
         return await post(head, data, environment)
     }
 
