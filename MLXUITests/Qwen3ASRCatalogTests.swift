@@ -57,3 +57,54 @@ struct Qwen3ASRCatalogTests {
         #expect(ParakeetSDK().claim(e) == .no)
     }
 }
+
+// MP3-2: the description and metadata.
+extension Qwen3ASRCatalogTests {
+
+    /// `support_languages` from the pinned config.json (mlx-community/Qwen3-ASR-1.7B-8bit @ a8379a2e), in file order.
+    /// Copied here because the pinned folder is outside the repository.
+    private static let configLanguages = [
+        "Chinese", "English", "Cantonese", "Arabic", "German", "French", "Spanish", "Portuguese", "Indonesian",
+        "Italian", "Korean", "Russian", "Thai", "Vietnamese", "Japanese", "Turkish", "Hindi", "Malay", "Dutch",
+        "Swedish", "Danish", "Finnish", "Polish", "Czech", "Filipino", "Persian", "Greek", "Romanian", "Hungarian",
+        "Macedonian",
+    ]
+
+    @Test func descriptionListsTheThirtyConfigLanguagesVerbatim() throws {
+        let e = try qwen()
+        let description = e.description ?? ""
+        #expect(Self.configLanguages.count == 30)
+        #expect(description.contains("30 languages, as listed in the model's configuration: "
+                                     + Self.configLanguages.joined(separator: ", ") + "."))
+        #expect(e.languages?.count == 30)
+    }
+
+    @Test func descriptionSaysLanguageIsDetectedAutomaticallyAndShowsTextOnly() throws {
+        let e = try qwen()
+        let description = e.description ?? ""
+        #expect(description.contains("## Language detection"))
+        #expect(description.contains("identifies the language of the audio itself"))
+        #expect(description.contains("no timestamps"))
+        #expect((e.summary ?? "").contains("automatic language detection"))
+    }
+
+    /// The card (README.md) makes no accuracy claim, and the forced aligner is a separate model that is out of scope.
+    @Test func descriptionMakesNoAccuracyOrAlignerClaim() throws {
+        let description = try qwen().description ?? ""
+        for forbidden in ["word error", "accuracy", "state-of-the-art", "outperform", "aligner", "word-level"] {
+            #expect(!description.localizedCaseInsensitiveContains(forbidden), "\(forbidden)")
+        }
+        // "WER" as a word, not as a substring (it sits inside ordinary words).
+        #expect(description.range(of: #"\bWER\b"#, options: .regularExpression) == nil)
+    }
+
+    @Test func attributionLicenseAndEstimateLines() throws {
+        let e = try qwen()
+        let description = e.description ?? ""
+        #expect(e.displayName == "Qwen3-ASR 1.7B")
+        #expect(description.contains("Original model by the Qwen team, licensed under"))
+        #expect(description.contains("Apache-2.0"))
+        #expect(description.contains("Qwen/Qwen3-ASR-1.7B"))
+        #expect(description.contains("RAM figure is an estimate (download size × 1.5)"))
+    }
+}
