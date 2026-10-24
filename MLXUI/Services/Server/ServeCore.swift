@@ -133,6 +133,9 @@ nonisolated struct ServeRequest: Sendable, Equatable {
     /// model (`ToolCallFormatTable.acceptsTools`) and is decided by the route, which is the only
     /// place that knows both; `RequestLogEntry.toolsIgnored` carries the outcome.
     var toolsRequested: Bool = false
+    /// WW4-1-2: what shape the reply must have (`response_format` / `text.format`, decoded by the dialect in WW4-1-4).
+    /// `.none` is also what `{"type": "text"}` decodes to — a no-op, never constrained and never refused (owner ruling AO).
+    var structure: ServeStructure = .none
 
     var effectiveMaxTokens: Int { maxTokens ?? Self.defaultMaxTokens }
 
