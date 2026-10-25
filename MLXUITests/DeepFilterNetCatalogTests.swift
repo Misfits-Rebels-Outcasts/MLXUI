@@ -108,3 +108,52 @@ struct DeepFilterNetCatalogTests {
         #expect(!out.contains("convert_deepfilternet.py"))
     }
 }
+
+// MP5-2: the description and metadata.
+extension DeepFilterNetCatalogTests {
+
+    /// Every field `ModelDetailView` and `ComparisonTableView` render, pinned so the only dashes are the sanctioned nulls:
+    /// Speed (no tokens/s for an audio filter, MP-0 G), Context, benchmarks and languages (the card states none).
+    @Test func metadataRendersWithNoUnsanctionedDash() throws {
+        let e = try deepFilterNet()
+        #expect(e.architecture == "Deep-filtering speech enhancement (FFT 960, hop 480, 32 ERB bands, 96 DF bins, DF order 5)")
+        #expect(e.descriptionSource == "mlx-community/DeepFilterNet-mlx")
+        #expect(e.taskTags == ["speech-enhancement", "noise-suppression"])
+        // api.json: lastModified 2026-03-11, likes 7. Downloads is 0 at the pin (renders "0", not a dash).
+        #expect(e.lastUpdated == "2026-03-11")
+        #expect(e.communityLikes == 7)
+        #expect(e.communityDownloads != nil)
+        let day = DateFormatter()
+        day.locale = Locale(identifier: "en_US_POSIX")
+        day.dateFormat = "yyyy-MM-dd"
+        day.isLenient = false
+        #expect(e.lastUpdated.flatMap { day.date(from: $0) } != nil)
+        #expect(e.formattedDownloads() != "—")
+        #expect(e.speedTokensPerSec == nil)
+        #expect(e.contextWindow == nil)
+        #expect(e.benchmarks == nil)
+        #expect(e.languages == nil)
+        #expect(DataNormalizer.normalizeLicense(e.license) != "—")
+        #expect(!e.paramSize.isEmpty)
+        #expect(e.summary?.isEmpty == false)
+    }
+
+    @Test func descriptionCarriesOnlyWhatTheCardSupports() throws {
+        let e = try deepFilterNet()
+        let description = try #require(e.description)
+        #expect(description.hasPrefix("# DeepFilterNet 3"))
+        #expect(description.contains("full-band 48 kHz audio"))
+        #expect(description.contains("MLXUI uses v3"))
+        #expect(description.contains("| **License** | MIT |"))
+        #expect(description.contains("Hendrik Schroeter"))
+        #expect(description.contains("Rikorose/DeepFilterNet"))
+        #expect(description.contains("| **Sample rate** | 48 kHz in and out |"))
+        #expect(description.contains("no fine-tuning or quantization"))
+        #expect(description.contains("RAM figure is an estimate (download size × 1.5)"))
+        #expect((e.summary ?? "").contains("48 kHz"))
+        // The card states no quality, PESQ, real-time or language claim, so the text must not make one.
+        for forbidden in ["accuracy", "state-of-the-art", "outperform", "PESQ", "real-time", "realtime", "language"] {
+            #expect(!description.localizedCaseInsensitiveContains(forbidden), "\(forbidden)")
+        }
+    }
+}

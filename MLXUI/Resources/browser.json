@@ -3096,8 +3096,8 @@
           "contextWindow": null,
           "license": "mit",
           "licenseUrl": null,
-          "description": "# DeepFilterNet 3\n\nAn [MLX](https://github.com/ml-explore/mlx) conversion of [DeepFilterNet](https://github.com/Rikorose/DeepFilterNet) by Hendrik Schroeter, a speech-enhancement model that suppresses background noise from full-band 48 kHz audio. MLXUI uses the v3 weights.\n\nLicense: MIT, same as the original. The MLX conversion is by mlx-community.\n\nRAM figure is an estimate (download size × 1.5), not a measurement.",
-          "architecture": null,
+          "description": "# DeepFilterNet 3\n\nAn [MLX](https://github.com/ml-explore/mlx) conversion of [DeepFilterNet](https://github.com/Rikorose/DeepFilterNet), a speech-enhancement framework that suppresses background noise from full-band 48 kHz audio. The repository holds three versions (v1, v2, v3); MLXUI uses v3.\n\n## How it works\n\nThe model takes 48 kHz audio and returns 48 kHz audio with the background noise suppressed. It is built for speech, so it is meant for recordings of speech. Weights are float32, numerically identical to the original PyTorch checkpoints, with no fine-tuning or quantization.\n\n## Key Details\n\n| | |\n|---|---|\n| **Version used** | v3 (DeepFilterNet3) |\n| **Architecture** | Deep-filtering speech enhancement (FFT 960, hop 480, 32 ERB bands, 96 DF bins, DF order 5) |\n| **Weights** | float32 (as converted) |\n| **Sample rate** | 48 kHz in and out |\n| **Base model** | [DeepFilterNet](https://github.com/Rikorose/DeepFilterNet) |\n| **License** | MIT |\n\n## Attribution\n\nOriginal model by Hendrik Schroeter and co-authors (DeepFilterNet, Rikorose/DeepFilterNet), licensed under MIT, the same license as this conversion. The MLX conversion is by mlx-community.\n\nRAM figure is an estimate (download size × 1.5), not a measurement.",
+          "architecture": "Deep-filtering speech enhancement (FFT 960, hop 480, 32 ERB bands, 96 DF bins, DF order 5)",
           "languages": null,
           "lastUpdated": "2026-03-11",
           "taskTags": [
@@ -3122,7 +3122,7 @@
             }
           ],
           "descriptionSource": "mlx-community/DeepFilterNet-mlx",
-          "summary": "DeepFilterNet 3 speech enhancement, converted to MLX. Removes background noise from speech at 48 kHz."
+          "summary": "DeepFilterNet 3 speech enhancement, converted to MLX (float32). Removes background noise from speech, 48 kHz in and out."
         }
       ]
     }
