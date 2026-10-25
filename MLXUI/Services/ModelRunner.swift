@@ -876,8 +876,7 @@ final class ModelRunner {
             // the "unsupported" alert. Becomes unreachable once MP4-3 registers the module (same as .rerank above).
             showUnsupported("Speaker diarization", model)
         case .enhance:
-            // MP5-1: no DeepFilterNet module is registered yet, so AppState.runModel(_:) lands here and the user sees
-            // the "unsupported" alert. Becomes unreachable once MP5-3 registers the module (same as .diarization above).
+            // Unreachable in practice since MP5-3a registered DeepFilterNetModule (same as .diarization above).
             showUnsupported("Audio cleanup", model)
         }
     }

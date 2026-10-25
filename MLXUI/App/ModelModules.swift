@@ -30,6 +30,7 @@ let installedModules: [ModelModule.Type] = [
     ParakeetModule.self,
     Qwen3ASRModule.self,
     SortformerModule.self,   // MP4-3a: the only .diarization module; claims Sortformer-family entries only
+    DeepFilterNetModule.self,   // MP5-3a: the only .enhance module; claims DeepFilterNet-family entries only
     KokoroModule.self,
     MLXAudioTTSModule.self,
     MusicGenModule.self,

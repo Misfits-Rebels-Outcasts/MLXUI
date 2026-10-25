@@ -71,12 +71,20 @@ struct DeepFilterNetCatalogTests {
         #expect(data.domainIndex["enhance"] != nil)
     }
 
-    @Test func noModuleClaimsItYetAndTheGapFlagsIt() throws {
+    /// MP5-3a: the DeepFilterNet module is the only one that claims it (before MP5-3a none did, and the `ModelSupport` gap flagged it).
+    @Test func exactlyOneModuleClaimsItAndTheMP51GapIsGone() throws {
         let e = try deepFilterNet()
         let full = ModelRegistry()
         for module in installedModules { module.register(into: full) }
-        #expect(full.bestModule(for: e) == nil, "MP5-3 registers the module and removes the ModelSupport gap")
-        #expect(ModelSupport.unsupportedReason(for: e) != nil)
+        #expect(full.bestModule(for: e)?.descriptor.id == "deepfilternet")
+        var claimers: [String] = []
+        for module in installedModules {
+            let one = ModelRegistry()
+            module.register(into: one)
+            if one.bestModule(for: e) != nil { claimers.append(module.descriptor.id) }
+        }
+        #expect(claimers == ["deepfilternet"], "a chat/ASR module must not be handed an enhance model: \(claimers)")
+        #expect(ModelSupport.unsupportedReason(for: e) == nil)
     }
 
     @Test func stageFactoryRefusesTheKindWithAnExplicitCase() throws {
