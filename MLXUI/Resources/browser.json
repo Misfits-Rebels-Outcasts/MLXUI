@@ -3035,8 +3035,8 @@
           "contextWindow": null,
           "license": "cc-by-4.0",
           "licenseUrl": null,
-          "description": "# Sortformer 4spk v2.1\n\nAn [MLX](https://github.com/ml-explore/mlx) conversion of [nvidia/diar_streaming_sortformer_4spk-v2.1](https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1), NVIDIA's streaming speaker-diarization model: it works out who spoke when, for up to 4 speakers, from 16 kHz audio.\n\nLicense: CC-BY-4.0, original model by NVIDIA. The MLX conversion is by mlx-community.\n\nRAM figure is an estimate (download size × 1.5), not a measurement.",
-          "architecture": null,
+          "description": "# Sortformer 4spk v2.1\n\nAn [MLX](https://github.com/ml-explore/mlx) conversion of [nvidia/diar_streaming_sortformer_4spk-v2.1](https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1), NVIDIA's streaming speaker-diarization model. Diarization works out who spoke when: it labels stretches of audio by speaker, for up to 4 speakers.\n\n## How it works\n\nThe model reads 16 kHz mono audio and outputs per-frame speaker activity probabilities. It is a streaming model: it keeps a speaker cache and a FIFO of recent context, and compresses the cache by arrival order (AOSC) so that long recordings keep their long-range context.\n\n## Key Details\n\n| | |\n|---|---|\n| **Max speakers** | 4 |\n| **Architecture** | FastConformer (17 layers) + Transformer encoder (18 layers) + Sortformer modules |\n| **Weights** | fp16 (as converted) |\n| **Base model** | [nvidia/diar_streaming_sortformer_4spk-v2.1](https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1) |\n| **Input** | 16 kHz mono audio |\n| **License** | CC-BY-4.0 |\n\n## Attribution\n\nOriginal model by NVIDIA, licensed under [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/). The MLX conversion is by mlx-community. The weights were converted to the MLX format.\n\nRAM figure is an estimate (download size × 1.5), not a measurement.",
+          "architecture": "FastConformer (17 layers) + Transformer encoder (18 layers) + Sortformer modules",
           "languages": null,
           "lastUpdated": "2026-02-10",
           "taskTags": [
@@ -3061,7 +3061,7 @@
             }
           ],
           "descriptionSource": "mlx-community/diar_streaming_sortformer_4spk-v2.1-fp16",
-          "summary": "NVIDIA's streaming Sortformer speaker-diarization model, converted to MLX (fp16). Works out who spoke when, up to 4 speakers."
+          "summary": "NVIDIA's streaming Sortformer v2.1 speaker-diarization model, converted to MLX (fp16). Works out who spoke when, for up to 4 speakers, from 16 kHz audio."
         }
       ]
     }

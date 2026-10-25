@@ -93,3 +93,55 @@ struct SortformerCatalogTests {
         }
     }
 }
+
+// MP4-2: the description and metadata.
+extension SortformerCatalogTests {
+
+    /// Every field `ModelDetailView` and `ComparisonTableView` render, pinned so the only dashes are the sanctioned nulls:
+    /// Speed (diarization has no tokens/s, MP-0 G), Context, benchmarks and languages (the card states none).
+    @Test func metadataRendersWithNoUnsanctionedDash() throws {
+        let e = try sortformer()
+        // Detail "Architecture" tile appears only when non-nil; the string is the card's "Model Details" line.
+        #expect(e.architecture == "FastConformer (17 layers) + Transformer encoder (18 layers) + Sortformer modules")
+        #expect(e.descriptionSource == "mlx-community/diar_streaming_sortformer_4spk-v2.1-fp16")
+        #expect(e.taskTags == ["speaker-diarization", "voice-activity-detection"])
+        // Presence only (regenerate_catalog.py rewrites these from the HF API).
+        #expect((e.communityDownloads ?? 0) > 0)   // else the detail page and comparison print "—"
+        #expect(e.communityLikes != nil)
+        let day = DateFormatter()
+        day.locale = Locale(identifier: "en_US_POSIX")
+        day.dateFormat = "yyyy-MM-dd"
+        day.isLenient = false
+        #expect(e.lastUpdated.flatMap { day.date(from: $0) } != nil)
+        #expect(e.formattedDownloads() != "—")
+        // Sanctioned nulls.
+        #expect(e.speedTokensPerSec == nil)
+        #expect(e.contextWindow == nil)
+        #expect(e.benchmarks == nil)
+        #expect(e.languages == nil)
+        // The comparison table's License / Size / Download rows.
+        #expect(DataNormalizer.normalizeLicense(e.license) != "—")
+        #expect(!e.paramSize.isEmpty)
+        #expect(e.summary?.isEmpty == false)
+    }
+
+    @Test func descriptionCarriesOnlyWhatTheCardSupports() throws {
+        let e = try sortformer()
+        let description = try #require(e.description)
+        #expect(description.hasPrefix("# Sortformer 4spk v2.1"))
+        #expect(description.contains("up to 4 speakers"))
+        #expect(description.contains("16 kHz mono audio"))
+        #expect(description.contains("streaming"))
+        #expect(description.contains("| **Max speakers** | 4 |"))
+        #expect(description.contains("| **License** | CC-BY-4.0 |"))
+        #expect(description.contains("Original model by NVIDIA, licensed under"))
+        #expect(description.contains("nvidia/diar_streaming_sortformer_4spk-v2.1"))
+        #expect(description.contains("RAM figure is an estimate (download size × 1.5)"))
+        #expect((e.summary ?? "").contains("up to 4 speakers"))
+        // The card states no accuracy, DER, overlap or language claim, so the text must not make one.
+        for forbidden in ["accuracy", "state-of-the-art", "outperform", "overlap", "language", "real-time", "realtime"] {
+            #expect(!description.localizedCaseInsensitiveContains(forbidden), "\(forbidden)")
+        }
+        #expect(description.range(of: #"\bDER\b"#, options: .regularExpression) == nil)
+    }
+}
