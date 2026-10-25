@@ -74,28 +74,32 @@ nonisolated struct ParityCaseReport: Sendable {
 /// short, direct register. Values are taken as the model wrote them: NO `normalizeFieldValue`, because a grammar one-shot
 /// has no such step, and a sentinel like "n/a" surviving into a cell is exactly the kind of difference the experiment is for.
 nonisolated enum ParityGrammarOneShot {
-    /// A JSON Schema document, properties in column order.
+    /// A JSON Schema document, properties in column order. The root is an object holding the array
+    /// (`{"records": [...]}`): `ServeSchemaCheck` refuses any other root ("the root of a JSON Schema must be an object"), and the
+    /// real grammar run goes through that check. Q237(a)'s "array of objects" is the value of `records`.
     static func schema(columns: [String]) -> String {
         let properties = columns.map { "\(jsonString($0)):{\"type\":\"string\"}" }.joined(separator: ",")
         let required = columns.map(jsonString).joined(separator: ",")
-        return "{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\(properties)},"
-            + "\"required\":[\(required)],\"additionalProperties\":false}}"
+        return "{\"type\":\"object\",\"properties\":{\"records\":{\"type\":\"array\",\"items\":{\"type\":\"object\","
+            + "\"properties\":{\(properties)},\"required\":[\(required)],\"additionalProperties\":false}}},"
+            + "\"required\":[\"records\"],\"additionalProperties\":false}"
     }
 
     static func prompt(source: String, columns: [String]) -> String {
         let fields = columns.joined(separator: ", ")
         return "Text:\n\(source)\n\n"
             + "Extract every record in the text with values for: \(fields).\n"
-            + "Answer with a JSON array with one object per record, using exactly these keys: \(fields).\n"
-            + "Use an empty string for a value that is not in the text. If there are no records, answer with []."
+            + "Answer with a JSON object whose \"records\" key is an array with one object per record, using exactly these keys: \(fields).\n"
+            + "Use an empty string for a value that is not in the text. If there are no records, answer with {\"records\":[]}."
     }
 
-    /// The reply as rows in `columns` order. Strict: anything but an array of objects whose values are exactly the columns'
+    /// The reply as rows in `columns` order. Strict: anything but `{"records": [objects]}` whose values are exactly the columns'
     /// strings is a failure of the path, never repaired.
     static func decode(reply: String, columns: [String]) throws -> [[String]] {
         guard let data = reply.data(using: .utf8),
-              let array = (try? JSONSerialization.jsonObject(with: data)) as? [Any] else {
-            throw ParityError("reply is not a JSON array")
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let array = root["records"] as? [Any], root.count == 1 else {
+            throw ParityError("reply is not a JSON object holding a records array")
         }
         return try array.enumerated().map { index, element in
             guard let object = element as? [String: Any] else { throw ParityError("element \(index) is not an object") }

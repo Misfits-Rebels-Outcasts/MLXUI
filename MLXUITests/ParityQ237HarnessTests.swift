@@ -210,7 +210,7 @@ struct ParityQ237HarnessTests {
             return
         }
         #expect(path == .grammarOneShot)
-        #expect(reason.contains("not a JSON array"))
+        #expect(reason.contains("not a JSON object holding a records array"))
     }
 
     @Test func anEngineThatCannotBeBuiltIsAFailedPath() async {
@@ -258,9 +258,13 @@ struct ParityQ237HarnessTests {
 
     @Test func theSchemaListsEveryColumnInOrderAndAllowsNothingElse() throws {
         let schema = ParityGrammarOneShot.schema(columns: ["name", "we\"ird"])
-        let object = try #require(try JSONSerialization.jsonObject(with: Data(schema.utf8)) as? [String: Any])
-        #expect(object["type"] as? String == "array")
-        let items = try #require(object["items"] as? [String: Any])
+        let root = try #require(try JSONSerialization.jsonObject(with: Data(schema.utf8)) as? [String: Any])
+        #expect(root["type"] as? String == "object")
+        #expect(root["required"] as? [String] == ["records"])
+        #expect(root["additionalProperties"] as? Bool == false)
+        let records = try #require((root["properties"] as? [String: Any])?["records"] as? [String: Any])
+        #expect(records["type"] as? String == "array")
+        let items = try #require(records["items"] as? [String: Any])
         #expect(items["required"] as? [String] == ["name", "we\"ird"])
         #expect(items["additionalProperties"] as? Bool == false)
         let properties = try #require(items["properties"] as? [String: Any])
@@ -268,13 +272,30 @@ struct ParityQ237HarnessTests {
         #expect(schema.range(of: "\"name\"")!.lowerBound < schema.range(of: "we\\\"ird")!.lowerBound)
     }
 
+    /// The real grammar run refuses a schema `ServeSchemaCheck` refuses, and that includes a non-object root.
+    @Test func theSchemaPassesTheServersOwnSchemaCheck() {
+        #expect(ServeSchemaCheck.check(ParityGrammarOneShot.schema(columns: ["a", "b", "c", "d"])) == .ok)
+    }
+
     @Test func theDecoderIsStrict() throws {
-        #expect(try ParityGrammarOneShot.decode(reply: "[]", columns: ["a"]) == [])
-        #expect(try ParityGrammarOneShot.decode(reply: #"[{"b":"2","a":"1"}]"#, columns: ["a", "b"]) == [["1", "2"]])
-        #expect(throws: ParityError.self) { try ParityGrammarOneShot.decode(reply: #"{"a":"1"}"#, columns: ["a"]) }
-        #expect(throws: ParityError.self) { try ParityGrammarOneShot.decode(reply: #"[{"a":1}]"#, columns: ["a"]) }
-        #expect(throws: ParityError.self) { try ParityGrammarOneShot.decode(reply: #"[{"a":"1","z":"2"}]"#, columns: ["a"]) }
-        #expect(throws: ParityError.self) { try ParityGrammarOneShot.decode(reply: #"[{"a":"1"}]"#, columns: ["a", "b"]) }
+        #expect(try ParityGrammarOneShot.decode(reply: #"{"records":[]}"#, columns: ["a"]) == [])
+        #expect(try ParityGrammarOneShot.decode(reply: #"{"records":[{"b":"2","a":"1"}]}"#, columns: ["a", "b"]) == [["1", "2"]])
+        #expect(throws: ParityError.self) { try ParityGrammarOneShot.decode(reply: #"[{"a":"1"}]"#, columns: ["a"]) }
+        #expect(throws: ParityError.self) { try ParityGrammarOneShot.decode(reply: #"{"records":[],"x":1}"#, columns: ["a"]) }
+        #expect(throws: ParityError.self) { try ParityGrammarOneShot.decode(reply: #"{"records":[{"a":1}]}"#, columns: ["a"]) }
+        #expect(throws: ParityError.self) { try ParityGrammarOneShot.decode(reply: #"{"records":[{"a":"1","z":"2"}]}"#, columns: ["a"]) }
+        #expect(throws: ParityError.self) { try ParityGrammarOneShot.decode(reply: #"{"records":[{"a":"1"}]}"#, columns: ["a", "b"]) }
+    }
+
+    @Test func aReplyCanCostSeveralCallsAndReportSetupTime() async throws {
+        let meter = ParityMeter()
+        await meter.record(ParityReply(text: "yes", promptTokens: 10, completionTokens: 1, modelCalls: 2, setupSeconds: 0.5))
+        await meter.record(ParityReply(text: "x", promptTokens: 4, completionTokens: 2))
+        let accounting = await meter.snapshot(wallSeconds: 1.5)
+        #expect(accounting.modelCalls == 3)
+        #expect(accounting.totalTokens == 17)
+        #expect(accounting.setupSeconds == 0.5)
+        #expect(accounting.wallSeconds == 1.5)
     }
 }
 
