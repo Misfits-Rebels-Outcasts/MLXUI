@@ -29,6 +29,7 @@ let installedModules: [ModelModule.Type] = [
     VoxtralModule.self,
     ParakeetModule.self,
     Qwen3ASRModule.self,
+    SortformerModule.self,   // MP4-3a: the only .diarization module; claims Sortformer-family entries only
     KokoroModule.self,
     MLXAudioTTSModule.self,
     MusicGenModule.self,
