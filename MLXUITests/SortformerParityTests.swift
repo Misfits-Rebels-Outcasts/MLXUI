@@ -112,7 +112,7 @@ struct SortformerParityTests {
             #expect(!golden.segments.isEmpty)
             #expect((golden.toleranceSeconds ?? 0) > 0, "a filled golden names its tolerance")
             #expect(golden.notes.contains("toleranceSeconds"), "and documents it in the notes")
-            #expect(golden.notes.contains("pending owner confirmation"))
+            #expect(golden.notes.contains("confirmed by the owner 2026-10-25"))
         }
     }
 

@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import MLXUI
 
-/// MP4-3b: the long-clip policy (offline up to 60 s, streaming to 60 min, a sentence past that), the speaker renumbering and
+/// MP4-3b: the long-clip policy (offline up to 60 s, streaming to 3,583 s, a sentence past that), the speaker renumbering and
 /// the streaming chunking. Pure: no model. The model-backed halves are `SortformerSyntheticRunTests` (tiny model, streaming
 /// branch, limit before load) and `SortformerRealLoadTests` (the real checkpoint, both paths).
 struct SortformerLongClipTests {
@@ -21,9 +21,17 @@ struct SortformerLongClipTests {
         try SortformerEngine.requireWithinLimit(seconds: SortformerEngine.maxSeconds)
         #expect(throws: SortformerEngine.LimitError.self) { try SortformerEngine.requireWithinLimit(seconds: SortformerEngine.maxSeconds + 1) }
         let message = try #require(SortformerEngine.LimitError(seconds: 4_500).errorDescription)
-        #expect(message.contains("75 minutes") && message.contains("up to 60 minutes"))
+        #expect(message == "This recording is 75 minutes long. Speaker identification handles up to 59 minutes 43 seconds at a time; split the recording into shorter parts and run each one.")
         #expect(message.contains("split the recording"))
         #expect(MLXErrorGuard.sentence(for: SortformerEngine.LimitError(seconds: 4_500)) == message)
+    }
+
+    @Test func theLimitIsTheLongestMeasuredStreamingClip() throws {
+        #expect(SortformerEngine.maxSeconds == 3_583)
+        try SortformerEngine.requireWithinLimit(seconds: 3_583)
+        #expect(throws: SortformerEngine.LimitError.self) { try SortformerEngine.requireWithinLimit(seconds: 3_584) }
+        #expect(SortformerEngine.spoken(3_583) == "59 minutes 43 seconds")
+        #expect(SortformerEngine.spoken(120) == "2 minutes" && SortformerEngine.spoken(1) == "1 second" && SortformerEngine.spoken(61) == "1 minute 1 second")
     }
 
     @Test func theStageRefusesALongRecordingBeforeCallingTheDiarizer() async throws {
@@ -38,7 +46,7 @@ struct SortformerLongClipTests {
     }
 
     @Test func theRunUIExplainsTheLimit() {
-        #expect(SortformerRunView.lengthNote.contains("60 minutes"))
+        #expect(SortformerRunView.lengthNote.contains("59 minutes 43 seconds"))
     }
 
     // MARK: streaming chunks

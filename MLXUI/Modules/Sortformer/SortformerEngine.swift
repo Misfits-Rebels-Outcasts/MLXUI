@@ -11,7 +11,7 @@ import MLXAudioVAD
 ///   - **Offline** (`generate`, one forward pass over the whole clip) up to ``offlineMaxSeconds`` (60 s). Its memory grows
 ///     roughly with the square of the length: peak 0.836 GiB at 52.7 s, 1.000 at 60 s, 1.67 at 150 s, 2.27 at 180 s, 2.80 at
 ///     316 s, 9.89 at 632 s. Fine for a short clip, fatal for a long one, so it is capped where the peak is 1 GiB.
-///   - **Streaming** (`feed`, 5 s chunks, the speaker state carried between calls) above that, up to ``maxSeconds`` (60 min).
+///   - **Streaming** (`feed`, 5 s chunks, the speaker state carried between calls) above that, up to ``maxSeconds`` (3,583 s).
 ///     Its peak is flat: 0.59 GiB at 181 s, 0.68 at 316 s and 632 s, 0.89 at 1,896 s, 0.77 at 3,583 s (79 s to run). On the 52.7 s
 ///     parity clip it finds the same eight turns as the ground truth, within 0.12 s. `generateStream` was measured too and is
 ///     **not** used: it pre-encodes the whole recording first, so its peak grows with length (0.64, 2.13 and 3.76 GiB at 52,
@@ -19,8 +19,9 @@ import MLXAudioVAD
 ///   - So the most any clip the engine accepts needs is the offline figure at the cap, **1.000 GiB**: the catalog's `ramGB`
 ///     (1.1 GB) and the `ModelLoadProfile` row (4.6 x weights) come from it.
 ///   - Past ``maxSeconds`` the engine refuses with ``LimitError`` before touching the model: a clear sentence, not a crash
-///     (the "no request may kill the app" rule). The 60 s and 60 min figures are the implementer's call, pending owner
-///     confirmation.
+///     (the "no request may kill the app" rule). The 60 s offline cap and the 5 s chunk are owner-confirmed (2026-10-25).
+///     The limit is the longest clip actually measured on the streaming path, 3,583 s, by the owner's ruling (2026-10-25):
+///     a longer one is refused rather than run unmeasured.
 ///
 /// **`feed` timing fix.** The library's `feed` shifts each chunk by `framesProcessed x 80 ms`, but a 5 s chunk of audio makes 63
 /// output frames, not 62.5, so the timeline drifts later by half a frame per chunk (0.4 s after 52 s). This engine adds back
@@ -53,8 +54,18 @@ enum SortformerEngine {
 
     /// Longest clip the one-pass offline path takes (1 minute: 1.000 GiB peak, measured). Longer clips stream.
     nonisolated static let offlineMaxSeconds: Double = 60
-    /// Longest recording the engine accepts at all (60 min). Implementer's call, pending owner confirmation.
-    nonisolated static let maxSeconds: Double = 3_600
+    /// Longest recording the engine accepts at all: 3,583 s (59 min 43 s), the longest clip measured on the streaming path
+    /// (2026-10-25). Owner ruling, 2026-10-25: the limit is the longest measured length, not a round 60 minutes.
+    nonisolated static let maxSeconds: Double = 3_583
+
+    /// A length as the person reads it: "59 minutes 43 seconds", "2 minutes", "45 seconds".
+    nonisolated static func spoken(_ seconds: Double) -> String {
+        let total = max(Int(seconds.rounded()), 0)
+        let (m, s) = (total / 60, total % 60)
+        func unit(_ n: Int, _ word: String) -> String { "\(n) \(word)\(n == 1 ? "" : "s")" }
+        if m == 0 { return unit(s, "second") }
+        return s == 0 ? unit(m, "minute") : "\(unit(m, "minute")) \(unit(s, "second"))"
+    }
     /// Streaming chunk length (the library's own default for `generateStream`).
     nonisolated static let streamChunkSeconds: Double = 5
 
@@ -76,10 +87,8 @@ enum SortformerEngine {
     struct LimitError: Error, LocalizedError, Equatable {
         let seconds: Double
         var errorDescription: String? {
-            let minutes = Int((seconds / 60).rounded())
-            let limit = Int(SortformerEngine.maxSeconds / 60)
-            return "This recording is about \(minutes) minutes long. Speaker identification handles up to \(limit) minutes at a time; "
-                + "split the recording into shorter parts and run each one."
+            return "This recording is \(SortformerEngine.spoken(seconds)) long. Speaker identification handles up to "
+                + "\(SortformerEngine.spoken(SortformerEngine.maxSeconds)) at a time; split the recording into shorter parts and run each one."
         }
     }
 

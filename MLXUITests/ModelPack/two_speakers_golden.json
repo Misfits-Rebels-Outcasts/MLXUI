@@ -3,7 +3,7 @@
   "clip": "two_speakers.wav",
   "threshold": 0.5,
   "toleranceSeconds": 0.16,
-  "notes": "Recorded 2026-10-25 from the real model mlx-community/diar_streaming_sortformer_4spk-v2.1-fp16 (revision e23e6404), offline SortformerEngine.diarize at threshold 0.5 on two_speakers.wav (52.69 s), then SpeakerSegments.cleaned (pieces within 1 ms joined, speakers renumbered by order of first appearance: the model's slot 0 is speaker 0, its slot 2 is speaker 1). Deterministic across 3 runs on this Mac. toleranceSeconds 0.16 (two 80 ms model frames) is the allowed difference for every segment start and end: proposed, pending owner confirmation. Segment count and speaker numbers must match exactly. Speaker 0 is the first voice to speak (Samantha), speaker 1 the second (Daniel); the model's own slot numbers are NOT in arrival order, which is why the output is renumbered.",
+  "notes": "Recorded 2026-10-25 from the real model mlx-community/diar_streaming_sortformer_4spk-v2.1-fp16 (revision e23e6404), offline SortformerEngine.diarize at threshold 0.5 on two_speakers.wav (52.69 s), then SpeakerSegments.cleaned (pieces within 1 ms joined, speakers renumbered by order of first appearance: the model's slot 0 is speaker 0, its slot 2 is speaker 1). Deterministic across 3 runs on this Mac. toleranceSeconds 0.16 (two 80 ms model frames) is the allowed difference for every segment start and end: confirmed by the owner 2026-10-25. Segment count and speaker numbers must match exactly. Speaker 0 is the first voice to speak (Samantha), speaker 1 the second (Daniel); the model's own slot numbers are NOT in arrival order, which is why the output is renumbered.",
   "segments": [
     {
       "speaker": 0,

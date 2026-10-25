@@ -1,7 +1,7 @@
 import Foundation
 
 /// One stretch of one speaker talking. `speaker` is a 0-based number; the displayed label and the CSV column are 1-based
-/// ("Speaker 1"; implementer's call, pending owner confirmation). Straight from the model it is one of 4 internal slots, and
+/// ("Speaker 1"; owner-confirmed 2026-10-25). Straight from the model it is one of 4 internal slots, and
 /// **the slots are not numbered in order of appearance** (the real run on the two-speaker clip used slots 0 and 2), so
 /// ``SpeakerSegments/relabeledByFirstAppearance(_:)`` renumbers them 0, 1, 2, 3 before anything is shown or compared.
 nonisolated struct SpeakerSegment: Sendable, Equatable, Hashable {
@@ -51,7 +51,7 @@ nonisolated enum SpeakerSegments {
 
     /// Renumbers speakers 0, 1, 2, ... in order of first appearance (the earliest-starting segment of each speaker decides),
     /// keeping everything else. `segments` should already be sorted (``normalized(_:duration:mergeGap:)``); the first time a
-    /// speaker number is met in the given order fixes its new number. Lead's call, pending owner confirmation.
+    /// speaker number is met in the given order fixes its new number. Owner-confirmed 2026-10-25.
     static func relabeledByFirstAppearance(_ segments: [SpeakerSegment]) -> [SpeakerSegment] {
         var mapping: [Int: Int] = [:]
         return segments.map { s in
