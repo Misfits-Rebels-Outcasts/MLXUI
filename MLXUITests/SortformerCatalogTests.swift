@@ -34,10 +34,10 @@ struct SortformerCatalogTests {
         #expect(e.license == "cc-by-4.0")
         // Pinned tree listing: model.safetensors 236,108,132 B + config.json 1,702 B = 236,109,834 B = 0.24 GB.
         #expect(e.downloadSizeGB == 0.24)
-        // MP4-3b: ramGB is measured, not the download x 1.5 estimate: MLX peak 1.000 GiB = 1.074 GB at the 60 s offline cap
-        // (the most any accepted clip needs), rounded up to 0.1 GB. Provenance is in the description.
-        #expect(e.ramGB == 1.1)
-        #expect(e.ramGB >= 1.000 * 1.073741824, "never below the measured peak")
+        // MP4-3d: ramGB is the measured process peak (phys_footprint, 1,673 MiB = 1.754 GB) at the 60 s offline cap, the most any
+        // accepted clip needs, rounded up to 0.1 GB. Provenance is in the description.
+        #expect(e.ramGB == 1.8)
+        #expect(e.ramGB >= 1_673.0 * 1_048_576 / 1e9, "never below the measured peak")
         #expect(e.variants?.first?.ramGB == e.ramGB)
         #expect(e.speedTokensPerSec == nil)
         #expect(e.variants?.count == 1)
@@ -141,7 +141,7 @@ extension SortformerCatalogTests {
         #expect(description.contains("| **License** | CC-BY-4.0 |"))
         #expect(description.contains("Original model by NVIDIA, licensed under"))
         #expect(description.contains("nvidia/diar_streaming_sortformer_4spk-v2.1"))
-        #expect(description.contains("RAM figure is measured: peak 1.000 GiB (1.074 GB, listed as 1.1)"))
+        #expect(description.contains("RAM figure is measured: process peak (phys_footprint) 1.63 GiB (1.75 GB, listed as 1.8)"))
         #expect(description.contains("replaces the download × 1.5 estimate"))
         #expect((e.summary ?? "").contains("up to 4 speakers"))
         // The card states no accuracy, DER, overlap or language claim, so the text must not make one.

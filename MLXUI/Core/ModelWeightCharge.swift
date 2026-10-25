@@ -82,13 +82,12 @@ nonisolated enum ModelLoadProfile {
         case .ocr:      return Entry(factor: 1.75, workingSetBytes: 0, measured: true)
         case .asr:      return Entry(factor: 2.05, workingSetBytes: 0, measured: true)
         case .decision: return Entry(factor: 1.20, workingSetBytes: 0, measured: true)
-        // MP4-3b: Sortformer, measured 2026-10-25 with MLX's own peak counter (`SortformerLongClipMeasurement.measureEnginePath`),
-        // at the longest clip each path takes: offline 60 s = 1.000 GiB (1,073,802,220 B), streaming 3,583 s = 0.77 GiB (0.89 GiB
-        // at 1,896 s). Weights are 236,108,132 B, so 1,073,802,220 / 236,108,132 = 4.55, rounded up to 4.6. This is MLX's peak,
-        // not `phys_footprint` like the rows above (it leaves out the process baseline); measuring `phys_footprint` is a follow-up.
-        // The engine caps the one-pass path at 60 s so the figure holds for any length up to its 3,583 s limit (the longest
-        // streaming clip measured; owner ruling 2026-10-25). The load-profile factor itself is the implementer's call.
-        case .diarization: return Entry(factor: 4.6, workingSetBytes: 0, measured: true)
+        // MP4-3d: Sortformer, `phys_footprint` added by the Run UI's real path (decode, resample, engine, CSV; two runs, 20 ms
+        // sampler, `SortformerLongClipMeasurement.measureFootprint`, 2026-10-25) at the longest one-pass clip: 60 s offline went
+        // from 115 MiB (decoded) to a 1,673 MiB peak, 1,558 MiB added = 1.521 GiB over the 0.220 GiB of weights (236,108,132 B)
+        // = 6.92, rounded up to 6.95. Streaming clips add less (1,104 MiB at 3,583 s). MLX's own peak
+        // counter reads 1.000 GiB for the same run and leaves out Metal and driver memory; it is not the booking figure.
+        case .diarization: return Entry(factor: 6.95, workingSetBytes: 0, measured: true)
         case .vision:   return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 2 * gib, measured: true)
         default:        return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 0, measured: false)
         }

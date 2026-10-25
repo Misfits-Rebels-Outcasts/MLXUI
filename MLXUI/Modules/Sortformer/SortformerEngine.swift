@@ -16,8 +16,12 @@ import MLXAudioVAD
 ///     parity clip it finds the same eight turns as the ground truth, within 0.12 s. `generateStream` was measured too and is
 ///     **not** used: it pre-encodes the whole recording first, so its peak grows with length (0.64, 2.13 and 3.76 GiB at 52,
 ///     316 and 632 s).
-///   - So the most any clip the engine accepts needs is the offline figure at the cap, **1.000 GiB**: the catalog's `ramGB`
-///     (1.1 GB) and the `ModelLoadProfile` row (4.6 x weights) come from it.
+///   - Those are MLX's own counter, which leaves out Metal and driver memory. The process's `phys_footprint` through the Run UI's
+///     whole path (MP4-3d, clean test process of about 100 MiB at start) peaks at: 1,441 MiB offline at 52.7 s, **1,673 MiB offline
+///     at 60 s**, 1,219 MiB streaming at 61 s, 1,244 MiB at 588 s, 1,437 MiB at 3,583 s (that one includes the 229 MB of decoded
+///     samples the UI holds). The offline cap is the maximum, so the catalog's `ramGB` (1.8 GB) and the `ModelLoadProfile` row
+///     (6.95 x weights, added over the decoded baseline) come from it. Streaming frees MLX's buffer cache after every chunk
+///     (about 0.25 GB less than without, and faster).
 ///   - Past ``maxSeconds`` the engine refuses with ``LimitError`` before touching the model: a clear sentence, not a crash
 ///     (the "no request may kill the app" rule). The 60 s offline cap and the 5 s chunk are owner-confirmed (2026-10-25).
 ///     The limit is the longest clip actually measured on the streaming path, 3,583 s, by the owner's ruling (2026-10-25):
@@ -52,7 +56,7 @@ enum SortformerEngine {
     nonisolated static let defaultThreshold: Float = 0.5
     nonisolated static let thresholdRange: ClosedRange<Float> = 0.05...0.95
 
-    /// Longest clip the one-pass offline path takes (1 minute: 1.000 GiB peak, measured). Longer clips stream.
+    /// Longest clip the one-pass offline path takes (1 minute: 1.000 GiB MLX peak, 1.63 GiB process footprint, measured). Longer clips stream.
     nonisolated static let offlineMaxSeconds: Double = 60
     /// Longest recording the engine accepts at all: 3,583 s (59 min 43 s), the longest clip measured on the streaming path
     /// (2026-10-25). Owner ruling, 2026-10-25: the limit is the longest measured length, not a round 60 minutes.
@@ -195,6 +199,8 @@ enum SortformerEngine {
             let (output, next) = try await model.feed(chunk: chunk, state: state, sampleRate: sampleRate,
                                                       threshold: clampedThreshold(threshold))
             state = next
+            // Return MLX's freed buffers after every chunk, or they pile up between the 5 s steps (MP4-3d).
+            Memory.clearCache()
             // Where the chunk really starts, minus where the library put it (see the type comment).
             let correction = Double(range.lowerBound) / Double(sampleRate) - Double(framesBefore) * frameSeconds
             segments += output.segments.map {

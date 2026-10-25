@@ -1,6 +1,7 @@
 import Foundation
 import MLX
 import MLXAudioVAD
+import MLXNN
 import Testing
 @testable import MLXUI
 
@@ -329,4 +330,107 @@ struct SortformerLongClipMeasurement {
         print("SORTFORMERENGINEMEASURE speakers \(SpeakerSegments.speakers(in: cleaned)), \(cleaned.count) segments")
         #expect(!raw.isEmpty)
     }
+
+    /// MP4-3d: the **process footprint** (`phys_footprint`, the figure the OS acts on and `ramGB` is defined by) through the Run UI's
+    /// path: write the (repeated, trimmed) clip as a 16-bit mono 16 kHz WAV in a temp folder, decode it with `AudioFileReader`, run
+    /// a `SortformerStage` on it (resample, engine, CSV), parse the CSV. A 20 ms sampler keeps the peak of every phase. Gated like
+    /// the others plus `MLXUI_TEST_SORTFORMER_FOOTPRINT=1`; prints `SORTFORMERFOOTPRINT` lines (MiB).
+    @Test(.enabled(if: SortformerRealLoad.directory != nil && env["MLXUI_TEST_SORTFORMER_FOOTPRINT"] == "1"))
+    func measureFootprint() async throws {
+        let copy = try SortformerRealLoad.workingCopy()
+        defer { copy.remove() }
+        let (file, seconds) = try Self.makeWav()
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let tracker = FootprintTracker()
+        let sampler = Task.detached {
+            while !Task.isCancelled { tracker.note(FootprintTracker.phys()); try? await Task.sleep(for: .milliseconds(20)) }
+        }
+        func report(_ label: String) {
+            print(String(format: "SORTFORMERFOOTPRINT %@ (%.0f s): now %.0f MiB, phase peak %.0f MiB, run peak %.0f MiB, MLX cache %.0f MiB",
+                         label, seconds, Double(FootprintTracker.phys()) / 1_048_576, Double(tracker.takePhasePeak()) / 1_048_576,
+                         Double(tracker.runPeak) / 1_048_576, Double(Memory.snapshot().cacheMemory) / 1_048_576))
+        }
+        tracker.note(FootprintTracker.phys()); report("start")
+        // What MLX/Metal cost before any model: one tiny op, then the weights loaded and released.
+        let warm = MLXArray(0..<16).reshaped(4, 4); eval(matmul(warm, warm)); report("mlxWarm")
+        do {
+            let model = try SortformerModel.fromModelDirectory(copy.url); eval(model.parameters()); report("modelLoaded")
+        }
+        Memory.clearCache(); report("modelReleased")
+        let buffer = try AudioFileReader.read(file)
+        report("decoded")
+        let directory = copy.url
+        let stage = SortformerStage(id: "footprint", name: "footprint") { samples in
+            try await SortformerEngine.diarize(samples, modelDirectory: directory)
+        }
+        for pass in 1...2 {
+            let started = Date()
+            let output = try await stage.run(.audio(buffer)) { _ in }
+            guard case let .text(csv) = output else { Issue.record("expected text"); break }
+            let parsed = try SpeakerSegments.parseCSV(csv)
+            print(String(format: "SORTFORMERFOOTPRINT pass %d: %d segments in %.1f s", pass, parsed.count, Date().timeIntervalSince(started)))
+            report("afterStage\(pass)")
+            Memory.clearCache()
+            report("afterClearCache\(pass)")
+        }
+        sampler.cancel()
+    }
+
+    /// The clip (repeated and trimmed as the other measurements) written as a WAV in the temp folder, one copy at a time so the
+    /// test process itself stays small (a long in-memory array would leave the footprint baseline high); only the file survives.
+    nonisolated static func makeWav() throws -> (URL, Double) {
+        let once = try SortformerRealLoad.clipSamples(clip)
+        let repeats = env["MLXUI_TEST_SORTFORMER_REPEAT"].flatMap(Int.init) ?? 1
+        var total = once.count * max(repeats, 1)
+        if let n = env["MLXUI_TEST_SORTFORMER_TRIM_SECONDS"].flatMap(Double.init) { total = min(total, Int(n * 16_000)) }
+        let header = wav([]).prefix(44)
+        var fixed = Data(header)
+        func put(_ offset: Int, _ n: Int) { var v = UInt32(n).littleEndian; withUnsafeBytes(of: &v) { fixed.replaceSubrange(offset..<offset + 4, with: $0) } }
+        put(4, 36 + total * 2); put(40, total * 2)
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("sortformer-footprint-\(UUID().uuidString).wav")
+        FileManager.default.createFile(atPath: file.path, contents: fixed)
+        let handle = try FileHandle(forWritingTo: file)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        let piece = wav(once).dropFirst(44)
+        var written = 0
+        while written < total {
+            let count = min(once.count, total - written)
+            try handle.write(contentsOf: piece.prefix(count * 2))
+            written += count
+        }
+        return (file, Double(total) / 16_000)
+    }
+
+    /// 16-bit mono 16 kHz PCM WAV bytes.
+    nonisolated static func wav(_ samples: [Float]) -> Data {
+        var pcm = Data(capacity: samples.count * 2)
+        for x in samples {
+            var v = Int16((max(-1, min(1, x)) * 32767).rounded()).littleEndian
+            withUnsafeBytes(of: &v) { pcm.append(contentsOf: $0) }
+        }
+        func le32(_ n: Int) -> Data { var v = UInt32(n).littleEndian; return withUnsafeBytes(of: &v) { Data($0) } }
+        func le16(_ n: Int) -> Data { var v = UInt16(n).littleEndian; return withUnsafeBytes(of: &v) { Data($0) } }
+        var d = Data("RIFF".utf8); d += le32(36 + pcm.count); d += Data("WAVEfmt ".utf8); d += le32(16); d += le16(1); d += le16(1)
+        d += le32(16_000); d += le32(32_000); d += le16(2); d += le16(16); d += Data("data".utf8); d += le32(pcm.count)
+        return d + pcm
+    }
+}
+
+/// `phys_footprint` sampling for `measureFootprint`.
+final class FootprintTracker: @unchecked Sendable {
+    private let lock = NSLock()
+    private var phase: Int64 = 0, run: Int64 = 0
+    static func phys() -> Int64 {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size)
+        let kr = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count) }
+        }
+        return kr == KERN_SUCCESS ? Int64(info.phys_footprint) : -1
+    }
+    func note(_ v: Int64) { lock.lock(); phase = max(phase, v); run = max(run, v); lock.unlock() }
+    func takePhasePeak() -> Int64 { lock.lock(); defer { lock.unlock() }; let v = phase; phase = 0; return v }
+    var runPeak: Int64 { lock.lock(); defer { lock.unlock() }; return run }
 }

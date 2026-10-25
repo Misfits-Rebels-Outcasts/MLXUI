@@ -159,9 +159,9 @@ struct SortformerModuleTests {
         let row = ModelLoadProfile.entry(for: .diarization)
         #expect(row.measured)
         #expect(row.workingSetBytes == 0)
-        // 1,073,802,220 B peak at the 60 s cap / 236,108,132 B of weights = 4.55, rounded up.
-        #expect(row.factor == 4.6)
-        #expect(Double(236_108_132) * row.factor >= 1_073_802_220, "books at least the measured peak")
+        // phys_footprint added at the 60 s cap: (1,673 - 115) MiB / 236,108,132 B of weights = 6.92, rounded up to 0.05.
+        #expect(row.factor == 6.95)
+        #expect(Double(236_108_132) * row.factor >= 1_558.0 * 1_048_576, "books at least the measured added footprint")
     }
 }
 
