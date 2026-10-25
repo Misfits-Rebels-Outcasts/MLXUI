@@ -31,6 +31,20 @@ enum AudioMetrics {
         snrDB(estimate: cleaned, reference: reference) - snrDB(estimate: noisy, reference: reference)
     }
 
+    /// The shift of `estimate` against `reference`, in samples, within +-`maxLag`, by normalised cross-correlation over the first
+    /// `window` samples (positive: the estimate is late). A diagnostic for a model's delay; nothing asserts on it.
+    static func bestLag(estimate: [Float], reference: [Float], maxLag: Int, window: Int) -> Int {
+        let n = min(window, min(estimate.count, reference.count) - maxLag)
+        guard n > 0, maxLag >= 0 else { return 0 }
+        var best = 0, bestScore = -Double.infinity
+        for lag in -maxLag...maxLag {
+            var dot = 0.0
+            for i in maxLag..<(maxLag + n) { dot += Double(estimate[i + lag]) * Double(reference[i]) }
+            if dot > bestScore { bestScore = dot; best = lag }
+        }
+        return best
+    }
+
     /// `reference + noise`, with `noise` scaled so the mix has exactly `snrDB` against `reference`.
     static func mix(reference: [Float], noise: [Float], snrDB: Double) -> [Float] {
         let n = min(reference.count, noise.count)

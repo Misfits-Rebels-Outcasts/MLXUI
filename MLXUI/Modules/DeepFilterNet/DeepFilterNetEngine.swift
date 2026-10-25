@@ -152,7 +152,8 @@ enum DeepFilterNetEngine {
         var out = [Float](repeating: 0, count: samples.count)
         for (index, window) in plan.windows.enumerated() {
             try Task.checkCancellation()
-            let input = MLXArray(Array(samples[window]))
+            // A whole-clip window reads `samples` directly: `Array(samples[window])` would be a second full copy of a long clip.
+            let input = MLXArray(window.count == samples.count ? samples : Array(samples[window]))
             try MLXErrorGuard.evaluate(input)
             let enhanced = try model.enhance(input)
             var values = try MLXErrorGuard.read(enhanced, as: Float.self)

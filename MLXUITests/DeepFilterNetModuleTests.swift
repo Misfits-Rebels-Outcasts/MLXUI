@@ -287,6 +287,13 @@ struct AudioMetricsTests {
         #expect(abs(AudioMetrics.improvementDB(noisy: noisy, cleaned: cleaned, reference: reference) - 10) < 0.05)
     }
 
+    @Test func bestLagFindsAKnownShift() {
+        let reference = AudioMetrics.noise(count: 6_000, sampleRate: 48_000, seed: 11)
+        let late = [Float](repeating: 0, count: 37) + reference
+        #expect(AudioMetrics.bestLag(estimate: late, reference: reference, maxLag: 100, window: 4_000) == 37)
+        #expect(AudioMetrics.bestLag(estimate: reference, reference: reference, maxLag: 100, window: 4_000) == 0)
+    }
+
     @Test func noiseIsDeterministicPerSeedAndDiffersAcrossSeeds() {
         let a = AudioMetrics.noise(count: 1_000, sampleRate: 48_000, seed: 42)
         let b = AudioMetrics.noise(count: 1_000, sampleRate: 48_000, seed: 42)

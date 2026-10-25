@@ -21,10 +21,19 @@ nonisolated struct DeepFilterNetStage: PipelineStage {
     }
 
     /// The real engine on the installed folder of `modelID`.
-    init(modelID: String, chunkSeconds: Double? = DeepFilterNetEngine.defaultChunkSeconds) {
-        let directory = DeepFilterNetEngine.installedModelDirectory(id: modelID)
-        self.init(id: "deepfilternet.\(modelID)", name: "DeepFilterNet") { samples, progress in
-            try await DeepFilterNetEngine.enhance(samples, modelDirectory: directory, chunkSeconds: chunkSeconds, progress: progress)
+    init(modelID: String, chunkSeconds: Double? = DeepFilterNetEngine.defaultChunkSeconds,
+         overlapSeconds: Double = DeepFilterNetEngine.defaultOverlapSeconds) {
+        self.init(modelDirectory: DeepFilterNetEngine.installedModelDirectory(id: modelID),
+                  chunkSeconds: chunkSeconds, overlapSeconds: overlapSeconds)
+    }
+
+    /// The real engine on an explicit folder. The app's path (`init(modelID:)`) and the owner-run tests (a temp copy of the
+    /// installed folder) both go through here, so they call `DeepFilterNetEngine.enhance` identically.
+    init(modelDirectory: URL, chunkSeconds: Double? = DeepFilterNetEngine.defaultChunkSeconds,
+         overlapSeconds: Double = DeepFilterNetEngine.defaultOverlapSeconds) {
+        self.init(id: "deepfilternet.\(modelDirectory.lastPathComponent)", name: "DeepFilterNet") { samples, progress in
+            try await DeepFilterNetEngine.enhance(samples, modelDirectory: modelDirectory, chunkSeconds: chunkSeconds,
+                                                  overlapSeconds: overlapSeconds, progress: progress)
         }
     }
 
