@@ -21,6 +21,39 @@ enum Qwen3ASRRealLoad {
         return FileManager.default.fileExists(atPath: marker.path) ? url : nil
     }()
 
+    /// A model folder the test may write into (MP3 T2). The sandboxed test host cannot write `tokenizer.json` into the Direct
+    /// store (Cocoa 513), so with `MLXUI_TEST_QWEN3ASR_DIR` set the folder is cloned (`copyItem` is an APFS clone on the same
+    /// volume) into a fresh temp directory, and `tokenizer.json` is deleted from the copy so the engine's write (T5) is
+    /// genuinely exercised even when the source already has one. The source is never touched. Without the override the
+    /// `ModelStore` folder is used as is. Call `remove()` (a `defer`) when done.
+    struct WorkingCopy {
+        nonisolated let url: URL
+        nonisolated let root: URL?
+
+        nonisolated func remove() {
+            if let root { try? FileManager.default.removeItem(at: root) }
+        }
+    }
+
+    nonisolated static func workingCopy() throws -> WorkingCopy {
+        let source = try #require(directory)
+        guard ProcessInfo.processInfo.environment["MLXUI_TEST_QWEN3ASR_DIR"] != nil else {
+            return WorkingCopy(url: source, root: nil)
+        }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("qwen3asr-model-\(UUID().uuidString)")
+        let copy = root.appendingPathComponent(source.lastPathComponent)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.copyItem(at: source, to: copy)
+            let tokenizer = copy.appendingPathComponent("tokenizer.json")
+            if FileManager.default.fileExists(atPath: tokenizer.path) { try FileManager.default.removeItem(at: tokenizer) }
+        } catch {
+            try? FileManager.default.removeItem(at: root)
+            throw error
+        }
+        return WorkingCopy(url: copy, root: root)
+    }
+
     /// The bundled English sample, as the 16 kHz mono buffer `ASRStage` hands the engine.
     nonisolated static func sampleSamples() throws -> [Float] {
         let url = URL(fileURLWithPath: #filePath)
@@ -43,7 +76,12 @@ struct Qwen3ASRRealLoadTests {
     /// the folder holds the generated `tokenizer.json` and still its `.installed` marker (T5, the write).
     @Test(.enabled(if: Qwen3ASRRealLoad.directory != nil))
     func theCheckpointLoadsAndTranscribesTheSample() async throws {
-        let dir = try #require(Qwen3ASRRealLoad.directory)
+        let copy = try Qwen3ASRRealLoad.workingCopy()
+        defer { copy.remove() }
+        let dir = copy.url
+        if copy.root != nil {
+            #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("tokenizer.json").path), "the copy starts without one")
+        }
         let samples = try Qwen3ASRRealLoad.sampleSamples()
         let text = try await Qwen3ASREngine.transcribe(samples, modelDirectory: dir)
         print("QWEN3ASR transcript: \(text)")
@@ -62,7 +100,9 @@ struct Qwen3ASRRealLoadTests {
 struct Qwen3ASRMainActorProbeTests {
     @Test(.enabled(if: Qwen3ASRRealLoad.directory != nil))
     func transcribeFromTheMainActorReturnsTheTranscript() async throws {
-        let dir = try #require(Qwen3ASRRealLoad.directory)
+        let copy = try Qwen3ASRRealLoad.workingCopy()
+        defer { copy.remove() }
+        let dir = copy.url
         let samples = try Qwen3ASRRealLoad.sampleSamples()
         MLXErrorGuard.installFallback()
         MLXErrorGuard.resetFallbackMessage()
@@ -83,7 +123,9 @@ struct Qwen3ASRMainActorProbeTests {
     /// penalty at 1.0 (the unit test pins that); if it works, `MLXAudioThread` is not needed even for that path.
     @Test(.enabled(if: Qwen3ASRRealLoad.directory != nil && ProcessInfo.processInfo.environment["MLXUI_TEST_QWEN3ASR_PENALTY_PROBE"] == "1"))
     func penaltyPathFromTheMainActorIsReportedNotAsserted() async throws {
-        let dir = try #require(Qwen3ASRRealLoad.directory)
+        let copy = try Qwen3ASRRealLoad.workingCopy()
+        defer { copy.remove() }
+        let dir = copy.url
         let samples = try Qwen3ASRRealLoad.sampleSamples()
         MLXErrorGuard.installFallback()
         MLXErrorGuard.resetFallbackMessage()
@@ -162,7 +204,9 @@ struct Qwen3ASRLongClipMeasurement {
 
     @Test(.enabled(if: Qwen3ASRRealLoad.directory != nil && env["MLXUI_TEST_QWEN3ASR_MEASURE"] == "1"))
     func measureLoadAndTranscribe() async throws {
-        let dir = try #require(Qwen3ASRRealLoad.directory)
+        let copy = try Qwen3ASRRealLoad.workingCopy()
+        defer { copy.remove() }
+        let dir = copy.url
         let buffer = try AudioFileReader.read(Self.clip)
         let once = try AudioResampler.resample(buffer, to: 16_000).samples
         let repeats = Self.env["MLXUI_TEST_QWEN3ASR_REPEAT"].flatMap(Int.init) ?? 1
@@ -200,7 +244,9 @@ struct Qwen3ASRLongClipMeasurement {
 struct Qwen3ASRFlowRealRunTests {
     @Test(.enabled(if: Qwen3ASRRealLoad.directory != nil))
     func twoRowFlowTranscribesTheSampleWithQwen3ASR() async throws {
-        let dir = try #require(Qwen3ASRRealLoad.directory)
+        let copy = try Qwen3ASRRealLoad.workingCopy()
+        defer { copy.remove() }
+        let dir = copy.url
         let repoRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         let catalogData = try Data(contentsOf: repoRoot.appendingPathComponent("MLXUI/Resources/browser.json"))
         let catalog = try JSONDecoder().decode(BrowserData.self, from: catalogData).domains.flatMap { $0.allModels }
