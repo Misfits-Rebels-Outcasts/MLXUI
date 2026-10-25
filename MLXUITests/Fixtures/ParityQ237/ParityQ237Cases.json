@@ -1,0 +1,446 @@
+{
+  "_about": "WW4-2-1 parity corpus (SPEC-Q237 ruling 2026-10-25). Every Extract Structured row in the bundled gallery, plus five hand-written Q35 edge cases. The synced conformance corpus (Fixtures/CatFlow/conformance) holds no Extract Structured case; ParityQ237CorpusTests pins that. expectedShape is a human note, never a pass criterion. inputStatus 'needs-upstream-model' means the row's input is another model's output (OCR) and cannot be reproduced here; WW4-2-2 may fill inputText from a captured real OCR run.",
+  "version": 1,
+  "cases": [
+    {
+      "id": "g06-contract-s0",
+      "provenance": {
+        "origin": "gallery",
+        "flow": "06-ContractScan.cat",
+        "row": "3.1 (inside <each scan_section>)",
+        "inputFile": "06-ContractScan/contract.pdf",
+        "derivation": "Read PDF (PDFKit page strings joined with a blank line), then Split by=headings (the shipped splitHeadings algorithm), section 0"
+      },
+      "settings": "clause_type, risk_level, obligation, deadline",
+      "columns": [
+        "clause_type",
+        "risk_level",
+        "obligation",
+        "deadline"
+      ],
+      "inputStatus": "text",
+      "inputText": "Master Services Agreement",
+      "expectedShape": "title only, no clause: 0 records expected"
+    },
+    {
+      "id": "g06-contract-s1",
+      "provenance": {
+        "origin": "gallery",
+        "flow": "06-ContractScan.cat",
+        "row": "3.1 (inside <each scan_section>)",
+        "inputFile": "06-ContractScan/contract.pdf",
+        "derivation": "Read PDF (PDFKit page strings joined with a blank line), then Split by=headings (the shipped splitHeadings algorithm), section 1"
+      },
+      "settings": "clause_type, risk_level, obligation, deadline",
+      "columns": [
+        "clause_type",
+        "risk_level",
+        "obligation",
+        "deadline"
+      ],
+      "inputStatus": "text",
+      "inputText": "# 1. Term and Termination\nRisk Level: Medium\nObligation: Provide 30 days written notice before choosing not to renew. Deadline: Twelve months from the effective date, auto-renewing annually.",
+      "expectedShape": "1 record (term and termination, Medium)"
+    },
+    {
+      "id": "g06-contract-s2",
+      "provenance": {
+        "origin": "gallery",
+        "flow": "06-ContractScan.cat",
+        "row": "3.1 (inside <each scan_section>)",
+        "inputFile": "06-ContractScan/contract.pdf",
+        "derivation": "Read PDF (PDFKit page strings joined with a blank line), then Split by=headings (the shipped splitHeadings algorithm), section 2"
+      },
+      "settings": "clause_type, risk_level, obligation, deadline",
+      "columns": [
+        "clause_type",
+        "risk_level",
+        "obligation",
+        "deadline"
+      ],
+      "inputStatus": "text",
+      "inputText": "# 2. Payment Obligations Risk Level: Low\nObligation: Pay all invoiced amounts in full. Deadline: Within 30 days of invoice receipt.",
+      "expectedShape": "1 record (payment, Low)"
+    },
+    {
+      "id": "g06-contract-s3",
+      "provenance": {
+        "origin": "gallery",
+        "flow": "06-ContractScan.cat",
+        "row": "3.1 (inside <each scan_section>)",
+        "inputFile": "06-ContractScan/contract.pdf",
+        "derivation": "Read PDF (PDFKit page strings joined with a blank line), then Split by=headings (the shipped splitHeadings algorithm), section 3"
+      },
+      "settings": "clause_type, risk_level, obligation, deadline",
+      "columns": [
+        "clause_type",
+        "risk_level",
+        "obligation",
+        "deadline"
+      ],
+      "inputStatus": "text",
+      "inputText": "# 3. Confidentiality Risk Level: High Obligation: Keep the other party's confidential information secret. Deadline: Five years following disclosure.",
+      "expectedShape": "1 record (confidentiality, High)"
+    },
+    {
+      "id": "g06-contract-s4",
+      "provenance": {
+        "origin": "gallery",
+        "flow": "06-ContractScan.cat",
+        "row": "3.1 (inside <each scan_section>)",
+        "inputFile": "06-ContractScan/contract.pdf",
+        "derivation": "Read PDF (PDFKit page strings joined with a blank line), then Split by=headings (the shipped splitHeadings algorithm), section 4"
+      },
+      "settings": "clause_type, risk_level, obligation, deadline",
+      "columns": [
+        "clause_type",
+        "risk_level",
+        "obligation",
+        "deadline"
+      ],
+      "inputStatus": "text",
+      "inputText": "# 4. Limitation of Liability Risk Level: Medium\nObligation: Cap total liability at fees paid for the claim period. Deadline: Twelve months preceding the claim.",
+      "expectedShape": "1 record (limitation of liability, Medium)"
+    },
+    {
+      "id": "g06-contract-s5",
+      "provenance": {
+        "origin": "gallery",
+        "flow": "06-ContractScan.cat",
+        "row": "3.1 (inside <each scan_section>)",
+        "inputFile": "06-ContractScan/contract.pdf",
+        "derivation": "Read PDF (PDFKit page strings joined with a blank line), then Split by=headings (the shipped splitHeadings algorithm), section 5"
+      },
+      "settings": "clause_type, risk_level, obligation, deadline",
+      "columns": [
+        "clause_type",
+        "risk_level",
+        "obligation",
+        "deadline"
+      ],
+      "inputStatus": "text",
+      "inputText": "# 5. Indemnification\nRisk Level: High Obligation: Indemnify the client against third-party claims from gross negligenc\ne.\nDeadline: Prompt written notice at the time of the claim.",
+      "expectedShape": "1 record (indemnification, High); the PDF text has a mid-word line break"
+    },
+    {
+      "id": "g09-invoice-01",
+      "provenance": {
+        "origin": "gallery",
+        "flow": "09-InvoiceLedger.cat",
+        "row": "2.2 (inside <each read_one>)",
+        "inputFile": "09-InvoiceLedger/invoices/invoice-01.pdf",
+        "derivation": "Read PDF (PDFKit page strings joined with a blank line)"
+      },
+      "settings": "vendor, date, total, currency",
+      "columns": [
+        "vendor",
+        "date",
+        "total",
+        "currency"
+      ],
+      "inputStatus": "text",
+      "inputText": "Invoice #1001\nBilling Details\nVendor: Acme Cloud Hosting\nDate: 2026-04-02\nTotal: $1,240.00\nCurrency: USD\nTerms: Net 30",
+      "expectedShape": "1 record (Acme Cloud Hosting $1,240.00)"
+    },
+    {
+      "id": "g09-invoice-02",
+      "provenance": {
+        "origin": "gallery",
+        "flow": "09-InvoiceLedger.cat",
+        "row": "2.2 (inside <each read_one>)",
+        "inputFile": "09-InvoiceLedger/invoices/invoice-02.pdf",
+        "derivation": "Read PDF (PDFKit page strings joined with a blank line)"
+      },
+      "settings": "vendor, date, total, currency",
+      "columns": [
+        "vendor",
+        "date",
+        "total",
+        "currency"
+      ],
+      "inputStatus": "text",
+      "inputText": "Invoice #1002\nBilling Details\nVendor: Northwind Office Supplies\nDate: 2026-04-09\nTotal: $312.55\nCurrency: USD\nTerms: Net 30",
+      "expectedShape": "1 record (Northwind Office Supplies $312.55)"
+    },
+    {
+      "id": "g09-invoice-03",
+      "provenance": {
+        "origin": "gallery",
+        "flow": "09-InvoiceLedger.cat",
+        "row": "2.2 (inside <each read_one>)",
+        "inputFile": "09-InvoiceLedger/invoices/invoice-03.pdf",
+        "derivation": "Read PDF (PDFKit page strings joined with a blank line)"
+      },
+      "settings": "vendor, date, total, currency",
+      "columns": [
+        "vendor",
+        "date",
+        "total",
+        "currency"
+      ],
+      "inputStatus": "text",
+      "inputText": "Invoice #1003\nBilling Details\nVendor: BrightPath Design Studio\nDate: 2026-04-15\nTotal: $4,800.00\nCurrency: USD\nTerms: Net 30",
+      "expectedShape": "1 record (BrightPath Design Studio $4,800.00)"
+    },
+    {
+      "id": "g14-frontmatter-post",
+      "provenance": {
+        "origin": "gallery",
+        "flow": "14-FrontmatterBot.cat",
+        "row": "2.3 (inside <parallel meta>)",
+        "inputFile": "14-FrontmatterBot/post.md",
+        "derivation": "Read Text, verbatim file contents"
+      },
+      "settings": "tags, category",
+      "columns": [
+        "tags",
+        "category"
+      ],
+      "inputStatus": "text",
+      "inputText": "# Why we moved inference on-device\n\nFor a year we ran every model call through a hosted API. It was\neasy to start with, but the latency budget kept shrinking as the\npipeline grew, and every added step meant another round trip. We\nswitched to running quantized models locally and cut end-to-end\nlatency by 70%, at the cost of managing our own model updates.\nThis post walks through what changed, what broke, and what we'd\ndo differently.\n",
+      "expectedShape": "1 record; the post states neither tags nor a category, so values are model inference"
+    },
+    {
+      "id": "g28-ticket-01",
+      "provenance": {
+        "origin": "gallery",
+        "flow": "28-TicketTrends.cat",
+        "row": "2.2 (inside <each one>)",
+        "inputFile": "28-TicketTrends/28-TicketTrends-ticket-01.txt",
+        "derivation": "Read Text, verbatim file contents"
+      },
+      "settings": "product, issue_type, severity",
+      "columns": [
+        "product",
+        "issue_type",
+        "severity"
+      ],
+      "inputStatus": "text",
+      "inputText": "Product: Dashboard\nIssue: Export button does nothing when clicked on Safari. Works fine on Chrome. Severity feels high, customer is blocked from a report they need today.\n",
+      "expectedShape": "1 record (Dashboard, export bug; severity stated as 'high' in prose)"
+    },
+    {
+      "id": "g28-ticket-02",
+      "provenance": {
+        "origin": "gallery",
+        "flow": "28-TicketTrends.cat",
+        "row": "2.2 (inside <each one>)",
+        "inputFile": "28-TicketTrends/28-TicketTrends-ticket-02.txt",
+        "derivation": "Read Text, verbatim file contents"
+      },
+      "settings": "product, issue_type, severity",
+      "columns": [
+        "product",
+        "issue_type",
+        "severity"
+      ],
+      "inputStatus": "text",
+      "inputText": "Product: Mobile App\nIssue: App crashes on launch after the latest update on iOS 18. Happens every time, not intermittent.\n",
+      "expectedShape": "1 record (Mobile App, launch crash; severity not stated)"
+    },
+    {
+      "id": "g28-ticket-03",
+      "provenance": {
+        "origin": "gallery",
+        "flow": "28-TicketTrends.cat",
+        "row": "2.2 (inside <each one>)",
+        "inputFile": "28-TicketTrends/28-TicketTrends-ticket-03.txt",
+        "derivation": "Read Text, verbatim file contents"
+      },
+      "settings": "product, issue_type, severity",
+      "columns": [
+        "product",
+        "issue_type",
+        "severity"
+      ],
+      "inputStatus": "text",
+      "inputText": "Product: Billing\nIssue: Invoice shows the wrong currency symbol for a EUR-billed account. Cosmetic but confusing for the customer's finance team.\n",
+      "expectedShape": "1 record (Billing, wrong currency symbol; severity not stated, 'cosmetic')"
+    },
+    {
+      "id": "g30-receipt-01",
+      "provenance": {
+        "origin": "gallery",
+        "flow": "30-ReceiptsExpense.cat",
+        "row": "2.2 (inside <each read_receipt>)",
+        "inputFile": "30-ReceiptsExpense/receipts/receipt-01.png",
+        "derivation": "OCR (GLM-OCR) of the image; the OCR text is not reproducible without the model"
+      },
+      "settings": "merchant, date, total, category",
+      "columns": [
+        "merchant",
+        "date",
+        "total",
+        "category"
+      ],
+      "inputStatus": "needs-upstream-model",
+      "inputText": null,
+      "expectedShape": "1 record expected (a receipt)"
+    },
+    {
+      "id": "g30-receipt-02",
+      "provenance": {
+        "origin": "gallery",
+        "flow": "30-ReceiptsExpense.cat",
+        "row": "2.2 (inside <each read_receipt>)",
+        "inputFile": "30-ReceiptsExpense/receipts/receipt-02.png",
+        "derivation": "OCR (GLM-OCR) of the image; the OCR text is not reproducible without the model"
+      },
+      "settings": "merchant, date, total, category",
+      "columns": [
+        "merchant",
+        "date",
+        "total",
+        "category"
+      ],
+      "inputStatus": "needs-upstream-model",
+      "inputText": null,
+      "expectedShape": "1 record expected (a receipt)"
+    },
+    {
+      "id": "g30-receipt-03",
+      "provenance": {
+        "origin": "gallery",
+        "flow": "30-ReceiptsExpense.cat",
+        "row": "2.2 (inside <each read_receipt>)",
+        "inputFile": "30-ReceiptsExpense/receipts/receipt-03.png",
+        "derivation": "OCR (GLM-OCR) of the image; the OCR text is not reproducible without the model"
+      },
+      "settings": "merchant, date, total, category",
+      "columns": [
+        "merchant",
+        "date",
+        "total",
+        "category"
+      ],
+      "inputStatus": "needs-upstream-model",
+      "inputText": null,
+      "expectedShape": "1 record expected (a receipt)"
+    },
+    {
+      "id": "g55-receipt-01",
+      "provenance": {
+        "origin": "gallery",
+        "flow": "55-ReceiptsLedger.cat",
+        "row": "5",
+        "inputFile": "55-ReceiptsLedger/receipts/receipt-01.jpg",
+        "derivation": "OCR (GLM-OCR) of the image; the OCR text is not reproducible without the model"
+      },
+      "settings": "merchant, date, total, category",
+      "columns": [
+        "merchant",
+        "date",
+        "total",
+        "category"
+      ],
+      "inputStatus": "needs-upstream-model",
+      "inputText": null,
+      "expectedShape": "1 record expected (a receipt)"
+    },
+    {
+      "id": "g55-receipt-02",
+      "provenance": {
+        "origin": "gallery",
+        "flow": "55-ReceiptsLedger.cat",
+        "row": "5",
+        "inputFile": "55-ReceiptsLedger/receipts/receipt-02.jpg",
+        "derivation": "OCR (GLM-OCR) of the image; the OCR text is not reproducible without the model"
+      },
+      "settings": "merchant, date, total, category",
+      "columns": [
+        "merchant",
+        "date",
+        "total",
+        "category"
+      ],
+      "inputStatus": "needs-upstream-model",
+      "inputText": null,
+      "expectedShape": "1 record expected (a receipt)"
+    },
+    {
+      "id": "h-zero-records",
+      "provenance": {
+        "origin": "hand-written",
+        "q35EdgeCase": "zero records",
+        "derivation": "written for WW4-2-1 (owner ruling 2026-10-25: up to 5 hand-written Q35 edge cases)"
+      },
+      "settings": "name, date, amount",
+      "columns": [
+        "name",
+        "date",
+        "amount"
+      ],
+      "inputStatus": "text",
+      "inputText": "The weather today is sunny with a light breeze. Nothing is scheduled and nobody has paid anyone anything.",
+      "expectedShape": "0 records: the gate should say no first; a table with the columns and no rows"
+    },
+    {
+      "id": "h-one-record",
+      "provenance": {
+        "origin": "hand-written",
+        "q35EdgeCase": "one record",
+        "derivation": "written for WW4-2-1 (owner ruling 2026-10-25: up to 5 hand-written Q35 edge cases)"
+      },
+      "settings": "name, date, amount",
+      "columns": [
+        "name",
+        "date",
+        "amount"
+      ],
+      "inputStatus": "text",
+      "inputText": "Invoice from Ada Lovelace dated 2026-03-14 for 250 dollars.",
+      "expectedShape": "1 record: Ada Lovelace, 2026-03-14, 250 dollars"
+    },
+    {
+      "id": "h-missing-field",
+      "provenance": {
+        "origin": "hand-written",
+        "q35EdgeCase": "a missing field",
+        "derivation": "written for WW4-2-1 (owner ruling 2026-10-25: up to 5 hand-written Q35 edge cases)"
+      },
+      "settings": "name, date, amount",
+      "columns": [
+        "name",
+        "date",
+        "amount"
+      ],
+      "inputStatus": "text",
+      "inputText": "Ada Lovelace was paid 250 dollars on 2026-03-14.\nGrace Hopper was paid 410 dollars. The payment date was not recorded.",
+      "expectedShape": "2 records; Grace Hopper's date is absent from the text (empty string expected)"
+    },
+    {
+      "id": "h-comma-quote",
+      "provenance": {
+        "origin": "hand-written",
+        "q35EdgeCase": "a field holding a comma or quote",
+        "derivation": "written for WW4-2-1 (owner ruling 2026-10-25: up to 5 hand-written Q35 edge cases)"
+      },
+      "settings": "company, item, total",
+      "columns": [
+        "company",
+        "item",
+        "total"
+      ],
+      "inputStatus": "text",
+      "inputText": "Order from \"Smith, Jones & Co.\" for 12\" copper pipes, total 40.50 dollars.",
+      "expectedShape": "1 record whose values hold a comma and double quotes (company: Smith, Jones & Co.; item: 12\" copper pipes)"
+    },
+    {
+      "id": "h-many-records",
+      "provenance": {
+        "origin": "hand-written",
+        "q35EdgeCase": "more than 5 records",
+        "derivation": "written for WW4-2-1 (owner ruling 2026-10-25: up to 5 hand-written Q35 edge cases)"
+      },
+      "settings": "name, date, amount",
+      "columns": [
+        "name",
+        "date",
+        "amount"
+      ],
+      "inputStatus": "text",
+      "inputText": "Payments this week:\nAda Lovelace, 2026-03-02, 100\nGrace Hopper, 2026-03-03, 110\nAlan Turing, 2026-03-04, 120\nMargaret Hamilton, 2026-03-05, 130\nKatherine Johnson, 2026-03-06, 140\nDorothy Vaughan, 2026-03-07, 150\nMary Jackson, 2026-03-08, 160",
+      "expectedShape": "7 records (more than 5; under the loop's 20-row bound)"
+    }
+  ]
+}
