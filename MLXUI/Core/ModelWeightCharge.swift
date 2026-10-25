@@ -94,6 +94,7 @@ nonisolated enum ModelLoadProfile {
         // meaningless (about 92x) and would under-book if the install ever shrank to v3 alone. It is booked as a per-call working
         // set instead (the VLM row's form): files x 1.10 + 2.35 GB. Over-books by the files' own size, never under.
         // Implementer's call, pending owner confirmation (the precedent .diarization row uses a factor; its weights are 236 MB).
+        // Provisional with ramGB 2.35 (owner, 2026-10-25): the final figure is the in-app Activity Monitor peak on the 60 min clip.
         case .enhance:  return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 2_350_000_000, measured: true)
         case .vision:   return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 2 * gib, measured: true)
         default:        return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 0, measured: false)

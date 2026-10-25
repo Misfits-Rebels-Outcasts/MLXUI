@@ -161,6 +161,9 @@ extension DeepFilterNetCatalogTests {
         #expect(description.contains("no fine-tuning or quantization"))
         #expect(description.contains("RAM figure is measured: process peak (phys_footprint) 2.35 GB (2.349 GB) on a 60-minute clip"))
         #expect(description.contains("replaces the download × 1.5 estimate (0.045 GB)"))
+        // Owner ruling (Boo, 2026-10-25): "ramGB 2.35 stays provisional. The final value is the in-app Activity Monitor peak on the
+        // 60 min clip from the smoke row, in decimal GB, whichever is higher."
+        #expect(description.contains("The figure is provisional"))
         #expect((e.summary ?? "").contains("48 kHz"))
         // The card states no quality, PESQ, real-time or language claim, so the text must not make one.
         for forbidden in ["accuracy", "state-of-the-art", "outperform", "PESQ", "real-time", "realtime", "language"] {
