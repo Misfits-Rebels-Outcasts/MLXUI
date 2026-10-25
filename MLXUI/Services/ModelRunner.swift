@@ -871,6 +871,10 @@ final class ModelRunner {
             // registry check ahead of this entry point will claim every .decision model,
             // the same way MoC-4-3 made the .rerank case above unreachable in practice.
             showUnsupported("Decision", model)
+        case .diarization:
+            // MP4-1: no SortformerSDK is registered yet, so AppState.runModel(_:) lands here and the user sees
+            // the "unsupported" alert. Becomes unreachable once MP4-3 registers the module (same as .rerank above).
+            showUnsupported("Speaker diarization", model)
         }
     }
 

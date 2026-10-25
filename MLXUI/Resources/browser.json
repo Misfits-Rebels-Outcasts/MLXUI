@@ -45,7 +45,8 @@
       "domainIds": [
         "asr",
         "tts",
-        "music"
+        "music",
+        "diarization"
       ]
     },
     {
@@ -106,6 +107,10 @@
     "upscale": {
       "icon": "sparkle.magnifyingglass",
       "description": "Image Upscaling"
+    },
+    "diarization": {
+      "icon": "person.2.wave.2",
+      "description": "Speaker Diarization"
     }
   },
   "domains": [
@@ -3001,6 +3006,62 @@
           ],
           "descriptionSource": "mlx-community/SeedVR2-3B-mlx-int8",
           "summary": "ByteDance's one-step diffusion super-resolution model (ICLR 2026) — upscale any image in a single forward pass on Apple Silicon, int8 (~4.5 GB RAM, Apache 2.0)."
+        }
+      ]
+    },
+    {
+      "id": "diarization",
+      "name": "Speaker Diarization",
+      "sfSymbol": "person.2.wave.2",
+      "children": null,
+      "models": [
+        {
+          "id": "mlx-community--diar_streaming_sortformer_4spk-v2.1-fp16",
+          "family": "Sortformer",
+          "displayName": "Sortformer 4spk v2.1",
+          "paramSize": "0.1B",
+          "paramCountB": 0.118,
+          "modelType": "diarization",
+          "source": "mlx",
+          "format": "mlx-fp16",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/diar_streaming_sortformer_4spk-v2.1-fp16",
+          "ramGB": 0.36,
+          "downloadSizeGB": 0.24,
+          "contextWindow": null,
+          "license": "cc-by-4.0",
+          "licenseUrl": null,
+          "description": "# Sortformer 4spk v2.1\n\nAn [MLX](https://github.com/ml-explore/mlx) conversion of [nvidia/diar_streaming_sortformer_4spk-v2.1](https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1), NVIDIA's streaming speaker-diarization model: it works out who spoke when, for up to 4 speakers, from 16 kHz audio.\n\nLicense: CC-BY-4.0, original model by NVIDIA. The MLX conversion is by mlx-community.\n\nRAM figure is an estimate (download size × 1.5), not a measurement.",
+          "architecture": null,
+          "languages": null,
+          "lastUpdated": "2026-02-10",
+          "taskTags": [
+            "speaker-diarization",
+            "voice-activity-detection"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 961,
+          "communityLikes": 2,
+          "variants": [
+            {
+              "quantization": "fp16",
+              "format": "mlx-fp16",
+              "ramGB": 0.36,
+              "downloadSizeGB": 0.24,
+              "qualityPercent": 100,
+              "hfModelId": "mlx-community/diar_streaming_sortformer_4spk-v2.1-fp16",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/diar_streaming_sortformer_4spk-v2.1-fp16",
+          "summary": "NVIDIA's streaming Sortformer speaker-diarization model, converted to MLX (fp16). Works out who spoke when, up to 4 speakers."
         }
       ]
     }
