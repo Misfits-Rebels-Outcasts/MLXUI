@@ -195,8 +195,9 @@ nonisolated enum TaskModels {
     private static let taskModels: [String: [String]] = [
         // MP2-W (owner rulings V and AE, 2026-10-24): "Parakeet TDT 0.6B v3" appended **last** -- the seed
         // ("Whisper Tiny") does not move, and Parakeet is never the default.
+        // MP3-W: "Qwen3-ASR 1.7B" appended **last** after Parakeet -- the seed does not move, never the default.
         "Transcribe": ["Whisper Tiny", "Whisper Small", "Whisper Large v3", "Voxtral Mini 4B Realtime",
-                       "Parakeet TDT 0.6B v3"],
+                       "Parakeet TDT 0.6B v3", "Qwen3-ASR 1.7B"],
         "Embed": ["BGE-M3"],
         "Generate": llmModels,
         "Summarize": llmModels,

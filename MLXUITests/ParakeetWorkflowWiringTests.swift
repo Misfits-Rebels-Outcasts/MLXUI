@@ -129,7 +129,10 @@ struct ParakeetWorkflowWiringTests {
     @MainActor
     @Test func parakeetIsLastInTheTranscribePoolWithoutMovingTheSeed() throws {
         let pool = TaskModels.models(forTask: "Transcribe")
-        #expect(pool == ["Whisper Tiny", "Whisper Small", "Whisper Large v3", "Voxtral Mini 4B Realtime", Self.display])
+        // MP3-W appended "Qwen3-ASR 1.7B" after it, so the pool is compared up to Parakeet and Parakeet must still follow
+        // Voxtral (implementer's call, pending owner confirmation: the assertion follows the append, as the count guards do).
+        #expect(Array(pool.prefix(5)) == ["Whisper Tiny", "Whisper Small", "Whisper Large v3", "Voxtral Mini 4B Realtime", Self.display])
+        #expect(pool.last == "Qwen3-ASR 1.7B")
         #expect(TaskModels.seededModels(forTask: "Transcribe").first == "Whisper Tiny")
         let catalog = try loadCatalog()
         let claimable = claimableIDs(catalog)

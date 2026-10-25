@@ -191,3 +191,71 @@ struct Qwen3ASRLongClipMeasurement {
         }
     }
 }
+
+/// MP3-W — a real two-row flow through the real executor (the MP2-W precedent): `Read Audio` of the bundled
+/// sample, then `Transcribe` with the model named exactly as a `.cat` writes it. Owner-run, gated on the installed
+/// weights (the same `MLXUI_TEST_QWEN3ASR_DIR` as the other real-load tests); a skipped run does not count.
+/// Real: the parser, `FlowRunner`, `RealExecutor`, the bridge resolution, `Read Audio`, `ASRStage`, `Qwen3ASREngine`. Not
+/// the SDK's `makeStage` (it reads `ModelStore.shared`, the test host's container): see the factory comment.
+struct Qwen3ASRFlowRealRunTests {
+    @Test(.enabled(if: Qwen3ASRRealLoad.directory != nil))
+    func twoRowFlowTranscribesTheSampleWithQwen3ASR() async throws {
+        let dir = try #require(Qwen3ASRRealLoad.directory)
+        let repoRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let catalogData = try Data(contentsOf: repoRoot.appendingPathComponent("MLXUI/Resources/browser.json"))
+        let catalog = try JSONDecoder().decode(BrowserData.self, from: catalogData).domains.flatMap { $0.allModels }
+        let qwen = try #require(catalog.first { $0.id == "mlx-community--Qwen3-ASR-1.7B-8bit" })
+
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("qwen3asr-flow-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let workspace = FlowWorkspace(root: base.appendingPathComponent("flows"))
+        let flowDir = workspace.directory(for: "qwen3asr-flow")
+        try FileManager.default.createDirectory(at: flowDir, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: repoRoot.appendingPathComponent("MLXUI/Resources/Samples/sample-audio.m4a"),
+                                         to: flowDir.appendingPathComponent("sample-audio.m4a"))
+
+        let registry = await MainActor.run { () -> ModelRegistry in
+            let registry = ModelRegistry()
+            for module in installedModules { module.register(into: registry) }
+            return registry
+        }
+        let blobs = base.appendingPathComponent("blobs")
+        let executor = RealExecutor(
+            workspace: workspace, flowID: "qwen3asr-flow", blobDirectory: blobs,
+            makeModelStage: { model, _ in
+                // The registry must hand this card to the Qwen3-ASR module. `Qwen3ASRSDK.makeStage` reads
+                // `ModelStore.shared`, which in this sandboxed test host is the container, not the owner's install,
+                // so the stage itself is the engine's own path on the override directory.
+                let moduleID = await MainActor.run { registry.bestModule(for: model)?.descriptor.id }
+                guard moduleID == "qwen3-asr" else { throw StageError.unsupportedModel(id: model.id, kind: model.runnerKind) }
+                return ASRStage(id: "qwen3-asr.\(model.id)", name: "Qwen3-ASR") { samples in
+                    try await Qwen3ASREngine.transcribe(samples, modelDirectory: dir)
+                }
+            },
+            installedModelIDs: [qwen.id], catalog: catalog)
+
+        let doc = try CatParser.parse("""
+        mlxflow 0.8
+        1. Read Audio   sample-audio.m4a
+        2. Transcribe   Qwen3-ASR 1.7B
+        """)
+        let row2 = try #require(doc.rows.last)
+        let context = FlowRunner.RunContext(flowID: "qwen3asr-flow", workspace: workspace, blobDirectory: blobs, executor: executor)
+
+        let started = Date()
+        var output: String?
+        var failure: String?
+        for await event in FlowRunner().run(doc, context: context) {
+            switch event {
+            case .finished(let id, let asset) where id == row2.id: output = asset.items.first?.value
+            case .failed(_, let error): failure = "\(error)"
+            default: break
+            }
+        }
+        let elapsed = Date().timeIntervalSince(started)
+        print("QWEN3ASRFLOW elapsed \(String(format: "%.1f", elapsed)) s, failure: \(failure ?? "none")")
+        print("QWEN3ASRFLOW output: \(output ?? "nil")")
+        #expect(failure == nil)
+        #expect(Qwen3ASRRealLoad.readsTheMemo(output ?? ""), "\(output ?? "nil")")
+    }
+}

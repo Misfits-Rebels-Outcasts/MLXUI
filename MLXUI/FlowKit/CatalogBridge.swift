@@ -375,6 +375,17 @@ nonisolated enum CatalogBridge {
             candidates: ["mlx-community/parakeet-tdt-0.6b-v3"],
             equivalence: .same,
             manifestFile: "parakeet-tdt-0.6b-v3.json"),
+        // MP3-W (RSI/DelegateModelPackBacklog.md, MP3-W) -- Qwen3-ASR 1.7B (8-bit), the `Transcribe` row's sixth model.
+        // `.same`: the card's repo is the pinned repo. No catflow-mlx manifest exists for it, so
+        // `qwen3-asr-1.7b-8bit.json` is MLXUI-authored (see its "notes"). Appended **last** to the `"Transcribe"` pool,
+        // so the seed ("Whisper Tiny") does not move. Implementer's call, pending owner confirmation, that the row is
+        // offered at all: the backlog says to wire it, and no owner ruling is quoted for this model's pool slot.
+        BridgeEntry(
+            display: "Qwen3-ASR 1.7B",
+            pinnedID: "mlx-community/Qwen3-ASR-1.7B-8bit",
+            candidates: ["mlx-community/Qwen3-ASR-1.7B-8bit"],
+            equivalence: .same,
+            manifestFile: "qwen3-asr-1.7b-8bit.json"),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {
