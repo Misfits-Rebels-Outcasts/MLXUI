@@ -160,14 +160,57 @@ struct DeepFilterNetModuleTests {
 
     // MARK: Limit hook
 
-    @Test func theLimitHookIsOffByDefaultAndRefusesWhenSet() throws {
-        #expect(DeepFilterNetEngine.maxDurationSeconds == nil)   // MP5-3c sets it from the measurements
-        try DeepFilterNetEngine.requireWithinLimit(seconds: 1_000_000)
+    /// MP5-3c: the measured defaults (journal 2026-598): 8 s windows, 1 s overlap, refuse past 60 minutes.
+    @Test func theDefaultsAreTheMeasuredOnes() {
+        #expect(DeepFilterNetEngine.defaultChunkSeconds == 8)
+        #expect(DeepFilterNetEngine.defaultOverlapSeconds == 1)
+        #expect(DeepFilterNetEngine.maxDurationSeconds == 3_600)
+    }
+
+    @Test func theLimitIsInclusiveAt3600AndRefusesPastIt() throws {
+        try DeepFilterNetEngine.requireWithinLimit(seconds: 3_600)
+        try DeepFilterNetEngine.requireWithinLimit(seconds: 3_600 + 2.0 / 48_000)   // resampling can add a sample or two
+        #expect(throws: DeepFilterNetEngine.LimitError.self) { try DeepFilterNetEngine.requireWithinLimit(seconds: 3_600.5) }
+        #expect(throws: DeepFilterNetEngine.LimitError.self) { try DeepFilterNetEngine.requireWithinLimit(seconds: 3_601) }
         try DeepFilterNetEngine.requireWithinLimit(seconds: 60, limit: 60)
         #expect(throws: DeepFilterNetEngine.LimitError.self) { try DeepFilterNetEngine.requireWithinLimit(seconds: 61, limit: 60) }
-        let message = DeepFilterNetEngine.LimitError(seconds: 3_700, limit: 3_583).errorDescription ?? ""
-        #expect(message.contains("1 hour") == false)
-        #expect(message.contains("61 minutes 40 seconds") && message.contains("59 minutes 43 seconds"))
+        try DeepFilterNetEngine.requireWithinLimit(seconds: 1_000_000, limit: nil)
+    }
+
+    @Test func theRefusalSentenceReadsWell() {
+        let message = DeepFilterNetEngine.LimitError(seconds: 3_601, limit: 3_600).errorDescription
+        #expect(message == "This recording is 60 minutes 1 second long. Audio cleanup handles up to 60 minutes at a time; split the recording into shorter parts and run each one.")
+    }
+
+    @Test func theChunkedDefaultPlansAnHourAsAboutFiveHundredWindows() {
+        let samples = 3_600 * 48_000
+        let plan = DeepFilterNetEngine.chunkPlan(sampleCount: samples, chunkSamples: Int(8 * 48_000), overlapSamples: 48_000)
+        #expect(plan.windows.count == 515 && plan.overlap == 48_000)   // step 7 s: ceil((3600 - 8) / 7) + 1
+        #expect(plan.windows.last?.upperBound == samples)
+    }
+
+    /// The Run UI refuses an over-long file from its header, before decoding, and never reaches the stage.
+    @Test func theRunViewModelRefusesAnOverLongFileBeforeDecoding() async throws {
+        let url = tempURL("two-seconds.wav")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try AudioWriter.writeWAV(AudioBuffer(samples: sine(count: 96_000, rate: 48_000), sampleRate: 48_000), to: url)
+        #expect(abs((DeepFilterNetInput.durationSeconds(of: url) ?? 0) - 2.0) < 1e-6)
+        let stage = DeepFilterNetStage(id: "t", name: "t") { _, _ in
+            Issue.record("the stage must not run for an over-long file")
+            return []
+        }
+        let model = DeepFilterNetRunModel()
+        model.start(audioURL: url, stage: stage, maxDurationSeconds: 1)
+        for _ in 0..<200 where model.isRunning { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(model.errorText == "This recording is 2 seconds long. Audio cleanup handles up to 1 second at a time; split the recording into shorter parts and run each one.")
+        #expect(model.original == nil && !model.hasResult)
+    }
+
+    @Test func aFileThatIsNotAudioHasNoHeaderDuration() throws {
+        let url = tempURL("text.wav")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data("not audio".utf8).write(to: url)
+        #expect(DeepFilterNetInput.durationSeconds(of: url) == nil)
     }
 
     // MARK: WAV output

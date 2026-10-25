@@ -95,7 +95,7 @@ struct DeepFilterNetRunView: View {
             Text("Built for recordings of speech. Any sample rate works: the audio is converted to 48 kHz first, and the cleaned file is always 48 kHz mono.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let limit = DeepFilterNetEngine.maxDurationSeconds {
-                Text("Handles recordings up to \(DeepFilterNetEngine.spoken(limit)).")
+                Text("Handles recordings up to \(DeepFilterNetEngine.spoken(limit)). Long recordings are cleaned in 8-second windows to keep memory use modest; a longer one is refused, so split it into parts.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Text(license ?? "License: see model page").font(.caption).foregroundStyle(.secondary)
@@ -195,19 +195,23 @@ final class DeepFilterNetRunModel: NSObject, AVAudioPlayerDelegate {
 
     func cancel() { task?.cancel() }
 
-    func start(audioURL: URL, stage: any PipelineStage) {
+    func start(audioURL: URL, stage: any PipelineStage, maxDurationSeconds: Double? = DeepFilterNetEngine.maxDurationSeconds) {
         reset()
         isRunning = true
         let accessed = audioURL.startAccessingSecurityScopedResource()
         task = Task {
             defer { if accessed { audioURL.stopAccessingSecurityScopedResource() } }
             do {
+                // Refuse an over-long file from its header, before the decode allocates anything.
+                if let header = DeepFilterNetInput.durationSeconds(of: audioURL) {
+                    try DeepFilterNetEngine.requireWithinLimit(seconds: header, limit: maxDurationSeconds)
+                }
                 // Decode off the main actor; a long recording is many megabytes of samples.
                 let buffer = try await Task.detached { try DeepFilterNetInput.read(audioURL) }.value
                 self.original = buffer
                 let seconds = Double(buffer.samples.count) / Double(buffer.sampleRate)
                 // Refuse an over-long recording before anything is loaded (the stage and the engine check again).
-                try DeepFilterNetEngine.requireWithinLimit(seconds: seconds)
+                try DeepFilterNetEngine.requireWithinLimit(seconds: seconds, limit: maxDurationSeconds)
                 // MLX-ERR-2 (see MLXErrorGuard.guardedRun): an MLX error becomes a thrown sentence, and a run in which the
                 // process-wide fallback fired is never reported as successful.
                 let output = try await MLXErrorGuard.guardedRun {

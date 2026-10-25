@@ -10,13 +10,13 @@ import MLXAudioSTS
 /// (`AudioResampler`, to ``sampleRate``, not the 16 kHz ASR path) and the output stays 48 kHz whatever the input rate.
 ///
 /// **Chunking (MP5-3a; implementer's call, pending owner confirmation).** The processing sits behind one function,
-/// ``enhance(_:modelDirectory:chunkSeconds:overlapSeconds:maxDurationSeconds:progress:)``. `chunkSeconds == nil` (the default,
-/// ``defaultChunkSeconds``) runs the whole clip in one `enhance` call. A number splits the clip into windows of that length that
+/// ``enhance(_:modelDirectory:chunkSeconds:overlapSeconds:maxDurationSeconds:progress:)``. `chunkSeconds == nil` (not the default,
+/// ``defaultChunkSeconds`` is now 8) runs the whole clip in one `enhance` call. A number splits the clip into windows of that length that
 /// overlap by `overlapSeconds` and are joined with a linear crossfade over the overlap (``chunkPlan(sampleCount:chunkSamples:overlapSamples:)``,
 /// ``accumulate(into:window:values:overlap:isFirst:isLast:)``). The library's offline `enhance` carries no state between calls, so
-/// each window starts cold; the overlap is what hides that warm-up. MP5-3b/3c fill the real chunk length and overlap from the
-/// 1, 10 and 60 minute measurements (owner ruling 2026-10-25: measure before any limit or `ramGB` is set).
-/// ``maxDurationSeconds`` is the refusal-limit hook; `nil` until MP5-3c sets it to the longest measured clip.
+/// each window starts cold; the overlap is what hides that warm-up. The defaults (8 s, 1 s) come from the 1, 10 and 60 minute
+/// measurements (owner ruling 2026-10-25: measure before any limit or `ramGB` is set).
+/// ``maxDurationSeconds`` is the refusal limit: 3,600 s, the longest clip measured (MP5-3c; numbers on ``defaultChunkSeconds``).
 ///
 /// **Thread-bound streams (KICKOFF rule 17; memory note `mlx-swift-032-thread-bound-streams`).**
 /// - `DeepFilterNetForward.swift:179` @ 580e952 is `coefs[0..., k, 0..., 0..., 0...]` where `k` is a Swift `Int` loop counter, so
@@ -32,12 +32,24 @@ enum DeepFilterNetEngine {
     /// The version subfolder of the installed repo that MLXUI runs (the repo also holds v1 and v2).
     nonisolated static let versionSubfolder = "v3"
 
-    /// `nil`: the whole clip in one pass. MP5-3b/3c set this from measurement.
-    nonisolated static let defaultChunkSeconds: Double? = nil
-    /// Overlap between windows when chunking (implementer's call, pending owner confirmation; MP5-3b decides by evidence).
+    /// Window length of the default (chunked) run, in seconds. `nil` would be the whole clip in one pass, which is only for tests.
+    ///
+    /// **Measured 2026-10-25 by the lead (MP5-3b harness, `MLXUI` scheme, `phys_footprint` through the Run UI path
+    /// `DeepFilterNetInput.read` -> stage -> `wavData`; journal 2026-597/598).** A whole-file pass grows linearly with length:
+    /// 1 minute 2.996 GB, 10 minutes 14.201 GB (60 minutes would be about 80 GB; not run). Windows of 8 s with 1 s overlap:
+    /// 1 minute 0.620 GB, 10 minutes 0.861 GB, 60 minutes 2.349 GB (MLX's own peak stays flat at 0.253 GiB; the growth is the host
+    /// arrays, the decode phase alone is 1.76 GB at 60 minutes), 188 s wall for 60 minutes. Chunking costs nothing in quality: against the whole-file run the SNR gain differs by at most
+    /// 0.07 dB at every setting tried (4/0.5, 4/1, 8/0.5, 8/1, 8/2, 16/1 s) and the seam difference is at most 0.002 RMS.
+    /// 8 s / 1 s is the lead's ruling (implementer-level; the owner ruled the method, 2026-10-25).
+    nonisolated static let defaultChunkSeconds: Double? = 8
+    /// Overlap between windows when chunking, in seconds (see ``defaultChunkSeconds``).
     nonisolated static let defaultOverlapSeconds: Double = 1
-    /// Longest recording accepted, in seconds. `nil` = no limit yet; MP5-3c sets it to the longest clip measured.
-    nonisolated static let maxDurationSeconds: Double? = nil
+    /// Longest recording accepted, in seconds: 3,600 (60 minutes), the longest clip measured (chunked 8 s / 1 s, 2.349 GB). The
+    /// owner's rule (2026-10-25) is that a longer one is refused rather than run unmeasured. Lead's ruling, implementer-level.
+    nonisolated static let maxDurationSeconds: Double? = 3_600
+    /// Slack on the limit, in seconds: resampling a 3,600.000 s file can return a few samples more than 3,600 x 48,000, and that
+    /// must not turn the longest measured clip into a refusal. Half a second over is refused. Implementer's call, pending owner confirmation.
+    nonisolated static let limitToleranceSeconds: Double = 0.1
 
     /// Rule 17's one-line switch (see the type comment). `false`: the engine runs wherever it is awaited.
     nonisolated static let usesAudioThread = false
@@ -74,7 +86,7 @@ enum DeepFilterNetEngine {
 
     /// Throws ``LimitError`` for a recording over `limit` (checked before any model is loaded). No limit when `limit` is nil.
     nonisolated static func requireWithinLimit(seconds: Double, limit: Double? = maxDurationSeconds) throws {
-        if let limit, seconds > limit { throw LimitError(seconds: seconds, limit: limit) }
+        if let limit, seconds > limit + limitToleranceSeconds { throw LimitError(seconds: seconds, limit: limit) }
     }
 
     // MARK: - Chunk plan and crossfade (pure)

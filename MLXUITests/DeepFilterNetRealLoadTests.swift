@@ -43,18 +43,25 @@ enum DeepFilterNetRealLoad {
         return WorkingCopy(url: copy, root: root)
     }
 
-    // MARK: Thresholds -- PLACEHOLDERS
+    // MARK: Thresholds -- PROPOSED from the first real run
 
-    /// PROPOSED, awaiting first real run + owner confirmation. Minimum SNR gain (dB, against the clean reference) on the parity clip.
-    nonisolated static let snrImprovementThresholdDB = 3.0
-    /// PROPOSED, awaiting first real run + owner confirmation. RMS of the cleaned clip over the RMS of the clean reference.
-    nonisolated static let rmsRatioRange = 0.5...1.2
-    /// PROPOSED, awaiting first real run + owner confirmation. Clean speech through the model: SNR of output against input (dB).
-    nonisolated static let cleanInputMinSNRDB = 10.0
-    /// PROPOSED, awaiting first real run + owner confirmation. Clean speech through the model: RMS of output over input.
-    nonisolated static let cleanInputRMSRatioRange = 0.8...1.1
-    /// PROPOSED, awaiting first real run + owner confirmation. How far below the whole-file SNR gain a chunked run may fall (dB).
-    nonisolated static let chunkedImprovementSlackDB = 3.0
+    // First real run, 2026-10-25 (lead, MLXUI scheme, journal 2026-597/598), parity clip mixed at 5 dB, chunked 8 s / 1 s unless noted:
+    // noisy: snrOut 18.13 dB, improvement 13.13 dB, rmsRatio 0.958; 44.1 kHz input 12.96 dB / 0.956; 16 kHz input 10.38 dB / 0.949;
+    // clean input: snrOutVsInput 32.51 dB, rmsRatio 0.981; chunk sweep: gain within 0.07 dB of the whole file at every setting.
+    // Each constant below sits well under its measurement. PROPOSED, awaiting owner confirmation.
+
+    /// PROPOSED from the first run (measured 13.13 dB), awaiting owner confirmation. Minimum SNR gain (dB) on the parity clip.
+    nonisolated static let snrImprovementThresholdDB = 8.0
+    /// PROPOSED from the first run (measured 10.38 dB), awaiting owner confirmation. Minimum SNR gain for the 16 kHz input.
+    nonisolated static let snrImprovementThreshold16kDB = 6.0
+    /// PROPOSED from the first run (measured 0.949 to 0.958), awaiting owner confirmation. RMS of the cleaned clip over the clean reference's.
+    nonisolated static let rmsRatioRange = 0.85...1.10
+    /// PROPOSED from the first run (measured 32.51 dB), awaiting owner confirmation. Clean speech: SNR of output against input (dB).
+    nonisolated static let cleanInputMinSNRDB = 25.0
+    /// PROPOSED from the first run (measured 0.981), awaiting owner confirmation. Clean speech: RMS of output over input.
+    nonisolated static let cleanInputRMSRatioRange = 0.90...1.05
+    /// PROPOSED from the first run (measured at most 0.07 dB), awaiting owner confirmation. How far below the whole-file gain a chunked run may fall (dB).
+    nonisolated static let chunkedImprovementSlackDB = 1.0
     /// The SNR the parity clip is mixed at (dB). Implementer's call, pending owner confirmation.
     nonisolated static let mixSNRDB = 5.0
     nonisolated static let noiseSeed: UInt64 = 20_261_025
@@ -207,7 +214,7 @@ struct DeepFilterNetRealLoadTests {
 
     /// 44.1 kHz and 16 kHz inputs through the real resample path (the stage), the stage the Run UI builds: output is 48 kHz and
     /// about as long as the input. The reference is compared at 48 kHz; a 16 kHz input has lost everything above 8 kHz, so its
-    /// SNR gain is printed, not asserted.
+    /// SNR gain threshold is lower.
     @Test(.enabled(if: enabled), arguments: [44_100, 16_000])
     func otherInputRatesComeOutAt48kHz(inputRate: Int) async throws {
         let copy = try DeepFilterNetRealLoad.workingCopy()
@@ -220,7 +227,8 @@ struct DeepFilterNetRealLoadTests {
             #expect(buffer.sampleRate == 48_000)
             #expect(abs(Double(buffer.samples.count) / 48_000 - clip.seconds) < 0.1)
             #expect(DeepFilterNetRealLoad.finite(buffer.samples))
-            _ = DeepFilterNetRealLoad.report("input-\(inputRate)Hz", noisy: clip.noisy, cleaned: buffer.samples, clean: clip.clean)
+            let r = DeepFilterNetRealLoad.report("input-\(inputRate)Hz", noisy: clip.noisy, cleaned: buffer.samples, clean: clip.clean)
+            #expect(r.improvement >= (inputRate == 16_000 ? DeepFilterNetRealLoad.snrImprovementThreshold16kDB : DeepFilterNetRealLoad.snrImprovementThresholdDB))
             let ratio = AudioMetrics.rms(buffer.samples) / AudioMetrics.rms(clip.clean)
             #expect(DeepFilterNetRealLoad.rmsRatioRange.contains(ratio), "rms ratio \(ratio)")
         }
@@ -282,7 +290,7 @@ struct DeepFilterNetMainActorProbeTests {
         try await DeepFilterNetRealLoad.withClip { clip in
             MLXErrorGuard.installFallback()
             MLXErrorGuard.resetFallbackMessage()
-            let whole = try await MLXErrorGuard.guardedRun { try await DeepFilterNetEngine.enhance(clip.noisy, modelDirectory: copy.url) }
+            let whole = try await MLXErrorGuard.guardedRun { try await DeepFilterNetEngine.enhance(clip.noisy, modelDirectory: copy.url, chunkSeconds: nil) }
             let wholeGain = DeepFilterNetRealLoad.report("whole", noisy: clip.noisy, cleaned: whole, clean: clip.clean).improvement
             let settings: [(chunk: Double, overlap: Double)] = [(4, 0.5), (4, 1), (8, 0.5), (8, 1), (8, 2), (16, 1)]
             for setting in settings {
@@ -319,7 +327,7 @@ struct DeepFilterNetMainActorProbeTests {
 /// of that length (the parity clip, tiled, streamed to disk one tile at a time), then does what the Run UI does: decode with
 /// `DeepFilterNetInput.read`, run `DeepFilterNetStage(modelDirectory:)` (resample, `DeepFilterNetEngine.enhance`), and build the
 /// WAV bytes the Save button writes. A 20 ms sampler keeps the `phys_footprint` peak of the whole run. Prints one
-/// `DFNFOOTPRINT` line per length. `MLXUI_TEST_DEEPFILTERNET_CHUNK_SECONDS` (a number, or `none`, the default = whole file) and
+/// `DFNFOOTPRINT` line per length. `MLXUI_TEST_DEEPFILTERNET_CHUNK_SECONDS` (a number, or `none` = whole file; default the app's 8 s) and
 /// `..._OVERLAP_SECONDS` (default 1) choose the engine setting, so whole-file and chunked runs are separate invocations. Guard:
 /// a whole-file run of more than 10 minutes is skipped unless `MLXUI_TEST_DEEPFILTERNET_ALLOW_WHOLE_LONG=1` (its memory is
 /// expected to grow with length and can exhaust the machine).
@@ -331,7 +339,8 @@ struct DeepFilterNetFootprintTests {
     func measureFootprintAtOneTenAndSixtyMinutes() async throws {
         let env = DeepFilterNetRealLoad.env
         let minutes = (env["MLXUI_TEST_DEEPFILTERNET_MINUTES"] ?? "1,10,60").split(separator: ",").compactMap { Double($0) }.sorted()
-        let chunk = env["MLXUI_TEST_DEEPFILTERNET_CHUNK_SECONDS"].flatMap(Double.init)
+        // Default: the app's chunked setting (8 s / 1 s). `none` runs the whole file.
+        let chunk: Double? = env["MLXUI_TEST_DEEPFILTERNET_CHUNK_SECONDS"].map { $0 == "none" ? nil : Double($0) } ?? DeepFilterNetEngine.defaultChunkSeconds
         let overlap = env["MLXUI_TEST_DEEPFILTERNET_OVERLAP_SECONDS"].flatMap(Double.init) ?? DeepFilterNetEngine.defaultOverlapSeconds
         let allowLongWhole = env["MLXUI_TEST_DEEPFILTERNET_ALLOW_WHOLE_LONG"] == "1"
         let copy = try DeepFilterNetRealLoad.workingCopy()

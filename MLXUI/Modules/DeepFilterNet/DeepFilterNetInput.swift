@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 
 /// Reading the person's chosen file for audio cleanup, with errors a person can act on. `AudioFileReader` reports a file it
 /// can't decode as `StageError.engineFailure("Read Audio", CoreAudio error 1685348671)`, which says nothing; a non-audio file
@@ -15,6 +16,13 @@ nonisolated enum DeepFilterNetInput {
                 return "The audio file has no sound in it."
             }
         }
+    }
+
+    /// The file's length in seconds, from its header (no decoding), or nil when it can't be opened as audio. Lets the Run UI refuse an
+    /// over-long file before the decode, which is the biggest single allocation (691 MB per copy at 60 minutes).
+    static func durationSeconds(of url: URL) -> Double? {
+        guard let file = try? AVAudioFile(forReading: url), file.processingFormat.sampleRate > 0 else { return nil }
+        return Double(file.length) / file.processingFormat.sampleRate
     }
 
     /// Decodes `url` to mono float samples at the file's own rate. Throws ``ReadError``.
