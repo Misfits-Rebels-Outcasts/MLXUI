@@ -142,7 +142,7 @@ struct Qwen3ASRInstallTests {
         #expect(before.reconciled == [Self.cardID] && before.installed && before.ready == [Self.cardID])
         let sizeBefore = try #require(before.size)
 
-        let generated = String(repeating: "x", count: 4096)   // the real file is ~11 MB; only its presence matters
+        let generated = String(repeating: "x", count: 4096)   // the real file is a few MB (vocab.json 2.8 MB + merges.txt 1.7 MB in; not measured); only its presence matters
         try generated.write(to: model.appendingPathComponent("tokenizer.json"), atomically: true, encoding: .utf8)
         #expect(FileManager.default.fileExists(atPath: store.installedMarker(forHFModelID: Self.hfModelID).path))
 
