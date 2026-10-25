@@ -15,7 +15,7 @@ import MLXAudioSTT
 /// penalty. It runs only when `repetitionPenalty != 1.0`; the model's defaults (and so this engine's) leave it at
 /// 1.0, so the gather is never built, and `generationParameters(from:)` pins that. Nothing here crosses an actor hop
 /// with a lazy array: the model is built, run and read inside `generate`, and `generate` returns a `String`. So
-/// `MLXAudioThread.run` is **not** used (implementer's call, pending owner confirmation; the main-actor probe in
+/// `MLXAudioThread.run` is **not** used (owner-confirmed 2026-10-25; the main-actor probe in
 /// `Qwen3ASRRealLoadTests` is the evidence). There is also no array handed back to read through
 /// `MLXErrorGuard.read`: `STTOutput` carries text and plain dictionaries only. The input buffer is evaluated up
 /// front with `MLXErrorGuard.evaluate`, so a failed evaluation throws before the library touches it (rule 17b).
@@ -27,8 +27,12 @@ import MLXAudioSTT
 ///
 /// Long audio: the library splits at low-energy points into chunks of at most `chunkSeconds` (default 1200 s), one
 /// pass per chunk, and the audio encoder and the prompt's KV cache grow with the chunk. The engine uses 120 s, as
-/// `ParakeetEngine` does (owner ruling X, 2026-10-24) -- implementer's call, pending owner confirmation, because
-/// nobody has measured this model's memory on a long clip (`Qwen3ASRLongClipMeasurement` is the owner-run check).
+/// `ParakeetEngine` does (owner ruling X, 2026-10-24); the owner confirmed it on 2026-10-25. It is a ceiling per
+/// chunk, so the peak stays bounded on long clips. Measured 2026-10-25 on a 588 s clip with
+/// `Qwen3ASRLongClipMeasurement`: at 120 s the MLX peak was 3.80 GiB and the run took 47.4 s; at the library's
+/// 1200 s it was 4.50 GiB and 66.2 s. Both held 2.335 GiB after load and returned to it. The in-app peak
+/// (MLXUI-Direct, Activity Monitor basis) was 6.82 GiB. A 588 s clip fits inside one 1200 s chunk, so the gap on
+/// a ~20 min clip is not measured.
 enum Qwen3ASREngine {
     nonisolated static let chunkSeconds: Float = 120
 
