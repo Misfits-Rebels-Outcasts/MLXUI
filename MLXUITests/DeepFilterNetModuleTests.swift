@@ -213,6 +213,26 @@ struct DeepFilterNetModuleTests {
         #expect(DeepFilterNetInput.durationSeconds(of: url) == nil)
     }
 
+    // MARK: load profile (MP5-3d)
+
+    @Test func loadProfileRowBooksTheMeasuredPeakAsAWorkingSet() throws {
+        let row = ModelLoadProfile.entry(for: .enhance)
+        #expect(row.measured)
+        #expect(row.workingSetBytes == 2_350_000_000)
+        #expect(Double(row.workingSetBytes) >= 2.349e9, "at least the measured 60-minute peak")
+        // A folder shaped like the install (three versions, 25.6 MB of weights) books files x 1.10, plus the working set per call.
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("dfn-profile-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        for version in ["v1", "v2", "v3"] {
+            let sub = dir.appendingPathComponent(version)
+            try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+            try Data(count: 1_000_000).write(to: sub.appendingPathComponent("model.safetensors"))
+        }
+        let weights = ModelLoadProfile.charge(kind: .enhance, directory: dir, catalogFallback: nil)
+        #expect(weights == 3_300_000)
+        #expect(weights + ModelLoadProfile.workingSetBytes(for: .enhance) >= 2_350_000_000)
+    }
+
     // MARK: WAV output
 
     @Test func savedWAVIsA48kHzMonoFileThatReadsBack() throws {

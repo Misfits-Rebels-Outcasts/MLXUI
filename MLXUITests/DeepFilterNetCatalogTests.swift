@@ -42,10 +42,12 @@ struct DeepFilterNetCatalogTests {
         #expect(e.license == "mit")   // api.json cardData.license
         // Pinned tree: v1+v2+v3 model.safetensors 25,585,573 B + three config.json 2,568 B = 25,588,141 B = 0.0256 GB.
         #expect(e.downloadSizeGB == 0.03)
-        // MP5-1: ESTIMATE = download x 1.5 (MP-0 G). MP5-3d replaces it with the measured in-app peak.
-        #expect(e.ramGB == 0.045)
+        // MP5-3d: ramGB is the measured process peak (phys_footprint 2.349 GB on a 60-minute clip, chunked 8 s / 1 s, the whole
+        // Run UI path), rounded up to 0.01 GB. Provenance is in the description. It replaced the MP5-1 estimate (0.045).
+        #expect(e.ramGB == 2.35)
+        #expect(e.ramGB >= 2.349, "never below the measured peak")
         #expect(e.variants?.first?.ramGB == e.ramGB)
-        #expect(e.description?.contains("RAM figure is an estimate") == true)
+        #expect(e.description?.contains("RAM figure is measured") == true)
         #expect(e.speedTokensPerSec == nil)
         #expect(e.variants?.count == 1)
         #expect(e.variants?.first?.quantization == "fp32")
@@ -157,7 +159,8 @@ extension DeepFilterNetCatalogTests {
         #expect(description.contains("Rikorose/DeepFilterNet"))
         #expect(description.contains("| **Sample rate** | 48 kHz in and out |"))
         #expect(description.contains("no fine-tuning or quantization"))
-        #expect(description.contains("RAM figure is an estimate (download size × 1.5)"))
+        #expect(description.contains("RAM figure is measured: process peak (phys_footprint) 2.35 GB (2.349 GB) on a 60-minute clip"))
+        #expect(description.contains("replaces the download × 1.5 estimate (0.045 GB)"))
         #expect((e.summary ?? "").contains("48 kHz"))
         // The card states no quality, PESQ, real-time or language claim, so the text must not make one.
         for forbidden in ["accuracy", "state-of-the-art", "outperform", "PESQ", "real-time", "realtime", "language"] {
