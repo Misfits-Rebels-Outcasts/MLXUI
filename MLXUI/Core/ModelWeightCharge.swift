@@ -82,6 +82,11 @@ nonisolated enum ModelLoadProfile {
         case .ocr:      return Entry(factor: 1.75, workingSetBytes: 0, measured: true)
         case .asr:      return Entry(factor: 2.05, workingSetBytes: 0, measured: true)
         case .decision: return Entry(factor: 1.20, workingSetBytes: 0, measured: true)
+        // MP4-3a: Sortformer. UNMEASURED -- the conservative default row (files x 1.10, floored at the catalog's ramGB, itself
+        // an estimate). The offline pass also holds activations that grow with clip length (SortformerEngine's long-audio
+        // note), which this row does not model. Implementer's call, pending owner confirmation; measure it with
+        // `SortformerLongClipMeasurement` and replace this row.
+        case .diarization: return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 0, measured: false)
         case .vision:   return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 2 * gib, measured: true)
         default:        return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 0, measured: false)
         }

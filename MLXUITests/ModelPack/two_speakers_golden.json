@@ -1,0 +1,8 @@
+{
+  "pending": true,
+  "clip": "two_speakers.wav",
+  "threshold": 0.5,
+  "toleranceSeconds": null,
+  "notes": "PENDING. MP4-3b fills this from the first real run of the installed model (owner-run SortformerRealLoadTests, printed as SORTFORMER segments). toleranceSeconds is the allowed difference for every segment start and end, proposed from that run and confirmed by the owner; segment speaker numbers must match exactly (Sortformer numbers speakers in arrival order, so on this clip speaker 0 is the first voice, Samantha). While pending is true the parity test reports 'golden pending' and does not fail.",
+  "segments": []
+}

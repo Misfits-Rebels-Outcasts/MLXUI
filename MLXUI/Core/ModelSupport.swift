@@ -26,9 +26,7 @@ nonisolated enum ModelSupport {
         // Laya 0.4B (decision encoder) → LayaEngine ported in LY-4 (journal/2026-334).
         // CLM 8B (decision encoder) → CLMEngine ported in CL-4b, Run UI in CL-5 (journal/2026-341).
         // Clef Flash (decision) → ClefEngine ported in CF-5b (journal/2026-498); CF-2's gap is gone.
-        // MP4-1 (implementer's call, pending owner confirmation): Sortformer is catalogued and installable before its
-        // module exists, so flag it until MP4-3 lands. REMOVE THIS GAP IN MP4-3 when `Modules/Sortformer` registers.
-        Gap(idFragment: "sortformer", reason: "Speaker diarization has no runner in this build yet. The model installs, but Run isn't available until the Sortformer module ships."),
+        // Sortformer 4spk v2.1 (diarization) → SortformerEngine in MP4-3a; the MP4-1 "no runner yet" gap is gone.
     ]
 
     /// WW2-3-7 (owner ruling 2026-10-23; the WW6 "show it, don't fail it" rule): the OS a model's runner needs, shown

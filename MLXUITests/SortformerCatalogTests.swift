@@ -4,7 +4,7 @@ import Foundation
 
 /// MP4-1: the Sortformer 4spk v2.1 catalog entry and the new `diarization` kind. Facts are from the pinned HF files
 /// (RSI/notes/modelpack/hf/mlx-community_diar_streaming_sortformer_4spk-v2.1-fp16 @ e23e6404). Until MP4-3 registers a
-/// module the model installs but resolves to "no runner yet", and no workflow pool offers it.
+/// module the model installs but resolves to "no runner yet", and no workflow pool offers it. (MP4-3a registered the module.)
 @MainActor
 struct SortformerCatalogTests {
 
@@ -62,18 +62,20 @@ struct SortformerCatalogTests {
         #expect(data.domainIndex["diarization"] != nil)
     }
 
-    @Test func noModuleClaimsItYetSoItResolvesToNoRunner() throws {
+    /// MP4-3a: the Sortformer module is the only one that claims it (before MP4-3a none did, and the `ModelSupport` gap flagged it).
+    @Test func exactlyOneModuleClaimsItAndTheMP41GapIsGone() throws {
         let e = try sortformer()
         let full = ModelRegistry()
         for module in installedModules { module.register(into: full) }
-        #expect(full.bestModule(for: e) == nil, "a chat/ASR module must not be handed a diarization model")
+        #expect(full.bestModule(for: e)?.descriptor.id == "sortformer")
+        var claimers: [String] = []
         for module in installedModules {
             let one = ModelRegistry()
             module.register(into: one)
-            #expect(one.bestModule(for: e) == nil, "\(module.descriptor.id) claims Sortformer")
+            if one.bestModule(for: e) != nil { claimers.append(module.descriptor.id) }
         }
-        // ModelSupport flags it until MP4-3 (implementer's call, pending owner confirmation).
-        #expect(ModelSupport.unsupportedReason(for: e) != nil)
+        #expect(claimers == ["sortformer"], "a chat/ASR module must not be handed a diarization model: \(claimers)")
+        #expect(ModelSupport.unsupportedReason(for: e) == nil)
     }
 
     @Test func stageFactoryRefusesTheKindWithAnExplicitCase() throws {

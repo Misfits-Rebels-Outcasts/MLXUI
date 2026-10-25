@@ -106,6 +106,9 @@ nonisolated struct FlowServedLoadGate: Sendable {
         case .decision:
             return model.family == "CLM" ? await CLMEngineCache.shared.bytesNeeded(directory: directory)
                                          : await LayaEngineCache.shared.bytesNeeded(directory: directory)
+        case .diarization:
+            // MP4-3a: the engine cache books it like the ASR engines (per-run load, `ModelLoadProfile` row unmeasured).
+            return await cache.bytesNeeded(for: model, config: .default, booksWeights: booksWeights)
         default:
             return await cache.bytesNeeded(for: model, config: .default, booksWeights: booksWeights)
         }
