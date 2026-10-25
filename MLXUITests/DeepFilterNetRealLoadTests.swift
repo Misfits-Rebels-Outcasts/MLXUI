@@ -43,7 +43,7 @@ enum DeepFilterNetRealLoad {
         return WorkingCopy(url: copy, root: root)
     }
 
-    // MARK: Thresholds -- PROPOSED from the first real run
+    // MARK: Thresholds -- from the first real run, owner-confirmed 2026-10-25
 
     // First real run, 2026-10-25 (lead, MLXUI scheme, journal 2026-597/598), parity clip mixed at 5 dB, chunked 8 s / 1 s unless noted:
     // noisy: snrOut 18.13 dB, improvement 13.13 dB, rmsRatio 0.958; 44.1 kHz input 12.96 dB / 0.956; 16 kHz input 10.38 dB / 0.949;
