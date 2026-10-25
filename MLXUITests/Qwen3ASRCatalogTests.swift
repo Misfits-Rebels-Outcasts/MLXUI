@@ -30,8 +30,9 @@ struct Qwen3ASRCatalogTests {
         #expect(e.license == "apache-2.0")
         // Sum of the pinned tree listing's 9 selected files (2,467,856,503 B) = 2.47 GB; 2,467,859,030 B for all 11.
         #expect(e.downloadSizeGB == 2.47)
-        // MP-0 G: ramGB is an estimate, download size × 1.5 (nobody has measured it).
-        #expect(abs(e.ramGB - e.downloadSizeGB * 1.5) < 0.01)
+        // MP3-1-FIX (implementer's call, pending owner confirmation): ramGB is the measured in-app peak (6.82 GiB = 7.32 GB,
+        // 2026-10-25), replacing MP-0 G's download × 1.5 estimate (3.71) for this entry only, as for Parakeet.
+        #expect(e.ramGB == 7.3)
         #expect(e.languages?.count == 30)
         #expect(e.variants?.count == 1)
         #expect(e.variants?.first?.quantization == "8-bit")
@@ -105,6 +106,7 @@ extension Qwen3ASRCatalogTests {
         #expect(description.contains("Original model by the Qwen team, licensed under"))
         #expect(description.contains("Apache-2.0"))
         #expect(description.contains("Qwen/Qwen3-ASR-1.7B"))
-        #expect(description.contains("RAM figure is an estimate (download size × 1.5)"))
+        #expect(description.contains("RAM figure is measured: in-app peak 6.82 GiB (7.32 GB), MLXUI-Direct, 588 s clip, 120 s chunks, 2026-10-25"))
+        #expect(e.ramGB == 7.3)
     }
 }

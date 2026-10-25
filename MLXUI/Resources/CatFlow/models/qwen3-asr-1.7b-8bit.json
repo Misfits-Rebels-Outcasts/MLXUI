@@ -10,11 +10,11 @@
   "capabilities": {},
   "resources": {
     "disk_gb": 2.47,
-    "ram_gb": 3.71
+    "ram_gb": 7.3
   },
   "source": "https://huggingface.co/mlx-community/Qwen3-ASR-1.7B-8bit",
   "license": "Apache-2.0",
   "manifest_version": 1,
   "pinned": true,
-  "notes": "MLXUI-authored (RSI/DelegateModelPackBacklog.md MP3-W) -- catflow-mlx has no manifest for this model, so this was written in the shape of voxtral-mini-4b-realtime-2602-4bit.json. It has no checksum field, as the other MLXUI-authored manifests (the Gemma 4 pair, MiMo, Qwen3.8, Parakeet) have none: there is no catflow source manifest to inherit one from and the field is documentary. settings is empty on purpose (readme T4): the engine leaves the language to the model (automatic identification) and returns text only, so no lang or timestamps setting is offered; forcing a language in flows would be a SPEC-Q, not a manifest edit. resources.disk_gb is browser.json's downloadSizeGB (2.47) and resources.ram_gb is its ramGB 3.71 (download size x 1.5, MP-0 G: an estimate, not a measurement; replace it with the measured in-app peak once the owner has one, as MP2-R-FIX-1 did for Parakeet). Verified against mlx-community/Qwen3-ASR-1.7B-8bit revision a8379a2e2f9e313c9292cdf1af4055ab56d50d55. Original model by Qwen (Qwen/Qwen3-ASR-1.7B), Apache-2.0."
+  "notes": "MLXUI-authored (RSI/DelegateModelPackBacklog.md MP3-W) -- catflow-mlx has no manifest for this model, so this was written in the shape of voxtral-mini-4b-realtime-2602-4bit.json. It has no checksum field, as the other MLXUI-authored manifests (the Gemma 4 pair, MiMo, Qwen3.8, Parakeet) have none: there is no catflow source manifest to inherit one from and the field is documentary. settings is empty on purpose (readme T4): the engine leaves the language to the model (automatic identification) and returns text only, so no lang or timestamps setting is offered; forcing a language in flows would be a SPEC-Q, not a manifest edit. resources.disk_gb is browser.json's downloadSizeGB (2.47) and resources.ram_gb is its ramGB 7.3, a measured figure (in-app peak 6.82 GiB = 7.32 GB, MLXUI-Direct, 588 s clip, 120 s chunks, 2026-10-25), replacing MP-0 G's download x 1.5 estimate (3.71) for this entry only, as MP2-R-FIX-1 did for Parakeet; MP-0 G still governs unmeasured entries. Verified against mlx-community/Qwen3-ASR-1.7B-8bit revision a8379a2e2f9e313c9292cdf1af4055ab56d50d55. Original model by Qwen (Qwen/Qwen3-ASR-1.7B), Apache-2.0."
 }

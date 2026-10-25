@@ -70,7 +70,7 @@ struct Qwen3ASRWorkflowWiringTests {
         case .runnable(let slot, let equivalence, let note):
             #expect(slot.modelEntry?.id == Self.cardID)
             #expect(slot.modelEntry?.modelType == .asr)
-            #expect(slot.modelEntry?.ramGB == 3.71)
+            #expect(slot.modelEntry?.ramGB == 7.3)
             #expect(equivalence == .same)
             #expect(note == nil)
         case .notRunnable(let name, let reason, _):
@@ -93,7 +93,7 @@ struct Qwen3ASRWorkflowWiringTests {
         #expect(manifest.tasks == ["Transcribe"])
         #expect(manifest.settings.isEmpty, "T4: no invented lang or timestamps setting")
         #expect(manifest.resources?.diskGB == 2.47)
-        #expect(manifest.resources?.ramGB == 3.71)
+        #expect(manifest.resources?.ramGB == 7.3)
     }
 
     @Test func manifestResourcesMatchTheCatalogCard() throws {
@@ -117,8 +117,10 @@ struct Qwen3ASRWorkflowWiringTests {
         #expect(notes.contains("MLXUI-authored"))
         #expect(notes.contains("a8379a2e2f9e313c9292cdf1af4055ab56d50d55"))
         #expect(notes.contains("no checksum field"))
-        // Unmeasured, so the manifest says its RAM figure is the MP-0 G estimate (nobody has run this model on a long clip).
-        #expect(notes.contains("download size x 1.5, MP-0 G: an estimate, not a measurement"))
+        // MP3-1-FIX: the manifest cites the measurement, not the MP-0 G estimate (the Parakeet precedent).
+        #expect(notes.contains("a measured figure"))
+        #expect(notes.contains("in-app peak 6.82 GiB = 7.32 GB"))
+        #expect(notes.contains("MP-0 G still governs unmeasured entries"))
         #expect(notes.contains("SPEC-Q"), "forcing a language in flows is a spec question, not a manifest edit (T4)")
     }
 
