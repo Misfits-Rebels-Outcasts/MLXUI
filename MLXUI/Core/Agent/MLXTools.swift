@@ -117,6 +117,7 @@ nonisolated struct InstalledModelIndex: Sendable {
         case "segmentation":  return .segmentation
         case "rerank":        return .rerank
         case "diarization":   return .diarization
+        case "enhance":       return .enhance
         default:              return .unsupported  // video / unknown
         }
     }
