@@ -40,12 +40,12 @@ enum DeepFilterNetEngine {
     /// 1 minute 0.620 GB, 10 minutes 0.861 GB, 60 minutes 2.349 GB (MLX's own peak stays flat at 0.253 GiB; the growth is the host
     /// arrays, the decode phase alone is 1.76 GB at 60 minutes), 188 s wall for 60 minutes. Chunking costs nothing in quality: against the whole-file run the SNR gain differs by at most
     /// 0.07 dB at every setting tried (4/0.5, 4/1, 8/0.5, 8/1, 8/2, 16/1 s) and the seam difference is at most 0.002 RMS.
-    /// 8 s / 1 s is the lead's ruling (implementer-level; the owner ruled the method, 2026-10-25).
+    /// Owner ruling (Boo, 2026-10-25): "Confirm chunking by default: 8 s windows, 1 s overlap. Confirm the 3600 s refusal limit (measured)."
     nonisolated static let defaultChunkSeconds: Double? = 8
     /// Overlap between windows when chunking, in seconds (see ``defaultChunkSeconds``).
     nonisolated static let defaultOverlapSeconds: Double = 1
     /// Longest recording accepted, in seconds: 3,600 (60 minutes), the longest clip measured (chunked 8 s / 1 s, 2.349 GB). The
-    /// owner's rule (2026-10-25) is that a longer one is refused rather than run unmeasured. Lead's ruling, implementer-level.
+    /// owner's rule (2026-10-25) is that a longer one is refused rather than run unmeasured; confirmed (see ``defaultChunkSeconds``).
     nonisolated static let maxDurationSeconds: Double? = 3_600
     /// Slack on the limit, in seconds: resampling a 3,600.000 s file can return a few samples more than 3,600 x 48,000, and that
     /// must not turn the longest measured clip into a refusal. Half a second over is refused. Implementer's call, pending owner confirmation.
@@ -142,9 +142,7 @@ enum DeepFilterNetEngine {
                                  chunkSamples: chunkSeconds.map { Int($0 * Double(sampleRate)) },
                                  overlapSamples: Int(overlapSeconds * Double(sampleRate)))
             // One synchronous pass, no `await` between building an array and reading it (rule 17b).
-            let cleaned = try run(samples, model: model, plan: plan, progress: progress)
-            Memory.clearCache()
-            return cleaned
+            return try run(samples, model: model, plan: plan, progress: progress)
         } catch let error as StageError {
             throw error
         } catch let error as LimitError {
@@ -158,26 +156,43 @@ enum DeepFilterNetEngine {
         }
     }
 
-    nonisolated private static func run(_ samples: [Float], model: DeepFilterNetModel,
-                                        plan: (windows: [Range<Int>], overlap: Int),
-                                        progress: @Sendable (Double) -> Void) throws -> [Float] {
+    /// The per-window loop, with the window processor injectable so cancellation and the crossfade are testable without weights.
+    /// `process` gets one window's samples and returns the cleaned samples (the real one runs the model). The task is checked for
+    /// cancellation **before every window**, so Cancel stops between windows: no further window runs, the partial output (`out`,
+    /// local) is dropped by the throw, and `release` runs (a `defer`, so on cancel and on error too) to return MLX's buffer cache.
+    /// Crossfade: linear weights (``accumulate(into:window:values:overlap:isFirst:isLast:)``). The two windows around a seam are
+    /// the same audio, differently cold-started, so they are strongly correlated and a linear fade keeps the level and, unlike
+    /// equal-power (which sums correlated signals up to 3 dB too loud), makes a pass-through reproduce the input exactly.
+    nonisolated static func runWindows(_ samples: [Float], plan: (windows: [Range<Int>], overlap: Int),
+                                       process: ([Float]) throws -> [Float],
+                                       release: () -> Void = { Memory.clearCache() },
+                                       progress: @Sendable (Double) -> Void) throws -> [Float] {
+        defer { release() }
         var out = [Float](repeating: 0, count: samples.count)
         for (index, window) in plan.windows.enumerated() {
             try Task.checkCancellation()
-            // A whole-clip window reads `samples` directly: `Array(samples[window])` would be a second full copy of a long clip.
-            let input = MLXArray(window.count == samples.count ? samples : Array(samples[window]))
-            try MLXErrorGuard.evaluate(input)
-            let enhanced = try model.enhance(input)
-            var values = try MLXErrorGuard.read(enhanced, as: Float.self)
+            // A whole-clip window hands `samples` over directly: `Array(samples[window])` would be a second full copy of a long clip.
+            var values = try process(window.count == samples.count ? samples : Array(samples[window]))
             // The library returns the input length; pad or trim defensively so a stray sample can't shift the timeline.
             if values.count < window.count { values += [Float](repeating: 0, count: window.count - values.count) }
             accumulate(into: &out, window: window, values: values, overlap: plan.overlap,
                        isFirst: index == 0, isLast: index == plan.windows.count - 1)
             // Return MLX's freed buffers after every window, or they pile up between windows (MP4-3d lesson).
-            Memory.clearCache()
+            release()
             progress(Double(index + 1) / Double(plan.windows.count))
         }
         return out
+    }
+
+    nonisolated private static func run(_ samples: [Float], model: DeepFilterNetModel,
+                                        plan: (windows: [Range<Int>], overlap: Int),
+                                        progress: @Sendable (Double) -> Void) throws -> [Float] {
+        try runWindows(samples, plan: plan, process: { input in
+            let array = MLXArray(input)
+            try MLXErrorGuard.evaluate(array)
+            let enhanced = try model.enhance(array)
+            return try MLXErrorGuard.read(enhanced, as: Float.self)
+        }, progress: progress)
     }
 
     /// The model, loaded from a folder that must hold `v3/config.json` and weights. Checked here so a missing file is a

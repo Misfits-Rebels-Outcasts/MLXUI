@@ -213,6 +213,98 @@ struct DeepFilterNetModuleTests {
         #expect(DeepFilterNetInput.durationSeconds(of: url) == nil)
     }
 
+    // MARK: Seams and Cancel (no weights: the window processor is injectable)
+
+    /// Windows processed with different gains (1.0 then 0.5, as if cold starts disagreed): with the 1 s crossfade no sample-to-sample
+    /// jump around a seam exceeds the signal's own; with no overlap (a hard cut, the negative control) it does.
+    @Test func crossfadeKeepsTheJumpAtASeamUnderTheSignalsOwn() throws {
+        let rate = 8_000
+        let samples = sine(count: 20_000, rate: rate, hz: 200, amplitude: 0.5)
+        func run(overlap: Int) throws -> (out: [Float], plan: (windows: [Range<Int>], overlap: Int)) {
+            let plan = DeepFilterNetEngine.chunkPlan(sampleCount: samples.count, chunkSamples: 4_010, overlapSamples: overlap)
+            var call = 0
+            let out = try DeepFilterNetEngine.runWindows(samples, plan: plan, process: { input in
+                defer { call += 1 }
+                return input.map { $0 * (call == 0 ? 1.0 : 0.5) }
+            }, release: {}, progress: { _ in })
+            return (out, plan)
+        }
+        func seamAndElsewhere(_ r: (out: [Float], plan: (windows: [Range<Int>], overlap: Int))) -> (seam: Float, elsewhere: Float) {
+            let near = 40   // 5 ms at 8 kHz
+            var seam: Float = 0, elsewhere: Float = 0
+            let seams = zip(r.plan.windows, r.plan.windows.dropFirst()).map { ($0.1.lowerBound - near)..<($0.0.upperBound + near) }
+            for i in 1..<r.out.count {
+                let jump = abs(r.out[i] - r.out[i - 1])
+                if seams.contains(where: { $0.contains(i) }) { seam = max(seam, jump) } else { elsewhere = max(elsewhere, jump) }
+            }
+            return (seam, elsewhere)
+        }
+        let faded = seamAndElsewhere(try run(overlap: 1_000))
+        #expect(faded.seam <= faded.elsewhere * 1.05, "seam \(faded.seam) vs elsewhere \(faded.elsewhere)")
+        let cut = seamAndElsewhere(try run(overlap: 0))
+        #expect(cut.seam > cut.elsewhere * 1.5, "the control must show a click: seam \(cut.seam) vs elsewhere \(cut.elsewhere)")
+    }
+
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var n = 0
+        func bump() -> Int { lock.lock(); defer { lock.unlock() }; n += 1; return n }
+        var value: Int { lock.lock(); defer { lock.unlock() }; return n }
+    }
+
+    /// Cancel stops between windows: no further window runs after the cancel, the partial output is not returned, and the release
+    /// hook (MLX's cache) runs on that path too.
+    @Test func cancelStopsBetweenWindowsAndReleases() async {
+        let windows = Counter(), releases = Counter()
+        let samples = sine(count: 100_000, rate: 8_000)
+        let plan = DeepFilterNetEngine.chunkPlan(sampleCount: samples.count, chunkSamples: 10_000, overlapSamples: 1_000)
+        #expect(plan.windows.count > 6)
+        let task = Task {
+            try DeepFilterNetEngine.runWindows(samples, plan: plan, process: { input in
+                if windows.bump() == 3 { withUnsafeCurrentTask { $0?.cancel() } }   // the person presses Cancel during window 3
+                return input
+            }, release: { _ = releases.bump() }, progress: { _ in })
+        }
+        do {
+            _ = try await task.value
+            Issue.record("a cancelled run must not return audio")
+        } catch is CancellationError {
+            // expected
+        } catch {
+            Issue.record("\(error)")
+        }
+        #expect(windows.value == 3, "no window runs after the cancel")
+        #expect(releases.value >= 3, "released after each finished window and once more on the way out")
+    }
+
+    @Test func aFinishedRunReleasesOnceMoreAndReportsEveryWindow() throws {
+        let releases = Counter()
+        let samples = sine(count: 30_000, rate: 8_000)
+        let plan = DeepFilterNetEngine.chunkPlan(sampleCount: samples.count, chunkSamples: 10_000, overlapSamples: 1_000)
+        let log = ProgressLog()
+        let out = try DeepFilterNetEngine.runWindows(samples, plan: plan, process: { $0 }, release: { _ = releases.bump() }, progress: { log.add($0) })
+        #expect(out.count == samples.count && log.values.count == plan.windows.count && log.values.last == 1.0)
+        #expect(releases.value == plan.windows.count + 1)
+    }
+
+    /// The Run UI's Cancel: the run ends without an error, and the decoded audio and any partial result are dropped.
+    @Test func theRunViewModelCancelDropsTheBuffersAndShowsNoError() async throws {
+        let url = tempURL("cancel.wav")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try AudioWriter.writeWAV(AudioBuffer(samples: sine(count: 48_000, rate: 48_000), sampleRate: 48_000), to: url)
+        let stage = DeepFilterNetStage(id: "t", name: "t") { _, _ in
+            while true { try await Task.sleep(for: .milliseconds(20)) }   // a long run; throws CancellationError when cancelled
+        }
+        let model = DeepFilterNetRunModel()
+        model.start(audioURL: url, stage: stage)
+        for _ in 0..<200 where model.original == nil { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(model.original != nil && model.isRunning, "decoded and cleaning")
+        model.cancel()
+        for _ in 0..<200 where model.isRunning { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(!model.isRunning && model.original == nil && !model.hasResult && model.errorText == nil)
+        #expect(model.progress == 0)
+    }
+
     // MARK: load profile (MP5-3d)
 
     @Test func loadProfileRowBooksTheMeasuredPeakAsAWorkingSet() throws {
@@ -355,6 +447,14 @@ struct AudioMetricsTests {
         let late = [Float](repeating: 0, count: 37) + reference
         #expect(AudioMetrics.bestLag(estimate: late, reference: reference, maxLag: 100, window: 4_000) == 37)
         #expect(AudioMetrics.bestLag(estimate: reference, reference: reference, maxLag: 100, window: 4_000) == 0)
+    }
+
+    @Test func maxJumpFindsTheLargestStepInARange() {
+        let s: [Float] = [0, 0.1, 0.1, 0.9, 0.9, 0.8]
+        #expect(abs(AudioMetrics.maxJump(s, in: 0..<6) - 0.8) < 1e-6)
+        #expect(abs(AudioMetrics.maxJump(s, in: 4..<6) - 0.1) < 1e-6)
+        #expect(AudioMetrics.maxJump(s, in: 3..<4) == 0)
+        #expect(abs(AudioMetrics.maxJump(s, in: -5..<100) - 0.8) < 1e-6)
     }
 
     @Test func noiseIsDeterministicPerSeedAndDiffersAcrossSeeds() {

@@ -105,7 +105,7 @@ struct DeepFilterNetRunView: View {
     private var runningRow: some View {
         HStack(spacing: 8) {
             ProgressView(value: model.progress).frame(maxWidth: 220)
-            Text("Cleaning…").font(.callout).foregroundStyle(.secondary)
+            Text("Cleaning… \(Int((model.progress * 100).rounded()))%").font(.callout).foregroundStyle(.secondary).monospacedDigit()
             Spacer()
             Button("Cancel") { model.cancel() }
         }
@@ -225,7 +225,11 @@ final class DeepFilterNetRunModel: NSObject, AVAudioPlayerDelegate {
                 self.durationLabel = String(format: "%.1f s", Double(audio.samples.count) / Double(audio.sampleRate))
                 self.progress = 1
             } catch is CancellationError {
-                // The user cancelled, or declined the served-load question: not a failure.
+                // The user cancelled (the engine stops between windows and drops its partial output), or declined the served-load
+                // question: not a failure. Drop the decoded audio too, so Cancel gives the memory back (60 minutes is 691 MB).
+                self.original = nil
+                self.cleaned = nil
+                self.progress = 0
             } catch {
                 self.errorText = MLXErrorGuard.sentence(for: error)
                 self.original = nil

@@ -48,19 +48,21 @@ enum DeepFilterNetRealLoad {
     // First real run, 2026-10-25 (lead, MLXUI scheme, journal 2026-597/598), parity clip mixed at 5 dB, chunked 8 s / 1 s unless noted:
     // noisy: snrOut 18.13 dB, improvement 13.13 dB, rmsRatio 0.958; 44.1 kHz input 12.96 dB / 0.956; 16 kHz input 10.38 dB / 0.949;
     // clean input: snrOutVsInput 32.51 dB, rmsRatio 0.981; chunk sweep: gain within 0.07 dB of the whole file at every setting.
-    // Each constant below sits well under its measurement. PROPOSED, awaiting owner confirmation.
+    // Each constant below sits well under its measurement. CONFIRMED by the owner (Boo, 2026-10-25): "Confirm the test thresholds as
+    // proposed: SNR gain >= 8 dB (>= 6 dB for 16 kHz input), output/clean RMS 0.85-1.10, clean-input SNR >= 25 dB with RMS 0.90-1.05."
+    // The chunked-vs-whole slack (1 dB) was proposed with them and is the implementer's call, pending owner confirmation.
 
-    /// PROPOSED from the first run (measured 13.13 dB), awaiting owner confirmation. Minimum SNR gain (dB) on the parity clip.
+    /// Owner-confirmed 2026-10-25 (measured 13.13 dB). Minimum SNR gain (dB) on the parity clip.
     nonisolated static let snrImprovementThresholdDB = 8.0
-    /// PROPOSED from the first run (measured 10.38 dB), awaiting owner confirmation. Minimum SNR gain for the 16 kHz input.
+    /// Owner-confirmed 2026-10-25 (measured 10.38 dB). Minimum SNR gain for the 16 kHz input.
     nonisolated static let snrImprovementThreshold16kDB = 6.0
-    /// PROPOSED from the first run (measured 0.949 to 0.958), awaiting owner confirmation. RMS of the cleaned clip over the clean reference's.
+    /// Owner-confirmed 2026-10-25 (measured 0.949 to 0.958). RMS of the cleaned clip over the clean reference's.
     nonisolated static let rmsRatioRange = 0.85...1.10
-    /// PROPOSED from the first run (measured 32.51 dB), awaiting owner confirmation. Clean speech: SNR of output against input (dB).
+    /// Owner-confirmed 2026-10-25 (measured 32.51 dB). Clean speech: SNR of output against input (dB).
     nonisolated static let cleanInputMinSNRDB = 25.0
-    /// PROPOSED from the first run (measured 0.981), awaiting owner confirmation. Clean speech: RMS of output over input.
+    /// Owner-confirmed 2026-10-25 (measured 0.981). Clean speech: RMS of output over input.
     nonisolated static let cleanInputRMSRatioRange = 0.90...1.05
-    /// PROPOSED from the first run (measured at most 0.07 dB), awaiting owner confirmation. How far below the whole-file gain a chunked run may fall (dB).
+    /// Implementer's call, pending owner confirmation (measured at most 0.07 dB). How far below the whole-file gain a chunked run may fall (dB).
     nonisolated static let chunkedImprovementSlackDB = 1.0
     /// The SNR the parity clip is mixed at (dB). Implementer's call, pending owner confirmation.
     nonisolated static let mixSNRDB = 5.0
@@ -317,6 +319,41 @@ struct DeepFilterNetMainActorProbeTests {
                     #expect(gain >= wholeGain - DeepFilterNetRealLoad.chunkedImprovementSlackDB)
                 }
             }
+            #expect(MLXErrorGuard.lastFallbackMessage() == nil)
+        }
+    }
+}
+
+extension DeepFilterNetMainActorProbeTests {
+    /// Owner-requested (2026-10-25): no click at the seams. On the parity clip at the app's default (8 s windows, 1 s overlap), the
+    /// largest sample-to-sample jump inside each overlap region (and so within 5 ms of every fade-in start, centre and fade-out end)
+    /// is compared with the largest jump everywhere else. One `DFNSEAM` line: `seamMaxJump` (all seams), `elsewhereMaxJump`,
+    /// `ratio`, and `perSeam=[...]`. The assertion allows 10 % over the elsewhere maximum (`seamJumpTolerance`, implementer's call,
+    /// pending owner confirmation).
+    @Test(.enabled(if: DeepFilterNetRealLoad.directory != nil))
+    func noClickAtTheChunkSeams() async throws {
+        let copy = try DeepFilterNetRealLoad.workingCopy()
+        defer { copy.remove() }
+        try await DeepFilterNetRealLoad.withClip { clip in
+            MLXErrorGuard.installFallback()
+            MLXErrorGuard.resetFallbackMessage()
+            let cleaned = try await MLXErrorGuard.guardedRun { try await DeepFilterNetEngine.enhance(clip.noisy, modelDirectory: copy.url) }
+            let plan = DeepFilterNetEngine.chunkPlan(sampleCount: clip.noisy.count,
+                                                     chunkSamples: Int((DeepFilterNetEngine.defaultChunkSeconds ?? 8) * 48_000),
+                                                     overlapSamples: Int(DeepFilterNetEngine.defaultOverlapSeconds * 48_000))
+            let near = 240   // 5 ms at 48 kHz
+            let regions = zip(plan.windows, plan.windows.dropFirst()).map { ($0.1.lowerBound - near)..<($0.0.upperBound + near) }
+            let perSeam = regions.map { AudioMetrics.maxJump(cleaned, in: $0) }
+            var elsewhere: Float = 0
+            for i in 1..<cleaned.count where !regions.contains(where: { $0.contains(i) }) {
+                elsewhere = max(elsewhere, abs(cleaned[i] - cleaned[i - 1]))
+            }
+            let seam = perSeam.max() ?? 0
+            print(String(format: "DFNSEAM chunk=%.0fs overlap=%.1fs seams=%d seamMaxJump=%.5f elsewhereMaxJump=%.5f ratio=%.3f perSeam=[%@]",
+                         DeepFilterNetEngine.defaultChunkSeconds ?? 0, DeepFilterNetEngine.defaultOverlapSeconds, regions.count, seam, elsewhere,
+                         elsewhere > 0 ? Double(seam / elsewhere) : 0, perSeam.map { String(format: "%.5f", $0) }.joined(separator: ", ")))
+            #expect(regions.count >= 1)
+            #expect(seam <= elsewhere * 1.10, "a click at a seam: \(seam) vs \(elsewhere)")
             #expect(MLXErrorGuard.lastFallbackMessage() == nil)
         }
     }

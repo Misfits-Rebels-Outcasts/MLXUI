@@ -45,6 +45,16 @@ enum AudioMetrics {
         return best
     }
 
+    /// The largest absolute difference between neighbouring samples with both indices in `range` (clamped to the array); 0 for none.
+    /// A click at a join shows up as a jump bigger than the signal's own.
+    static func maxJump(_ samples: [Float], in range: Range<Int>) -> Float {
+        let lo = max(range.lowerBound, 0), hi = min(range.upperBound, samples.count)
+        guard hi - lo >= 2 else { return 0 }
+        var best: Float = 0
+        for i in (lo + 1)..<hi { best = max(best, abs(samples[i] - samples[i - 1])) }
+        return best
+    }
+
     /// `reference + noise`, with `noise` scaled so the mix has exactly `snrDB` against `reference`.
     static func mix(reference: [Float], noise: [Float], snrDB: Double) -> [Float] {
         let n = min(reference.count, noise.count)
