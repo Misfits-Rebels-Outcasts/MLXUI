@@ -86,8 +86,8 @@ def main():
         "sampleRate": RATE,
         "durationSeconds": len(out) / RATE,
         "note": "Turn times are the trimmed speech span of each say-rendered turn (sample arithmetic from "
-                "make_two_speaker_clip.py). Pauses inside a turn are part of the turn. Voice 0 is Samantha, voice 1 is Daniel; "
-                "Sortformer's own speaker numbering is arrival order, so compare by alternation, not by index.",
+                "make_two_speaker_clip.py). Pauses inside a turn are part of the turn. Voice 0 is Samantha, voice 1 is Daniel. "
+                "The Run UI and the golden renumber speakers by order of first appearance (the model's own slot numbers are not in arrival order: on this clip it uses slots 0 and 2), so here speaker 0 is the first voice, Samantha.",
         "turns": truth,
     }
     with open(os.path.join(here, "two_speakers_truth.json"), "w") as f:

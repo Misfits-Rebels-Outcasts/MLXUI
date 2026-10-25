@@ -1,7 +1,9 @@
 import Foundation
 
-/// One stretch of one speaker talking. `speaker` is Sortformer's own 0-based slot (it numbers speakers in arrival order, up to
-/// 4); the displayed label and the CSV column are 1-based ("Speaker 1"; implementer's call, pending owner confirmation).
+/// One stretch of one speaker talking. `speaker` is a 0-based number; the displayed label and the CSV column are 1-based
+/// ("Speaker 1"; implementer's call, pending owner confirmation). Straight from the model it is one of 4 internal slots, and
+/// **the slots are not numbered in order of appearance** (the real run on the two-speaker clip used slots 0 and 2), so
+/// ``SpeakerSegments/relabeledByFirstAppearance(_:)`` renumbers them 0, 1, 2, 3 before anything is shown or compared.
 nonisolated struct SpeakerSegment: Sendable, Equatable, Hashable {
     let speaker: Int
     let start: Double
@@ -47,7 +49,29 @@ nonisolated enum SpeakerSegments {
         return merged.sorted { ($0.start, $0.end, $0.speaker) < ($1.start, $1.end, $1.speaker) }
     }
 
-    /// The speakers that have at least one segment, in slot order.
+    /// Renumbers speakers 0, 1, 2, ... in order of first appearance (the earliest-starting segment of each speaker decides),
+    /// keeping everything else. `segments` should already be sorted (``normalized(_:duration:mergeGap:)``); the first time a
+    /// speaker number is met in the given order fixes its new number. Lead's call, pending owner confirmation.
+    static func relabeledByFirstAppearance(_ segments: [SpeakerSegment]) -> [SpeakerSegment] {
+        var mapping: [Int: Int] = [:]
+        return segments.map { s in
+            if mapping[s.speaker] == nil { mapping[s.speaker] = mapping.count }
+            return SpeakerSegment(speaker: mapping[s.speaker] ?? s.speaker, start: s.start, end: s.end)
+        }
+    }
+
+    /// Two segments of one speaker closer than this (seconds) are one stretch: the pieces a streaming chunk edge leaves touch
+    /// exactly, give or take float rounding. Far below the model's 80 ms frame, so no real pause is ever joined.
+    static let joinGap = 0.001
+
+    /// What the Run UI shows, the CSV carries and the golden holds: ``normalized(_:duration:mergeGap:)`` (joining pieces that
+    /// touch), then ``relabeledByFirstAppearance(_:)``. Idempotent, except that two different speakers with exactly the same start and end
+    /// (a tie the sort breaks by speaker number) can swap places on a second pass; the app cleans once.
+    static func cleaned(_ segments: [SpeakerSegment], duration: Double? = nil) -> [SpeakerSegment] {
+        relabeledByFirstAppearance(normalized(segments, duration: duration, mergeGap: joinGap))
+    }
+
+    /// The speakers that have at least one segment, in number order.
     static func speakers(in segments: [SpeakerSegment]) -> [Int] {
         Set(segments.map(\.speaker)).sorted()
     }

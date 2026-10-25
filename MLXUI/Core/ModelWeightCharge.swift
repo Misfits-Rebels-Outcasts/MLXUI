@@ -82,11 +82,13 @@ nonisolated enum ModelLoadProfile {
         case .ocr:      return Entry(factor: 1.75, workingSetBytes: 0, measured: true)
         case .asr:      return Entry(factor: 2.05, workingSetBytes: 0, measured: true)
         case .decision: return Entry(factor: 1.20, workingSetBytes: 0, measured: true)
-        // MP4-3a: Sortformer. UNMEASURED -- the conservative default row (files x 1.10, floored at the catalog's ramGB, itself
-        // an estimate). The offline pass also holds activations that grow with clip length (SortformerEngine's long-audio
-        // note), which this row does not model. Implementer's call, pending owner confirmation; measure it with
-        // `SortformerLongClipMeasurement` and replace this row.
-        case .diarization: return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 0, measured: false)
+        // MP4-3b: Sortformer, measured 2026-10-25 with MLX's own peak counter (`SortformerLongClipMeasurement.measureEnginePath`),
+        // at the longest clip each path takes: offline 60 s = 1.000 GiB (1,073,802,220 B), streaming 3,583 s = 0.77 GiB (0.89 GiB
+        // at 1,896 s). Weights are 236,108,132 B, so 1,073,802,220 / 236,108,132 = 4.55, rounded up to 4.6. This is MLX's peak,
+        // not `phys_footprint` like the rows above (it leaves out the process baseline); measuring `phys_footprint` is a follow-up.
+        // The engine caps the one-pass path at 60 s so the figure holds for any length up to the 60-minute limit. Implementer's
+        // call, pending owner confirmation.
+        case .diarization: return Entry(factor: 4.6, workingSetBytes: 0, measured: true)
         case .vision:   return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 2 * gib, measured: true)
         default:        return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 0, measured: false)
         }

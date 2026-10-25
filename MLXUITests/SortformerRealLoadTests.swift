@@ -63,11 +63,17 @@ enum SortformerRealLoad {
         "SORTFORMERMEASURE \(label): active \(s.activeMemory) B (\(gib(s.activeMemory))), cache \(s.cacheMemory) B (\(gib(s.cacheMemory))), peak \(s.peakMemory) B (\(gib(s.peakMemory)))"
     }
 
+    /// The first `MLXUI_TEST_SORTFORMER_TRIM_SECONDS` seconds, when set (to land a measurement on an exact length).
+    nonisolated static func trimmed(_ samples: [Float]) -> [Float] {
+        guard let n = ProcessInfo.processInfo.environment["MLXUI_TEST_SORTFORMER_TRIM_SECONDS"].flatMap(Double.init) else { return samples }
+        return Array(samples.prefix(Int(n * 16_000)))
+    }
+
     /// What the clip should show: at least two distinct speakers, sorted by start, every segment inside the clip.
     nonisolated static func plausible(_ segments: [SpeakerSegment], duration: Double) -> [String] {
         var problems: [String] = []
         if SpeakerSegments.speakers(in: segments).count < 2 { problems.append("fewer than 2 distinct speakers") }
-        if segments != SpeakerSegments.normalized(segments) { problems.append("not sorted/normalized") }
+        if segments != SpeakerSegments.cleaned(segments) { problems.append("not sorted/cleaned") }
         for s in segments where s.start < 0 || s.end > duration + 0.001 || s.end <= s.start {
             problems.append("segment outside the clip or empty: \(s)")
         }
@@ -92,7 +98,7 @@ struct SortformerRealLoadTests {
         let raw = try await SortformerEngine.diarize(samples, modelDirectory: copy.url)
         let seconds = Date().timeIntervalSince(started)
         print(SortformerRealLoad.line("afterDiarize", Memory.snapshot()) + String(format: ", %.1f s for %.1f s of audio", seconds, duration))
-        let segments = SpeakerSegments.normalized(raw, duration: duration)
+        let segments = SpeakerSegments.cleaned(raw, duration: duration)
         print("SORTFORMER raw: \(raw.count) segments; normalized: \(segments.count)")
         print("SORTFORMER segments: \(segments.map { String(format: "(%d, %.3f, %.3f)", $0.speaker, $0.start, $0.end) }.joined(separator: " "))")
         print("SORTFORMER csv-begin\n\(SpeakerSegments.csv(segments))SORTFORMER csv-end")
@@ -121,11 +127,33 @@ struct SortformerMainActorProbeTests {
             let raw = try await MLXErrorGuard.guardedRun {
                 try await SortformerEngine.diarize(samples, modelDirectory: copy.url)
             }
-            let segments = SpeakerSegments.normalized(raw, duration: duration)
+            let segments = SpeakerSegments.cleaned(raw, duration: duration)
             print("SORTFORMERPROBE \(segments.count) segments, speakers \(SpeakerSegments.speakers(in: segments))")
             let problems = SortformerRealLoad.plausible(segments, duration: duration)
             #expect(problems.isEmpty, "\(problems)")
         }
+        #expect(MLXErrorGuard.lastFallbackMessage() == nil)
+    }
+
+    /// MP4-3b: the **engine's streaming branch** (`feed`, the speaker-cache compression gather included) from the main actor
+    /// inside `guardedRun`: the parity clip is sent down the streaming path with `offlineLimit: 1`. Asserts real segments with
+    /// no stream error and no fallback message, and that the speakers match the ground-truth pair.
+    @Test(.enabled(if: SortformerRealLoad.directory != nil))
+    func engineStreamingBranchFromTheMainActorReturnsSegments() async throws {
+        let copy = try SortformerRealLoad.workingCopy()
+        defer { copy.remove() }
+        let samples = try SortformerRealLoad.clipSamples()
+        let duration = Double(samples.count) / 16_000
+        MLXErrorGuard.installFallback()
+        MLXErrorGuard.resetFallbackMessage()
+        let raw = try await MLXErrorGuard.guardedRun {
+            try await SortformerEngine.diarize(samples, modelDirectory: copy.url, offlineLimit: 1)
+        }
+        let segments = SpeakerSegments.cleaned(raw, duration: duration)
+        print("SORTFORMERSTREAMPROBE \(segments.count) segments, speakers \(SpeakerSegments.speakers(in: segments)): "
+              + segments.map { String(format: "(%d, %.3f, %.3f)", $0.speaker, $0.start, $0.end) }.joined(separator: " "))
+        let problems = SortformerRealLoad.plausible(segments, duration: duration)
+        #expect(problems.isEmpty, "\(problems)")
         #expect(MLXErrorGuard.lastFallbackMessage() == nil)
     }
 
@@ -178,7 +206,7 @@ struct SortformerLongClipMeasurement {
         defer { copy.remove() }
         let once = try SortformerRealLoad.clipSamples(Self.clip)
         let repeats = Self.env["MLXUI_TEST_SORTFORMER_REPEAT"].flatMap(Int.init) ?? 1
-        let samples = (1..<max(repeats, 1)).reduce(once) { acc, _ in acc + once }
+        let samples = SortformerRealLoad.trimmed((1..<max(repeats, 1)).reduce(once) { acc, _ in acc + once })
         let seconds = samples.count / 16_000
         let audio = MLXArray(samples)
         eval(audio)
@@ -202,5 +230,103 @@ struct SortformerLongClipMeasurement {
               + String(format: "load %.1f s, generate %.1f s", loadSeconds, generateSeconds)
               + ", \(output.segments.count) segments, \(output.numSpeakers) speakers")
         #expect(!output.segments.isEmpty)
+    }
+
+    /// MP4-3b: the same measurement for the library's **streaming** paths, to decide how to handle long clips. Gated like the
+    /// offline one plus `MLXUI_TEST_SORTFORMER_STREAM_MEASURE=1`. `MLXUI_TEST_SORTFORMER_STREAM_MODE` picks the path:
+    /// `generateStream` (default; one call, the library pre-encodes the whole recording first) or `feed` (this test cuts the
+    /// audio into chunks and carries the state handle between calls). `MLXUI_TEST_SORTFORMER_CHUNK` is the chunk length in
+    /// seconds (default 5). Only segments are read (Swift values); no library array is touched. Prints
+    /// `SORTFORMERSTREAMMEASURE` lines, and for a 1x clip the segments, plus how they differ from the offline pass.
+    @Test(.enabled(if: SortformerRealLoad.directory != nil && env["MLXUI_TEST_SORTFORMER_STREAM_MEASURE"] == "1"))
+    func measureStreaming() async throws {
+        let copy = try SortformerRealLoad.workingCopy()
+        defer { copy.remove() }
+        let once = try SortformerRealLoad.clipSamples(Self.clip)
+        let repeats = Self.env["MLXUI_TEST_SORTFORMER_REPEAT"].flatMap(Int.init) ?? 1
+        let samples = SortformerRealLoad.trimmed((1..<max(repeats, 1)).reduce(once) { acc, _ in acc + once })
+        let seconds = samples.count / 16_000
+        let mode = Self.env["MLXUI_TEST_SORTFORMER_STREAM_MODE"] ?? "generateStream"
+        let chunkSeconds = Self.env["MLXUI_TEST_SORTFORMER_CHUNK"].flatMap(Float.init) ?? 5
+        let audio = MLXArray(samples)
+        eval(audio)
+        Memory.clearCache()
+        Memory.peakMemory = 0
+        let tag = "SORTFORMERSTREAMMEASURE \(mode)"
+        print(SortformerRealLoad.line("start", Memory.snapshot()).replacingOccurrences(of: "SORTFORMERMEASURE", with: tag))
+
+        let t0 = Date()
+        let model = try SortformerModel.fromModelDirectory(copy.url)
+        print(SortformerRealLoad.line("afterLoad", Memory.snapshot()).replacingOccurrences(of: "SORTFORMERMEASURE", with: tag)
+              + String(format: ", %.1f s", Date().timeIntervalSince(t0)))
+        Memory.peakMemory = 0
+
+        var segments: [SpeakerSegment] = []
+        func take(_ output: DiarizationOutput) {
+            segments += output.segments.map { SpeakerSegment(speaker: $0.speaker, start: Double($0.start), end: Double($0.end)) }
+        }
+        let t1 = Date()
+        var chunks = 0
+        if mode == "feed" {
+            let chunkSamples = Int(chunkSeconds * 16_000)
+            var state = model.initStreamingState()
+            var offset = 0
+            while offset < samples.count {
+                let end = min(offset + chunkSamples, samples.count)
+                let chunk = MLXArray(Array(samples[offset..<end]))
+                let (output, next) = try await model.feed(chunk: chunk, state: state, threshold: 0.5)
+                take(output)
+                state = next
+                offset = end
+                chunks += 1
+            }
+        } else {
+            for try await output in model.generateStream(audio: audio, chunkDuration: chunkSeconds, threshold: 0.5) {
+                take(output)
+                chunks += 1
+            }
+        }
+        let elapsed = Date().timeIntervalSince(t1)
+        print(SortformerRealLoad.line("afterStream", Memory.snapshot()).replacingOccurrences(of: "SORTFORMERMEASURE", with: tag)
+              + String(format: ", %.1f s", elapsed))
+        Memory.clearCache()
+        print(SortformerRealLoad.line("afterClearCache", Memory.snapshot()).replacingOccurrences(of: "SORTFORMERMEASURE", with: tag))
+        // Chunk edges split a turn into touching pieces; join pieces that touch (1 ms) and nothing else.
+        let joined = SpeakerSegments.normalized(segments, duration: Double(samples.count) / 16_000, mergeGap: SpeakerSegments.joinGap)
+        print("\(tag) summary: x\(max(repeats, 1)), \(seconds) s of audio, chunk \(chunkSeconds) s, \(chunks) chunks, "
+              + String(format: "%.1f s", elapsed) + ", \(segments.count) raw segments, \(joined.count) joined, slots \(SpeakerSegments.speakers(in: joined))")
+        if repeats <= 1 {
+            print("\(tag) segments: \(joined.map { String(format: "(%d, %.3f, %.3f)", $0.speaker, $0.start, $0.end) }.joined(separator: " "))")
+            let offline = try await SortformerEngine.diarize(samples, modelDirectory: copy.url)
+            let reference = SpeakerSegments.cleaned(offline, duration: Double(samples.count) / 16_000)
+            print("\(tag) offline: \(reference.map { String(format: "(%d, %.3f, %.3f)", $0.speaker, $0.start, $0.end) }.joined(separator: " "))")
+        }
+        #expect(!segments.isEmpty)
+    }
+
+    /// MP4-3b: the **engine's own path** (`SortformerEngine.diarize`, so the offline/streaming choice and the timing fix),
+    /// peak and time for a clip of any length: the figure `ramGB` and the load-profile row come from. Gated like the others plus
+    /// `MLXUI_TEST_SORTFORMER_ENGINE_MEASURE=1`; `..._REPEAT` and `..._TRIM_SECONDS` choose the length. Prints
+    /// `SORTFORMERENGINEMEASURE` lines.
+    @Test(.enabled(if: SortformerRealLoad.directory != nil && env["MLXUI_TEST_SORTFORMER_ENGINE_MEASURE"] == "1"))
+    func measureEnginePath() async throws {
+        let copy = try SortformerRealLoad.workingCopy()
+        defer { copy.remove() }
+        let once = try SortformerRealLoad.clipSamples(Self.clip)
+        let repeats = Self.env["MLXUI_TEST_SORTFORMER_REPEAT"].flatMap(Int.init) ?? 1
+        let samples = SortformerRealLoad.trimmed((1..<max(repeats, 1)).reduce(once) { acc, _ in acc + once })
+        let seconds = Double(samples.count) / 16_000
+        let path = SortformerEngine.path(forSeconds: seconds)
+        Memory.clearCache()
+        Memory.peakMemory = 0
+        let started = Date()
+        let raw = try await SortformerEngine.diarize(samples, modelDirectory: copy.url)
+        let elapsed = Date().timeIntervalSince(started)
+        let snapshot = Memory.snapshot()
+        print(SortformerRealLoad.line("afterEngine", snapshot).replacingOccurrences(of: "SORTFORMERMEASURE", with: "SORTFORMERENGINEMEASURE")
+              + String(format: ", %.1f s for %.1f s of audio, path %@, %d raw segments", elapsed, seconds, "\(path)", raw.count))
+        let cleaned = SpeakerSegments.cleaned(raw, duration: seconds)
+        print("SORTFORMERENGINEMEASURE speakers \(SpeakerSegments.speakers(in: cleaned)), \(cleaned.count) segments")
+        #expect(!raw.isEmpty)
     }
 }

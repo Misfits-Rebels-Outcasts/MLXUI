@@ -98,4 +98,37 @@ struct SortformerSyntheticRunTests {
             _ = try await SortformerEngine.diarize([0.1, 0.2, 0.3], modelDirectory: dir)
         }
     }
+    /// MP4-3b: the engine's **streaming branch** (`feed`, chunk by chunk, state carried between calls) on the tiny model, from the
+    /// main actor inside `guardedRun`. `offlineLimit: 1` sends the 52 s clip down it (11 chunks of 5 s, the last folded). Shape
+    /// and bounds only (random weights): no stream error, no fallback message, sorted cleaned output inside the clip.
+    @Test func theStreamingBranchRunsFromTheMainActorOnATinyRandomModel() async throws {
+        let dir = try writeTinyModel()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let clip = try SortformerRealLoad.clipSamples()
+        let duration = Double(clip.count) / 16_000
+        #expect(SortformerEngine.path(forSeconds: duration, offlineLimit: 1) == .streaming)
+        MLXErrorGuard.installFallback()
+        MLXErrorGuard.resetFallbackMessage()
+        for _ in 0..<2 {
+            let raw = try await MLXErrorGuard.guardedRun {
+                try await SortformerEngine.diarize(clip, modelDirectory: dir, offlineLimit: 1)
+            }
+            let segments = SpeakerSegments.cleaned(raw, duration: duration)
+            for s in segments {
+                #expect(s.speaker >= 0 && s.speaker < 4)
+                #expect(s.start >= 0 && s.end <= duration + 0.001 && s.end > s.start)
+            }
+            #expect(SpeakerSegments.speakers(in: segments) == Array(0..<SpeakerSegments.speakers(in: segments).count), "compact numbering")
+        }
+        #expect(MLXErrorGuard.lastFallbackMessage() == nil)
+    }
+
+    @Test func aRecordingPastTheLimitIsRefusedBeforeAnyModelLoads() async throws {
+        // No model folder at all: the limit check must come first. 3601 s of silence is 230 MB of floats; use a sparse stand-in
+        // by asking the pure check, and the engine with a length just over the limit.
+        let long = [Float](repeating: 0, count: Int(SortformerEngine.maxSeconds) * 16_000 + 16_000)
+        await #expect(throws: SortformerEngine.LimitError.self) {
+            _ = try await SortformerEngine.diarize(long, modelDirectory: URL(fileURLWithPath: "/nonexistent"))
+        }
+    }
 }

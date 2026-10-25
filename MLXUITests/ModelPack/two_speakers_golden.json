@@ -1,8 +1,74 @@
 {
-  "pending": true,
+  "pending": false,
   "clip": "two_speakers.wav",
   "threshold": 0.5,
-  "toleranceSeconds": null,
-  "notes": "PENDING. MP4-3b fills this from the first real run of the installed model (owner-run SortformerRealLoadTests, printed as SORTFORMER segments). toleranceSeconds is the allowed difference for every segment start and end, proposed from that run and confirmed by the owner; segment speaker numbers must match exactly (Sortformer numbers speakers in arrival order, so on this clip speaker 0 is the first voice, Samantha). While pending is true the parity test reports 'golden pending' and does not fail.",
-  "segments": []
+  "toleranceSeconds": 0.16,
+  "notes": "Recorded 2026-10-25 from the real model mlx-community/diar_streaming_sortformer_4spk-v2.1-fp16 (revision e23e6404), offline SortformerEngine.diarize at threshold 0.5 on two_speakers.wav (52.69 s), then SpeakerSegments.cleaned (pieces within 1 ms joined, speakers renumbered by order of first appearance: the model's slot 0 is speaker 0, its slot 2 is speaker 1). Deterministic across 3 runs on this Mac. toleranceSeconds 0.16 (two 80 ms model frames) is the allowed difference for every segment start and end: proposed, pending owner confirmation. Segment count and speaker numbers must match exactly. Speaker 0 is the first voice to speak (Samantha), speaker 1 the second (Daniel); the model's own slot numbers are NOT in arrival order, which is why the output is renumbered.",
+  "segments": [
+    {
+      "speaker": 0,
+      "start": 0.48,
+      "end": 1.76
+    },
+    {
+      "speaker": 0,
+      "start": 1.92,
+      "end": 3.84
+    },
+    {
+      "speaker": 0,
+      "start": 3.92,
+      "end": 6.4
+    },
+    {
+      "speaker": 1,
+      "start": 7.28,
+      "end": 13.76
+    },
+    {
+      "speaker": 0,
+      "start": 14.64,
+      "end": 15.76
+    },
+    {
+      "speaker": 0,
+      "start": 15.84,
+      "end": 19.36
+    },
+    {
+      "speaker": 1,
+      "start": 20.32,
+      "end": 25.84
+    },
+    {
+      "speaker": 0,
+      "start": 26.64,
+      "end": 27.28
+    },
+    {
+      "speaker": 0,
+      "start": 27.36,
+      "end": 32.88
+    },
+    {
+      "speaker": 1,
+      "start": 33.76,
+      "end": 40.16
+    },
+    {
+      "speaker": 0,
+      "start": 41.12,
+      "end": 46.32
+    },
+    {
+      "speaker": 1,
+      "start": 47.28,
+      "end": 49.52
+    },
+    {
+      "speaker": 1,
+      "start": 49.68,
+      "end": 52.32
+    }
+  ]
 }

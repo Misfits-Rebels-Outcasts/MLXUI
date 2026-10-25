@@ -106,8 +106,18 @@ struct SortformerRunView: View {
             }
             Text("A frame counts as a speaker talking when the model's probability is above the threshold. Lower finds quieter or shorter turns and may add noise; higher is stricter.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text(Self.lengthNote).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Text(license ?? "License: see model page").font(.caption).foregroundStyle(.secondary)
         }
+    }
+
+    /// What the length limit means for the person (the engine's two paths and its refusal; measured numbers are in its comment).
+    static var lengthNote: String {
+        let limit = Int(SortformerEngine.maxSeconds / 60)
+        let single = Int(SortformerEngine.offlineMaxSeconds)
+        return "Handles recordings up to \(limit) minutes. Up to \(single) seconds is analysed in one pass; a longer recording is "
+            + "analysed in 5-second steps, which keeps memory use the same for any length but can place turn boundaries a "
+            + "fraction of a second differently. Longer than \(limit) minutes is refused: split it into parts."
     }
 
     private var runningRow: some View {
@@ -278,6 +288,8 @@ final class SortformerRunModel {
                 // Decode off the main actor; a long recording is many megabytes of samples.
                 let buffer = try await Task.detached { try AudioFileReader.read(audioURL) }.value
                 let duration = buffer.sampleRate > 0 ? Double(buffer.samples.count) / Double(buffer.sampleRate) : 0
+                // Refuse an over-long recording before anything is loaded (the stage and the engine check again).
+                try SortformerEngine.requireWithinLimit(seconds: duration)
                 // MLX-ERR-2 (see MLXErrorGuard.guardedRun). The library's `generate` hops to its own detached task, where the
                 // scoped handler does not reach; the process-wide fallback records an error there and guardedRun rethrows it.
                 let output = try await MLXErrorGuard.guardedRun {
