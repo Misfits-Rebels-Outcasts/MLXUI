@@ -44,8 +44,8 @@ struct ParakeetModuleTests {
         let data = try Data(contentsOf: repoRoot.appendingPathComponent("MLXUI/Resources/browser.json"))
         let catalog = try JSONDecoder().decode(BrowserData.self, from: data)
         let asr = try #require(catalog.domains.first { $0.id == "asr" }).allModels
-        // MP3-1: the bundled catalog gained Qwen3-ASR (6 ASR entries). Its module lands in MP3-3, so until then its
-        // claimer set is empty (implementer's call, pending owner confirmation: a bumped count, as each earlier phase did).
+        // MP3-1: the bundled catalog gained Qwen3-ASR (6 ASR entries); MP3-3 registered its module, so it has exactly one
+        // claimer (implementer's call, pending owner confirmation: a bumped count, as each earlier phase did).
         #expect(asr.count == 6, "the four existing ASR entries plus Parakeet and Qwen3-ASR: \(asr.map(\.id))")
 
         let full = ModelRegistry()
@@ -66,12 +66,12 @@ struct ParakeetModuleTests {
             } else if family.contains("voxtral") {
                 expectedClaimers = ["voxtral"]; expectedWinner = "voxtral"
             } else if family.contains("qwen3-asr") {
-                expectedClaimers = []; expectedWinner = ""   // MP3-3 registers the module
+                expectedClaimers = ["qwen3-asr"]; expectedWinner = "qwen3-asr"   // MP3-3 registered the module
             } else {
                 expectedClaimers = ["parakeet"]; expectedWinner = "parakeet"
             }
             #expect(claimers == expectedClaimers, "\(entry.id) is claimed by \(claimers.sorted())")
-            #expect((full.bestModule(for: entry)?.descriptor.id ?? "") == expectedWinner, "\(entry.id)")
+            #expect(full.bestModule(for: entry)?.descriptor.id == expectedWinner, "\(entry.id)")
         }
     }
 

@@ -7,14 +7,14 @@ import Foundation
 /// `.exact` claim tie for `source == .mlx` whisper entries (the registry keeps the
 /// earliest-registered on a tie). WhisperKit remains the fallback for any non-mlx whisper.
 /// `KokoroModule` (`.exact`) outranks `MLXAudioTTSModule` (`.generic`) by score, so order
-/// between them is not load-bearing. `VoxtralModule` and `ParakeetModule` each claim only their own family's ASR.
+/// between them is not load-bearing. `VoxtralModule`, `ParakeetModule` and `Qwen3ASRModule` each claim only their own family's ASR.
 /// `PaddleOCRModule`, `DotsOCRModule`, and `DeepSeekOCRModule` are all listed **before** `OCRModule`:
 /// each scores `.exact` only for its own checkpoint family (paddleocr / dots / deepseek-ocr), so the
 /// tie routes those to their vendored / custom pipelines while all other OCR repos (olmOCR, …) still
 /// resolve to `OCRModule`'s MLXVLM path. Those three predicates are disjoint, so order among them
 /// isn't load-bearing.
 ///
-/// Coverage (browser.json): chat (LLM) · ASR (Whisper, Voxtral, Parakeet) · TTS (Kokoro + generic) ·
+/// Coverage (browser.json): chat (LLM) · ASR (Whisper, Voxtral, Parakeet, Qwen3-ASR) · TTS (Kokoro + generic) ·
 /// Vision (VLM) · OCR (MLXVLM + PaddleOCR-VL + dots.ocr + DeepSeek-OCR) · Embeddings ·
 /// Rerank (Qwen3-Reranker causal yes/no scorer, MoC-4-3) · Decision (Laya 0.4B, a ModernBERT
 /// decision encoder, LY-4) · Image generation (FLUX.1) · Image segmentation (SAM3) ·
@@ -28,6 +28,7 @@ let installedModules: [ModelModule.Type] = [
     WhisperModule.self,
     VoxtralModule.self,
     ParakeetModule.self,
+    Qwen3ASRModule.self,
     KokoroModule.self,
     MLXAudioTTSModule.self,
     MusicGenModule.self,
