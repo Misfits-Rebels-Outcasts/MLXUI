@@ -452,7 +452,7 @@
             }
           ],
           "descriptionSource": "mlx-community/gemma-3-1b-it-qat-4bit",
-          "summary": "The Model mlx-community/gemma-3-1b-it-qat-4bit was"
+          "summary": "The Model mlx-community/gemma-3-1b-it-qat-4bit was converted to MLX format from google/gemma-3-1b-it-qat-q4_0"
         },
         {
           "id": "mlx-community--Ministral-3-3B-Instruct-2512-4bit",
