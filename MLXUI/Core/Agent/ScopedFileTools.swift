@@ -48,6 +48,20 @@ nonisolated enum ScopedFileTools {
         return URL(fileURLWithPath: folder, isDirectory: true)
     }
 
+    /// CW-FIX-2: the model-facing text for a relative path that does not exist, or `nil` when this
+    /// is not that case (absolute path, no working folder, or the path exists). Shared by both
+    /// editions; call it inside the security scope so "exists" is accurate.
+    static func notFoundMessage(_ url: URL, askedPath: String?) -> String? {
+        guard let asked = askedPath, !asked.isEmpty,
+              !(asked as NSString).expandingTildeInPath.hasPrefix("/"),
+              let scope = FileScope.current, let working = scope.workingFolder,
+              !FileManager.default.fileExists(atPath: url.path)
+        else { return nil }
+        return "Error: there is no \"\(asked)\" in the working folder \(FileScope.displayName(for: working))"
+            + " (\(working)). To list the working folder itself, call list_directory with no path."
+            + " This chat can use: \(FileScope.folderList(scope.folders))."
+    }
+
     /// An explicit scope for one tool call. Production passes nothing (`nil`) and the tool reads
     /// the live grant store; a unit test passes temp roots so it never touches `~/Library`.
     ///
@@ -174,6 +188,7 @@ nonisolated struct ScopedReadFileTool: AgentTool {
             to: access.url, grants: access.grants,
             container: selection.container, roots: access.roots
         ) { url in
+            if let missing = ScopedFileTools.notFoundMessage(url, askedPath: path) { return missing }
             let data = try Data(contentsOf: url)
             let clipped = data.prefix(Self.maxBytes)
             guard let text = String(data: clipped, encoding: .utf8) else {
@@ -279,7 +294,8 @@ nonisolated struct ScopedEditFileTool: AgentTool {
             to: access.url, grants: access.grants,
             container: selection.container, roots: access.roots
         ) { url in
-            TextEdit.editFile(
+            if let missing = ScopedFileTools.notFoundMessage(url, askedPath: path) { return missing }
+            return TextEdit.editFile(
                 at: url,
                 old: old,
                 new: new,
@@ -320,6 +336,7 @@ nonisolated struct ScopedListDirectoryTool: AgentTool {
             to: access.url, grants: access.grants,
             container: selection.container, roots: access.roots
         ) { url in
+            if let missing = ScopedFileTools.notFoundMessage(url, askedPath: path) { return missing }
             let names = try FileManager.default.contentsOfDirectory(atPath: url.path).sorted()
             guard !names.isEmpty else { return "(empty directory)" }
             let shown = names.prefix(Self.maxEntries).map { name -> String in
@@ -375,7 +392,8 @@ nonisolated struct ScopedSearchFilesTool: AgentTool {
             to: access.url, grants: access.grants,
             container: selection.container, roots: access.roots
         ) { url in
-            Self.format(matches: Self.search(root: url, query: query), query: query)
+            if let missing = ScopedFileTools.notFoundMessage(url, askedPath: path) { return missing }
+            return Self.format(matches: Self.search(root: url, query: query), query: query)
         }
     }
 

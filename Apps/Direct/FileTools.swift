@@ -88,6 +88,9 @@ nonisolated struct ReadFileTool: AgentTool {
             return message
         case .allowed(let url):
             if let denial = DirectFileScope.denial(for: url) { return denial }
+            if let missing = ScopedFileTools.notFoundMessage(url, askedPath: arguments.string("path")) {
+                return missing
+            }
             do {
                 let data = try Data(contentsOf: url)
                 let clipped = data.prefix(Self.maxBytes)
@@ -193,6 +196,9 @@ nonisolated struct EditFileTool: AgentTool {
             return message
         case .allowed(let url):
             if let denial = DirectFileScope.denial(for: url) { return denial }
+            if let missing = ScopedFileTools.notFoundMessage(url, askedPath: arguments.string("path")) {
+                return missing
+            }
             // `editFile` never throws: every refusal comes back as a model-facing string.
             return TextEdit.editFile(
                 at: url,
@@ -233,6 +239,7 @@ nonisolated struct ListDirectoryTool: AgentTool {
             return message
         case .allowed(let url):
             if let denial = DirectFileScope.denial(for: url) { return denial }
+            if let missing = ScopedFileTools.notFoundMessage(url, askedPath: argument) { return missing }
             return list(url, path: url.path)
         }
     }

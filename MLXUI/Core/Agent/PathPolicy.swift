@@ -78,7 +78,16 @@ nonisolated enum PathPolicy {
     /// `isAllowed` check — the denylist and the escape/symlink guards see the joined result, never
     /// the raw string. With `base == nil` the behaviour is byte-identical to before: a relative
     /// path is rejected outright.
-    static func resolve(_ path: String?, roots: [URL] = defaultRoots, base: URL? = nil) -> Resolution {
+    ///
+    /// `folders` (CW-FIX-2) are the folders attached to the chat, defaulting to the bound
+    /// `FileScope`. They only change **which path is asked for** (see `aliasedFolder`); the result
+    /// still goes through `isAllowed` unchanged.
+    static func resolve(
+        _ path: String?,
+        roots: [URL] = defaultRoots,
+        base: URL? = nil,
+        folders: [String] = FileScope.current?.folders ?? []
+    ) -> Resolution {
         guard let path, !path.isEmpty else {
             return .rejected("Error: 'path' is required.")
         }
@@ -86,6 +95,8 @@ nonisolated enum PathPolicy {
         let url: URL
         if expanded.hasPrefix("/") {
             url = URL(fileURLWithPath: expanded)
+        } else if let alias = aliasedFolder(for: expanded, base: base, folders: folders) {
+            url = alias
         } else if let base {
             // Join before checking. `..` is collapsed by `isAllowed`'s
             // `standardizedFileURL`, so `../outside` cannot escape that way.
@@ -97,5 +108,29 @@ nonisolated enum PathPolicy {
             return .rejected("Error: access to \(url.path) is not permitted.")
         }
         return .allowed(url)
+    }
+
+    /// CW-FIX-2: the user and the model both call an attached folder by its chip name, so a relative
+    /// path whose first component is that name ("workfolder", "workfolder/notes/a.md") means the
+    /// folder, not `<working folder>/workfolder`.
+    ///
+    /// Returns `nil` — meaning "resolve as before" — when the first component names no attached
+    /// folder, names more than one (ambiguous names are not guessed), or `<base>/<path>` really
+    /// exists (a real subfolder wins). The alias set is only `folders`, so this cannot reach
+    /// anything the chat has not attached, and the caller still applies `isAllowed` (so `..` after
+    /// the alias is refused as ever).
+    static func aliasedFolder(for relative: String, base: URL?, folders: [String]) -> URL? {
+        let parts = relative.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        guard let first = parts.first else { return nil }
+        let matches = Set(folders
+            .filter { FileScope.displayName(for: $0) == first }
+            .map { URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL.path })
+        guard matches.count == 1, let folder = matches.first else { return nil }
+        if let base, FileManager.default.fileExists(atPath: base.appendingPathComponent(relative).path) {
+            return nil
+        }
+        let rest = parts.dropFirst().joined(separator: "/")
+        let root = URL(fileURLWithPath: folder, isDirectory: true)
+        return rest.isEmpty ? root : root.appendingPathComponent(rest)
     }
 }

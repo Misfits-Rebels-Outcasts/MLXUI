@@ -52,6 +52,7 @@ struct ChatEnvironmentTests {
         Folders you can use in this chat:
         - workfolder: /Users/me/Desktop/workfolder (working folder)
         Relative paths start in the working folder, e.g. notes/todo.md.
+        To list the working folder itself, call list_directory with no path.
         \(writeLine)
         """)
     }
@@ -66,6 +67,7 @@ struct ChatEnvironmentTests {
         - Invoices 2026: /Users/me/Documents/Invoices 2026
         - Some Long Named Project Folder: /Users/me/Projects/Some Long Named Project Folder
         Relative paths start in the working folder, e.g. notes/todo.md.
+        To list the working folder itself, call list_directory with no path.
         \(writeLine)
         """)
     }

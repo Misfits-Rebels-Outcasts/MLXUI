@@ -87,9 +87,12 @@ nonisolated enum ChatEnvironment {
             let working = folder == scope.workingFolder ? " (working folder)" : ""
             lines.append("- \(FileScope.displayName(for: folder)): \(folder)\(working)")
         }
-        lines.append(scope.workingFolder != nil
-            ? "Relative paths start in the working folder, e.g. notes/todo.md."
-            : "There is no working folder, so use full paths.")
+        if scope.workingFolder != nil {
+            lines.append("Relative paths start in the working folder, e.g. notes/todo.md.")
+            lines.append("To list the working folder itself, call list_directory with no path.")
+        } else {
+            lines.append("There is no working folder, so use full paths.")
+        }
         lines.append(canWrite
             ? "You can read and change files in these folders. The user approves each change."
             : "You can read these folders. Writing is off; if asked to change a file, tell the user"
