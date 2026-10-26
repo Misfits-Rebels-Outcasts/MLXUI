@@ -51,7 +51,8 @@ enum DeepFilterNetEngine {
     /// must not turn the longest measured clip into a refusal. Half a second over is refused. Implementer's call, pending owner confirmation.
     nonisolated static let limitToleranceSeconds: Double = 0.1
 
-    /// Rule 17's one-line switch (see the type comment). `false`: the engine runs wherever it is awaited.
+    /// Rule 17's one-line switch (see the type comment). `false`: ``enhance`` is `@concurrent` (MP5-3g), so it runs on a pool thread
+    /// and never on the caller's actor; the load, the windows and every read stay in its one synchronous region on that thread.
     nonisolated static let usesAudioThread = false
 
     enum EngineError: Error, LocalizedError, Equatable {
@@ -129,7 +130,7 @@ enum DeepFilterNetEngine {
 
     /// Enhance 48 kHz mono `samples` with the installed model in `modelDirectory`. Loads the model per call (as the other
     /// engines). `progress` gets 0...1 after each window.
-    nonisolated static func enhance(_ samples: [Float], modelDirectory: URL,
+    @concurrent nonisolated static func enhance(_ samples: [Float], modelDirectory: URL,
                                     chunkSeconds: Double? = defaultChunkSeconds,
                                     overlapSeconds: Double = defaultOverlapSeconds,
                                     maxDurationSeconds: Double? = maxDurationSeconds,

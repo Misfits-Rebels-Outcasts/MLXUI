@@ -215,7 +215,7 @@ final class DeepFilterNetRunModel: NSObject, AVAudioPlayerDelegate {
                 // MLX-ERR-2 (see MLXErrorGuard.guardedRun): an MLX error becomes a thrown sentence, and a run in which the
                 // process-wide fallback fired is never reported as successful.
                 let output = try await MLXErrorGuard.guardedRun {
-                    try await stage.run(.audio(buffer)) { fraction in
+                    try await Self.runOffMain(stage, .audio(buffer)) { fraction in
                         Task { @MainActor in self.progress = fraction }
                     }
                 }
@@ -224,18 +224,32 @@ final class DeepFilterNetRunModel: NSObject, AVAudioPlayerDelegate {
                 self.source = .cleaned
                 self.durationLabel = String(format: "%.1f s", Double(audio.samples.count) / Double(audio.sampleRate))
                 self.progress = 1
-            } catch is CancellationError {
-                // The user cancelled (the engine stops between windows and drops its partial output), or declined the served-load
-                // question: not a failure. Drop the decoded audio too, so Cancel gives the memory back (60 minutes is 691 MB).
-                self.original = nil
-                self.cleaned = nil
-                self.progress = 0
             } catch {
-                self.errorText = MLXErrorGuard.sentence(for: error)
-                self.original = nil
+                // MP5-3g (owner ruling 2026-10-26): a cancelled run is never an error. The user cancelled (the engine stops between
+                // windows and drops its partial output), or declined the served-load question; and a cancelled memory wait throws
+                // `MemoryBudget.WaitError`, not `CancellationError`, so the task's own flag decides, whatever was thrown. Drop the
+                // decoded audio too, so Cancel gives the memory back (60 minutes is 691 MB).
+                if error is CancellationError || Task.isCancelled {
+                    self.original = nil
+                    self.cleaned = nil
+                    self.progress = 0
+                } else {
+                    self.errorText = MLXErrorGuard.sentence(for: error)
+                    self.original = nil
+                }
             }
             self.isRunning = false
         }
+    }
+
+    /// Runs `stage` off the main actor (MP5-3g). `SWIFT_APPROACHABLE_CONCURRENCY` makes a plain `nonisolated async` call run on
+    /// its caller's actor, and this model's `Task` is main-actor, so without the hop a stage's synchronous window loop ran on the
+    /// main thread: beachball, progress stuck at 0%, Cancel unclickable. `@concurrent` is a child hop, not `Task.detached`, so the
+    /// `MLXErrorGuard` task-local and cancellation carry across, and any stage (a `LeasingStage` waiting for memory included)
+    /// leaves the main actor.
+    @concurrent nonisolated private static func runOffMain(_ stage: any PipelineStage, _ input: Media,
+                                                          progress: @Sendable @escaping (Double) -> Void) async throws -> Media {
+        try await stage.run(input, progress: progress)
     }
 
     // MARK: - Playback

@@ -473,3 +473,138 @@ struct DeepFilterNetHarnessTests {
         #expect(try DeepFilterNetInput.read(partial).samples.count == 7_200)
     }
 }
+
+// MARK: - MP5-3g: the Run UI leaves the main actor (real weights)
+
+/// Wraps the stage the Run UI hands the run model and records, on every progress call, whether the thread making it is the main
+/// thread. `DeepFilterNetStage` calls `progress` synchronously from the window loop, so this is the loop's own thread.
+nonisolated private final class LoopThreadProbe: PipelineStage, @unchecked Sendable {
+    private let inner: any PipelineStage
+    private let lock = NSLock()
+    private var calls = 0, onMain = 0
+    init(_ inner: any PipelineStage) { self.inner = inner }
+    var id: String { inner.id }
+    var name: String { inner.name }
+    var accepts: MediaKind { inner.accepts }
+    var produces: MediaKind { inner.produces }
+    var counts: (calls: Int, onMain: Int) { lock.lock(); defer { lock.unlock() }; return (calls, onMain) }
+
+    func run(_ input: Media, progress: @Sendable @escaping (Double) -> Void) async throws -> Media {
+        try await inner.run(input) { [self] fraction in
+            lock.lock(); calls += 1; if Thread.isMainThread { onMain += 1 }; lock.unlock()
+            progress(fraction)
+        }
+    }
+}
+
+/// MP5-3g (owner ruling 2026-10-26; reviewer notes): the real checkpoint through the real Run UI path (`DeepFilterNetRunModel` ->
+/// `LeasingStage.perRun` -> `DeepFilterNetStage` -> `DeepFilterNetEngine.enhance`), from the main actor. Asserts the window loop is
+/// never on the main thread, the main actor stays responsive (largest gap between 5 ms polls), SNR gain is unchanged, and Cancel
+/// ends a long run quietly. Prints `DFNOFFMAIN` lines with timestamps for decode end, lease granted (the stage's first progress),
+/// first window, and the end, to say which step the 08:32:13 -> 08:32:47 gap of smoke row 125 was. Length: 600 s, or
+/// `MLXUI_TEST_DEEPFILTERNET_OFFMAIN_SECONDS` (3600 for the row-125 size).
+@MainActor
+struct DeepFilterNetOffMainProbeTests {
+    private static let enabled = DeepFilterNetRealLoad.directory != nil
+
+    private struct Timeline {
+        var decodeEnd: Double?, leaseGranted: Double?, firstWindow: Double?, end: Double?
+        var maxMainGapMs = 0.0
+    }
+
+    /// Starts `model` on `url` through the sheet's stage shape and polls it every 5 ms until `stopWhen` or the end.
+    private func drive(_ model: DeepFilterNetRunModel, url: URL, modelDirectory: URL,
+                       stopWhen: (DeepFilterNetRunModel) -> Bool = { _ in false }) async throws -> (Timeline, LoopThreadProbe) {
+        let entry = makeEntry(id: "mlx-community--DeepFilterNet-mlx", family: "DeepFilterNet", modelType: .enhance, source: .mlx, ramGB: 2.35)
+        let handed = LeasingStage(model: entry, config: .default, probe: DeepFilterNetStage(modelDirectory: modelDirectory))
+        let leased = LeasingStage.perRun(handed, config: .default) { _ in DeepFilterNetStage(modelDirectory: modelDirectory) }
+        let probe = LoopThreadProbe(leased)
+        var t = Timeline()
+        let origin = ContinuousClock.now
+        func seconds() -> Double { let d = ContinuousClock.now - origin; return Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18 }
+        model.start(audioURL: url, stage: probe)
+        var last = seconds()
+        while model.isRunning {
+            try await Task.sleep(for: .milliseconds(5))
+            let now = seconds()
+            t.maxMainGapMs = max(t.maxMainGapMs, (now - last) * 1000)
+            last = now
+            if t.decodeEnd == nil, model.original != nil { t.decodeEnd = now }
+            if t.leaseGranted == nil, model.progress >= 0.05 { t.leaseGranted = now }
+            if t.firstWindow == nil, model.progress > 0.1 { t.firstWindow = now }
+            if stopWhen(model) { break }
+        }
+        t.end = seconds()
+        return (t, probe)
+    }
+
+    /// The parity clip through the whole Run UI path: loop off the main thread, SNR gain unchanged, responsive main actor.
+    @Test(.enabled(if: enabled))
+    func theParityClipRunsOffTheMainThreadThroughTheRunModel() async throws {
+        let copy = try DeepFilterNetRealLoad.workingCopy()
+        defer { copy.remove() }
+        try await DeepFilterNetRealLoad.withClip { clip in
+            MLXErrorGuard.installFallback()
+            MLXErrorGuard.resetFallbackMessage()
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("dfn-offmain-parity-\(UUID().uuidString).wav")
+            defer { try? FileManager.default.removeItem(at: url) }
+            try AudioWriter.writeWAV(AudioBuffer(samples: clip.noisy, sampleRate: 48_000), to: url)
+            let model = DeepFilterNetRunModel()
+            let (t, probe) = try await drive(model, url: url, modelDirectory: copy.url)
+            let cleaned = try #require(model.cleaned, "the run produced no result; error: \(model.errorText ?? "none")")
+            // The saved WAV is 16-bit, so the model's own output is what the stage returned; read the run model's buffer.
+            let r = DeepFilterNetRealLoad.report("runmodel", noisy: clip.noisy, cleaned: cleaned.samples, clean: clip.clean)
+            print(String(format: "DFNOFFMAIN parity seconds=%.1f loopProgressCalls=%d onMain=%d maxMainGapMs=%.0f end=%.1f s",
+                         clip.seconds, probe.counts.calls, probe.counts.onMain, t.maxMainGapMs, t.end ?? -1))
+            #expect(probe.counts.calls > 0)
+            #expect(probe.counts.onMain == 0, "the window loop ran on the main thread \(probe.counts.onMain) times")
+            #expect(t.maxMainGapMs < 500, "the main actor was blocked for \(t.maxMainGapMs) ms")
+            #expect(abs(r.improvement - 13.13) < 0.15, "SNR gain \(r.improvement) dB against the 13.13 dB measured on the main actor")
+            #expect(DeepFilterNetRealLoad.rmsRatioRange.contains(r.rmsRatio))
+            #expect(model.errorText == nil)
+            #expect(MLXErrorGuard.lastFallbackMessage() == nil)
+        }
+    }
+
+    /// A long recording (row 125's shape): timestamps for each step, the loop off the main thread, a responsive main actor.
+    @Test(.enabled(if: enabled))
+    func aLongRecordingKeepsTheMainActorResponsive() async throws {
+        let copy = try DeepFilterNetRealLoad.workingCopy()
+        defer { copy.remove() }
+        let length = Double(DeepFilterNetRealLoad.env["MLXUI_TEST_DEEPFILTERNET_OFFMAIN_SECONDS"] ?? "") ?? 600
+        try await DeepFilterNetRealLoad.withClip { clip in
+            let url = try DeepFilterNetFootprintTests.makeWav(tile: clip.noisy, seconds: length)
+            defer { try? FileManager.default.removeItem(at: url) }
+            let model = DeepFilterNetRunModel()
+            let (t, probe) = try await drive(model, url: url, modelDirectory: copy.url)
+            func f(_ v: Double?) -> String { v.map { String(format: "%.2f", $0) } ?? "n/a" }
+            print("DFNOFFMAIN timeline seconds=\(Int(length)) decodeEnd=\(f(t.decodeEnd)) leaseGranted=\(f(t.leaseGranted)) firstWindow=\(f(t.firstWindow)) end=\(f(t.end)) maxMainGapMs=\(Int(t.maxMainGapMs)) loopOnMain=\(probe.counts.onMain)/\(probe.counts.calls)")
+            #expect(model.errorText == nil)
+            #expect(model.hasResult)
+            #expect(probe.counts.onMain == 0)
+            #expect(t.maxMainGapMs < 500, "the main actor was blocked for \(t.maxMainGapMs) ms")
+        }
+    }
+
+    /// Cancel a long real run partway: it stops within 2 s, with no error and no buffers kept.
+    @Test(.enabled(if: enabled))
+    func cancelStopsALongRealRunQuietly() async throws {
+        let copy = try DeepFilterNetRealLoad.workingCopy()
+        defer { copy.remove() }
+        let length = max(Double(DeepFilterNetRealLoad.env["MLXUI_TEST_DEEPFILTERNET_OFFMAIN_SECONDS"] ?? "") ?? 600, 300)
+        try await DeepFilterNetRealLoad.withClip { clip in
+            let url = try DeepFilterNetFootprintTests.makeWav(tile: clip.noisy, seconds: length)
+            defer { try? FileManager.default.removeItem(at: url) }
+            let model = DeepFilterNetRunModel()
+            let (_, probe) = try await drive(model, url: url, modelDirectory: copy.url) { $0.progress > 0.2 }
+            #expect(model.isRunning && model.progress > 0.2, "cleaning, with progress above 20%")
+            let cancelledAt = ContinuousClock.now
+            model.cancel()
+            for _ in 0..<400 where model.isRunning { try await Task.sleep(for: .milliseconds(5)) }
+            let took = ContinuousClock.now - cancelledAt
+            print("DFNOFFMAIN cancel tookMs=\(Int(took / .milliseconds(1))) loopOnMain=\(probe.counts.onMain)/\(probe.counts.calls)")
+            #expect(took < .seconds(2))
+            #expect(!model.isRunning && model.errorText == nil && model.original == nil && !model.hasResult)
+        }
+    }
+}
