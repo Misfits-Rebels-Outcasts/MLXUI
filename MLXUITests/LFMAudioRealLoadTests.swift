@@ -148,4 +148,29 @@ struct LFMAudioMainActorProbeTests {
             if case .text = out {} else { Issue.record("the ASR stage must return text") }
         }
     }
+
+    /// MP6-3c: the same voice turn through the object the Run UI drives -- `LFMVoiceRunModel` on the main actor with the stage
+    /// `LeasingStage.perRun` builds, `MLXErrorGuard.guardedRun` and the `@concurrent` hop -- so the real call shape is on the
+    /// record, not only the engine entry point called from `guardedRun`.
+    @Test(.enabled(if: enabled))
+    func aVoiceTurnThroughTheRunModelFromTheMainActor() async throws {
+        let dir = try LFMAudioRealLoad.modelDirectory()
+        try await LFMAudioRealLoad.withSpeech("Good morning. What is two plus three?") { samples in
+            #expect(onMainThread())
+            let placeholder = LFMAudioStages.asr(modelDirectory: dir)
+            let model = LFMVoiceRunModel(player: FakeReplyPlayer(), makeStage: { conversation, onEvent in
+                LeasingStage.perRun(placeholder, config: .default) { _ in
+                    LFMVoiceTurnStage(modelDirectory: dir, conversation: conversation, onEvent: onEvent)
+                }
+            })
+            model.send(samples)
+            #expect(model.phase == .thinking)
+            for _ in 0..<2400 where model.phase != .idle { try await Task.sleep(for: .milliseconds(50)) }
+            #expect(model.phase == .idle, "the turn never finished")
+            #expect(model.errorText == nil, "\(model.errorText ?? "")")
+            #expect(model.conversation.turns.count == 1)
+            #expect(model.messages.contains { $0.role == .assistant && (!$0.text.isEmpty || !$0.audio.isEmpty) })
+            #expect(onMainThread())
+        }
+    }
 }

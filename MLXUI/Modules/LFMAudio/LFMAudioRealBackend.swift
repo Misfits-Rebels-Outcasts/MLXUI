@@ -96,8 +96,10 @@ nonisolated final class LFMAudioRealBackend: LFMAudioBackend {
 
         var ids: [Int] = []
         var frames: [[Int32]] = []
+        var produced = 0
         for try await (token, modality) in stream {
             try Task.checkCancellation()
+            produced += 1
             switch modality {
             case .text:
                 ids.append(Int(try MLXErrorGuard.item(token.asType(.int32), as: Int32.self)))
@@ -110,7 +112,7 @@ nonisolated final class LFMAudioRealBackend: LFMAudioBackend {
             }
         }
         let words = ids.filter { !Self.controlTokens.contains($0) }
-        return LFMGenerated(text: words.isEmpty ? "" : processor.decodeText(words), audioFrames: frames)
+        return LFMGenerated(text: words.isEmpty ? "" : processor.decodeText(words), audioFrames: frames, tokens: produced)
     }
 
     func decode(frames: [[Int32]]) async throws -> [Float] {

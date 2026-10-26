@@ -46,6 +46,9 @@ nonisolated struct LFMSampling: Sendable, Equatable {
 nonisolated struct LFMGenerated: Sendable, Equatable {
     var text: String
     var audioFrames: [[Int32]]
+    /// Tokens the library produced for this call (text tokens plus audio frames, the end-of-audio frame included), for the
+    /// measurement harness and the "hit the cap" report; 0 from a backend that doesn't count. Not used by the engine's logic.
+    var tokens = 0
 }
 
 /// What the engine needs from the model. The real one wraps `LFM2AudioModel` and `LFM2AudioDetokenizer`
