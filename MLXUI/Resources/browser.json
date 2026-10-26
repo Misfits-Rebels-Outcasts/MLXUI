@@ -3155,10 +3155,10 @@
           "ramGB": 2.6,
           "downloadSizeGB": 1.73,
           "contextWindow": null,
-          "license": "other",
+          "license": "lfm1.0",
           "licenseUrl": null,
-          "description": "# LFM2.5-Audio 1.5B\n\nAn [MLX](https://github.com/ml-explore/mlx) conversion (6-bit) of Liquid AI's LFM2.5-Audio, an audio-in, audio-out model built on the LFM2 1.2B backbone. It takes speech and answers in speech; it can also transcribe speech and read text aloud. English only.\n\nLicense: LFM Open License v1.0 (the model card's `lfm1.0`). Read its terms before relying on the model commercially.\n\nRun isn't available yet in this build: the model installs, but its Run screen ships in a later update.\n\nRAM figure is an estimate (download size × 1.5), not a measurement.",
-          "architecture": null,
+          "description": "# LFM2.5-Audio 1.5B\n\nAn [MLX](https://github.com/ml-explore/mlx) conversion (6-bit) of [LiquidAI/LFM2.5-Audio-1.5B](https://huggingface.co/LiquidAI/LFM2.5-Audio-1.5B), Liquid AI's audio-in, audio-out model built on the LFM2 1.2B base. English only.\n\n## Modes\n\n| Mode | What it does |\n|---|---|\n| **Voice conversation** | Speech in, speech out. You speak, and the model replies with spoken audio and text, which it can interleave in one turn. |\n| **Speech to text** | Transcribes spoken audio to text. |\n| **Text to speech** | Reads text aloud as speech. |\n\n## Key Details\n\n| | |\n|---|---|\n| **Language** | English only |\n| **Architecture** | Conformer audio encoder, LFM backbone (1.5B), Depthformer audio decoder (8 codebooks), ISTFT neural detokenizer |\n| **Weights** | 6-bit (as converted) |\n| **Audio output** | 24 kHz |\n| **Base model** | [LiquidAI/LFM2-1.2B](https://huggingface.co/LiquidAI/LFM2-1.2B) |\n| **License** | LFM Open License v1.0 |\n\n## License\n\nLFM Open License v1.0 (the model card's `lfm1.0`). The conversion follows the license of the original model. Read the license before using the model commercially.\n\nRAM figure is an estimate (download size × 1.5), not a measurement.",
+          "architecture": "Conformer audio encoder + LFM backbone (1.5B) + Depthformer audio decoder + ISTFT neural detokenizer",
           "languages": [
             "en"
           ],
@@ -3185,7 +3185,7 @@
             }
           ],
           "descriptionSource": "mlx-community/LFM2.5-Audio-1.5B-6bit",
-          "summary": "Liquid AI's LFM2.5-Audio, converted to MLX (6-bit). Speech in, speech out; also speech-to-text and text-to-speech. English only."
+          "summary": "Liquid AI's LFM2.5-Audio, converted to MLX (6-bit). Voice conversation (speech in, speech out), speech-to-text and text-to-speech. English only."
         }
       ]
     }

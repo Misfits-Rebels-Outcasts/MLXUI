@@ -124,3 +124,62 @@ struct LFMAudioCatalogTests {
         #expect((Double(bytes) / 1e9 * 100).rounded() / 100 == 1.73)
     }
 }
+
+// MP6-2: the description and metadata (facts from the pinned model card only).
+extension LFMAudioCatalogTests {
+
+    /// Every field `ModelDetailView` and `ComparisonTableView` render, pinned so the only dashes are the sanctioned nulls:
+    /// Speed (no tokens/s for an audio model, MP-0 G), Context and benchmarks (the card states none).
+    @Test func metadataRendersWithNoUnsanctionedDash() throws {
+        let e = try lfm()
+        #expect(e.license == "lfm1.0")
+        #expect(DataNormalizer.normalizeLicense(e.license) == "LFM Open License v1.0")
+        #expect(DataNormalizer.normalizeLicense(e.license) != "Custom")
+        // Detail renders the architecture string through the normalizer; it leaves a descriptive string as written.
+        let arch = try #require(e.architecture)
+        #expect(arch == "Conformer audio encoder + LFM backbone (1.5B) + Depthformer audio decoder + ISTFT neural detokenizer")
+        #expect(DataNormalizer.normalizeArchitecture(arch) == arch)
+        #expect(e.descriptionSource == "mlx-community/LFM2.5-Audio-1.5B-6bit")
+        #expect(e.taskTags == ["speech-to-speech", "audio-to-audio"])
+        // api.json: lastModified 2026-01-15, downloads 34, likes 0.
+        #expect(e.lastUpdated == "2026-01-15")
+        #expect(e.communityLikes == 0)
+        #expect(e.communityDownloads == 34)
+        let day = DateFormatter()
+        day.locale = Locale(identifier: "en_US_POSIX")
+        day.dateFormat = "yyyy-MM-dd"
+        day.isLenient = false
+        #expect(e.lastUpdated.flatMap { day.date(from: $0) } != nil)
+        #expect(e.formattedDownloads() != "—")
+        #expect(e.speedTokensPerSec == nil)
+        #expect(e.contextWindow == nil)
+        #expect(e.benchmarks == nil)
+        #expect(e.languages == ["en"])
+        #expect(!e.paramSize.isEmpty)
+        #expect(e.summary?.isEmpty == false)
+    }
+
+    @Test func descriptionCarriesOnlyWhatTheCardSupports() throws {
+        let e = try lfm()
+        let description = try #require(e.description)
+        #expect(description.hasPrefix("# LFM2.5-Audio 1.5B"))
+        #expect(description.contains("LiquidAI/LFM2.5-Audio-1.5B"))
+        #expect(description.contains("English only"))
+        #expect(description.contains("| **Voice conversation** |"))
+        #expect(description.contains("| **Speech to text** |"))
+        #expect(description.contains("| **Text to speech** |"))
+        #expect(description.contains("| **License** | LFM Open License v1.0 |"))
+        #expect(description.contains("Read the license before using the model commercially."))
+        #expect(description.contains("| **Audio output** | 24 kHz |"))
+        #expect(description.contains("RAM figure is an estimate (download size × 1.5), not a measurement."))
+        // The MP6-1 placeholder is gone, and nothing says the Run screen is missing.
+        #expect(!description.contains("Run isn't available"))
+        // The owner has not read the license's commercial terms; the text must not paraphrase them. The card states no
+        // quality, benchmark, latency or voice-choice claim either.
+        for forbidden in ["revenue", "royalt", "free for", "accuracy", "state-of-the-art", "outperform", "benchmark",
+                          "real-time", "realtime", "low-latency", "voice clon", "multilingual"] {
+            #expect(!description.localizedCaseInsensitiveContains(forbidden), "\(forbidden)")
+        }
+        #expect((e.summary ?? "").contains("English only"))
+    }
+}
