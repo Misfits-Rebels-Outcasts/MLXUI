@@ -103,6 +103,15 @@ struct Qwen3ASRModuleTests {
         #expect(tuned.repetitionContextSize == base.repetitionContextSize)
     }
 
+    /// MP3-FIX-1: a chunk's own length can be passed as `chunkDuration`, so the library does not split it again. Nothing else moves.
+    @Test func aChunkDurationOverrideChangesOnlyTheChunkDuration() {
+        let base = STTGenerateParameters(maxTokens: 8192, temperature: 0.0, topP: 0.95, topK: 0, verbose: false,
+                                         language: nil, chunkDuration: 1200.0, minChunkDuration: 1.0)
+        let tuned = Qwen3ASREngine.generationParameters(from: base, chunkDuration: 124)
+        #expect(tuned.chunkDuration == 124)
+        #expect(tuned.maxTokens == 8192 && tuned.language == nil && tuned.repetitionPenalty == 1.0)
+    }
+
     /// Whatever the base says, the engine does not turn the penalty or a forced language on by itself.
     @Test func engineDoesNotInventALanguageOrAPenalty() {
         let base = STTGenerateParameters()

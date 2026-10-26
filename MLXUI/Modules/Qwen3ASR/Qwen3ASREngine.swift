@@ -36,9 +36,11 @@ import MLXAudioSTT
 enum Qwen3ASREngine {
     nonisolated static let chunkSeconds: Float = 120
 
-    /// The model's own defaults with only `chunkDuration` replaced. `language` stays as the model has it (`nil`, auto)
-    /// and `repetitionPenalty` stays 1.0 (see the type comment).
-    nonisolated static func generationParameters(from base: STTGenerateParameters) -> STTGenerateParameters {
+    /// The model's own defaults with only `chunkDuration` replaced (`chunkSeconds` unless a chunk's own length says
+    /// otherwise, see `generate`). `language` stays as the model has it (`nil`, auto) and `repetitionPenalty` stays 1.0
+    /// (see the type comment).
+    nonisolated static func generationParameters(from base: STTGenerateParameters,
+                                                 chunkDuration: Float = chunkSeconds) -> STTGenerateParameters {
         STTGenerateParameters(
             maxTokens: base.maxTokens,
             temperature: base.temperature,
@@ -46,7 +48,7 @@ enum Qwen3ASREngine {
             topK: base.topK,
             verbose: base.verbose,
             language: base.language,
-            chunkDuration: chunkSeconds,
+            chunkDuration: chunkDuration,
             minChunkDuration: base.minChunkDuration,
             repetitionPenalty: base.repetitionPenalty,
             repetitionContextSize: base.repetitionContextSize,
@@ -73,10 +75,23 @@ enum Qwen3ASREngine {
         let model = try await Qwen3ASRModel.fromModelDirectory(modelDirectory)
         let audio = MLXArray(samples)
         try MLXErrorGuard.evaluate(audio)
-        let output = model.generate(
-            audio: audio,
-            generationParameters: generationParameters(from: model.defaultGenerationParameters))
-        return output.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // MP3-FIX-1 (owner ruling 2026-10-26). The library's `generate` treats `maxTokens` (8192) as ONE budget across
+        // every chunk (`remainingTokens -= result.generationTokens; if remainingTokens <= 0 { break }`) and drops the
+        // later chunks without a word: about 40 minutes of speech, then nothing. So the split is done here, with the
+        // library's own public `splitAudioIntoChunks` at `chunkSeconds` (the same cut points the library used), and each
+        // chunk gets its own `generate` call and so its own full budget. A chunk can run a little past `chunkSeconds`
+        // (the cut searches 5 s either side), so each call's `chunkDuration` is that chunk's length plus a margin and the
+        // library never splits it again. Texts are joined with one space, as the library joins them.
+        let base = model.defaultGenerationParameters
+        var texts: [String] = []
+        for (chunk, _) in splitAudioIntoChunks(audio, sampleRate: 16_000, chunkDuration: chunkSeconds,
+                                               minChunkDuration: base.minChunkDuration) {
+            let length = Float(chunk.dim(0)) / 16_000
+            let parameters = generationParameters(from: base, chunkDuration: max(chunkSeconds, length + 1))
+            texts.append(model.generate(audio: chunk, generationParameters: parameters).text)
+            Memory.clearCache()
+        }
+        return texts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// The installed-model directory for a catalog id, mirroring `InstallManager`'s layout
