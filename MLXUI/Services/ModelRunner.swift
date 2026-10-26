@@ -345,7 +345,13 @@ final class ModelRunner {
             guard FolderGrants.grant(covering: path, in: FolderGrants.load()) != nil else { return }
         }
         #endif
-        if !conversations[index].attachedFolders.contains(path) {
+        recordAttachment(path, at: index)
+    }
+
+    /// The shared tail of both attach routes: add the path unless the same folder is already
+    /// attached under another spelling, default the working folder, persist.
+    private func recordAttachment(_ path: String, at index: Int) {
+        if !FolderGrants.contains(conversations[index].attachedFolders, path) {
             conversations[index].attachedFolders.append(path)
         }
         if conversations[index].workingFolder == nil {
@@ -361,16 +367,7 @@ final class ModelRunner {
     func attachFolder(path: String) {
         guard let index = conversations.firstIndex(where: { $0.id == activeConversationID })
         else { return }
-        if !conversations[index].attachedFolders.contains(path) {
-            conversations[index].attachedFolders.append(path)
-        }
-        if conversations[index].workingFolder == nil {
-            conversations[index].workingFolder = conversations[index].attachedFolders.first
-        }
-        persistConversation(at: index)
-        #if DIRECT_BUILD
-        Self.recordRecentFolder(path)
-        #endif
+        recordAttachment(path, at: index)
     }
 
     /// Detach a folder. Removing the working folder promotes the next attached one, or clears it
@@ -378,8 +375,8 @@ final class ModelRunner {
     func detachFolder(path: String) {
         guard let index = conversations.firstIndex(where: { $0.id == activeConversationID })
         else { return }
-        conversations[index].attachedFolders.removeAll { $0 == path }
-        if conversations[index].workingFolder == path {
+        conversations[index].attachedFolders.removeAll { FolderGrants.samePath($0, path) }
+        if let working = conversations[index].workingFolder, FolderGrants.samePath(working, path) {
             conversations[index].workingFolder = conversations[index].attachedFolders.first
         }
         persistConversation(at: index)
@@ -389,9 +386,9 @@ final class ModelRunner {
     /// ignored.
     func setWorkingFolder(path: String) {
         guard let index = conversations.firstIndex(where: { $0.id == activeConversationID }),
-              conversations[index].attachedFolders.contains(path)
+              let attached = conversations[index].attachedFolders.first(where: { FolderGrants.samePath($0, path) })
         else { return }
-        conversations[index].workingFolder = path
+        conversations[index].workingFolder = attached
         persistConversation(at: index)
     }
 
@@ -415,7 +412,7 @@ final class ModelRunner {
     }
 
     static func recordRecentFolder(_ path: String, in defaults: UserDefaults = .standard) {
-        var recent = recentFolders(from: defaults).filter { $0 != path }
+        var recent = recentFolders(from: defaults).filter { !FolderGrants.samePath($0, path) }
         recent.insert(path, at: 0)
         defaults.set(Array(recent.prefix(8)), forKey: recentFoldersKey)
     }

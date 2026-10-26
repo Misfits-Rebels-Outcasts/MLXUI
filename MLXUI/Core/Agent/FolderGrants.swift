@@ -37,7 +37,37 @@ nonisolated enum FolderGrants {
         guard let data = defaults.data(forKey: defaultsKey),
               let grants = try? JSONDecoder().decode([FolderGrant].self, from: data)
         else { return [] }
-        return grants
+        // CW-FIX-3: one grant per real folder. Older builds compared raw strings, so the same
+        // folder under two spellings was stored twice; keep the last one saved and write the
+        // cleaned list back once.
+        let cleaned = deduplicated(grants)
+        if cleaned.count != grants.count { save(cleaned, to: defaults) }
+        return cleaned
+    }
+
+    /// Collapse grants that name the same folder (by `canonicalPath`), keeping the last one saved
+    /// and the order of the survivors. A path with no canonical form is never merged.
+    static func deduplicated(_ grants: [FolderGrant]) -> [FolderGrant] {
+        var seen = Set<String>()
+        var kept: [FolderGrant] = []
+        for grant in grants.reversed() {
+            if let canonical = canonicalPath(grant.path), !seen.insert(canonical).inserted { continue }
+            kept.append(grant)
+        }
+        return kept.reversed()
+    }
+
+    /// True when two paths are the same folder however they are spelled (trailing slash, symlink,
+    /// firmlink, `/Volumes/...` versus `/Users/...`).
+    static func samePath(_ a: String, _ b: String) -> Bool {
+        if a == b { return true }
+        guard let x = canonicalPath(a), let y = canonicalPath(b) else { return false }
+        return x == y
+    }
+
+    /// `list.contains(path)`, compared by `samePath`.
+    static func contains(_ list: [String], _ path: String) -> Bool {
+        list.contains { samePath($0, path) }
     }
 
     static func save(_ grants: [FolderGrant], to defaults: UserDefaults = .standard) {
@@ -53,13 +83,13 @@ nonisolated enum FolderGrants {
             options: .withSecurityScope,
             includingResourceValuesForKeys: nil,
             relativeTo: nil)
-        var grants = load(from: defaults).filter { $0.path != url.path }
+        var grants = load(from: defaults).filter { !samePath($0.path, url.path) }
         grants.append(FolderGrant(path: url.path, bookmark: bookmark))
         save(grants, to: defaults)
     }
 
     static func removeGrant(path: String, from defaults: UserDefaults = .standard) {
-        save(load(from: defaults).filter { $0.path != path }, to: defaults)
+        save(load(from: defaults).filter { !samePath($0.path, path) }, to: defaults)
     }
 
     /// Paths of all granted folders (for the menu UI).

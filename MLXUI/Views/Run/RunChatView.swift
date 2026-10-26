@@ -709,7 +709,7 @@ struct RunChatView: View {
                 Text("No recently used folders")
             } else {
                 ForEach(candidates, id: \.self) { path in
-                    Toggle(isOn: attachBinding(path)) { Text(Self.folderLabel(path)) }
+                    Toggle(isOn: attachBinding(path)) { Text(Self.folderLabel(path, among: candidates)) }
                 }
             }
             #else
@@ -718,7 +718,7 @@ struct RunChatView: View {
                 Text("No folders granted yet")
             } else {
                 ForEach(candidates, id: \.self) { path in
-                    Toggle(isOn: attachBinding(path)) { Text(Self.folderLabel(path)) }
+                    Toggle(isOn: attachBinding(path)) { Text(Self.folderLabel(path, among: candidates)) }
                 }
             }
             #endif
@@ -779,7 +779,7 @@ struct RunChatView: View {
                 HStack(spacing: 3) {
                     Image(systemName: "plus")
                         .font(.caption2)
-                    Text(Self.folderLabel(path))
+                    Text(Self.folderLabel(path, among: candidates))
                         .font(.caption2)
                         .lineLimit(1)
                 }
@@ -795,7 +795,7 @@ struct RunChatView: View {
             // established place for the full set.
             Menu("More…") {
                 ForEach(candidates, id: \.self) { path in
-                    Button(Self.folderLabel(path)) { runner.attachFolder(path: path) }
+                    Button(Self.folderLabel(path, among: candidates)) { runner.attachFolder(path: path) }
                 }
             }
             .menuStyle(.borderlessButton)
@@ -869,7 +869,7 @@ struct RunChatView: View {
 
     private func attachBinding(_ path: String) -> Binding<Bool> {
         Binding(
-            get: { runner.activeAttachedFolders.contains(path) },
+            get: { FolderGrants.contains(runner.activeAttachedFolders, path) },
             set: { attached in
                 if attached { runner.attachFolder(path: path) }
                 else { runner.detachFolder(path: path) }
@@ -890,7 +890,7 @@ struct RunChatView: View {
                         }
                         Image(systemName: "folder")
                             .font(.caption2)
-                        Text(Self.folderLabel(path))
+                        Text(Self.folderLabel(path, among: runner.activeAttachedFolders))
                             .font(.caption)
                             .lineLimit(1)
                         Button {
@@ -933,24 +933,32 @@ struct RunChatView: View {
 
     /// The "+" list: every granted folder (App Store), attached ones first.
     #if !DIRECT_BUILD
-    static func grantCandidates(attached: [String]) -> [String] {
-        let granted = FolderGrants.grantedPaths()
-        let rest = granted.filter { !attached.contains($0) }
-        return attached.filter { granted.contains($0) } + rest
+    static func grantCandidates(
+        attached: [String], granted: [String] = FolderGrants.grantedPaths()
+    ) -> [String] {
+        let rest = granted.filter { !FolderGrants.contains(attached, $0) }
+        return uniquelySpelled(attached.filter { FolderGrants.contains(granted, $0) } + rest)
     }
     #else
     /// The "+" list in Direct (C9): the recent-folders MRU, attached ones first.
     static func recentFolderCandidates(attached: [String]) -> [String] {
         let recent = ModelRunner.recentFolders()
-        let rest = recent.filter { !attached.contains($0) }
-        return attached + rest
+        let rest = recent.filter { !FolderGrants.contains(attached, $0) }
+        return uniquelySpelled(attached + rest)
     }
     #endif
 
+    /// `paths` with every later spelling of an already-listed folder dropped (CW-FIX-3).
+    static func uniquelySpelled(_ paths: [String]) -> [String] {
+        var kept: [String] = []
+        for path in paths where !FolderGrants.contains(kept, path) { kept.append(path) }
+        return kept
+    }
+
     /// A folder's display name (its last path component).
-    static func folderLabel(_ path: String) -> String {
-        let name = URL(fileURLWithPath: path).lastPathComponent
-        return name.isEmpty ? path : name
+    /// `among` is the list it is shown in: folders sharing a name there get their parent appended.
+    static func folderLabel(_ path: String, among paths: [String] = []) -> String {
+        FolderLabels.label(path, among: paths)
     }
 
     /// SC-5a-b: what the composer gets back after a send — exactly what was sent (text and attachment chips) when the
