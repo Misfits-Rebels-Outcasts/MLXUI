@@ -84,13 +84,20 @@ struct LFMAudioCatalogTests {
         #expect(data.domainIndex["voice"] != nil)
     }
 
-    /// No module registered yet, so the registry claims nothing and Run falls to the "no runner yet" notice.
-    @Test func noModuleClaimsItAndTheGapFlagsIt() throws {
+    /// MP6-3a: the LFM module is the only one that claims it (before MP6-3a none did, and the `ModelSupport` gap flagged it).
+    @Test func exactlyOneModuleClaimsItAndTheMP61GapIsGone() throws {
         let e = try lfm()
         let full = ModelRegistry()
         for module in installedModules { module.register(into: full) }
-        #expect(full.bestModule(for: e) == nil, "MP6-3 owns the LFM module; remove this expectation and the ModelSupport gap there")
-        #expect(ModelSupport.unsupportedReason(for: e)?.contains("no runner in this build yet") == true)
+        #expect(full.bestModule(for: e)?.descriptor.id == "lfmaudio")
+        var claimers: [String] = []
+        for module in installedModules {
+            let one = ModelRegistry()
+            module.register(into: one)
+            if one.bestModule(for: e) != nil { claimers.append(module.descriptor.id) }
+        }
+        #expect(claimers == ["lfmaudio"], "a chat/ASR/TTS module must not be handed a voice model: \(claimers)")
+        #expect(ModelSupport.unsupportedReason(for: e) == nil)
     }
 
     @Test func stageFactoryRefusesTheKindWithAnExplicitCase() throws {
