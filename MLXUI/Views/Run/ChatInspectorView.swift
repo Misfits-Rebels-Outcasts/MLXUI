@@ -568,7 +568,7 @@ struct ChatInspectorView: View {
     /// and the draft. The block is rebuilt here rather than cached, so a detach shows up at once.
     private var environmentAndHistory: String {
         var parts: [String] = []
-        if let block = runner.currentEnvironmentBlock() { parts.append(block) }
+        if let block = runner.currentEnvironmentBlock(for: model) { parts.append(block) }
         parts.append(contentsOf: runner.transcript.items.compactMap { item in
             switch item {
             case .message(let message): return message.text

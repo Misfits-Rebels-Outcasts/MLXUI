@@ -65,17 +65,17 @@ nonisolated enum ChatEnvironment {
         into lines: inout [String]
     ) -> Bool {
         guard !scope.folders.isEmpty else {
-            // No folders: the only thing worth saying is where to look. Direct's shell and file
-            // tools can both reach home, so the hint needs one of them on (F3).
+            // No folders. App Store: say nothing — the no-folder text is the file tool's refusal
+            // (`FileScope.noFolderMessage`), sent only once a model has asked for a file, because as a
+            // system prompt it reads as an order and models obey it instead of answering. Direct's
+            // shell and file tools can both reach home, so its line needs one of them on (F3).
             switch edition {
             case .appStore:
-                guard fileToolsOn else { return false }
-                lines.append(FileScope.noFolderMessage)
-                return true
+                return false
             case .direct:
                 guard fileToolsOn || canWrite || shellOn, let homePath else { return false }
-                lines.append("No folder is attached to this chat. The user's home folder is \(homePath)."
-                    + " Use full paths under it, or paths starting with ~/.")
+                lines.append("The user's home folder is \(homePath)."
+                    + " For files, use full paths under it, or paths starting with ~/.")
                 return true
             }
         }

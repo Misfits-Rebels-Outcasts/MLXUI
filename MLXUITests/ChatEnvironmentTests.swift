@@ -81,11 +81,20 @@ struct ChatEnvironmentTests {
         #expect(block?.contains("Next:") == false)
     }
 
-    @Test func noFoldersWithFileToolsAsksForOne() {
+    /// CW-FIX (owner, 2026-10-26): plain chat with no folder sends no folder text at all. The
+    /// no-folder message is only the file tool's refusal.
+    @Test func noFoldersWithFileToolsSendsNothingOnAppStore() {
         let block = ChatEnvironment.instructions(
             scope: FileScope(folders: []), edition: .appStore,
             fileToolsEnabled: readOnlyTools, writeEnabled: false)
-        #expect(block == FileScope.noFolderMessage)
+        #expect(block == nil)
+    }
+
+    @Test func noFoldersWithWriteToolsSendsNothingOnAppStore() {
+        let block = ChatEnvironment.instructions(
+            scope: FileScope(folders: []), edition: .appStore,
+            fileToolsEnabled: writeTools, writeEnabled: true)
+        #expect(block == nil)
     }
 
     /// Two folders and no working folder: nothing can resolve a relative path, so say so.
@@ -108,8 +117,9 @@ struct ChatEnvironmentTests {
         let block = ChatEnvironment.instructions(
             scope: FileScope(folders: []), edition: .direct,
             fileToolsEnabled: readOnlyTools, writeEnabled: false, homePath: "/Users/me")
-        #expect(block == "No folder is attached to this chat. The user's home folder is /Users/me."
-            + " Use full paths under it, or paths starting with ~/.")
+        #expect(block == "The user's home folder is /Users/me."
+            + " For files, use full paths under it, or paths starting with ~/.")
+        #expect(block?.contains("No folder is attached") == false)
     }
 
     /// F3: Direct used to inject the home line whatever the tool state.

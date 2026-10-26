@@ -481,10 +481,19 @@ final class ModelRunner {
         return { stored in await OCRImageTool.recognizeText(in: stored) }
     }
 
+    /// Where a model's files are: the test seam when set, else `ModelStore`.
+    private func modelDirectory(for model: ModelEntry) -> URL {
+        #if DEBUG
+        modelDirectoryForTesting?(model.id) ?? ModelStore.shared.directory(forModelID: model.id)
+        #else
+        ModelStore.shared.directory(forModelID: model.id)
+        #endif
+    }
+
     /// CW-4: the environment block the next send would carry, rebuilt on demand for the inspector.
     /// Shares `environmentBlock(…)` with `send`, so the meter measures the text the model actually
     /// gets rather than a second guess at it.
-    func currentEnvironmentBlock() -> String? {
+    func currentEnvironmentBlock(for model: ModelEntry) -> String? {
         let conversation = conversations.first { $0.id == activeConversationID }
         #if DIRECT_BUILD
         let edition = FileScope.Edition.direct
@@ -497,7 +506,7 @@ final class ModelRunner {
         #endif
         return environmentBlock(
             conversation: conversation, edition: edition, grants: grants,
-            homePath: homePath, attachmentsNote: nil)
+            homePath: homePath, attachmentsNote: nil, modelDirectory: modelDirectory(for: model))
     }
 
     /// One place builds the C3 block: `send` and the inspector both call this.
@@ -506,8 +515,14 @@ final class ModelRunner {
         edition: FileScope.Edition,
         grants: [FolderGrant],
         homePath: String?,
-        attachmentsNote: String?
+        attachmentsNote: String?,
+        modelDirectory: URL
     ) -> String? {
+        // CW-FIX: a template that can't render tools gets no folder or tool text. `.unknown` stays
+        // conservative (the block is kept). Reads `model_type` the way the Local Server does.
+        let modelType = ModelContainerPool.modelTypeString(
+            configData: ModelContainerPool.configData(directory: modelDirectory)) ?? ""
+        if ToolCallFormatTable.toolSupport(forModelType: modelType) == .templateIgnoresTools { return nil }
         let scope = FileScope.forConversation(
             attached: conversation?.attachedFolders ?? [],
             workingFolder: conversation?.effectiveWorkingFolder,
@@ -693,7 +708,8 @@ final class ModelRunner {
         let attachmentsNote = ChatAttachment.environmentNote(for: readyAttachments)
         let instructions = environmentBlock(
             conversation: conversation, edition: edition, grants: grants,
-            homePath: homePath, attachmentsNote: attachmentsNote)
+            homePath: homePath, attachmentsNote: attachmentsNote,
+            modelDirectory: modelDir)
 
         currentTask = Task { [weak self] in
             guard let self else { return }
