@@ -37,6 +37,8 @@ PRODUCT_MODULE_NAME = MLXUI
 // ── Info.plist generation ──
 GENERATE_INFOPLIST_FILE = YES
 INFOPLIST_KEY_LSApplicationCategoryType = public.app-category.productivity
+// Owner ruling (Boo, 2026-10-27), MP6-3b: the microphone is used only while the user holds to talk (LFM2.5-Audio voice chat).
+INFOPLIST_KEY_NSMicrophoneUsageDescription = AI Browser uses the microphone only while you hold to talk, to send your voice to a model running on this Mac. Audio never leaves your Mac.
 
 // ── Assets ──
 ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor

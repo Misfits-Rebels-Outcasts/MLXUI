@@ -8,6 +8,9 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- LFM2.5-Audio hold-to-talk (MP6-3b). Owner ruling (Boo, 2026-10-27). The prompt is asked on the first hold, never at launch. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
 	<!-- Local Server (RSI/plan-local-server-2026-09.md) — loopback only until S6. Owner approval 2026-09-27. -->
 	<key>com.apple.security.network.server</key>
 	<true/>

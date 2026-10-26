@@ -29,3 +29,41 @@ nonisolated enum LFMAudioStages {
         }
     }
 }
+
+/// One voice turn as a stage, so the Run window's `LeasingStage` can book the model's memory and ask before it pushes another
+/// model out, exactly as for the other modes. `audio -> text`: the output is the reply text; the spoken reply and the text again
+/// go through `onEvent` as they are produced. A turn is not a flow step (it has memory and sound out); nothing but the Run UI builds this.
+nonisolated struct LFMVoiceTurnStage: PipelineStage {
+    let id: String
+    let name = "LFM2.5-Audio (voice chat)"
+    var accepts: MediaKind { .audio }
+    var produces: MediaKind { .text }
+
+    private let modelDirectory: URL
+    private let conversation: LFMConversation
+    private let style: String?
+    private let onEvent: @Sendable (LFMVoiceEvent) -> Void
+    private let factory: (@Sendable (URL) async throws -> any LFMAudioBackend)?
+
+    init(modelDirectory: URL, conversation: LFMConversation, style: String? = nil,
+         factory: (@Sendable (URL) async throws -> any LFMAudioBackend)? = nil,
+         onEvent: @escaping @Sendable (LFMVoiceEvent) -> Void) {
+        self.id = "lfmaudio.voice.\(modelDirectory.lastPathComponent)"
+        self.modelDirectory = modelDirectory
+        self.conversation = conversation
+        self.style = style
+        self.factory = factory
+        self.onEvent = onEvent
+    }
+
+    func run(_ input: Media, progress: @Sendable @escaping (Double) -> Void) async throws -> Media {
+        try require(input, .audio)
+        guard case let .audio(buffer) = input else { throw StageError.kindMismatch(expected: .audio, got: input.kind) }
+        progress(0.1)
+        let mono16k = try AudioResampler.resample(buffer, to: LFMAudioEngine.inputSampleRate)
+        let reply = try await LFMAudioEngine.voiceTurn(userSamples: mono16k.samples, conversation: conversation, style: style,
+                                                       modelDirectory: modelDirectory, factory: factory, onEvent: onEvent)
+        progress(1.0)
+        return .text(reply.text)
+    }
+}
