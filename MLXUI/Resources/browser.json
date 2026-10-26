@@ -47,7 +47,8 @@
         "tts",
         "music",
         "diarization",
-        "enhance"
+        "enhance",
+        "voice"
       ]
     },
     {
@@ -116,6 +117,10 @@
     "enhance": {
       "icon": "waveform.badge.minus",
       "description": "Audio Cleanup"
+    },
+    "voice": {
+      "icon": "waveform.and.mic",
+      "description": "Voice Conversation"
     }
   },
   "domains": [
@@ -3123,6 +3128,64 @@
           ],
           "descriptionSource": "mlx-community/DeepFilterNet-mlx",
           "summary": "DeepFilterNet 3 speech enhancement, converted to MLX (float32). Removes background noise from speech, 48 kHz in and out."
+        }
+      ]
+    },
+    {
+      "id": "voice",
+      "name": "Voice Conversation",
+      "sfSymbol": "waveform.and.mic",
+      "children": null,
+      "models": [
+        {
+          "id": "mlx-community--LFM2.5-Audio-1.5B-6bit",
+          "family": "LFM2.5-Audio",
+          "displayName": "LFM2.5-Audio 1.5B",
+          "paramSize": "1.5B",
+          "paramCountB": 1.5,
+          "modelType": "voice",
+          "source": "mlx",
+          "format": "mlx-6bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/LFM2.5-Audio-1.5B-6bit",
+          "ramGB": 2.6,
+          "downloadSizeGB": 1.73,
+          "contextWindow": null,
+          "license": "other",
+          "licenseUrl": null,
+          "description": "# LFM2.5-Audio 1.5B\n\nAn [MLX](https://github.com/ml-explore/mlx) conversion (6-bit) of Liquid AI's LFM2.5-Audio, an audio-in, audio-out model built on the LFM2 1.2B backbone. It takes speech and answers in speech; it can also transcribe speech and read text aloud. English only.\n\nLicense: LFM Open License v1.0 (the model card's `lfm1.0`). Read its terms before relying on the model commercially.\n\nRun isn't available yet in this build: the model installs, but its Run screen ships in a later update.\n\nRAM figure is an estimate (download size × 1.5), not a measurement.",
+          "architecture": null,
+          "languages": [
+            "en"
+          ],
+          "lastUpdated": "2026-01-15",
+          "taskTags": [
+            "speech-to-speech",
+            "audio-to-audio"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 34,
+          "communityLikes": 0,
+          "variants": [
+            {
+              "quantization": "6-bit",
+              "format": "mlx-6bit",
+              "ramGB": 2.6,
+              "downloadSizeGB": 1.73,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/LFM2.5-Audio-1.5B-6bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/LFM2.5-Audio-1.5B-6bit",
+          "summary": "Liquid AI's LFM2.5-Audio, converted to MLX (6-bit). Speech in, speech out; also speech-to-text and text-to-speech. English only."
         }
       ]
     }

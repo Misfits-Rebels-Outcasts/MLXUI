@@ -5,7 +5,7 @@ nonisolated enum ModelSource: String, Codable {
 }
 
 nonisolated enum ModelType: String, Codable {
-    case llm, asr, tts, embedding, vision, ocr, video, image, music, segmentation, upscale, rerank, decision, diarization, enhance
+    case llm, asr, tts, embedding, vision, ocr, video, image, music, segmentation, upscale, rerank, decision, diarization, enhance, voice
     var sfSymbol: String {
         switch self {
         case .llm: "bubble.left.and.bubble.right"
@@ -23,6 +23,7 @@ nonisolated enum ModelType: String, Codable {
         case .decision: "arrow.triangle.branch"
         case .diarization: "person.2.wave.2"   // MP4-1: who spoke when (implementer's call, owner-confirmed 2026-10-25)
         case .enhance: "waveform.badge.minus"   // MP5-1: noise removal (implementer's call, pending owner confirmation)
+        case .voice: "waveform.and.mic"   // MP6-1: speech in, speech out (implementer's call, pending owner confirmation)
         }
     }
 }

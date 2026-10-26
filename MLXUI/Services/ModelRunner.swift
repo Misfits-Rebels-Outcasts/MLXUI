@@ -891,6 +891,10 @@ final class ModelRunner {
         case .enhance:
             // Unreachable in practice since MP5-3a registered DeepFilterNetModule (same as .diarization above).
             showUnsupported("Audio cleanup", model)
+        case .voice:
+            // MP6-1: no LFMAudio module is registered yet, so AppState.runModel(_:) lands here and the user sees
+            // the "unsupported" alert. Becomes unreachable once MP6-3 registers the module (same as .enhance above).
+            showUnsupported("Voice conversation", model)
         }
     }
 
