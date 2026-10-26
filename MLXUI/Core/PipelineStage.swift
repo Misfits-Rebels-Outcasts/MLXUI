@@ -14,7 +14,7 @@ protocol PipelineStage: Identifiable, Sendable {
     nonisolated var produces: MediaKind { get }
 
     /// Execute the stage. Reports `0...1` progress. Throws `StageError`.
-    func run(
+    nonisolated func run(
         _ input: Media,
         progress: @Sendable @escaping (Double) -> Void
     ) async throws -> Media
