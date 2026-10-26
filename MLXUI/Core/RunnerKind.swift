@@ -5,7 +5,7 @@ import Foundation
 /// corrections live in `ModelEntry.runnerKind` below — the single source of truth.
 /// See `Design/pipeline-stage-sketch.md` §routing.
 nonisolated enum RunnerKind: String, Sendable {
-    case llm, asr, tts, vision, embedding, ocr, image, music, segmentation, video, upscale, rerank, decision, diarization, unsupported
+    case llm, asr, tts, vision, embedding, ocr, image, music, segmentation, video, upscale, rerank, decision, diarization, enhance, unsupported
 }
 
 nonisolated extension ModelEntry {
@@ -33,6 +33,7 @@ nonisolated extension ModelEntry {
         case .rerank:        return .rerank          // [text] + query → [text], reordered; engine lives in Modules/Rerank (MoC-4)
         case .decision:      return .decision        // text + typed question → label + probabilities; engine lives in Modules/Laya
         case .diarization:   return .diarization     // audio → speaker segments (who spoke when); engine lives in Modules/Sortformer (MP4-3)
+        case .enhance:       return .enhance         // audio → cleaned 48 kHz audio; engine lives in Modules/DeepFilterNet (MP5-3)
         }
     }
 }

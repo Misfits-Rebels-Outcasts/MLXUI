@@ -305,3 +305,96 @@ struct Qwen3ASRFlowRealRunTests {
         #expect(Qwen3ASRRealLoad.readsTheMemo(output ?? ""), "\(output ?? "nil")")
     }
 }
+
+/// MP3-FIX-1 (owner ruling 2026-10-26): the library's `generate` spent ONE 8192-token budget across all chunks and silently
+/// dropped the rest, so a 60-minute recording ended near 40 minutes. The engine now gives every chunk its own budget.
+/// Owner/lead-run, gated on the weights. Both tests call the engine the way a flow does: from a task with no actor, inside
+/// `MLXErrorGuard.guardedRun`, and assert the engine body never runs on the main thread. Run scoped at the type.
+nonisolated enum Qwen3ASRLongRun {
+    @concurrent static func transcribe(_ samples: [Float], dir: URL, log: GateThreadLog) async throws -> String {
+        try await Task {
+            try await MLXErrorGuard.guardedRun { () async throws -> String in
+                log.record()
+                return try await Qwen3ASREngine.transcribe(samples, modelDirectory: dir)
+            }
+        }.value
+    }
+
+    /// The passage as the model spells it (the fixture is read in American English; `DeepFilterNetRealLoad.passage` is the
+    /// British source text).
+    nonisolated static let passage = """
+    The harbor was quiet before sunrise. A few fishing boats rocked against their ropes, and the only sound was the slow knock \
+    of wood on wood. Maria walked down the stone steps with a thermos of coffee and a small notebook. She had promised herself \
+    that this year she would write down everything the old fisherman said, every proverb, every warning about the weather, \
+    every story about the storms that never made the newspapers.
+    """
+
+    /// Letters and digits only, lowercased, so punctuation the model adds or moves at a chunk join does not matter.
+    nonisolated static func squash(_ text: String) -> String {
+        String(text.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) })
+    }
+}
+
+struct Qwen3ASRLongTranscriptTests {
+    nonisolated static let longClip = ProcessInfo.processInfo.environment["MLXUI_TEST_QWEN3ASR_LONG_CLIP"]
+
+    /// The 3600 s harbor fixture (`noisy-voice-at-limit-3600s.wav`, the passage looped): at least 150 repeats of the passage,
+    /// and the text ends inside the last repeat, not at a token cap.
+    @Test(.enabled(if: Qwen3ASRRealLoad.directory != nil && longClip != nil))
+    func anHourOfSpeechIsTranscribedToTheEnd() async throws {
+        let copy = try Qwen3ASRRealLoad.workingCopy()
+        defer { copy.remove() }
+        let buffer = try AudioFileReader.read(URL(fileURLWithPath: try #require(Self.longClip)))
+        let samples = try AudioResampler.resample(buffer, to: 16_000).samples
+        MLXErrorGuard.installFallback()
+        MLXErrorGuard.resetFallbackMessage()
+        Memory.clearCache()
+        Memory.peakMemory = 0
+        let log = GateThreadLog()
+        let started = Date()
+        let text = try await Qwen3ASRLongRun.transcribe(samples, dir: copy.url, log: log)
+        let peak = Memory.peakMemory
+        let repeats = text.lowercased().components(separatedBy: "was quiet before sunrise").count - 1
+        let squashed = Qwen3ASRLongRun.squash(text)
+        let passage = Qwen3ASRLongRun.squash(Qwen3ASRLongRun.passage)
+        // The last 60 squashed characters must be a run of the passage, so the text stops inside a repeat.
+        let tail = String(squashed.suffix(60))
+        print("QWEN3ASRLONG seconds=\(samples.count / 16_000) repeats=\(repeats) words=\(text.split(separator: " ").count) "
+              + String(format: "elapsed=%.1f s peak=%.3f GiB", Date().timeIntervalSince(started), Double(peak) / 1_073_741_824)
+              + " engineOnMain=\(log.counts.onMain) tail=\"\(text.suffix(80))\"")
+        #expect(repeats >= 150, "repeats: \(repeats)")
+        #expect((passage + passage).contains(tail), "the text ends at: \(text.suffix(120))")
+        #expect(log.counts.calls == 1 && log.counts.onMain == 0)
+        #expect(MLXErrorGuard.lastFallbackMessage() == nil)
+    }
+
+    /// The bundled sample looped to about 588 s (the MP3 measurement clip, 42 repeats): the engine's text equals what the
+    /// library's own single `generate` call gave at the same 120 s chunking, which fits one budget at this length. Prints the
+    /// MLX peak for the comparison with the MP3 figure (3.80 GiB at 120 s).
+    @Test(.enabled(if: Qwen3ASRRealLoad.directory != nil))
+    func theMeasuredClipIsUnchanged() async throws {
+        let copy = try Qwen3ASRRealLoad.workingCopy()
+        defer { copy.remove() }
+        let once = try Qwen3ASRRealLoad.sampleSamples()
+        let samples = (1..<42).reduce(once) { acc, _ in acc + once }
+        // The engine first, alone in the process, so the peak is comparable with the MP3 figure.
+        Memory.clearCache()
+        let before = Memory.snapshot()
+        Memory.peakMemory = 0
+        let log = GateThreadLog()
+        let text = try await Qwen3ASRLongRun.transcribe(samples, dir: copy.url, log: log)
+        let peak = Memory.peakMemory
+        // The old path: the library's one call, chunked at 120 s.
+        let model = try await Qwen3ASRModel.fromModelDirectory(copy.url)
+        let audio = MLXArray(samples)
+        eval(audio)
+        let legacy = model.generate(audio: audio, generationParameters: Qwen3ASREngine.generationParameters(from: model.defaultGenerationParameters)).text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        Memory.clearCache()
+        print(String(format: "QWEN3ASRLONG measured-clip seconds=%d equal=%@ peak=%.3f GiB (before %.3f GiB)", samples.count / 16_000,
+                     text == legacy ? "yes" : "NO", Double(peak) / 1_073_741_824, Double(before.activeMemory) / 1_073_741_824))
+        if text != legacy { print("QWEN3ASRLONG legacy: \(legacy)\nQWEN3ASRLONG engine: \(text)") }
+        #expect(text == legacy)
+        #expect(log.counts.onMain == 0)
+    }
+}

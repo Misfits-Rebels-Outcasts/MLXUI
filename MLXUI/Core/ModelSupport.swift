@@ -27,6 +27,7 @@ nonisolated enum ModelSupport {
         // CLM 8B (decision encoder) → CLMEngine ported in CL-4b, Run UI in CL-5 (journal/2026-341).
         // Clef Flash (decision) → ClefEngine ported in CF-5b (journal/2026-498); CF-2's gap is gone.
         // Sortformer 4spk v2.1 (diarization) → SortformerEngine in MP4-3a; the MP4-1 "no runner yet" gap is gone.
+        // DeepFilterNet 3 (enhance) → DeepFilterNetEngine in MP5-3a; the MP5-1 "no runner yet" gap is gone.
     ]
 
     /// WW2-3-7 (owner ruling 2026-10-23; the WW6 "show it, don't fail it" rule): the OS a model's runner needs, shown

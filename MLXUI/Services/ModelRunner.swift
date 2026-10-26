@@ -875,6 +875,9 @@ final class ModelRunner {
             // MP4-1: no SortformerSDK is registered yet, so AppState.runModel(_:) lands here and the user sees
             // the "unsupported" alert. Becomes unreachable once MP4-3 registers the module (same as .rerank above).
             showUnsupported("Speaker diarization", model)
+        case .enhance:
+            // Unreachable in practice since MP5-3a registered DeepFilterNetModule (same as .diarization above).
+            showUnsupported("Audio cleanup", model)
         }
     }
 

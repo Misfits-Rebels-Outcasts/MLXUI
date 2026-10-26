@@ -88,6 +88,14 @@ nonisolated enum ModelLoadProfile {
         // = 6.92, rounded up to 6.95. Streaming clips add less (1,104 MiB at 3,583 s). MLX's own peak
         // counter reads 1.000 GiB for the same run and leaves out Metal and driver memory; it is not the booking figure.
         case .diarization: return Entry(factor: 6.95, workingSetBytes: 0, measured: true)
+        // MP5-3d: DeepFilterNet 3, `phys_footprint` peak of the whole Run UI path (decode, resample, 8 s / 1 s windows, model, WAV bytes)
+        // on the longest clip it accepts, 60 minutes: 2.349 GB (lead's run, 2026-10-25, journal 2026-598); 0.62 GB at 1 minute, 0.86 GB at
+        // 10. The growth is host arrays, not weights (the 25.6 MB installed files, v1 to v3), so a factor over the files would be
+        // meaningless (about 92x) and would under-book if the install ever shrank to v3 alone. It is booked as a per-call working
+        // set instead (the VLM row's form): files x 1.10 + 2.35 GB. Over-books by the files' own size, never under.
+        // Implementer's call, pending owner confirmation (the precedent .diarization row uses a factor; its weights are 236 MB).
+        // Provisional with ramGB 2.35 (owner, 2026-10-25): the final figure is the in-app Activity Monitor peak on the 60 min clip.
+        case .enhance:  return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 2_350_000_000, measured: true)
         case .vision:   return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 2 * gib, measured: true)
         default:        return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 0, measured: false)
         }
