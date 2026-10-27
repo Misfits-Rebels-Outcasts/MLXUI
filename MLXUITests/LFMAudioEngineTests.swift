@@ -217,17 +217,19 @@ struct LFMAudioEngineTests {
         #expect(text == "piece1 piece2 piece3")
         let calls = backend.calls
         #expect(calls.count == 3)
-        #expect(calls.allSatisfy { $0.mode == .interleaved })
+        // MP6-3f: the model card's ASR recipe -- sequential generation (journal 2026-614)
+        #expect(calls.allSatisfy { $0.mode == .sequential })
         #expect(calls.allSatisfy { $0.sampling.maxNewTokens == LFMAudioEngine.sttMaxNewTokens }, "the budget is per window, not per session")
         #expect(calls.allSatisfy { $0.sampling.temperature == 0 }, "transcription is greedy")
         #expect(progress.values == [1.0 / 3, 2.0 / 3, 1.0])
-        // each prompt is one user turn: the window's audio, then the instruction
-        guard case let .audio(first) = calls[0].prompt.turns[0].parts[0], case let .audio(last) = calls[2].prompt.turns[0].parts[0] else {
+        // each prompt is the system line "Perform ASR." then one user turn that is the window's audio alone (MP6-3f)
+        guard case let .audio(first) = calls[0].prompt.turns[1].parts[0], case let .audio(last) = calls[2].prompt.turns[1].parts[0] else {
             Issue.record("prompt shape"); return
         }
         #expect(first.count == 30 * 16_000)
         #expect(last.count == 10 * 16_000)
-        #expect(calls[0].prompt.turns[0].parts[1] == .text("Transcribe the audio."))
+        #expect(calls[0].prompt.turns[0].parts == [.text("Perform ASR.")])
+        #expect(calls[0].prompt.turns[1].parts.count == 1, "the user turn is the audio alone")
         #expect(calls[0].prompt.assistantStartsAudio == false)
     }
 
@@ -393,7 +395,7 @@ struct LFMAudioEngineTests {
         let out = try await stage.run(.audio(input)) { _ in }
         guard case let .text(text) = out else { Issue.record("not text"); return }
         #expect(text == "spoken words")
-        guard case let .audio(heard) = backend.calls[0].prompt.turns[0].parts[0] else { Issue.record("no audio"); return }
+        guard case let .audio(heard) = backend.calls[0].prompt.turns[1].parts[0] else { Issue.record("no audio"); return }
         #expect(abs(heard.count - 2 * 16_000) < 64, "two seconds at 16 kHz, not 44.1")
     }
 

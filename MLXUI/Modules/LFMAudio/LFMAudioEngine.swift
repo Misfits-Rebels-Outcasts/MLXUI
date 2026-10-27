@@ -63,7 +63,10 @@ nonisolated enum LFMAudioEngine {
     /// Frames per delivered audio slice in a voice turn (12.5 frames per second, so 2 s). The upstream streaming example decodes
     /// every 10 frames; slice seams are unverified by ear until the MP6-3b smoke.
     static let voiceSliceFrames = 25
-    static let sttInstruction = "Transcribe the audio."
+    /// The model card's ASR recipe (Liquid4All/liquid-audio README, quoted in journal 2026-614): a system turn "Perform ASR.", the
+    /// user turn is the audio alone, and the generation is **sequential**. The earlier prompt (no system turn, "Transcribe the audio."
+    /// after the audio, interleaved) made the model chat ("Sure, here's the transcription:") or stop early on clips under about 15 s.
+    static let sttInstruction = "Perform ASR."
 
     enum EngineError: Error, LocalizedError, Equatable {
         case emptyAudio
@@ -116,7 +119,7 @@ nonisolated enum LFMAudioEngine {
     }
 
     static func sttPrompt(_ window: [Float]) -> LFMPrompt {
-        LFMPrompt(turns: [.user(.audio(window), .text(sttInstruction))])
+        LFMPrompt(turns: [.system(sttInstruction), .user(.audio(window))])
     }
 
     static func ttsPrompt(_ text: String, style: String?) -> LFMPrompt {
@@ -149,7 +152,7 @@ nonisolated enum LFMAudioEngine {
         var pieces: [String] = []
         for (index, window) in plan.enumerated() {
             try Task.checkCancellation()
-            let result = try await backend.generate(sttPrompt(Array(samples[window])), mode: .interleaved, sampling: sampling)
+            let result = try await backend.generate(sttPrompt(Array(samples[window])), mode: .sequential, sampling: sampling)
             try Task.checkCancellation()
             pieces.append(result.text)
             progress(Double(index + 1) / Double(plan.count))
