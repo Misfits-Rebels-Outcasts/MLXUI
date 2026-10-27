@@ -192,4 +192,30 @@ extension LFMAudioCatalogTests {
         }
         #expect((e.summary ?? "").contains("English only"))
     }
+
+    /// MP6-3h (owner ruling, Boo, 2026-10-27): the page tells the user the known limits in plain words, and does not promise
+    /// streaming (replies arrive all at once; the library cannot stream, journal MP6-3g-0).
+    @Test func descriptionStatesTheKnownLimitsInPlainWords() throws {
+        let description = try #require(try lfm().description)
+        #expect(description.contains("## Good to know"))
+        #expect(description.contains("- English only."))
+        #expect(description.contains("Replies take a while to make, and they arrive all at once, not word by word."))
+        #expect(description.contains("- A long reply may be cut short."))
+        #expect(description.contains("it may forget earlier turns"))
+        // The limits sit with the plain facts, before the technical table, and the license and RAM lines are still there.
+        let good = try #require(description.range(of: "## Good to know"))
+        let details = try #require(description.range(of: "## Key Details"))
+        #expect(good.lowerBound < details.lowerBound)
+        #expect(description.contains("Read the license before using the model commercially."))
+        #expect(description.contains("RAM figure is an estimate (download size × 1.5), not a measurement."))
+        // No promise of streaming or speed, and no jargon in the limits section.
+        let limits = String(description[good.lowerBound ..< details.lowerBound])
+        for forbidden in ["stream", "token", "KV", "cache", "prefill", "context window", "instant", "fast", "real-time", "realtime"] {
+            #expect(!limits.localizedCaseInsensitiveContains(forbidden), "\(forbidden)")
+        }
+        // Everything below stays a non-weakened ban on the whole page: no streaming/latency promises anywhere.
+        for forbidden in ["real-time", "realtime", "low-latency"] {
+            #expect(!description.localizedCaseInsensitiveContains(forbidden), "\(forbidden)")
+        }
+    }
 }
