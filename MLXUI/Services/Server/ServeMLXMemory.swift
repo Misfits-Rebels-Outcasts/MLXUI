@@ -33,6 +33,7 @@ nonisolated final class ServeMLXMemory: @unchecked Sendable {
     private let lock = NSLock()
     private var depth = 0
     private var saved = 0
+    private var applied = 0
 
     /// - Parameters: the cache limit's getter and setter (MLX's, or fakes in tests).
     init(read: @escaping @Sendable () -> Int, write: @escaping @Sendable (Int) -> Void) {
@@ -54,16 +55,20 @@ nonisolated final class ServeMLXMemory: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         if depth == 0 {
             saved = read()
-            write(Self.effectiveLimit(current: saved, cap: cap))
+            applied = Self.effectiveLimit(current: saved, cap: cap)
+            write(applied)
         }
         depth += 1
     }
 
-    /// Leaving it: the last one out puts the previous limit back.
+    /// Leaving it: the last one out puts the previous limit back -- **only if the limit is still the one this helper set**.
+    /// Someone else may have set it while a holder was running (`EngineCache.init` sets `Memory.cacheLimit` to its budget the
+    /// first time a flow executor is built, which can happen mid-turn); restoring over that would silently undo it (MP6-3h, owner
+    /// ruling, Boo, 2026-10-27). A limit changed meanwhile is left alone.
     func end() {
         lock.lock(); defer { lock.unlock() }
         guard depth > 0 else { return }
         depth -= 1
-        if depth == 0 { write(saved) }
+        if depth == 0, read() == applied { write(saved) }
     }
 }
