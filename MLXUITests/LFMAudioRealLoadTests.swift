@@ -1,5 +1,6 @@
 import Foundation
 import MLX
+import MLXRandom
 import Testing
 @testable import MLXUI
 
@@ -102,22 +103,43 @@ struct LFMAudioRealLoadTests {
         #expect(LFMAudioRealLoad.rms(samples) > 1e-3, "the output is silent")
     }
 
+    /// MP6-3e: the second turn must actually recall the first. Two choices, both from measurement (journal 2026-613):
+    /// - the probe is a **code word**, not a name: asked "what is my name?" the model answers with its own persona or mixes the two,
+    ///   with or without history, even all-text and even in a single two-sentence audio;
+    /// - the text is sampled **greedily and the random state seeded** here: at the app's production sampling (0.9) the model recalled
+    ///   the word in 7 of 9 trials, so a sampled assertion would flake. (Greedy alone is not deterministic either: the library's audio
+    ///   preprocessor adds random dither, seen as a 2.7 s clip transcribed differently from run to run.) This tests what this code
+    ///   owns -- the history reaches the model and is used; the production recall rate is reported in the journal, not asserted.
+    /// A cold control (same question, no history) must not produce the word, so a pass is the history's doing.
     @Test(.enabled(if: enabled))
-    func aVoiceTurnAnswersInTextAndSpeechAndTheSecondTurnHasMemory() async throws {
+    func aVoiceTurnAnswersInTextAndSpeechAndTheSecondTurnRecallsTheFirst() async throws {
         let dir = try LFMAudioRealLoad.modelDirectory()
-        try await LFMAudioRealLoad.withSpeech("My name is Alex. What is two plus two?") { first in
-            var conversation = LFMConversation()
-            let events = LFMEventBox()
-            let started = Date()
-            let reply = try await LFMAudioEngine.voiceTurn(userSamples: first, conversation: conversation, modelDirectory: dir) { events.add($0) }
-            print(String(format: "LFMVOICE1 %.1f s, %d audio samples, text: %@", Date().timeIntervalSince(started), reply.audioSampleCount, reply.text))
-            #expect(!reply.text.isEmpty || reply.audioSampleCount > 0, "the model said nothing")
-            if case .text? = events.values.first {} else { Issue.record("the first event must be the text") }
-            conversation.record(userSamples: first, assistantText: reply.text)
-            try await LFMAudioRealLoad.withSpeech("What is my name?") { second in
-                let again = try await LFMAudioEngine.voiceTurn(userSamples: second, conversation: conversation, modelDirectory: dir) { _ in }
+        var greedy = LFMAudioEngine.voiceSampling
+        greedy.temperature = 0
+        try await LFMAudioRealLoad.withSpeech("The secret code word is banana. Please just say okay.") { first in
+            try await LFMAudioRealLoad.withSpeech("What was the secret code word?") { second in
+                let events = LFMEventBox()
+                let started = Date()
+                let (reply, again, cold) = try await LFMAudioEngine.withBackend(dir) { backend in
+                    MLXRandom.seed(20261027)
+                    let reply = try await LFMAudioEngine.voiceTurn(userSamples: first, conversation: LFMConversation(), backend: backend,
+                                                                  sampling: greedy) { events.add($0) }
+                    var conversation = LFMConversation()
+                    conversation.record(userSamples: first, assistantText: reply.text)
+                    let again = try await LFMAudioEngine.voiceTurn(userSamples: second, conversation: conversation, backend: backend,
+                                                                  sampling: greedy) { _ in }
+                    let cold = try await LFMAudioEngine.voiceTurn(userSamples: second, conversation: LFMConversation(), backend: backend,
+                                                                 sampling: greedy) { _ in }
+                    return (reply, again, cold)
+                }
+                print(String(format: "LFMVOICE1 %.1f s for three turns, %d audio samples in turn 1, text: %@", Date().timeIntervalSince(started), reply.audioSampleCount, reply.text))
                 print("LFMVOICE2 text: \(again.text)")
-                #expect(again.text.lowercased().contains("alex") || again.audioSampleCount > 0)
+                print("LFMVOICE2-COLD text: \(cold.text)")
+                #expect(!reply.text.isEmpty, "the model said nothing in text")
+                #expect(reply.audioSampleCount > 0, "the model said nothing aloud")
+                if case .text? = events.values.first {} else { Issue.record("the first event must be the text") }
+                #expect(again.text.lowercased().contains("banana"), "turn 2 did not recall turn 1: \(again.text)")
+                #expect(!cold.text.lowercased().contains("banana"), "the word came from nowhere: \(cold.text)")
             }
         }
     }
