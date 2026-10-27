@@ -1160,11 +1160,11 @@ nonisolated struct RealExecutor: FlowExecutor {
         if desc.refName == "engines.tts.speak" {
             let voice = settings.value(for: "voice") ?? settings.firstBare()
             let speed = Float(settings.value(for: "speed") ?? "") ?? 1.0
-            return StageConfig(voice: voice, speed: speed)
+            return StageConfig(voice: voice, speed: speed, flowTask: "Speak")
         }
         if desc.refName == "engines.asr.transcribe" {
             let language = settings.value(for: "lang") ?? "en"
-            return StageConfig(language: language)
+            return StageConfig(language: language, flowTask: "Transcribe")
         }
         if desc.refName.hasPrefix("engines.diffusion.") {
             let number = { (key: String) -> String? in

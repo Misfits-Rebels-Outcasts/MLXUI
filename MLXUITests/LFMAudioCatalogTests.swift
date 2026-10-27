@@ -107,14 +107,17 @@ struct LFMAudioCatalogTests {
         }
     }
 
-    @Test func noWorkflowPoolOffersIt() throws {
+    /// MP6-1 asserted no pool offered it; MP6-W (bridge row + two pools) supersedes that: exactly Transcribe and Speak do,
+    /// and no task names the voice kind itself (`LFMAudioWorkflowWiringTests` pins the four tables).
+    @Test func onlyTranscribeAndSpeakOfferIt() throws {
         let e = try lfm()
         for task in TaskCatalog.allTasks().map(\.name) {
             #expect(TaskModels.runnerKind(forTask: task) != .voice, "\(task) names the voice kind")
             let pool = TaskModels.derivedModels(for: task, catalog: [e], claimableModelIDs: [e.id])
-            #expect(!pool.contains { $0.id == e.id }, "\(task) offers LFM2.5-Audio")
+            let offers = pool.contains { $0.modelEntry?.id == e.id }
+            #expect(offers == (task == "Transcribe" || task == "Speak"), "\(task)")
         }
-        #expect(CatalogBridge.entries.allSatisfy { $0.display != "LFM2.5-Audio 1.5B" }, "the bridge row is MP6-W")
+        #expect(CatalogBridge.entries.filter { $0.display == "LFM2.5-Audio 1.5B" }.count == 1)
     }
 
     /// T7: the root `tokenizer-e351c8d8-checkpoint125.safetensors` (384,644,900 B) is skipped, because the standard weights

@@ -1,0 +1,21 @@
+{
+  "id": "mlx-community/LFM2.5-Audio-1.5B-6bit",
+  "display": "LFM2.5-Audio 1.5B",
+  "kind": "local",
+  "engine": "mlx-audio-swift",
+  "tasks": [
+    "Transcribe",
+    "Speak"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 1.73,
+    "ram_gb": 2.6
+  },
+  "source": "https://huggingface.co/mlx-community/LFM2.5-Audio-1.5B-6bit",
+  "license": "LFM Open License v1.0",
+  "manifest_version": 1,
+  "pinned": true,
+  "notes": "MLXUI-authored (RSI/DelegateModelPackBacklog.md MP6-W) -- catflow-mlx has no manifest for this model, so this was written in the shape of qwen3-asr-1.7b-8bit.json. It has no checksum field, as the other MLXUI-authored manifests have none: there is no catflow source manifest to inherit one from and the field is documentary. settings is empty on purpose: the engine takes no language (English only, per the model card) and returns text only, and the model has no voice list (its text-to-speech takes free text added to the instruction, which a flow row has no setting for), so no lang, timestamps or voice setting is offered; adding one would be a SPEC-Q, not a manifest edit. tasks lists the two flow tasks the model genuinely serves (Transcribe = its speech-to-text mode, Speak = its text-to-speech mode); its voice conversation mode is not a flow task. resources.disk_gb is browser.json's downloadSizeGB (1.73) and resources.ram_gb is its ramGB 2.6, an ESTIMATE (download size x 1.5, MP-0 G), not a measurement; MP6-3d replaces it with the owner's measured peak. License: the model card's lfm1.0, shown as LFM Open License v1.0; read it before commercial use. Original model by Liquid AI (LiquidAI/LFM2.5-Audio-1.5B)."
+}

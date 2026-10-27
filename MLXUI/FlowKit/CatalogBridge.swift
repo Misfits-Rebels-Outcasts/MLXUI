@@ -386,6 +386,16 @@ nonisolated enum CatalogBridge {
             candidates: ["mlx-community/Qwen3-ASR-1.7B-8bit"],
             equivalence: .same,
             manifestFile: "qwen3-asr-1.7b-8bit.json"),
+        // MP6-W (RSI/DelegateModelPackBacklog.md, MP6-W; MP-0 I) -- LFM2.5-Audio 1.5B (6-bit), the `Transcribe` row's seventh
+        // model and the `Speak` row's fourth. `.same`: the card's repo is the pinned repo. No catflow-mlx manifest exists for it,
+        // so `lfm2.5-audio-1.5b-6bit.json` is MLXUI-authored. Appended **last** to both pools; neither seed moves. One bridge
+        // row serves both tasks (the manifest lists both). Voice conversation is not a flow task and is not reachable from here.
+        BridgeEntry(
+            display: "LFM2.5-Audio 1.5B",
+            pinnedID: "mlx-community/LFM2.5-Audio-1.5B-6bit",
+            candidates: ["mlx-community/LFM2.5-Audio-1.5B-6bit"],
+            equivalence: .same,
+            manifestFile: "lfm2.5-audio-1.5b-6bit.json"),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {

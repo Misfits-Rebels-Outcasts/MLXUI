@@ -112,6 +112,9 @@ nonisolated enum TaskModels {
     /// `.decision` too, without changing what `.llm`-only tasks (Judge, Think, Decide) offer.
     private static let taskExtraKinds: [String: Set<RunnerKind>] = [
         "Classify": [.decision], "Gate": [.decision], "Score": [.decision],
+        // MP6-W: LFM2.5-Audio is a `.voice` model that genuinely serves exactly these two tasks through
+        // `LFMAudioSDK.makeStage` (`config.flowTask`): speech to text and text to speech. No other task lists `.voice`.
+        "Transcribe": [.voice], "Speak": [.voice],
     ]
 
     /// **SPEC-Q214** (`catflow-mlx/SPEC_QUESTIONS.md`) — a `.model`-class task that runs
@@ -197,7 +200,7 @@ nonisolated enum TaskModels {
         // ("Whisper Tiny") does not move, and Parakeet is never the default.
         // MP3-W: "Qwen3-ASR 1.7B" appended **last** after Parakeet -- the seed does not move, never the default.
         "Transcribe": ["Whisper Tiny", "Whisper Small", "Whisper Large v3", "Voxtral Mini 4B Realtime",
-                       "Parakeet TDT 0.6B v3", "Qwen3-ASR 1.7B"],
+                       "Parakeet TDT 0.6B v3", "Qwen3-ASR 1.7B", "LFM2.5-Audio 1.5B"],
         "Embed": ["BGE-M3"],
         "Generate": llmModels,
         "Summarize": llmModels,
@@ -211,7 +214,8 @@ nonisolated enum TaskModels {
         "Verify": llmModels,
         "Revise": llmModels,
         "Merge": llmModels,
-        "Speak": ["Kokoro 82M", "Qwen3-TTS 1.7B", "Qwen3-TTS 0.6B"],
+        // MP6-W: "LFM2.5-Audio 1.5B" appended **last** -- the seed ("Kokoro 82M") does not move, never the default.
+        "Speak": ["Kokoro 82M", "Qwen3-TTS 1.7B", "Qwen3-TTS 0.6B", "LFM2.5-Audio 1.5B"],
         "Rerank": ["BGE Reranker", "Qwen3 Reranker 0.6B"],
         "Text to Table": llmModels,
         // LY-8 (RSI/DelegateLayaBacklog.md, 2026-09-27 gate D amendment, superseding LY-0's own

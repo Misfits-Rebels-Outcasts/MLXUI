@@ -18,7 +18,10 @@ nonisolated struct LFMAudioSDK: ModelSDK {
         return .exact
     }
 
+    /// The Run UI and a `Transcribe` row want speech to text (`config.flowTask` nil or `"Transcribe"`); a `Speak` row wants text
+    /// to speech. A row's `voice` / bare setting and `lang` are not passed on: the model has no voice list and takes no language
+    /// (MP6-W; the manifest's `settings` is empty and `check` does not flag a stray token, so it is accepted and has no effect, which the journal records).
     func makeStage(for model: ModelEntry, config: StageConfig) throws -> any PipelineStage {
-        LFMAudioStages.asr(modelID: model.id)
+        config.flowTask == "Speak" ? LFMAudioStages.tts(modelID: model.id) : LFMAudioStages.asr(modelID: model.id)
     }
 }

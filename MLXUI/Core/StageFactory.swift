@@ -24,6 +24,10 @@ nonisolated struct StageConfig: Sendable, Hashable {
     var scale: Int?            // diffusion — upscale factor (BG-2)
     var query: String?         // rerank — the query every candidate is scored against (MoC-3-2)
     var topK: Int?             // rerank — truncate the sorted result to this many (MoC-3-2)
+    /// MP6-W: the flow task that asked for this stage (`"Transcribe"` / `"Speak"`), set only by `RealExecutor.stageConfig`.
+    /// One model that serves two tasks (LFM2.5-Audio: speech to text *and* text to speech) can't be told apart by its
+    /// `RunnerKind` alone; every other SDK ignores it. Part of the engine-cache key on purpose: the two tasks build two stages.
+    var flowTask: String?
 
     init(
         voice: String? = nil,
@@ -42,7 +46,8 @@ nonisolated struct StageConfig: Sendable, Hashable {
         steps: Int? = nil,
         scale: Int? = nil,
         query: String? = nil,
-        topK: Int? = nil
+        topK: Int? = nil,
+        flowTask: String? = nil
     ) {
         self.voice = voice
         self.speed = speed
@@ -58,6 +63,7 @@ nonisolated struct StageConfig: Sendable, Hashable {
         self.scale = scale
         self.query = query
         self.topK = topK
+        self.flowTask = flowTask
     }
 
     static let `default` = StageConfig()
