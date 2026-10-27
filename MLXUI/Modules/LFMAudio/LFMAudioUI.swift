@@ -162,6 +162,9 @@ struct LFMVoiceChatView: View {
                 Label(message.text, systemImage: isUser ? "waveform" : "text.bubble")
                     .labelStyle(BubbleLabelStyle(showIcon: isUser))
                     .textSelection(.enabled)
+                if message.cutShort {
+                    Text(LFMVoiceRunModel.cutShortLine).font(.caption).foregroundStyle(.secondary)
+                }
                 if !message.audio.isEmpty {
                     Button { model.replay(message) } label: { Label("Replay", systemImage: "play.fill") }
                         .buttonStyle(.borderless).font(.caption)

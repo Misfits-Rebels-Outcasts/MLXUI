@@ -24,6 +24,8 @@ final class LFMVoiceRunModel {
         var text: String
         /// The spoken reply (24 kHz), for the Replay button. RAM only.
         var audio: [Float] = []
+        /// The reply stopped at the token budget: the Run UI shows ``LFMVoiceRunModel/cutShortLine`` under it.
+        var cutShort = false
     }
 
     private(set) var phase: Phase = .idle
@@ -40,8 +42,15 @@ final class LFMVoiceRunModel {
     private var task: Task<Void, Never>?
     private var pressHeld = false
 
+    /// Said when a hold reached the 60 s limit and was sent as it stood.
+    /// Shown under a reply that stopped at the token budget (a plain line, never an error).
+    static let cutShortLine = "(reply cut short)"
+    static let cutHint = "That message was cut at 1 minute."
+
     /// Shorter than this is a tap, not speech (0.3 s).
     static let minimumSamples = LFMAudioEngine.inputSampleRate * 3 / 10
+    /// The limit in 16 kHz samples.
+    static let maximumSamples = Int(LFMAudioEngine.maxUserTurnSeconds * Double(LFMAudioEngine.inputSampleRate))
 
     init(recorder: LFMMicRecorder? = nil, player: (any LFMReplyPlaying)? = nil,
          makeStage: @escaping @MainActor (LFMConversation, @escaping @Sendable (LFMVoiceEvent) -> Void) -> any PipelineStage) {
@@ -58,6 +67,8 @@ final class LFMVoiceRunModel {
             guard let self else { return }
             self.pressHeld = false
             self.send(samples)
+            // The cap was reached while the button was still down: the turn is sent, and the user is told, plainly (not an error).
+            self.hint = Self.cutHint
         }
     }
 
@@ -110,8 +121,11 @@ final class LFMVoiceRunModel {
 
     // MARK: Turn
 
-    func send(_ samples: [Float]) {
+    func send(_ allSamples: [Float]) {
         if phase == .recording { phase = .idle }
+        // A recording is never longer than the limit (the capture stops there); anything longer is cut here, so a UI cut at exactly
+        // the limit can't trip the engine's refusal.
+        let samples = allSamples.count > Self.maximumSamples ? Array(allSamples.prefix(Self.maximumSamples)) : allSamples
         guard samples.count >= Self.minimumSamples else {
             hint = "That was too short. Hold the button while you speak, and let go when you are done."
             return
@@ -165,6 +179,8 @@ final class LFMVoiceRunModel {
         case .text(let text):
             messages.append(Message(role: .assistant, text: text))
             phase = .speaking
+        case .cutShort:
+            if let index = messages.indices.last, messages[index].role == .assistant { messages[index].cutShort = true }
         case .audio(let samples):
             if phase == .thinking { phase = .speaking }
             if let index = messages.indices.last, messages[index].role == .assistant { messages[index].audio += samples }

@@ -85,6 +85,30 @@ nonisolated struct LFMConversation: Sendable, Equatable {
     }
 
     mutating func reset() { turns.removeAll() }
+
+    /// The most seconds of earlier user audio a voice turn replays to the model (owner ruling, Boo, 2026-10-27: bound voice-chat
+    /// memory with a replay budget, oldest exchanges dropped first). The new recording is counted separately. The model's prefill
+    /// memory grows faster than linearly with the audio in the prompt (journal 2026-615: 413 s of audio peaked at 7.7 GiB of MLX
+    /// memory, 118 s at 3.5 GiB), so this is what bounds a long chat. The value is the implementer's call from those
+    /// measurements, pending owner confirmation.
+    static let maxReplaySeconds = 120.0
+
+    /// The exchanges a turn replays: the newest ones whose user audio adds up to at most `maxSeconds`, oldest dropped first and
+    /// each dropped whole (never trimmed). A short chat replays everything. ``turns`` itself is untouched, so nothing is lost
+    /// from the transcript or the ``maxTurns`` count; only the replay shrinks.
+    static func replayed(_ turns: [Turn], maxSeconds: Double = maxReplaySeconds, sampleRate: Int = LFMAudioEngine.inputSampleRate) -> [Turn] {
+        let budget = Int(maxSeconds * Double(sampleRate))
+        var used = 0, kept = 0
+        for turn in turns.reversed() {
+            if used + turn.userSamples.count > budget { break }
+            used += turn.userSamples.count
+            kept += 1
+        }
+        return Array(turns.suffix(kept))
+    }
+
+    /// The exchanges the next turn will replay.
+    var replayTurns: [Turn] { Self.replayed(turns) }
 }
 
 /// What a voice turn reports as it goes. The model's loop is synchronous (the library builds its whole result inside
@@ -95,6 +119,9 @@ nonisolated enum LFMVoiceEvent: Sendable, Equatable {
     case text(String)
     /// A slice of the spoken reply: 24 kHz mono samples.
     case audio([Float])
+    /// The reply stopped at the token budget (``LFMAudioEngine/voiceMaxNewTokens``), not because the model finished. Sent right
+    /// after ``text(_:)``; the Run UI shows a plain "(reply cut short)" line under the reply, never an error.
+    case cutShort
 }
 
 nonisolated struct LFMVoiceReply: Sendable, Equatable {

@@ -28,6 +28,7 @@ nonisolated final class LFMTurnProbe: @unchecked Sendable {
             switch e {
             case .text: if _textAt == nil { _textAt = Date() }
             case .audio: _lastAudioAt = Date()
+            case .cutShort: break
             }
         }
     }
@@ -82,13 +83,15 @@ struct LFMAudioFootprintTests {
         return Set(walker.compactMap { $0 as? String })
     }
 
-    /// Tiles `clip` to at least `seconds` of 16 kHz audio (exactly, trimmed).
-    private static func tiled(_ clip: [Float], seconds: Double) -> [Float] {
+    /// A non-repeating clip of exactly `seconds`: distinct sentences (the script, then the STT sentences) from `offset`. Tiling one
+    /// short sentence made the model answer a repetitive prompt (journal 2026-615), so the worst-case session uses this instead.
+    private static func varied(offset: Int, seconds: Double) throws -> [Float] {
+        let pool = script + Array(STTScore.sentences.values)
         let want = Int(seconds * 16_000)
         var out: [Float] = []
-        out.reserveCapacity(want)
-        while out.count < want { out += clip.prefix(want - out.count) }
-        return out
+        var i = offset
+        while out.count < want { out += try LFMAudioRealLoad.speech(pool[i % pool.count]); i += 1 }
+        return Array(out.prefix(want))
     }
 
     @Test(.enabled(if: enabled))
@@ -159,21 +162,20 @@ struct LFMAudioFootprintTests {
         #expect((rows.map(\.history).max() ?? 0) <= LFMConversation.maxTurns)
         #expect(model.conversation.turns.count <= LFMConversation.maxTurns)
 
-        // ---- B: the limit cases. One turn at the 120 s recording limit, one 20+ s STT file, one ~2,000-character TTS.
-        let base = clips[0]
-        let long = Self.tiled(base, seconds: 119.5)
+        // ---- B: the limit cases. One turn at the 60 s recording limit (owner ruling 2026-10-27; it was 120 s), one 20+ s STT file, one ~2,000-character TTS.
+        let long = try Self.varied(offset: 0, seconds: 59.5)
         probe.reset(); tracker.takePhasePeak()
         model.newConversation()
         var started = Date()
         model.send(long)
         while model.phase != .idle { try await Task.sleep(for: .milliseconds(50)) }
-        if let message = model.errorText { Issue.record("120 s turn: \(message)") }
+        if let message = model.errorText { Issue.record("59.5 s turn: \(message)") }
         var snap = probe.snapshot
         print(String(format: "LFMFOOTPRINT LIMIT recording %.1f s: peak %.0f MiB, wall %.1f s, to text %@ s, tokens %d, cap hit %@, audio frames %d",
                      Double(long.count) / 16_000, Self.mib(tracker.takePhasePeak()), Date().timeIntervalSince(started),
                      snap.textAt.map { String(format: "%.1f", $0.timeIntervalSince(started)) } ?? "n/a", snap.tokens, snap.cap ? "YES" : "no", snap.frames))
 
-        let stt = Self.tiled(base, seconds: 24)
+        let stt = try Self.varied(offset: 3, seconds: 24)
         probe.reset(); tracker.takePhasePeak(); started = Date()
         let transcript = try await MLXErrorGuard.guardedRun { try await LFMAudioEngine.transcribe(stt, modelDirectory: dir, factory: factory) }
         snap = probe.snapshot
@@ -190,10 +192,37 @@ struct LFMAudioFootprintTests {
                      essay.count, Self.mib(tracker.takePhasePeak()), Date().timeIntervalSince(started), Double(spoken.count) / 24_000,
                      snap.tokens, snap.cap ? "YES" : "no", snap.frames))
 
+        // ---- C: the worst-case session (owner ruling 2026-10-27): 7 consecutive voice turns of ~59 s each, so the memory (6 exchanges)
+        // holds six full-length recordings when the seventh is sent. Its peak is reported on its own and is part of the PEAK line.
+        model.newConversation()
+        probe.reset(); tracker.takePhasePeak()
+        var worstPeak: Int64 = 0
+        var worstRows: [String] = []
+        for n in 1...7 {
+            probe.reset(); tracker.takePhasePeak(); Memory.peakMemory = 0
+            let turnClip = try Self.varied(offset: n * 5, seconds: 59)
+            let turnStarted = Date()
+            model.send(turnClip)
+            while model.phase != .idle { try await Task.sleep(for: .milliseconds(100)) }
+            if let message = model.errorText { Issue.record("worst-case turn \(n): \(message)"); break }
+            let turnSnap = probe.snapshot
+            let peak = tracker.takePhasePeak()
+            worstPeak = max(worstPeak, peak)
+            worstRows.append(String(format: "LFMFOOTPRINT WORST turn %d: history %d exchanges, peak %.0f MiB (MLX peak %.0f MiB), after %.0f MiB, wall %.1f s, load %.1f s, tokens %d, cap hit %@",
+                                    n, model.conversation.turns.count, Self.mib(peak), Self.mib(Memory.peakMemory), Self.mib(FootprintTracker.phys()), Date().timeIntervalSince(turnStarted),
+                                    turnSnap.load, turnSnap.tokens, turnSnap.cap ? "YES" : "no"))
+            print(worstRows.last!)
+            #expect(model.conversation.turns.count == min(n, LFMConversation.maxTurns))
+        }
+        try await Task.sleep(for: .seconds(5))
+        print(String(format: "LFMFOOTPRINT WORST SESSION peak %.0f MiB (%.2f GiB); 5 s after the last reply: now %.0f MiB, MLX active %.0f cache %.0f MiB",
+                     Self.mib(worstPeak), Self.mib(worstPeak) / 1024, Self.mib(FootprintTracker.phys()),
+                     Self.mib(Memory.snapshot().activeMemory), Self.mib(Memory.snapshot().cacheMemory)))
+
         Memory.clearCache()
         line("end", "(after clearCache)")
-        print(String(format: "LFMFOOTPRINT PEAK over the whole run %.0f MiB (%.2f GiB); download-size x 1.5 estimate to compare: 1.73 GB x 1.5 = %.2f GB",
-                     Self.mib(tracker.runPeak), Self.mib(tracker.runPeak) / 1024, 1.73 * 1.5))
+        print(String(format: "LFMFOOTPRINT PEAK (max of the session, the 59.5 s turn, the STT, the TTS and the 7 x 59 s worst case) %.0f MiB (%.2f GiB, %.2f GB decimal); download-size x 1.5 estimate to compare: 1.73 GB x 1.5 = %.2f GB",
+                     Self.mib(tracker.runPeak), Self.mib(tracker.runPeak) / 1024, Double(tracker.runPeak) / 1_000_000_000, 1.73 * 1.5))
         model.shutdown()
         #expect(Self.storeListing() == before, "the harness wrote into the model store; a voice session persists nothing")
     }

@@ -299,11 +299,20 @@ struct LFMAudioEngineTests {
         #expect(call.prompt.turns[0] == .system("Respond with interleaved text and speech audio."))
     }
 
+    /// The boundary: exactly the limit passes the engine guard; one sample over is refused (the UI trims before this).
+    @Test func theLimitIsSixtySecondsAndInclusive() throws {
+        #expect(LFMAudioEngine.maxUserTurnSeconds == 60)
+        try LFMAudioEngine.requireWithinTurnLimit(sampleCount: 60 * 16_000)
+        #expect(throws: LFMAudioEngine.LimitError.self) { try LFMAudioEngine.requireWithinTurnLimit(sampleCount: 60 * 16_000 + 1) }
+        let message = LFMAudioEngine.LimitError(seconds: 61, limit: 60).errorDescription ?? ""
+        #expect(message.contains("up to 60 seconds"))
+    }
+
     @Test func aFailedOrRefusedTurnLeavesTheMemoryAlone() async {
         let conversation = LFMConversation()
         let backend = MockLFMBackend()
         await #expect(throws: LFMAudioEngine.LimitError.self) {
-            _ = try await LFMAudioEngine.voiceTurn(userSamples: [Float](repeating: 0, count: 121 * 16_000), conversation: conversation,
+            _ = try await LFMAudioEngine.voiceTurn(userSamples: [Float](repeating: 0, count: 61 * 16_000), conversation: conversation,
                                                    backend: backend) { _ in }
         }
         #expect(backend.calls.isEmpty, "refused before the model is touched")
@@ -320,6 +329,111 @@ struct LFMAudioEngineTests {
         // RAM only: persisting it would need a new type and a decision.
         #expect((LFMConversation.self as Any.Type) is Encodable.Type == false)
         #expect((LFMConversation.Turn.self as Any.Type) is Encodable.Type == false)
+    }
+
+    // MARK: Replay budget (owner ruling, Boo, 2026-10-27)
+
+    private static func exchange(_ seconds: Double, _ tag: String) -> LFMConversation.Turn {
+        .init(userSamples: [Float](repeating: 0, count: Int(seconds * 16_000)), assistantText: tag)
+    }
+
+    @Test func aShortChatReplaysEverything() {
+        let turns = [Self.exchange(5, "a"), Self.exchange(8, "b"), Self.exchange(3, "c")]
+        #expect(LFMConversation.replayed(turns, maxSeconds: 120).map(\.assistantText) == ["a", "b", "c"])
+        #expect(LFMConversation.replayed([], maxSeconds: 120).isEmpty)
+    }
+
+    @Test func theOldestExchangesAreDroppedWholeFirst() {
+        let turns = [Self.exchange(59, "a"), Self.exchange(59, "b"), Self.exchange(59, "c"), Self.exchange(59, "d")]
+        #expect(LFMConversation.replayed(turns, maxSeconds: 120).map(\.assistantText) == ["c", "d"], "118 s fits, 177 s does not")
+        #expect(LFMConversation.replayed(turns, maxSeconds: 60).map(\.assistantText) == ["d"])
+        // never trimmed: an exchange that alone exceeds the budget is dropped, and so is everything older
+        #expect(LFMConversation.replayed([Self.exchange(10, "x"), Self.exchange(61, "y")], maxSeconds: 60).isEmpty)
+        // the budget is inclusive, and a long exchange does not let an older short one slip past it
+        #expect(LFMConversation.replayed([Self.exchange(10, "x"), Self.exchange(50, "y")], maxSeconds: 60).map(\.assistantText) == ["x", "y"])
+        #expect(LFMConversation.replayed([Self.exchange(5, "x"), Self.exchange(61, "y"), Self.exchange(5, "z")], maxSeconds: 60).map(\.assistantText) == ["z"])
+    }
+
+    @Test func aTurnReplaysTheBudgetedHistoryAndKeepsTheTranscript() {
+        var conversation = LFMConversation()
+        for tag in ["a", "b", "c", "d"] { conversation.record(userSamples: Self.exchange(59, tag).userSamples, assistantText: tag) }
+        #expect(conversation.turns.count == 4, "the memory itself keeps every exchange up to maxTurns")
+        let prompt = LFMAudioEngine.voicePrompt(userSamples: [0.5], conversation: conversation, style: nil)
+        // system + 2 replayed exchanges (user, assistant) + the new recording
+        #expect(prompt.turns.count == 1 + 2 * 2 + 1)
+        #expect(prompt.turns[2].parts == [.text("c")] && prompt.turns[4].parts == [.text("d")])
+        #expect(prompt.turns.last?.parts == [.audio([0.5])], "the new recording is counted apart from the history budget")
+    }
+
+    @Test func theDefaultBudgetFitsAMaximumTurnTwice() {
+        #expect(LFMConversation.maxReplaySeconds >= LFMAudioEngine.maxUserTurnSeconds, "one maximum-length exchange is always replayed")
+    }
+
+    // MARK: Turn-scoped MLX cache cap (shared with the Local Server's helper)
+
+    private final class FakeLimit: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _value: Int
+        init(_ v: Int) { _value = v }
+        var value: Int { lock.withLock { _value } }
+        func set(_ v: Int) { lock.withLock { _value = v } }
+        func memory() -> ServeMLXMemory { ServeMLXMemory(read: { [self] in value }, write: { [self] in set($0) }) }
+    }
+
+    private static let startLimit = 17 * 1_073_741_824
+
+    @Test func aVoiceTurnCapsTheCacheForItsDurationAndRestoresIt() async throws {
+        let limit = FakeLimit(Self.startLimit)
+        let seen = LFMProgressBox()
+        let backend = MockLFMBackend()
+        backend.onGenerate = { _ in seen.add(Double(limit.value)) }
+        _ = try await LFMAudioEngine.voiceTurn(userSamples: [0.1, 0.2], conversation: LFMConversation(), modelDirectory: URL(fileURLWithPath: "/tmp/x"),
+                                               factory: { _ in backend }, memory: limit.memory()) { _ in }
+        #expect(seen.values == [Double(ServeMLXMemory.generationCacheLimit)], "capped at the server's 1 GiB while generating")
+        #expect(limit.value == Self.startLimit, "the previous limit is back afterwards")
+    }
+
+    @Test func theLimitIsRestoredWhenTheTurnThrows() async {
+        let limit = FakeLimit(Self.startLimit)
+        let backend = MockLFMBackend()
+        backend.onGenerate = { _ in throw CancellationError() }
+        _ = try? await LFMAudioEngine.voiceTurn(userSamples: [0.1], conversation: LFMConversation(), modelDirectory: URL(fileURLWithPath: "/tmp/x"),
+                                                factory: { _ in backend }, memory: limit.memory()) { _ in }
+        #expect(limit.value == Self.startLimit)
+    }
+
+    @Test func aVoiceTurnAndAServerGenerationShareOneSavedLimitInEitherOrder() async throws {
+        for serverFirst in [true, false] {
+            let limit = FakeLimit(Self.startLimit)
+            let memory = limit.memory()
+            let backend = MockLFMBackend()
+            if serverFirst {
+                memory.begin()                                   // a server generation is already running
+                _ = try await LFMAudioEngine.voiceTurn(userSamples: [0.1], conversation: LFMConversation(), modelDirectory: URL(fileURLWithPath: "/tmp/x"),
+                                                       factory: { _ in backend }, memory: memory) { _ in }
+                #expect(limit.value == ServeMLXMemory.generationCacheLimit, "still capped: the server generation holds it")
+                memory.end()
+            } else {
+                backend.onGenerate = { _ in memory.begin() }     // a server generation starts during the voice turn...
+                _ = try await LFMAudioEngine.voiceTurn(userSamples: [0.1], conversation: LFMConversation(), modelDirectory: URL(fileURLWithPath: "/tmp/x"),
+                                                       factory: { _ in backend }, memory: memory) { _ in }
+                #expect(limit.value == ServeMLXMemory.generationCacheLimit, "...and outlives it")
+                memory.end()
+            }
+            #expect(limit.value == Self.startLimit, "serverFirst=\(serverFirst): the original limit is restored exactly once, by the last one out")
+            #expect(!memory.isCapActive)
+        }
+    }
+
+    @Test func aReplyAtTheTokenBudgetIsFlaggedCutShort() async throws {
+        let events = LFMEventBox()
+        let capped = MockLFMBackend(reply: { _ in LFMGenerated(text: "x", audioFrames: [], tokens: LFMAudioEngine.voiceMaxNewTokens) })
+        _ = try await LFMAudioEngine.voiceTurn(userSamples: [0.1], conversation: LFMConversation(), backend: capped) { events.add($0) }
+        #expect(events.values.contains(.cutShort))
+        let finished = MockLFMBackend(reply: { _ in LFMGenerated(text: "x", audioFrames: [], tokens: 40) })
+        let other = LFMEventBox()
+        _ = try await LFMAudioEngine.voiceTurn(userSamples: [0.1], conversation: LFMConversation(), backend: finished) { other.add($0) }
+        #expect(!other.values.contains(.cutShort))
     }
 
     // MARK: Cancellation and errors

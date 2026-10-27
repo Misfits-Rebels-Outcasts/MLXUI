@@ -149,7 +149,7 @@ nonisolated struct ScriptedVoiceStage: PipelineStage {
 @MainActor
 struct LFMMicRecorderTests {
     private func recorder(_ permission: FakePermission, device: FakeCapture = FakeCapture(samples: [0.1, 0.2]),
-                          maxSeconds: Double = 120) -> (LFMMicRecorder, FakeCapture) {
+                          maxSeconds: Double = LFMAudioEngine.maxUserTurnSeconds) -> (LFMMicRecorder, FakeCapture) {
         (LFMMicRecorder(maxSeconds: maxSeconds, permission: permission, makeDevice: { device }), device)
     }
 
@@ -165,7 +165,7 @@ struct LFMMicRecorderTests {
         #expect(await rec.begin() == .started)
         #expect(permission.requests == 1)
         #expect(rec.isRecording)
-        #expect(device.maxSamples == 120 * 16_000, "the 120 s cap, in 16 kHz samples")
+        #expect(device.maxSamples == 60 * 16_000, "the 60 s cap, in 16 kHz samples")
         #expect(rec.end() == [0.1, 0.2])
         #expect(!rec.isRecording)
         #expect(await rec.begin() == .started)
@@ -278,6 +278,19 @@ struct LFMVoiceRunModelTests {
         }
     }
 
+    @Test func aReplyThatHitTheBudgetCarriesAPlainCutShortLineAndNoError() async throws {
+        let (model, _, _) = model(events: [.text("a long reply"), .cutShort, .audio([0.1])])
+        model.send(speech)
+        try await settle(model)
+        #expect(model.messages.last?.cutShort == true)
+        #expect(LFMVoiceRunModel.cutShortLine == "(reply cut short)")
+        #expect(model.errorText == nil)
+        let (plain, _, _) = self.model()
+        plain.send(speech)
+        try await settle(plain)
+        #expect(plain.messages.last?.cutShort == false)
+    }
+
     @Test func aTurnShowsTheLabelThenTheReplyAndRemembersTheExchange() async throws {
         let (model, _, player) = model()
         model.send(speech)
@@ -291,6 +304,31 @@ struct LFMVoiceRunModelTests {
         #expect(model.conversation.turns.count == 1)
         #expect(model.conversation.turns[0].assistantText == "the reply")
         #expect(model.errorText == nil)
+    }
+
+    /// MP6-3d-prep (owner ruling, Boo, 2026-10-27): the hold that reaches 60 s is sent, with a plain line, never an error.
+    @Test func reachingTheLimitSendsTheTurnAndSaysItWasCut() async throws {
+        let device = FakeCapture(samples: [Float](repeating: 0.2, count: 60 * 16_000))
+        let (model, device2, _) = model(device: device)
+        model.pressBegan()
+        try await settle(model, until: .recording)
+        device2.hitCap()
+        try await settle(model, until: .thinking)
+        try await settle(model)
+        #expect(model.errorText == nil)
+        #expect(model.hint == "That message was cut at 1 minute.")
+        #expect(model.messages.first?.text == "Voice message 1:00")
+        #expect(model.conversation.turns.count == 1, "the cut turn was sent and remembered")
+        #expect(model.conversation.turns[0].userSamples.count == 60 * 16_000)
+    }
+
+    @Test func aLongerRecordingIsCutToTheLimitNotRefused() async throws {
+        let (model, _, _) = model()
+        model.send([Float](repeating: 0.1, count: 60 * 16_000 + 4_096))
+        try await settle(model)
+        #expect(model.errorText == nil)
+        #expect(model.conversation.turns.count == 1)
+        #expect(model.conversation.turns[0].userSamples.count == LFMVoiceRunModel.maximumSamples)
     }
 
     @Test func holdToTalkRecordsThenSendsOnRelease() async throws {

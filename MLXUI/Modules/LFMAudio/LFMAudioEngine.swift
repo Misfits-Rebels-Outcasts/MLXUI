@@ -57,9 +57,11 @@ nonisolated enum LFMAudioEngine {
     static let voiceMaxNewTokens = 1_024
     static let voiceSampling = LFMSampling(maxNewTokens: voiceMaxNewTokens, temperature: 0.9, topK: 50, audioTemperature: 0.8, audioTopK: 4)
     static let voiceInstruction = "Respond with interleaved text and speech audio."
-    /// Longest single user recording a voice turn accepts. Provisional: unmeasured (the owner's rule is to measure before a limit
-    /// is final, MP6-3c). It exists so a stuck push-to-talk can't prefill an hour of audio.
-    static let maxUserTurnSeconds = 120.0
+    /// Longest single user recording a voice turn takes: 60 s (owner ruling, Boo, 2026-10-27: "60 s per voice turn
+    /// (maxUserTurnSeconds 120 -> 60)"; it was 120 s, which peaked at 5.8 GiB in the MP6-3c measurement). Voice chat only; speech to
+    /// text keeps its 30 s windows and text to speech its chunks. The microphone stops at this length and the turn is sent (the Run
+    /// UI says it was cut), so the engine's refusal below is a guard for other callers, not something a recording reaches.
+    static let maxUserTurnSeconds = 60.0
     /// Frames per delivered audio slice in a voice turn (12.5 frames per second, so 2 s). The upstream streaming example decodes
     /// every 10 frames; slice seams are unverified by ear until the MP6-3b smoke.
     static let voiceSliceFrames = 25
@@ -133,7 +135,7 @@ nonisolated enum LFMAudioEngine {
         let trimmed = style?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let system = trimmed.isEmpty ? voiceInstruction : voiceInstruction + " " + trimmed
         var turns: [LFMPromptTurn] = [.system(system)]
-        for turn in conversation.turns {
+        for turn in conversation.replayTurns {
             turns.append(.user(.audio(turn.userSamples)))
             turns.append(.assistant(turn.assistantText))
         }
@@ -194,6 +196,7 @@ nonisolated enum LFMAudioEngine {
         try Task.checkCancellation()
         let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
         onEvent(.text(text))
+        if result.tokens >= sampling.maxNewTokens { onEvent(.cutShort) }
         var delivered = 0
         let size = max(sliceFrames, 1)
         for start in stride(from: 0, to: result.audioFrames.count, by: size) {
@@ -255,9 +258,15 @@ nonisolated enum LFMAudioEngine {
     /// later optimisation (journal 2026-609).
     static func voiceTurn(userSamples: [Float], conversation: LFMConversation, style: String? = nil, modelDirectory: URL,
                           factory: (@Sendable (URL) async throws -> any LFMAudioBackend)? = nil,
+                          memory: ServeMLXMemory = .shared,
                           onEvent: @escaping @Sendable (LFMVoiceEvent) -> Void) async throws -> LFMVoiceReply {
         guard !userSamples.isEmpty else { throw EngineError.emptyAudio }
         try requireWithinTurnLimit(sampleCount: userSamples.count)
+        // MLX keeps freed buffers in a pool that defaults to ~17 GiB, and a turn that replays long recordings frees a lot of them
+        // (journal 2026-615: 13 GiB footprint against a 7.7 GiB MLX peak). The Local Server's scoped, reference-counted cap (1 GiB,
+        // R52) bounds it for this turn and puts the previous limit back when the last holder leaves, on throw and cancel too.
+        memory.begin()
+        defer { memory.end() }
         return try await run(modelDirectory, factory) { backend in
             try await voiceTurn(userSamples: userSamples, conversation: conversation, style: style, backend: backend, onEvent: onEvent)
         }
