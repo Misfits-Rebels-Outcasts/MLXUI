@@ -169,6 +169,33 @@ extension LFMAudioCatalogTests {
         #expect(e.summary?.isEmpty == false)
     }
 
+    private static let licenseLink = "[LFM Open License v1.0](https://huggingface.co/LiquidAI/LFM2.5-Audio-1.5B/blob/main/LICENSE)"
+    private static let licenseURL = "https://huggingface.co/LiquidAI/LFM2.5-Audio-1.5B/blob/main/LICENSE"
+
+    /// MP6-3k: the entry carries the license URL (the card's `license_link: LICENSE`, resolved against the original model's repo,
+    /// since the mlx-community repo ships no LICENSE file), and the detail page's About text -- rendered by the same inline-markdown
+    /// pass `ModelDetailView.descriptionMarkdown` uses -- shows it as a link next to the card's notice, quoted verbatim.
+    @Test func licenseLinkAndNoticeRenderOnTheModelPage() throws {
+        let e = try lfm()
+        #expect(e.licenseUrl == Self.licenseURL)
+        let description = try #require(e.description)
+        let notice = "This implementation follows the license terms of the original LFM2.5-Audio model. See [LiquidAI/LFM2.5-Audio-1.5B](https://huggingface.co/LiquidAI/LFM2.5-Audio-1.5B) for details."
+        #expect(description.contains(notice))
+        // The view's pass: strip heading markers, then inline markdown.
+        let cleaned = description.replacingOccurrences(of: "(?m)^#{1,6}[ \t]*", with: "", options: .regularExpression)
+        let rendered = try AttributedString(markdown: cleaned, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))
+        let links = rendered.runs.compactMap { $0.link?.absoluteString }
+        #expect(links.contains(Self.licenseURL), "the license is a link")
+        #expect(links.contains("https://huggingface.co/LiquidAI/LFM2.5-Audio-1.5B"), "the notice's pointer is a link")
+        let plain = String(rendered.characters)
+        #expect(plain.contains("LFM Open License v1.0"))
+        #expect(plain.contains("This implementation follows the license terms of the original LFM2.5-Audio model."))
+        // No paraphrase of the terms and no commercial threshold on the page.
+        for forbidden in ["revenue", "royalt", "free for", "threshold", "commercially", "million"] {
+            #expect(!description.localizedCaseInsensitiveContains(forbidden), "\(forbidden)")
+        }
+    }
+
     @Test func descriptionCarriesOnlyWhatTheCardSupports() throws {
         let e = try lfm()
         let description = try #require(e.description)
@@ -179,7 +206,9 @@ extension LFMAudioCatalogTests {
         #expect(description.contains("| **Speech to text** |"))
         #expect(description.contains("| **Text to speech** |"))
         #expect(description.contains("| **License** | LFM Open License v1.0 |"))
-        #expect(description.contains("Read the license before using the model commercially."))
+        // MP6-3k (owner, Boo, 2026-10-27, after reading the license): the page links the license and quotes the card's notice; the
+        // old "read it before using commercially" line is replaced. See `licenseLinkAndNoticeRenderOnTheModelPage`.
+        #expect(description.contains(Self.licenseLink))
         #expect(description.contains("| **Audio output** | 24 kHz |"))
         #expect(description.contains("RAM figure is an estimate (download size × 1.5), not a measurement."))
         // The MP6-1 placeholder is gone, and nothing says the Run screen is missing.
@@ -206,7 +235,9 @@ extension LFMAudioCatalogTests {
         let good = try #require(description.range(of: "## Good to know"))
         let details = try #require(description.range(of: "## Key Details"))
         #expect(good.lowerBound < details.lowerBound)
-        #expect(description.contains("Read the license before using the model commercially."))
+        // MP6-3k (owner, Boo, 2026-10-27, after reading the license): the page links the license and quotes the card's notice; the
+        // old "read it before using commercially" line is replaced. See `licenseLinkAndNoticeRenderOnTheModelPage`.
+        #expect(description.contains(Self.licenseLink))
         #expect(description.contains("RAM figure is an estimate (download size × 1.5), not a measurement."))
         // No promise of streaming or speed, and no jargon in the limits section.
         let limits = String(description[good.lowerBound ..< details.lowerBound])
