@@ -242,7 +242,7 @@ struct LFMAudioWorkflowWiringTests {
         #expect(manifest.tasks == ["Transcribe", "Speak"])
         #expect(manifest.settings.isEmpty, "no invented voice or language setting")
         #expect(manifest.resources?.diskGB == 1.73)
-        #expect(manifest.resources?.ramGB == 2.6)
+        #expect(manifest.resources?.ramGB == 5.0)
     }
 
     @Test func manifestResourcesMatchTheCatalogCard() throws {
@@ -252,7 +252,7 @@ struct LFMAudioWorkflowWiringTests {
         #expect(manifest.resources?.diskGB == card.downloadSizeGB)
     }
 
-    @Test func manifestSaysItIsMLXUIAuthoredAndTheRAMFigureAnEstimate() throws {
+    @Test func manifestSaysItIsMLXUIAuthoredAndTheRAMFigureMeasured() throws {
         let url = repoRoot.appendingPathComponent("MLXUI/Resources/CatFlow/models/\(Self.manifest)")
         let json = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         #expect(json["pinned"] as? Bool == true)
@@ -261,8 +261,8 @@ struct LFMAudioWorkflowWiringTests {
         #expect(json["checksum"] == nil)
         let notes = try #require(json["notes"] as? String)
         #expect(notes.contains("MLXUI-authored"))
-        #expect(notes.contains("ESTIMATE"))
-        #expect(notes.contains("MP6-3d"))
+        #expect(notes.contains("MEASURED"))
+        #expect(notes.contains("journal 2026-621"))
         #expect(notes.contains("English only"))
     }
 }

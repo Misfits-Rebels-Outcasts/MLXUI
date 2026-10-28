@@ -49,10 +49,10 @@ struct LFMAudioCatalogTests {
         #expect(e.source == .mlx)
         #expect(e.format == "mlx-6bit")
         #expect(e.downloadSizeGB == 1.73)
-        // MP-0 G (implementer's call to round up, pending owner confirmation): download x 1.5 = 2.595, shown as 2.6, an estimate.
-        #expect(e.ramGB == 2.6)
+        // MP6-3d: measured, the harness peak 4.96 GB rounded up to 0.1; it replaced the download x 1.5 estimate (2.6).
+        #expect(e.ramGB == 5.0)
         #expect(e.ramGB >= e.downloadSizeGB * 1.5)
-        #expect(e.description?.contains("RAM figure is an estimate (download size × 1.5)") == true)
+        #expect(e.description?.contains("RAM figure is measured: harness peak 4.62 GiB (4.96 GB)") == true)
         #expect(e.speedTokensPerSec == nil)
         #expect(e.languages == ["en"])
         #expect(e.variants?.count == 1)
@@ -210,7 +210,7 @@ extension LFMAudioCatalogTests {
         // old "read it before using commercially" line is replaced. See `licenseLinkAndNoticeRenderOnTheModelPage`.
         #expect(description.contains(Self.licenseLink))
         #expect(description.contains("| **Audio output** | 24 kHz |"))
-        #expect(description.contains("RAM figure is an estimate (download size × 1.5), not a measurement."))
+        #expect(description.contains("RAM figure is measured: harness peak 4.62 GiB (4.96 GB)"))
         // The MP6-1 placeholder is gone, and nothing says the Run screen is missing.
         #expect(!description.contains("Run isn't available"))
         // The owner has not read the license's commercial terms; the text must not paraphrase them. The card states no
@@ -238,7 +238,7 @@ extension LFMAudioCatalogTests {
         // MP6-3k (owner, Boo, 2026-10-27, after reading the license): the page links the license and quotes the card's notice; the
         // old "read it before using commercially" line is replaced. See `licenseLinkAndNoticeRenderOnTheModelPage`.
         #expect(description.contains(Self.licenseLink))
-        #expect(description.contains("RAM figure is an estimate (download size × 1.5), not a measurement."))
+        #expect(description.contains("RAM figure is measured: harness peak 4.62 GiB (4.96 GB)"))
         // No promise of streaming or speed, and no jargon in the limits section.
         let limits = String(description[good.lowerBound ..< details.lowerBound])
         for forbidden in ["stream", "token", "KV", "cache", "prefill", "context window", "instant", "fast", "real-time", "realtime"] {
