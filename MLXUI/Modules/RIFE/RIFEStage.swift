@@ -4,8 +4,8 @@ import Foundation
 /// MP4**. `Media` has no video kind, so a file path is how a video crosses the stage boundary (WanVideo's `text → image` first-frame
 /// stage is the nearest precedent). Making it a real stage, and not a stub, is what lets the Run screen book memory through
 /// `LeasingStage` like every other model. Options (2× or 4×, scale) ride on the stage because `StageConfig` has no field for
-/// them and nothing in AI Workflows names this kind (RIFE-W skipped, owner ruling 2026-10-28). Implementer's call, pending owner
-/// confirmation.
+/// them and nothing in AI Workflows names this kind (RIFE-W skipped, owner ruling 2026-10-28). Implementer's call, owner-confirmed
+/// 2026-10-28.
 nonisolated struct RIFEStage: PipelineStage {
     let id: String
     let name: String
