@@ -133,3 +133,52 @@ struct RIFERealLoadTests {
         #expect(out.min().item(Float.self) > -0.5 && out.max().item(Float.self) < 1.5)
     }
 }
+
+// RIFE-3b: parity with the Python reference (xocialize/rife-mlx) on one frame pair. Fixtures in MLXUITests/Fixtures/RIFE are checked in
+// and never edited to pass. The card's own figure for full IFNet vs PyTorch CPU fp32 is 1.43e-3.
+@Suite(.enabled(if: RIFERealLoad.enabled, "needs MLXUI_TEST_RIFE_DIR or an installed mlx-community/RIFE-4.25"))
+struct RIFEParityTests {
+
+    private static let height = 96, width = 130
+    /// The card's IFNet-vs-PyTorch figure. Both sides here are MLX on the same checkpoint, so the real gap should sit far below it.
+    private static let tolerance: Float = 1.43e-3
+
+    private static var fixtures: URL {
+        URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/RIFE")
+    }
+
+    private func floats(_ name: String) throws -> [Float] {
+        let data = try Data(contentsOf: Self.fixtures.appendingPathComponent(name))
+        return data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+    }
+
+    private func frame(_ name: String) throws -> MLXArray {
+        let bytes = [UInt8](try Data(contentsOf: Self.fixtures.appendingPathComponent(name)))
+        #expect(bytes.count == Self.height * Self.width * 3)
+        return MLXArray(bytes).asType(.float32).reshaped(1, Self.height, Self.width, 3) / 255
+    }
+
+    private func maxDifference(timestep: Float, scale: Float, golden: String) throws -> Float {
+        let loaded = try RIFEEngine.load(directory: try #require(RIFERealLoad.directory))
+        let out = try RIFEEngine.interpolate(loaded, try frame("frame0.u8"), try frame("frame1.u8"), timestep: timestep, scale: scale)
+        eval(out)
+        let swift = out.reshaped(-1).asArray(Float.self)
+        let reference = try floats(golden)
+        #expect(swift.count == reference.count)
+        let diff = zip(swift, reference).map { abs($0 - $1) }.max() ?? .infinity
+        print("RIFE PARITY \(golden): max |Δ| = \(diff)")
+        return diff
+    }
+
+    @Test func midpointMatchesTheReference() throws {
+        #expect(try maxDifference(timestep: 0.5, scale: 1, golden: "t050_s100.f32") < Self.tolerance)
+    }
+
+    @Test func quarterPointMatchesTheReference() throws {
+        #expect(try maxDifference(timestep: 0.25, scale: 1, golden: "t025_s100.f32") < Self.tolerance)
+    }
+
+    @Test func halfScaleMatchesTheReference() throws {
+        #expect(try maxDifference(timestep: 0.5, scale: 0.5, golden: "t050_s050.f32") < Self.tolerance)
+    }
+}
