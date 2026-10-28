@@ -35,7 +35,8 @@
         "imagegen",
         "segmentation",
         "videogen",
-        "upscale"
+        "upscale",
+        "interpolate"
       ]
     },
     {
@@ -121,6 +122,10 @@
     "voice": {
       "icon": "waveform.and.mic",
       "description": "Voice Conversation"
+    },
+    "interpolate": {
+      "icon": "forward.frame",
+      "description": "Frame Interpolation"
     }
   },
   "domains": [
@@ -3186,6 +3191,63 @@
           ],
           "descriptionSource": "mlx-community/LFM2.5-Audio-1.5B-6bit",
           "summary": "Liquid AI's LFM2.5-Audio, converted to MLX (6-bit). Voice conversation (speech in, speech out), speech-to-text and text-to-speech. English only."
+        }
+      ]
+    },
+    {
+      "id": "interpolate",
+      "name": "Frame Interpolation",
+      "sfSymbol": "forward.frame",
+      "children": null,
+      "models": [
+        {
+          "id": "mlx-community--RIFE-4.25",
+          "family": "RIFE",
+          "displayName": "RIFE 4.25",
+          "paramSize": "0.0057B",
+          "paramCountB": 0.0057,
+          "modelType": "interpolate",
+          "source": "mlx",
+          "format": "mlx-fp32",
+          "platforms": [
+            "macOS 14+"
+          ],
+          "minMacOSVersion": "14.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/RIFE-4.25",
+          "ramGB": 2.0,
+          "downloadSizeGB": 0.023,
+          "contextWindow": null,
+          "license": "mit",
+          "licenseUrl": null,
+          "description": "# RIFE 4.25\n\nAn [MLX](https://github.com/ml-explore/mlx) port of [Practical-RIFE](https://github.com/hzwer/Practical-RIFE) 4.25 (© hzwer, MIT), a real-time video frame interpolation network. It looks at two neighbouring frames and draws the ones between them, so a clip plays at 2× or 4× the frame rate: smoother motion, or slow motion at the original rate. It adds frames; it does not make the picture sharper or larger.\n\nShipped as fp32 (22.7 MB). RIFE's coarse-to-fine flow estimate is sensitive to half precision, and the network is small enough that there is nothing to gain from quantizing it.\n\nLicense: MIT, same as the original. The MLX conversion is by mlx-community.\n\nRAM figure is an estimate (the 1.5× weights rule does not apply here, and nobody has measured the video path yet), not a measurement.",
+          "architecture": null,
+          "languages": null,
+          "lastUpdated": "2026-06-06",
+          "taskTags": [
+            "video-frame-interpolation",
+            "frame-interpolation",
+            "slow-motion"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 0,
+          "communityLikes": 3,
+          "variants": [
+            {
+              "quantization": "fp32",
+              "format": "mlx-fp32",
+              "ramGB": 2.0,
+              "downloadSizeGB": 0.023,
+              "qualityPercent": 100,
+              "hfModelId": "mlx-community/RIFE-4.25",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/RIFE-4.25",
+          "summary": "RIFE 4.25 video frame interpolation, converted to MLX (fp32). Raises a clip to 2× or 4× the frame rate for smoother motion or slow motion."
         }
       ]
     }

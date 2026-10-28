@@ -5,7 +5,7 @@ import Foundation
 /// corrections live in `ModelEntry.runnerKind` below — the single source of truth.
 /// See `Design/pipeline-stage-sketch.md` §routing.
 nonisolated enum RunnerKind: String, Sendable {
-    case llm, asr, tts, vision, embedding, ocr, image, music, segmentation, video, upscale, rerank, decision, diarization, enhance, voice, unsupported
+    case llm, asr, tts, vision, embedding, ocr, image, music, segmentation, video, upscale, rerank, decision, diarization, enhance, voice, interpolate, unsupported
 }
 
 nonisolated extension ModelEntry {
@@ -36,6 +36,7 @@ nonisolated extension ModelEntry {
         case .diarization:   return .diarization     // audio → speaker segments (who spoke when); engine lives in Modules/Sortformer (MP4-3)
         case .enhance:       return .enhance         // audio → cleaned 48 kHz audio; engine lives in Modules/DeepFilterNet (MP5-3)
         case .voice:         return .voice           // speech in → speech out (also ASR/TTS modes); engine lives in Modules/LFMAudio (MP6-3)
+        case .interpolate:   return .interpolate     // video → video at 2x/4x the frame rate (RIFE); engine lives in Modules/RIFE (RIFE-3). Not .upscale: that is SeedVR2's dispatch.
         }
     }
 }
