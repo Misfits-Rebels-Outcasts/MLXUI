@@ -75,9 +75,8 @@ struct RIFECatalogTests {
         #expect(!upscale.allModels.contains { $0.hfModelId == Self.hfID })
     }
 
-    /// RIFE-3d: the RIFE module is the only one that claims it. The `ModelSupport` gap stays until RIFE-4 gives it a real Run screen
-    /// (REMOVE the gap, and the second assertion, in RIFE-4): until then the registered UI is the "not supported yet" view.
-    @Test func exactlyOneModuleClaimsItAndTheGapStaysUntilTheRunScreenExists() throws {
+    /// The RIFE module is the only one that claims it, and the RIFE-1 `ModelSupport` "no runner yet" gap is gone now that the Run screen exists (RIFE-4).
+    @Test func exactlyOneModuleClaimsItAndTheRIFE1GapIsGone() throws {
         let e = try rife()
         let full = ModelRegistry()
         for module in installedModules { module.register(into: full) }
@@ -89,7 +88,7 @@ struct RIFECatalogTests {
             if one.bestModule(for: e) != nil { claimers.append(module.descriptor.id) }
         }
         #expect(claimers == ["rife"], "a chat/upscale module must not be handed an interpolate model: \(claimers)")
-        #expect(ModelSupport.unsupportedReason(for: e) != nil)
+        #expect(ModelSupport.unsupportedReason(for: e) == nil)
     }
 
     @Test func stageFactoryRefusesTheKindWithAnExplicitCase() throws {

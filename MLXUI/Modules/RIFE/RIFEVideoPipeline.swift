@@ -29,8 +29,6 @@ nonisolated enum RIFEVideoError: Error, LocalizedError, Equatable {
     case tooLarge(width: Int, height: Int)
     case writerFailed(String)
     case noFrames
-    /// A direct `RIFEStage.run` (an `image` in) — RIFE needs the whole video from its Run screen.
-    case needsWholeVideo
 
     var errorDescription: String? {
         switch self {
@@ -41,7 +39,6 @@ nonisolated enum RIFEVideoError: Error, LocalizedError, Equatable {
         case .tooLarge(let w, let h):          return "That video is \(w) × \(h); the largest supported size is 3840 × 2160."
         case .writerFailed(let why):           return "Couldn't write the new video (\(why))."
         case .noFrames:                        return "That video has fewer than two frames, so there is nothing to interpolate between."
-        case .needsWholeVideo:                 return "RIFE works on a whole video, not a single image. Open its Run screen and pick a video."
         }
     }
 }

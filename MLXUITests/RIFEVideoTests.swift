@@ -241,3 +241,21 @@ struct RIFEVideoRunTests {
         #expect(worst < 0.5, "the main actor was blocked for \(worst) s")
     }
 }
+
+// RIFE-4: the stage the Run screen runs (text path in, text path out), end to end.
+@Suite(.enabled(if: RIFERealLoad.enabled, "needs MLXUI_TEST_RIFE_DIR or an installed mlx-community/RIFE-4.25"))
+struct RIFEStageRunTests {
+    @Test func theStageTurnsAVideoPathIntoANewVideoPath() async throws {
+        let src = try await RIFETestVideo.make(frames: 8, fps: 8, audioSeconds: 1)
+        defer { try? FileManager.default.removeItem(at: src) }
+        let out = RIFEStage.temporaryOutputURL()
+        defer { try? FileManager.default.removeItem(at: out) }
+        let stage = RIFEStage(modelDirectory: try #require(RIFERealLoad.directory), options: RIFEVideoOptions(times: 2, scale: 1), outputURL: out)
+        var last = 0.0
+        let result = try await stage.run(.text(src.path), progress: { last = max(last, $0) })
+        guard case let .text(path) = result else { Issue.record("expected text"); return }
+        #expect(path == out.path)
+        #expect(try await RIFETestVideo.frameCount(out) == 15)
+        #expect(last > 0)
+    }
+}

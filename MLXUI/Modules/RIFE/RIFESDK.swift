@@ -20,12 +20,11 @@ nonisolated struct RIFESDK: ModelSDK {
     }
 }
 
-/// `ModelUI` for RIFE. Until RIFE-4 builds the video Run screen this returns the standard "not supported yet" view, which is exactly what
-/// the app showed before the module was registered, so registering the engine (RIFE-3d) changes no behaviour a user can reach.
+/// `ModelUI` for RIFE: `RIFERunView` (pick a video, 2× or 4×, Scale, interpolate, preview, save).
 struct RIFEUI: ModelUI {
     func claim(_ model: ModelEntry) -> ClaimScore { RIFESDK().claim(model) }
 
     @MainActor func makeRunView(for model: ModelEntry, stage: any PipelineStage) -> AnyView {
-        AnyView(UnsupportedModelView(model: model))
+        AnyView(RIFERunView(modelDisplayName: model.displayName, license: model.license, modelID: model.id, handedStage: stage))
     }
 }

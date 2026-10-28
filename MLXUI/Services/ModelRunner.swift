@@ -895,7 +895,7 @@ final class ModelRunner {
             // Unreachable in practice since MP6-3a registered LFMAudioModule (same as .enhance above).
             showUnsupported("Voice conversation", model)
         case .interpolate:
-            // RIFE-1: no RIFE module is registered yet, so AppState.runModel(_:) lands here. Becomes unreachable once RIFE-3d registers it.
+            // Unreachable in practice since RIFE-3d registered RIFEModule (same as .voice above).
             showUnsupported("Frame interpolation", model)
         }
     }

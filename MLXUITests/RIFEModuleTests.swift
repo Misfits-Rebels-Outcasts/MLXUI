@@ -35,18 +35,24 @@ struct RIFEModuleTests {
         #expect(registry.bestModule(for: seed)?.descriptor.id == "seedvr2")
     }
 
-    @Test func makeStageReturnsARIFEStageWhoseDirectRunRefusesPlainly() async throws {
+    @Test func makeStageReturnsATextToTextRIFEStageWithDefaultOptions() throws {
         let e = try rife()
         let stage = try RIFESDK().makeStage(for: e, config: .default)
-        #expect(stage is RIFEStage)
+        let rife = try #require(stage as? RIFEStage)
         #expect(stage.id == "rife.mlx-community--RIFE-4.25")
-        do {
-            _ = try await stage.run(.text("x"), progress: { _ in })
-            Issue.record("expected a refusal")
-        } catch let error as RIFEVideoError {
-            #expect(error == .needsWholeVideo)
-            #expect(String(describing: error).contains("whole video"))
-        }
+        #expect(rife.accepts == .text && rife.produces == .text)
+        #expect(rife.options == RIFEVideoOptions(times: 2, scale: 1.0))
+    }
+
+    @Test func stageRefusesTheWrongKindAndAnUnreadableFile() async throws {
+        let stage = RIFEStage(modelDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("no-such-rife"))
+        await #expect(throws: StageError.self) { _ = try await stage.run(.audio(AudioBuffer(samples: [0], sampleRate: 16000)), progress: { _ in }) }
+        await #expect(throws: RIFEVideoError.self) { _ = try await stage.run(.text("/no/such/video.mp4"), progress: { _ in }) }
+    }
+
+    @Test func savedFileNameCarriesTheMultiplier() {
+        #expect(RIFERunModel.savedFileName(for: URL(fileURLWithPath: "/a/holiday.mov"), times: 4) == "holiday-4x.mp4")
+        #expect(RIFERunModel.savedFileName(for: nil, times: 2) == "video-2x.mp4")
     }
 
     @Test func descriptorRecordsTheLicenceAndKind() {
