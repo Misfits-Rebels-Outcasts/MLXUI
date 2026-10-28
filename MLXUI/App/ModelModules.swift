@@ -52,5 +52,6 @@ let installedModules: [ModelModule.Type] = [
     SegmentAnythingModule.self,
     WanVideoModule.self,
     SeedVR2Module.self,
+    RIFEModule.self,   // RIFE-3d: the only .interpolate module; claims RIFE-family entries only
     ChatModule.self,
 ]
