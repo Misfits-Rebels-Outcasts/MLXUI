@@ -2,6 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- LFM2.5-Audio hold-to-talk (MP6-3b). Owner ruling (Boo, 2026-10-27). The Hardened Runtime needs this key for any microphone access. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
 	<key>keychain-access-groups</key>
 	<array>
 		<string>$(AppIdentifierPrefix)net.connectcode.mlxui-pro</string>

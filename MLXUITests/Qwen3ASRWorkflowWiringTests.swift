@@ -130,8 +130,9 @@ struct Qwen3ASRWorkflowWiringTests {
     @MainActor
     @Test func qwen3ASRIsLastInTheTranscribePoolWithoutMovingTheSeed() throws {
         let pool = TaskModels.models(forTask: "Transcribe")
+        // MP6-W appended "LFM2.5-Audio 1.5B" after it (implementer's call, pending owner confirmation: the assertion follows the append).
         #expect(pool == ["Whisper Tiny", "Whisper Small", "Whisper Large v3", "Voxtral Mini 4B Realtime",
-                         "Parakeet TDT 0.6B v3", Self.display])
+                         "Parakeet TDT 0.6B v3", Self.display, "LFM2.5-Audio 1.5B"])
         #expect(TaskModels.seededModels(forTask: "Transcribe").first == "Whisper Tiny")
         let catalog = try loadCatalog()
         let claimable = claimableIDs(catalog)

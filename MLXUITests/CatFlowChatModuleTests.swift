@@ -85,7 +85,9 @@ struct CatFlowChatModuleTests {
         //        entry (RSI/DelegateModelPackBacklog.md MP4-1, MP-0 ruled 2026-10-21), 49 → 50. Same convention.
         // MP5-1: bundled catalog gained the mlx-community/DeepFilterNet-mlx `.enhance` entry
         //        (RSI/DelegateModelPackBacklog.md MP5-1, MP-0 ruled 2026-10-21), 50 → 51. Same convention.
-        #expect(entries.count == 51, "bundled catalog drifted: \(entries.count) entries")
+        // MP6-1: bundled catalog gained the mlx-community/LFM2.5-Audio-1.5B-6bit `.voice` entry
+        //        (RSI/DelegateModelPackBacklog.md MP6-1, MP-0 ruled 2026-10-21), 51 → 52. Same convention.
+        #expect(entries.count == 52, "bundled catalog drifted: \(entries.count) entries")
 
         let withChat = registry(includingChat: true)
         let withoutChat = registry(includingChat: false)
@@ -105,7 +107,7 @@ struct CatFlowChatModuleTests {
             }
             checked += 1
         }
-        #expect(checked == 51)
+        #expect(checked == 52)
         #expect(llmChecked == 14)   // MP1-1: Gemma 4 E4B is the 14th .llm entry (MM1: MiMo V2.6 9B was the 13th)
     }
 

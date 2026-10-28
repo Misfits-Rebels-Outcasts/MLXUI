@@ -255,7 +255,8 @@ struct RoutingTests {
     }
 
     @Test func runnerKindOverridesSpeechToSpeechToUnsupported() {
-        #expect(makeEntry(family: "LFM2.5-Audio", modelType: .asr).runnerKind == .unsupported)
+        // MP6-1: LFM2.5-Audio left this override (it routes to `.voice` now); sam-audio keeps `.unsupported`.
+        #expect(makeEntry(family: "LFM2.5-Audio", modelType: .asr).runnerKind == .voice)
         #expect(makeEntry(family: "sam-audio", modelType: .asr).runnerKind == .unsupported)
     }
 

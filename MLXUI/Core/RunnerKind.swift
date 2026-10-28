@@ -5,7 +5,7 @@ import Foundation
 /// corrections live in `ModelEntry.runnerKind` below — the single source of truth.
 /// See `Design/pipeline-stage-sketch.md` §routing.
 nonisolated enum RunnerKind: String, Sendable {
-    case llm, asr, tts, vision, embedding, ocr, image, music, segmentation, video, upscale, rerank, decision, diarization, enhance, unsupported
+    case llm, asr, tts, vision, embedding, ocr, image, music, segmentation, video, upscale, rerank, decision, diarization, enhance, voice, unsupported
 }
 
 nonisolated extension ModelEntry {
@@ -15,7 +15,8 @@ nonisolated extension ModelEntry {
         // Known overrides first (mislabeled in the catalog):
         switch family {
         case "Llama-OuteTTS":               return .tts          // catalog tags it asr
-        case "LFM2.5-Audio", "sam-audio":   return .unsupported  // speech-to-speech; no linear stage yet
+        case "LFM2.5-Audio":                return .voice        // speech-to-speech conversation; engine lives in Modules/LFMAudio (MP6-3)
+        case "sam-audio":                   return .unsupported  // speech-to-speech; no linear stage yet
         default:                            break
         }
         switch modelType {
@@ -34,6 +35,7 @@ nonisolated extension ModelEntry {
         case .decision:      return .decision        // text + typed question → label + probabilities; engine lives in Modules/Laya
         case .diarization:   return .diarization     // audio → speaker segments (who spoke when); engine lives in Modules/Sortformer (MP4-3)
         case .enhance:       return .enhance         // audio → cleaned 48 kHz audio; engine lives in Modules/DeepFilterNet (MP5-3)
+        case .voice:         return .voice           // speech in → speech out (also ASR/TTS modes); engine lives in Modules/LFMAudio (MP6-3)
         }
     }
 }

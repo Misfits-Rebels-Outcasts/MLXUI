@@ -102,7 +102,8 @@ nonisolated struct InstalledModelIndex: Sendable {
     private static func kind(modelType: String, family: String) -> RunnerKind {
         switch family {
         case "Llama-OuteTTS":             return .tts
-        case "LFM2.5-Audio", "sam-audio": return .unsupported
+        case "LFM2.5-Audio":              return .voice
+        case "sam-audio":                 return .unsupported
         default:                          break
         }
         switch modelType {
@@ -118,6 +119,7 @@ nonisolated struct InstalledModelIndex: Sendable {
         case "rerank":        return .rerank
         case "diarization":   return .diarization
         case "enhance":       return .enhance
+        case "voice":         return .voice
         default:              return .unsupported  // video / unknown
         }
     }

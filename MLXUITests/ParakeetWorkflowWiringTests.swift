@@ -132,7 +132,8 @@ struct ParakeetWorkflowWiringTests {
         // MP3-W appended "Qwen3-ASR 1.7B" after it, so the pool is compared up to Parakeet and Parakeet must still follow
         // Voxtral (implementer's call, pending owner confirmation: the assertion follows the append, as the count guards do).
         #expect(Array(pool.prefix(5)) == ["Whisper Tiny", "Whisper Small", "Whisper Large v3", "Voxtral Mini 4B Realtime", Self.display])
-        #expect(pool.last == "Qwen3-ASR 1.7B")
+        // MP6-W appended "LFM2.5-Audio 1.5B" after Qwen3-ASR (same convention: the assertion follows the append).
+        #expect(Array(pool.suffix(2)) == ["Qwen3-ASR 1.7B", "LFM2.5-Audio 1.5B"])
         #expect(TaskModels.seededModels(forTask: "Transcribe").first == "Whisper Tiny")
         let catalog = try loadCatalog()
         let claimable = claimableIDs(catalog)

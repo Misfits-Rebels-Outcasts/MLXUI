@@ -31,6 +31,7 @@ let installedModules: [ModelModule.Type] = [
     Qwen3ASRModule.self,
     SortformerModule.self,   // MP4-3a: the only .diarization module; claims Sortformer-family entries only
     DeepFilterNetModule.self,   // MP5-3a: the only .enhance module; claims DeepFilterNet-family entries only
+    LFMAudioModule.self,   // MP6-3a: the only .voice module; claims LFM2.5-Audio-family entries only
     KokoroModule.self,
     MLXAudioTTSModule.self,
     MusicGenModule.self,
