@@ -106,3 +106,47 @@ struct RIFECatalogTests {
         #expect(out == ["config.json", "model.safetensors"])
     }
 }
+
+// RIFE-2: the description and metadata.
+extension RIFECatalogTests {
+
+    /// Every field `ModelDetailView` and `ComparisonTableView` render, pinned so the only dashes are the sanctioned nulls:
+    /// Speed (no tokens/s for a frame interpolator), Context, benchmarks (the card's parity figures are not quality benchmarks)
+    /// and languages (a vision model).
+    @Test func metadataRendersWithNoUnsanctionedDash() throws {
+        let e = try rife()
+        #expect(e.architecture?.hasPrefix("IFNet") == true)
+        #expect(e.descriptionSource == "mlx-community/RIFE-4.25")
+        #expect(e.taskTags == ["video-frame-interpolation", "frame-interpolation", "slow-motion"])
+        #expect(e.lastUpdated == "2026-06-06")   // HF lastModified
+        #expect(e.communityLikes == 3)
+        #expect(e.communityDownloads != nil)
+        let day = DateFormatter()
+        day.locale = Locale(identifier: "en_US_POSIX")
+        day.dateFormat = "yyyy-MM-dd"
+        day.isLenient = false
+        #expect(e.lastUpdated.flatMap { day.date(from: $0) } != nil)
+        #expect(e.formattedDownloads() != "—")
+        #expect(e.speedTokensPerSec == nil)
+        #expect(e.contextWindow == nil)
+        #expect(e.benchmarks == nil)
+        #expect(e.languages == nil)
+        #expect(DataNormalizer.normalizeLicense(e.license) != "—")
+        #expect(!e.paramSize.isEmpty)
+        #expect(e.summary?.isEmpty == false)
+    }
+
+    /// What it does, what it doesn't, why fp32, and the attribution the MIT licence asks for (hzwer). No quality claim the card
+    /// doesn't make: only its own parity figure may be cited, and the description cites none.
+    @Test func descriptionStatesTheModesTheAttributionAndNoInventedClaims() throws {
+        let d = try #require(try rife().description)
+        #expect(d.contains("2×") && d.contains("4×"))
+        #expect(d.contains("hzwer"))
+        #expect(d.contains("MIT"))
+        #expect(d.contains("fp32"))
+        #expect(d.contains("does not make the picture sharper"))
+        for banned in ["FPS", "faster than", "best", "state-of-the-art", "PSNR", "SSIM"] {
+            #expect(!d.contains(banned), "unsupported claim: \(banned)")
+        }
+    }
+}
