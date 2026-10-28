@@ -69,7 +69,7 @@ nonisolated enum RIFEEngine {
         let weights = try MLX.loadArrays(url: weightsURL)
         let net = RIFEIFNet()
         try net.update(parameters: ModuleParameters.unflattened(weights), verify: .all)
-        eval(net)
+        try MLXErrorGuard.evaluate(net.parameters().flattened().map(\.1))
         return Loaded(net: net, config: config)
     }
 
