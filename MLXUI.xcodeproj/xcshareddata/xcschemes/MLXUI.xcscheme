@@ -102,5 +102,24 @@
    <ArchiveAction
       buildConfiguration = "Release"
       revealArchiveInOrganizer = "YES">
+      <PreActions>
+         <ExecutionAction
+            ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
+            <ActionContent
+               title = "Strip quarantine (ITMS-91109)"
+               scriptText = "# App Store rejects any bundled file carrying com.apple.quarantine (ITMS-91109).&#10;/usr/bin/xattr -dr com.apple.quarantine &quot;${SRCROOT}/MLXUI&quot; 2&gt;/dev/null || true&#10;"
+               shellToInvoke = "/bin/sh">
+               <EnvironmentBuildable>
+                  <BuildableReference
+                     BuildableIdentifier = "primary"
+                     BlueprintIdentifier = "207EF2A22FEB616500A0AC5F"
+                     BuildableName = "MLXUI.app"
+                     BlueprintName = "MLXUI"
+                     ReferencedContainer = "container:MLXUI.xcodeproj">
+                  </BuildableReference>
+               </EnvironmentBuildable>
+            </ActionContent>
+         </ExecutionAction>
+      </PreActions>
    </ArchiveAction>
 </Scheme>
