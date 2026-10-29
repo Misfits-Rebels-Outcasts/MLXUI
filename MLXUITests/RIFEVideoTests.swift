@@ -128,6 +128,15 @@ struct RIFEVideoPlanTests {
         #expect(RIFEVideoError.fullScaleTooLarge(width: 3840, height: 2160).description.contains("Scale 0.5"))
     }
 
+    // Owner ruling 2026-10-29: say so when the source has no audio, instead of promising it is copied.
+    @Test func theOutputLineFollowsTheSourceAudio() {
+        let withAudio = RIFEVideoInfo(width: 1280, height: 720, frameRate: 30, duration: 2, estimatedFrames: 60, hasAudio: true)
+        var silent = withAudio; silent.hasAudio = false
+        #expect(RIFERunModel.outputLine(withAudio, times: 2) == "Output: 60 fps, about 119 frames, the same length as the original. The audio is copied unchanged.")
+        #expect(RIFERunModel.outputLine(silent, times: 2) == "Output: 60 fps, about 119 frames, the same length as the original. The clip has no audio.")
+        #expect(!RIFERunModel.outputLine(silent, times: 4).contains("copied"))
+    }
+
     @MainActor @Test func theRunModelFixesScaleAtHalfAbove1440p() {
         let model = RIFERunModel()
         model.scale = 1.0

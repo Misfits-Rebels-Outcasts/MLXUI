@@ -159,4 +159,12 @@ extension RIFECatalogTests {
             #expect(!d.contains(banned), "unsupported claim: \(banned)")
         }
     }
+
+    /// Owner ruling 2026-10-29: a download under 0.1 GB shows in MB ("23 MB"), not "0.0 GB", on the model page and the variant row.
+    @Test func smallDownloadsShowInMegabytes() throws {
+        #expect(DataNormalizer.downloadSize(gb: try rife().downloadSizeGB) == "23 MB")
+        #expect(DataNormalizer.downloadSize(gb: 0.05) == "50 MB")
+        #expect(DataNormalizer.downloadSize(gb: 0.1) == "0.1 GB")
+        #expect(DataNormalizer.downloadSize(gb: 4.2) == "4.2 GB")
+    }
 }

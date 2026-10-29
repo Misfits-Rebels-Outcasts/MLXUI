@@ -14,9 +14,18 @@ struct RIFERunView: View {
     /// SC-5c: the stage the Run sheet handed (a `LeasingStage`); every run goes through it.
     let handedStage: any PipelineStage
 
-    @State private var model = RIFERunModel()
+    @State private var model: RIFERunModel
     @State private var showImporter = false
     @State private var isDropTargeted = false
+
+    /// `model` is injectable so a test can host the result state (a finished run) without running one.
+    init(modelDisplayName: String, license: String?, modelID: String, handedStage: any PipelineStage, model: RIFERunModel? = nil) {
+        self.modelDisplayName = modelDisplayName
+        self.license = license
+        self.modelID = modelID
+        self.handedStage = handedStage
+        _model = State(initialValue: model ?? RIFERunModel())
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -93,7 +102,7 @@ struct RIFERunView: View {
             }
             .disabled(model.isRunning)
             if let info = model.info {
-                Text("Output: \(Self.fps(info.outputFrameRate(times: model.times))) fps, about \(info.outputFrames(times: model.times)) frames, the same length as the original. The audio is copied unchanged.")
+                Text(RIFERunModel.outputLine(info, times: model.times))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Text(model.scaleIsFixed
@@ -102,7 +111,6 @@ struct RIFERunView: View {
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Text("Handles clips up to \(RIFEVideoOptions.maxSourceFrames) frames (about 60 seconds at 30 fps) and 3840 × 2160. It adds frames; it doesn't make the picture sharper or larger.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Text(license ?? "License: see model page").font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -123,7 +131,7 @@ struct RIFERunView: View {
                 Label(summary, systemImage: "checkmark.circle.fill").foregroundStyle(.green).font(.subheadline.bold())
             }
             if let player = model.player {
-                VideoPlayer(player: player).frame(height: 240).clipShape(RoundedRectangle(cornerRadius: 8))
+                VideoPreview(player: player).frame(height: 240).clipShape(RoundedRectangle(cornerRadius: 8))
             }
             HStack {
                 Spacer()
@@ -184,6 +192,14 @@ final class RIFERunModel {
     var hasResult: Bool { outputURL != nil }
     var sourceName: String? { sourceURL?.lastPathComponent }
     var canRun: Bool { sourceURL != nil && info != nil && limitMessage == nil && !isRunning }
+
+    /// The Output line under the pickers; the audio sentence follows the source, not a promise about a track that isn't there.
+    nonisolated static func outputLine(_ info: RIFEVideoInfo, times: Int) -> String {
+        let rate = info.outputFrameRate(times: times)
+        let fps = String(format: abs(rate.rounded() - rate) < 0.005 ? "%.0f" : "%.2f", rate)
+        return "Output: \(fps) fps, about \(info.outputFrames(times: times)) frames, the same length as the original. "
+            + (info.hasAudio ? "The audio is copied unchanged." : "The clip has no audio.")
+    }
 
     func sourceSummary(_ info: RIFEVideoInfo) -> String {
         let fps = abs(info.frameRate.rounded() - info.frameRate) < 0.005 ? String(format: "%.0f", info.frameRate) : String(format: "%.2f", info.frameRate)
@@ -256,10 +272,7 @@ final class RIFERunModel {
                 }
                 guard case let .text(path) = produced else { throw StageError.kindMismatch(expected: .text, got: produced.kind) }
                 let url = URL(fileURLWithPath: path)
-                outputURL = url
-                player = AVPlayer(url: url)
-                resultSummary = "Done: \(info.outputFrames(times: times)) frames at \(String(format: "%.0f", info.outputFrameRate(times: times))) fps"
-                progress = 1
+                showResult(at: url, summary: "Done: \(info.outputFrames(times: times)) frames at \(String(format: "%.0f", info.outputFrameRate(times: times))) fps")
             } catch {
                 // MP5-3g (owner ruling 2026-10-26): a cancelled run is never an error. The task's own flag decides, whatever was
                 // thrown (a cancelled memory wait throws `MemoryBudget.WaitError`, not `CancellationError`). The pipeline has
@@ -273,6 +286,14 @@ final class RIFERunModel {
             }
             isRunning = false
         }
+    }
+
+    /// The finished state: the preview player and the summary line.
+    func showResult(at url: URL, summary: String) {
+        outputURL = url
+        player = AVPlayer(url: url)
+        resultSummary = summary
+        progress = 1
     }
 
     /// Runs `stage` off the main actor (MP5-3g): `SWIFT_APPROACHABLE_CONCURRENCY` makes a plain `nonisolated async` call run on its

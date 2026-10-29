@@ -1,6 +1,11 @@
 import Foundation
 
 enum DataNormalizer {
+    /// A download size for display: megabytes under 0.1 GB ("23 MB"), never "0.0 GB".
+    static func downloadSize(gb: Double) -> String {
+        gb < 0.1 ? "\(Int((gb * 1000).rounded())) MB" : String(format: "%.1f GB", gb)
+    }
+
     static func normalizeLicense(_ raw: String?) -> String {
         guard let raw else { return "Unknown" }
         let map: [String: String] = [
