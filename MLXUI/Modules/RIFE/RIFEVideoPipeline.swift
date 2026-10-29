@@ -15,8 +15,10 @@ nonisolated struct RIFEVideoOptions: Sendable, Equatable {
 
     static let allowedTimes = [2, 4]
     static let allowedScales: [Float] = [1.0, 0.5]
-    /// Source frames: 60 s at 30 fps. The output has `times`× as many.
-    static let maxSourceFrames = 1800
+    /// Source frames: 30 minutes at 30 fps. The output has `times`× as many. This is an app limit, not a model limit: memory stays flat
+    /// over a run (RIFE-L: a 5-minute 1080p 2x run peaked within 10% of the 8 s clip's), so only time bounds it, and the Run screen
+    /// shows the estimate before Interpolate (owner ruling, Boo, 2026-10-29).
+    static let maxSourceFrames = 54_000
     /// 3840 x 2160. Anything larger is refused rather than tried.
     static let maxPixels = 3840 * 2160
     /// 2560 x 1440. Above this the flow is always estimated at Scale 0.5: Scale 1.0 at 4K ran 30 minutes and peaked near 13 GiB
@@ -41,7 +43,7 @@ nonisolated enum RIFEVideoError: Error, LocalizedError, Equatable {
         case .notAVideo:                       return "That file has no video track."
         case .unreadable:                        return "Couldn't read that video."
         case .badOptions(let why):             return "RIFE: \(why)"
-        case .tooManyFrames(let n, let limit): return "That clip has about \(n) frames; the limit is \(limit) (about 60 seconds at 30 fps). Trim it and try again."
+        case .tooManyFrames(let n, let limit): return "That clip has about \(n) frames; the limit is \(limit) (about 30 minutes at 30 fps). Trim it and try again."
         case .tooLarge(let w, let h):          return "That video is \(w) × \(h); the largest supported size is 3840 × 2160."
         case .fullScaleTooLarge(let w, let h): return "That video is \(w) × \(h). Above 2560 × 1440 the motion is always estimated at half size (Scale 0.5)."
         case .writerFailed(let why):           return "Couldn't write the new video (\(why))."
@@ -68,7 +70,50 @@ nonisolated struct RIFEVideoInfo: Sendable, Equatable {
     func outputFrameRate(times: Int) -> Double { frameRate * Double(times) }
 }
 
+/// How long a run takes, before it starts: inserted frames × megapixels × a per-megapixel rate fitted to the measured runs (owner ruling,
+/// Boo, 2026-10-29; M3 Pro: 720p 2x ≈ 8 s per second of video, 1080p 2x ≈ 15, 1080p 4x ≈ 45, 4K 2x at Scale 0.5 ≈ 85 -- all about 0.30 s per
+/// inserted megapixel at Scale 1.0, 0.34 at Scale 0.5). An estimate for the Output line, never a promise.
+nonisolated enum RIFEEstimate {
+    static let secondsPerMegapixelFull = 0.30
+    static let secondsPerMegapixelHalf = 0.34
+
+    static func seconds(for info: RIFEVideoInfo, times: Int, scale: Float) -> Double {
+        let inserted = Double(max(0, info.estimatedFrames - 1) * max(0, times - 1))
+        let megapixels = Double(info.width * info.height) / 1_000_000
+        return inserted * megapixels * (scale < 1 ? secondsPerMegapixelHalf : secondsPerMegapixelFull)
+    }
+
+    /// "under a minute", "about 15 minutes", "about 7.5 hours".
+    static func phrase(seconds: Double) -> String {
+        if seconds < 60 { return "under a minute" }
+        let minutes = Int((seconds / 60).rounded())
+        if minutes == 1 { return "about 1 minute" }
+        if minutes < 120 { return "about \(minutes) minutes" }
+        let hours = (seconds / 1800).rounded() / 2   // nearest half hour
+        return hours == hours.rounded() ? "about \(Int(hours)) hours" : "about \(hours) hours"
+    }
+}
+
 nonisolated enum RIFEVideoPipeline {
+
+    // MARK: Scene cuts
+
+    /// Mean absolute difference between neighbouring frames above which they are a hard cut, on a 0...1 scale over every 8th pixel
+    /// (RIFE-L, measured on the sample clips and a clip with a hard cut: see journal 2026-637).
+    static let sceneCutThreshold: Float = 0.25
+
+    /// 0 for identical frames, 1 for black against white. Frames are `[1, H, W, 3]` floats in 0...1.
+    static func sceneDifference(_ a: MLXArray, _ b: MLXArray) throws -> Float {
+        func thinned(_ x: MLXArray) -> MLXArray {
+            let h = x.dim(1) / 8 * 8, w = x.dim(2) / 8 * 8
+            return x[0..., 0 ..< h, 0 ..< w, 0...].reshaped(1, h / 8, 8, w / 8, 8, 3)[0..., 0..., 0, 0..., 0, 0...]
+        }
+        return try MLXErrorGuard.read(mean(abs(thinned(a) - thinned(b))), as: Float.self).first ?? 0
+    }
+
+    static func isSceneCut(_ a: MLXArray, _ b: MLXArray) throws -> Bool {
+        try sceneDifference(a, b) > sceneCutThreshold
+    }
 
     // MARK: Pure helpers (unit-tested without a model)
 
@@ -271,10 +316,17 @@ nonisolated enum RIFEVideoPipeline {
             try MLXErrorGuard.evaluate(current)
             if let previous {
                 try await append(previous.frame, at: previous.time)
+                // A hard cut: interpolating across it only draws a ghost of two unrelated pictures, so the earlier frame is repeated.
+                let cut = try isSceneCut(previous.frame, current)
                 for step in 1 ..< options.times {
                     let t = Float(step) / Float(options.times)
-                    let mid = try RIFEEngine.interpolate(loaded, previous.frame, current, timestep: t, scale: options.scale)
-                    try MLXErrorGuard.evaluate(mid)
+                    let mid: MLXArray
+                    if cut {
+                        mid = previous.frame
+                    } else {
+                        mid = try RIFEEngine.interpolate(loaded, previous.frame, current, timestep: t, scale: options.scale)
+                        try MLXErrorGuard.evaluate(mid)
+                    }
                     try await append(mid, at: insertedTime(from: previous.time, to: time, step: step, of: options.times))
                 }
                 progress(min(0.98, Double(sourceIndex - 1) / Double(expectedPairs)))

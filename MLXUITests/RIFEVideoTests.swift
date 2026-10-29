@@ -146,9 +146,56 @@ struct RIFEVideoPlanTests {
     @Test func theOutputLineFollowsTheSourceAudio() {
         let withAudio = RIFEVideoInfo(width: 1280, height: 720, frameRate: 30, duration: 2, estimatedFrames: 60, hasAudio: true)
         var silent = withAudio; silent.hasAudio = false
-        #expect(RIFERunModel.outputLine(withAudio, times: 2) == "Output: 60 fps, about 119 frames, the same length as the original. The audio is copied unchanged.")
-        #expect(RIFERunModel.outputLine(silent, times: 2) == "Output: 60 fps, about 119 frames, the same length as the original. The clip has no audio.")
-        #expect(!RIFERunModel.outputLine(silent, times: 4).contains("copied"))
+        #expect(RIFERunModel.outputLine(withAudio, times: 2, scale: 1) == "Output: 60 fps, about 119 frames, the same length as the original. Takes under a minute. The audio is copied unchanged.")
+        #expect(RIFERunModel.outputLine(silent, times: 2, scale: 1) == "Output: 60 fps, about 119 frames, the same length as the original. Takes under a minute. The clip has no audio.")
+        #expect(!RIFERunModel.outputLine(silent, times: 4, scale: 1).contains("copied"))
+    }
+
+    // RIFE-L (owner ruling 2026-10-29): the Output line carries a time estimate, fitted to the measured runs.
+    @Test func theEstimateMatchesTheMeasuredRuns() {
+        func info(_ w: Int, _ h: Int, fps: Double, seconds: Double) -> RIFEVideoInfo {
+            RIFEVideoInfo(width: w, height: h, frameRate: fps, duration: seconds, estimatedFrames: Int(fps * seconds), hasAudio: false)
+        }
+        // Seconds of work per second of video: 720p 2x ≈ 8, 1080p 2x ≈ 15, 1080p 4x ≈ 45, 4K 2x at Scale 0.5 ≈ 85 (within 15%).
+        func perSecond(_ i: RIFEVideoInfo, _ times: Int, _ scale: Float) -> Double { RIFEEstimate.seconds(for: i, times: times, scale: scale) / i.duration }
+        #expect(abs(perSecond(info(1280, 720, fps: 30, seconds: 12), 2, 1) - 8) < 8 * 0.15 + 1)
+        #expect(abs(perSecond(info(1920, 1080, fps: 24, seconds: 8), 2, 1) - 15) < 15 * 0.15)
+        #expect(abs(perSecond(info(1920, 1080, fps: 24, seconds: 8), 4, 1) - 45) < 45 * 0.15)
+        #expect(abs(perSecond(info(3840, 2160, fps: 30, seconds: 6), 2, 0.5) - 85) < 85 * 0.15)
+    }
+
+    @Test func theEstimateIsRoundedInPlainWords() {
+        #expect(RIFEEstimate.phrase(seconds: 0) == "under a minute")
+        #expect(RIFEEstimate.phrase(seconds: 59) == "under a minute")
+        #expect(RIFEEstimate.phrase(seconds: 60) == "about 1 minute")
+        #expect(RIFEEstimate.phrase(seconds: 94) == "about 2 minutes")
+        #expect(RIFEEstimate.phrase(seconds: 900) == "about 15 minutes")
+        #expect(RIFEEstimate.phrase(seconds: 7_199) == "about 2 hours")
+        #expect(RIFEEstimate.phrase(seconds: 27_000) == "about 7.5 hours")
+        #expect(RIFEEstimate.phrase(seconds: 10_800) == "about 3 hours")
+    }
+
+    // RIFE-L: 30 minutes of source video, 54,000 frames at 30 fps; 3840 x 2160 unchanged.
+    @Test func theLimitIsThirtyMinutesAt30Fps() throws {
+        #expect(RIFEVideoOptions.maxSourceFrames == 54_000)
+        var ok = RIFEVideoInfo(width: 1920, height: 1080, frameRate: 30, duration: 1800, estimatedFrames: 54_000, hasAudio: true)
+        try RIFEVideoPipeline.validate(ok)
+        ok.estimatedFrames = 54_001
+        #expect(throws: RIFEVideoError.self) { try RIFEVideoPipeline.validate(ok) }
+        let message = RIFEVideoError.tooManyFrames(count: 55_800, limit: 54_000).description
+        #expect(message.contains("about 30 minutes at 30 fps") && message.contains("55800"))
+        #expect(throws: RIFEVideoError.self) { try RIFEVideoPipeline.validate(RIFEVideoInfo(width: 3841, height: 2160, frameRate: 30, duration: 2, estimatedFrames: 60, hasAudio: false)) }
+    }
+
+    // RIFE-L scene cuts: pure arithmetic on small frames.
+    @Test func sceneDifferenceIsZeroForTheSameFrameAndOneForBlackAgainstWhite() throws {
+        let black = MLXArray.zeros([1, 48, 64, 3]), white = MLXArray.ones([1, 48, 64, 3])
+        #expect(try RIFEVideoPipeline.sceneDifference(black, black) == 0)
+        #expect(abs(try RIFEVideoPipeline.sceneDifference(black, white) - 1) < 1e-5)
+        #expect(try RIFEVideoPipeline.isSceneCut(black, white))
+        #expect(try !RIFEVideoPipeline.isSceneCut(black, black))
+        // A small brightness step (a fade, a flash of motion) is not a cut.
+        #expect(try !RIFEVideoPipeline.isSceneCut(black, MLXArray.ones([1, 48, 64, 3]) * 0.1))
     }
 
     @MainActor @Test func theRunModelFixesScaleAtHalfAbove1440p() {
