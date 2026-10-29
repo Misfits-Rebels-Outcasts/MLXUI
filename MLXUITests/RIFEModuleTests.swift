@@ -60,4 +60,13 @@ struct RIFEModuleTests {
         #expect(RIFEModule.descriptor.modelTypes == [.interpolate])
         #expect(RIFEModule.descriptor.maintainers == ["hzwer"])
     }
+
+    /// RIFE-5c: the ledger books the measured 6.4 GB working set (Case E), not the 2.0 GB it booked as a provisional catalog figure.
+    @Test func theLedgerBooksTheMeasuredWorkingSet() {
+        let row = ModelLoadProfile.entry(for: .interpolate)
+        #expect(row.measured)
+        #expect(row.workingSetBytes == 6_400_000_000)
+        #expect(ModelLoadProfile.workingSetBytes(for: .interpolate) == 6_400_000_000)
+        #expect(ModelLoadProfile.charge(kind: .interpolate, directory: FileManager.default.temporaryDirectory.appendingPathComponent("no-such-\(UUID().uuidString)"), catalogFallback: 6_400_000_000) == 6_400_000_000)
+    }
 }
