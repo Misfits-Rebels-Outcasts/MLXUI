@@ -189,16 +189,44 @@ nonisolated enum RIFEVideoPipeline {
         guard writer.startWriting() else { throw RIFEVideoError.writerFailed(writer.error?.localizedDescription ?? "the writer didn't start") }
         writer.startSession(atSourceTime: .zero)
 
-        func waitUntilReady(_ input: AVAssetWriterInput) async throws {
+        // The writer interleaves by time: with a long clip it stops accepting video until the audio has caught up, so the audio
+        // is fed alongside the video (up to just past the frame being written), never after it.
+        var pendingAudio: CMSampleBuffer?
+        var audioFinished = false
+        func pumpAudio(upTo limit: CMTime?) throws {
+            guard let audioOut, let audioIn, !audioFinished else { return }
+            while audioIn.isReadyForMoreMediaData {
+                if pendingAudio == nil { pendingAudio = audioOut.copyNextSampleBuffer() }
+                // The source ran dry: the input must be closed now, or the writer keeps waiting for more audio and holds the video.
+                guard let sample = pendingAudio else {
+                    audioIn.markAsFinished()
+                    audioFinished = true
+                    return
+                }
+                // A buffer with no samples (or no valid timestamp) carries nothing to write, and an invalid time compares as
+                // later than every limit, which would park it here forever and starve the video.
+                if CMSampleBufferGetNumSamples(sample) == 0 { pendingAudio = nil; continue }
+                if let limit, CMTimeCompare(CMSampleBufferGetPresentationTimeStamp(sample), limit) > 0,
+                   CMSampleBufferGetPresentationTimeStamp(sample).isValid { return }
+                guard audioIn.append(sample) else {
+                    throw RIFEVideoError.writerFailed(writer.error?.localizedDescription ?? "an audio packet was refused")
+                }
+                pendingAudio = nil
+            }
+        }
+
+        func waitUntilReady(_ input: AVAssetWriterInput, audioUpTo time: CMTime? = nil) async throws {
             while !input.isReadyForMoreMediaData {
                 try Task.checkCancellation()
                 if writer.status == .failed { throw RIFEVideoError.writerFailed(writer.error?.localizedDescription ?? "unknown") }
+                try pumpAudio(upTo: time)
                 try await Task.sleep(for: .milliseconds(2))
             }
         }
 
         func append(_ frame: MLXArray, at time: CMTime) async throws {
-            try await waitUntilReady(videoIn)
+            try pumpAudio(upTo: time + CMTime(seconds: 1, preferredTimescale: 600))
+            try await waitUntilReady(videoIn, audioUpTo: time + CMTime(seconds: 1, preferredTimescale: 600))
             guard let pool = adaptor.pixelBufferPool else { throw RIFEVideoError.writerFailed("no pixel buffer pool") }
             var buffer: CVPixelBuffer?
             CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer)
@@ -238,14 +266,11 @@ nonisolated enum RIFEVideoPipeline {
         try await append(last.frame, at: last.time)
         videoIn.markAsFinished()
 
-        if let audioOut, let audioIn {
-            while let sample = audioOut.copyNextSampleBuffer() {
-                try await waitUntilReady(audioIn)
-                guard audioIn.append(sample) else {
-                    throw RIFEVideoError.writerFailed(writer.error?.localizedDescription ?? "an audio packet was refused")
-                }
-            }
-            audioIn.markAsFinished()
+        while audioIn != nil, !audioFinished {
+            try Task.checkCancellation()
+            if writer.status == .failed { throw RIFEVideoError.writerFailed(writer.error?.localizedDescription ?? "unknown") }
+            try pumpAudio(upTo: nil)
+            if !audioFinished { try await Task.sleep(for: .milliseconds(2)) }
         }
         if reader.status == .failed { throw RIFEVideoError.unreadable(reader.error?.localizedDescription ?? "read failed") }
         await writer.finishWriting()

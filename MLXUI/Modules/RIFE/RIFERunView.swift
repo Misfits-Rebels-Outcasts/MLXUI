@@ -136,7 +136,7 @@ struct RIFERunView: View {
         }
     }
 
-    private static func fps(_ value: Double) -> String { String(format: value.rounded() == value ? "%.0f" : "%.2f", value) }
+    private static func fps(_ value: Double) -> String { String(format: abs(value.rounded() - value) < 0.005 ? "%.0f" : "%.2f", value) }
 
     // MARK: - Actions
 
@@ -178,7 +178,7 @@ final class RIFERunModel {
     var canRun: Bool { sourceURL != nil && info != nil && limitMessage == nil && !isRunning }
 
     func sourceSummary(_ info: RIFEVideoInfo) -> String {
-        let fps = info.frameRate.rounded() == info.frameRate ? String(format: "%.0f", info.frameRate) : String(format: "%.2f", info.frameRate)
+        let fps = abs(info.frameRate.rounded() - info.frameRate) < 0.005 ? String(format: "%.0f", info.frameRate) : String(format: "%.2f", info.frameRate)
         return "\(info.width) × \(info.height) · \(fps) fps · \(String(format: "%.1f", info.duration)) s" + (info.hasAudio ? " · audio" : "")
     }
 
