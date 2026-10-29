@@ -23,7 +23,7 @@ struct WanVideoRunView: View {
     let modelDisplayName: String
     let modelID: String
 
-    @State private var model          = WanRunModel()
+    @State private var model: WanRunModel
     @State private var prompt         = "Blue Waves"
     @State private var showNeg        = false
     @State private var negativePrompt = ""
@@ -31,6 +31,13 @@ struct WanVideoRunView: View {
     @State private var numSteps       = 50
     @State private var resolution     = WanResolution.compact
     @State private var player: AVPlayer?
+
+    /// `model` is injectable so a test can host the finished-video state.
+    init(modelDisplayName: String, modelID: String, model: WanRunModel? = nil) {
+        self.modelDisplayName = modelDisplayName
+        self.modelID = modelID
+        _model = State(initialValue: model ?? WanRunModel())
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -170,7 +177,7 @@ struct WanVideoRunView: View {
     private func videoSection(_ url: URL) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             if let p = player {
-                VideoPlayer(player: p)
+                VideoPreview(player: p)
                     .frame(height: 330)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .onAppear { p.play() }
