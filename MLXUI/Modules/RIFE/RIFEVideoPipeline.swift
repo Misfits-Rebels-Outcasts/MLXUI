@@ -39,7 +39,7 @@ nonisolated enum RIFEVideoError: Error, LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .notAVideo:                       return "That file has no video track."
-        case .unreadable(let why):             return "Couldn't read that video (\(why))."
+        case .unreadable:                        return "Couldn't read that video."
         case .badOptions(let why):             return "RIFE: \(why)"
         case .tooManyFrames(let n, let limit): return "That clip has about \(n) frames; the limit is \(limit) (about 60 seconds at 30 fps). Trim it and try again."
         case .tooLarge(let w, let h):          return "That video is \(w) × \(h); the largest supported size is 3840 × 2160."

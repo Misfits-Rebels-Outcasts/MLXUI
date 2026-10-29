@@ -113,6 +113,20 @@ struct RIFEVideoPlanTests {
     }
 
     // RIFE-5b (owner ruling 2026-10-29): above 1440p Scale is 0.5; the pipeline refuses 1.0 there, not only the Run screen.
+    // Owner ruling 2026-10-29 (row 137 step 9): no raw system reason in the sentence.
+    @Test func anUnreadableVideoGetsAPlainSentence() async throws {
+        #expect(RIFEVideoError.unreadable("Cannot Open").description == "Couldn't read that video.")
+        let notAVideo = FileManager.default.temporaryDirectory.appendingPathComponent("not-a-video-\(UUID().uuidString).mp4")
+        try "not a video".write(to: notAVideo, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: notAVideo) }
+        do {
+            _ = try await RIFEVideoPipeline.inspect(notAVideo)
+            Issue.record("a text file should not inspect as a video")
+        } catch {
+            #expect(MLXErrorGuard.sentence(for: error) == "Couldn't read that video.")
+        }
+    }
+
     @Test func fullScaleIsRefusedAbove1440p() throws {
         func info(_ w: Int, _ h: Int) -> RIFEVideoInfo {
             RIFEVideoInfo(width: w, height: h, frameRate: 30, duration: 2, estimatedFrames: 60, hasAudio: false)
