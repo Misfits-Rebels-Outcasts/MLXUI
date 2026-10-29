@@ -46,11 +46,14 @@ struct RIFECatalogTests {
         #expect(e.variants?.first?.hfModelId == Self.hfID)
     }
 
-    /// The 1.5x weights rule would give 0.03 GB. ramGB is a provisional estimate until RIFE-5 measures 1080p and 4K (scale 0.5).
-    @Test func ramGBIsAnEstimateNotTheWeightsRule() throws {
+    /// The 1.5x weights rule would give 0.03 GB. ramGB is the measured peak of the largest run the app offers (RIFE-5c, 2026-10-29:
+    /// 4K 4x at Scale 0.5, 6061 MiB = 6.36 GB, rounded up to 6.4).
+    @Test func ramGBIsMeasuredNotTheWeightsRule() throws {
         let e = try rife()
         #expect(e.ramGB > e.downloadSizeGB * 1.5 * 10, "not the 1.5x rule")
-        #expect(e.description?.contains("RAM figure is an estimate") == true)
+        #expect(e.ramGB == 6.4)
+        #expect(e.description?.contains("RAM figure is measured") == true)
+        #expect(e.description?.contains("is an estimate") == false)
     }
 
     @Test func kindRoutesToInterpolateNotUpscale() throws {
