@@ -82,7 +82,7 @@ struct ModelDetailView: View {
                     if let speed = model.speedTokensPerSec {
                         infoTile("Speed", "~\(Int(speed)) tok/s")
                     }
-                    infoTile("Download", "\(String(format: "%.1f", model.downloadSizeGB)) GB")
+                    infoTile("Download", DataNormalizer.downloadSize(gb: model.downloadSizeGB))
                     infoTile("License", DataNormalizer.normalizeLicense(model.license))
                     if let arch = model.architecture {
                         infoTile("Architecture", DataNormalizer.normalizeArchitecture(arch))
@@ -127,7 +127,7 @@ struct ModelDetailView: View {
                                 .foregroundStyle(.green)
                             Text(variant.quantization)
                                 .fontWeight(.medium)
-                            Text("· \(String(format: "%.1f", variant.ramGB)) GB · \(String(format: "%.1f", variant.downloadSizeGB)) GB")
+                            Text("· \(String(format: "%.1f", variant.ramGB)) GB · \(DataNormalizer.downloadSize(gb: variant.downloadSizeGB))")
                                 .foregroundStyle(.secondary)
                         }
                         .font(.subheadline)

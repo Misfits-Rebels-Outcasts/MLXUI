@@ -97,6 +97,11 @@ nonisolated enum ModelLoadProfile {
         // Provisional with ramGB 2.35 (owner, 2026-10-25): the final figure is the in-app Activity Monitor peak on the 60 min clip.
         case .enhance:  return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 2_350_000_000, measured: true)
         case .vision:   return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 2 * gib, measured: true)
+        // RIFE-5c: RIFE 4.25, whole-process `phys_footprint` peak of the largest run the Run screen offers, Case E (4K 4x, Scale 0.5, the
+        // 1 GiB MLX cache cap on): 6061 MiB = 6.36 GB, 2026-10-29 (test host; `RIFEMemoryMeasurementTests`). The growth is frame buffers and
+        // flow maps at 4K, not the 22.7 MB of weights, so it is a per-call working set (the .enhance row's form), booked as 6.4 GB
+        // (owner, 2026-10-29: "ramGB 6.4 decimal GB: Confirmed"). 1080p peaks near 3 GB, so smaller clips are over-booked, never under.
+        case .interpolate: return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 6_400_000_000, measured: true)
         default:        return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 0, measured: false)
         }
     }

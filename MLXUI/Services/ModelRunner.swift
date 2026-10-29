@@ -894,6 +894,9 @@ final class ModelRunner {
         case .voice:
             // Unreachable in practice since MP6-3a registered LFMAudioModule (same as .enhance above).
             showUnsupported("Voice conversation", model)
+        case .interpolate:
+            // Unreachable in practice since RIFE-3d registered RIFEModule (same as .voice above).
+            showUnsupported("Frame interpolation", model)
         }
     }
 

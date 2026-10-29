@@ -120,6 +120,7 @@ nonisolated struct InstalledModelIndex: Sendable {
         case "diarization":   return .diarization
         case "enhance":       return .enhance
         case "voice":         return .voice
+        case "interpolate":   return .interpolate
         default:              return .unsupported  // video / unknown
         }
     }

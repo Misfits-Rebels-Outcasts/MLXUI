@@ -1,0 +1,31 @@
+{
+  "cases": {
+    "t025_s100": {
+      "max": 0.9999969601631165,
+      "mean": 0.4335775077342987,
+      "min": 0.0,
+      "scale": 1.0,
+      "timestep": 0.25
+    },
+    "t050_s050": {
+      "max": 1.0,
+      "mean": 0.43435680866241455,
+      "min": 0.0,
+      "scale": 0.5,
+      "timestep": 0.5
+    },
+    "t050_s100": {
+      "max": 0.9999964833259583,
+      "mean": 0.43448078632354736,
+      "min": 0.0,
+      "scale": 1.0,
+      "timestep": 0.5
+    }
+  },
+  "height": 96,
+  "mlx": "0.31.2",
+  "reference": "xocialize/rife-mlx",
+  "seed": 425,
+  "weights_sha256": "40bd5bdc9b41d22ad2fad79da325dcd68988a90d8b8e8fb7b67ed5eedebccf5f",
+  "width": 130
+}
