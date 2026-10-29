@@ -389,15 +389,15 @@ struct RIFESceneCutTests {
             let d = try await Self.differences(of: try RIFESmoke.clip(name))
             let s = d.sorted()
             print(String(format: "RIFECUT %@: %d pairs, median %.4f, p99 %.4f, max %.4f", name, d.count, s[s.count / 2], s[Int(Double(s.count) * 0.99)], s.last ?? 0))
-            #expect((s.last ?? 1) < RIFEVideoPipeline.sceneCutThreshold, "\(name): ordinary motion must never read as a cut")
+            var detector = RIFESceneCutDetector()
+            #expect(d.filter { detector.isCut(difference: $0) }.isEmpty, "\(name): ordinary motion must never read as a cut")
         }
         let cut = try await Self.differences(of: try RIFESmoke.clip("09-hard-cut-640x360-30fps-4s.mp4"))
         let sorted = cut.enumerated().sorted { $0.element > $1.element }
-        print(String(format: "RIFECUT hard-cut clip: cut pair %d = %.4f; next largest pair %d = %.4f; threshold %.2f",
-                     sorted[0].offset, sorted[0].element, sorted[1].offset, sorted[1].element, RIFEVideoPipeline.sceneCutThreshold))
-        #expect(sorted[0].offset == 59, "the cut is between source frames 59 and 60")
-        #expect(sorted[0].element > RIFEVideoPipeline.sceneCutThreshold)
-        #expect(sorted[1].element < RIFEVideoPipeline.sceneCutThreshold, "only the cut pair crosses the threshold")
+        print(String(format: "RIFECUT hard-cut clip: cut pair %d = %.4f; next largest pair %d = %.4f", sorted[0].offset, sorted[0].element, sorted[1].offset, sorted[1].element))
+        var detector = RIFESceneCutDetector()
+        let fired = cut.enumerated().filter { detector.isCut(difference: $0.element) }.map(\.offset)
+        #expect(fired == [59], "only the pair between source frames 59 and 60 is a cut; fired \(fired)")
     }
 
     /// Mean absolute pixel difference (0...255) between two frames of the output, every 8th pixel.
@@ -432,8 +432,12 @@ struct RIFESceneCutTests {
     @Test(.enabled(if: RIFERealLoad.enabled, "needs the model")) func aHardCutIsRepeatedNotInterpolated() async throws {
         let out = RIFEStage.temporaryOutputURL()
         defer { try? FileManager.default.removeItem(at: out) }
+        let awakeDuringRun = AwakeProbe()
+        let awakeBefore = RIFEKeepAwake.activeCount
         _ = try await RIFEStage(modelDirectory: try #require(RIFERealLoad.directory), options: RIFEVideoOptions(times: 2, scale: 1), outputURL: out)
-            .run(.text(try RIFESmoke.clip("09-hard-cut-640x360-30fps-4s.mp4").path), progress: { _ in })
+            .run(.text(try RIFESmoke.clip("09-hard-cut-640x360-30fps-4s.mp4").path), progress: { _ in awakeDuringRun.note(RIFEKeepAwake.activeCount) })
+        #expect(awakeDuringRun.max == awakeBefore + 1, "the Mac is held awake while the run works")
+        #expect(RIFEKeepAwake.activeCount == awakeBefore, "and released when it finishes")
         let frames = try await Self.thumbnails(of: out)
         #expect(frames.count == 239)
         // Output index 2n is source frame n: source 59 is output 118, source 60 is output 120, and the frame inserted across the cut is 119.
@@ -446,4 +450,13 @@ struct RIFESceneCutTests {
         let ordinary = Self.meanDiff(frames[41], frames[40])
         #expect(ordinary > 0, "frames away from the cut are interpolated, not repeated")
     }
+}
+
+
+/// The highest `RIFEKeepAwake.activeCount` seen from a run's progress callback.
+final class AwakeProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var highest = 0
+    func note(_ v: Int) { lock.lock(); highest = Swift.max(highest, v); lock.unlock() }
+    var max: Int { lock.lock(); defer { lock.unlock() }; return highest }
 }

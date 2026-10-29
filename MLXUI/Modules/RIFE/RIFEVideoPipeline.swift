@@ -70,11 +70,64 @@ nonisolated struct RIFEVideoInfo: Sendable, Equatable {
     func outputFrameRate(times: Int) -> Double { frameRate * Double(times) }
 }
 
+/// Decides frame by frame whether a pair of neighbouring frames is a hard cut, from the pair differences seen so far (no look-ahead).
+/// A cut is a difference over 0.25, **or** a difference of at least 0.10 that is at least 5× the median of the previous 15 pairs
+/// (a jump cut in a quiet shot is small in absolute terms but huge against its surroundings); the relative rule waits for 3 earlier
+/// pairs. Owner ruling, Boo, 2026-10-29; validated on App_Preview_179.mp4 (cuts at 36.07 s: 0.139, 6.9×, and 60.03 s: 0.172, 16.3×; the
+/// next highest pair is 4.0×, 0.085).
+nonisolated struct RIFESceneCutDetector: Sendable {
+    static let absoluteThreshold: Float = 0.25
+    static let relativeFloor: Float = 0.10
+    static let relativeFactor: Float = 5
+    static let windowSize = 15
+    static let minimumHistory = 3
+
+    private var history: [Float] = []
+
+    /// Feed the next pair's difference; true when that pair is a cut. Every difference, cut or not, joins the window.
+    mutating func isCut(difference: Float) -> Bool {
+        var cut = difference > Self.absoluteThreshold
+        if !cut, history.count >= Self.minimumHistory, difference >= Self.relativeFloor {
+            cut = difference >= Self.relativeFactor * Self.median(history)
+        }
+        history.append(difference)
+        if history.count > Self.windowSize { history.removeFirst(history.count - Self.windowSize) }
+        return cut
+    }
+
+    static func median(_ values: [Float]) -> Float {
+        let s = values.sorted()
+        guard !s.isEmpty else { return 0 }
+        return s.count % 2 == 1 ? s[s.count / 2] : (s[s.count / 2 - 1] + s[s.count / 2]) / 2
+    }
+}
+
+/// Keeps the Mac awake while a run works: a 30-minute clip takes hours, and idle sleep would stall it. Begun when a run starts, ended
+/// on finish, cancel or error (owner ruling, Boo, 2026-10-29).
+nonisolated enum RIFEKeepAwake {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var active = 0
+
+    /// How many runs currently hold the Mac awake (tests read this).
+    static var activeCount: Int { lock.lock(); defer { lock.unlock() }; return active }
+
+    static func hold<T>(reason: String, _ body: () async throws -> T) async rethrows -> T {
+        let token = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled], reason: reason)
+        lock.lock(); active += 1; lock.unlock()
+        defer {
+            ProcessInfo.processInfo.endActivity(token)
+            lock.lock(); active -= 1; lock.unlock()
+        }
+        return try await body()
+    }
+}
+
 /// How long a run takes, before it starts: inserted frames × megapixels × a per-megapixel rate fitted to the measured runs (owner ruling,
 /// Boo, 2026-10-29; M3 Pro: 720p 2x ≈ 8 s per second of video, 1080p 2x ≈ 15, 1080p 4x ≈ 45, 4K 2x at Scale 0.5 ≈ 85 -- all about 0.30 s per
-/// inserted megapixel at Scale 1.0, 0.34 at Scale 0.5). An estimate for the Output line, never a promise.
+/// inserted megapixel at Scale 1.0, 0.34 at Scale 0.5; then "err long": RIFE-L measured 0.285-0.295 s/MP at Scale 1.0 on 1080p and 1440p runs, up to the
+/// 5-minute 1080p run (17.8 s per second of video at 30 fps), so 0.31 is above every measured run). An estimate for the Output line, never a promise.
 nonisolated enum RIFEEstimate {
-    static let secondsPerMegapixelFull = 0.30
+    static let secondsPerMegapixelFull = 0.31
     static let secondsPerMegapixelHalf = 0.34
 
     static func seconds(for info: RIFEVideoInfo, times: Int, scale: Float) -> Double {
@@ -98,10 +151,6 @@ nonisolated enum RIFEVideoPipeline {
 
     // MARK: Scene cuts
 
-    /// Mean absolute difference between neighbouring frames above which they are a hard cut, on a 0...1 scale over every 8th pixel
-    /// (RIFE-L, measured on the sample clips and a clip with a hard cut: see journal 2026-637).
-    static let sceneCutThreshold: Float = 0.25
-
     /// 0 for identical frames, 1 for black against white. Frames are `[1, H, W, 3]` floats in 0...1.
     static func sceneDifference(_ a: MLXArray, _ b: MLXArray) throws -> Float {
         func thinned(_ x: MLXArray) -> MLXArray {
@@ -109,10 +158,6 @@ nonisolated enum RIFEVideoPipeline {
             return x[0..., 0 ..< h, 0 ..< w, 0...].reshaped(1, h / 8, 8, w / 8, 8, 3)[0..., 0..., 0, 0..., 0, 0...]
         }
         return try MLXErrorGuard.read(mean(abs(thinned(a) - thinned(b))), as: Float.self).first ?? 0
-    }
-
-    static func isSceneCut(_ a: MLXArray, _ b: MLXArray) throws -> Bool {
-        try sceneDifference(a, b) > sceneCutThreshold
     }
 
     // MARK: Pure helpers (unit-tested without a model)
@@ -187,6 +232,14 @@ nonisolated enum RIFEVideoPipeline {
     @concurrent
     static func run(input: URL, output: URL, modelDirectory: URL, options: RIFEVideoOptions,
                     progress: @Sendable @escaping (Double) -> Void) async throws {
+        try await RIFEKeepAwake.hold(reason: "RIFE is interpolating a video") {
+            try await runAwake(input: input, output: output, modelDirectory: modelDirectory, options: options, progress: progress)
+        }
+    }
+
+    @concurrent
+    private static func runAwake(input: URL, output: URL, modelDirectory: URL, options: RIFEVideoOptions,
+                                 progress: @Sendable @escaping (Double) -> Void) async throws {
         try validate(options)
         let info = try await inspect(input)
         try validate(info)
@@ -302,6 +355,7 @@ nonisolated enum RIFEVideoPipeline {
         }
 
         var previous: (frame: MLXArray, time: CMTime)?
+        var cutDetector = RIFESceneCutDetector()
         var sourceIndex = 0
         let expectedPairs = max(1, info.estimatedFrames - 1)
         while let sample = videoOut.copyNextSampleBuffer() {
@@ -317,7 +371,7 @@ nonisolated enum RIFEVideoPipeline {
             if let previous {
                 try await append(previous.frame, at: previous.time)
                 // A hard cut: interpolating across it only draws a ghost of two unrelated pictures, so the earlier frame is repeated.
-                let cut = try isSceneCut(previous.frame, current)
+                let cut = cutDetector.isCut(difference: try sceneDifference(previous.frame, current))
                 for step in 1 ..< options.times {
                     let t = Float(step) / Float(options.times)
                     let mid: MLXArray
