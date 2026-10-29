@@ -194,6 +194,19 @@ struct RIFESmokeRow137Tests {
         #expect(frames.first?.time == 0)
     }
 
+    // RIFE-5b: the stage itself refuses Scale 1.0 on the 4K clip, before any frame is read.
+    @Test func theStageRefusesFullScaleOnThe4KClip() async throws {
+        let out = RIFEStage.temporaryOutputURL()
+        let stage = RIFEStage(modelDirectory: try #require(RIFERealLoad.directory), options: RIFEVideoOptions(times: 2, scale: 1.0), outputURL: out)
+        do {
+            _ = try await stage.run(.text(try RIFESmoke.clip("03-4k-30fps-6s.mp4").path), progress: { _ in })
+            Issue.record("Scale 1.0 on 4K should have been refused")
+        } catch let error as RIFEVideoError {
+            #expect(error == .fullScaleTooLarge(width: 3840, height: 2160))
+        }
+        #expect(!FileManager.default.fileExists(atPath: out.path))
+    }
+
     // Step 6.
     @Test func fourTimesAtHalfScaleGivesQuadrupleFps() async throws {
         let model = try await choose("01-720p-30fps-12s.mp4")
@@ -276,9 +289,9 @@ struct RIFESmokeRow137Tests {
 }
 
 /// Row 138 (RIFE-5): peak `phys_footprint` through the real stage. One case per process, so the peak is that case's own:
-/// `MLXUI_TEST_RIFE_MEMORY=A|B|C|D` selects it (A 1080p 2x s1.0, B 4K 2x s0.5, C 4K 2x s1.0, D 1080p 4x s1.0). A test host is smaller than
+/// `MLXUI_TEST_RIFE_MEMORY=A|B|C|D|E|F` selects it (A 1080p 2x s1.0, B 4K 2x s0.5, C 4K 2x s1.0, D 1080p 4x s1.0). A test host is smaller than
 /// the app (no windows, no model list), so the figures are a floor for the app's Activity Monitor number, not above it.
-@Suite(.enabled(if: RIFESmoke.enabled && ProcessInfo.processInfo.environment["MLXUI_TEST_RIFE_MEMORY"] != nil, "needs MLXUI_TEST_RIFE_MEMORY=A|B|C|D"))
+@Suite(.enabled(if: RIFESmoke.enabled && ProcessInfo.processInfo.environment["MLXUI_TEST_RIFE_MEMORY"] != nil, "needs MLXUI_TEST_RIFE_MEMORY=A|B|C|D|E|F"))
 struct RIFEMemoryMeasurementTests {
     @Test func measure() async throws {
         let which = try #require(ProcessInfo.processInfo.environment["MLXUI_TEST_RIFE_MEMORY"])
@@ -287,14 +300,22 @@ struct RIFEMemoryMeasurementTests {
             "B": ("03-4k-30fps-6s.mp4", 2, 0.5, "4K 2x scale 0.5"),
             "C": ("03-4k-30fps-6s.mp4", 2, 1.0, "4K 2x scale 1.0"),
             "D": ("02-1080p-24fps-8s.mp4", 4, 1.0, "1080p 4x scale 1.0"),
+            "F": ("07-1440p-30fps-6s.mp4", 2, 1.0, "1440p 2x scale 1.0"),
+            "E": ("03-4k-30fps-6s.mp4", 4, 0.5, "4K 4x scale 0.5"),
         ]
         let c = try #require(cases[which])
         let src = try RIFESmoke.clip(c.clip)
         let out = RIFEStage.temporaryOutputURL()
         defer { try? FileManager.default.removeItem(at: out) }
         let tracker = FootprintTracker()
+        let atPeak = PeakSnapshot()
         let sampler = Task.detached {
-            while !Task.isCancelled { tracker.note(FootprintTracker.phys()); try? await Task.sleep(for: .milliseconds(20)) }
+            while !Task.isCancelled {
+                let v = FootprintTracker.phys()
+                tracker.note(v)
+                atPeak.note(v, active: Memory.activeMemory, cache: Memory.cacheMemory)
+                try? await Task.sleep(for: .milliseconds(20))
+            }
         }
         let baseline = FootprintTracker.phys()
         tracker.note(baseline)
@@ -312,6 +333,21 @@ struct RIFEMemoryMeasurementTests {
                      which, c.label, failure ?? "finished", wall, Double(peak) / 1_048_576, Double(peak) / 1_073_741_824,
                      Double(baseline) / 1_048_576, Double(peak - baseline) / 1_048_576, Double(Memory.peakMemory) / 1_048_576,
                      info.map { "\($0.width)x\($0.height) \(Int($0.frameRate)) fps" } ?? "none"))
+        let mib = 1_048_576.0
+        print(String(format: "RIFEMEM %@ at the footprint peak: MLX active %.0f MiB, MLX cache %.0f MiB, so outside MLX %.0f MiB",
+                     which, Double(atPeak.active) / mib, Double(atPeak.cache) / mib,
+                     Double(peak) / mib - Double(atPeak.active + atPeak.cache) / mib))
         #expect(failure == nil, "the run failed: \(failure ?? "")")
+    }
+}
+
+/// MLX active and cache memory at the instant `phys_footprint` was highest.
+final class PeakSnapshot: @unchecked Sendable {
+    private let lock = NSLock()
+    private var best: Int64 = 0
+    private(set) var active = 0, cache = 0
+    func note(_ v: Int64, active a: Int, cache c: Int) {
+        lock.lock(); defer { lock.unlock() }
+        if v > best { best = v; active = a; cache = c }
     }
 }

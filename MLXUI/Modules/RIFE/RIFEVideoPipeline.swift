@@ -19,7 +19,12 @@ nonisolated struct RIFEVideoOptions: Sendable, Equatable {
     static let maxSourceFrames = 1800
     /// 3840 x 2160. Anything larger is refused rather than tried.
     static let maxPixels = 3840 * 2160
-}
+    /// 2560 x 1440. Above this the flow is always estimated at Scale 0.5: Scale 1.0 at 4K ran 30 minutes and peaked near 13 GiB
+    /// (RIFE-5, owner ruling 2026-10-29).
+    static let fullScaleMaxPixels = 2560 * 1440
+
+    /// Whether Scale 1.0 may be used on a clip of this size.
+    static func allowsFullScale(width: Int, height: Int) -> Bool { width * height <= fullScaleMaxPixels }}
 
 nonisolated enum RIFEVideoError: Error, LocalizedError, Equatable {
     case notAVideo
@@ -27,6 +32,7 @@ nonisolated enum RIFEVideoError: Error, LocalizedError, Equatable {
     case badOptions(String)
     case tooManyFrames(count: Int, limit: Int)
     case tooLarge(width: Int, height: Int)
+    case fullScaleTooLarge(width: Int, height: Int)
     case writerFailed(String)
     case noFrames
 
@@ -37,6 +43,7 @@ nonisolated enum RIFEVideoError: Error, LocalizedError, Equatable {
         case .badOptions(let why):             return "RIFE: \(why)"
         case .tooManyFrames(let n, let limit): return "That clip has about \(n) frames; the limit is \(limit) (about 60 seconds at 30 fps). Trim it and try again."
         case .tooLarge(let w, let h):          return "That video is \(w) × \(h); the largest supported size is 3840 × 2160."
+        case .fullScaleTooLarge(let w, let h): return "That video is \(w) × \(h). Above 2560 × 1440 the motion is always estimated at half size (Scale 0.5)."
         case .writerFailed(let why):           return "Couldn't write the new video (\(why))."
         case .noFrames:                        return "That video has fewer than two frames, so there is nothing to interpolate between."
         }
@@ -90,6 +97,13 @@ nonisolated enum RIFEVideoPipeline {
         a + CMTimeMultiplyByRatio(b - a, multiplier: Int32(step), divisor: Int32(times))
     }
 
+    /// The Scale rule, enforced here as well as in the Run screen.
+    static func validate(_ info: RIFEVideoInfo, options: RIFEVideoOptions) throws {
+        guard options.scale < 1 || RIFEVideoOptions.allowsFullScale(width: info.width, height: info.height) else {
+            throw RIFEVideoError.fullScaleTooLarge(width: info.width, height: info.height)
+        }
+    }
+
     // MARK: Inspect
 
     static func inspect(_ url: URL) async throws -> RIFEVideoInfo {
@@ -131,8 +145,13 @@ nonisolated enum RIFEVideoPipeline {
         try validate(options)
         let info = try await inspect(input)
         try validate(info)
+        try validate(info, options: options)
         let loaded = try RIFEEngine.load(directory: modelDirectory)
         try? FileManager.default.removeItem(at: output)
+        // MLX keeps freed buffers in a pool as large as the memory limit; at 4K that pool alone was 8 GiB of the footprint (RIFE-5a:
+        // 11.3 GiB peak with the default, 5.9 GiB with this cap, same speed). Same scoped cap the Local Server uses.
+        ServeMLXMemory.shared.begin()
+        defer { ServeMLXMemory.shared.end() }
         do {
             try await process(input: input, output: output, loaded: loaded, info: info, options: options, progress: progress)
         } catch {

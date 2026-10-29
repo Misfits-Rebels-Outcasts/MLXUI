@@ -112,6 +112,32 @@ struct RIFEVideoPlanTests {
         #expect(throws: RIFEVideoError.self) { try RIFEVideoPipeline.validate(RIFEVideoOptions(times: 2, scale: 0.25)) }
     }
 
+    // RIFE-5b (owner ruling 2026-10-29): above 1440p Scale is 0.5; the pipeline refuses 1.0 there, not only the Run screen.
+    @Test func fullScaleIsRefusedAbove1440p() throws {
+        func info(_ w: Int, _ h: Int) -> RIFEVideoInfo {
+            RIFEVideoInfo(width: w, height: h, frameRate: 30, duration: 2, estimatedFrames: 60, hasAudio: false)
+        }
+        let full = RIFEVideoOptions(times: 2, scale: 1), half = RIFEVideoOptions(times: 2, scale: 0.5)
+        try RIFEVideoPipeline.validate(info(1920, 1080), options: full)
+        try RIFEVideoPipeline.validate(info(2560, 1440), options: full)
+        try RIFEVideoPipeline.validate(info(3840, 2160), options: half)
+        #expect(throws: RIFEVideoError.fullScaleTooLarge(width: 3840, height: 2160)) {
+            try RIFEVideoPipeline.validate(info(3840, 2160), options: full)
+        }
+        #expect(throws: RIFEVideoError.self) { try RIFEVideoPipeline.validate(info(2560, 1600), options: full) }
+        #expect(RIFEVideoError.fullScaleTooLarge(width: 3840, height: 2160).description.contains("Scale 0.5"))
+    }
+
+    @MainActor @Test func theRunModelFixesScaleAtHalfAbove1440p() {
+        let model = RIFERunModel()
+        model.scale = 1.0
+        #expect(!model.scaleIsFixed && model.options.scale == 1.0)
+        model.info = RIFEVideoInfo(width: 3840, height: 2160, frameRate: 30, duration: 2, estimatedFrames: 60, hasAudio: false)
+        #expect(model.scaleIsFixed && model.options.scale == 0.5)
+        model.info = RIFEVideoInfo(width: 2560, height: 1440, frameRate: 30, duration: 2, estimatedFrames: 60, hasAudio: false)
+        #expect(!model.scaleIsFixed && model.options.scale == 1.0)
+    }
+
     @Test func limitsRefuseALongOrHugeClipAndATrivialOne() {
         let ok = RIFEVideoInfo(width: 1920, height: 1080, frameRate: 30, duration: 10, estimatedFrames: 300, hasAudio: true)
         #expect(throws: Never.self) { try RIFEVideoPipeline.validate(ok) }

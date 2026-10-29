@@ -3,7 +3,7 @@ import AppKit
 import AVKit
 import UniformTypeIdentifiers
 
-/// The run surface: choose or drop a video, pick 2× or 4× the frame rate (and Scale 1.0 or 0.5 for 4K), Interpolate, preview the
+/// The run surface: choose or drop a video, pick 2× or 4× the frame rate (and Scale 1.0 or 0.5; fixed at 0.5 above 1440p), Interpolate, preview the
 /// result, save the MP4. The original audio is kept. Image-pair mode is not in this release (owner ruling 2026-10-28).
 struct RIFERunView: View {
     @Environment(\.dismiss) private var dismiss
@@ -81,18 +81,24 @@ struct RIFERunView: View {
                     Text("4×").tag(4)
                 }
                 .pickerStyle(.segmented).frame(maxWidth: 180)
-                Picker("Scale", selection: $model.scale) {
-                    Text("1.0").tag(Float(1.0))
-                    Text("0.5").tag(Float(0.5))
+                if model.scaleIsFixed {
+                    LabeledContent("Scale", value: "0.5 (fixed)")
+                } else {
+                    Picker("Scale", selection: $model.scale) {
+                        Text("1.0").tag(Float(1.0))
+                        Text("0.5").tag(Float(0.5))
+                    }
+                    .pickerStyle(.segmented).frame(maxWidth: 180)
                 }
-                .pickerStyle(.segmented).frame(maxWidth: 180)
             }
             .disabled(model.isRunning)
             if let info = model.info {
                 Text("Output: \(Self.fps(info.outputFrameRate(times: model.times))) fps, about \(info.outputFrames(times: model.times)) frames, the same length as the original. The audio is copied unchanged.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Text("Scale 0.5 estimates the motion at half size: use it for 4K video to save memory; 1.0 is more exact on smaller video.")
+            Text(model.scaleIsFixed
+                 ? "This video is larger than 2560 × 1440, so the motion is always estimated at half size (Scale 0.5): full size would take about half an hour and most of this Mac's memory."
+                 : "Scale 0.5 estimates the motion at half size and uses less memory; 1.0 is more exact.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Text("Handles clips up to \(RIFEVideoOptions.maxSourceFrames) frames (about 60 seconds at 30 fps) and 3840 × 2160. It adds frames; it doesn't make the picture sharper or larger.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -172,7 +178,9 @@ final class RIFERunModel {
     private var inspecting: Task<Void, Never>?
     private var accessing = false
 
-    var options: RIFEVideoOptions { RIFEVideoOptions(times: times, scale: scale) }
+    /// Above 2560 × 1440 Scale is 0.5 and the picker is not offered (RIFE-5b, owner ruling 2026-10-29).
+    var scaleIsFixed: Bool { info.map { !RIFEVideoOptions.allowsFullScale(width: $0.width, height: $0.height) } ?? false }
+    var options: RIFEVideoOptions { RIFEVideoOptions(times: times, scale: scaleIsFixed ? 0.5 : scale) }
     var hasResult: Bool { outputURL != nil }
     var sourceName: String? { sourceURL?.lastPathComponent }
     var canRun: Bool { sourceURL != nil && info != nil && limitMessage == nil && !isRunning }
