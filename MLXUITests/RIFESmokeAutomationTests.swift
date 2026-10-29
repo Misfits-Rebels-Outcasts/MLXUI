@@ -238,10 +238,10 @@ struct RIFESmokeRow137Tests {
 
     // Step 8.
     @Test func theLongClipIsRefusedWithAPlainSentenceAndRunIsDisabled() async throws {
-        let model = try await choose("04-too-long-70s.mp4")
+        let model = try await choose("04-too-long-31min.mp4")
         let message = try #require(model.limitMessage)
         print("RIFESMOKE 137 long clip message: \(message)")
-        #expect(message.contains("1800") && message.contains("frames"))
+        #expect(message.contains("54000") && message.contains("about 30 minutes at 30 fps"))
         #expect(!model.canRun)
     }
 
@@ -289,9 +289,9 @@ struct RIFESmokeRow137Tests {
 }
 
 /// Row 138 (RIFE-5): peak `phys_footprint` through the real stage. One case per process, so the peak is that case's own:
-/// `MLXUI_TEST_RIFE_MEMORY=A|B|C|D|E|F` selects it (A 1080p 2x s1.0, B 4K 2x s0.5, C 4K 2x s1.0, D 1080p 4x s1.0). A test host is smaller than
+/// `MLXUI_TEST_RIFE_MEMORY=A|B|C|D|E|F|G` selects it (A 1080p 2x s1.0, B 4K 2x s0.5, C 4K 2x s1.0, D 1080p 4x s1.0). A test host is smaller than
 /// the app (no windows, no model list), so the figures are a floor for the app's Activity Monitor number, not above it.
-@Suite(.enabled(if: RIFESmoke.enabled && ProcessInfo.processInfo.environment["MLXUI_TEST_RIFE_MEMORY"] != nil, "needs MLXUI_TEST_RIFE_MEMORY=A|B|C|D|E|F"))
+@Suite(.enabled(if: RIFESmoke.enabled && ProcessInfo.processInfo.environment["MLXUI_TEST_RIFE_MEMORY"] != nil, "needs MLXUI_TEST_RIFE_MEMORY=A|B|C|D|E|F|G"))
 struct RIFEMemoryMeasurementTests {
     @Test func measure() async throws {
         let which = try #require(ProcessInfo.processInfo.environment["MLXUI_TEST_RIFE_MEMORY"])
@@ -301,6 +301,7 @@ struct RIFEMemoryMeasurementTests {
             "C": ("03-4k-30fps-6s.mp4", 2, 1.0, "4K 2x scale 1.0"),
             "D": ("02-1080p-24fps-8s.mp4", 4, 1.0, "1080p 4x scale 1.0"),
             "F": ("07-1440p-30fps-6s.mp4", 2, 1.0, "1440p 2x scale 1.0"),
+            "G": ("08-1080p-30fps-5min.mp4", 2, 1.0, "1080p 5 min 2x scale 1.0"),
             "E": ("03-4k-30fps-6s.mp4", 4, 0.5, "4K 4x scale 0.5"),
         ]
         let c = try #require(cases[which])
@@ -309,11 +310,18 @@ struct RIFEMemoryMeasurementTests {
         defer { try? FileManager.default.removeItem(at: out) }
         let tracker = FootprintTracker()
         let atPeak = PeakSnapshot()
+        let started0 = Date()
+        nonisolated(unsafe) var lastPrint = Date()
         let sampler = Task.detached {
             while !Task.isCancelled {
                 let v = FootprintTracker.phys()
                 tracker.note(v)
                 atPeak.note(v, active: Memory.activeMemory, cache: Memory.cacheMemory)
+                if Date().timeIntervalSince(lastPrint) >= 120 {   // a trend line for long runs: does anything grow?
+                    lastPrint = Date()
+                    print(String(format: "RIFEMEM %@ trend +%.0f s: footprint %.0f MiB, MLX active %.0f, cache %.0f", which,
+                                 Date().timeIntervalSince(started0), Double(v) / 1_048_576, Double(Memory.activeMemory) / 1_048_576, Double(Memory.cacheMemory) / 1_048_576))
+                }
                 try? await Task.sleep(for: .milliseconds(20))
             }
         }
@@ -350,4 +358,149 @@ final class PeakSnapshot: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         if v > best { best = v; active = a; cache = c }
     }
+}
+
+
+// RIFE-L: scene cuts. The first test measures the neighbouring-frame difference on every sample (the threshold's evidence); the second
+// runs the real model over a clip with a hard cut and checks that nothing is drawn across it.
+@Suite(.enabled(if: RIFESmoke.samples != nil, "needs MLXUI_TEST_RIFE_SAMPLES"), .serialized)
+struct RIFESceneCutTests {
+
+    nonisolated static func differences(of url: URL) async throws -> [Float] {
+        let asset = AVURLAsset(url: url)
+        let track = try #require(try await asset.loadTracks(withMediaType: .video).first)
+        let reader = try AVAssetReader(asset: asset)
+        let out = AVAssetReaderTrackOutput(track: track, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+        reader.add(out)
+        reader.startReading()
+        var previous: MLXArray?
+        var result: [Float] = []
+        while let sample = out.copyNextSampleBuffer(), let pixels = CMSampleBufferGetImageBuffer(sample) {
+            let frame = RIFEVideoPipeline.read(pixels)
+            try MLXErrorGuard.evaluate(frame)
+            if let previous { result.append(try RIFEVideoPipeline.sceneDifference(previous, frame)) }
+            previous = frame
+        }
+        return result
+    }
+
+    @Test func measureTheThresholdOnTheSamples() async throws {
+        for name in ["01-720p-30fps-12s.mp4", "02-1080p-24fps-8s.mp4", "03-4k-30fps-6s.mp4", "05-1080p-30fps-silent-6s.mp4"] {
+            let d = try await Self.differences(of: try RIFESmoke.clip(name))
+            let s = d.sorted()
+            print(String(format: "RIFECUT %@: %d pairs, median %.4f, p99 %.4f, max %.4f", name, d.count, s[s.count / 2], s[Int(Double(s.count) * 0.99)], s.last ?? 0))
+            var detector = RIFESceneCutDetector()
+            #expect(d.filter { detector.isCut(difference: $0) }.isEmpty, "\(name): ordinary motion must never read as a cut")
+        }
+        let cut = try await Self.differences(of: try RIFESmoke.clip("09-hard-cut-640x360-30fps-4s.mp4"))
+        let sorted = cut.enumerated().sorted { $0.element > $1.element }
+        print(String(format: "RIFECUT hard-cut clip: cut pair %d = %.4f; next largest pair %d = %.4f", sorted[0].offset, sorted[0].element, sorted[1].offset, sorted[1].element))
+        var detector = RIFESceneCutDetector()
+        let fired = cut.enumerated().filter { detector.isCut(difference: $0.element) }.map(\.offset)
+        #expect(fired == [59], "only the pair between source frames 59 and 60 is a cut; fired \(fired)")
+    }
+
+    /// Each neighbouring pair's difference with the presentation time of the pair's later frame.
+    nonisolated static func timedDifferences(of url: URL) async throws -> [(time: Double, difference: Float)] {
+        let asset = AVURLAsset(url: url)
+        let track = try #require(try await asset.loadTracks(withMediaType: .video).first)
+        let reader = try AVAssetReader(asset: asset)
+        let out = AVAssetReaderTrackOutput(track: track, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+        reader.add(out)
+        reader.startReading()
+        var previous: MLXArray?
+        var result: [(time: Double, difference: Float)] = []
+        while let sample = out.copyNextSampleBuffer(), let pixels = CMSampleBufferGetImageBuffer(sample) {
+            let frame = RIFEVideoPipeline.read(pixels)
+            try MLXErrorGuard.evaluate(frame)
+            if let previous {
+                result.append((CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sample)), try RIFEVideoPipeline.sceneDifference(previous, frame)))
+            }
+            previous = frame
+        }
+        return result
+    }
+
+    /// Detector only, no model: the owner's real clip (1080x1920, 30 fps, 70.1 s) has exactly two jump cuts, at 36.07 s and 60.03 s.
+    @Test func theRealAppPreviewFiresExactlyItsTwoCuts() async throws {
+        let pairs = try await Self.timedDifferences(of: try RIFESmoke.clip("App Preview 179.mp4"))
+        var detector = RIFESceneCutDetector()
+        var history: [Float] = []
+        var fired: [Double] = []
+        for pair in pairs {
+            let median = RIFESceneCutDetector.median(Array(history.suffix(RIFESceneCutDetector.windowSize)))
+            let cut = detector.isCut(difference: pair.difference)
+            if cut { fired.append(pair.time) }
+            if history.count >= RIFESceneCutDetector.minimumHistory, median > 0, pair.difference > 3 * median {
+                print(String(format: "RIFECUT app-preview over 3x: %.2f s  diff %.4f  trailing median %.4f  %.1fx  %@", pair.time, pair.difference, median, pair.difference / median, cut ? "CUT" : "-"))
+            }
+            history.append(pair.difference)
+        }
+        print("RIFECUT app-preview: \(pairs.count) pairs, fired at \(fired.map { String(format: "%.2f", $0) })")
+        #expect(fired.count == 2, "exactly two cuts; fired at \(fired)")
+        if fired.count == 2 {
+            #expect(abs(fired[0] - 36.07) < 0.05, "first cut at 36.07 s; fired at \(fired[0])")
+            #expect(abs(fired[1] - 60.03) < 0.05, "second cut at 60.03 s; fired at \(fired[1])")
+        }
+    }
+
+    /// Mean absolute pixel difference (0...255) between two frames of the output, every 8th pixel.
+    nonisolated static func thumbnails(of url: URL) async throws -> [[UInt8]] {
+        let asset = AVURLAsset(url: url)
+        let track = try #require(try await asset.loadTracks(withMediaType: .video).first)
+        let reader = try AVAssetReader(asset: asset)
+        let out = AVAssetReaderTrackOutput(track: track, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+        reader.add(out)
+        reader.startReading()
+        var frames: [[UInt8]] = []
+        while let sample = out.copyNextSampleBuffer(), let buffer = CMSampleBufferGetImageBuffer(sample) {
+            CVPixelBufferLockBaseAddress(buffer, .readOnly)
+            defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
+            guard let base = CVPixelBufferGetBaseAddress(buffer) else { continue }
+            let w = CVPixelBufferGetWidth(buffer), h = CVPixelBufferGetHeight(buffer), stride = CVPixelBufferGetBytesPerRow(buffer)
+            let bytes = base.assumingMemoryBound(to: UInt8.self)
+            var thumb: [UInt8] = []
+            for y in Swift.stride(from: 0, to: h, by: 8) { for x in Swift.stride(from: 0, to: w, by: 8) {
+                let p = bytes + y * stride + x * 4
+                thumb.append(contentsOf: [p[0], p[1], p[2]])
+            } }
+            frames.append(thumb)
+        }
+        return frames
+    }
+
+    nonisolated static func meanDiff(_ a: [UInt8], _ b: [UInt8]) -> Double {
+        zip(a, b).reduce(0.0) { $0 + abs(Double($1.0) - Double($1.1)) } / Double(max(1, a.count))
+    }
+
+    @Test(.enabled(if: RIFERealLoad.enabled, "needs the model")) func aHardCutIsRepeatedNotInterpolated() async throws {
+        let out = RIFEStage.temporaryOutputURL()
+        defer { try? FileManager.default.removeItem(at: out) }
+        let awakeDuringRun = AwakeProbe()
+        let awakeBefore = RIFEKeepAwake.activeCount
+        _ = try await RIFEStage(modelDirectory: try #require(RIFERealLoad.directory), options: RIFEVideoOptions(times: 2, scale: 1), outputURL: out)
+            .run(.text(try RIFESmoke.clip("09-hard-cut-640x360-30fps-4s.mp4").path), progress: { _ in awakeDuringRun.note(RIFEKeepAwake.activeCount) })
+        #expect(awakeDuringRun.max == awakeBefore + 1, "the Mac is held awake while the run works")
+        #expect(RIFEKeepAwake.activeCount == awakeBefore, "and released when it finishes")
+        let frames = try await Self.thumbnails(of: out)
+        #expect(frames.count == 239)
+        // Output index 2n is source frame n: source 59 is output 118, source 60 is output 120, and the frame inserted across the cut is 119.
+        let before = frames[118], inserted = frames[119], after = frames[120]
+        let toEarlier = Self.meanDiff(inserted, before), toLater = Self.meanDiff(inserted, after)
+        print(String(format: "RIFECUT inserted frame: %.2f from the earlier frame, %.2f from the later one (0-255 scale)", toEarlier, toLater))
+        #expect(toEarlier < 3, "the frame at the cut repeats the earlier frame")
+        #expect(toLater > 30, "and is nothing like the later one: no ghost of both pictures")
+        // An ordinary pair still gets a real in-between: it differs from both neighbours.
+        let ordinary = Self.meanDiff(frames[41], frames[40])
+        #expect(ordinary > 0, "frames away from the cut are interpolated, not repeated")
+    }
+}
+
+
+/// The highest `RIFEKeepAwake.activeCount` seen from a run's progress callback.
+final class AwakeProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var highest = 0
+    func note(_ v: Int) { lock.lock(); highest = Swift.max(highest, v); lock.unlock() }
+    var max: Int { lock.lock(); defer { lock.unlock() }; return highest }
 }

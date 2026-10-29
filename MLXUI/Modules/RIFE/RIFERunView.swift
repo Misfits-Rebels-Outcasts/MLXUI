@@ -102,14 +102,14 @@ struct RIFERunView: View {
             }
             .disabled(model.isRunning)
             if let info = model.info {
-                Text(RIFERunModel.outputLine(info, times: model.times))
+                Text(RIFERunModel.outputLine(info, times: model.times, scale: model.options.scale))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Text(model.scaleIsFixed
                  ? "This video is larger than 2560 × 1440, so the motion is always estimated at half size (Scale 0.5): full size would take about half an hour and most of this Mac's memory."
                  : "Scale 0.5 estimates the motion at half size and uses less memory; 1.0 is more exact.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Text("Handles clips up to \(RIFEVideoOptions.maxSourceFrames) frames (about 60 seconds at 30 fps) and 3840 × 2160. It adds frames; it doesn't make the picture sharper or larger.")
+            Text("Handles clips up to 30 minutes at 30 fps and 3840 × 2160. It adds frames; it doesn't make the picture sharper or larger.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -194,10 +194,11 @@ final class RIFERunModel {
     var canRun: Bool { sourceURL != nil && info != nil && limitMessage == nil && !isRunning }
 
     /// The Output line under the pickers; the audio sentence follows the source, not a promise about a track that isn't there.
-    nonisolated static func outputLine(_ info: RIFEVideoInfo, times: Int) -> String {
+    nonisolated static func outputLine(_ info: RIFEVideoInfo, times: Int, scale: Float) -> String {
         let rate = info.outputFrameRate(times: times)
         let fps = String(format: abs(rate.rounded() - rate) < 0.005 ? "%.0f" : "%.2f", rate)
         return "Output: \(fps) fps, about \(info.outputFrames(times: times)) frames, the same length as the original. "
+            + "Takes \(RIFEEstimate.phrase(seconds: RIFEEstimate.seconds(for: info, times: times, scale: scale))). "
             + (info.hasAudio ? "The audio is copied unchanged." : "The clip has no audio.")
     }
 

@@ -146,9 +146,131 @@ struct RIFEVideoPlanTests {
     @Test func theOutputLineFollowsTheSourceAudio() {
         let withAudio = RIFEVideoInfo(width: 1280, height: 720, frameRate: 30, duration: 2, estimatedFrames: 60, hasAudio: true)
         var silent = withAudio; silent.hasAudio = false
-        #expect(RIFERunModel.outputLine(withAudio, times: 2) == "Output: 60 fps, about 119 frames, the same length as the original. The audio is copied unchanged.")
-        #expect(RIFERunModel.outputLine(silent, times: 2) == "Output: 60 fps, about 119 frames, the same length as the original. The clip has no audio.")
-        #expect(!RIFERunModel.outputLine(silent, times: 4).contains("copied"))
+        #expect(RIFERunModel.outputLine(withAudio, times: 2, scale: 1) == "Output: 60 fps, about 119 frames, the same length as the original. Takes under a minute. The audio is copied unchanged.")
+        #expect(RIFERunModel.outputLine(silent, times: 2, scale: 1) == "Output: 60 fps, about 119 frames, the same length as the original. Takes under a minute. The clip has no audio.")
+        #expect(!RIFERunModel.outputLine(silent, times: 4, scale: 1).contains("copied"))
+    }
+
+    // RIFE-L (owner ruling 2026-10-29): the Output line carries a time estimate, fitted to the measured runs.
+    @Test func theEstimateMatchesTheMeasuredRuns() {
+        func info(_ w: Int, _ h: Int, fps: Double, seconds: Double) -> RIFEVideoInfo {
+            RIFEVideoInfo(width: w, height: h, frameRate: fps, duration: seconds, estimatedFrames: Int(fps * seconds), hasAudio: false)
+        }
+        // Seconds of work per second of video: 720p 2x ≈ 8, 1080p 2x ≈ 15, 1080p 4x ≈ 45, 4K 2x at Scale 0.5 ≈ 85 (within 15%).
+        func perSecond(_ i: RIFEVideoInfo, _ times: Int, _ scale: Float) -> Double { RIFEEstimate.seconds(for: i, times: times, scale: scale) / i.duration }
+        #expect(abs(perSecond(info(1280, 720, fps: 30, seconds: 12), 2, 1) - 8) < 8 * 0.15 + 1)
+        #expect(abs(perSecond(info(1920, 1080, fps: 24, seconds: 8), 2, 1) - 15) < 15 * 0.15)
+        #expect(abs(perSecond(info(1920, 1080, fps: 24, seconds: 8), 4, 1) - 45) < 45 * 0.15)
+        #expect(abs(perSecond(info(3840, 2160, fps: 30, seconds: 6), 2, 0.5) - 85) < 85 * 0.15)
+    }
+
+    // Owner ruling 2026-10-29: "Err long." No measured run may take longer than its estimate, and none may be over-estimated by more than 40%.
+    @Test func theEstimateNeverUnderPromisesAMeasuredRun() {
+        func info(_ w: Int, _ h: Int, fps: Double, seconds: Double) -> RIFEVideoInfo {
+            RIFEVideoInfo(width: w, height: h, frameRate: fps, duration: seconds, estimatedFrames: Int(fps * seconds), hasAudio: false)
+        }
+        // (clip, times, scale, measured seconds): RIFE-5 / RIFE-L runs, test host, 2026-10-29.
+        let runs: [(String, RIFEVideoInfo, Int, Float, Double)] = [
+            ("1080p 8 s 2x", info(1920, 1080, fps: 24, seconds: 8), 2, 1, 112.8),
+            ("1080p 8 s 4x", info(1920, 1080, fps: 24, seconds: 8), 4, 1, 336.5),
+            ("1440p 6 s 2x", info(2560, 1440, fps: 30, seconds: 6), 2, 1, 194.3),
+            ("4K 6 s 2x half", info(3840, 2160, fps: 30, seconds: 6), 2, 0.5, 407.9),
+            ("4K 6 s 4x half", info(3840, 2160, fps: 30, seconds: 6), 4, 0.5, 1176.5),
+            ("1080p 5 min 2x (17.8 s per second of video)", info(1920, 1080, fps: 30, seconds: 300), 2, 1, 5326.3),
+        ]
+        for (name, clip, times, scale, measured) in runs {
+            let estimate = RIFEEstimate.seconds(for: clip, times: times, scale: scale)
+            #expect(estimate >= measured, "\(name): estimated \(estimate) s, took \(measured) s")
+            #expect(estimate <= measured * 1.4, "\(name): estimated \(estimate) s is far above \(measured) s")
+        }
+    }
+
+    @Test func theEstimateIsRoundedInPlainWords() {
+        #expect(RIFEEstimate.phrase(seconds: 0) == "under a minute")
+        #expect(RIFEEstimate.phrase(seconds: 59) == "under a minute")
+        #expect(RIFEEstimate.phrase(seconds: 60) == "about 1 minute")
+        #expect(RIFEEstimate.phrase(seconds: 94) == "about 2 minutes")
+        #expect(RIFEEstimate.phrase(seconds: 900) == "about 15 minutes")
+        #expect(RIFEEstimate.phrase(seconds: 7_199) == "about 2 hours")
+        #expect(RIFEEstimate.phrase(seconds: 27_000) == "about 7.5 hours")
+        #expect(RIFEEstimate.phrase(seconds: 10_800) == "about 3 hours")
+    }
+
+    // RIFE-L: 30 minutes of source video, 54,000 frames at 30 fps; 3840 x 2160 unchanged.
+    @Test func theLimitIsThirtyMinutesAt30Fps() throws {
+        #expect(RIFEVideoOptions.maxSourceFrames == 54_000)
+        var ok = RIFEVideoInfo(width: 1920, height: 1080, frameRate: 30, duration: 1800, estimatedFrames: 54_000, hasAudio: true)
+        try RIFEVideoPipeline.validate(ok)
+        ok.estimatedFrames = 54_001
+        #expect(throws: RIFEVideoError.self) { try RIFEVideoPipeline.validate(ok) }
+        let message = RIFEVideoError.tooManyFrames(count: 55_800, limit: 54_000).description
+        #expect(message.contains("about 30 minutes at 30 fps") && message.contains("55800"))
+        #expect(throws: RIFEVideoError.self) { try RIFEVideoPipeline.validate(RIFEVideoInfo(width: 3841, height: 2160, frameRate: 30, duration: 2, estimatedFrames: 60, hasAudio: false)) }
+    }
+
+    // RIFE-L scene cuts: pure arithmetic on small frames.
+    @Test func sceneDifferenceIsZeroForTheSameFrameAndOneForBlackAgainstWhite() throws {
+        let black = MLXArray.zeros([1, 48, 64, 3]), white = MLXArray.ones([1, 48, 64, 3])
+        #expect(try RIFEVideoPipeline.sceneDifference(black, black) == 0)
+        #expect(abs(try RIFEVideoPipeline.sceneDifference(black, white) - 1) < 1e-5)
+        // A small brightness step (a fade, a flash of motion) is far from a cut.
+        #expect(abs(try RIFEVideoPipeline.sceneDifference(black, MLXArray.ones([1, 48, 64, 3]) * 0.1) - 0.1) < 1e-5)
+    }
+
+    // RIFE-L (owner ruling 2026-10-29): cut if diff > 0.25, OR (diff ≥ 0.10 AND diff ≥ 5 × the median of the previous 15 pairs; no
+    // relative rule until 3 pairs exist). The numbers are from App_Preview_179.mp4.
+    @Test func theCutRuleFiresOnTheTwoRealJumpCutsAndNothingElse() {
+        func fires(after history: [Float], _ diff: Float) -> Bool {
+            var d = RIFESceneCutDetector()
+            for h in history { _ = d.isCut(difference: h) }
+            return d.isCut(difference: diff)
+        }
+        let quiet1 = [Float](repeating: 0.139 / 6.9, count: 15), quiet2 = [Float](repeating: 0.172 / 16.3, count: 15)
+        #expect(fires(after: quiet1, 0.139), "36.07 s: 0.139, 6.9×")
+        #expect(fires(after: quiet2, 0.172), "60.03 s: 0.172, 16.3×")
+        #expect(!fires(after: [Float](repeating: 0.085 / 4.0, count: 15), 0.085), "11.10 s: 0.085, 4.0× and under 0.10")
+        #expect(!fires(after: [Float](repeating: 0.01, count: 15), 0.09), "9× but under the 0.10 floor")
+        #expect(!fires(after: [Float](repeating: 0.05, count: 15), 0.12), "over 0.10 but only 2.4× its surroundings")
+        #expect(fires(after: [], 0.26), "over 0.25 alone is a cut, with no history")
+        #expect(!fires(after: [], 0.25), "0.25 itself is not over 0.25, and there is no history for the relative rule")
+    }
+
+    @Test func theRelativeRuleWaitsForThreePairsAndUsesOnlyTheLast15() {
+        func fires(after history: [Float], _ diff: Float) -> Bool {
+            var d = RIFESceneCutDetector()
+            for h in history { _ = d.isCut(difference: h) }
+            return d.isCut(difference: diff)
+        }
+        #expect(!fires(after: [0.01, 0.01], 0.15), "only 2 earlier pairs: no relative rule")
+        #expect(fires(after: [0.01, 0.01, 0.01], 0.15), "3 earlier pairs: the rule applies")
+        // 20 busy pairs (0.1) followed by 15 quiet ones (0.01): the busy ones have left the window.
+        #expect(fires(after: [Float](repeating: 0.1, count: 20) + [Float](repeating: 0.01, count: 15), 0.12))
+        // The window is 15 wide: 8 quiet then 7 busy still puts the median at the busy level.
+        #expect(!fires(after: [Float](repeating: 0.1, count: 8) + [Float](repeating: 0.01, count: 7), 0.12))
+        #expect(RIFESceneCutDetector.median([0.3, 0.1, 0.2]) == 0.2)
+        #expect(RIFESceneCutDetector.median([0.1, 0.2, 0.3, 0.4]) == 0.25)
+        #expect(RIFESceneCutDetector.median([]) == 0)
+    }
+
+    // RIFE-L (owner ruling 2026-10-29): the Mac stays awake while a run works, and the hold always ends.
+    @Test func theKeepAwakeHoldBeginsAndEndsOnFinishErrorAndCancel() async {
+        struct Boom: Error {}
+        let before = RIFEKeepAwake.activeCount
+        let inside = await RIFEKeepAwake.hold(reason: "test") { RIFEKeepAwake.activeCount }
+        #expect(inside == before + 1 && RIFEKeepAwake.activeCount == before)
+        do { try await RIFEKeepAwake.hold(reason: "test") { throw Boom() } } catch {}
+        #expect(RIFEKeepAwake.activeCount == before, "ended on error")
+        let task = Task { try await RIFEKeepAwake.hold(reason: "test") { try await Task.sleep(for: .seconds(60)) } }
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(RIFEKeepAwake.activeCount == before + 1)
+        task.cancel()
+        _ = await task.result
+        #expect(RIFEKeepAwake.activeCount == before, "ended on cancel")
+        // A failing pipeline run (not a video) ends its hold too.
+        _ = try? await RIFEVideoPipeline.run(input: FileManager.default.temporaryDirectory.appendingPathComponent("none.mp4"),
+                                             output: RIFEStage.temporaryOutputURL(), modelDirectory: FileManager.default.temporaryDirectory,
+                                             options: RIFEVideoOptions(), progress: { _ in })
+        #expect(RIFEKeepAwake.activeCount == before, "a refused run ends its hold")
     }
 
     @MainActor @Test func theRunModelFixesScaleAtHalfAbove1440p() {
