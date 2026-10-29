@@ -400,6 +400,50 @@ struct RIFESceneCutTests {
         #expect(fired == [59], "only the pair between source frames 59 and 60 is a cut; fired \(fired)")
     }
 
+    /// Each neighbouring pair's difference with the presentation time of the pair's later frame.
+    nonisolated static func timedDifferences(of url: URL) async throws -> [(time: Double, difference: Float)] {
+        let asset = AVURLAsset(url: url)
+        let track = try #require(try await asset.loadTracks(withMediaType: .video).first)
+        let reader = try AVAssetReader(asset: asset)
+        let out = AVAssetReaderTrackOutput(track: track, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+        reader.add(out)
+        reader.startReading()
+        var previous: MLXArray?
+        var result: [(time: Double, difference: Float)] = []
+        while let sample = out.copyNextSampleBuffer(), let pixels = CMSampleBufferGetImageBuffer(sample) {
+            let frame = RIFEVideoPipeline.read(pixels)
+            try MLXErrorGuard.evaluate(frame)
+            if let previous {
+                result.append((CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sample)), try RIFEVideoPipeline.sceneDifference(previous, frame)))
+            }
+            previous = frame
+        }
+        return result
+    }
+
+    /// Detector only, no model: the owner's real clip (1080x1920, 30 fps, 70.1 s) has exactly two jump cuts, at 36.07 s and 60.03 s.
+    @Test func theRealAppPreviewFiresExactlyItsTwoCuts() async throws {
+        let pairs = try await Self.timedDifferences(of: try RIFESmoke.clip("App Preview 179.mp4"))
+        var detector = RIFESceneCutDetector()
+        var history: [Float] = []
+        var fired: [Double] = []
+        for pair in pairs {
+            let median = RIFESceneCutDetector.median(Array(history.suffix(RIFESceneCutDetector.windowSize)))
+            let cut = detector.isCut(difference: pair.difference)
+            if cut { fired.append(pair.time) }
+            if history.count >= RIFESceneCutDetector.minimumHistory, median > 0, pair.difference > 3 * median {
+                print(String(format: "RIFECUT app-preview over 3x: %.2f s  diff %.4f  trailing median %.4f  %.1fx  %@", pair.time, pair.difference, median, pair.difference / median, cut ? "CUT" : "-"))
+            }
+            history.append(pair.difference)
+        }
+        print("RIFECUT app-preview: \(pairs.count) pairs, fired at \(fired.map { String(format: "%.2f", $0) })")
+        #expect(fired.count == 2, "exactly two cuts; fired at \(fired)")
+        if fired.count == 2 {
+            #expect(abs(fired[0] - 36.07) < 0.05, "first cut at 36.07 s; fired at \(fired[0])")
+            #expect(abs(fired[1] - 60.03) < 0.05, "second cut at 60.03 s; fired at \(fired[1])")
+        }
+    }
+
     /// Mean absolute pixel difference (0...255) between two frames of the output, every 8th pixel.
     nonisolated static func thumbnails(of url: URL) async throws -> [[UInt8]] {
         let asset = AVURLAsset(url: url)
