@@ -453,6 +453,11 @@ nonisolated enum CatalogBridge {
         }
         // No bridge row: an R14-2/7 derived pick. Match the catalog directly.
         if let model = catalog.first(where: { $0.hfModelId == display || $0.displayName == display }) {
+            // MP7-2: a catalogued model with a known "no runner yet" gap (`ModelSupport`) is not runnable — without this the
+            // display-name fallback would offer the download and then fail at Run with an unsupported-model error.
+            if let gap = ModelSupport.unsupportedReason(for: model) {
+                return .notRunnable(display: display, reason: "\(display): \(gap)", action: nil)
+            }
             return .runnable(.cataloged(model), equivalence: .same, note: nil)
         }
         // RM-3: a row naming a remote provider by its own `name @ provider` text, whose
