@@ -11,8 +11,7 @@ import Testing
 //
 // What it prints (REALDIT lines): cosine and relative L2 against diffusers at the taps (double 0 / last, single 0 / last, final prediction), and for EVERY block the
 // L2 norm, mean |x| and max |x| of this port's output next to diffusers' and their ratio -- a bf16 intermediate that is silently upcast, or an outlier channel that is
-// lost, shows up as a norm that drifts away from the diffusers list. All floors here are PROVISIONAL (implementer's call, pending owner confirmation): a follow-up cycle
-// replaces them with margins under the first measured values. The quantized variants are print-only apart from their own provisional floors.
+// lost, shows up as a norm that drifts away from the diffusers list. Limits are the measured worst values plus a margin (MP7-3f-FIX-1; see `Limits`).
 
 enum KleinDiTGolden {
     nonisolated static let file: URL? = {
@@ -23,16 +22,34 @@ enum KleinDiTGolden {
     nonisolated static let enabled = file != nil && Klein3eHeader.present
     nonisolated static let skipReason: Comment = "needs TEST_RUNNER_MLXUI_TEST_KLEIN_DIT_GOLDEN_DIR (folder with real_dit.safetensors from real_dit_goldens.py), the installed Klein transformer/, and an unsandboxed test host"
 
-    /// PROVISIONAL floors on the cosine of every tap and of the prediction (implementer's call, pending owner confirmation; replace with margins under the first measured values).
-    static let provisionalBF16Cosine = 0.99
-    static let provisionalInt8Cosine = 0.95
-    static let provisionalInt4Cosine = 0.90
+    /// Limits per variant, set (MP7-3f-FIX-1) AFTER the owner's first real run, with a margin under the measured worst values. They pin measured behaviour of this port
+    /// against diffusers bf16 on CPU; they are not quality claims. The margins are the implementer's call, pending owner confirmation.
+    /// Measured worst over the six taps + pred / over every block's L2 ratio (ours/diffusers):
+    ///   bf16: cosine 0.999264 (pred), relL2 0.03838, L2 ratio 0.9956...1.0038     -> cosine >= 0.998, relL2 <= 0.06, L2 ratio within 2%
+    ///   int8: cosine 0.997260 (pred), relL2 0.07399, L2 ratio 0.9943...1.0069     -> cosine >= 0.995, relL2 <= 0.10, L2 ratio within 2%
+    ///   int4: cosine 0.943265 (pred), relL2 0.33473, L2 ratio 0.9536...1.0365     -> cosine >= 0.93,  relL2 <= 0.40, L2 ratio within 8%
+    struct Limits { let cosine: Double, relL2: Double, normBand: Double }
+    static let bf16Limits = Limits(cosine: 0.998, relL2: 0.06, normBand: 0.02)
+    static let int8Limits = Limits(cosine: 0.995, relL2: 0.10, normBand: 0.02)
+    static let int4Limits = Limits(cosine: 0.93, relL2: 0.40, normBand: 0.08)
+
+    static func check(_ label: String, _ r: Result, _ l: Limits) {
+        for t in r.taps {
+            #expect(t.cosine >= l.cosine, Comment(rawValue: "\(label) \(t.name) cosine \(t.cosine) < \(l.cosine)"))
+            #expect(t.relL2 <= l.relL2, Comment(rawValue: "\(label) \(t.name) relL2 \(t.relL2) > \(l.relL2)"))
+        }
+        for group in groups {
+            for (i, (a, b)) in zip(r.stats[group] ?? [], r.theirs[group] ?? []).enumerated() {
+                #expect(abs(a.l2 / b.l2 - 1) <= l.normBand, Comment(rawValue: "\(label) \(group)[\(i)] L2 ratio \(a.l2 / b.l2)"))
+            }
+        }
+    }
 
     /// Per-block statistics of one output: L2 norm, mean |x|, max |x| (float32).
     struct BlockStats { var l2: Double, meanAbs: Double, maxAbs: Double }
 
     struct Result {
-        var taps: [(name: String, cosine: Double, relL2: Double)] = []
+        var taps: [(name: String, cosine: Double, relL2: Double, maxAbs: Double)] = []
         var stats: [String: [BlockStats]] = [:]            // group -> per block
         var theirs: [String: [BlockStats]] = [:]
     }
@@ -53,6 +70,8 @@ enum KleinDiTGolden {
         if p.count == 2, p[0] == "single", let i = Int(p[1]) { return ("single", i) }
         return nil
     }
+
+    static func maxAbsDiff(_ x: [Float], _ y: [Float]) -> Double { zip(x, y).reduce(0.0) { max($0, Double(abs($1.0 - $1.1))) } }
 
     static func floats(_ a: MLXArray) throws -> [Float] { try MLXErrorGuard.read(a.asType(.float32).reshaped(-1), as: Float.self) }
 
@@ -88,14 +107,14 @@ enum KleinDiTGolden {
                 if let key = wanted.first(where: { $0.0 == stage })?.1 {
                     let want = try g(key)
                     let x = try floats(value), y = try floats(want)
-                    result.taps.append((stage, KleinCosine.cosine(x, y), Flux2KleinEncoderQuantizationTests.relL2(x, y)))
+                    result.taps.append((stage, KleinCosine.cosine(x, y), Flux2KleinEncoderQuantizationTests.relL2(x, y), maxAbsDiff(x, y)))
                 }
             } catch { failure = error }
         }
         if let failure { throw failure }
         let want = try g("out.pred")
         let x = try floats(pred), y = try floats(want)
-        result.taps.append(("pred", KleinCosine.cosine(x, y), Flux2KleinEncoderQuantizationTests.relL2(x, y)))
+        result.taps.append(("pred", KleinCosine.cosine(x, y), Flux2KleinEncoderQuantizationTests.relL2(x, y), maxAbsDiff(x, y)))
         for group in groups {
             let l2 = try floats(g("stats.\(group).l2")), mean = try floats(g("stats.\(group).meanabs")), mx = try floats(g("stats.\(group).maxabs"))
             result.theirs[group] = (0 ..< l2.count).map { BlockStats(l2: Double(l2[$0]), meanAbs: Double(mean[$0]), maxAbs: Double(mx[$0])) }
@@ -105,7 +124,7 @@ enum KleinDiTGolden {
     }
 
     static func report(_ label: String, _ r: Result) {
-        for t in r.taps { print(String(format: "REALDIT %@ tap %@: cosine %.6f relL2 %.5f", label, t.name, t.cosine, t.relL2)) }
+        for t in r.taps { print(String(format: "REALDIT %@ tap %@: cosine %.6f relL2 %.5f max-abs %.4f", label, t.name, t.cosine, t.relL2, t.maxAbs)) }
         for group in groups {
             guard let ours = r.stats[group], let theirs = r.theirs[group] else { continue }
             func list(_ f: (BlockStats) -> Double) -> String { ours.indices.map { String(format: "%.3f", f(ours[$0])) }.joined(separator: " ") }
@@ -193,29 +212,31 @@ struct Flux2KleinRealDiTGoldenTests {
         }
         Memory.clearCache()
         KleinDiTGolden.report("bf16", r)
-        // PROVISIONAL floor (implementer's call, pending owner confirmation): 0.99 on every tap and on the prediction.
-        for t in r.taps { #expect(t.cosine >= KleinDiTGolden.provisionalBF16Cosine, Comment(rawValue: "bf16 \(t.name) cosine \(t.cosine) (provisional floor)")) }
+        KleinDiTGolden.check("bf16", r, KleinDiTGolden.bf16Limits)
     }
 
-    @Test func int8PortVersusDiffusers() throws {
-        try quantized(bits: 8, floor: KleinDiTGolden.provisionalInt8Cosine)
+    @Test func int8PortVersusDiffusers() throws { try quantized(bits: 8, keepFrontEndBF16: false, label: "int8", limits: KleinDiTGolden.int8Limits) }
+
+    @Test func int4PortVersusDiffusers() throws { try quantized(bits: 4, keepFrontEndBF16: false, label: "int4", limits: KleinDiTGolden.int4Limits) }
+
+    /// Print-only extra (implementer's call, pending owner confirmation): int4 blocks, but context_embedder, the three modulation Linears and norm_out.linear left in bf16.
+    /// Its limits are the int4 ones, so it can only fail if it is WORSE than the shipping int4 policy's measured bound.
+    @Test func int4KeepingTheFrontEndBF16VersusDiffusers() throws {
+        try quantized(bits: 4, keepFrontEndBF16: true, label: "int4-frontbf16", limits: KleinDiTGolden.int4Limits)
     }
 
-    @Test func int4PortVersusDiffusers() throws {
-        try quantized(bits: 4, floor: KleinDiTGolden.provisionalInt4Cosine)
-    }
-
-    private func quantized(bits: Int, floor: Double) throws {
+    private func quantized(bits: Int, keepFrontEndBF16: Bool, label: String, limits: KleinDiTGolden.Limits) throws {
         let dir = try #require(Klein3eHeader.directory)
         let golden = try Self.golden()
         let r: KleinDiTGolden.Result
         do {
-            let model = try Flux2KleinTransformer.load(transformerDirectory: dir, bits: bits)
+            let model = try Flux2KleinTransformer.loadForTesting(transformerDirectory: dir, bits: bits, keepFrontEndBF16: keepFrontEndBF16)
+            print(String(format: "REALDIT %@ weight bytes %.3f GB (blocks %.3f GB)", label, Double(model.parameterBytes()) / 1e9,
+                         Double(model.parameterBytes { $0.hasPrefix("transformer_blocks.") || $0.hasPrefix("single_transformer_blocks.") }) / 1e9))
             r = try KleinDiTGolden.compare(model: model, golden: golden, dtype: .bfloat16)
         }
         Memory.clearCache()
-        KleinDiTGolden.report("int\(bits)", r)
-        // Print-only apart from this PROVISIONAL floor (implementer's call, pending owner confirmation).
-        for t in r.taps { #expect(t.cosine >= floor, Comment(rawValue: "int\(bits) \(t.name) cosine \(t.cosine) (provisional floor)")) }
+        KleinDiTGolden.report(label, r)
+        KleinDiTGolden.check(label, r, limits)
     }
 }

@@ -201,9 +201,16 @@ nonisolated final class Flux2KleinTransformer: Module {
         try load(transformerDirectory: dir, optionalBits: nil, groupSize: 64, stage: stage)
     }
 
-    private static func load(transformerDirectory dir: URL, optionalBits: Int?, groupSize: Int, stage: (String) -> Void) throws -> Flux2KleinTransformer {
+    /// Measurement-only (MP7-3f-FIX-1, implementer's call, pending owner confirmation): `keepFrontEndBF16` leaves `context_embedder`, the three modulation Linears and
+    /// `norm_out.linear` in the checkpoint dtype while the blocks are quantized. Not for the engine; the production policy is `quantizesFront`.
+    static func loadForTesting(transformerDirectory dir: URL, bits: Int?, keepFrontEndBF16: Bool, stage: (String) -> Void = { _ in }) throws -> Flux2KleinTransformer {
+        try load(transformerDirectory: dir, optionalBits: bits, groupSize: 64, keepFrontEndBF16: keepFrontEndBF16, stage: stage)
+    }
+
+    private static func load(transformerDirectory dir: URL, optionalBits: Int?, groupSize: Int, keepFrontEndBF16: Bool = false, stage: (String) -> Void) throws -> Flux2KleinTransformer {
         let config = try Flux2KleinTransformerConfig.decode(from: Data(contentsOf: dir.appendingPathComponent("config.json")))
-        return try load(shape: Flux2KleinTransformerShape(config), shards: try weightShards(in: dir), bits: optionalBits, groupSize: groupSize, stage: stage)
+        return try load(shape: Flux2KleinTransformerShape(config), shards: try weightShards(in: dir), bits: optionalBits, groupSize: groupSize,
+                        keepFrontEndBF16: keepFrontEndBF16, stage: stage)
     }
 
     /// One lazy shard per `*.safetensors` file of the directory, in file-name order (single file or sharded; no index file is read).
@@ -232,7 +239,7 @@ nonisolated final class Flux2KleinTransformer: Module {
     /// second half), quantized right away if `bits` is set, evaluated, and its bf16 originals dropped (`clearCache`); the bf16 model is never fully resident.
     /// Missing tensors throw by name at the end; an unknown, renamed, duplicated or out-of-range tensor throws by name as soon as it arrives. Cancellation is checked per shard
     /// and per block. A layer that cannot be quantized throws (no silent bf16 fallback). The test-facing entry takes `bits: nil` (unquantized).
-    static func load(shape: Flux2KleinTransformerShape, shards: [Shard], bits: Int?, groupSize: Int = 64,
+    static func load(shape: Flux2KleinTransformerShape, shards: [Shard], bits: Int?, groupSize: Int = 64, keepFrontEndBF16: Bool = false,
                      stage: (String) -> Void = { _ in }) throws -> Flux2KleinTransformer {
         if let bits, !Flux2KleinQuantization.ditSupportedBits.contains(bits) { throw Flux2KleinTransformerError.unsupportedBits(bits) }
         let e = shape.embedder
@@ -321,7 +328,7 @@ nonisolated final class Flux2KleinTransformer: Module {
         try Task.checkCancellation()
         let model = Flux2KleinTransformer(shape: shape, doubleBlocks: doubles.compactMap { $0 }, singleBlocks: singles.compactMap { $0 })
         try model.update(parameters: ModuleParameters.unflattened(front), verify: [.noUnusedKeys, .shapeMismatch])
-        try quantizeChecked(model, label: "") { Flux2KleinTransformer.quantizesFront($0) }
+        try quantizeChecked(model, label: "") { !keepFrontEndBF16 && Flux2KleinTransformer.quantizesFront($0) }
         finish(model)
         stage("front end ready")
         return model
