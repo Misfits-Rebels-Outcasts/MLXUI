@@ -428,7 +428,7 @@ nonisolated enum CatalogBridge {
     /// `.same` with no curated manifest (a manifest-less model is non-stochastic: `withSeed`
     /// already tolerates the missing file). Without this, 20 of the 34 catalog entries would be
     /// selectable and pinned yet refused at Run.
-    static func resolve(_ display: String, catalog: [ModelEntry]) -> CatalogBridgeResolution {
+    static func resolve(_ display: String, catalog: [ModelEntry], ignoringGaps: [String] = []) -> CatalogBridgeResolution {
         if let entry = entry(for: display) {
             for candidate in entry.candidates {
                 if let model = catalog.first(where: {
@@ -455,7 +455,7 @@ nonisolated enum CatalogBridge {
         if let model = catalog.first(where: { $0.hfModelId == display || $0.displayName == display }) {
             // MP7-2: a catalogued model with a known "no runner yet" gap (`ModelSupport`) is not runnable — without this the
             // display-name fallback would offer the download and then fail at Run with an unsupported-model error.
-            if let gap = ModelSupport.unsupportedReason(for: model) {
+            if let gap = ModelSupport.unsupportedReason(for: model, ignoringGaps: ignoringGaps) {
                 return .notRunnable(display: display, reason: "\(display): \(gap)", action: nil)
             }
             return .runnable(.cataloged(model), equivalence: .same, note: nil)

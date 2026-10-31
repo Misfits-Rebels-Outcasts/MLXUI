@@ -1,0 +1,159 @@
+[
+ {
+  "prompt": "a red fox in a snowy forest at sunrise",
+  "templated": "<|im_start|>user\na red fox in a snowy forest at sunrise<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+  "input_ids": [
+   151644,
+   872,
+   198,
+   64,
+   2518,
+   38835,
+   304,
+   264,
+   89773,
+   13638,
+   518,
+   63819,
+   151645,
+   198,
+   151644,
+   77091,
+   198,
+   151667,
+   271,
+   151668,
+   271
+  ],
+  "real_length": 21,
+  "padded_length": 512,
+  "padding_side": "right",
+  "pad_token_id": 151643,
+  "pad_ids_head": [
+   151644,
+   872,
+   198
+  ],
+  "mask_head": [
+   1,
+   1,
+   1
+  ]
+ },
+ {
+  "prompt": "A street sign that reads \"OPEN\"",
+  "templated": "<|im_start|>user\nA street sign that reads \"OPEN\"<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+  "input_ids": [
+   151644,
+   872,
+   198,
+   32,
+   8592,
+   1841,
+   429,
+   15804,
+   330,
+   30933,
+   1,
+   151645,
+   198,
+   151644,
+   77091,
+   198,
+   151667,
+   271,
+   151668,
+   271
+  ],
+  "real_length": 20,
+  "padded_length": 512,
+  "padding_side": "right",
+  "pad_token_id": 151643,
+  "pad_ids_head": [
+   151644,
+   872,
+   198
+  ],
+  "mask_head": [
+   1,
+   1,
+   1
+  ]
+ },
+ {
+  "prompt": "",
+  "templated": "<|im_start|>user\n<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+  "input_ids": [
+   151644,
+   872,
+   198,
+   151645,
+   198,
+   151644,
+   77091,
+   198,
+   151667,
+   271,
+   151668,
+   271
+  ],
+  "real_length": 12,
+  "padded_length": 512,
+  "padding_side": "right",
+  "pad_token_id": 151643,
+  "pad_ids_head": [
+   151644,
+   872,
+   198
+  ],
+  "mask_head": [
+   1,
+   1,
+   1
+  ]
+ },
+ {
+  "prompt": "café au lait, 猫 🐱",
+  "templated": "<|im_start|>user\ncafé au lait, 猫 🐱<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+  "input_ids": [
+   151644,
+   872,
+   198,
+   924,
+   58858,
+   7906,
+   1187,
+   275,
+   11,
+   10236,
+   234,
+   104,
+   11162,
+   238,
+   109,
+   151645,
+   198,
+   151644,
+   77091,
+   198,
+   151667,
+   271,
+   151668,
+   271
+  ],
+  "real_length": 24,
+  "padded_length": 512,
+  "padding_side": "right",
+  "pad_token_id": 151643,
+  "pad_ids_head": [
+   151644,
+   872,
+   198
+  ],
+  "mask_head": [
+   1,
+   1,
+   1
+  ]
+ }
+]

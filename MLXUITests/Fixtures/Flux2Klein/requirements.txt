@@ -1,0 +1,9 @@
+# Pinned for tiny_goldens.py / real_goldens.py. CPU wheels only; nothing here downloads model weights.
+# diffusers 0.37.x is the line the Klein transformer config was exported from (_diffusers_version 0.37.0.dev0).
+# If 0.37.0 is not on PyPI yet when you run this, use the closest released 0.37.x and record it in outputs/versions.json.
+torch==2.9.1
+numpy==2.2.6
+safetensors==0.6.2
+transformers==4.57.3
+diffusers==0.37.1
+accelerate==1.12.0

@@ -62,8 +62,11 @@ nonisolated enum ModelSupport {
     }
 
     /// A human-readable reason this model can't run yet, or `nil` if it should run.
-    static func unsupportedReason(for model: ModelEntry) -> String? {
+    ///
+    /// `ignoringGaps` (MP7-3a) lists `idFragment`s to treat as already removed, so a test can show what a model does once
+    /// its gap is gone (the Klein module registering in MP7-3h). Empty by default; production never passes it.
+    static func unsupportedReason(for model: ModelEntry, ignoringGaps: [String] = []) -> String? {
         let haystack = (model.id + " " + model.hfModelId).lowercased()
-        return gaps.first { haystack.contains($0.idFragment) }?.reason
+        return gaps.first { haystack.contains($0.idFragment) && !ignoringGaps.contains($0.idFragment) }?.reason
     }
 }
