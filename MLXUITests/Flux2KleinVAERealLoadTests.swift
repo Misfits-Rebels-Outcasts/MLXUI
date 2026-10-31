@@ -10,7 +10,7 @@ import Testing
 // the installed folder is only read.
 //  * Header check: names + shapes only, no tensor data. Runs whenever the installed model is present.
 //  * Peak measurement: needs TEST_RUNNER_MLXUI_TEST_KLEIN_VAE_SIZES=512,1024 (comma list of sizes, multiples of 16) and TEST_RUNNER_MLXUI_TEST_KLEIN_VAE_DTYPE=bf16|fp32;
-//    optional TEST_RUNNER_MLXUI_TEST_KLEIN_VAE_CACHE_MB (Memory.cacheLimit) and TEST_RUNNER_MLXUI_TEST_KLEIN_VAE_CHUNK (attention query rows per slice).
+//    optional TEST_RUNNER_MLXUI_TEST_KLEIN_VAE_CACHE_MB (Memory.cacheLimit).
 //    ONE dtype per process so peaks are not polluted. Prints VAE3G-PEAK lines. Random latent, no accuracy claim.
 
 enum Klein3gReal {
@@ -27,7 +27,6 @@ enum Klein3gReal {
     nonisolated static let sizes: [Int] = (env["MLXUI_TEST_KLEIN_VAE_SIZES"] ?? "").split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
     nonisolated static let dtype: DType? = ["bf16": DType.bfloat16, "fp32": DType.float32][env["MLXUI_TEST_KLEIN_VAE_DTYPE"] ?? ""]
     nonisolated static let cacheMB: Int? = env["MLXUI_TEST_KLEIN_VAE_CACHE_MB"].flatMap { Int($0) }
-    nonisolated static let chunk: Int? = env["MLXUI_TEST_KLEIN_VAE_CHUNK"].flatMap { Int($0) }
     nonisolated static let evalEach: Bool? = env["MLXUI_TEST_KLEIN_VAE_EVAL_EACH"].map { $0 == "1" }       // nil = the decoder's default (on)
     nonisolated static let peakEnabled = present && !sizes.isEmpty && dtype != nil
     nonisolated static let peakSkipReason: Comment = "needs the installed Klein vae/, TEST_RUNNER_MLXUI_TEST_KLEIN_VAE_SIZES=512,1024 and TEST_RUNNER_MLXUI_TEST_KLEIN_VAE_DTYPE=bf16|fp32, and an unsandboxed test host"
@@ -76,7 +75,6 @@ struct Flux2KleinVAERealPeakTests {
         let label = dtype == .bfloat16 ? "bf16" : "fp32"
         if let mb = Klein3gReal.cacheMB { Memory.cacheLimit = mb * 1024 * 1024 }
         let cacheNote = Klein3gReal.cacheMB.map { "cacheLimit \($0) MB" } ?? "default cache"
-        let chunkNote0 = Klein3gReal.chunk.map { "attention chunk \($0)" } ?? "attention unchunked"
 
         Memory.clearCache(); Memory.peakMemory = 0
         let fpLoad = KleinFootprint()
@@ -88,9 +86,8 @@ struct Flux2KleinVAERealPeakTests {
         let loadSeconds = Date().timeIntervalSince(t0)
         let loadFootprint = KleinFootprint.gb(fpLoad.stop())
         print(String(format: "VAE3G-PEAK %@ LOAD: %.2f s, weights %.3f GB, mlx peak %.3f GB, footprint peak %.2f GB (before %.2f), %@, %@", label, loadSeconds,
-                     KleinFootprint.gb(vae.parameterBytes()), KleinFootprint.gb(Memory.peakMemory), loadFootprint, before, cacheNote, chunkNote0))
-        vae.setAttentionQueryChunk(Klein3gReal.chunk)
-        let chunkNote = chunkNote0 + (vae.evaluatesBetweenLayers ? ", eval per layer" : ", single eval")
+                     KleinFootprint.gb(vae.parameterBytes()), KleinFootprint.gb(Memory.peakMemory), loadFootprint, before, cacheNote))
+        let evalNote = vae.evaluatesBetweenLayers ? "eval per layer" : "single eval"
 
         for size in Klein3gReal.sizes {
             let grid = size / 16
@@ -110,7 +107,7 @@ struct Flux2KleinVAERealPeakTests {
             let footPeak = KleinFootprint.gb(fp.stop())
             let stats = try MLXErrorGuard.read(stacked([isFinite(image).all().asType(.float32), image.min(), image.max(), sqrt((image * image).mean())]), as: Float.self)
             print(String(format: "VAE3G-PEAK %@ %dx%d: decode %.2f s, mlx peak %.3f GB, footprint peak %.2f GB (before %.2f), finite %@, range [%.2f, %.2f], rms %.3f, shape %@, %@, %@",
-                         label, size, size, seconds, mlxPeak, footPeak, footBefore, stats[0] == 1 ? "yes" : "NO", stats[1], stats[2], stats[3], "\(image.shape)", cacheNote, chunkNote))
+                         label, size, size, seconds, mlxPeak, footPeak, footBefore, stats[0] == 1 ? "yes" : "NO", stats[1], stats[2], stats[3], "\(image.shape)", cacheNote, evalNote))
             #expect(image.shape == [1, 3, size, size] && stats[0] == 1)
         }
         Memory.clearCache()

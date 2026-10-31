@@ -83,7 +83,6 @@ nonisolated final class Flux2KleinVAEResnet: Module {
 }
 
 /// diffusers `Attention` as used in the VAE mid block: GroupNorm -> q/k/v (plain Linear with bias) -> single-head SDPA over all pixels -> to_out.0 -> residual.
-/// `queryChunk` splits the query rows into slices (exact: softmax is per query row) to bound the score matrix when the fused kernel is not used; nil = one call.
 nonisolated final class Flux2KleinVAEAttention: Module {
     @ModuleInfo(key: "group_norm") var groupNorm: GroupNorm
     @ModuleInfo(key: "to_q") var toQ: Linear
@@ -92,7 +91,6 @@ nonisolated final class Flux2KleinVAEAttention: Module {
     @ModuleInfo(key: "to_out") var toOut: [Linear]
 
     let channels: Int
-    var queryChunk: Int?
 
     init(channels: Int, groups: Int) {
         self.channels = channels
@@ -111,23 +109,9 @@ nonisolated final class Flux2KleinVAEAttention: Module {
         let k = toK(y).reshaped([b, 1, h * w, channels])
         let v = toV(y).reshaped([b, 1, h * w, channels])
         let scale = 1.0 / Float(channels).squareRoot()
-        var out: MLXArray
-        if let chunk = queryChunk, chunk > 0, h * w > chunk {
-            var parts: [MLXArray] = []
-            var start = 0
-            while start < h * w {
-                let end = min(h * w, start + chunk)
-                let part = scaledDotProductAttention(queries: q[0..., 0..., start ..< end, 0...], keys: k, values: v, scale: scale, mask: nil)
-                eval(part)         // bounds the live score matrices to one slice
-                parts.append(part)
-                start = end
-            }
-            out = concatenated(parts, axis: 2)
-        } else {
-            out = scaledDotProductAttention(queries: q, keys: k, values: v, scale: scale, mask: nil)
-        }
-        out = toOut[0](out.reshaped([b, h, w, channels]))
-        return x + out
+        let out = scaledDotProductAttention(queries: q, keys: k, values: v, scale: scale, mask: nil)
+        let projected = toOut[0](out.reshaped([b, h, w, channels]))
+        return x + projected
     }
 }
 
@@ -288,11 +272,6 @@ nonisolated final class Flux2KleinVAE: Module {
     func setEvaluatesBetweenLayers(_ on: Bool) {
         decoder.midBlock.evalBetweenLayers = on
         for b in decoder.upBlocks { b.evalBetweenLayers = on }
-    }
-
-    /// Number of query rows per attention slice (nil = one call). Measurement/lowering knob; not the default.
-    func setAttentionQueryChunk(_ rows: Int?) {
-        decoder.midBlock.attentions[0].queryChunk = rows
     }
 
     // MARK: Parameter accounting

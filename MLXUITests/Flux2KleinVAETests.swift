@@ -89,7 +89,6 @@ enum Klein3gFloors {
     static let decodePSNR = 80.0
     static let decodeMaxAbs = 1e-5
     static let glueMaxAbs = 1e-6
-    static let chunkedAttentionMaxAbs = 1e-5   // measured 2.2e-6 (same fp32 rounding scale as the parity error)
 }
 
 // MARK: - Parity against diffusers on the tiny golden
@@ -136,19 +135,6 @@ enum Klein3gFloors {
         let a = try vae.decode(packedLatents: z), b = try vae.decode(packedLatents: z2)
         #expect(try Klein3gFix.compare(both[0 ..< 1], a).maxAbs <= 1e-5)
         #expect(try Klein3gFix.compare(both[1 ..< 2], b).maxAbs <= 1e-5)
-    }
-
-    @Test func chunkedMidBlockAttentionIsExact() throws {
-        let g = try Klein3gFix.tiny()
-        let vae = try Flux2KleinVAE.load(shape: g.shape, tensors: g.weights, computeDType: nil)
-        let z = try #require(g.io["in.z_packed"])
-        let whole = try vae.decode(packedLatents: z)
-        vae.setAttentionQueryChunk(3)         // 4 x 4 = 16 pixels at the mid block -> slices of 3, 3, 3, 3, 3, 1
-        let chunked = try vae.decode(packedLatents: z)
-        vae.setAttentionQueryChunk(nil)
-        let e = try Klein3gFix.compare(whole, chunked)
-        print("VAE3G tiny chunked-vs-whole attention maxabs \(e.maxAbs) cos \(e.cosine)")
-        #expect(e.maxAbs <= Klein3gFloors.chunkedAttentionMaxAbs)
     }
 
     @Test func badInputsAreNamedNotCrashed() throws {

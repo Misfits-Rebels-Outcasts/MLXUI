@@ -11,7 +11,8 @@ import Testing
 // reason. Unsandboxed host. The test feeds the same normalised packed latents to this port's bf16 decode (weights as shipped) and to its fp32 decode (weights upcast), and PRINTS
 // PSNR / cosine / max-abs per case against diffusers' float32 image (REALVAE lines), plus against diffusers' bf16 image for context.
 //
-// The floors below are PROVISIONAL (implementer's call, pending owner confirmation). The follow-up cycle replaces them with measured values plus a margin after the owner's first run.
+// The floors below are PINS just under the first measured run (MP7-3g-FIX-1), not quality claims. Measured vs diffusers fp32: bf16 PSNR 52.55 / 50.12 dB (128 / 256), cosine 0.999826 / 0.999797,
+// max-abs 0.0619 / 0.0702; fp32 PSNR 130.58 / 127.56 dB, cosine 1.0, max-abs 2e-5 / 1e-5. bf16 stays the VAE default (owner ruling); fp32 is the port-correctness evidence.
 
 enum KleinVAEGolden {
     nonisolated static let file: URL? = {
@@ -22,9 +23,12 @@ enum KleinVAEGolden {
     nonisolated static let enabled = file != nil && Klein3gReal.present
     nonisolated static let skipReason: Comment = "needs TEST_RUNNER_MLXUI_TEST_KLEIN_VAE_GOLDEN_DIR (folder with real_vae.safetensors from real_vae_goldens.py), the installed Klein vae/, and an unsandboxed test host"
 
-    /// PROVISIONAL floors against diffusers float32 (implementer's call, pending owner confirmation; to be replaced by measured values plus a margin).
-    static let provisionalPSNR = 40.0
-    static let provisionalCosine = 0.99
+    /// Pins against diffusers float32, per variant: (min PSNR dB, min cosine, max max-abs). Margins: bf16 about 1 dB / 1e-4 / +0.02 under the measured worst case;
+    /// fp32 about 7 dB / 1e-6 / 5x the measured worst case.
+    static let floors: [String: (psnr: Double, cosine: Double, maxAbs: Double)] = [
+        "bf16": (49.0, 0.9997, 0.09),
+        "fp32": (120.0, 0.999999, 1e-4),
+    ]
 
     static let cases = ["128", "256"]
 
@@ -60,9 +64,11 @@ struct Flux2KleinRealVAEGoldenTests {
         let golden = try loadArrays(url: try #require(KleinVAEGolden.file))
         let vae = try Flux2KleinVAE.load(vaeDirectory: dir, computeDType: variant.1)
         let rows = try KleinVAEGolden.compare(vae: vae, label: variant.0, golden: golden)
-        for r in rows where r.reference == "fp32" {          // floors against the card's reference precision only; bf16 rows are printed context
-            #expect(r.errors.psnr >= KleinVAEGolden.provisionalPSNR, Comment(rawValue: "PROVISIONAL \(r.label) \(r.size) psnr \(r.errors.psnr)"))
-            #expect(r.errors.cosine >= KleinVAEGolden.provisionalCosine, Comment(rawValue: "PROVISIONAL \(r.label) \(r.size) cosine \(r.errors.cosine)"))
+        let floor = try #require(KleinVAEGolden.floors[variant.0])
+        for r in rows where r.reference == "fp32" {          // floors against the card's reference precision only; rows against diffusers bf16 are printed context
+            #expect(r.errors.psnr >= floor.psnr, Comment(rawValue: "\(r.label) \(r.size) psnr \(r.errors.psnr)"))
+            #expect(r.errors.cosine >= floor.cosine, Comment(rawValue: "\(r.label) \(r.size) cosine \(r.errors.cosine)"))
+            #expect(r.errors.maxAbs <= floor.maxAbs, Comment(rawValue: "\(r.label) \(r.size) max-abs \(r.errors.maxAbs)"))
         }
         #expect(rows.count == 4)
     }
