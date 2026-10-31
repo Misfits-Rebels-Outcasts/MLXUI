@@ -113,13 +113,31 @@ struct Flux2KleinTokenizerParityTests {
 
     @Test func everyGoldenPromptTokenizesToDiffusersIdsAndMask() async throws {
         let tok = try await tokenizer()
-        for c in try GoldenPrompt.load("g3b_tokens.json") + GoldenPrompt.load("g3b_tokens_edge.json") {
-            let e = try Flux2KleinPrompt.encode(c.prompt, tokenizer: tok)
-            let name = Comment(rawValue: c.name ?? String(c.prompt.prefix(20)))
-            #expect(e.realLength == c.real_length, name)
-            #expect(e.ids[..<e.realLength].map(Int.init) == c.input_ids, name)
-            #expect(e.cutTokenCount == (c.cut_token_count ?? 0), name)
-            #expect(e.ids.count == 512 && e.attentionMask.reduce(0, +) == Int32(c.real_length), name)
+        // One `SMOKE|row|check|result|detail` line per prompt group, the format model-smoke.sh counts (checks=N).
+        let groups: [(String, [GoldenPrompt])] = [
+            ("standard prompts (short, quoted text, empty, accents/CJK/emoji)", try GoldenPrompt.load("g3b_tokens.json")),
+        ] + (try {
+            let edge = try GoldenPrompt.load("g3b_tokens_edge.json")
+            func pick(_ names: [String]) -> [GoldenPrompt] { edge.filter { names.contains($0.name ?? "") } }
+            return [("length edges: 511, 512, 513 and 700 tokens (cut at the end)", pick(["at511", "at512", "past513", "past700"])),
+                    ("CJK, whitespace, literal special-token text", pick(["cjk", "whitespace", "special_literal"])),
+                    ("literal [IMG] passed through, and its stripped twin", pick(["img_raw", "img_stripped"]))]
+        }())
+        #expect(groups.map(\.1.count).reduce(0, +) == 13)
+        for (title, cases) in groups {
+            var failures: [String] = []
+            for c in cases {
+                let e = try Flux2KleinPrompt.encode(c.prompt, tokenizer: tok)
+                let name = Comment(rawValue: c.name ?? String(c.prompt.prefix(20)))
+                let ok = e.realLength == c.real_length && e.ids[..<e.realLength].map(Int.init) == c.input_ids
+                    && e.cutTokenCount == (c.cut_token_count ?? 0) && e.ids.count == 512 && e.attentionMask.reduce(0, +) == Int32(c.real_length)
+                #expect(e.realLength == c.real_length, name)
+                #expect(e.ids[..<e.realLength].map(Int.init) == c.input_ids, name)
+                #expect(e.cutTokenCount == (c.cut_token_count ?? 0), name)
+                #expect(e.ids.count == 512 && e.attentionMask.reduce(0, +) == Int32(c.real_length), name)
+                if !ok { failures.append(c.name ?? String(c.prompt.prefix(20))) }
+            }
+            print("SMOKE|3b|tokenizer parity: \(title)|\(failures.isEmpty ? "PASS" : "FAIL")|\(cases.count) prompts equal diffusers ids, length, cut count and mask\(failures.isEmpty ? "" : "; differ: " + failures.joined(separator: ", "))")
         }
     }
 
