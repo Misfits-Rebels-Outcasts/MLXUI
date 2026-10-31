@@ -194,6 +194,7 @@ private enum Klein {
     static let hashes: [String: String] = [
         "g3a_transformer.safetensors": "f372424d3334c0b94a7bdc4554dfdd5acd3ed77e5556660c540dc8cd10973b8e",
         "g3b_tokens.json": "dc90f38ba8a0cff8d5cf7038cdf9bb56a53985004aa725b9bba853fec89111f0",
+        "g3b_tokens_edge.json": "ab0ceb216256bf8c368e51dcc6a8f51b55cb562f55b90fee3c56cc7e20bab3e4",
         "g3c_textencoder.safetensors": "cd767b07a1917ea1cc4581d4089a04a1a93f7761791afd32f07ac655b85b5050",
         "g3d_vae.safetensors": "e2830030dbafcb3be688ff0337af6cd8b402cba81a92eee43048a6192a9e351b",
         "g3e_ids.safetensors": "f8eb78eda0fdaa55999bb3af7acd4d551ec2e3644240d76e2950eaf9eef9d67b",
@@ -369,9 +370,16 @@ private enum Klein {
             #expect(throws: Flux2KleinSizeError.notPositive(width: w, height: h)) { try Flux2KleinLatents.validateSize(width: w, height: h) }
         }
         #expect(throws: Flux2KleinSizeError.self) { try Flux2KleinLatents.makeNoise(width: 1000, height: 1000, seed: 1) }
-        let message = Flux2KleinSizeError.notMultipleOf16(width: 1000, height: 600).localizedDescription
-        #expect(message.contains("1000 x 600") && message.contains("multiples of 16"))
-        #expect(message.contains("992 x 592") && message.contains("1008 x 608"))
+        // SPEC-Q242 wording: width first, names the first offending setting only.
+        #expect(Flux2KleinSizeError.notMultipleOf16(width: 1000, height: 600).localizedDescription
+            == "Width 1000 isn't a multiple of 16. The nearest sizes are 992 and 1008.")
+        #expect(Flux2KleinSizeError.notMultipleOf16(width: 1024, height: 1020).localizedDescription
+            == "Height 1020 isn't a multiple of 16. The nearest sizes are 1008 and 1024.")
+        #expect(Flux2KleinSizeError.notMultipleOf16(width: 8, height: 512).localizedDescription
+            == "Width 8 isn't a multiple of 16. The nearest size is 16.")
+        do { try Flux2KleinLatents.validateSize(width: 1000, height: 1020) } catch {
+            #expect(error.localizedDescription == "Width 1000 isn't a multiple of 16. The nearest sizes are 992 and 1008.")
+        }
     }
 }
 

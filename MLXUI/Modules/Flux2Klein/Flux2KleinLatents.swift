@@ -20,10 +20,11 @@ nonisolated enum Flux2KleinSizeError: Error, Equatable, LocalizedError {
         case let .notPositive(w, h):
             return "FLUX.2 Klein needs a positive width and height; got \(w) x \(h)."
         case let .notMultipleOf16(w, h):
-            func down(_ v: Int) -> Int { max(16, (v / 16) * 16) }
-            func up(_ v: Int) -> Int { v % 16 == 0 ? v : (v / 16 + 1) * 16 }
-            return "FLUX.2 Klein needs the width and height to be multiples of 16; got \(w) x \(h). "
-                + "Try \(down(w)) x \(down(h)) or \(up(w)) x \(up(h))."
+            // SPEC-Q242 wording: "Width 1000 isn't a multiple of 16. The nearest sizes are 992 and 1008."
+            let (name, v) = w % 16 != 0 ? ("Width", w) : ("Height", h)
+            let down = max(16, (v / 16) * 16), up = max(16, v % 16 == 0 ? v : (v / 16 + 1) * 16)
+            let nearest = down == up ? "The nearest size is \(down)." : "The nearest sizes are \(down) and \(up)."
+            return "\(name) \(v) isn't a multiple of 16. \(nearest)"
         }
     }
 }
@@ -35,13 +36,14 @@ nonisolated enum Flux2KleinLatents {
 
     // MARK: Size
 
-    /// Refuse, not round (the lead's MP7-3a instruction, citing an owner ruling whose words are not quoted there; pending
-    /// owner confirmation). A size that is not a multiple of 16 is an error naming the size; it is never silently changed.
-    /// diffusers floors with a warning, the Swift reference rounds up, mflux (catflow-mlx's engine) floors with a warning: all
-    /// three round, in two directions, so this is reported to the owner and not decided here.
+    /// Refuse, not round (owner ruling 2026-10-31, SPEC-Q242: "Refuse is the right reading of the size ruling"). A size that is not a
+    /// multiple of 16 is an error naming the first offending setting, width before height; it is never silently changed. For the
+    /// record, diffusers and mflux (catflow-mlx's engine) floor with a warning and the Swift reference rounds up; both runtimes
+    /// here refuse instead.
     @discardableResult
     static func validateSize(width: Int, height: Int) throws -> (gridWidth: Int, gridHeight: Int) {
         guard width > 0, height > 0 else { throw Flux2KleinSizeError.notPositive(width: width, height: height) }
+        // SPEC-Q242
         guard width % sizeMultiple == 0, height % sizeMultiple == 0 else {
             throw Flux2KleinSizeError.notMultipleOf16(width: width, height: height)
         }
