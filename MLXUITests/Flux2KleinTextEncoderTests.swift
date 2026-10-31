@@ -1,5 +1,7 @@
+import CryptoKit
 import Foundation
 import MLX
+import MLXNN
 import Testing
 @testable import MLXUI
 
@@ -155,6 +157,120 @@ enum KleinCosine {
         }
         let result = await task.result
         if case let .failure(error) = result { #expect(error is CancellationError) } else { Issue.record("a cancelled load must stop") }
+    }
+
+    // MARK: MP7-3c-FIX-1
+
+    @Test func aLayerMissingSeveralTensorsNamesThemAll() {
+        #expect(throws: Flux2KleinTextEncoderError.missingWeight("w.layers.1.mlp.down_proj.weight, w.layers.1.self_attn.q_norm.weight")) {
+            _ = try Self.encoder(shards: [{ Self.weights { $0.contains("layers.1.mlp.down_proj") || $0.contains("layers.1.self_attn.q_norm") } }])
+        }
+        // A layer that never arrives lists all eleven.
+        do {
+            _ = try Self.encoder(shards: [{ Self.weights { $0.contains("layers.2.") } }])
+            Issue.record("a layer with no tensors must be refused")
+        } catch let Flux2KleinTextEncoderError.missingWeight(names) {
+            #expect(names.components(separatedBy: ", ").count == 11 && names.hasPrefix("w.layers.2.") )
+        } catch { Issue.record("\(error)") }
+    }
+
+    @Test func anExtraOrRenamedPerLayerTensorIsRefusedByName() throws {
+        var extra = Self.weights()
+        extra["w.layers.0.self_attn.q_proj.bias"] = MLXArray.zeros([16])
+        #expect(throws: Flux2KleinTextEncoderError.unexpectedWeight("w.layers.0.self_attn.q_proj.bias")) {
+            _ = try Self.encoder(shards: [{ extra }])
+        }
+        var renamed = Self.weights()
+        renamed["w.layers.2.mlp.up_projection.weight"] = renamed.removeValue(forKey: "w.layers.2.mlp.up_proj.weight")
+        #expect(throws: Flux2KleinTextEncoderError.unexpectedWeight("w.layers.2.mlp.up_projection.weight")) {
+            _ = try Self.encoder(shards: [{ renamed }])
+        }
+        // An extra tensor on a layer that is still incomplete is refused too, not silently parked.
+        var partial = Self.weights { $0.contains("layers.1.mlp.down_proj") }
+        partial["w.layers.1.mlp.surprise.weight"] = MLXArray.zeros([4])
+        #expect(throws: Flux2KleinTextEncoderError.unexpectedWeight("w.layers.1.mlp.surprise.weight")) {
+            _ = try Self.encoder(shards: [{ partial }])
+        }
+        #expect(Flux2KleinQwen3Layer.expectedTensorNames.count == 11)
+    }
+
+    // A shape whose widths are multiples of 64, so MLX can really quantize it; random weights (no golden: this tests the policy, not the numbers).
+    static let quantizable = Flux2KleinQwen3Shape(hidden: 64, intermediate: 128, heads: 2, kvHeads: 1, headDim: 32, eps: 1e-6, ropeTheta: 1_000_000,
+                                                  vocab: 128, taps: [1, 2])
+
+    static func randomWeights(_ s: Flux2KleinQwen3Shape) -> [String: MLXArray] {
+        var w: [String: MLXArray] = ["w.embed_tokens.weight": MLXRandom.normal([s.vocab, s.hidden]) * 0.05]
+        let shapes: [String: [Int]] = [
+            "input_layernorm.weight": [s.hidden], "post_attention_layernorm.weight": [s.hidden],
+            "self_attn.q_proj.weight": [s.heads * s.headDim, s.hidden], "self_attn.k_proj.weight": [s.kvHeads * s.headDim, s.hidden],
+            "self_attn.v_proj.weight": [s.kvHeads * s.headDim, s.hidden], "self_attn.o_proj.weight": [s.hidden, s.heads * s.headDim],
+            "self_attn.q_norm.weight": [s.headDim], "self_attn.k_norm.weight": [s.headDim],
+            "mlp.gate_proj.weight": [s.intermediate, s.hidden], "mlp.up_proj.weight": [s.intermediate, s.hidden], "mlp.down_proj.weight": [s.hidden, s.intermediate],
+        ]
+        for layer in 0 ..< s.layerCount {
+            for (name, shape) in shapes { w["w.layers.\(layer).\(name)"] = name.contains("norm") ? MLXArray.ones(shape) : MLXRandom.normal(shape) * 0.05 }
+        }
+        return w
+    }
+
+    @Test(arguments: [3, 4, 5, 6, 8]) func theTextEncoderIsNeverQuantizedBelowEightBits(requested: Int) throws {
+        let weights = Self.randomWeights(Self.quantizable)
+        let encoder = try Flux2KleinTextEncoder.load(shape: Self.quantizable, prefix: "w.", shards: [{ weights }], bits: requested, groupSize: 64)
+        #expect(encoder.bits == 8, "asked for \(requested), loaded at \(String(describing: encoder.bits))")
+        #expect((encoder.embedTokens as? QuantizedEmbedding)?.bits == 8, "the embedding table too")
+        for layer in encoder.layers {
+            #expect((layer.attention.qProj as? QuantizedLinear)?.bits == 8)
+            #expect((layer.mlp.down as? QuantizedLinear)?.bits == 8)
+        }
+        let ids = MLXArray([3, 9, 20, 5] as [Int32], [1, 4])
+        let out = try encoder(ids: ids, attentionMask: MLXArray.ones(like: ids))
+        eval(out)
+        let reference = try Flux2KleinTextEncoder.load(shape: Self.quantizable, prefix: "w.", shards: [{ weights }], bits: nil)
+        let ref = try reference(ids: ids, attentionMask: MLXArray.ones(like: ids))
+        eval(ref)
+        #expect(try KleinCosine.of(out, ref) > 0.99, "an 8-bit encoder tracks the unquantized one")
+        #expect(reference.bits == nil && !(reference.embedTokens is QuantizedEmbedding))
+    }
+
+    @Test func theBitFloorLivesInOnePlaceWithTheRowWording() {
+        #expect(Flux2KleinQuantization.textEncoderMinimumBits == 8)
+        #expect(Flux2KleinQuantization.textEncoderBits(for: 4) == 8 && Flux2KleinQuantization.textEncoderBits(for: 8) == 8)
+        #expect(Flux2KleinQuantization.textEncoderBits(for: nil) == nil)
+        #expect(Flux2KleinQuantization.textEncoderNote.contains("text encoder stays 8-bit"))
+    }
+
+    // MARK: Padded input against diffusers (g3c_padded.safetensors, made by padded_goldens.py with g3c's own weights, never edited)
+
+    static let padded: [String: MLXArray] = {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Flux2Klein/g3c_padded.safetensors")
+        return (try? loadArrays(url: url)) ?? [:]
+    }()
+
+    @Test(arguments: [("pad5_11", 5), ("pad7_9", 7)]) func paddedRowsMatchDiffusersToo(name: String, real: Int) throws {
+        let ids = Self.ids(try #require(Self.padded["\(name).in.input_ids"])), mask = Self.ids(try #require(Self.padded["\(name).in.mask"]))
+        let expected = try #require(Self.padded["\(name).out.prompt_embeds"])
+        #expect(ids.shape == [1, 16] && expected.shape == [1, 16, 48])
+        let out = try Self.encoder()(ids: ids, attentionMask: mask)
+        eval(out)
+        let all = try KleinCosine.of(out, expected)
+        let pad = try KleinCosine.of(out[0..., real..., 0...], expected[0..., real..., 0...])
+        let front = try KleinCosine.of(out[0..., 0 ..< real, 0...], expected[0..., 0 ..< real, 0...])
+        let worst = try MLXErrorGuard.read(abs(out - expected).max().reshaped(1), as: Float.self)[0]
+        var tapLine = ""
+        for n in 0 ..< 3 { tapLine += " tap\(n): \(try KleinCosine.of(out[0..., 0..., (n * 16) ..< ((n + 1) * 16)], expected[0..., 0..., (n * 16) ..< ((n + 1) * 16)]))" }
+        print("PADPARITY \(name): all \(all) real rows \(front) pad rows \(pad) max-abs \(worst)\(tapLine)")
+        #expect(all >= Self.paddedCosineFloor && pad >= Self.paddedCosineFloor && front >= Self.paddedCosineFloor)
+        #expect(Float(worst) < Self.paddedMaxAbsCeiling)
+    }
+
+    // Measured 2026-10-31 (fp32, diffusers 0.37.1 golden): 1 - cosine <= 7e-15 on every tap and block, max-abs <= 1.1e-8, for both cases. Floors set after.
+    static let paddedCosineFloor = 0.999999
+    static let paddedMaxAbsCeiling: Float = 1e-5
+
+    @Test func thePaddedGoldenIsTheOneThatWasGenerated() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Flux2Klein/g3c_padded.safetensors")
+        let digest = SHA256.hash(data: try Data(contentsOf: url)).map { String(format: "%02x", $0) }.joined()
+        #expect(digest == "3a70abe2b522e44975a4f7cc3119324be92105cd9342177506be2883feeca339")
     }
 
     @Test func realShapeMatchesTheDecodedConfig() throws {

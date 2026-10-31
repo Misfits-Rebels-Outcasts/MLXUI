@@ -21,6 +21,8 @@ import MLXNN
 nonisolated enum Flux2KleinTextEncoderError: Error, Equatable, LocalizedError {
     case unsupportedBits(Int)
     case missingWeight(String)
+    case unexpectedWeight(String)
+    case quantizationFailed(String)
     case noWeightFiles(String)
     case badInput(String)
 
@@ -30,12 +32,26 @@ nonisolated enum Flux2KleinTextEncoderError: Error, Equatable, LocalizedError {
             return "FLUX.2 Klein can quantize its text encoder to 3, 4, 5, 6 or 8 bits; \(bits) is not one of them."
         case let .missingWeight(name):
             return "The FLUX.2 Klein text encoder is missing the weight \(name). Reinstall the model."
+        case let .unexpectedWeight(name):
+            return "The FLUX.2 Klein text encoder has a weight it does not know: \(name). The checkpoint is not the one this build expects."
+        case let .quantizationFailed(what):
+            return "FLUX.2 Klein could not quantize its text encoder (\(what))."
         case let .noWeightFiles(dir):
             return "No text-encoder weight files (model-*.safetensors) were found in \(dir). Reinstall the model."
         case let .badInput(why):
             return "FLUX.2 Klein text encoder input: \(why)."
         }
     }
+}
+
+/// MP7-3c-FIX-1, owner ruling 2026-10-31: the text encoder never goes below 8 bits. A `quantize` setting below 8 applies to the image model (DiT) only,
+/// and the row says so with `textEncoderNote`. Later slices (Run UI, flow row text) use these two constants, not their own.
+nonisolated enum Flux2KleinQuantization {
+    static let textEncoderMinimumBits = 8
+    static let textEncoderNote = "The text encoder stays 8-bit; a lower quantize setting applies to the image model only."
+
+    /// The width the text encoder is actually loaded at for a requested `quantize`: nil (unquantized) stays nil, anything else is at least 8.
+    static func textEncoderBits(for quantize: Int?) -> Int? { quantize.map { max($0, textEncoderMinimumBits) } }
 }
 
 nonisolated struct Flux2KleinQwen3Shape: Equatable, Sendable {
@@ -119,8 +135,13 @@ nonisolated final class Flux2KleinQwen3Layer: Module {
     @ModuleInfo(key: "input_layernorm") var inputNorm: RMSNorm
     @ModuleInfo(key: "post_attention_layernorm") var postNorm: RMSNorm
 
-    /// The 11 tensors a layer owns (q/k/v/o, q/k norm, gate/up/down, two layer norms).
-    static let tensorsPerLayer = 11
+    /// The 11 tensors a layer owns (q/k/v/o, q/k norm, gate/up/down, two layer norms), by their name inside the layer.
+    static let expectedTensorNames: Set<String> = [
+        "input_layernorm.weight", "post_attention_layernorm.weight",
+        "self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight", "self_attn.o_proj.weight",
+        "self_attn.q_norm.weight", "self_attn.k_norm.weight",
+        "mlp.gate_proj.weight", "mlp.up_proj.weight", "mlp.down_proj.weight",
+    ]
 
     init(_ s: Flux2KleinQwen3Shape) {
         _attention.wrappedValue = Flux2KleinQwen3Attention(s)
@@ -139,6 +160,7 @@ nonisolated final class Flux2KleinQwen3Layer: Module {
 /// The text conditioner: embeddings + layers 0...(deepest tap - 1). No final norm, no lm_head.
 nonisolated final class Flux2KleinTextEncoder {
     let shape: Flux2KleinQwen3Shape
+    /// The width actually loaded (after the 8-bit floor); nil = unquantized.
     let bits: Int?
     private(set) var embedTokens: Embedding
     private(set) var layers: [Flux2KleinQwen3Layer]
@@ -213,6 +235,8 @@ nonisolated final class Flux2KleinTextEncoder {
     static func load(shape: Flux2KleinQwen3Shape, prefix: String, shards: [Shard], bits: Int?, groupSize: Int = 64,
                      stage: (String) -> Void = { _ in }) throws -> Flux2KleinTextEncoder {
         if let bits, !supportedBits.contains(bits) { throw Flux2KleinTextEncoderError.unsupportedBits(bits) }
+        // The floor: whatever `quantize` the row asked for, the encoder is built at 8 bits or more (Flux2KleinQuantization).
+        let bits = Flux2KleinQuantization.textEncoderBits(for: bits)
         let wanted = shape.layerCount
         var layers: [Flux2KleinQwen3Layer?] = Array(repeating: nil, count: wanted)
         var pending: [Int: [String: MLXArray]] = [:]       // layer -> local name -> tensor, until complete
@@ -250,13 +274,24 @@ nonisolated final class Flux2KleinTextEncoder {
                 e.update(parameters: ModuleParameters.unflattened(["weight": weight]))
                 embedWeight = nil
                 var built: Embedding = e
-                if let bits, let q = quantizeSingle(layer: e, groupSize: groupSize, bits: bits) as? Embedding { built = q }
+                if let bits {
+                    guard let q = quantizeSingle(layer: e, groupSize: groupSize, bits: bits) as? Embedding else {
+                        throw Flux2KleinTextEncoderError.quantizationFailed("embedding table, \(bits) bits, group \(groupSize)")
+                    }
+                    built = q
+                }
                 eval(built)
                 Memory.clearCache()
                 embed = built
                 stage("embedding ready")
             }
-            for index in pending.keys.sorted() where pending[index]?.count == Flux2KleinQwen3Layer.tensorsPerLayer {
+            for index in pending.keys.sorted() {
+                let have = Set(pending[index]?.keys.map { $0 } ?? [])
+                // Anything not in the expected 11 (an extra or a renamed tensor) is refused by name, whether or not the layer is complete.
+                if let extra = have.subtracting(Flux2KleinQwen3Layer.expectedTensorNames).sorted().first {
+                    throw Flux2KleinTextEncoderError.unexpectedWeight("\(layerPrefix)\(index).\(extra)")
+                }
+                guard have.count == Flux2KleinQwen3Layer.expectedTensorNames.count else { continue }
                 try Task.checkCancellation()
                 let layer = Flux2KleinQwen3Layer(shape)
                 layer.update(parameters: ModuleParameters.unflattened(pending[index] ?? [:]))
@@ -273,12 +308,10 @@ nonisolated final class Flux2KleinTextEncoder {
         var built: [Flux2KleinQwen3Layer] = []
         for (index, layer) in layers.enumerated() {
             guard let layer else {
-                // Name a tensor that really is absent: the layer's first missing one, or the whole layer if none arrived.
+                // Name every tensor that never arrived (all 11 when the layer is absent altogether).
                 let have = Set(pending[index]?.keys.map { $0 } ?? [])
-                let expected = ["input_layernorm.weight", "post_attention_layernorm.weight", "self_attn.q_proj.weight", "self_attn.k_proj.weight",
-                                "self_attn.v_proj.weight", "self_attn.o_proj.weight", "self_attn.q_norm.weight", "self_attn.k_norm.weight",
-                                "mlp.gate_proj.weight", "mlp.up_proj.weight", "mlp.down_proj.weight"]
-                throw Flux2KleinTextEncoderError.missingWeight("\(layerPrefix)\(index).\(expected.first { !have.contains($0) } ?? "weight")")
+                let missing = Flux2KleinQwen3Layer.expectedTensorNames.subtracting(have).sorted().map { "\(layerPrefix)\(index).\($0)" }
+                throw Flux2KleinTextEncoderError.missingWeight(missing.joined(separator: ", "))
             }
             built.append(layer)
         }
@@ -295,19 +328,20 @@ nonisolated struct Flux2KleinTextEmbeddings: @unchecked Sendable {
 }
 
 nonisolated enum Flux2KleinTextEncoding {
-    /// Tokenize with the installed `tokenizer/`, load the streamed encoder from `text_encoder/`, encode, drop the encoder, clear MLX's buffer cache.
+    /// Tokenize with the installed `tokenizer/`, load the streamed encoder from `text_encoder/` (at `max(bits, 8)`), encode, drop the encoder, clear MLX's buffer cache.
     /// `@concurrent`: a nonisolated async function runs on the caller's executor, and a 27-layer forward on the main actor beachballs.
     /// The result is evaluated before it leaves this function (MixedSubscript rule 17b).
     @concurrent static func embed(prompt: String, modelDirectory: URL, bits: Int?) async throws -> Flux2KleinTextEmbeddings {
+        // Whatever happens (done, thrown, cancelled), MLX's buffer cache is emptied on the way out.
+        defer { Memory.clearCache() }
         let tokenizer = try await HFTokenizerLoader().load(from: modelDirectory.appendingPathComponent("tokenizer"))
         let encoded = try Flux2KleinPrompt.encode(prompt, tokenizer: tokenizer)
         let result: Flux2KleinTextEmbeddings
-        do {
+        do {   // the encoder is released at the end of this block, BEFORE the function-level defer empties the cache
             let encoder = try Flux2KleinTextEncoder.load(textEncoderDirectory: modelDirectory.appendingPathComponent("text_encoder"), bits: bits)
             result = Flux2KleinTextEmbeddings(array: try encoder.embeddings(for: encoded), realLength: encoded.realLength,
                                               cutTokenCount: encoded.cutTokenCount)
         }
-        Memory.clearCache()
         return result
     }
 }
