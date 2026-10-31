@@ -23,4 +23,10 @@ MP7-3d additions (run twice, byte-identical): `g3d_embedders.safetensors` 47,392
 `embedders_goldens.py` sha256 `e47115ad06ab8cdb9b9aa6fa6a413ce369a110895016eb7c633904929a12d784` (pinned with the file in `Flux2KleinEmbeddersFixtureTests`, not in the
 list above). Fixture folder total after this slice: 1745069 bytes (budget 2 MB for the goldens).
 
+MP7-3f addition (run twice, byte-identical): `g3f_dit_stack.safetensors` 160,168 bytes, sha256 `d85451a5f2b5c53f3c27932719c4b7446f5710c4a5f0dbebed8bca2b6e68cc1a`; made by
+`dit_stack_goldens.py` (sha256 `561066efb4001a36120abe9b1208dd4c24fc29bb8ae9f532051082ff99952e6a`, 7,415 bytes; both pinned in `Flux2KleinDiTStackFixtureTests`, not in the list above).
+A separate tiny `Flux2Transformer2DModel` (3 double + 3 single blocks, heads 2 x head_dim 8 = inner 16, in_channels 8, joint 12, axes (2,2,2,2), fp32, seed 20261031, weights drawn at
+N(0, 1/fan_in) so every residual branch has real size): `w.*` weights, `in.*` inputs, `mid.double_N_{txt,img}` and `mid.single_N` after EVERY block, `out.pred`; the same set at a
+second sigma under `alt.*` (primary sigma 0.005, alt sigma 0.7). g3a is untouched. Fixture folder total after this slice: 1,913,542 bytes (owner ruling: under 2,000,000).
+
 Regenerate (only with the owner's say-so): in a venv with `requirements.txt` installed, `python3 tiny_goldens.py --out <dir>`.
