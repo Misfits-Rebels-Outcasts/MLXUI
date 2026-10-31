@@ -186,6 +186,10 @@ nonisolated final class Flux2KleinEmbedders: Module {
 ///
 /// Verdict (MP7-3d, measured, see MP7-3d-report.md): `FluxLayers.embedND` already produces the same per-axis angles, so cos/sin are derived from it rather than
 /// re-implemented; the rotation itself is `applyRotary`, in the `[B, S, H, D]` layout the Klein attention uses.
+///
+/// Owner ruling (Boo, 2026-10-31: "RoPE fp32 gap accepted, no change"): the cos/sin table is built in float32 on the GPU, which differs from a float64 reference by
+/// about 2.4e-5 at positions near 500. That gap is accepted as owner-ruled. It is roughly 300x below bf16 resolution (~7.8e-3), and diffusers also computes this
+/// table in float32 on Apple GPUs. No logic change; MP7-3d-FIX-1 pins it at the real positions (Flux2KleinRoPERealPositionTests, floor 1e-4).
 nonisolated enum Flux2KleinRoPE {
     /// `cos`, `sin` as `[S, sum(axesDims)]`, each axis repeat-interleaved by 2 and the axes concatenated (diffusers `Flux2PosEmbed`). `ids` is `[S, axes]` (or `[1, S, axes]`).
     static func cosSin(ids: MLXArray, axesDims: [Int], theta: Float) -> (cos: MLXArray, sin: MLXArray) {

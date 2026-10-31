@@ -276,8 +276,8 @@ enum KleinRealGolden {
 @Suite(.enabled(if: KleinRealGolden.enabled, "needs TEST_RUNNER_MLXUI_TEST_KLEIN_REAL_GOLDEN_DIR (folder with real_encoder.safetensors from real_encoder_goldens.py) and the installed Klein"),
        .serialized)
 struct Flux2KleinRealShapeGoldenTests {
-    /// PROVISIONAL floor (an untuned sanity bar, 0.99 per tap): no real-weight diffusers numbers existed when this was written. After the owner's first run the
-    /// measured values go into the report and the floors below are replaced by margins under them.
+    /// Per-tap cosine floor for the port's bf16 vs diffusers, over both row blocks. Set after the owner's golden was measured (MP7-3d-FIX-1): the worst tap measured
+    /// 0.995853 (cjk pad rows, tap 27); the front rows are pinned much tighter by the variants test below. A pin of measured behaviour, not a quality claim.
     static let provisionalTapCosine = 0.99
 
     @Test func thePortMatchesDiffusersBf16OnTheRealCheckpoint() throws {
@@ -299,6 +299,115 @@ struct Flux2KleinRealShapeGoldenTests {
                 let rel = Flux2KleinEncoderQuantizationTests.relL2(x, y)
                 print(String(format: "REALGOLDEN %@ %@: cos all %.6f taps %.6f %.6f %.6f relL2 %.5f", name, block, whole, taps[0], taps[1], taps[2], rel))
                 #expect(taps.allSatisfy { $0 >= Self.provisionalTapCosine }, "\(name) \(block)")
+            }
+        }
+    }
+
+    // MARK: MP7-3d-FIX-1 -- per tap, per row block, four numbers per variant, against the diffusers golden.
+
+    struct Variant { let name: String; let bits: Int?; let keepEmbeddingBF16: Bool }
+    /// The golden holds only rows 0-47 (front) and 500-511 (pad), so every number below is over those 60 rows, never all 512.
+    struct Measure { var cos = 0.0, rel = 0.0, tapCos: [Double] = [], tapRel: [Double] = [], worstRow = -1, worstRel = 0.0, goldNorm = 0.0, portNorm = 0.0 }
+
+    static let variants = [Variant(name: "1 bf16 (port, bits nil)", bits: nil, keepEmbeddingBF16: false),
+                           Variant(name: "2 int8 layers + bf16 embedding", bits: 8, keepEmbeddingBF16: true),
+                           Variant(name: "3 int8 everything (shipping)", bits: 8, keepEmbeddingBF16: false)]
+
+    /// rows x 7680 row-major arrays; rowOffset is the first row's real index in the 512-row output (for the worst-row report).
+    static func measure(_ x: [Float], _ y: [Float], rows: Int, rowOffset: Int) -> Measure {
+        var m = Measure()
+        m.cos = KleinCosine.cosine(x, y); m.rel = Flux2KleinEncoderQuantizationTests.relL2(x, y)
+        for t in 0 ..< 3 {
+            var xt: [Float] = [], yt: [Float] = []
+            for r in 0 ..< rows { xt += x[(r * 7680 + t * 2560) ..< (r * 7680 + (t + 1) * 2560)]; yt += y[(r * 7680 + t * 2560) ..< (r * 7680 + (t + 1) * 2560)] }
+            m.tapCos.append(KleinCosine.cosine(xt, yt)); m.tapRel.append(Flux2KleinEncoderQuantizationTests.relL2(xt, yt))
+        }
+        for r in 0 ..< rows {
+            let a = Array(x[(r * 7680) ..< ((r + 1) * 7680)]), b = Array(y[(r * 7680) ..< ((r + 1) * 7680)])
+            let rel = Flux2KleinEncoderQuantizationTests.relL2(a, b)
+            if rel > m.worstRel {
+                m.worstRel = rel; m.worstRow = rowOffset + r
+                m.goldNorm = b.reduce(0.0) { $0 + Double($1) * Double($1) }.squareRoot()
+                m.portNorm = a.reduce(0.0) { $0 + Double($1) * Double($1) }.squareRoot()
+            }
+        }
+        return m
+    }
+
+    /// results[variant][prompt][block]
+    nonisolated(unsafe) static var results: [String: [String: [String: Measure]]] = [:]
+
+    @Test func measuresEveryVariantAgainstDiffusersPerTapAndRowBlock() throws {
+        let dir = try #require(KleinRealInstall.directory)
+        let golden = try loadArrays(url: try #require(KleinRealGolden.file))
+        let blocks: [(String, String, Int, Int)] = [("front rows0-47", "front", 48, 0), ("pad rows500-511", "pad", 12, 500)]
+        for v in Self.variants {
+            let sampler = KleinFootprint()
+            Memory.clearCache(); Memory.peakMemory = 0
+            sampler.start()
+            let t0 = Date()
+            var loadSeconds = 0.0
+            var perPrompt: [String: [String: Measure]] = [:]
+            var encodeSeconds = 0.0
+            do {
+            let encoder = try Flux2KleinTextEncoder.load(textEncoderDirectory: dir.appendingPathComponent("text_encoder"), bits: v.bits,
+                                                                              testOnlyKeepEmbeddingBF16: v.keepEmbeddingBF16)
+            loadSeconds = Date().timeIntervalSince(t0)
+            for name in ["short", "long", "cjk"] {
+                let ids = try #require(golden["\(name).ids"]).asType(.int32), mask = try #require(golden["\(name).mask"]).asType(.int32)
+                let t1 = Date()
+                let out = try encoder(ids: ids, attentionMask: mask)
+                eval(out)
+                encodeSeconds += Date().timeIntervalSince(t1)
+                var byBlock: [String: Measure] = [:]
+                for (label, key, count, offset) in blocks {
+                    let want = try #require(golden["\(name).\(key)"]).reshaped(1, count, 7680)
+                    let mine = out[0..., offset ..< (offset + count), 0...]
+                    let x = try MLXErrorGuard.read(mine.asType(.float32).reshaped(-1), as: Float.self)
+                    let y = try MLXErrorGuard.read(want.asType(.float32).reshaped(-1), as: Float.self)
+                    byBlock[label] = Self.measure(x, y, rows: count, rowOffset: offset)
+                }
+                perPrompt[name] = byBlock
+            }
+            }
+            Memory.clearCache()
+            let peak = sampler.stop()
+            Self.results[v.name] = perPrompt
+            print(String(format: "REALGOLDEN-RUN %@: load %.1f s, encode 3 prompts %.1f s, MLX peak %.2f GB, process footprint peak %.2f GB", v.name, loadSeconds, encodeSeconds,
+                         KleinFootprint.gb(Memory.peakMemory), KleinFootprint.gb(peak)))
+            for name in ["short", "long", "cjk"] {
+                for (label, _, _, _) in blocks {
+                    guard let m = perPrompt[name]?[label] else { continue }
+                    print(String(format: "REALGOLDEN-TABLE | %@ | %@ | %@ | cos all %.6f taps %.6f %.6f %.6f | relL2 all %.5f taps %.5f %.5f %.5f | worst row %d relL2 %.5f goldNorm %.4f portNorm %.4f",
+                                 v.name, name, label, m.cos, m.tapCos[0], m.tapCos[1], m.tapCos[2], m.rel, m.tapRel[0], m.tapRel[1], m.tapRel[2], m.worstRow, m.worstRel, m.goldNorm, m.portNorm))
+                }
+            }
+        }
+                Self.assertFloors()
+    }
+
+    /// FLOORS, set AFTER measuring (MP7-3d-FIX-1; measured values in MP7-3d-FIX-1-report.md): a fixed small margin under the worst value over the three prompts.
+    /// These are pins of measured behaviour, NOT quality claims. Implementer's call, pending owner confirmation. Each tuple is
+    /// (front cos all/tap, front relL2 all max, front worst-row relL2 max, pad cos all, pad cos tap, pad relL2 all max, pad worst-row relL2 max).
+    static let floors: [String: (frontCos: Double, frontRel: Double, frontRow: Double, padCos: Double, padTapCos: Double, padRel: Double, padRow: Double)] = [
+        "1 bf16 (port, bits nil)": (0.9999, 0.005, 0.25, 0.99, 0.99, 0.12, 0.25),
+        "2 int8 layers + bf16 embedding": (0.9999, 0.015, 0.45, 0.97, 0.97, 0.25, 0.40),
+        "3 int8 everything (shipping)": (0.9999, 0.015, 0.60, 0.95, 0.93, 0.33, 0.65),
+    ]
+
+    static func assertFloors() {
+        for (name, f) in floors {
+            for prompt in ["short", "long", "cjk"] {
+                if let m = results[name]?[prompt]?["front rows0-47"] {
+                    #expect(m.cos >= f.frontCos && m.tapCos.allSatisfy { $0 >= f.frontCos }, "\(name) \(prompt) front cosine")
+                    #expect(m.rel <= f.frontRel, "\(name) \(prompt) front relL2")
+                    #expect(m.worstRel <= f.frontRow, "\(name) \(prompt) front worst row")
+                } else { Issue.record("missing front measure \(name) \(prompt)") }
+                if let m = results[name]?[prompt]?["pad rows500-511"] {
+                    #expect(m.cos >= f.padCos && m.tapCos.allSatisfy { $0 >= f.padTapCos }, "\(name) \(prompt) pad cosine")
+                    #expect(m.rel <= f.padRel, "\(name) \(prompt) pad relL2")
+                    #expect(m.worstRel <= f.padRow, "\(name) \(prompt) pad worst row")
+                } else { Issue.record("missing pad measure \(name) \(prompt)") }
             }
         }
     }

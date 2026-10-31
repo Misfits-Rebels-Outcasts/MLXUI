@@ -218,7 +218,7 @@ nonisolated final class Flux2KleinTextEncoder {
 
     /// Loads `text_encoder/` of an installed Klein model. Needs only `config.json` and the `model*.safetensors` shards; it does NOT need
     /// `model.safetensors.index.json` (the installer does not fetch it), so layer membership is read from the tensors' own names.
-    static func load(textEncoderDirectory dir: URL, bits: Int?, groupSize: Int = 64,
+    static func load(textEncoderDirectory dir: URL, bits: Int?, groupSize: Int = 64, testOnlyKeepEmbeddingBF16: Bool = false,
                      stage: (String) -> Void = { _ in }) throws -> Flux2KleinTextEncoder {
         let config = try Flux2KleinTextEncoderConfig.decode(from: Data(contentsOf: dir.appendingPathComponent("config.json")))
         let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
@@ -226,13 +226,16 @@ nonisolated final class Flux2KleinTextEncoder {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
         guard !files.isEmpty else { throw Flux2KleinTextEncoderError.noWeightFiles(dir.path) }
         let shards: [Shard] = files.map { url in { try loadArrays(url: url) } }
-        return try load(shape: Flux2KleinQwen3Shape(config), prefix: "model.", shards: shards, bits: bits, groupSize: groupSize, stage: stage)
+        return try load(shape: Flux2KleinQwen3Shape(config), prefix: "model.", shards: shards, bits: bits, groupSize: groupSize,
+                    testOnlyKeepEmbeddingBF16: testOnlyKeepEmbeddingBF16, stage: stage)
     }
 
     /// The streaming loader. Tensors are matched by name (`<prefix>embed_tokens.weight`, `<prefix>layers.N.…`); everything else (deeper layers,
     /// final norm, lm_head) is ignored and released as soon as its shard is read. A layer is built the moment all of its 11 tensors have
     /// arrived, so a layer that straddles two shards (layer 20 of the real checkpoint) simply waits for its second half.
-    static func load(shape: Flux2KleinQwen3Shape, prefix: String, shards: [Shard], bits: Int?, groupSize: Int = 64,
+    /// `testOnlyKeepEmbeddingBF16` (MP7-3d-FIX-1, implementer's call, pending owner confirmation): measurement-only; leaves the embedding table in the checkpoint dtype
+    /// while the layers are still quantized. Defaults to false, and no production caller passes it, so the shipping path (embedding quantized with the layers) is unchanged.
+    static func load(shape: Flux2KleinQwen3Shape, prefix: String, shards: [Shard], bits: Int?, groupSize: Int = 64, testOnlyKeepEmbeddingBF16: Bool = false,
                      stage: (String) -> Void = { _ in }) throws -> Flux2KleinTextEncoder {
         if let bits, !supportedBits.contains(bits) { throw Flux2KleinTextEncoderError.unsupportedBits(bits) }
         // The floor: whatever `quantize` the row asked for, the encoder is built at 8 bits or more (Flux2KleinQuantization).
@@ -274,7 +277,7 @@ nonisolated final class Flux2KleinTextEncoder {
                 e.update(parameters: ModuleParameters.unflattened(["weight": weight]))
                 embedWeight = nil
                 var built: Embedding = e
-                if let bits {
+                if let bits, !testOnlyKeepEmbeddingBF16 {
                     guard let q = quantizeSingle(layer: e, groupSize: groupSize, bits: bits) as? Embedding else {
                         throw Flux2KleinTextEncoderError.quantizationFailed("embedding table, \(bits) bits, group \(groupSize)")
                     }
