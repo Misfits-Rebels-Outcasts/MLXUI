@@ -15,7 +15,12 @@ question for the owner.
 | `g3e_ids.safetensors` | 3a | the pipeline's own ids / pack / unpack / patchify outputs |
 | `g3f_scalars.json`, `g3f_scheduler.safetensors` | 3a | `compute_empirical_mu`, `retrieve_timesteps` sigmas and timesteps for six (seq, steps) cases; one Euler step |
 | `g3g_glue.safetensors` | 3a/3g | a 2-step denoise on the tiny transformer, then unpack, BN denormalise, unpatchify, decode |
+| `g3d_embedders.safetensors` | 3d | MP7-3d, made later by `embedders_goldens.py` with g3a's own weights (asserted, none written): `time_proj`, `temb`, x/context embedder outputs, the three modulations and their chunks, `norm_out`/`proj_out`, RoPE cos/sin for three id layouts (a 4x4 and a 2x8 image grid of equal length, and text), rotated q/k |
 
 sha256 of each file is pinned in `Flux2KleinGlueTests.swift` (`Flux2KleinFixtureIntegrityTests`). Total size is checked there (<= 2 MB).
+
+MP7-3d additions (run twice, byte-identical): `g3d_embedders.safetensors` 47,392 bytes, sha256 `1b7695bf722fc266c5a14d87c92e79f91b168fe331097766e30d5da893d8fc33`;
+`embedders_goldens.py` sha256 `e47115ad06ab8cdb9b9aa6fa6a413ce369a110895016eb7c633904929a12d784` (pinned with the file in `Flux2KleinEmbeddersFixtureTests`, not in the
+list above). Fixture folder total after this slice: 1745069 bytes (budget 2 MB for the goldens).
 
 Regenerate (only with the owner's say-so): in a venv with `requirements.txt` installed, `python3 tiny_goldens.py --out <dir>`.
