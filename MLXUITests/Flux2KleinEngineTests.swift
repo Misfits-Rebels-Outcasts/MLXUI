@@ -421,7 +421,7 @@ private let tinyRequest = Flux2KleinRequest(prompt: "a tiny test prompt", width:
         #expect(Flux2KleinMemoryPlan.peaks(width: largest, height: largest, quantize: 8).busiest * 1.15 * 1e9 <= Double(Self.thisMac))
         #expect(Flux2KleinMemoryPlan.peaks(width: largest + 16, height: largest + 16, quantize: 8).busiest * 1.15 * 1e9 > Double(Self.thisMac))
         let sentence = error.errorDescription ?? ""
-        #expect(sentence.contains("FLUX.2 Klein 4B") && sentence.contains("2048 x 2048") && sentence.contains("\(largest) x \(largest)") && sentence.contains("quantize 8"))
+        #expect(sentence.hasPrefix("FLUX.2 Klein can't make a 2048 \u{00D7} 2048 image at quantize 8 on this Mac: ") && sentence.contains("\(largest) \u{00D7} \(largest)") && !sentence.contains(" x "))
     }
 
     @Test func aBiggerMacGetsABiggerCapAndASmallOneRefusesEverything() throws {

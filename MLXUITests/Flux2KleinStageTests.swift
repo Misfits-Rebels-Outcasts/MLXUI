@@ -133,10 +133,10 @@ private func tinySettings(width: Int = 32, height: Int = 32, steps: Int = 2, see
 
     @Test func aSizeOverThisMacsCapNamesTheRowTheSizeAskedAndTheLargestPossible() async throws {
         let text = try #require(await refusal(tinySettings(width: 4096, height: 4096), row: "Row 9"))
-        #expect(text.hasPrefix("Row 9 can't make a 4096 x 4096 image at quantize 8 on this Mac"), Comment(rawValue: text))
+        #expect(text.hasPrefix("Row 9: FLUX.2 Klein can't make a 4096 \u{00D7} 4096 image at quantize 8 on this Mac"), Comment(rawValue: text))
         #expect(text.contains("The largest it can make here is"), Comment(rawValue: text))
         let largest = Flux2KleinMemoryPlan.largestSquareSide(quantize: 8, budgetBytes: Flux2KleinMemoryPlan.defaultBudgetBytes)
-        #expect(text.contains("\(largest) x \(largest)"), Comment(rawValue: text))
+        #expect(text.contains("\(largest) \u{00D7} \(largest)"), Comment(rawValue: text))
     }
 
     @Test func zeroStepsIsRefused() async throws {
@@ -398,7 +398,7 @@ struct Flux2KleinRunModelTests {
         #expect(offered(tiny).isEmpty)
         let none = Flux2KleinRunModel(budgetBytes: { tiny })
         #expect(none.widthText == "512" && none.offeredSizes.isEmpty && !none.canRun)
-        #expect(none.settingsRefusal?.contains("can't make a 512 x 512 image at quantize 8 on this Mac") == true)
+        #expect(none.settingsRefusal?.contains("can't make a 512 \u{00D7} 512 image at quantize 8 on this Mac") == true)
     }
 
     @Test func aMacTooSmallForTheDefaultStillOpensTheRunWindow() throws {
@@ -447,7 +447,7 @@ struct Flux2KleinRunModelTests {
         let m = Flux2KleinRunModel(budgetBytes: { 12_000_000_000 })
         m.widthText = "2048"; m.heightText = "2048"
         let text = try #require(m.settingsRefusal)
-        #expect(text.hasPrefix("This image can't make a 2048 x 2048 image at quantize 8 on this Mac"), Comment(rawValue: text))
+        #expect(text.hasPrefix("FLUX.2 Klein can't make a 2048 \u{00D7} 2048 image at quantize 8 on this Mac"), Comment(rawValue: text))
         #expect(text.contains("largest it can make here is"))
         #expect(!m.canRun)
         m.applySizePreset(1024)

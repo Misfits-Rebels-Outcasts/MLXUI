@@ -113,10 +113,10 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
     /// it go (its last use). A stage that books no bytes here (an LLM stage — its weights are leased in the pool by
     /// `LLMEngine`) comes back unwrapped.
     func leasedStage(for model: ModelEntry, config: StageConfig, maxWait: Duration = MemoryBudget.defaultMaxWait,
-                     holder: MemoryBudget.HolderKind? = .flow, booksWeights: Bool = true,
+                     holder: MemoryBudget.HolderKind? = .flow, booksWeights: Bool = true, footprintOverride: Int64? = nil,
                      builder: Builder) async throws -> any PipelineStage {
         let (stage, hold) = try await lease(for: model, config: config, maxWait: maxWait, holder: holder,
-                                            booksWeights: booksWeights, builder: builder)
+                                            booksWeights: booksWeights, footprintOverride: footprintOverride, builder: builder)
         return hold.isInert ? stage : LeasedStage(inner: stage, hold: hold)
     }
 

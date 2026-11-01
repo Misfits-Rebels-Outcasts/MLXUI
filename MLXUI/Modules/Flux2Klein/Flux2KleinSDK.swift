@@ -22,12 +22,12 @@ nonisolated struct Flux2KleinSDK: ModelSDK {
     /// sentence when none does (MP7-4-FIX-1, owner ruling 3), so with no size named nothing is checked against the cap here; `Flux2KleinStage.run` still checks the size
     /// it is given before any weight loads. A config that names a size is validated as a flow row's is.
     func makeStage(for model: ModelEntry, config: StageConfig) throws -> any PipelineStage {
-        if config.width == nil && config.height == nil {
+        if config.width == nil && config.height == nil && config.quantize == nil {
             if config.scale != nil { throw StageError.unsupportedSetting(setting: "scale") }
             let settings = Flux2KleinRunSettings(steps: config.steps ?? Flux2KleinRunSettings.defaultSteps, seed: config.seed)
             return Flux2KleinStage(modelID: model.id, settings: settings, rowLabel: Self.defaultRowLabel)
         }
-        return try makeStage(for: model, config: config, quantize: Flux2KleinRunSettings.defaultQuantize, rowLabel: Self.defaultRowLabel)
+        return try makeStage(for: model, config: config, quantize: config.quantize ?? Flux2KleinRunSettings.defaultQuantize, rowLabel: Self.defaultRowLabel)
     }
 
     /// The same with the row's `quantize` and its real label (a flow row's "Row 3"): what MP7-W's executor calls. `config.width/height/steps/seed` fall back to the manifest's
@@ -53,23 +53,26 @@ nonisolated struct Flux2KleinSDK: ModelSDK {
     /// * `guidance`: Klein 4B is guidance-distilled and has no guidance path (`Flux2Model.usesGuidanceEmbeds == false`), so only the manifest default 2.0 is accepted.
     /// * `negative`, `lora`, `controlnet`: any non-empty value. `preview`: anything but an explicit off.
     /// * `quantize`: 4 or 8 (the engine's own sentence).
+    ///
+    /// `rowLabel` empty = no "<label>: " prefix: a flow row's refusal is wrapped as "Row 3 failed: ..." by the interpreter, which already names the row (MP7-W).
     static func refusal(forRowSetting value: (String) -> String?, rowLabel: String) -> String? {
+        let lead = rowLabel.isEmpty ? "" : "\(rowLabel): "
         func present(_ key: String) -> String? {
             guard let raw = value(key)?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
             return raw
         }
         if let raw = present("guidance"), Double(raw) != 2.0 {
-            return "\(rowLabel): FLUX.2 Klein 4B has no guidance setting (it is distilled to 4 steps), so guidance can only be left at 2.0, not \(raw)."
+            return "\(lead)FLUX.2 Klein 4B has no guidance setting (it is distilled to 4 steps), so guidance can only be left at 2.0, not \(raw)."
         }
         for (key, what) in [("negative", "a negative prompt"), ("lora", "LoRA weights"), ("controlnet", "a ControlNet")] where present(key) != nil {
-            return "\(rowLabel): FLUX.2 Klein 4B can't use \(what) in this build; remove the \(key) setting."
+            return "\(lead)FLUX.2 Klein 4B can't use \(what) in this build; remove the \(key) setting."
         }
         if let raw = present("preview"), !["false", "no", "off", "0"].contains(raw.lowercased()) {
-            return "\(rowLabel): FLUX.2 Klein 4B can't show a preview while it denoises in this build; remove the preview setting."
+            return "\(lead)FLUX.2 Klein 4B can't show a preview while it denoises in this build; remove the preview setting."
         }
         if let raw = present("quantize") {
-            guard let bits = Int(raw) else { return "\(rowLabel): quantize must be a whole number, 4 or 8; the row says \(raw)." }
-            do { try Flux2KleinEngine.validate(quantize: bits, row: rowLabel) } catch { return (error as? LocalizedError)?.errorDescription ?? "\(rowLabel): unsupported quantize \(bits)." }
+            guard let bits = Int(raw) else { return "\(lead)quantize must be a whole number, 4 or 8; the row says \(raw)." }
+            do { try Flux2KleinEngine.validate(quantize: bits, row: rowLabel) } catch { return (error as? LocalizedError)?.errorDescription ?? "\(lead)unsupported quantize \(bits)." }
         }
         return nil
     }
@@ -103,4 +106,12 @@ nonisolated enum Flux2KleinBooking {
     }
 
     static func bytes(for model: ModelEntry) -> Int64? { isKlein(model) ? bookedBytes : nil }
+
+    /// MP7-W: what a FLOW row books, from its config (the Run UI's stage reports its own through `LeaseSized`). The size and quantize default to the manifest's 1024 x 1024 / 8, as
+    /// `Flux2KleinSDK.makeStage` does. nil for any other model.
+    static func leaseOverride(for model: ModelEntry, config: StageConfig) -> Int64? {
+        guard isKlein(model) else { return nil }
+        return bytes(width: config.width ?? Flux2KleinRunSettings.defaultSize, height: config.height ?? Flux2KleinRunSettings.defaultSize,
+                     quantize: config.quantize ?? Flux2KleinRunSettings.defaultQuantize)
+    }
 }

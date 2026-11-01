@@ -396,6 +396,18 @@ nonisolated enum CatalogBridge {
             candidates: ["mlx-community/LFM2.5-Audio-1.5B-6bit"],
             equivalence: .same,
             manifestFile: "lfm2.5-audio-1.5b-6bit.json"),
+        // MP7-W (RSI/DelegateModelPackBacklog.md, MP7-W) -- FLUX.2 Klein 4B, the `Generate Image` row's second model (named in the pool since CFM-R12). The catalog card is the
+        // mlx-community bf16 snapshot that the app quantizes at load (flows default to quantize 8), the manifest pins `black-forest-labs/FLUX.2-klein-4B`: a different repo
+        // of the same checkpoint, so `.requantized` (silent, as the Whisper Large v3 and LFM2-VL rows). The manifest is a byte-identical copy of
+        // `catflow-mlx/models/curated/flux2-klein-4b.json` (never edited; its "FLUX.2 Community License" vs the card's Apache-2.0 is a SPEC-Q, backlog MP7-1 D).
+        // Only `Generate Image` is served: `Init/Encode/Decode Latent` stay unserved (no stage exposes them). The manifest's `lora`, `controlnet`, `preview`, `negative`, a
+        // non-default `guidance` and a `quantize` outside 4/8 are refused by name in `RealExecutor.stageConfig`, never dropped.
+        BridgeEntry(
+            display: "FLUX.2 Klein 4B",
+            pinnedID: "black-forest-labs/FLUX.2-klein-4B",
+            candidates: ["mlx-community/FLUX.2-klein-4B-bf16"],
+            equivalence: .requantized,
+            manifestFile: "flux2-klein-4b.json"),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {

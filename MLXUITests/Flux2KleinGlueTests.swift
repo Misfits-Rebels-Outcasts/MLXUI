@@ -385,7 +385,8 @@ private enum Klein {
 
 @Suite struct Flux2KleinGapRemovalTests {
     /// The MP7-2 gap kept Klein off the workflow rows while it had no runner. MP7-4 registered the module and removed the gap from `ModelSupport`, so the
-    /// display-name fallback now resolves it as runnable, exactly as `ignoringGaps` predicted in MP7-3a. (There is still no `CatalogBridge` entry or manifest: MP7-W.)
+    /// catalog's own display name resolves it as runnable. MP7-W added the `CatalogBridge` row "FLUX.2 Klein 4B" (the catalog's displayName is the same string), so the
+    /// resolution is no longer the display-name fallback (`.same`) but the bridge's `.requantized` onto the catflow pin (MP7-W: owner-ordered; also `Flux2KleinWorkflowTests`).
     @Test func theDisplayNameFallbackIsRunnableNowThatTheKleinGapIsRemoved() throws {
         let data = try Data(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("MLXUI/Resources/browser.json"))
@@ -397,7 +398,7 @@ private enum Klein {
         guard case let .runnable(target, equivalence, _) = CatalogBridge.resolve(klein.displayName, catalog: [klein]) else {
             Issue.record("the display-name fallback still refuses Klein with the gap removed"); return
         }
-        #expect(equivalence == .same)
+        #expect(equivalence == .requantized)
         if case let .cataloged(model) = target { #expect(model.hfModelId == klein.hfModelId) } else { Issue.record("not a catalog target") }
     }
 }

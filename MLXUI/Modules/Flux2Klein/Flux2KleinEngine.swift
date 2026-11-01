@@ -44,7 +44,7 @@ nonisolated struct Flux2KleinRequest: Sendable, Equatable {
     var seed: UInt64 = 0
     /// The row's `quantize`: the DiT's bit width (3, 4, 5, 6 or 8; Browse default 8). The text encoder is built at `max(quantize, 8)`.
     var quantize: Int = 8
-    /// The row, for sentences ("FLUX.2 Klein 4B can't make ...").
+    /// The row, for sentences ("Row 3: FLUX.2 Klein can't make ...").
     var row: String = Flux2KleinEngine.modelName
     /// Evaluate after every transformer block (done-when d). ON by default (implementer's call, pending owner confirmation): measured at 1024 x 1024, int8, MLX peak 5.67 GB -> 5.22 GB
     /// (footprint 6.00 -> 5.44 GB) at the same speed within noise (7.31 s vs 7.47 s); lower at every size measured (MP7-3h-report.md). Same arithmetic: the tiny golden shows max-abs 0.
@@ -99,11 +99,13 @@ nonisolated enum Flux2KleinEngineError: Error, Equatable, LocalizedError {
         case let .invalidSteps(steps):
             return "FLUX.2 Klein needs at least 1 step; the row asks for \(steps)."
         case let .unsupportedQuantize(row, quantize):
-            return "\(row): FLUX.2 Klein 4B runs at quantize 4 or 8 in this build, not \(quantize)."
+            return "\(row.isEmpty ? "" : "\(row): ")FLUX.2 Klein 4B runs at quantize 4 or 8 in this build, not \(quantize)."
         case let .sizeExceedsMemory(row, width, height, quantize, needed, available, largest):
-            let head = "\(row) can't make a \(width) x \(height) image at quantize \(quantize) on this Mac: it needs about \(Self.gb(needed)) GB at its busiest step and this Mac can give it \(Self.gb(available)) GB."
+            // MP7-W (owner, 2026-11-01): the subject is the model, with U+00D7 in every size; a flow row is named first ("Row 3: FLUX.2 Klein can't make ..."), the Run window's own label is not.
+            let lead = (row.isEmpty || row == Flux2KleinStage.runWindowLabel || row == Flux2KleinEngine.modelName) ? "" : "\(row): "
+            let head = "\(lead)FLUX.2 Klein can't make a \(width) \u{00D7} \(height) image at quantize \(quantize) on this Mac: it needs about \(Self.gb(needed)) GB at its busiest step and this Mac can give it \(Self.gb(available)) GB."
             if largest >= Flux2KleinLatents.sizeMultiple {
-                return head + " The largest it can make here is \(largest) x \(largest) (or any other shape with no more pixels)."
+                return head + " The largest it can make here is \(largest) \u{00D7} \(largest) (or any other shape with no more pixels)."
             }
             return head + " It can't make an image of any size here at this quantize."
         case .imageConversionFailed:
@@ -484,3 +486,13 @@ nonisolated final class Flux2KleinSlot<R: AnyObject>: @unchecked Sendable {
         return value
     }
 }
+
+// MP7-W: the flow interpreter stringifies a thrown error with `String(describing:)` (`FlowInterpreter` row failure), and a `LocalizedError` enum that is not also
+// `CustomStringConvertible` prints as a raw case dump there ("sizeExceedsMemory(row: ...)"). Every error a Klein row can throw reads as its own sentence.
+extension Flux2KleinEngineError: CustomStringConvertible { var description: String { errorDescription ?? "FLUX.2 Klein failed." } }
+extension Flux2KleinSizeError: CustomStringConvertible { var description: String { errorDescription ?? "FLUX.2 Klein can't make an image of that size." } }
+extension Flux2KleinTextEncoderError: CustomStringConvertible { var description: String { errorDescription ?? "FLUX.2 Klein's text encoder failed." } }
+extension Flux2KleinVAEError: CustomStringConvertible { var description: String { errorDescription ?? "FLUX.2 Klein's picture decoder failed." } }
+extension Flux2KleinTransformerError: CustomStringConvertible { var description: String { errorDescription ?? "FLUX.2 Klein's image model failed." } }
+extension Flux2KleinPromptError: CustomStringConvertible { var description: String { errorDescription ?? "FLUX.2 Klein can't use that prompt." } }
+extension Flux2KleinConfigError: CustomStringConvertible { var description: String { errorDescription ?? "FLUX.2 Klein's model files are not what this build expects." } }

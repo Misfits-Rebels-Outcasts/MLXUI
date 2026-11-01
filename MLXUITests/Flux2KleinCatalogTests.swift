@@ -162,12 +162,13 @@ struct Flux2KleinCatalogTests {
         #expect(!ModelFileSelector.filesToDownload(siblings: Self.tree.map(\.name)).isEmpty)
     }
 
-    /// The pool names "FLUX.2 Klein 4B" (from catflow-mlx). There is still no `CatalogBridge` entry and no manifest (MP7-W), so a flow's Model menu offers Klein
-    /// only through the registry claim; this records what a workflow does today so MP7-W changes it on purpose.
-    @Test func workflowsStillHaveNoBridgeEntryForKlein() throws {
+    /// The pool names "FLUX.2 Klein 4B" (from catflow-mlx). MP7-W added the `CatalogBridge` row (`.requantized` onto the catflow pin `black-forest-labs/FLUX.2-klein-4B`) and the
+    /// verbatim manifest, replacing the MP7-2 test `workflowsStillHaveNoBridgeEntryForKlein` ("no CatalogBridge entry until MP7-W"), as that test said it would be.
+    @Test func workflowsNowBridgeKlein() throws {
         let k = try klein()
-        #expect(CatalogBridge.entry(for: "FLUX.2 Klein 4B") == nil, "no CatalogBridge entry until MP7-W")
-        #expect(CatalogBridge.entry(forCandidate: Self.hfID) == nil)
+        let entry = try #require(CatalogBridge.entry(for: "FLUX.2 Klein 4B"), "MP7-W added the bridge row")
+        #expect(entry.candidates == [Self.hfID] && entry.equivalence == .requantized && entry.manifestFile == "flux2-klein-4b.json")
+        #expect(CatalogBridge.entry(forCandidate: Self.hfID)?.display == "FLUX.2 Klein 4B")
         let registry = ModelRegistry()
         for module in installedModules { module.register(into: registry) }
         let claimable = Set([k].filter { registry.bestModule(for: $0) != nil }.map(\.id))

@@ -47,15 +47,19 @@ struct CatFlowEditingTests {
 
     /// The bundled catalog + the registry's own claim answer — the derived pool's inputs
     /// (CFM-R14-2). `@MainActor` because `ModelRegistry` is.
+    /// `excludingBridgedKlein`: MP7-W gave FLUX.2 Klein 4B a `CatalogBridge` row, so as the default Generate Image model (MP7-4-FIX-1) it no longer needs a `models:` pin, and
+    /// the R2 pin tests below (whose premise is "a display with NO bridge row must be pinned") would stop exercising a pin at all. They keep that premise by leaving Klein out of
+    /// the claimable set, which makes the unbridged `Flux-1.lite-8B` the default again (`generateImageDefaultFollowsThePoolOrder`); `aBridgedDefaultNeedsNoPin` covers Klein.
     @MainActor
-    private func loadedCatalogAndClaimable() throws -> (catalog: [ModelEntry], claimable: Set<String>) {
+    private func loadedCatalogAndClaimable(excludingBridgedKlein: Bool = false) throws -> (catalog: [ModelEntry], claimable: Set<String>) {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("MLXUI/Resources/browser.json")
         let catalog = try JSONDecoder().decode(BrowserData.self, from: Data(contentsOf: url))
             .domains.flatMap { $0.allModels }
         let registry = ModelRegistry()
         for module in installedModules { module.register(into: registry) }
-        let claimable = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
+        var claimable = Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
+        if excludingBridgedKlein { claimable.subtract(catalog.filter { $0.hfModelId == "mlx-community/FLUX.2-klein-4B-bf16" }.map(\.id)) }
         return (catalog, claimable)
     }
 
@@ -219,7 +223,7 @@ struct CatFlowEditingTests {
     /// `structuralIssues()` turned straight into `saveBlockReason` — Save disabled until the
     /// user re-picked the model already sitting on the row. This is the R2 bug in one test.
     @Test @MainActor func addingGenerateImagePinsItsSeededModelSoSaveIsNotBlocked() throws {
-        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let (catalog, claimable) = try loadedCatalogAndClaimable(excludingBridgedKlein: true)
         let model = try editor()
         model.modelCatalog = catalog
         model.claimableModelIDs = claimable
@@ -262,7 +266,7 @@ struct CatFlowEditingTests {
     /// set, **and** Run's own readiness genuinely does move with it — so this cannot pass by
     /// accidentally proving that install state is ignored everywhere.
     @Test @MainActor func saveGateIgnoresInstallStateWhileRunReadinessUsesIt() throws {
-        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let (catalog, claimable) = try loadedCatalogAndClaimable(excludingBridgedKlein: true)
         let model = try editor()
         model.modelCatalog = catalog
         model.claimableModelIDs = claimable
@@ -290,7 +294,7 @@ struct CatFlowEditingTests {
     /// both") — so undoing the add cannot leave a stale `models:` entry behind, which would be
     /// the other half of the R2 bug.
     @Test @MainActor func undoAfterAddingAModelRowRemovesBothTheRowAndItsPin() throws {
-        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let (catalog, claimable) = try loadedCatalogAndClaimable(excludingBridgedKlein: true)
         let model = try editor()
         model.modelCatalog = catalog
         model.claimableModelIDs = claimable
@@ -326,7 +330,7 @@ struct CatFlowEditingTests {
     /// `allRows()`, so the reconcile must see it — this is the test that would catch a
     /// `reconcileModelsBlock()` that only walked `document.rows`.
     @Test @MainActor func addingAModelChildIntoABlockPinsItToo() throws {
-        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let (catalog, claimable) = try loadedCatalogAndClaimable(excludingBridgedKlein: true)
         let model = try editor()
         model.modelCatalog = catalog
         model.claimableModelIDs = claimable
@@ -350,6 +354,23 @@ struct CatFlowEditingTests {
         let hf = try #require(catalog.first { TaskModels.displayName(for: $0) == display }?.hfModelId)
         #expect(model.document.models[display] == hf)
         #expect(model.saveBlockReason == nil)
+    }
+
+    /// MP7-W: Klein (the default for a new Generate Image row) has a bridge row, so the row names "FLUX.2 Klein 4B" with no `models:` pin and Save is not blocked: the
+    /// bridge resolves it to the installable card, silently (`.requantized`).
+    @Test @MainActor func aBridgedDefaultNeedsNoPin() throws {
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let model = try editor()
+        model.modelCatalog = catalog
+        model.claimableModelIDs = claimable
+        model.add(task: "Generate Image")
+        let display = try #require(model.document.rows.first?.model)
+        #expect(display == "FLUX.2 Klein 4B")
+        #expect(CatalogBridge.entry(for: display) != nil)
+        #expect(model.document.models[display] == nil)
+        #expect(model.saveBlockReason == nil)
+        guard case let .runnable(_, equivalence, note) = CatalogBridge.resolve(display, catalog: catalog) else { Issue.record("did not resolve"); return }
+        #expect(equivalence == .requantized && note == nil)
     }
 
     /// MP7-4-FIX-1 (owner, 2026-11-01): the default for a new Generate Image row is the first pool-named runnable model. Klein claimable -> Klein; not claimable -> the
