@@ -63,15 +63,16 @@ struct LFMAudioCatalogTests {
         #expect(e.variants?.first?.hfModelId == Self.hfID)
     }
 
-    @Test func kindRoutesToVoiceAndSamAudioStaysUnsupported() throws {
+    @Test func kindRoutesToVoiceAndSamAudioIsSeparate() throws {
         let e = try lfm()
         #expect(e.runnerKind == .voice)
         #expect(ModelType.voice.rawValue == "voice")
         #expect(RunnerKind.voice.rawValue == "voice")
         #expect(ModelType.voice.sfSymbol == "waveform.and.mic")
-        // The family override wins over whatever modelType the catalog writes; sam-audio is not in this change.
+        // The family override wins over whatever modelType the catalog writes. MC1: sam-audio routes to `.separate`
+        // (SAM-Audio sound isolation) instead of `.unsupported`.
         #expect(makeEntry(family: "LFM2.5-Audio", modelType: .asr).runnerKind == .voice)
-        #expect(makeEntry(family: "sam-audio", modelType: .asr).runnerKind == .unsupported)
+        #expect(makeEntry(family: "sam-audio", modelType: .asr).runnerKind == .separate)
     }
 
     @Test func liveInTheAudioSectionsVoiceLeaf() throws {

@@ -114,17 +114,17 @@ nonisolated enum SAMAudioEngine {
 
     // MARK: - The time estimate shown before a run (implementer's call, pending owner confirmation)
 
-    /// How long loading the two models takes on the test machine, in seconds. Measured 2026-11-02 (MC1-6, the
-    /// `SAMAudioRealLoad` harness): a load plus the T5 encode took about 25 s. It is a fixed cost per run, paid before
-    /// the first window.
-    nonisolated static let estimatedLoadSeconds: Double = 25
-    /// Seconds of processing per second of audio on the test machine: the 65 s clip came out at 0.33x realtime
-    /// (197.7 s wall for 9 windows, 2026-11-02, MC1-6), so about 3 s per second of audio. It varies with the Mac, which
-    /// is why the Run screen says "about".
+    /// The fixed cost of a run, in seconds: loading both models and the T5 encode, before the first window. Measured
+    /// 2026-11-02 (MC1-6, the `SAMAudioRealLoad` harness): a cold first run took about a minute, including the one-time
+    /// Metal kernel compilation; a warm process reloads in about 15 s.
+    nonisolated static let estimatedLoadSeconds: Double = 60
+    /// Seconds of processing per second of audio. Measured 2026-11-02 (MC1-6): the 65 s windowed clip ran at 0.65x to
+    /// 0.68x realtime warm (92-95 s wall), and the first, cold 10 s run was slower. Set to 3 s per audio second, a
+    /// conservative value; it varies with the Mac, which is why the Run screen says "about".
     nonisolated static let estimatedProcessingSecondsPerAudioSecond: Double = 3.0
 
-    /// The sentence the Run screen shows before a run starts: "About 9 minutes for this 4 minute 12 second recording."
-    /// Only a basis for a decision, never a promise about another Mac.
+    /// The sentence the Run screen shows before a run starts: "It will take about 90 minutes" for a 30-minute
+    /// recording. Only a basis for a decision, never a promise about another Mac.
     nonisolated static func estimate(seconds: Double) -> Double {
         estimatedLoadSeconds + max(seconds, 0) * estimatedProcessingSecondsPerAudioSecond
     }

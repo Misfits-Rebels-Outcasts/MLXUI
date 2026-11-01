@@ -254,10 +254,12 @@ struct RoutingTests {
         #expect(entry.runnerKind == .tts)
     }
 
-    @Test func runnerKindOverridesSpeechToSpeechToUnsupported() {
-        // MP6-1: LFM2.5-Audio left this override (it routes to `.voice` now); sam-audio keeps `.unsupported`.
+    @Test func runnerKindOverridesTheSpeechFamilies() {
+        // MP6-1: LFM2.5-Audio left this override (it routes to `.voice` now).
+        // MC1: sam-audio routes to `.separate` (sound isolation) instead of `.unsupported`.
         #expect(makeEntry(family: "LFM2.5-Audio", modelType: .asr).runnerKind == .voice)
-        #expect(makeEntry(family: "sam-audio", modelType: .asr).runnerKind == .unsupported)
+        #expect(makeEntry(family: "sam-audio", modelType: .asr).runnerKind == .separate)
+        #expect(makeEntry(family: "sam-audio", modelType: .asr).runnerKind != .unsupported)
     }
 
     // MARK: StageFactory — install gate

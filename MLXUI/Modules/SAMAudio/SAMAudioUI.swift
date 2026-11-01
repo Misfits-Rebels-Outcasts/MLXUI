@@ -203,7 +203,7 @@ struct SAMAudioRunView: View {
     private var estimateText: String? {
         guard let durationSeconds else { return nil }
         let estimate = SAMAudioEngine.estimate(seconds: durationSeconds)
-        return "This \(SAMAudioEngine.spoken(durationSeconds)) recording will take about \(SAMAudioEngine.spokenEstimate(estimate))."
+        return "This recording is \(SAMAudioEngine.spoken(durationSeconds)) long; it will take about \(SAMAudioEngine.spokenEstimate(estimate))."
     }
 
     // MARK: - Actions

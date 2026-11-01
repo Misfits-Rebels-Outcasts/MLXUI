@@ -319,7 +319,10 @@ struct SAMAudioListenableOutputTests {
         let dir = try #require(SAMAudioRealLoad.directory)
         try await SAMAudioRealLoad.withClip(seconds: 20) { clip in
             let result = try await SAMAudioEngine.separate(clip.mix, description: "speech", modelDirectory: dir)
-            let out = URL(fileURLWithPath: "/private/tmp/sam-audio-mc1", isDirectory: true)
+            // The sandboxed test host cannot write to /private/tmp; the process's own temporary directory (the
+            // app container's `tmp/`) is writable and openable from Finder. `SAM4D_LISTEN_DIR` overrides it.
+            let out = SAMAudioRealLoad.env["SAM4D_LISTEN_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+                ?? FileManager.default.temporaryDirectory.appendingPathComponent("sam-audio-mc1", isDirectory: true)
             try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
             let isolated = out.appendingPathComponent("voice-over-music-isolated.wav")
             let other = out.appendingPathComponent("voice-over-music-everything-else.wav")
