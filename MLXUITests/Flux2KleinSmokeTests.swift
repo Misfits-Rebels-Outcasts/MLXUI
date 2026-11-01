@@ -307,4 +307,44 @@ struct Flux2KleinSmokeTests {
         if let image { try Klein3hReal.writePNG(image, to: out.appendingPathComponent("klein-flow-1344-q8-seed7.png")) }
         KleinSmoke.line("REVIEW|139|klein-flow-1344-q8-seed7.png|1344 x 1344 at the cap: a coherent picture of the prompt")
     }
+
+    // MARK: MP7-W-f: bundled gallery flow 66-SeedSweep (the exact "Z-Image Turbo (4-bit)" display substitutes Klein), 4 seeds at the default size, through the real executor
+
+    @Test @MainActor func galleryFlow66SeedSweepRunsFourSeedsAndMakesAContactSheet() async throws {
+        let out = try KleinSmoke.ensureOut()
+        let blobs = out.appendingPathComponent("flow66-work", isDirectory: true)
+        try? FileManager.default.removeItem(at: blobs)
+        try FileManager.default.createDirectory(at: blobs, withIntermediateDirectories: true)
+        let exec = try KleinSmoke.executor(blobs: blobs)
+        let doc = try GalleryLoader.loadDocument(flowID: "66-SeedSweep")
+        let (events, peak) = try await KleinSmoke.measured("gallery 66-SeedSweep, 4 seeds at 1024 x 1024 q8", detail: "Range 3..6, each Generate Image on the Klein substitute") {
+            try await FlowInterpreter.run(doc, executor: exec, definitions: doc.definitions, presets: doc.presets)
+        }
+        let failed = events.filter { $0.kind == .rowFailed }
+        KleinSmoke.check("66: no row failed and the run completed", failed.isEmpty && events.last?.kind == .runCompleted, failed.compactMap(\.error).joined(separator: "; "))
+        var pngs: [(String, URL)] = []
+        for e in events where e.kind == .rowCompleted {
+            for item in e.output?.items ?? [] where item.kind == .image { if let u = item.path { pngs.append((e.path, u)) } }
+        }
+        let generated = pngs.filter { $0.0.hasPrefix("2.") }
+        KleinSmoke.check("66: four generated images", generated.count == 4, "\(generated.map(\.0))")
+        var datas: [Data] = []
+        for (n, (path, url)) in generated.enumerated() {
+            let data = try Data(contentsOf: url)
+            datas.append(data)
+            let img = try #require(KleinSmoke.loadPNG(url))
+            KleinSmoke.check("66: image \(n + 1) is 1024 x 1024 and not blank", img.width == 1024 && img.height == 1024 && KleinSmoke.pixelStd(img) > 8, "row \(path) \(img.width) x \(img.height) std \(String(format: "%.1f", KleinSmoke.pixelStd(img)))")
+            try data.write(to: out.appendingPathComponent("gallery66-seed-\(n + 3).png"))
+        }
+        KleinSmoke.check("66: the four seeds give four different images", Set(datas).count == 4, "distinct PNG bytes: \(Set(datas).count)")
+        if let sheet = pngs.first(where: { $0.0 == "3" }) {
+            let data = try Data(contentsOf: sheet.1)
+            try data.write(to: out.appendingPathComponent("gallery66-contact-sheet.png"))
+            let img = try #require(KleinSmoke.loadPNG(sheet.1))
+            KleinSmoke.check("66: contact sheet made (2 columns of 256 px cells, not blank)", img.width == 512 && img.height > 512 && KleinSmoke.pixelStd(img) > 8, "\(img.width) x \(img.height)")
+        } else { KleinSmoke.check("66: contact sheet made", false, "no image output from row 3") }
+        KleinSmoke.check("66: footprint under the stop line", peak < KleinSmoke.stopLineGB, String(format: "peak %.2f GB", peak))
+        try? FileManager.default.removeItem(at: blobs)
+        KleinSmoke.line("REVIEW|139|gallery66-contact-sheet.png|four seeds of 'a lighthouse at sunset, watercolor style', labelled by seed; the pictures differ and depict the prompt")
+    }
 }

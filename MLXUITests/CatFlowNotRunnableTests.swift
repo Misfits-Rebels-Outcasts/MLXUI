@@ -43,11 +43,13 @@ struct CatFlowNotRunnableTests {
     }
 
     @Test func flowsWithRealGapsRefuseByName() throws {
-        // 60 — Generate Image has no bridge model.
-        #expect(try refusal("60-GenerateProductShot") != nil)
-        // 67-69 — .catpipeline model-space flows have no runnable models.
+        // MP7-W-f (owner ruling, Boo, 2026-11-01): the exact display "Z-Image Turbo (4-bit)" is a `.substitute` bridge row onto FLUX.2 Klein 4B, so 60 (and 66, 69: they write
+        // the same name) are no longer refused for "no bridge model"; `Flux2KleinWorkflowTests` pins them runnable with the substitute note. 61 (Edit Image) stays refused.
+        #expect(try refusal("60-GenerateProductShot") == nil)
+        #expect(try refusal("69-PickALook") == nil)
+        #expect(try refusal("61-EditInPlace") != nil)
+        // 67 — .catpipeline model-space flow: the latent tasks are unserved.
         #expect(try refusal("67-DriveTheLatent") != nil)
-        #expect(try refusal("69-PickALook") != nil)
     }
 
     /// Phase WS: 31/34/53 (Web Search, no provider) are no longer a `canRun` refusal — a

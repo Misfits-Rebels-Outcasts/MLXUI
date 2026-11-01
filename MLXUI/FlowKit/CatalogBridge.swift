@@ -408,6 +408,17 @@ nonisolated enum CatalogBridge {
             candidates: ["mlx-community/FLUX.2-klein-4B-bf16"],
             equivalence: .requantized,
             manifestFile: "flux2-klein-4b.json"),
+        // MP7-W-f (owner, Boo, 2026-11-01: "Gallery 60/66: add a .substitute bridge row for the exact display 'Z-Image Turbo (4-bit)' -> FLUX.2 Klein 4B, as one more MP7-W task.")
+        // The bundled gallery flows 60 (Generate a Product Shot) and 66 (Eight Seeds, One Sheet) write this name, and no Z-Image card exists in browser.json, so they were refused.
+        // `.substitute` shows "running Z-Image Turbo (4-bit) as mlx-community/FLUX.2-klein-4B-bf16" on the row, never hidden. Only this EXACT display: the bare "Z-Image Turbo"
+        // stays unbridged, and no other substitution is guessed. The settings authority is Klein's manifest, so a row's guidance/negative/lora/controlnet/preview/quantize are judged
+        // as Klein's. It is listed AFTER the Klein row on purpose: `entry(forCandidate:)` (and so `TaskModels.displayName(for:)`) must keep answering "FLUX.2 Klein 4B" for that card.
+        BridgeEntry(
+            display: "Z-Image Turbo (4-bit)",
+            pinnedID: "black-forest-labs/FLUX.2-klein-4B",
+            candidates: ["mlx-community/FLUX.2-klein-4B-bf16"],
+            equivalence: .substitute,
+            manifestFile: "flux2-klein-4b.json"),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {

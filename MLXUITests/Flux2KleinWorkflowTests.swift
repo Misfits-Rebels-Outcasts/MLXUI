@@ -257,17 +257,78 @@ struct Flux2KleinWorkflowTests {
         #expect(!TaskModels.isServedByExecutor("Edit Image"))
     }
 
-    @Test func bundledGalleryFlows60And66NameZImageNotKleinAndStayUntouched() throws {
+    // MARK: MP7-W-f: gallery 60 and 66 (owner, Boo, 2026-11-01): the exact display "Z-Image Turbo (4-bit)" is a `.substitute` onto Klein
+
+    private static let zImage = "Z-Image Turbo (4-bit)"
+
+    private static func galleryDoc(_ file: String) throws -> FlowDocument {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        return try CatParser.parse(String(contentsOf: root.appendingPathComponent("MLXUI/Resources/Gallery/\(file)"), encoding: .utf8))
+    }
+
+    @MainActor private static func claimable(_ catalog: [ModelEntry]) -> Set<String> {
+        let registry = ModelRegistry()
+        for module in installedModules { module.register(into: registry) }
+        return Set(catalog.filter { registry.bestModule(for: $0) != nil }.map(\.id))
+    }
+
+    @Test func theExactZImageDisplayIsASubstituteOntoKleinWithTheNoteAndTheBareNameIsNot() throws {
         let catalog = try Self.catalog()
-        for file in ["60-GenerateProductShot.cat", "66-SeedSweep.cat"] {
-            let text = try String(contentsOf: root.appendingPathComponent("MLXUI/Resources/Gallery/\(file)"), encoding: .utf8)
-            #expect(text.contains("Z-Image Turbo (4-bit)") && !text.contains("Klein"), Comment(rawValue: file))
-            let doc = try CatParser.parse(text)
-            #expect(!doc.rows.isEmpty)
+        guard case let .runnable(slot, equivalence, note) = CatalogBridge.resolve(Self.zImage, catalog: catalog) else { Issue.record("did not resolve"); return }
+        #expect(slot.modelEntry?.hfModelId == "mlx-community/FLUX.2-klein-4B-bf16")
+        #expect(equivalence == .substitute)
+        #expect(note == "running Z-Image Turbo (4-bit) as mlx-community/FLUX.2-klein-4B-bf16", Comment(rawValue: note ?? "nil"))
+        // only the EXACT name: the bare one and a near miss stay unbridged
+        for other in ["Z-Image Turbo", "Z-Image Turbo (8-bit)", "z-image turbo (4-bit)"] {
+            if case .runnable = CatalogBridge.resolve(other, catalog: catalog) { Issue.record("\(other) must stay unbridged") }
         }
-        // "Z-Image Turbo (4-bit)" has no bridge row and no catalog card, so adding Klein's row neither resolves nor hijacks it: it stays as it was (not runnable), never "running as Klein".
-        if case .runnable = CatalogBridge.resolve("Z-Image Turbo (4-bit)", catalog: catalog) { Issue.record("Z-Image must not resolve to anything installable here") }
+        // the Klein card still answers to its own name, and a new Generate Image row still defaults to Klein
+        #expect(TaskModels.displayName(for: try Self.klein()) == "FLUX.2 Klein 4B")
+        #expect(CatalogBridge.entry(forCandidate: "mlx-community/FLUX.2-klein-4B-bf16")?.display == "FLUX.2 Klein 4B")
+    }
+
+    @Test @MainActor func aNewGenerateImageRowStillDefaultsToKleinNotZImage() throws {
+        let catalog = try Self.catalog()
+        let claimable = Self.claimable(catalog)
+        #expect(FlowEditorModel.defaultModel(forTask: "Generate Image", catalog: catalog, claimableModelIDs: claimable) == "FLUX.2 Klein 4B")
+        #expect(!TaskModels.derivedModels(for: "Generate Image", catalog: catalog, claimableModelIDs: claimable).contains { $0.displayName == Self.zImage })
+        #expect(!TaskModels.models(forTask: "Generate Image").contains(Self.zImage))
+    }
+
+    @Test @MainActor func galleryFlows60And66AreNowRunnableAndTheirSettingsAreNotRefusedByKlein() throws {
+        let catalog = try Self.catalog()
+        let klein = try Self.klein()
+        let claimable = Self.claimable(catalog)
+        let desc = try #require(TaskCatalog.get("Generate Image"))
+        for file in ["60-GenerateProductShot.cat", "66-SeedSweep.cat"] {
+            let doc = try Self.galleryDoc(file)
+            #expect(FlowRunnability.refusalReason(for: doc, catalog: catalog, installed: [klein.id], totalRAMGB: 19, claimableModelIDs: claimable) == nil, Comment(rawValue: file))
+            // the settings the file writes pass Klein's refusals, so they do not now fail for an unrelated setting
+            var generate: [Row] = []
+            func walk(_ rows: [Row]) { for r in rows { if r.task == "Generate Image" { generate.append(r) }; walk(r.children) } }
+            walk(doc.rows)
+            #expect(generate.count == 1, Comment(rawValue: file))
+            for row in generate {
+                #expect(row.model == Self.zImage)
+                let settings = (row.settings ?? "").replacingOccurrences(of: "{item}", with: "3")
+                let config = try executor().stageConfig(for: desc, row: Row(task: "Generate Image", model: row.model, settings: settings), path: "1", model: klein)
+                #expect(config.quantize == nil)
+                #expect(config.seed != nil, Comment(rawValue: file))
+            }
+        }
+        // not installed: refused only for the missing install, naming the model that actually loads (the preflight's own wording), not for an unknown model
+        let doc60 = try Self.galleryDoc("60-GenerateProductShot.cat")
+        let bare = FlowRunnability.refusalReason(for: doc60, catalog: catalog, installed: [], totalRAMGB: 19, claimableModelIDs: claimable)
+        #expect(bare == nil || !(bare ?? "").contains("runnable-model table"), Comment(rawValue: bare ?? "nil"))
+    }
+
+    @Test @MainActor func galleryFlow61StaysRefusedBecauseEditImageIsUnserved() throws {
+        let catalog = try Self.catalog()
+        let klein = try Self.klein()
+        let doc = try Self.galleryDoc("61-EditInPlace.cat")
+        let reason = FlowRunnability.refusalReason(for: doc, catalog: catalog, installed: [klein.id], totalRAMGB: 19, claimableModelIDs: Self.claimable(catalog))
+        #expect(reason != nil)
+        #expect(!TaskModels.isServedByExecutor("Edit Image"))
     }
 
     private static func sha256(_ data: Data) -> String {

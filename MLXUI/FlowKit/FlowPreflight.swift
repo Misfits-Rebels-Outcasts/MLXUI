@@ -147,6 +147,14 @@ nonisolated struct FlowPreflight {
             }
             switch CatalogBridge.resolve(display, catalog: catalog) {
             case .runnable(let slot, let equivalence, _):
+                // MP7-W-f: a bridge row names a MODEL, not a task. A task `RealExecutor` has no path for (`Edit Image`, the latent tasks) must not pass preflight just because the
+                // model it names resolves (gallery 61 writes `Edit Image   Z-Image Turbo (4-bit)`, which now resolves to Klein): refuse it here, plainly, before any download.
+                if desc.refKind == .engine, !TaskModels.isServedByExecutor(desc.name) {
+                    result.needs.append(ModelNeed(
+                        task: row.task ?? "?", display: display, model: nil, installed: false, equivalence: nil,
+                        blockingReason: "\(desc.name) isn't something this version of Flows can run yet, with \(display) or any other model."))
+                    continue
+                }
                 switch slot.readiness(installedModelIDs: installedModelIDs) {
                 // `.ready`/`.needsDownload` already encode installedness — re-deriving it
                 // from `installedModelIDs.contains(slot.modelEntry?.id ?? "")` here was
