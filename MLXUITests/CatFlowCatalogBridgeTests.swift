@@ -171,7 +171,9 @@ struct CatFlowCatalogBridgeTests {
         // MP2-W added "Parakeet TDT 0.6B v3", 29 -> 30 (owner ruling AE, 2026-10-24; same convention).
         // MP3-W added "Qwen3-ASR 1.7B", 30 -> 31 (implementer's call, pending owner confirmation; same convention).
         // MP6-W added "LFM2.5-Audio 1.5B", 31 -> 32 (implementer's call, pending owner confirmation; same convention).
-        #expect(CatalogBridge.entries.count == 32)
+        // MP7-W added "FLUX.2 Klein 4B", 32 -> 33 (owner-ordered MP7-W, 2026-11-01; same convention).
+        // MP7-W-f added the exact display "Z-Image Turbo (4-bit)" as a `.substitute` onto Klein, 33 -> 34 (owner ruling, Boo, 2026-11-01; same convention).
+        #expect(CatalogBridge.entries.count == 34)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
@@ -407,7 +409,9 @@ struct CatFlowCatalogBridgeTests {
         // MP2-W added "Parakeet TDT 0.6B v3", 29 -> 30 (owner ruling AE, 2026-10-24; same convention).
         // MP3-W added "Qwen3-ASR 1.7B", 30 -> 31 (implementer's call, pending owner confirmation; same convention).
         // MP6-W added "LFM2.5-Audio 1.5B", 31 -> 32 (implementer's call, pending owner confirmation; same convention).
-        #expect(CatalogBridge.entries.count == 32)
+        // MP7-W added "FLUX.2 Klein 4B", 32 -> 33 (owner-ordered MP7-W, 2026-11-01; same convention).
+        // MP7-W-f added the exact display "Z-Image Turbo (4-bit)" as a `.substitute` onto Klein, 33 -> 34 (owner ruling, Boo, 2026-11-01; same convention).
+        #expect(CatalogBridge.entries.count == 34)
     }
 
     // MARK: - MoC-4-4: Qwen3 Reranker 0.6B joins the bridge, the model on MoC-3's seam

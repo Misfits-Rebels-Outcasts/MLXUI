@@ -30,6 +30,7 @@ nonisolated enum ModelSupport {
         // DeepFilterNet 3 (enhance) → DeepFilterNetEngine in MP5-3a; the MP5-1 "no runner yet" gap is gone.
         // LFM2.5-Audio (voice) → LFMAudioEngine in MP6-3a; the MP6-1 "no runner yet" gap is gone.
         // RIFE 4.25 (interpolate) → RIFEEngine + RIFERunView in RIFE-3/4; the RIFE-1 "no runner yet" gap is gone.
+        // FLUX.2 Klein 4B (image) → Flux2KleinModule in MP7-4 (engine MP7-3a…3h); the MP7-2 "no runner yet" gap is gone.
     ]
 
     /// WW2-3-7 (owner ruling 2026-10-23; the WW6 "show it, don't fail it" rule): the OS a model's runner needs, shown
@@ -59,8 +60,11 @@ nonisolated enum ModelSupport {
     }
 
     /// A human-readable reason this model can't run yet, or `nil` if it should run.
-    static func unsupportedReason(for model: ModelEntry) -> String? {
+    ///
+    /// `ignoringGaps` (MP7-3a) lists `idFragment`s to treat as already removed, so a test can show what a model does once
+    /// its gap is gone (the Klein module registering in MP7-3h). Empty by default; production never passes it.
+    static func unsupportedReason(for model: ModelEntry, ignoringGaps: [String] = []) -> String? {
         let haystack = (model.id + " " + model.hfModelId).lowercased()
-        return gaps.first { haystack.contains($0.idFragment) }?.reason
+        return gaps.first { haystack.contains($0.idFragment) && !ignoringGaps.contains($0.idFragment) }?.reason
     }
 }

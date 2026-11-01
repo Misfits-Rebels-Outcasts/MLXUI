@@ -95,17 +95,17 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
     func stage(for model: ModelEntry, config: StageConfig,
                builder: Builder) async throws -> any PipelineStage {
         try await acquire(for: model, config: config, maxWait: nil, leased: false, holder: nil, booksWeights: true,
-                          builder: builder).stage
+                          footprintOverride: nil, builder: builder).stage
     }
 
     /// SC-2a: `stage(for:)`, leased. The engine is **in use until `hold` is released** (or dropped): LRU eviction
     /// skips it, an explicit `clear()` dooms it (its bytes stay booked until the release), and a build that can
     /// only fit by evicting it waits — at most `maxWait`, then `MemoryBudget.WaitError`.
     func lease(for model: ModelEntry, config: StageConfig, maxWait: Duration = MemoryBudget.defaultMaxWait,
-               holder: MemoryBudget.HolderKind? = .flow, booksWeights: Bool = true,
+               holder: MemoryBudget.HolderKind? = .flow, booksWeights: Bool = true, footprintOverride: Int64? = nil,
                builder: Builder) async throws -> (stage: any PipelineStage, hold: MemoryBudget.Hold) {
         let got = try await acquire(for: model, config: config, maxWait: maxWait, leased: true, holder: holder,
-                                    booksWeights: booksWeights, builder: builder)
+                                    booksWeights: booksWeights, footprintOverride: footprintOverride, builder: builder)
         return (got.stage, got.hold ?? .inert)
     }
 
@@ -113,15 +113,15 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
     /// it go (its last use). A stage that books no bytes here (an LLM stage — its weights are leased in the pool by
     /// `LLMEngine`) comes back unwrapped.
     func leasedStage(for model: ModelEntry, config: StageConfig, maxWait: Duration = MemoryBudget.defaultMaxWait,
-                     holder: MemoryBudget.HolderKind? = .flow, booksWeights: Bool = true,
+                     holder: MemoryBudget.HolderKind? = .flow, booksWeights: Bool = true, footprintOverride: Int64? = nil,
                      builder: Builder) async throws -> any PipelineStage {
         let (stage, hold) = try await lease(for: model, config: config, maxWait: maxWait, holder: holder,
-                                            booksWeights: booksWeights, builder: builder)
+                                            booksWeights: booksWeights, footprintOverride: footprintOverride, builder: builder)
         return hold.isInert ? stage : LeasedStage(inner: stage, hold: hold)
     }
 
     private func acquire(for model: ModelEntry, config: StageConfig, maxWait: Duration?, leased: Bool,
-                         holder: MemoryBudget.HolderKind?, booksWeights: Bool,
+                         holder: MemoryBudget.HolderKind?, booksWeights: Bool, footprintOverride: Int64?,
                          builder: Builder) async throws -> (stage: any PipelineStage, hold: MemoryBudget.Hold?) {
         let key = Key(id: model.id, config: config)
         if let cached = withLock({ () -> (stage: any PipelineStage, hold: MemoryBudget.Hold?)? in
@@ -133,7 +133,7 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
         }
 
         // Make room *before* building (peak memory must not briefly hold both).
-        let bytes = booksWeights ? footprint(of: model) : 0
+        let bytes = booksWeights ? (footprintOverride ?? footprint(of: model)) : 0
         let reservation: MemoryBudget.Reservation
         if let maxWait {
             reservation = try await budget.reserveBounded(bytes: bytes, for: self, label: model.id, maxWait: maxWait,
@@ -189,8 +189,8 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
     /// engine if it isn't cached (the kind's real charge, `footprint(of:)` for a stage that books here; `ModelLoadProfile`
     /// for one whose engine books its own weights, the VLM, 0 for its weights when already resident), plus the per-call
     /// working set of a vision model. 0 = the run adds nothing.
-    func bytesNeeded(for model: ModelEntry, config: StageConfig, booksWeights: Bool) async -> Int64 {
-        if booksWeights { return isCached(model, config: config) ? 0 : footprint(of: model) }
+    func bytesNeeded(for model: ModelEntry, config: StageConfig, booksWeights: Bool, footprintOverride: Int64? = nil) async -> Int64 {
+        if booksWeights { return isCached(model, config: config) ? 0 : (footprintOverride ?? footprint(of: model)) }
         let directory = modelDirectory(model)
         let resident = await ModelContainerPool.vlm.residentBytes(directory: directory) != nil
         let weights = resident ? 0 : ModelLoadProfile.charge(kind: model.runnerKind, directory: directory,
@@ -242,6 +242,8 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
     /// only when the files aren't there to measure (or, for a kind nobody has measured, as a floor).
     func footprint(of model: ModelEntry) -> Int64 {
         if !countsLLMWeights && model.runnerKind == .llm { return 0 }
+        // MP7-4: the staged Klein engine holds one component at a time (about 5.9 GB at 1024 x 1024), not its 16 GB of files x 1.10.
+        if let staged = Flux2KleinBooking.bytes(for: model) { return staged }
         return ModelLoadProfile.charge(kind: model.runnerKind, directory: modelDirectory(model),
                                        catalogFallback: Int64(model.ramGB * 1_073_741_824))
     }
@@ -254,6 +256,12 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
         recency.removeAll { $0 == key }
         recency.insert(key, at: 0)
     }
+}
+
+/// MP7-4-FIX-1: a stage that knows what one run of it needs, from its own settings (a size or a quantize the catalog's single `ramGB` cannot express).
+/// `LeasingStage` books this instead of `EngineCache.footprint(of:)` when it is non-nil.
+nonisolated protocol LeaseSized {
+    var leaseBytes: Int64? { get }
 }
 
 /// SC-2a — a cached stage with its lease riding on it. The lease is returned when the wrapper is dropped, i.e. when
@@ -325,8 +333,11 @@ nonisolated final class LeasingStage: PipelineStage, @unchecked Sendable {
     /// `EngineCache.footprint` for a stage that books here; `ModelLoadProfile` for one whose engine books its own
     /// weights, the VLM), plus the per-call working set of a vision model. 0 = the run adds nothing to the ledger.
     func bytesNeeded() async -> Int64 {
-        await cache.bytesNeeded(for: model, config: cacheConfig, booksWeights: booksWeights)
+        await cache.bytesNeeded(for: model, config: cacheConfig, booksWeights: booksWeights, footprintOverride: sizedBytes)
     }
+
+    /// MP7-4-FIX-1: a stage whose memory depends on its own settings (Klein: size and quantize) says what this run books.
+    private var sizedBytes: Int64? { (probe as? LeaseSized)?.leaseBytes }
 
     var id: String { probe.id }
     var name: String { probe.name }
@@ -347,7 +358,8 @@ nonisolated final class LeasingStage: PipelineStage, @unchecked Sendable {
         // every load inside the run is the Run window's, whatever holder the engine itself names
         return try await MemoryBudget.RunWindowScope.$holder.withValue(.runWindow) {
             let (stage, hold) = try await cache.lease(for: model, config: cacheConfig, maxWait: maxWait,
-                                                      holder: .runWindow, booksWeights: booksWeights) { _, _ in probe }
+                                                      holder: .runWindow, booksWeights: booksWeights,
+                                                      footprintOverride: sizedBytes) { _, _ in probe }
             lock.lock(); active += 1; lock.unlock()
             defer {
                 hold.release()                                     // on return, throw and cancel alike

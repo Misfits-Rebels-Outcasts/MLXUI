@@ -140,7 +140,10 @@ struct CatFlowPreflightSetupTests {
                                          claimableModelIDs: claimable)
             let modelOnly = FlowPreflight.run(modelRowsOnly(doc), catalog: catalog, installedModelIDs: [],
                                               totalRAMGB: 16, claimableModelIDs: claimable)
-            #expect(FlowPreflight.blockedReason(full, totalRAMGB: 16) == FlowPreflight.blockedReason(modelOnly, totalRAMGB: 16),
+            // MP7-R (owner-ruled sentence, Boo, 2026-11-01): the unserved-task refusal names its row ("Row 3: Edit Image is not supported in this app yet."), and the
+            // model-rows-only copy renumbers the rows, so the comparison ignores a leading "Row N: ".
+            func unnumbered(_ reason: String?) -> String? { reason?.replacingOccurrences(of: #"^Row [0-9]+: "#, with: "", options: .regularExpression) }
+            #expect(unnumbered(FlowPreflight.blockedReason(full, totalRAMGB: 16)) == unnumbered(FlowPreflight.blockedReason(modelOnly, totalRAMGB: 16)),
                     "flow \(metadata.flowID)'s blocked reason must not move")
             #expect(FlowPreflight.blockedAction(full) == FlowPreflight.blockedAction(modelOnly),
                     "flow \(metadata.flowID)'s blocked action must not move")

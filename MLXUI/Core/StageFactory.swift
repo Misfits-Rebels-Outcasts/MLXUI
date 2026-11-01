@@ -28,6 +28,10 @@ nonisolated struct StageConfig: Sendable, Hashable {
     /// One model that serves two tasks (LFM2.5-Audio: speech to text *and* text to speech) can't be told apart by its
     /// `RunnerKind` alone; every other SDK ignores it. Part of the engine-cache key on purpose: the two tasks build two stages.
     var flowTask: String?
+    /// MP7-W: the flow row's `quantize=` for a model whose manifest declares one (FLUX.2 Klein: 4 or 8). Set only by `RealExecutor.stageConfig` for such a row, already
+    /// validated there; `nil` = the stage's own default. Part of the engine-cache key (a different quantize is a different engine) and so kept by `weightsOnly`.
+    /// nil = not set. Klein resolves it to the manifest default (8) at `makeStage`; every other stage ignores it.
+    var quantize: Int?
 
     init(
         voice: String? = nil,
@@ -47,7 +51,8 @@ nonisolated struct StageConfig: Sendable, Hashable {
         scale: Int? = nil,
         query: String? = nil,
         topK: Int? = nil,
-        flowTask: String? = nil
+        flowTask: String? = nil,
+        quantize: Int? = nil
     ) {
         self.voice = voice
         self.speed = speed
@@ -64,6 +69,7 @@ nonisolated struct StageConfig: Sendable, Hashable {
         self.query = query
         self.topK = topK
         self.flowTask = flowTask
+        self.quantize = quantize
     }
 
     static let `default` = StageConfig()

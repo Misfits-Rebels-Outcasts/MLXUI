@@ -396,6 +396,29 @@ nonisolated enum CatalogBridge {
             candidates: ["mlx-community/LFM2.5-Audio-1.5B-6bit"],
             equivalence: .same,
             manifestFile: "lfm2.5-audio-1.5b-6bit.json"),
+        // MP7-W (RSI/DelegateModelPackBacklog.md, MP7-W) -- FLUX.2 Klein 4B, the `Generate Image` row's second model (named in the pool since CFM-R12). The catalog card is the
+        // mlx-community bf16 snapshot that the app quantizes at load (flows default to quantize 8), the manifest pins `black-forest-labs/FLUX.2-klein-4B`: a different repo
+        // of the same checkpoint, so `.requantized` (silent, as the Whisper Large v3 and LFM2-VL rows). The manifest is a byte-identical copy of
+        // `catflow-mlx/models/curated/flux2-klein-4b.json` (never edited; its "FLUX.2 Community License" vs the card's Apache-2.0 is a SPEC-Q, backlog MP7-1 D).
+        // Only `Generate Image` is served: `Init/Encode/Decode Latent` stay unserved (no stage exposes them). The manifest's `lora`, `controlnet`, `preview`, `negative`, a
+        // non-default `guidance` and a `quantize` outside 4/8 are refused by name in `RealExecutor.stageConfig`, never dropped.
+        BridgeEntry(
+            display: "FLUX.2 Klein 4B",
+            pinnedID: "black-forest-labs/FLUX.2-klein-4B",
+            candidates: ["mlx-community/FLUX.2-klein-4B-bf16"],
+            equivalence: .requantized,
+            manifestFile: "flux2-klein-4b.json"),
+        // MP7-W-f (owner, Boo, 2026-11-01: "Gallery 60/66: add a .substitute bridge row for the exact display 'Z-Image Turbo (4-bit)' -> FLUX.2 Klein 4B, as one more MP7-W task.")
+        // The bundled gallery flows 60 (Generate a Product Shot) and 66 (Eight Seeds, One Sheet) write this name, and no Z-Image card exists in browser.json, so they were refused.
+        // `.substitute` shows "running Z-Image Turbo (4-bit) as mlx-community/FLUX.2-klein-4B-bf16" on the row, never hidden. Only this EXACT display: the bare "Z-Image Turbo"
+        // stays unbridged, and no other substitution is guessed. The settings authority is Klein's manifest, so a row's guidance/negative/lora/controlnet/preview/quantize are judged
+        // as Klein's. It is listed AFTER the Klein row on purpose: `entry(forCandidate:)` (and so `TaskModels.displayName(for:)`) must keep answering "FLUX.2 Klein 4B" for that card.
+        BridgeEntry(
+            display: "Z-Image Turbo (4-bit)",
+            pinnedID: "black-forest-labs/FLUX.2-klein-4B",
+            candidates: ["mlx-community/FLUX.2-klein-4B-bf16"],
+            equivalence: .substitute,
+            manifestFile: "flux2-klein-4b.json"),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {
@@ -428,7 +451,7 @@ nonisolated enum CatalogBridge {
     /// `.same` with no curated manifest (a manifest-less model is non-stochastic: `withSeed`
     /// already tolerates the missing file). Without this, 20 of the 34 catalog entries would be
     /// selectable and pinned yet refused at Run.
-    static func resolve(_ display: String, catalog: [ModelEntry]) -> CatalogBridgeResolution {
+    static func resolve(_ display: String, catalog: [ModelEntry], ignoringGaps: [String] = []) -> CatalogBridgeResolution {
         if let entry = entry(for: display) {
             for candidate in entry.candidates {
                 if let model = catalog.first(where: {
@@ -453,6 +476,11 @@ nonisolated enum CatalogBridge {
         }
         // No bridge row: an R14-2/7 derived pick. Match the catalog directly.
         if let model = catalog.first(where: { $0.hfModelId == display || $0.displayName == display }) {
+            // MP7-2: a catalogued model with a known "no runner yet" gap (`ModelSupport`) is not runnable — without this the
+            // display-name fallback would offer the download and then fail at Run with an unsupported-model error.
+            if let gap = ModelSupport.unsupportedReason(for: model, ignoringGaps: ignoringGaps) {
+                return .notRunnable(display: display, reason: "\(display): \(gap)", action: nil)
+            }
             return .runnable(.cataloged(model), equivalence: .same, note: nil)
         }
         // RM-3: a row naming a remote provider by its own `name @ provider` text, whose

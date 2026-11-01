@@ -565,7 +565,7 @@ nonisolated struct RealExecutor: FlowExecutor {
             throw FlowError.badInputCardinality(row: "\(path)", expected: "an input", got: 0)
         }
         let config = try await sanitizedPrompt(
-            stageConfig(for: desc, row: row, path: "\(path)"), for: modelEntry)
+            stageConfig(for: desc, row: row, path: "\(path)", model: modelEntry), for: modelEntry)
         let stage = try await makeModelStage(modelEntry, config)
         let adapter = SingleMediaStage(id: modelEntry.id, name: display(row),
                                        inner: stage, rowLabel: "\(path)",
@@ -1155,7 +1155,10 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// reaches here, so `seed` is a concrete number when the row is stochastic — the stage
     /// sees exactly what the row settled on, never the `seed=auto`/`{item}` token.
     /// Internal (not `private`) so the settings→voice/language/seed mapping is unit-testable.
-    func stageConfig(for desc: TaskDescriptor, row: Row, path: String = "?") throws -> StageConfig {
+    ///
+    /// MP7-W: `model` is the row's resolved catalog entry. For a FLUX.2 Klein row the manifest's settings this build cannot honour (`guidance` off its default, `negative`,
+    /// `lora`, `controlnet`, `preview`, `quantize` outside 4/8) are refused by name here, never dropped, and a valid `quantize` rides on the config. Other diffusion rows are untouched.
+    func stageConfig(for desc: TaskDescriptor, row: Row, path: String = "?", model: ModelEntry? = nil) throws -> StageConfig {
         let settings = FlowSettings(row.settings)
         if desc.refName == "engines.tts.speak" {
             let voice = settings.value(for: "voice") ?? settings.firstBare()
@@ -1195,12 +1198,21 @@ nonisolated struct RealExecutor: FlowExecutor {
                 }
                 scale = Int(value)
             }
+            // MP7-W: no row label in the sentence; the interpreter wraps a thrown row error as "Row N failed: ...".
+            var quantize: Int?
+            if let model, Flux2KleinBooking.isKlein(model) {
+                if let sentence = Flux2KleinSDK.refusal(forRowSetting: { number($0) }, rowLabel: "") {
+                    throw FlowSettingRefusal(description: sentence)
+                }
+                quantize = number("quantize").flatMap(Int.init)
+            }
             return StageConfig(
                 seed: number("seed").flatMap(UInt64.init),
                 width: number("width").flatMap(Int.init),
                 height: number("height").flatMap(Int.init),
                 steps: number("steps").flatMap(Int.init),
-                scale: scale
+                scale: scale,
+                quantize: quantize
             )
         }
         if desc.refName.hasPrefix("engines.rerank.") {
@@ -1319,4 +1331,10 @@ nonisolated struct RealExecutor: FlowExecutor {
             throw FlowError.unsupportedKind(row: rowLabel, kind: .vector)
         }
     }
+}
+
+/// MP7-W: a setting a model's stage cannot honour, refused with a full sentence. `String(describing:)` is how the flow interpreter reports a row failure, so the description
+/// is the sentence ("Row 3 failed: FLUX.2 Klein 4B can't use a negative prompt in this build; remove the negative setting.").
+nonisolated struct FlowSettingRefusal: Error, CustomStringConvertible, Equatable {
+    let description: String
 }

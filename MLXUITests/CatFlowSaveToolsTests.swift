@@ -111,11 +111,14 @@ struct CatFlowSaveToolsTests {
         #expect(runs("8-VoiceoverBed") == nil)
         #expect(runs("7-UpscaleSmall") == nil, "SeedVR2 3B is in the catalog (SV-AM1)")
         #expect(runs("6-CutOutSubject") == nil, "SAM Base bridges onto sam3-4bit (CFM-R15-1)")
-        // These still refuse: no bridge model exists for their task.
-        for fid in ["61-EditInPlace", "62-SeeDepth",
-                    "60-GenerateProductShot", "66-SeedSweep"] {
+        // MP7-W-f (owner ruling, Boo, 2026-11-01): 60 and 66 write "Z-Image Turbo (4-bit)", now a `.substitute` bridge row onto FLUX.2 Klein 4B; with claimableModelIDs empty
+        // here the substitute still resolves (readiness is install-only), so they pass the live gate.
+        #expect(runs("60-GenerateProductShot") == nil)
+        #expect(runs("66-SeedSweep") == nil)
+        // These still refuse: Edit Image is unserved (the preflight names the task), Depth Pro has no bridge model.
+        for fid in ["61-EditInPlace", "62-SeeDepth"] {
             let reason = runs(fid)
-            #expect(reason != nil, "\(fid) should refuse at the live gate (no bridge model)")
+            #expect(reason != nil, "\(fid) should refuse at the live gate")
         }
     }
 

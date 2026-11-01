@@ -49,6 +49,7 @@ let installedModules: [ModelModule.Type] = [
     ClefModule.self,
     SDXLTurboModule.self,
     FluxModule.self,
+    Flux2KleinModule.self,   // MP7-4: claims the Klein 4B entry only; FluxSDK.claim returns .no for FLUX.2-family ids
     SegmentAnythingModule.self,
     WanVideoModule.self,
     SeedVR2Module.self,

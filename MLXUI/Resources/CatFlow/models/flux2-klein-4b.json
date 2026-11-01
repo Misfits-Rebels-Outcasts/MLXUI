@@ -1,0 +1,90 @@
+{
+  "id": "black-forest-labs/FLUX.2-klein-4B",
+  "display": "FLUX.2 Klein 4B",
+  "kind": "local",
+  "engine": "mlx-diffusion",
+  "tasks": [
+    "Generate Image",
+    "Init Latent",
+    "Encode Latent",
+    "Decode Latent"
+  ],
+  "settings": {
+    "steps": {
+      "type": "number",
+      "min": 1,
+      "max": 50,
+      "default": 4,
+      "maps_to": "num_inference_steps"
+    },
+    "width": {
+      "type": "number",
+      "min": 256,
+      "max": 2048,
+      "default": 1024
+    },
+    "height": {
+      "type": "number",
+      "min": 256,
+      "max": 2048,
+      "default": 1024
+    },
+    "seed": {
+      "type": "number",
+      "min": 0,
+      "max": 4294967295,
+      "maps_to": "seed",
+      "auto_ok": true
+    },
+    "guidance": {
+      "type": "number",
+      "min": 0.0,
+      "max": 10.0,
+      "default": 2.0
+    },
+    "negative": {
+      "type": "string",
+      "default": ""
+    },
+    "quantize": {
+      "type": "number",
+      "min": 3,
+      "max": 8,
+      "default": 8,
+      "maps_to": "quantize"
+    },
+    "lora": {
+      "type": "adapter",
+      "adapter_kind": "lora",
+      "repeatable": true,
+      "weight_range": [
+        0.0,
+        2.5
+      ]
+    },
+    "controlnet": {
+      "type": "adapter",
+      "adapter_kind": "controlnet"
+    },
+    "preview": {
+      "type": "bool",
+      "default": false,
+      "maps_to": "preview"
+    }
+  },
+  "capabilities": {
+    "supports_guidance": true,
+    "variant": "flux-2-klein",
+    "latent_space": "flux-2"
+  },
+  "resources": {
+    "disk_gb": 15.0,
+    "ram_gb": 8.0,
+    "bits": 8
+  },
+  "source": "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B",
+  "checksum": "N/A",
+  "license": "FLUX.2 Community License",
+  "manifest_version": 1,
+  "pinned": false
+}

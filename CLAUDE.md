@@ -142,7 +142,7 @@ Vendor ─── PaddleOCRVL (local SPM package)
 ```
 
 **Modules** (`MLXUI/Modules/`) — Chat, VLM, OCR, DotsOCR, DeepSeekOCR, PaddleOCR, Whisper,
-MLXWhisper, Voxtral, MLXAudioTTS, Kokoro, Embedding, Flux, StableDiffusion, MusicGen,
+MLXWhisper, Voxtral, MLXAudioTTS, Kokoro, Embedding, Flux, Flux2Klein, StableDiffusion, MusicGen,
 SegmentAnything, WanVideo, SeedVR2, Tools, Demo. Each registers itself in `App/ModelModules.swift`;
 `ModelRegistry.bestModule(for:)` is what resolves a `ModelEntry` to a runner.
 
@@ -393,12 +393,21 @@ Known inconsistencies in the tree itself — fix or rule on them, don't propagat
 - **`MLXUITests` carries a target-level `MACOSX_DEPLOYMENT_TARGET = 26.4`** while both app targets
   take **14.0** from `Config/Shared.xcconfig`. A test target with a higher floor than the app can
   compile against APIs the shipping binary cannot use.
-- **`AppState.hiddenFlowNumbers` is `[]`**, though `CFM-R12-FIX-13` records an owner ruling of
-  2026-08-25 to keep gallery flows 60–69 hidden. Either a later ruling isn't written down, or it
-  drifted back.
+- **`AppState.hiddenFlowNumbers` is `[61, 62, 67, 68]`** (owner ruling, Boo, 2026-11-01, which
+  supersedes the 2026-08-25 hide-60–69 ruling, `CFM-R12-FIX-13`): gallery 60, 66 and 69 are shown,
+  and the four flows the live gate still refuses are hidden (61 Edit Image, 62 Depth Pro, 67/68 the
+  latent and checkpoint pipelines). `GalleryHiddenFlowsTests` pins the set to "the bundled 6x flows
+  refused at the live gate", so a newly runnable flow is a deliberate change. **But
+  `AppState.hideAdvanceGallery = true` hides every non-basic bundled flow**, so in the app today
+  AI Workflows shows only the 8 Basic flows and none of 60/66/69 is visible (owner, 2026-11-01:
+  keep it as is; out of MP7's scope). `hiddenFlowNumbers` takes effect when the Advance Gallery
+  returns.
 - **WhisperKit is still linked** although the MLX-first guardrail superseded it (A2).
-- **`StageConfig` carries no `seed` / `width` / `height` / `steps`**, so diffusion rows' settings
-  are silently dropped — see `CFM-R16-1` in `RSI/DelegateMergeBacklog.md`.
+- **`StageConfig` now carries `seed` / `width` / `height` / `steps`** (CFM-R16-1) and `quantize`
+  (MP7-W: `Int?`, `nil` = not set, set only for a FLUX.2 Klein flow row, which resolves it to the
+  manifest default 8 at `makeStage`; every other stage ignores it). Diffusion rows' settings are no
+  longer dropped, but a stage that cannot honour one must refuse by name (as `FluxSDK`,
+  `Flux2KleinSDK` and `RealExecutor.stageConfig` do), never ignore it.
 
 ## Conventions (from the project style guide)
 
