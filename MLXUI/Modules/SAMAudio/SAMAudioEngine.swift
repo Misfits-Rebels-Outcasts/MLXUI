@@ -7,7 +7,7 @@ import MLXAudioSTS
 /// description of a sound ("speech", "music", "singing voice") go in; two tracks come out — the named sound and
 /// everything else. Loads the **installed** folder only (the A2 pattern): `SAMAudio(config:)` +
 /// `loadConvertedWeights`, never `fromPretrained` / `fromDirectory`, so no code path here can download weights
-/// (`SAMAudioNoNetworkScanTests` reads the source to keep it that way).
+/// (`SAMAudioModuleTests.noModuleFileCanDownloadWeights` reads the source to keep it that way).
 ///
 /// **Trap 1 — the text encoder is not in the SAM-Audio repo.** `SAMAudio`'s `T5TextEncoder` resolves
 /// `config.textEncoder.name`; when that string is not an existing path it calls `HubApi().snapshot(from: "t5-base")`,
