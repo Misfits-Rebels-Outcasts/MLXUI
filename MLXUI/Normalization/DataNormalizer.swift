@@ -18,6 +18,7 @@ enum DataNormalizer {
             "flux-1-dev-non-commercial-license": "FLUX.1-dev Non-Commercial",
             "stability-ai-community-license": "Stability AI Community License (RAIL++-M)",
             "lfm1.0": "LFM Open License v1.0",   // MP6-2: the HF card's license_name for LFM2.5-Audio
+            "sam-license": "SAM License",   // MC1: the HF card's license_name for facebook/sam-audio-base
         ]
         let lower = raw.lowercased()
         for (key, value) in map where lower.contains(key) {

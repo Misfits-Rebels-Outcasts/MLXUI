@@ -897,6 +897,9 @@ final class ModelRunner {
         case .interpolate:
             // Unreachable in practice since RIFE-3d registered RIFEModule (same as .voice above).
             showUnsupported("Frame interpolation", model)
+        case .separate:
+            // Unreachable in practice since MC1-4 registered SAMAudioModule (same as .interpolate above).
+            showUnsupported("Sound isolation", model)
         }
     }
 
