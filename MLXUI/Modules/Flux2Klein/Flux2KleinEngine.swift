@@ -281,12 +281,17 @@ nonisolated extension Flux2KleinStageSource {
 nonisolated struct Flux2KleinInstalledStages: Flux2KleinStageSource {
     let modelDirectory: URL
     private let vaeDType: DType?
+    private let encoderUnquantized: Bool
 
-    /// Production: the VAE decodes in the checkpoint's bf16 (owner, 2026-11-01: "Keep bf16").
-    init(modelDirectory: URL) { self.modelDirectory = modelDirectory; self.vaeDType = nil }
+    /// Production: the VAE decodes in the checkpoint's bf16 (owner, 2026-11-01: "Keep bf16"); the encoder is built at `max(quantize, 8)` (`Flux2KleinQuantization`).
+    init(modelDirectory: URL) { self.modelDirectory = modelDirectory; self.vaeDType = nil; self.encoderUnquantized = false }
 
     /// TEST-ONLY: an fp32 VAE decode (twice the peak memory). Not reachable from a row or the Run UI.
-    init(modelDirectory: URL, vaeComputeDTypeForTesting: DType?) { self.modelDirectory = modelDirectory; self.vaeDType = vaeComputeDTypeForTesting }
+    init(modelDirectory: URL, vaeComputeDTypeForTesting: DType?) { self.modelDirectory = modelDirectory; self.vaeDType = vaeComputeDTypeForTesting; self.encoderUnquantized = false }
+
+    /// TEST-ONLY (MP7-4 smoke row 140): keeps the text encoder in the checkpoint's bf16 (6.85 GB) instead of the production 8-bit, so the owner can compare
+    /// encoder 8 vs bf16 on the same seed. The production constant (`Flux2KleinQuantization`) is untouched and nothing a row or the Run UI says reaches this.
+    init(modelDirectory: URL, encoderUnquantizedForTesting: Bool) { self.modelDirectory = modelDirectory; self.vaeDType = nil; self.encoderUnquantized = encoderUnquantizedForTesting }
 
     var computeDType: DType { .bfloat16 }
 
@@ -296,7 +301,7 @@ nonisolated struct Flux2KleinInstalledStages: Flux2KleinStageSource {
     }
 
     func makeTextEncoder(quantize: Int) throws -> Flux2KleinTextEncoder {
-        try Flux2KleinTextEncoder.load(textEncoderDirectory: modelDirectory.appendingPathComponent("text_encoder"), bits: quantize)
+        try Flux2KleinTextEncoder.load(textEncoderDirectory: modelDirectory.appendingPathComponent("text_encoder"), bits: encoderUnquantized ? nil : quantize)
     }
 
     func makeTransformer(quantize: Int) throws -> Flux2KleinTransformer {

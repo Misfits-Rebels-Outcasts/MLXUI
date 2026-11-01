@@ -242,6 +242,8 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
     /// only when the files aren't there to measure (or, for a kind nobody has measured, as a floor).
     func footprint(of model: ModelEntry) -> Int64 {
         if !countsLLMWeights && model.runnerKind == .llm { return 0 }
+        // MP7-4: the staged Klein engine holds one component at a time (about 5.9 GB at 1024 x 1024), not its 16 GB of files x 1.10.
+        if let staged = Flux2KleinBooking.bytes(for: model) { return staged }
         return ModelLoadProfile.charge(kind: model.runnerKind, directory: modelDirectory(model),
                                        catalogFallback: Int64(model.ramGB * 1_073_741_824))
     }

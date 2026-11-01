@@ -30,9 +30,7 @@ nonisolated enum ModelSupport {
         // DeepFilterNet 3 (enhance) → DeepFilterNetEngine in MP5-3a; the MP5-1 "no runner yet" gap is gone.
         // LFM2.5-Audio (voice) → LFMAudioEngine in MP6-3a; the MP6-1 "no runner yet" gap is gone.
         // RIFE 4.25 (interpolate) → RIFEEngine + RIFERunView in RIFE-3/4; the RIFE-1 "no runner yet" gap is gone.
-        // MP7-2 (implementer's call, pending owner confirmation): FLUX.2 Klein is catalogued and installable before its module
-        // exists (hand-port, MP7-3a…3h), so flag it. REMOVE THIS GAP IN MP7-3h/MP7-4 when `Modules/Flux2Klein` registers.
-        Gap(idFragment: "flux.2-klein", reason: "FLUX.2 Klein has no runner in this build yet. The model installs, but Run isn't available until the Klein module ships."),
+        // FLUX.2 Klein 4B (image) → Flux2KleinModule in MP7-4 (engine MP7-3a…3h); the MP7-2 "no runner yet" gap is gone.
     ]
 
     /// WW2-3-7 (owner ruling 2026-10-23; the WW6 "show it, don't fail it" rule): the OS a model's runner needs, shown

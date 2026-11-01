@@ -682,10 +682,10 @@ struct Flux2KleinRegistryRoutingTests {
         }
     }
 
-    /// This slice registers nothing: the shipping registry still resolves no module for Klein, and the Local Server's table has no Klein row.
-    @Test func thisSliceRegistersNothingForKlein() throws {
-        let source = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("MLXUI/App/ModelModules.swift"), encoding: .utf8)
-        #expect(!source.lowercased().contains("klein"))
+    /// MP7-4 registers the Klein module (the Local Server scan lives in Flux2KleinRegistryClaimTests).
+    @Test func theKleinModuleIsRegistered() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("MLXUI")
+        let modules = try String(contentsOf: root.appendingPathComponent("App/ModelModules.swift"), encoding: .utf8)
+        #expect(modules.contains("Flux2KleinModule.self"))
     }
 }

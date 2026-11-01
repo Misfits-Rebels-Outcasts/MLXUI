@@ -76,12 +76,22 @@ struct Flux2KleinCatalogTests {
         #expect(leaf.allModels.first?.hfModelId == "mlx-community/Flux-1.lite-8B-MLX-Q4", "append-only: existing entries keep their place")
     }
 
-    /// The RAM figure is an int4 estimate, not a measurement, and says so (replaced from the MP7-4 smoke).
-    @Test func ramGBIsLabelledAnEstimate() throws {
+    /// MP7-4: the RAM figure is the largest measured whole-run footprint peak at 1024 x 1024, quantize 8 (MP7-3h 5.83 GB; the MP7-4 matrix and cold run 5.61 to 6.05 GB),
+    /// with its provenance and the 4-bit peak in the description, and no "fits a 16 GB Mac" claim anywhere (owner, 2026-10-31 / 2026-11-01).
+    @Test func ramGBIsTheMeasuredFootprintAtQuantize8WithProvenance() throws {
         let e = try klein()
-        #expect(e.ramGB == 5.0)
-        #expect(e.description?.contains("RAM figure is an estimate (int4 staged, MP7-1") == true)
-        #expect(e.description?.contains("not yet measured") == true)
+        #expect(e.ramGB == 6.05)
+        #expect(e.variants?.first?.ramGB == 6.05)
+        #expect(Flux2KleinBooking.bookedBytes == Int64((e.ramGB * 1e9).rounded()), "the lease books exactly the catalog figure")
+        let description = try #require(e.description)
+        #expect(description.contains("RAM figure is measured"))
+        #expect(description.contains("6.05 GB") && description.contains("quantize 8") && description.contains("1024 x 1024"))
+        #expect(description.contains("quantize 4") && description.contains("5.4 to 6.1 GB"), "the 4-bit peak is recorded too")
+        #expect(!description.contains("not yet measured"))
+        for text in [description, e.summary ?? ""] {
+            #expect(!text.contains("16 GB Mac"), "no unmeasured fit claim")
+        }
+        #expect(e.summary?.contains("about 6 GB") == true && e.summary?.contains("8-bit") == true)
     }
 
     // MARK: - Install file set
@@ -126,17 +136,17 @@ struct Flux2KleinCatalogTests {
         return try JSONDecoder().decode(ModelEntry.self, from: JSONSerialization.data(withJSONObject: json))
     }
 
-    // MARK: - Until the Klein module exists
+    // MARK: - With the Klein module registered (MP7-4)
 
-    /// FluxSDK matches any `.image` + `.mlx` id containing "flux"; Klein must not fall to the FLUX.1 engine (owner, 2026-10-31).
-    @Test func theFlux1ModuleDoesNotClaimKleinButStillClaimsFlux1() throws {
+    /// FluxSDK matches any `.image` + `.mlx` id containing "flux"; Klein must not fall to the FLUX.1 engine (owner, 2026-10-31); the Klein module takes it.
+    @Test func theFlux1ModuleDoesNotClaimKleinButStillClaimsFlux1AndKleinGoesToTheKleinModule() throws {
         let k = try klein()
         #expect(FluxSDK().claim(k) == .no)
         let flux1 = try #require(try catalog().domains.flatMap { $0.allModels }.first { $0.hfModelId == "mlx-community/Flux-1.lite-8B-MLX-Q4" })
         #expect(FluxSDK().claim(flux1) == .exact)
         let registry = ModelRegistry()
         for module in installedModules { module.register(into: registry) }
-        #expect(registry.bestModule(for: k) == nil, "no module may resolve Klein before MP7: \(String(describing: registry.bestModule(for: k)?.descriptor.id))")
+        #expect(registry.bestModule(for: k)?.descriptor.id == "flux2-klein")
         #expect(registry.bestModule(for: flux1)?.descriptor.id == "flux")
         // every other flux-family spelling the guard names
         for hf in ["black-forest-labs/FLUX.2-klein-4B", "someone/flux2-dev-4bit", "x/FLUX-2-anything", "x/klein-9b"] {
@@ -144,41 +154,23 @@ struct Flux2KleinCatalogTests {
         }
     }
 
-    @Test func browseFlagsKleinAsNoRunnerYetAndFlux1IsUnaffected() throws {
+    @Test func theMP72GapIsGoneAndFlux1IsUnaffected() throws {
         let k = try klein()
-        let reason = try #require(ModelSupport.unsupportedReason(for: k))
-        #expect(reason.contains("no runner in this build yet"))
-        #expect(reason.contains("installs"))
+        #expect(ModelSupport.unsupportedReason(for: k) == nil, "the Klein module registered: no more \"no runner yet\"")
         let flux1 = try #require(try catalog().domains.flatMap { $0.allModels }.first { $0.hfModelId == "mlx-community/Flux-1.lite-8B-MLX-Q4" })
         #expect(ModelSupport.unsupportedReason(for: flux1) == nil)
-        // Install is unaffected: the file selection does not consult ModelSupport.
         #expect(!ModelFileSelector.filesToDownload(siblings: Self.tree.map(\.name)).isEmpty)
     }
 
-    /// The pool names "FLUX.2 Klein 4B" (from catflow-mlx) but no workflow may resolve it as runnable yet: the catalog-display
-    /// fallback in `CatalogBridge.resolve` honours the ModelSupport gap, there is no bridge row (MP7-W), and the derived
-    /// pool needs a registry claim it does not have.
-    @Test func workflowsRefuseTheKleinRowHonestly() throws {
+    /// The pool names "FLUX.2 Klein 4B" (from catflow-mlx). There is still no `CatalogBridge` entry and no manifest (MP7-W), so a flow's Model menu offers Klein
+    /// only through the registry claim; this records what a workflow does today so MP7-W changes it on purpose.
+    @Test func workflowsStillHaveNoBridgeEntryForKlein() throws {
         let k = try klein()
         #expect(CatalogBridge.entry(for: "FLUX.2 Klein 4B") == nil, "no CatalogBridge entry until MP7-W")
         #expect(CatalogBridge.entry(forCandidate: Self.hfID) == nil)
-        switch CatalogBridge.resolve("FLUX.2 Klein 4B", catalog: [k]) {
-        case .runnable: Issue.record("Klein resolved as runnable before it has a runner")
-        case .notRunnable(let display, let reason, _):
-            #expect(display == "FLUX.2 Klein 4B")
-            #expect(reason.contains("no runner in this build yet"), Comment(rawValue: reason))
-        }
         let registry = ModelRegistry()
         for module in installedModules { module.register(into: registry) }
         let claimable = Set([k].filter { registry.bestModule(for: $0) != nil }.map(\.id))
-        #expect(claimable.isEmpty)
-        let pool = TaskModels.derivedModels(for: "Generate Image", catalog: [k], claimableModelIDs: claimable)
-        #expect(!pool.contains { $0.id == k.id })
-        // Preflight blocks a flow that names it, with the sentence, instead of offering a 16 GB download.
-        let doc = FlowDocument(version: "0.8", rows: [Row(task: "Generate Image", model: "FLUX.2 Klein 4B", settings: "\"a red fox\"")])
-        let result = FlowPreflight.run(doc, catalog: [k], installedModelIDs: [], totalRAMGB: 64, claimableModelIDs: claimable)
-        let blocked = try #require(FlowPreflight.blockedReason(result, totalRAMGB: 64))
-        #expect(blocked.contains("no runner in this build yet"), Comment(rawValue: blocked))
-        #expect(result.toDownload.isEmpty)
+        #expect(claimable == [k.id])
     }
 }

@@ -384,24 +384,18 @@ private enum Klein {
 }
 
 @Suite struct Flux2KleinGapRemovalTests {
-    /// The MP7-2 gap keeps Klein off the workflow rows only while it has no runner. When the module registers (MP7-3h) the gap is
-    /// removed from `ModelSupport`, and this is what the display-name fallback then does: resolve it as runnable again.
-    @Test func theDisplayNameFallbackBecomesRunnableOnceTheKleinGapIsRemoved() throws {
+    /// The MP7-2 gap kept Klein off the workflow rows while it had no runner. MP7-4 registered the module and removed the gap from `ModelSupport`, so the
+    /// display-name fallback now resolves it as runnable, exactly as `ignoringGaps` predicted in MP7-3a. (There is still no `CatalogBridge` entry or manifest: MP7-W.)
+    @Test func theDisplayNameFallbackIsRunnableNowThatTheKleinGapIsRemoved() throws {
         let data = try Data(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("MLXUI/Resources/browser.json"))
         let browser = try JSONDecoder().decode(BrowserData.self, from: data)
         let klein = try #require(browser.domains.flatMap { $0.allModels }.first { $0.hfModelId == "mlx-community/FLUX.2-klein-4B-bf16" })
 
-        // With the gap in place (today): refused with the sentence.
-        guard case let .notRunnable(_, reason, _) = CatalogBridge.resolve(klein.displayName, catalog: [klein]) else {
-            Issue.record("Klein resolved as runnable while its ModelSupport gap exists"); return
-        }
-        #expect(reason.contains("no runner in this build yet"))
-        // The gap is the only thing deciding it: ignoring it (what removing the entry does) makes the same call runnable.
-        #expect(ModelSupport.unsupportedReason(for: klein) != nil)
+        #expect(ModelSupport.unsupportedReason(for: klein) == nil, "the gap is gone")
         #expect(ModelSupport.unsupportedReason(for: klein, ignoringGaps: ["flux.2-klein"]) == nil)
-        guard case let .runnable(target, equivalence, _) = CatalogBridge.resolve(klein.displayName, catalog: [klein], ignoringGaps: ["flux.2-klein"]) else {
-            Issue.record("with the gap removed the display-name fallback still refuses Klein"); return
+        guard case let .runnable(target, equivalence, _) = CatalogBridge.resolve(klein.displayName, catalog: [klein]) else {
+            Issue.record("the display-name fallback still refuses Klein with the gap removed"); return
         }
         #expect(equivalence == .same)
         if case let .cataloged(model) = target { #expect(model.hfModelId == klein.hfModelId) } else { Issue.record("not a catalog target") }

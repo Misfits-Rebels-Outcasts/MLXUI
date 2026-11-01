@@ -2852,12 +2852,12 @@
           "minMacOSVersion": "14.0",
           "hfRepo": "mlx-community",
           "hfModelId": "mlx-community/FLUX.2-klein-4B-bf16",
-          "ramGB": 5.0,
+          "ramGB": 6.05,
           "downloadSizeGB": 15.98,
           "contextWindow": null,
           "license": "apache-2.0",
           "licenseUrl": "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B/blob/main/LICENSE.md",
-          "description": "# FLUX.2 Klein 4B (bf16)\n\nFLUX.2 Klein 4B is Black Forest Labs' compact text-to-image model: a rectified-flow MMDiT with 5 double-stream and 20 single-stream blocks, a Qwen3-4B text conditioner that reads three of its hidden layers, and the FLUX.2 VAE. It is distilled to make an image in 4 steps.\n\nThis is the mlx-community bf16 MLX snapshot (diffusers folder layout: transformer, text_encoder, vae, tokenizer, scheduler). The app downloads the bf16 files (about 16 GB) and quantizes to 4-bit at load, one component at a time, so a run needs far less memory than the download.\n\n**License:** Apache 2.0 (the 4B tier; the 9B Klein models are non-commercial).\n\nRAM figure is an estimate (int4 staged, MP7-1 §5): about 4-5 GB streamed peak at 1024 x 1024, taken from tensor sizes and not yet measured. It will be replaced by a measured figure once the model runs in this app.",
+          "description": "# FLUX.2 Klein 4B (bf16)\n\nFLUX.2 Klein 4B is Black Forest Labs' compact text-to-image model: a rectified-flow MMDiT with 5 double-stream and 20 single-stream blocks, a Qwen3-4B text conditioner that reads three of its hidden layers, and the FLUX.2 VAE. It is distilled to make an image in 4 steps.\n\nThis is the mlx-community bf16 MLX snapshot (diffusers folder layout: transformer, text_encoder, vae, tokenizer, scheduler). The app downloads the bf16 files (about 16 GB) and quantizes at load, one component at a time: the text encoder to 8-bit, the image model to 8-bit by default (4-bit is offered as smaller, lower quality). Only one component is in memory at once, so a run needs far less memory than the download.\n\n**License:** Apache 2.0 (the 4B tier; the 9B Klein models are non-commercial).\n\nRAM figure is measured, not estimated: the whole-process footprint peaked at 5.6 to 6.05 GB over six runs at 1024 x 1024, 4 steps, quantize 8, on a 19 GB Apple Silicon Mac (MP7-3h and MP7-4; the catalog figure is the largest, 6.05 GB; MLX's own peak is 5.74 GB). At quantize 4 the peak is about the same (5.4 to 6.1 GB) because the picture decoder, not the image model, is the busiest step. Larger sizes need more (a 1344 x 1344 image peaked at 8.25 GB), and the app refuses a size this Mac's memory can't hold, naming the largest it can make. The text encoder stays 8-bit at either setting.",
           "architecture": "Flux2 MMDiT (5 double + 20 single blocks, Qwen3-4B conditioner, FLUX.2 VAE)",
           "languages": [
             "en"
@@ -2877,7 +2877,7 @@
             {
               "quantization": "bf16",
               "format": "mlx-bf16",
-              "ramGB": 5.0,
+              "ramGB": 6.05,
               "downloadSizeGB": 15.98,
               "qualityPercent": 100,
               "hfModelId": "mlx-community/FLUX.2-klein-4B-bf16",
@@ -2885,7 +2885,7 @@
             }
           ],
           "descriptionSource": "mlx-community/FLUX.2-klein-4B-bf16",
-          "summary": "Black Forest Labs' 4B text-to-image model in bf16 MLX, distilled to 4 steps; quantized to 4-bit at load to fit a 16 GB Mac (Apache 2.0)."
+          "summary": "Black Forest Labs' 4B text-to-image model in bf16 MLX, distilled to 4 steps; runs one component at a time, about 6 GB peak at 1024 x 1024 with 8-bit quantize (Apache 2.0)."
         }
       ]
     },
