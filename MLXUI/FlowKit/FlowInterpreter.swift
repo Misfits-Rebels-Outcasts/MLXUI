@@ -1292,6 +1292,7 @@ nonisolated enum FlowInterpreter {
         let name = String(presetTokens.last!.dropFirst("preset=".count)).trimmingCharacters(in: .whitespaces)
         let others = tokens.filter { !$0.hasPrefix("preset=") }
         if presets.isEmpty { return (settings, nil) }   // a .cat — `preset=` is an ordinary setting
+        // SPEC-Q243: a top-level run never binds its own `params:` defaults, so this stays deferred and the row runs with the model's own defaults.
         if isParamRef(name) { return (stripPresetTokens(settings), nil) }   // deferred
         guard let preset = presets[name] else { return (stripPresetTokens(settings), name) }   // E715
         var explicit = Set<String>()
