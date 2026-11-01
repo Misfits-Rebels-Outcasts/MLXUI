@@ -3,7 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 // FLUX.2 Klein 4B run surface (MP7-4): prompt, Size (width x height, multiples of 16 up to this Mac's cap), steps, seed, the image model's quantize
-// (8 default, 4 "smaller, lower quality"), progress per stage and step, cancel, Save PNG. It reuses the shape of `FluxRunView` / `FluxRunModel` but NOT FluxUI's Size picker,
+// (fixed at 8: MP7-4-FIX-1 dropped the choice; flows still accept 4 and 8), progress per stage and step, cancel, Save PNG. It reuses the shape of `FluxRunView` / `FluxRunModel` but NOT FluxUI's Size picker,
 // whose selection is never read (MP7-1 spike 7.4): every value shown here reaches both the `StageConfig` and the leased stage.
 
 /// Settings parsing and run state for one Klein run window. `@MainActor @Observable`, no Combine.
@@ -12,11 +12,12 @@ import UniformTypeIdentifiers
 final class Flux2KleinRunModel {
     // Fields hold text so a half-typed value is not rewritten under the user's cursor.
     var prompt = "a red fox in a snowy forest at sunrise"
-    var widthText = "\(Flux2KleinRunSettings.defaultSize)"
-    var heightText = "\(Flux2KleinRunSettings.defaultSize)"
+    var widthText: String
+    var heightText: String
     var stepsText = "\(Flux2KleinRunSettings.defaultSteps)"
     var seedText = ""
-    var quantize = Flux2KleinRunSettings.defaultQuantize
+    /// The Run UI offers no quantize choice (owner, 2026-11-01): every run is 8-bit.
+    let quantize = Flux2KleinRunSettings.defaultQuantize
 
     var isRunning = false
     var progress = 0.0
@@ -36,7 +37,29 @@ final class Flux2KleinRunModel {
     private var generation = 0
 
     static let sizePresets = [512, 768, 1024, 1280]
-    static let quantizeChoices: [(bits: Int, label: String)] = [(8, "8-bit"), (4, "4-bit: smaller, lower quality")]
+
+    /// `budgetBytes` is the cap budget this window plans against (a test stands in for a small Mac). The size fields start at `defaultSide(...)`.
+    init(budgetBytes: (@Sendable () -> Int64)? = nil) {
+        let budget = budgetBytes ?? { Flux2KleinMemoryPlan.defaultBudgetBytes }
+        self.budgetBytes = budget
+        let side = Self.defaultSide(quantize: Flux2KleinRunSettings.defaultQuantize, budgetBytes: budget())
+        widthText = "\(side)"
+        heightText = "\(side)"
+    }
+
+    /// The preset sizes this Mac can make at `quantize`, smallest first. Empty when not even the smallest preset fits.
+    nonisolated static func offeredSizes(quantize: Int, budgetBytes: Int64) -> [Int] {
+        let largest = Flux2KleinMemoryPlan.largestSquareSide(quantize: quantize, budgetBytes: budgetBytes)
+        return sizePresets.filter { $0 <= largest }
+    }
+
+    /// The largest offered size at or below the manifest's 1024; the smallest preset when none is offered (so the cap sentence names a real size).
+    nonisolated static func defaultSide(quantize: Int, budgetBytes: Int64) -> Int {
+        offeredSizes(quantize: quantize, budgetBytes: budgetBytes).last { $0 <= Flux2KleinRunSettings.defaultSize } ?? sizePresets[0]
+    }
+
+    /// The sizes the Presets menu lists (this Mac's, not every preset).
+    var offeredSizes: [Int] { Self.offeredSizes(quantize: quantize, budgetBytes: budgetBytes()) }
 
     // MARK: Settings
 
@@ -74,9 +97,6 @@ final class Flux2KleinRunModel {
 
     var promptIsEmpty: Bool { prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var canRun: Bool { !isRunning && !promptIsEmpty && settingsRefusal == nil }
-
-    /// "The text encoder stays 8-bit" while the image model is below 8 bits (owner ruling 2026-10-31); nil at 8.
-    var encoderNote: String? { quantize < Flux2KleinQuantization.textEncoderMinimumBits ? Flux2KleinQuantization.textEncoderNote : nil }
 
     /// The largest square this Mac can make at the chosen quantize, for the caption under the size fields.
     var largestSquare: Int { Flux2KleinMemoryPlan.largestSquareSide(quantize: quantize, budgetBytes: budgetBytes()) }
@@ -229,11 +249,12 @@ struct Flux2KleinRunView: View {
                 Text("×")
                 TextField("Height", text: $model.heightText).textFieldStyle(.roundedBorder).frame(width: 80)
                 Menu("Presets") {
-                    ForEach(Flux2KleinRunModel.sizePresets, id: \.self) { side in
+                    ForEach(model.offeredSizes, id: \.self) { side in
                         Button("\(side) × \(side)") { model.applySizePreset(side) }
                     }
                 }
                 .fixedSize()
+                .disabled(model.offeredSizes.isEmpty)
                 Spacer()
             }
             Text(sizeCaption).font(.caption).foregroundStyle(.secondary).padding(.leading, 70)
@@ -248,19 +269,6 @@ struct Flux2KleinRunView: View {
                 TextField("Seed (blank = random)", text: $model.seedText).textFieldStyle(.roundedBorder).frame(maxWidth: 200)
                 Spacer()
             }
-            HStack {
-                Text("Quantize").frame(width: 70, alignment: .leading)
-                Picker("", selection: $model.quantize) {
-                    ForEach(Flux2KleinRunModel.quantizeChoices, id: \.bits) { choice in Text(choice.label).tag(choice.bits) }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 340)
-                Spacer()
-            }
-            if let note = model.encoderNote {
-                Text(note).font(.caption).foregroundStyle(.secondary).padding(.leading, 70)
-            }
             if let refusal = model.settingsRefusal {
                 Text(refusal).font(.callout).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
             }
@@ -274,7 +282,7 @@ struct Flux2KleinRunView: View {
         let rule = "Multiples of 16."
         return largest >= Flux2KleinLatents.sizeMultiple
             ? "\(rule) The largest this Mac can make is \(largest) × \(largest) (or any shape with no more pixels)."
-            : "\(rule) This Mac can't make an image at this quantize."
+            : "\(rule) This Mac doesn't have the memory for even a small image with this model."
     }
 
     private var progressRow: some View {

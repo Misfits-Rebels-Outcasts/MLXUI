@@ -297,6 +297,40 @@ struct Flux2KleinLeaseTests {
         #expect(budget.inUseCount == 0)
     }
 
+    // MP7-4-FIX-1 (owner, 2026-11-01): the lease books this run's staged peak at its size and quantize (x 1.15), not one flat figure.
+
+    @Test func theLeaseBooksTheRunsOwnEstimateAndALargerSizeReservesMore() {
+        let sizes = [512, 1024, 1344]
+        for q in [4, 8] {
+            let booked = sizes.map { Flux2KleinBooking.bytes(width: $0, height: $0, quantize: q) }
+            #expect(booked[0] < booked[1] && booked[1] < booked[2], "q\(q): \(booked)")
+            for (side, bytes) in zip(sizes, booked) {
+                let plan = Flux2KleinMemoryPlan.peaks(width: side, height: side, quantize: q).busiest * Flux2KleinMemoryPlan.safetyMargin * 1e9
+                #expect(abs(Double(bytes) - plan) <= 1, "q\(q) \(side): the cap's own number")
+            }
+        }
+        // a 1344 x 1344 run (8.25 GB measured) books well over the flat 6.05 GB
+        #expect(Flux2KleinBooking.bytes(width: 1344, height: 1344, quantize: 8) > 8_250_000_000)
+        #expect(Flux2KleinBooking.bytes(width: 1344, height: 1344, quantize: 8) > Flux2KleinBooking.bookedBytes)
+        // quantize is taken into account where the image model is the busiest stage (a small size: the decoder is not)
+        #expect(Flux2KleinBooking.bytes(width: 256, height: 256, quantize: 4) < Flux2KleinBooking.bytes(width: 256, height: 256, quantize: 8))
+        // the stage reports it, and from its own settings
+        let stage = Flux2KleinStage(id: "x", name: "x", settings: tinySettings(width: 1344, height: 1344, quantize: 8)) { _ in throw StageError.unsupportedSetting(setting: "x") }
+        #expect(stage.leaseBytes == Flux2KleinBooking.bytes(width: 1344, height: 1344, quantize: 8))
+    }
+
+    @Test func aRunLeasesItsOwnEstimateFromTheSharedBudget() async throws {
+        for (side, q) in [(512, 8), (1024, 8), (1344, 8), (1024, 4)] {
+            let budget = makeBudget(40)
+            let seenUsed = KleinBox(Int64(-1))
+            let probe = KleinSizedProbe(bytes: Flux2KleinBooking.bytes(width: side, height: side, quantize: q), hook: { seenUsed.set(budget.usedBytes) })
+            let stage = LeasingStage(model: kleinEntry(), config: .default, probe: probe, cache: makeCache(budget), maxWait: .seconds(2))
+            _ = try await stage.run(.text("p")) { _ in }
+            #expect(seenUsed.value == Flux2KleinBooking.bytes(width: side, height: side, quantize: q), "\(side) q\(q)")
+            #expect(budget.inUseCount == 0)
+        }
+    }
+
     @Test func theLeaseIsReturnedWhenTheStageThrows() async {
         let budget = makeBudget(10)
         let stage = LeasingStage(model: kleinEntry(), config: .default, probe: KleinProbeStage(failure: Flux2KleinEngineError.imageConversionFailed), cache: makeCache(budget), maxWait: .seconds(2))
@@ -332,24 +366,55 @@ struct Flux2KleinLeaseTests {
 struct Flux2KleinRunModelTests {
     private let big: Int64 = 40_000_000_000
 
-    @Test func defaultsAreQuantize8AndTheManifestSize() throws {
-        let m = Flux2KleinRunModel()
+    @Test func defaultsAreQuantize8AndTheLargestOfferedSizeAtOrBelow1024() throws {
+        let m = Flux2KleinRunModel(budgetBytes: { self.big })
         #expect(m.quantize == 8 && m.widthText == "1024" && m.heightText == "1024" && m.stepsText == "4" && m.seedText.isEmpty)
-        #expect(Flux2KleinRunModel.quantizeChoices.map(\.bits) == [8, 4])
-        #expect(Flux2KleinRunModel.quantizeChoices[1].label.contains("smaller, lower quality"))
-        #expect(Flux2KleinRunModel.quantizeChoices[0].label == "8-bit")
-        m.budgetBytes = { big }
         #expect(m.settingsRefusal == nil)
         #expect(try m.resolve().get() == Flux2KleinRunSettings())
+        // the Run UI has no quantize choice and no encoder note any more (owner, 2026-11-01)
+        let source = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("MLXUI/Modules/Flux2Klein/Flux2KleinRunView.swift"), encoding: .utf8)
+        #expect(!source.contains("lower quality") && !source.contains("encoderNote") && !source.contains("Picker(\"\", selection: $model.quantize)"))
     }
 
-    @Test func theEncoderNoteShowsOnlyBelowEight() {
-        let m = Flux2KleinRunModel()
-        #expect(m.encoderNote == nil)
-        m.quantize = 4
-        #expect(m.encoderNote?.contains("The text encoder stays 8-bit") == true)
-        m.quantize = 8
-        #expect(m.encoderNote == nil)
+    @Test func theSizePickerOffersOnlySizesThatFitAndDefaultsToTheLargestAtOrBelow1024() {
+        func offered(_ bytes: Int64) -> [Int] { Flux2KleinRunModel.offeredSizes(quantize: 8, budgetBytes: bytes) }
+        func need(_ side: Int) -> Int64 { Int64((Flux2KleinMemoryPlan.peaks(width: side, height: side, quantize: 8).busiest * 1.15 * 1e9).rounded(.up)) }
+        // a roomy Mac offers all four and opens on 1024, never on 1280
+        #expect(offered(big) == [512, 768, 1024, 1280])
+        #expect(Flux2KleinRunModel(budgetBytes: { self.big }).widthText == "1024")
+        // a mid Mac: 1024 does not fit but 768 does -> 1024 and 1280 are not offered, the default is 768
+        let mid = need(768)
+        #expect(need(1024) > mid)
+        #expect(offered(mid) == [512, 768])
+        let m = Flux2KleinRunModel(budgetBytes: { mid })
+        #expect(m.offeredSizes == [512, 768] && m.widthText == "768" && m.heightText == "768")
+        #expect(m.settingsRefusal == nil && m.canRun)
+        // a small Mac that fits only 512
+        let small = need(512)
+        #expect(offered(small) == [512] && Flux2KleinRunModel(budgetBytes: { small }).widthText == "512")
+        // a Mac that cannot fit even the smallest: nothing offered, the fields name 512, the CAP SENTENCE shows and Run is off
+        let tiny = need(512) - 1
+        #expect(offered(tiny).isEmpty)
+        let none = Flux2KleinRunModel(budgetBytes: { tiny })
+        #expect(none.widthText == "512" && none.offeredSizes.isEmpty && !none.canRun)
+        #expect(none.settingsRefusal?.contains("can't make a 512 x 512 image at quantize 8 on this Mac") == true)
+    }
+
+    @Test func aMacTooSmallForTheDefaultStillOpensTheRunWindow() throws {
+        // `makeStage(for:config: .default)` is what the Run sheet probes with; it must not refuse for the 1024 default (UnsupportedModelView), the view shows the cap sentence.
+        let stage = try #require(try Flux2KleinSDK().makeStage(for: kleinEntry(), config: .default) as? Flux2KleinStage)
+        #expect(stage.settings.quantize == 8)
+        // a size that IS named is still refused when over the cap, before any weight loads
+        #expect(throws: (any Error).self) { _ = try Flux2KleinSDK().makeStage(for: kleinEntry(), config: StageConfig(width: 8192, height: 8192)) }
+    }
+
+    @Test func flowsStillAcceptQuantize4And8() throws {
+        #expect(throws: Never.self) { try Flux2KleinEngine.validate(quantize: 4, row: "Row 1") }
+        #expect(throws: Never.self) { try Flux2KleinEngine.validate(quantize: 8, row: "Row 1") }
+        #expect(Flux2KleinSDK.refusal(forRowSetting: { $0 == "quantize" ? "4" : nil }, rowLabel: "Row 1") == nil)
+        let r = Flux2KleinRunModel.resolve(width: "512", height: "512", steps: "4", seed: "", quantize: 4, budgetBytes: big)
+        #expect((try? r.get())?.quantize == 4)
     }
 
     @Test func fieldsParseToSettingsAndABlankSeedStaysNil() throws {
@@ -379,8 +444,7 @@ struct Flux2KleinRunModelTests {
     }
 
     @Test func aSizeOverTheCapIsRefusedNamingTheLargestAndRunIsDisabled() throws {
-        let m = Flux2KleinRunModel()
-        m.budgetBytes = { 12_000_000_000 }
+        let m = Flux2KleinRunModel(budgetBytes: { 12_000_000_000 })
         m.widthText = "2048"; m.heightText = "2048"
         let text = try #require(m.settingsRefusal)
         #expect(text.hasPrefix("This image can't make a 2048 x 2048 image at quantize 8 on this Mac"), Comment(rawValue: text))
@@ -551,5 +615,20 @@ enum KleinPNG {
                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
         ctx?.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
         return rgba
+    }
+}
+
+/// A probe that reports what a run of it books (a `LeaseSized` stage), without running an engine.
+nonisolated final class KleinSizedProbe: PipelineStage, LeaseSized, @unchecked Sendable {
+    let id = "klein-sized-probe"
+    let name = "klein sized probe"
+    var accepts: MediaKind { .text }
+    var produces: MediaKind { .image }
+    let leaseBytes: Int64?
+    private let hook: @Sendable () -> Void
+    init(bytes: Int64, hook: @escaping @Sendable () -> Void) { leaseBytes = bytes; self.hook = hook }
+    func run(_ input: Media, progress: @Sendable @escaping (Double) -> Void) async throws -> Media {
+        hook()
+        return .text("done")
     }
 }

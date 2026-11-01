@@ -80,7 +80,7 @@ nonisolated struct Flux2KleinRunSettings: Sendable, Equatable {
     static func randomSeed() -> UInt64 { UInt64.random(in: 0 ..< (1 << 32)) }
 }
 
-nonisolated struct Flux2KleinStage: PipelineStage {
+nonisolated struct Flux2KleinStage: PipelineStage, LeaseSized {
     /// How a row is named in refusals ("<row>: FLUX.2 Klein 4B runs at quantize 4 or 8 ..."). The engine's default label is the model's own name, which doubles it in a
     /// sentence ("FLUX.2 Klein 4B: FLUX.2 Klein 4B runs ..."), so a stage always carries a real label: the flow row's ("Row 3") where a row builds it, "This image" in the Run UI.
     static let runWindowLabel = "This image"
@@ -91,6 +91,8 @@ nonisolated struct Flux2KleinStage: PipelineStage {
     let rowLabel: String
     var accepts: MediaKind { .text }
     var produces: MediaKind { .image }
+    /// What one run at these settings books from the shared budget (`Flux2KleinBooking.bytes(width:height:quantize:)`).
+    var leaseBytes: Int64? { Flux2KleinBooking.bytes(width: settings.width, height: settings.height, quantize: settings.quantize) }
 
     /// Builds the engine for a run; the observer is how phases reach `onPhase`. Production: the installed folder. Tests: the tiny stage source.
     typealias EngineFactory = @Sendable (_ observer: @escaping @Sendable (Flux2KleinLifecycleEvent) -> Void) throws -> Flux2KleinEngine

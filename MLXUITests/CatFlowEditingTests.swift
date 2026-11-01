@@ -342,9 +342,27 @@ struct CatFlowEditingTests {
         let child = try #require(model.document.rows[0].children.last)
         #expect(child.task == "Generate Image")
         let display = try #require(child.model)
-        #expect(display == "Flux-1.lite-8B")
-        #expect(model.document.models[display] == "mlx-community/Flux-1.lite-8B-MLX-Q4")
+        // Owner-ruled change (Boo, 2026-11-01, MP7-4-FIX-1): "Klein becomes the default for a new Generate Image row. That's the pool order working (Generate Image
+        // pool = Z-Image Turbo, FLUX.2 Klein 4B; Flux-1.lite-8B was only the fallback)." So this expects whatever `defaultModel` returns for the same catalog and claimable
+        // set, not a hard-coded name; the choice itself is pinned in `generateImageDefaultFollowsThePoolOrder`.
+        let expected = try #require(FlowEditorModel.defaultModel(forTask: "Generate Image", catalog: catalog, claimableModelIDs: claimable))
+        #expect(display == expected)
+        let hf = try #require(catalog.first { TaskModels.displayName(for: $0) == display }?.hfModelId)
+        #expect(model.document.models[display] == hf)
         #expect(model.saveBlockReason == nil)
+    }
+
+    /// MP7-4-FIX-1 (owner, 2026-11-01): the default for a new Generate Image row is the first pool-named runnable model. Klein claimable -> Klein; not claimable -> the
+    /// FLUX.1 fallback. Nothing special-cases Klein.
+    @Test @MainActor func generateImageDefaultFollowsThePoolOrder() throws {
+        let (catalog, claimable) = try loadedCatalogAndClaimable()
+        let klein = try #require(catalog.first { $0.hfModelId == "mlx-community/FLUX.2-klein-4B-bf16" })
+        #expect(claimable.contains(klein.id))
+        let withKlein = try #require(FlowEditorModel.defaultModel(forTask: "Generate Image", catalog: catalog, claimableModelIDs: claimable))
+        #expect(withKlein == "FLUX.2 Klein 4B")
+        #expect(TaskModels.displayName(for: klein) == "FLUX.2 Klein 4B")
+        let withoutKlein = try #require(FlowEditorModel.defaultModel(forTask: "Generate Image", catalog: catalog, claimableModelIDs: claimable.subtracting([klein.id])))
+        #expect(withoutKlein == "Flux-1.lite-8B")
     }
 
     @Test func removeByIdKeepsOtherRows() throws {

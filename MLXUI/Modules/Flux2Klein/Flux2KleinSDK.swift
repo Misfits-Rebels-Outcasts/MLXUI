@@ -18,8 +18,16 @@ nonisolated struct Flux2KleinSDK: ModelSDK {
         return (model.id + " " + model.hfModelId).lowercased().contains("flux.2-klein-4b")
     }
 
+    /// The Run sheet's probe (and `.default` probes). The sheet must open on a Mac too small for the 1024 default: the Run UI offers only sizes that fit and shows the cap
+    /// sentence when none does (MP7-4-FIX-1, owner ruling 3), so with no size named nothing is checked against the cap here; `Flux2KleinStage.run` still checks the size
+    /// it is given before any weight loads. A config that names a size is validated as a flow row's is.
     func makeStage(for model: ModelEntry, config: StageConfig) throws -> any PipelineStage {
-        try makeStage(for: model, config: config, quantize: Flux2KleinRunSettings.defaultQuantize, rowLabel: Self.defaultRowLabel)
+        if config.width == nil && config.height == nil {
+            if config.scale != nil { throw StageError.unsupportedSetting(setting: "scale") }
+            let settings = Flux2KleinRunSettings(steps: config.steps ?? Flux2KleinRunSettings.defaultSteps, seed: config.seed)
+            return Flux2KleinStage(modelID: model.id, settings: settings, rowLabel: Self.defaultRowLabel)
+        }
+        return try makeStage(for: model, config: config, quantize: Flux2KleinRunSettings.defaultQuantize, rowLabel: Self.defaultRowLabel)
     }
 
     /// The same with the row's `quantize` and its real label (a flow row's "Row 3"): what MP7-W's executor calls. `config.width/height/steps/seed` fall back to the manifest's
@@ -82,11 +90,17 @@ nonisolated enum Flux2KleinBooking {
     static func isKlein(_ model: ModelEntry) -> Bool { Flux2KleinSDK.claimsKlein(model) }
 
     /// The largest whole-process `phys_footprint` peak measured for the default run (1024 x 1024, 4 steps, quantize 8): 6.05 GB over the six runs of MP7-3h and MP7-4 (5.61 to 6.05;
-    /// the plan's busiest stage, `Flux2KleinMemoryPlan`, says 5.91). It is also the catalog's `ramGB`, so the Browse figure and the ledger agree (a test pins that).
-    /// Implementer's call, pending owner confirmation: the lease is per model, not per size, so a larger image books less than it uses (1344 x 1344 peaked at 8.25 GB);
-    /// the engine's own cap check (60% of RAM, x 1.15) is what bounds those.
+    /// the plan's busiest stage, `Flux2KleinMemoryPlan`, says 5.91). It is also the catalog's `ramGB`, so the Browse figure and the ledger agree (a test pins that). It is only the
+    /// fallback for a caller that has no run settings; a run books `bytes(width:height:quantize:)`.
     static let measuredFootprintGB = 6.05
     static var bookedBytes: Int64 { Int64((measuredFootprintGB * 1e9).rounded()) }
+
+    /// MP7-4-FIX-1 (owner, 2026-11-01): what ONE run books: the busiest staged peak at this size and quantize, times the same 1.15 margin the size cap uses. A 1344 x 1344 run
+    /// (8.25 GB measured) therefore cannot share the Mac with a model `MemoryBudget` admitted against the 6.05 GB figure.
+    static func bytes(width: Int, height: Int, quantize: Int) -> Int64 {
+        let busiest = Flux2KleinMemoryPlan.peaks(width: width, height: height, quantize: quantize).busiest
+        return Int64((busiest * Flux2KleinMemoryPlan.safetyMargin * 1e9).rounded())
+    }
 
     static func bytes(for model: ModelEntry) -> Int64? { isKlein(model) ? bookedBytes : nil }
 }
