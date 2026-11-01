@@ -97,6 +97,41 @@ install in the catalog are the same models your workflows use — no separate se
 <!-- Items marked *(hidden in-app)* are built but switched off behind an in-app flag right
      now — pruning candidates if you don't want to announce them before they're switched on. -->
 
+### New models since the last release
+
+- **FLUX.2 Klein 4B** — text-to-image on a native MLX port (Qwen3 text encoder → DiT → VAE, one
+  stage resident at a time to keep memory low). It is now the default *Generate Image* model, the
+  Run UI only offers sizes that fit your RAM, and it runs from AI Workflows (it also stands in for
+  the Z-Image Turbo row in the sample gallery).
+- **RIFE 4.25** — video frame interpolation, 2× or 4×, with a Scale control, preview and save.
+  Clips up to **30 minutes** with a time estimate, scene-cut handling (the earlier frame is repeated
+  at a hard cut), and the Mac is kept awake during a run.
+- **LFM2.5-Audio 1.5B** — voice chat, speech-to-text and text-to-speech in one model, with
+  microphone input. Reachable from AI Workflows as **Transcribe** and **Speak** rows.
+- **DeepFilterNet 3** — audio cleanup (noise suppression) with its own Run UI; long files are
+  processed in chunks.
+- **Sortformer 4spk v2.1** — speaker diarization: who spoke when, up to four speakers, with
+  speaker labels.
+- **Parakeet TDT 0.6B v3** and **Qwen3-ASR 1.7B** — two more speech-to-text engines, in Browse and
+  in AI Workflows.
+- **Gemma 4 E4B Vision** is back, now that `mlx-swift-lm` 3.32.3 handles its KV-shared layers.
+
+### Local Server — structured output and a Swift snippet
+
+`response_format` (chat completions) and `text.format` (Responses) now accept a JSON schema and
+return output that conforms to it, via grammar-constrained decoding. Requests the schema can't
+express get a clear `400`. `/v1/models` and the Connect sheet state plainly whether a model
+supports it, and the Connect sheet gained a Swift (Foundation Models) block.
+
+### Under the hood
+
+- Moved to **mlx-swift 0.32.3** / **mlx-swift-lm 3.32.3**, with thread-safety fixes for MLX audio
+  and long-running engines so heavy work stays off the main actor.
+- Measured RAM figures replace estimates for Parakeet, Qwen3-ASR, DeepFilterNet, Sortformer,
+  LFM2.5-Audio and RIFE, so the "fits your Mac" dimming in Browse is honest.
+- Sample-gallery flows the runtime can't yet run (Edit Image, Depth Pro, the latent/checkpoint
+  pipelines) are hidden rather than offered and refused; refusals now name the offending row.
+
 ### Chat workspace — give a chat a folder, files and a side panel
 
 Chats can now work on real files. Each conversation gets its own granted folder, a **+** menu to
@@ -117,8 +152,7 @@ One click turns an available file into one that is in this chat.
   and an official 4-bit build. Text-only; usable in Browse, chat and AI Workflows.
 - **MiMo V2.6 9B** — a 9B model (OptiQ 4/8-bit), text-only, in Browse, chat,
   AI Workflows and the Local Server.
-- **Gemma 4 E4B** — chat-only for now. The vision build is withheld until the upstream
-  `mlx-swift-lm` Gemma 4 vision loader handles the KV-shared layers.
+- **Gemma 4 E4B** — chat first; the vision build has since been restored (see above).
 - **Clef Flash** — a 9B **decision model** on the same seam as Laya and CLM, with a joint
   schema head, a native Swift/MLX port of its backbone, and its own Run UI. It joins the
   **Classify**, **Gate** and **Score** rows. Decision models now have their own **Deciders**
@@ -379,9 +413,9 @@ Prism ML's [Ternary-Bonsai-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2
 
 ## Supported Models
 
-### browser.json — MVP catalog (30 models)
+### browser.json — MVP catalog
 
-The app ships `browser.json`, a hand-curated set of 30 models across 8 categories.
+The app ships `browser.json`, a hand-curated set of models across these categories.
 Every model listed here is downloadable and has a working Run UI.
 
 | Category | Models | Sizes |
@@ -389,10 +423,12 @@ Every model listed here is downloadable and has a working Run UI.
 | **Chat & Text** (9) | Gemma 3, Ministral 3, Qwen3, Llama 3.1, Gemma 2, Qwen2.5, GPT-OSS, Devstral-Small 2, **Ternary-Bonsai-27B** | 1B – 27B |
 | **Vision** (4) | LFM2-VL, Gemma 3, Qwen3-VL | 1.6B – 12B |
 | **OCR** (4) | PaddleOCR-VL, DeepSeek-OCR-2, dots.ocr, olmOCR 2 | 255M – 7B |
-| **Speech-to-Text** (4) | Whisper tiny/small/large-v3, Voxtral-Mini | 37M – 1.5B |
+| **Speech-to-Text** | Whisper tiny/small/large-v3, Voxtral-Mini, **Parakeet TDT 0.6B v3**, **Qwen3-ASR 1.7B** | 37M – 1.7B |
 | **Text-to-Speech** (4) | Kokoro, Qwen3-TTS, Chatterbox, Orpheus | 82M – 3B |
 | **Embeddings** (4) | all-MiniLM-L6, embeddinggemma, ModernBERT-embed, bge-m3 | 18M – 568M |
-| **Image Generation** (2) | FLUX.1-Lite-8B, **SDXL-Turbo** | 3.5B – 8B |
+| **Image Generation** | FLUX.1-Lite-8B, SDXL-Turbo, **FLUX.2 Klein 4B** | 3.5B – 8B |
+| **Audio** | **LFM2.5-Audio 1.5B** (voice), **DeepFilterNet 3** (cleanup), **Sortformer 4spk v2.1** (diarization) | 1.5B and under |
+| **Video** | **RIFE 4.25** (frame interpolation) | small |
 | **Music Generation** (1) | **MusicGen-small** | 615M (float32, ~2.5 GB) |
 | **Decision** (3) | **Laya 0.4B**, **CLM 8B**, **Clef Flash** | 0.4B – 9B |
 
@@ -415,6 +451,11 @@ and Run UIs are added with every release.
 | Image | Diffusion (Flux) | ✅ | ✅ | ✅ | Flux (native MLX) |
 | Image | Diffusion (SDXL-Turbo) | ✅ | ✅ | ✅ | SDXL-Turbo (native MLX) |
 | Audio | Music generation (MusicGen) | ✅ | ✅ | ✅ | MusicGen (native MLX) |
+| Speech | ASR — Parakeet, Qwen3-ASR | ✅ | ✅ | ✅ | Native MLX |
+| Speech | Voice chat / STT / TTS — LFM2.5-Audio | ✅ | ✅ | ✅ | Native MLX |
+| Audio | Cleanup (DeepFilterNet 3) · diarization (Sortformer) | ✅ | ✅ | ✅ | mlx-audio-swift |
+| Image | Diffusion (FLUX.2 Klein 4B) | ✅ | ✅ | ✅ | Native MLX |
+| Video | Frame interpolation (RIFE 4.25) | ✅ | ✅ | ✅ | Native MLX + AVFoundation |
 | Text | Decision / classification (Laya, CLM, Clef Flash) | ✅ | ✅ | ✅ | Native MLX encoders + decision heads |
 
 ✅ = built &emsp; ⬜ = available for contribution
@@ -576,6 +617,12 @@ Every model in the catalog should eventually have a working Run button.
       previews and diffs, `edit_file`, and Markdown/JSON chat export
 - [x] Clef Flash decision model, Qwen3.8 27B, MiMo V2.6 9B and Gemma 4 E4B (chat) in the catalog
 - [x] AI Workflows: kind rail, row-source defaults, Upscale step and a basic sample gallery
+- [x] FLUX.2 Klein 4B text-to-image, in the Run UI and AI Workflows
+- [x] RIFE 4.25 video frame interpolation (clips up to 30 minutes)
+- [x] LFM2.5-Audio 1.5B voice chat / STT / TTS; DeepFilterNet 3 cleanup; Sortformer diarization
+- [x] Parakeet TDT 0.6B v3 and Qwen3-ASR 1.7B speech-to-text; Gemma 4 E4B Vision restored
+- [x] Local Server: structured output (`response_format` / `text.format`) via grammar-constrained decoding
+- [x] mlx-swift 0.32.3 / mlx-swift-lm 3.32.3
 
 ### In progress
 - [ ] Local Server: MCP and served flows, then embeddings/audio endpoints and LAN access
