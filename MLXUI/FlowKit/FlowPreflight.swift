@@ -119,8 +119,8 @@ nonisolated struct FlowPreflight {
     ) -> Result {
         var result = Result()
         // Flatten rows (blocks aren't in the linear subset, but be safe).
-        let rows = allRows(doc.rows)
-        for row in rows {
+        let rows = pathedRows(doc.rows)
+        for (path, row) in rows {
             guard let desc = TaskCatalog.get(row.task ?? "") else { continue }
             guard desc.taskClass == .model else {
                 // FIX-2: every non-`.model` row is asked too, not just skipped — but only as
@@ -152,7 +152,7 @@ nonisolated struct FlowPreflight {
                 if desc.refKind == .engine, !TaskModels.isServedByExecutor(desc.name) {
                     result.needs.append(ModelNeed(
                         task: row.task ?? "?", display: display, model: nil, installed: false, equivalence: nil,
-                        blockingReason: "\(desc.name) isn't something this version of Flows can run yet, with \(display) or any other model."))
+                        blockingReason: "Row \(path): \(desc.name) is not supported in this app yet."))
                     continue
                 }
                 switch slot.readiness(installedModelIDs: installedModelIDs) {
@@ -228,11 +228,13 @@ nonisolated struct FlowPreflight {
 
     // MARK: - Helpers
 
-    private static func allRows(_ rows: [Row]) -> [Row] {
-        var out: [Row] = []
-        for row in rows {
-            out.append(row)
-            out.append(contentsOf: allRows(row.children))
+    /// Every row with its path ("3", "2.2": the number the flow shows), depth first.
+    private static func pathedRows(_ rows: [Row], prefix: String = "") -> [(String, Row)] {
+        var out: [(String, Row)] = []
+        for (i, row) in rows.enumerated() {
+            let path = "\(prefix)\(i + 1)"
+            out.append((path, row))
+            out.append(contentsOf: pathedRows(row.children, prefix: path + "."))
         }
         return out
     }

@@ -347,4 +347,44 @@ struct Flux2KleinSmokeTests {
         try? FileManager.default.removeItem(at: blobs)
         KleinSmoke.line("REVIEW|139|gallery66-contact-sheet.png|four seeds of 'a lighthouse at sunset, watercolor style', labelled by seed; the pictures differ and depict the prompt")
     }
+
+    // MARK: MP7-R: gallery 69-PickALook, draft and balanced, as a caller binding `quality=` would run them
+
+    /// Run as a top-level pipeline, `preset=(param:quality)` is deferred and stripped (nothing binds `quality`), so the row would run Klein's defaults whatever the param says
+    /// (`Gallery69PresetTraceTests`). A caller that binds `quality=` expands the preset; this test substitutes the name in an in-memory copy (the gallery file is not edited).
+    @Test @MainActor func gallery69DraftAndBalancedPresetsRunWithTheirStepsAndSizes() async throws {
+        let out = try KleinSmoke.ensureOut()
+        let blobs = out.appendingPathComponent("flow69-work", isDirectory: true)
+        try? FileManager.default.removeItem(at: blobs)
+        try FileManager.default.createDirectory(at: blobs, withIntermediateDirectories: true)
+        let exec = try KleinSmoke.executor(blobs: blobs)
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let original = try String(contentsOf: root.appendingPathComponent("MLXUI/Resources/Gallery/69-PickALook.catpipeline"), encoding: .utf8)
+        var rendered: [String: CGImage] = [:]
+        for (name, side, steps) in [("draft", 512, 4), ("balanced", 1024, 9)] {
+            let doc = try CatParser.parse(original.replacingOccurrences(of: "preset=(param:quality)", with: "preset=\(name)"))
+            let log = KleinSmoke.PhaseLog()
+            _ = log
+            let (events, peak) = try await KleinSmoke.measured("gallery 69-PickALook \(name) (\(steps) steps, \(side) x \(side))", detail: "seed 7") {
+                try await FlowInterpreter.run(doc, executor: exec, definitions: doc.definitions, presets: doc.presets)
+            }
+            let failed = events.filter { $0.kind == .rowFailed }
+            KleinSmoke.check("69 \(name): row completes", failed.isEmpty && events.last?.kind == .runCompleted, failed.compactMap(\.error).joined(separator: "; "))
+            let path = events.first { $0.kind == .rowCompleted && $0.path == "1" }?.output?.items.first?.path
+            let image = try #require(path.flatMap { KleinSmoke.loadPNG($0) })
+            rendered[name] = image
+            try Klein3hReal.writePNG(image, to: out.appendingPathComponent("gallery69-\(name).png"))
+            KleinSmoke.check("69 \(name): \(side) x \(side), not blank", image.width == side && image.height == side && KleinSmoke.pixelStd(image) > 8,
+                             "\(image.width) x \(image.height), std \(String(format: "%.1f", KleinSmoke.pixelStd(image))), peak \(String(format: "%.2f", peak)) GB")
+            KleinSmoke.check("69 \(name): under the stop line", peak < KleinSmoke.stopLineGB, String(format: "%.2f GB", peak))
+        }
+        // studio (28 steps, 1536 x 1536): the cap sentence through the flow, no weights loaded
+        let studio = try CatParser.parse(original.replacingOccurrences(of: "preset=(param:quality)", with: "preset=studio"))
+        let result = try await FlowInterpreter.run(studio, executor: exec, definitions: studio.definitions, presets: studio.presets)
+        let message = result.first { $0.kind == .rowFailed }?.error ?? ""
+        let largest = Flux2KleinMemoryPlan.largestSquareSide(quantize: 8, budgetBytes: Flux2KleinMemoryPlan.defaultBudgetBytes)
+        KleinSmoke.check("69 studio: 1536 x 1536 refused with the cap sentence", largest >= 1536 || message.hasPrefix("FLUX.2 Klein can't make a 1536 \u{00D7} 1536 image at quantize 8 on this Mac"), message, info: largest >= 1536)
+        try? FileManager.default.removeItem(at: blobs)
+        KleinSmoke.line("REVIEW|139|gallery69-balanced.png|the lighthouse at sunset, watercolor: compare with gallery69-draft.png (same seed 7 and prompt; draft is 512 x 512, 4 steps; balanced 1024 x 1024, 9 steps)")
+    }
 }
