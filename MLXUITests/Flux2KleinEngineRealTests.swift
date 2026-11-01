@@ -176,6 +176,7 @@ struct Flux2KleinDiTWorkingMemoryTests {
 
 @Suite(.enabled(if: Klein3hReal.goldenEnabled, Klein3hReal.goldenSkip), .serialized)
 struct Flux2KleinEngineRealGoldenTests {
+    /// `in.noise` = the script's initial seeded noise latents, float32 [1,128,size/16,size/16] (patchified, before packing); both tests inject exactly it and never draw their own.
     /// Names the script writes (and `requiredKeys` checks first, so a mismatch is a clear failure, not a nil).
     static let requiredKeys = ["in.noise", "in.prompt_embeds", "out.final_latents_packed", "out.image", "out.step0", "out.step1", "out.step2", "out.step3"]
 
@@ -195,7 +196,9 @@ struct Flux2KleinEngineRealGoldenTests {
         let url = try #require(Klein3hReal.goldenFile)
         let (arrays, meta) = try loadArraysAndMetadata(url: url)
         let missing = requiredKeys.filter { arrays[$0] == nil }
-        #expect(missing.isEmpty, "golden is missing \(missing)")
+        if !missing.isEmpty {
+            throw Klein3hGoldenError.missingKeys("the golden file \(url.lastPathComponent) is missing \(missing). `in.noise` is the seeded float32 noise real_e2e_goldens.py injected into diffusers; this test must feed THOSE latents (torch and MLX RNGs differ), so regenerate the golden with the current script")
+        }
         return Golden(arrays: arrays, prompt: meta["prompt"] ?? Klein3hReal.prompt, size: Int(meta["size"] ?? "512") ?? 512, steps: Int(meta["steps"] ?? "4") ?? 4)
     }
 
@@ -238,6 +241,11 @@ struct Flux2KleinEngineRealGoldenTests {
         let result = try await MLXErrorGuard.guardedRun { try await engine.generate(request, injection: injection) }
         try Self.report("golden-embeddings", result: result, golden: golden, steps: collector.all)
     }
+}
+
+nonisolated enum Klein3hGoldenError: Error, CustomStringConvertible {
+    case missingKeys(String)
+    var description: String { switch self { case let .missingKeys(m): return m } }
 }
 
 /// ||a - b|| / ||b||

@@ -44,6 +44,8 @@ nonisolated enum Flux2KleinTransformerError: Error, Equatable, LocalizedError {
 extension Flux2KleinQuantization {
     /// Widths MLX can quantize to (affine, group 64). 7 is not an MLX width.
     static let ditSupportedBits: Set<Int> = [3, 4, 5, 6, 8]
+    /// What the ENGINE accepts for a row's `quantize` (owner ruling 2026-11-01): a limit of this build, like the size cap. The loader range above (and the manifest's) is untouched.
+    static let acceptedRowQuantize: Set<Int> = [4, 8]
 }
 
 extension Flux2KleinDoubleBlock {

@@ -351,29 +351,37 @@ private let tinyRequest = Flux2KleinRequest(prompt: "a tiny test prompt", width:
 // MARK: - quantize and size (done-when c, g)
 
 @Suite struct Flux2KleinEngineValidationTests {
-    @Test(arguments: [3, 4, 5, 6, 8]) func supportedWidthsPass(q: Int) throws {
+    @Test(arguments: [4, 8]) func supportedWidthsPass(q: Int) throws {
         try Flux2KleinEngine.validate(quantize: q)
         var r = tinyRequest; r.quantize = q
         try Flux2KleinEngine.validate(r, budgetBytes: 40_000_000_000)
     }
 
-    @Test(arguments: [7, 0, 1, 2, 9, 16, -4]) func unsupportedWidthsAreRefusedInASentenceAboutTheImageModel(q: Int) {
-        #expect(throws: Flux2KleinTransformerError.unsupportedBits(q)) { try Flux2KleinEngine.validate(quantize: q) }
-        let sentence = Flux2KleinTransformerError.unsupportedBits(q).errorDescription ?? ""
-        #expect(sentence.contains("image model") && sentence.contains("3, 4, 5, 6 or 8") && sentence.contains("\(q)"))
-        #expect(!sentence.contains("text encoder"), "the row-level sentence is about the image model; the encoder's floor has its own sentence")
+    /// Owner ruling 2026-11-01: the engine takes {4, 8} only, even though the loader still knows 3, 5, 6.
+    @Test(arguments: [3, 5, 6, 7, 0, 1, 2, 9, 16, -4]) func everythingButFourAndEightIsRefusedInOneSentenceNamingTheRowAndBothValues(q: Int) {
+        #expect(throws: Flux2KleinEngineError.unsupportedQuantize(row: "Row 3", quantize: q)) { try Flux2KleinEngine.validate(quantize: q, row: "Row 3") }
+        let sentence = Flux2KleinEngineError.unsupportedQuantize(row: "Row 3", quantize: q).errorDescription ?? ""
+        #expect(sentence == "Row 3: FLUX.2 Klein 4B runs at quantize 4 or 8 in this build, not \(q).")
+        #expect(!sentence.contains("text encoder"))
+        var r = tinyRequest; r.quantize = q; r.row = "Row 3"
+        #expect(throws: Flux2KleinEngineError.unsupportedQuantize(row: "Row 3", quantize: q)) { try Flux2KleinEngine.validate(r, budgetBytes: 40_000_000_000) }
+    }
+
+    @Test func theLoadersOwnRangeIsUntouched() {
+        #expect(Flux2KleinQuantization.ditSupportedBits == [3, 4, 5, 6, 8])
+        #expect(Flux2KleinQuantization.acceptedRowQuantize == [4, 8])
     }
 
     @Test func aBadQuantizeIsRefusedBeforeAnythingLoads() async {
         let stages = Klein3hTinyStages()
-        var r = tinyRequest; r.quantize = 7
-        await #expect(throws: Flux2KleinTransformerError.unsupportedBits(7)) { _ = try await tinyEngine(stages).generate(r) }
+        var r = tinyRequest; r.quantize = 5
+        await #expect(throws: Flux2KleinEngineError.unsupportedQuantize(row: r.row, quantize: 5)) { _ = try await tinyEngine(stages).generate(r) }
         #expect(stages.log.events.isEmpty && stages.log.residentAtMake.isEmpty, "nothing may be loaded or capped for a refused row")
     }
 
     @Test func theEncodersOwnSentenceMentionsOnlyItsEightBitFloor() {
         let s = Flux2KleinTextEncoderError.unsupportedBits(7).errorDescription ?? ""
-        #expect(s.contains("8 bits or more") && !s.contains("image model") && !s.contains("3, 4, 5, 6"))
+        #expect(s.contains("8 bits or more") && !s.contains("image model") && !s.contains("3, 4, 5, 6") && !s.contains("quantize 4 or 8"))
     }
 
     @Test func stepsMustBePositive() {
@@ -389,11 +397,11 @@ private let tinyRequest = Flux2KleinRequest(prompt: "a tiny test prompt", width:
         #expect(throws: Flux2KleinSizeError.self) { try Flux2KleinEngine.validate(r, budgetBytes: 1) }
     }
 
-    /// 60% of a 19.3 GB Mac, the same figure `MemoryBudget.shared` gives on the machine these were measured on.
-    static let thisMac = Int64(19.3e9 * 0.6)
+    /// 60% of a 19.3 GB Mac: `Flux2KleinMemoryPlan.budgetBytes(physicalMemory:)`, Klein's own budget (owner ruling 2026-11-01).
+    static let thisMac = Flux2KleinMemoryPlan.budgetBytes(physicalMemory: 19_300_000_000)
 
     @Test func twelveEightyBySquareFitsOnThisMacAtEveryQuantize() throws {
-        for q in [3, 4, 5, 6, 8] {
+        for q in [4, 8] {
             var r = tinyRequest; r.width = 1280; r.height = 1280; r.quantize = q
             try Flux2KleinEngine.validate(r, budgetBytes: Self.thisMac)
         }
@@ -410,8 +418,8 @@ private let tinyRequest = Flux2KleinRequest(prompt: "a tiny test prompt", width:
         #expect(needed * 1e9 > Double(Self.thisMac) && abs(available - Double(Self.thisMac) / 1e9) < 1e-9)
         #expect(largest % 16 == 0 && largest >= 1280 && largest < 2048)
         // the claim is exact: `largest` fits, one multiple of 16 more does not
-        #expect(Flux2KleinMemoryPlan.peaks(width: largest, height: largest, quantize: 8).busiest * 1e9 <= Double(Self.thisMac))
-        #expect(Flux2KleinMemoryPlan.peaks(width: largest + 16, height: largest + 16, quantize: 8).busiest * 1e9 > Double(Self.thisMac))
+        #expect(Flux2KleinMemoryPlan.peaks(width: largest, height: largest, quantize: 8).busiest * 1.15 * 1e9 <= Double(Self.thisMac))
+        #expect(Flux2KleinMemoryPlan.peaks(width: largest + 16, height: largest + 16, quantize: 8).busiest * 1.15 * 1e9 > Double(Self.thisMac))
         let sentence = error.errorDescription ?? ""
         #expect(sentence.contains("FLUX.2 Klein 4B") && sentence.contains("2048 x 2048") && sentence.contains("\(largest) x \(largest)") && sentence.contains("quantize 8"))
     }
@@ -426,6 +434,31 @@ private let tinyRequest = Flux2KleinRequest(prompt: "a tiny test prompt", width:
             do { try Flux2KleinEngine.validate(r, budgetBytes: 1_000_000_000); return nil } catch let e as Flux2KleinEngineError { return e } catch { return nil }
         }())
         #expect(error.errorDescription?.contains("any size") == true)
+    }
+
+    /// Boundary: the budget exactly at the margin-scaled peak admits the size; one byte under refuses it.
+    @Test(arguments: [4, 8]) func theBudgetBoundaryIsTheBusiestPeakTimesOnePointOneFive(q: Int) throws {
+        var r = tinyRequest; r.width = 1024; r.height = 1024; r.quantize = q
+        let need = Flux2KleinMemoryPlan.peaks(width: 1024, height: 1024, quantize: q).busiest * 1.15 * 1e9
+        try Flux2KleinEngine.validate(r, budgetBytes: Int64(need.rounded(.up)))
+        #expect(throws: Flux2KleinEngineError.self) { try Flux2KleinEngine.validate(r, budgetBytes: Int64(need.rounded(.down)) - 1) }
+    }
+
+    @Test func theDefaultBudgetIsSixtyPercentOfPhysicalMemoryNotTheSharedLedger() {
+        #expect(Flux2KleinMemoryPlan.budgetBytes(physicalMemory: 16_000_000_000) == 9_600_000_000)
+        #expect(Flux2KleinMemoryPlan.defaultBudgetBytes == Int64(Double(ProcessInfo.processInfo.physicalMemory) * 0.6))
+    }
+
+    @Test func capsOnThisMacAndOnCommonMemorySizes() {
+        for gb in [16.0, 19.3, 32, 64] {
+            let budget = Flux2KleinMemoryPlan.budgetBytes(physicalMemory: UInt64(gb * 1e9))
+            let q8 = Flux2KleinMemoryPlan.largestSquareSide(quantize: 8, budgetBytes: budget)
+            let q4 = Flux2KleinMemoryPlan.largestSquareSide(quantize: 4, budgetBytes: budget)
+            print("KLEINCAP \(gb) GB budget \(budget): q8 \(q8), q4 \(q4)")
+            #expect(q8 % 16 == 0 && q4 >= q8)
+        }
+        let here = Flux2KleinMemoryPlan.largestSquareSide(quantize: 8, budgetBytes: Self.thisMac)
+        #expect(here >= 1024 && here <= 1360)
     }
 
     @Test func theCapUsesTheBitsActuallyChosen() {

@@ -88,6 +88,7 @@ nonisolated struct Flux2KleinResult: @unchecked Sendable {
 
 nonisolated enum Flux2KleinEngineError: Error, Equatable, LocalizedError {
     case invalidSteps(Int)
+    case unsupportedQuantize(row: String, quantize: Int)
     case sizeExceedsMemory(row: String, width: Int, height: Int, quantize: Int, neededGB: Double, availableGB: Double, largestSide: Int)
     case imageConversionFailed
     case injectedShapeMismatch(String)
@@ -97,6 +98,8 @@ nonisolated enum Flux2KleinEngineError: Error, Equatable, LocalizedError {
         switch self {
         case let .invalidSteps(steps):
             return "FLUX.2 Klein needs at least 1 step; the row asks for \(steps)."
+        case let .unsupportedQuantize(row, quantize):
+            return "\(row): FLUX.2 Klein 4B runs at quantize 4 or 8 in this build, not \(quantize)."
         case let .sizeExceedsMemory(row, width, height, quantize, needed, available, largest):
             let head = "\(row) can't make a \(width) x \(height) image at quantize \(quantize) on this Mac: it needs about \(Self.gb(needed)) GB at its busiest step and this Mac can give it \(Self.gb(available)) GB."
             if largest >= Flux2KleinLatents.sizeMultiple {
@@ -118,7 +121,8 @@ nonisolated enum Flux2KleinEngineError: Error, Equatable, LocalizedError {
 // MARK: - Memory plan (done-when c)
 
 /// What each stage costs, from numbers MEASURED on this Mac (decimal GB; reports MP7-3c, 3f, 3g, 3h) and linear in pixels where the stage is. The stages are never co-resident, so
-/// a size fits when the BUSIEST stage fits (not the sum). Compared against `MemoryBudget.shared.capacityBytes` (`max(4 GB, RAM x 0.6)`: 11.6 GB on a 19.3 GB Mac).
+/// a size fits when the BUSIEST stage fits (not the sum). Compared against Klein's OWN budget, `Flux2KleinMemoryPlan.defaultBudgetBytes` (`ProcessInfo.physicalMemory` x 0.6, owner ruling 2026-11-01; not `MemoryBudget.shared`), and the busiest stage is
+/// scaled by `safetyMargin` (1.15) before the comparison.
 ///
 /// Implementer's call, pending owner confirmation: the budget is the whole capacity, not capacity minus what other holders reserve right now (MP7-4 leases through
 /// `LeasingStage` / `MemoryBudget.reserve`, which is where "what is free now" is decided); the figures are MLX peaks (`Memory.peakMemory`), not process footprint.
@@ -143,6 +147,13 @@ nonisolated enum Flux2KleinMemoryPlan {
     /// The same without per-block evaluation (the request's `evaluatesEachBlock` off).
     static let ditActivationBaseNoEvalGB = 1.45
     static let ditActivationGBPerPixelNoEval = 6.5e-7
+
+    /// Owner ruling 2026-11-01: a size is admitted only if the busiest stage x 1.15 fits the budget.
+    static let safetyMargin = 1.15
+    /// Fraction of physical RAM Klein may plan for (owner ruling 2026-11-01).
+    static let budgetFractionOfRAM = 0.6
+    static func budgetBytes(physicalMemory: UInt64) -> Int64 { Int64(Double(physicalMemory) * budgetFractionOfRAM) }
+    static var defaultBudgetBytes: Int64 { budgetBytes(physicalMemory: ProcessInfo.processInfo.physicalMemory) }
 
     static func ditWeightsGB(quantize: Int) -> Double {
         ditWeightsGBAtInt8 + ditWeightsGBPerBit * Double(quantize - 8)
@@ -171,7 +182,7 @@ nonisolated enum Flux2KleinMemoryPlan {
         var lo = 0, hi = 1024                       // sides in units of `multiple`
         func fits(_ units: Int) -> Bool {
             let side = units * multiple
-            return peaks(width: side, height: side, quantize: quantize, evaluatesEachBlock: evaluatesEachBlock).busiest * 1e9 <= Double(budgetBytes)
+            return peaks(width: side, height: side, quantize: quantize, evaluatesEachBlock: evaluatesEachBlock).busiest * safetyMargin * 1e9 <= Double(budgetBytes)
         }
         guard fits(1) else { return 0 }
         lo = 1
@@ -184,7 +195,7 @@ nonisolated enum Flux2KleinMemoryPlan {
 
     /// Throws `Flux2KleinEngineError.sizeExceedsMemory` naming the row, the size asked and the largest that fits. Assumes the size is already a valid multiple of 16.
     static func check(width: Int, height: Int, quantize: Int, row: String, budgetBytes: Int64, evaluatesEachBlock: Bool = true) throws {
-        let busiest = peaks(width: width, height: height, quantize: quantize, evaluatesEachBlock: evaluatesEachBlock).busiest
+        let busiest = peaks(width: width, height: height, quantize: quantize, evaluatesEachBlock: evaluatesEachBlock).busiest * safetyMargin
         guard busiest * 1e9 > Double(budgetBytes) else { return }
         throw Flux2KleinEngineError.sizeExceedsMemory(row: row, width: width, height: height, quantize: quantize, neededGB: busiest,
                                                       availableGB: Double(budgetBytes) / 1e9,
@@ -311,7 +322,7 @@ nonisolated struct Flux2KleinEngine: Sendable {
 
     init(stages: any Flux2KleinStageSource,
          cacheLimits: Flux2KleinCacheLimits = .standard,
-         budgetBytes: @escaping @Sendable () -> Int64 = { MemoryBudget.shared.capacityBytes },
+         budgetBytes: @escaping @Sendable () -> Int64 = { Flux2KleinMemoryPlan.defaultBudgetBytes },
          readCacheLimit: @escaping @Sendable () -> Int = { Memory.cacheLimit },
          writeCacheLimit: @escaping @Sendable (Int) -> Void = { Memory.cacheLimit = $0 },
          observer: (@Sendable (Flux2KleinLifecycleEvent) -> Void)? = nil) {
@@ -328,16 +339,16 @@ nonisolated struct Flux2KleinEngine: Sendable {
     /// `quantize` for the WHOLE row, in a sentence about the image model; then the size (multiple of 16, SPEC-Q242), then the memory cap. Everything the engine would refuse, refused
     /// before anything loads. The text encoder's own check (its 8-bit floor) can never fire from here because the encoder is only ever asked for `max(quantize, 8)`.
     static func validate(_ request: Flux2KleinRequest, budgetBytes: Int64) throws {
-        try validate(quantize: request.quantize)
+        try validate(quantize: request.quantize, row: request.row)
         guard request.steps >= 1 else { throw Flux2KleinEngineError.invalidSteps(request.steps) }
         try Flux2KleinLatents.validateSize(width: request.width, height: request.height)   // SPEC-Q242
         try Flux2KleinMemoryPlan.check(width: request.width, height: request.height, quantize: request.quantize, row: request.row, budgetBytes: budgetBytes,
                                           evaluatesEachBlock: request.evaluatesEachBlock)
     }
 
-    /// 3, 4, 5, 6 or 8 (MLX affine widths with group 64; 7 is not one). The sentence is the image model's (`Flux2KleinTransformerError.unsupportedBits`).
-    static func validate(quantize: Int) throws {
-        guard Flux2KleinQuantization.ditSupportedBits.contains(quantize) else { throw Flux2KleinTransformerError.unsupportedBits(quantize) }
+    /// {4, 8} only: a limit of this build (owner ruling 2026-11-01), narrower than the loader's `ditSupportedBits`.
+    static func validate(quantize: Int, row: String = Flux2KleinEngine.modelName) throws {
+        guard Flux2KleinQuantization.acceptedRowQuantize.contains(quantize) else { throw Flux2KleinEngineError.unsupportedQuantize(row: row, quantize: quantize) }
     }
 
     // MARK: Generate
