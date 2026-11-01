@@ -432,7 +432,7 @@ Every model listed here is downloadable and has a working Run UI.
 | **Music Generation** (1) | **MusicGen-small** | 615M (float32, ~2.5 GB) |
 | **Decision** (3) | **Laya 0.4B**, **CLM 8B**, **Clef Flash** | 0.4B – 9B |
 
-The full `browser.json` catalog tracks **~435 models** from mlx-community. New models
+The bundled `browser.json` catalog currently lists **54 models**. New models
 and Run UIs are added with every release.
 
 ### Engine coverage
@@ -579,7 +579,7 @@ Every model in the catalog should eventually have a working Run button.
 ## Roadmap
 
 ### Done
-- [x] Browse, filter, and compare 435+ models
+- [x] Browse, filter, and compare 54 models
 - [x] Hardware-aware RAM/bandwidth filtering
 - [x] One-click install from Hugging Face with progress tracking
 - [x] Gated-repo auth flow (Hugging Face token via Keychain)
