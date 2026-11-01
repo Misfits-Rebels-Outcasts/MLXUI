@@ -169,13 +169,20 @@ nonisolated final class Flux2KleinEmbedders: Module {
         let doubleImg: [Flux2KleinModulationSet]    // 2 sets
         let doubleTxt: [Flux2KleinModulationSet]    // 2 sets
         let single: [Flux2KleinModulationSet]       // 1 set
+
+        /// THE conditioning computation (MP7-3h, owner done-when f: one source, no copy). `Flux2KleinEmbedders` and `Flux2KleinTransformer` each own the
+        /// same four modules under the same checkpoint keys; both call this with their own.
+        static func make(sigma: MLXArray, dtype: DType, time: Flux2KleinTimeEmbed, doubleImg: Flux2KleinModulation, doubleTxt: Flux2KleinModulation,
+                         single: Flux2KleinModulation) -> Conditioning {
+            let temb = time(sigma: sigma, dtype: dtype)
+            return Conditioning(temb: temb, doubleImg: doubleImg.chunks(temb), doubleTxt: doubleTxt.chunks(temb), single: single.chunks(temb))
+        }
     }
 
     /// `sigma` is `[B]` in [0, 1] (multiplied by 1000 inside).
     func conditioning(sigma: MLXArray, dtype: DType = .float32) -> Conditioning {
-        let temb = timeGuidanceEmbed(sigma: sigma, dtype: dtype)
-        return Conditioning(temb: temb, doubleImg: doubleModulationImg.chunks(temb), doubleTxt: doubleModulationTxt.chunks(temb),
-                            single: singleModulation.chunks(temb))
+        Conditioning.make(sigma: sigma, dtype: dtype, time: timeGuidanceEmbed, doubleImg: doubleModulationImg, doubleTxt: doubleModulationTxt,
+                          single: singleModulation)
     }
 
     /// Final layers: `proj_out(norm_out(x, temb))`.

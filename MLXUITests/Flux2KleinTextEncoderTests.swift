@@ -146,7 +146,9 @@ enum KleinCosine {
         #expect(throws: Flux2KleinTextEncoderError.unsupportedBits(bits)) {
             _ = try Flux2KleinTextEncoder.load(shape: Self.tiny, prefix: "w.", shards: [{ Self.weights() }], bits: bits)
         }
-        #expect(Flux2KleinTextEncoderError.unsupportedBits(7).errorDescription?.contains("3, 4, 5, 6 or 8") == true)
+        // MP7-3h: the encoder's own sentence mentions only its 8-bit floor (the row-level choice is the image model's, validated in the engine).
+        let sentence = Flux2KleinTextEncoderError.unsupportedBits(7).errorDescription ?? ""
+        #expect(sentence.contains("8 bits or more") && !sentence.contains("3, 4, 5, 6"))
     }
 
     @Test func aCancelledLoadThrowsCancellationNotAnMLXError() async {

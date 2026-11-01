@@ -222,7 +222,7 @@ struct Flux2KleinEncoderMainActorProbeTests {
         MLXErrorGuard.installFallback()
         MLXErrorGuard.resetFallbackMessage()
         let result = try await MLXErrorGuard.guardedRun {
-            try await Flux2KleinTextEncoding.embed(prompt: "a red fox in a snowy forest at sunrise", modelDirectory: dir, bits: 8)
+            try await Flux2KleinTextEncoding.embed(prompt: "a red fox in a snowy forest at sunrise", modelDirectory: dir, quantize: 8)
         }
         #expect(result.array.shape == [1, 512, 7680])
         #expect(result.realLength > 12 && result.cutTokenCount == 0)
@@ -244,7 +244,7 @@ struct Flux2KleinEncoderMainActorProbeTests {
         let cacheBefore = Memory.cacheMemory
         let task = Task { @MainActor in
             try await MLXErrorGuard.guardedRun {
-                try await Flux2KleinTextEncoding.embed(prompt: "a lighthouse at dusk", modelDirectory: dir, bits: 8)
+                try await Flux2KleinTextEncoding.embed(prompt: "a lighthouse at dusk", modelDirectory: dir, quantize: 8)
             }
         }
         try await Task.sleep(for: .milliseconds(1500))

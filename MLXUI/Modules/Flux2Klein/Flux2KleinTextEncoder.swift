@@ -29,7 +29,9 @@ nonisolated enum Flux2KleinTextEncoderError: Error, Equatable, LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .unsupportedBits(bits):
-            return "FLUX.2 Klein can quantize its text encoder to 3, 4, 5, 6 or 8 bits; \(bits) is not one of them."
+            // MP7-3h (owner done-when g): the encoder's own sentence mentions only its 8-bit floor. The row-level `quantize` choice is validated, in a sentence
+            // about the image model, before the encoder is ever asked (Flux2KleinEngine.validate).
+            return "The FLUX.2 Klein text encoder always runs at 8 bits or more; \(bits) bits is not a width it can load."
         case let .missingWeight(name):
             return "The FLUX.2 Klein text encoder is missing the weight \(name). Reinstall the model."
         case let .unexpectedWeight(name):
@@ -331,17 +333,19 @@ nonisolated struct Flux2KleinTextEmbeddings: @unchecked Sendable {
 }
 
 nonisolated enum Flux2KleinTextEncoding {
-    /// Tokenize with the installed `tokenizer/`, load the streamed encoder from `text_encoder/` (at `max(bits, 8)`), encode, drop the encoder, clear MLX's buffer cache.
+    /// Tokenize with the installed `tokenizer/`, load the streamed encoder from `text_encoder/` at `max(quantize, 8)`, encode, drop the encoder, clear MLX's buffer cache.
+    /// `quantize` is the ROW's setting and is not optional (MP7-3h, owner done-when g): the unquantized bf16 encoder (6.85 GB) stays reachable only through the test-facing
+    /// `Flux2KleinTextEncoder.load(... bits: nil)`. The caller has already validated `quantize` for the whole row (`Flux2KleinEngine.validate`).
     /// `@concurrent`: a nonisolated async function runs on the caller's executor, and a 27-layer forward on the main actor beachballs.
     /// The result is evaluated before it leaves this function (MixedSubscript rule 17b).
-    @concurrent static func embed(prompt: String, modelDirectory: URL, bits: Int?) async throws -> Flux2KleinTextEmbeddings {
+    @concurrent static func embed(prompt: String, modelDirectory: URL, quantize: Int) async throws -> Flux2KleinTextEmbeddings {
         // Whatever happens (done, thrown, cancelled), MLX's buffer cache is emptied on the way out.
         defer { Memory.clearCache() }
         let tokenizer = try await HFTokenizerLoader().load(from: modelDirectory.appendingPathComponent("tokenizer"))
         let encoded = try Flux2KleinPrompt.encode(prompt, tokenizer: tokenizer)
         let result: Flux2KleinTextEmbeddings
         do {   // the encoder is released at the end of this block, BEFORE the function-level defer empties the cache
-            let encoder = try Flux2KleinTextEncoder.load(textEncoderDirectory: modelDirectory.appendingPathComponent("text_encoder"), bits: bits)
+            let encoder = try Flux2KleinTextEncoder.load(textEncoderDirectory: modelDirectory.appendingPathComponent("text_encoder"), bits: quantize)
             result = Flux2KleinTextEmbeddings(array: try encoder.embeddings(for: encoded), realLength: encoded.realLength,
                                               cutTokenCount: encoded.cutTokenCount)
         }

@@ -60,9 +60,10 @@ nonisolated enum Flux2KleinLatents {
 
     /// `[1, 128, H/16, W/16]` standard-normal noise, the patchified layout the pipeline draws (`prepare_latents`).
     /// The values are MLX's generator for the seed, not torch's; a Swift run is reproducible with itself, not with diffusers.
-    static func makeNoise(width: Int, height: Int, seed: UInt64, dtype: DType = .float32) throws -> MLXArray {
+    /// `channels` is 128 for the real model; the tiny test models of the staged engine (MP7-3h) pass their own.
+    static func makeNoise(width: Int, height: Int, seed: UInt64, dtype: DType = .float32, channels: Int = patchedChannels) throws -> MLXArray {
         let g = try validateSize(width: width, height: height)
-        return MLXRandom.normal([1, patchedChannels, g.gridHeight, g.gridWidth], dtype: dtype, key: MLXRandom.key(seed))
+        return MLXRandom.normal([1, channels, g.gridHeight, g.gridWidth], dtype: dtype, key: MLXRandom.key(seed))
     }
 
     // MARK: Patchify / pack

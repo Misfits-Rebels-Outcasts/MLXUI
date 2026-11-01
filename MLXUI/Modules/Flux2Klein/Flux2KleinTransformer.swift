@@ -130,7 +130,11 @@ nonisolated final class Flux2KleinTransformer: Module {
 
     /// `hidden` `[B, Si, in_channels]`, `encoder` `[B, St, joint_attention_dim]`, `sigma` `[B]` in [0, 1] (multiplied by 1000 inside), `imgIDs` `[Si, 4]` (or `[1, Si, 4]`),
     /// `txtIDs` `[St, 4]`. Returns the prediction `[B, Si, in_channels]`, EVALUATED (so it may cross an actor hop, rule 17b). The model computes in the dtype of `hidden`.
-    func callAsFunction(hidden: MLXArray, encoder: MLXArray, sigma: MLXArray, imgIDs: MLXArray, txtIDs: MLXArray, probe: Probe? = nil) throws -> MLXArray {
+    ///
+    /// `evaluatesEachBlock` (MP7-3h, owner done-when d; default false = the single end-of-forward evaluation every earlier slice measured): evaluate the running state after every
+    /// block so MLX can free each block's temporaries before the next one is built. Same result; the effect on the streamed peak at 1024 x 1024 is recorded in MP7-3h-report.md.
+    func callAsFunction(hidden: MLXArray, encoder: MLXArray, sigma: MLXArray, imgIDs: MLXArray, txtIDs: MLXArray, evaluatesEachBlock: Bool = false,
+                        probe: Probe? = nil) throws -> MLXArray {
         let e = shape.embedder
         guard hidden.ndim == 3, encoder.ndim == 3, hidden.dim(0) == encoder.dim(0), hidden.dim(2) == e.inChannels, encoder.dim(2) == e.jointAttentionDim else {
             throw Flux2KleinTransformerError.badInput("hidden must be [batch, tokens, \(e.inChannels)] and encoder [batch, rows, \(e.jointAttentionDim)] with the same batch")
@@ -141,9 +145,11 @@ nonisolated final class Flux2KleinTransformer: Module {
             throw Flux2KleinTransformerError.badInput("ids must have one row per token (image \(imgRows) vs \(si), text \(txtRows) vs \(st))")
         }
         let dtype = hidden.dtype
-        // Same pieces as Flux2KleinEmbedders.conditioning(sigma:dtype:), against this model's own front-end modules.
-        let temb = timeGuidanceEmbed(sigma: sigma, dtype: dtype)
-        let imgMod = doubleModulationImg.chunks(temb), txtMod = doubleModulationTxt.chunks(temb), singleMod = singleModulation.chunks(temb)
+        // The one conditioning computation (Flux2KleinEmbedders.Conditioning.make), against this model's own front-end modules.
+        let conditioning = Flux2KleinEmbedders.Conditioning.make(sigma: sigma, dtype: dtype, time: timeGuidanceEmbed, doubleImg: doubleModulationImg,
+                                                                  doubleTxt: doubleModulationTxt, single: singleModulation)
+        let temb = conditioning.temb
+        let imgMod = conditioning.doubleImg, txtMod = conditioning.doubleTxt, singleMod = conditioning.single
         var img = xEmbedder(hidden)
         var txt = contextEmbedder(encoder)
         let (cos, sin) = Flux2KleinRoPE.jointCosSin(textIDs: txtIDs, imageIDs: imgIDs, axesDims: e.axesDims, theta: e.ropeTheta)
@@ -151,6 +157,7 @@ nonisolated final class Flux2KleinTransformer: Module {
         for (index, block) in doubleBlocks.enumerated() {
             try Task.checkCancellation()
             (txt, img) = block(img: img, txt: txt, imgMod: imgMod, txtMod: txtMod, cos: cos, sin: sin)
+            if evaluatesEachBlock { try MLXErrorGuard.evaluate(txt, img) }
             probe?("double_\(index)_txt", txt)
             probe?("double_\(index)_img", img)
         }
@@ -158,12 +165,13 @@ nonisolated final class Flux2KleinTransformer: Module {
         for (index, block) in singleBlocks.enumerated() {
             try Task.checkCancellation()
             joint = block(joint, mod: singleMod[0], cos: cos, sin: sin)
+            if evaluatesEachBlock { try MLXErrorGuard.evaluate(joint) }
             probe?("single_\(index)", joint)
         }
         let imageRows = MLX.split(joint, indices: [st], axis: 1)[1]
         let out = projOut(normOut(imageRows, temb: temb))
         probe?("out", out)
-        eval(out)
+        try MLXErrorGuard.evaluate(out)
         return out
     }
 
