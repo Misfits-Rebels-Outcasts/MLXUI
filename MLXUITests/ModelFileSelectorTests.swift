@@ -227,7 +227,7 @@ struct ModelFileSelectorTests {
         // MG-DL1 decision — the jasonvassallo repo has no EnCodec weights; the installer
         // bundles the mlx-community EnCodec repo so the engine loads only installed files.
         #expect(ModelFileSelector.companionRepo(for: "jasonvassallo/mlx-musicgen-small")
-                == "mlx-community/encodec-32khz-float32")
+                == ModelFileSelector.CompanionRepo(repository: "mlx-community/encodec-32khz-float32", subfolder: "encodec/"))
         #expect(ModelFileSelector.companionRepo(for: "mlx-community/Kokoro-82M-bf16") == nil)
     }
 
