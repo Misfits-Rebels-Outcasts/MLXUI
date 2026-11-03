@@ -148,3 +148,108 @@ struct TranslateGemmaCatalogTests {
         #expect(translate.factor == ModelWeightCharge.loadFactor)
     }
 }
+
+// MC2-2: the About text and every fact the model page and Compare render, plus the pinned HF file list the installer
+// must fetch. Facts from the pinned HF revision (2026-11-04) and its model card.
+extension TranslateGemmaCatalogTests {
+
+    /// The pinned repo's siblings (`/api/models/.../revision/5788ec08?blobs=true`), in the tree's order.
+    static let siblings = [
+        ".gitattributes", "README.md", "added_tokens.json", "chat_template.jinja", "config.json",
+        "generation_config.json", "model.safetensors", "model.safetensors.index.json",
+        "special_tokens_map.json", "tokenizer.json", "tokenizer.model", "tokenizer_config.json",
+    ]
+
+    /// The whole pinned repo: 2,222,628,201 B = 2.22 GB (decimal, the catalog's convention).
+    static let repoBytes: Int64 = 2_222_628_201
+
+    @Test func entryFactsMatchTheCardAndCompare() throws {
+        let e = try Self.entry()
+        #expect(e.hfModelId == "mlx-community/translategemma-4b-it-4bit")
+        // Card header and Compare: display name, family, size, source.
+        #expect(e.displayName == "TranslateGemma 4B")
+        #expect(e.family == "translategemma")
+        #expect(e.paramSize == "4B")
+        #expect(e.source == .mlx)
+        #expect(e.source.rawValue.uppercased() == "MLX")                 // Compare's Source row
+        // Detail tiles: Architecture, Context Window, RAM, Download, License, Updated, Downloads.
+        #expect(DataNormalizer.normalizeArchitecture(e.architecture) == "Gemma3")
+        #expect(e.contextWindow == 2048)                                 // detail/compare render "2K"
+        #expect(String(format: "%.1f", e.ramGB) == "3.3")
+        #expect(DataNormalizer.downloadSize(gb: e.downloadSizeGB) == "2.2 GB")
+        #expect(DataNormalizer.normalizeLicense(e.license) == "Gemma Terms of Use")
+        #expect(e.lastUpdated == "2026-01-16")
+        #expect(e.formattedDownloads() == "3.8K")
+        // No speed figure (the card publishes none; meaningfulness aside, a translator's tokens/s is not a quality
+        // figure) and no benchmarks — the sanctioned dashes, as SAM-Audio's facts test has it.
+        #expect(e.speedTokensPerSec == nil)
+        #expect(e.displaySpeed == "—")
+        #expect(e.benchmarks == nil)
+        #expect(e.qualityScore == nil)
+        #expect(e.taskTags == ["translation", "text-generation"])
+    }
+
+    /// The About text's claims, pinned — the issue asks for the card's own claims and nothing it doesn't make.
+    @Test func aboutTextSaysWhatItDoesAndNothingMore() throws {
+        let e = try Self.entry()
+        let d = try #require(e.description)
+        // What it does.
+        #expect(d.contains("translating text"))
+        #expect(d.contains("TranslateGemma 4B"))
+        // Decision 2: text only — the About text must not claim image translation.
+        #expect(d.contains("**Text only.**"))
+        #expect(d.localizedCaseInsensitiveContains("no image input"))
+        #expect(d.localizedCaseInsensitiveContains("translating text inside an image is not available"))
+        // Decision 8: the 2K-token input limit, counted on the rendered request.
+        #expect(d.contains("2K-token total input limit"))
+        #expect(d.contains("2,048 tokens"))
+        #expect(d.localizedCaseInsensitiveContains("rendered request"))
+        // Decision 7: deterministic, stops at the end of the turn.
+        #expect(d.contains("greedy (temperature 0)"))
+        #expect(d.localizedCaseInsensitiveContains("stops at the end of the model's turn"))
+        // The model card's 55-language claim, and that the other listed languages are untested.
+        #expect(d.contains("55 languages"))
+        #expect(d.localizedCaseInsensitiveContains("WMT24++"))
+        #expect(d.localizedCaseInsensitiveContains("only the 55 evaluated languages were tested"))
+        // Decision 11: the licence notice, on the page, both editions (the catalog is shared).
+        #expect(d.contains("Gemma Terms of Use"))
+        #expect(d.contains("https://ai.google.dev/gemma/terms"))
+        // MC2-1: the RAM figure is an estimate here; the maintainers set it from their own measurement (MC2-7).
+        #expect(d.contains("RAM figure is an estimate"))
+        #expect(d.contains("download × 1.5"))
+        // No quality claim the card doesn't make.
+        for claim in ["state-of-the-art", "best-in-class", "outperforms", "highest quality", "most accurate",
+                      "better than"] {
+            #expect(!d.localizedCaseInsensitiveContains(claim), "About text must not claim \(claim)")
+        }
+        // The short blurb (cards/lists) also stays text-only and honest.
+        let summary = try #require(e.summary)
+        #expect(summary.contains("TranslateGemma 4B"))
+        #expect(summary.contains("text only"))
+        #expect(summary.contains("2.2 GB"))
+        #expect(!summary.localizedCaseInsensitiveContains("chat"))
+        #expect(!summary.localizedCaseInsensitiveContains("quality"))
+    }
+
+    /// The pinned file list: the installer must fetch the weights, the configs, the chat template and the tokenizer —
+    /// the `.jinja` file is this repo's only copy of the template (tokenizer_config.json has no `chat_template` key).
+    @Test func theInstallerFetchesEveryFileTheEngineNeeds() {
+        let selected = ModelFileSelector.filesToDownload(siblings: Self.siblings)
+        #expect(selected == [
+            "added_tokens.json", "chat_template.jinja", "config.json", "generation_config.json",
+            "model.safetensors", "model.safetensors.index.json", "special_tokens_map.json",
+            "tokenizer.json", "tokenizer.model", "tokenizer_config.json",
+        ])
+        // Named one by one for the review: every file an MLX Gemma 3 load reaches for.
+        for needed in ["model.safetensors", "config.json", "generation_config.json", "chat_template.jinja",
+                       "tokenizer.json", "tokenizer_config.json", "tokenizer.model", "special_tokens_map.json"] {
+            #expect(selected.contains(needed), "the installer must fetch \(needed)")
+        }
+        // Docs and git metadata are not installed.
+        #expect(!selected.contains("README.md"))
+        #expect(!selected.contains(".gitattributes"))
+        // The single-file checkpoint is fully accounted for in the catalog's download figure.
+        #expect(Self.repoBytes == 2_183_295_977 + 33_384_568 + 4_689_074 + 1_155_413 + 79_768 + 16_982 + 2_815 + 128 + 662 + 35 + 1_209 + 1_570)
+    }
+}
+
