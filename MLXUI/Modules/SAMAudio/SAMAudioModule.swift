@@ -18,7 +18,7 @@ enum SAMAudioModule: ModelModule {
         isolated sound and everything else come out (48 kHz mono). Runs the installed mlx-community/sam-audio-base \
         files — the ones InstallManager downloads, with the google-t5/t5-base encoder in t5/ — loading them through \
         SAMAudio(config:) + loadConvertedWeights so no path can download weights. Clips up to 30 s go through one \
-        separate() pass; longer clips are windowed 10 s / 3 s with the library's cosine crossfade so Stop works \
+        separate() pass; longer clips are windowed 30 s / 3 s with the library's cosine crossfade so Stop works \
         between windows. Claims only SAM-Audio-family .separate models; no other module claims that kind.
         """
     )

@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import AVFoundation
 import UniformTypeIdentifiers
+import os
 
 /// `ModelUI` for SAM-Audio sound isolation. Presents `SAMAudioRunView` (pick or drop a recording, say what to
 /// isolate, Run/Stop, play the isolated track or everything else, save either as a WAV at the model's sample rate).
@@ -223,7 +224,7 @@ struct SAMAudioRunView: View {
         // One per run, so a second run never shows the first run's second track.
         let box = SAMAudioTrackBox()
         let stage = LeasingStage.perRun(handedStage, config: StageConfig(prompt: text)) { _ in
-            SAMAudioStage(modelID: modelID, description: text, output: box)
+            model.makeStage(modelID: modelID, description: text, output: box)
         }
         model.start(audioURL: url, stage: stage, output: box)
     }
@@ -253,6 +254,24 @@ final class SAMAudioRunModel: NSObject, AVAudioPlayerDelegate {
     private var task: Task<Void, Never>?
 
     var hasResult: Bool { isolated != nil }
+
+    /// R12: every Run gets a fresh random seed, so "Run again" is a new attempt (the diffusion draw varies; MC1-9b).
+    /// Injectable for tests. The seed is not shown in the UI; it goes to the debug log only.
+    @ObservationIgnored var seedProvider: () -> UInt64 = { UInt64.random(in: UInt64.min...UInt64.max) }
+    /// Where the seed line goes: the app's debug log (`com.ai-browser` / `sam-audio`). Injectable for tests.
+    @ObservationIgnored var seedLog: (String) -> Void = { line in
+        Logger(subsystem: "com.ai-browser", category: "sam-audio").info("\(line, privacy: .public)")
+    }
+
+    /// The line logged for a run's seed: the seed and nothing else (no audio, file name or description).
+    static func seedLogLine(_ seed: UInt64) -> String { "SAM-Audio run seed=\(seed)" }
+
+    /// The real-engine stage for the next Run, with a fresh seed that is logged.
+    func makeStage(modelID: String, description: String, output: SAMAudioTrackBox) -> SAMAudioStage {
+        let seed = seedProvider()
+        seedLog(Self.seedLogLine(seed))
+        return SAMAudioStage(modelID: modelID, description: description, output: output, seed: seed)
+    }
 
     func buffer(_ track: Track) -> AudioBuffer? {
         switch track {

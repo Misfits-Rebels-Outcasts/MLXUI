@@ -129,3 +129,40 @@ struct SAMAudioWindowLoopTests {
         #expect(single.isolated.count == 500 && single.other.count == 500, "the one-window path pads and trims too")
     }
 }
+
+/// MC1-10 (R12): the Run screen's seed policy, through `SAMAudioRunModel.makeStage` with no weights and no engine run.
+@MainActor
+struct SAMAudioRunSeedTests {
+    final class Lines: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stored: [String] = []
+        func add(_ s: String) { lock.lock(); stored.append(s); lock.unlock() }
+        var all: [String] { lock.lock(); defer { lock.unlock() }; return stored }
+    }
+
+    @Test func twoConsecutiveRunsGetDifferentSeeds() {
+        let model = SAMAudioRunModel()
+        let box = SAMAudioTrackBox()
+        let a = model.makeStage(modelID: "mlx-community--sam-audio-base", description: "speech", output: box)
+        let b = model.makeStage(modelID: "mlx-community--sam-audio-base", description: "speech", output: box)
+        #expect(a.seed != nil && b.seed != nil)
+        #expect(a.seed != b.seed, "Run again must be a new attempt")
+    }
+
+    @Test func anInjectedSeedProviderIsHonouredAndLogged() {
+        let model = SAMAudioRunModel()
+        let lines = Lines()
+        model.seedProvider = { 4_242 }
+        model.seedLog = { lines.add($0) }
+        let stage = model.makeStage(modelID: "m", description: "my private description", output: SAMAudioTrackBox())
+        #expect(stage.seed == 4_242)
+        #expect(lines.all == ["SAM-Audio run seed=4242"], "the seed and nothing else: no description, file or audio")
+    }
+
+    @Test func aCallerThatPassesNoSeedGetsTheDefault() {
+        let stage = SAMAudioStage(modelID: "m", description: "speech")
+        #expect(stage.seed == nil)
+        #expect(SAMAudioEngine.effectiveSeed(stage.seed) == SAMAudioEngine.defaultSeed)
+        #expect(SAMAudioEngine.effectiveSeed(9) == 9)
+    }
+}

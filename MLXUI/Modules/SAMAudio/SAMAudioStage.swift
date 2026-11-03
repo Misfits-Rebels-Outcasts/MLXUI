@@ -20,33 +20,36 @@ nonisolated struct SAMAudioStage: PipelineStage {
     /// Where the "everything else" track goes; created per run by the Run view.
     private let output: SAMAudioTrackBox?
     private let modelRate: Int
+    /// The run's seed, when the caller chose one (the Run screen does, per Run); `nil` means the engine's default.
+    let seed: UInt64?
 
     /// The seam tests use: an injectable separator, no weights, no folder.
     init(id: String, name: String, sampleRate: Int = SAMAudioEngine.fallbackSampleRate,
-         output: SAMAudioTrackBox? = nil,
+         output: SAMAudioTrackBox? = nil, seed: UInt64? = nil,
          separate: @escaping @Sendable ([Float], @Sendable @escaping (Double) -> Void) async throws -> SAMAudioEngine.Result) {
         self.id = id
         self.name = name
         self.separate = separate
         self.output = output
         self.modelRate = sampleRate
+        self.seed = seed
     }
 
     /// The real engine on an explicit folder. The app's path (`init(modelID:)`) and the owner-run tests (a temp copy of
     /// the installed folder) both go through here, so they call `SAMAudioEngine.separate` identically.
-    init(modelDirectory: URL, description: String, output: SAMAudioTrackBox? = nil) {
+    init(modelDirectory: URL, description: String, output: SAMAudioTrackBox? = nil, seed: UInt64? = nil) {
         let rate = SAMAudioEngine.sampleRate(in: modelDirectory)
         self.init(id: "samaudio.\(modelDirectory.lastPathComponent)", name: "SAM-Audio",
-                  sampleRate: rate, output: output) { samples, progress in
+                  sampleRate: rate, output: output, seed: seed) { samples, progress in
             try await SAMAudioEngine.separate(samples, description: description, modelDirectory: modelDirectory,
-                                              progress: progress)
+                                              seed: SAMAudioEngine.effectiveSeed(seed), progress: progress)
         }
     }
 
     /// The real engine on the installed folder of `modelID`.
-    init(modelID: String, description: String, output: SAMAudioTrackBox? = nil) {
+    init(modelID: String, description: String, output: SAMAudioTrackBox? = nil, seed: UInt64? = nil) {
         self.init(modelDirectory: SAMAudioEngine.installedModelDirectory(id: modelID), description: description,
-                  output: output)
+                  output: output, seed: seed)
     }
 
     func run(_ input: Media, progress: @Sendable @escaping (Double) -> Void) async throws -> Media {

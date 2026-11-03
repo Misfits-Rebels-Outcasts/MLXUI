@@ -255,8 +255,8 @@ struct SAMAudioRealLoadTests {
         #expect(loaded.sampleRate == 48_000, "the codec's own rate")
     }
 
-    /// A clip over 30 s takes the windowed path: progress rises per window, both tracks keep the recording's length,
-    /// and the whole thing finishes. The line prints wall time and the measured speed.
+    /// A clip over 30 s takes the windowed path (30 s windows every 27 s: a 65 s clip is 3 windows): progress rises per
+    /// window, both tracks keep the recording's length, and the whole thing finishes. The line prints wall time and the measured speed.
     @Test(.enabled(if: SAMAudioRealLoadTests.enabled))
     func aClipOverThirtySecondsGoesThroughTheWindows() async throws {
         let dir = try #require(SAMAudioRealLoad.directory)
@@ -268,7 +268,7 @@ struct SAMAudioRealLoadTests {
             SAMAudioRealLoad.report("65s-windowed", result: result, speech: clip.speech, wall: wall, audioSeconds: 65)
             print("SAMWINDOWS values=\(log.values)")
             #expect(result.isolated.count == clip.mix.count)
-            #expect(log.values.count > 1, "a 65 s clip must run several windows")
+            #expect(log.values.count > 1, "a 65 s clip must run several (3) windows")
             #expect(log.values == log.values.sorted() && log.values.last == 1.0)
             // MC1-9 (R3): the windowed path must separate as well as the single pass does (0.975 / 0.032 measured).
             let iso = SAMAudioRealLoad.correlation(result.isolated, clip.speech)
@@ -288,7 +288,9 @@ struct SAMAudioRealLoadTests {
     /// derived from the engine's time estimate (which can change for the Run screen's sake). The loop checks
     /// cancellation before the next window, so the real stop is expected in well under a second; one window measured
     /// about 11 s warm, so 45 s still covers a window that was in flight on a much slower Mac and fails a run that went
-    /// on to finish the file (a 95 s clip is a dozen windows, over two minutes at the measured speed). Two timestamps
+    /// on to finish the file. MC1-10: windows are 30 s now, one takes about 21 s warm (65 s clips ran at 0.96-1.0x with
+    /// the load included), so 45 s is about two windows of slack; the clip is 150 s (6 windows, so over 100 s of work
+    /// is left when the first window finishes) to keep a run that carries on well past the bound. Two timestamps
     /// are printed, relative to the test start, so the journal shows the stop came after the first window and not
     /// during the load. (The loop's Stop logic itself is covered without weights by `SAMAudioWindowLoopTests`.)
     static let stopBound: Double = 45
@@ -296,7 +298,7 @@ struct SAMAudioRealLoadTests {
     @Test(.enabled(if: SAMAudioRealLoadTests.enabled))
     func cancelStopsBetweenWindows() async throws {
         let dir = try #require(SAMAudioRealLoad.directory)
-        try await SAMAudioRealLoad.withClip(seconds: 95) { clip in
+        try await SAMAudioRealLoad.withClip(seconds: 150) { clip in
             let started = Date()
             let holder = SamTaskHolder()
             let firstProgressAt = SamTimestamp()
@@ -312,7 +314,7 @@ struct SAMAudioRealLoadTests {
             } catch is CancellationError {
                 let ended = Date().timeIntervalSince(started)
                 let first = try #require(firstProgressAt.value, "the run ended before any window finished")
-                print(String(format: "SAMCANCEL firstProgressAt=%.1f s runEndedAt=%.1f s (stop took %.2f s after window 1; 95 s clip, a dozen windows)",
+                print(String(format: "SAMCANCEL firstProgressAt=%.1f s runEndedAt=%.1f s (stop took %.2f s after window 1; 150 s clip, 6 windows)",
                              first, ended, ended - first))
                 #expect(ended - first < Self.stopBound,
                         "the run must stop within \(Self.stopBound) s of the first window finishing")

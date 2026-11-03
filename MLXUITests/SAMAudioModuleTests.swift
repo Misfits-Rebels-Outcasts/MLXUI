@@ -159,13 +159,13 @@ struct SAMAudioModuleTests {
     }
 
     @Test func theLibrarysWindowShapeIsTheOneWePlan() {
-        // A 30-minute clip at 48 kHz with the engine's defaults: 10 s windows every 7 s.
+        // A 30-minute clip at 48 kHz with the engine's defaults: 30 s windows every 27 s (MC1-10; was 10 s every 7 s).
         let samples = SAMAudioEngine.maxDurationSeconds.secondsToSamples(rate: 48_000)
         let plan = SAMAudioEngine.chunkPlan(sampleCount: samples,
                                             chunkSamples: Int(48_000 * SAMAudioEngine.chunkSeconds),
                                             overlapSamples: Int(48_000 * SAMAudioEngine.overlapSeconds))
         #expect(plan.overlap == 144_000)
-        #expect(plan.windows.count == 257, "ceil((1800 - 10) / 7) + 1")
+        #expect(plan.windows.count == 67, "ceil((1800 - 30) / 27) + 1")
         #expect(plan.windows.last?.upperBound == samples)
     }
 
@@ -221,7 +221,9 @@ struct SAMAudioModuleTests {
 
     @Test func theDefaultsAreTheOnesTheIssueNames() {
         #expect(SAMAudioEngine.wholeClipLimitSeconds == 30)
-        #expect(SAMAudioEngine.chunkSeconds == 10)
+        #expect(SAMAudioEngine.chunkSeconds == 30, "owner ruling 2026-11-03 (MC1-10)")
+        #expect(Double(SAMAudioEngine.chunkSeconds) == SAMAudioEngine.wholeClipLimitSeconds,
+                "a clip that fits one pass and one window of a longer clip are the same size")
         #expect(SAMAudioEngine.overlapSeconds == 3)
         #expect(SAMAudioEngine.maxDurationSeconds == 1_800)
     }

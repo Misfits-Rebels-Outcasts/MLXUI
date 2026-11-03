@@ -20,9 +20,11 @@ import MLXAudioSTS
 /// (``sampleRate(in:)``) and reported by `model.sampleRate`; it is neither the ASR path's 16 kHz nor assumed. Saved
 /// WAVs use it, and the stage resamples the input to it (not through the ASR resampler).
 ///
-/// **Chunking — same windows as the library's `separateLong`, run here (implementer's call, pending owner
+/// **Chunking — the library's `separateLong` algorithm (windows, overlap, crossfade), run here with 30 s windows**
+/// (owner ruling 2026-11-03: 30 s windows scored 0 bad windows in 30 against 13 in 90 at the library's 10 s default,
+/// MC1-9b). Implementer's call for the rest, pending owner confirmation (implementer's call, pending owner
 /// confirmation).** Up to ``wholeClipLimitSeconds`` (30 s) the clip goes through one `model.separate` pass; above it
-/// the clip is separated in ``chunkSeconds`` (10 s) windows that overlap by ``overlapSeconds`` (3 s) and are joined
+/// the clip is separated in ``chunkSeconds`` (30 s) windows that overlap by ``overlapSeconds`` (3 s) and are joined
 /// with the library's cosine crossfade (``cosineFade(count:)``, ``accumulate(into:window:values:overlap:isFirst:isLast:)``).
 /// The library's own `separateLong` does exactly these windows but offers no hook between them, so it cannot honour
 /// Stop or report progress; this loop is that algorithm with a `Task.checkCancellation()` **before every window**.
@@ -42,8 +44,9 @@ nonisolated enum SAMAudioEngine {
 
     /// Up to this long, a clip is separated in one pass; longer clips are windowed (see the type comment).
     nonisolated static let wholeClipLimitSeconds: Double = 30
-    /// Window length above ``wholeClipLimitSeconds``; the library's `separateLong` default.
-    nonisolated static let chunkSeconds: Float = 10
+    /// Window length above ``wholeClipLimitSeconds``: 30 s, the same as that limit, so a clip that fits one pass and a
+    /// window of a longer clip are the same size (owner ruling 2026-11-03; the library's own default is 10 s).
+    nonisolated static let chunkSeconds: Float = 30
     /// Overlap between windows; the library's `separateLong` default.
     nonisolated static let overlapSeconds: Float = 3
     /// Longest recording accepted, in seconds: 30 minutes (owner decision 5).
@@ -264,6 +267,10 @@ nonisolated enum SAMAudioEngine {
     /// (MC1-9, R3). Each window's noise is `key(seed + windowIndex)`; nothing here ever seeds or reads the global
     /// `MLXRandom` state.
     nonisolated static let defaultSeed: UInt64 = 20_260_503
+
+    /// The seed a run uses: the caller's, or ``defaultSeed`` when it passes none. The Run screen passes a fresh random
+    /// one per Run (R12); flows and other callers get the default and so reproducible tracks.
+    nonisolated static func effectiveSeed(_ seed: UInt64?) -> UInt64 { seed ?? defaultSeed }
 
     /// What one window's separation returns: the named sound and everything else, for that window's samples.
     struct WindowTracks: Sendable {
