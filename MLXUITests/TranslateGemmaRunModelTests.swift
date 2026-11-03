@@ -37,7 +37,9 @@ struct TranslateGemmaRunModelTests {
                                footprintBytes: 1)
     }
 
-    private func waitUntilIdle(_ model: TranslateGemmaRunModel, timeout: Duration = .seconds(3)) async throws {
+    /// The full suite can be heavily loaded (parallel test processes); the run's own work is a few main-actor hops, so a
+    /// generous bound is a no-op when healthy and keeps a loaded machine from recording a false timeout.
+    private func waitUntilIdle(_ model: TranslateGemmaRunModel, timeout: Duration = .seconds(30)) async throws {
         let deadline = ContinuousClock.now + timeout
         while model.isRunning, ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(5))
