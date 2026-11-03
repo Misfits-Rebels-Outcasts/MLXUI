@@ -11,6 +11,9 @@ import MLXAudioSTS
 ///
 /// Every test calls `SAMAudioEngine.separate` (the app's engine path), on the folder itself: the tests never write to it.
 /// A skipped run does not count as evidence.
+///
+/// **Opt-in (R5):** these also need `MLXUI_TEST_SAMAUDIO=1` (see ``optedIn``). Without it every test here reports as
+/// skipped, never as passed.
 enum SAMAudioRealLoad {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
@@ -27,7 +30,16 @@ enum SAMAudioRealLoad {
         return url
     }()
 
-    nonisolated static var canRun: Bool { directory != nil }
+    /// R5 (MC1-8): every suite that loads the real weights needs this explicit opt-in as well as the weights — a stray
+    /// `ModelStore` install must never start a 12+ GB run by itself. `MLXUI_TEST_SAMAUDIO=1`, which reaches the test
+    /// host as `TEST_RUNNER_MLXUI_TEST_SAMAUDIO=1` through `xcodebuild`. Same shape as the footprint suite's switch.
+    nonisolated static var optedIn: Bool {
+        (env["MLXUI_TEST_SAMAUDIO"] ?? env["TEST_RUNNER_MLXUI_TEST_SAMAUDIO"]) == "1"
+    }
+
+    /// True only when the opt-in is set **and** the weights are installed. Every real-weights `.enabled(if:)` uses this
+    /// (the footprint suite, which also needs its own switch, goes through it too).
+    nonisolated static var canRun: Bool { optedIn && directory != nil }
 
     /// A ~25 s speech passage, read by `say` at roughly 170 words a minute.
     nonisolated static let passage = """
@@ -261,26 +273,42 @@ struct SAMAudioRealLoadTests {
         }
     }
 
-    /// Stop, honoured between windows: a long run cancelled once it has started ends quickly with a `CancellationError`
-    /// and no audio, rather than finishing the file.
+    /// Stop, honoured between windows (R4): the run is cancelled from inside the **first progress callback** — the first
+    /// window has just finished, so the load is over and the loop is at the check before window 2 — and must end with a
+    /// `CancellationError` and no audio within one window's time plus a margin. Not a fixed delay: that would race the
+    /// ~15-60 s load and prove nothing about the windows.
+    ///
+    /// The bound: one window is `chunkSeconds` (10 s) of audio; `estimate` budgets 3 s per audio second, so a window is
+    /// budgeted at 30 s (measured warm: about 11 s). The loop checks cancellation before the next window, so the real
+    /// stop is expected in well under a second; the 30 s window + 15 s margin = 45 s covers a window that was already in
+    /// flight on a slower Mac and still fails a run that went on to finish the file (a 95 s clip is a dozen windows, over
+    /// 6 minutes at the budget). Two timestamps are printed, relative to the test start, so the journal shows the stop
+    /// came after the first window and not during the load.
     @Test(.enabled(if: SAMAudioRealLoadTests.enabled))
     func cancelStopsBetweenWindows() async throws {
         let dir = try #require(SAMAudioRealLoad.directory)
         try await SAMAudioRealLoad.withClip(seconds: 95) { clip in
             let started = Date()
+            let holder = SamTaskHolder()
+            let firstProgressAt = SamTimestamp()
             let task = Task {
-                try await SAMAudioEngine.separate(clip.mix, description: "speech", modelDirectory: dir)
+                try await SAMAudioEngine.separate(clip.mix, description: "speech", modelDirectory: dir) { _ in
+                    if firstProgressAt.setIfFirst(Date().timeIntervalSince(started)) { holder.cancel() }
+                }
             }
-            // Let the load and the first window happen, then stop as a person would.
-            try await Task.sleep(for: .seconds(1))
-            task.cancel()
+            holder.set(task)
+            let windowBudget = SAMAudioEngine.chunkSeconds * Float(SAMAudioEngine.estimatedProcessingSecondsPerAudioSecond)
+            let margin = 15.0
             do {
                 _ = try await task.value
                 Issue.record("a cancelled run must not return audio")
             } catch is CancellationError {
-                let stopped = Date().timeIntervalSince(started)
-                print(String(format: "SAMCANCEL stopped after %.1f s of a 95 s clip", stopped))
-                #expect(stopped < 90, "the run must stop between windows, not finish the file")
+                let ended = Date().timeIntervalSince(started)
+                let first = try #require(firstProgressAt.value, "the run ended before any window finished")
+                print(String(format: "SAMCANCEL firstProgressAt=%.1f s runEndedAt=%.1f s (stop took %.2f s after window 1; 95 s clip, a dozen windows)",
+                             first, ended, ended - first))
+                #expect(ended - first < Double(windowBudget) + margin,
+                        "the run must stop within one window (\(windowBudget) s) + \(margin) s of the first window finishing")
             } catch {
                 Issue.record("\(error)")
             }
@@ -344,4 +372,27 @@ private final class SamProgressLog: @unchecked Sendable {
     private var stored: [Double] = []
     func add(_ v: Double) { lock.lock(); stored.append(v); lock.unlock() }
     var values: [Double] { lock.lock(); defer { lock.unlock() }; return stored }
+}
+
+private final class SamTimestamp: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: Double?
+    /// Records `v` if nothing is recorded yet; true for the first caller only.
+    func setIfFirst(_ v: Double) -> Bool { lock.lock(); defer { lock.unlock() }; if stored != nil { return false }; stored = v; return true }
+    var value: Double? { lock.lock(); defer { lock.unlock() }; return stored }
+}
+
+/// Lets the progress callback cancel the task that is running it (the task does not exist yet when the closure is made).
+private final class SamTaskHolder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var task: Task<SAMAudioEngine.Result, Error>?
+    private var cancelRequested = false
+    func set(_ t: Task<SAMAudioEngine.Result, Error>) {
+        lock.lock(); task = t; let pending = cancelRequested; lock.unlock()
+        if pending { t.cancel() }
+    }
+    func cancel() {
+        lock.lock(); cancelRequested = true; let t = task; lock.unlock()
+        t?.cancel()
+    }
 }
