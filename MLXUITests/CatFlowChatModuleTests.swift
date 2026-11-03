@@ -111,8 +111,10 @@ struct CatFlowChatModuleTests {
             // module (MC2-4) claims it instead; until then it resolves to nothing.
             if entry.runnerKind == .translate {
                 #expect(entry.modelType == .llm, "\(entry.id): the translator stays modelType llm")
-                // MC2-1: the module lands in MC2-4; until then the entry resolves to nothing, and never to chat.
-                #expect(before == nil, "\(entry.id) resolved before ChatModule existed")
+                // MC2-4 registers its own module, so it resolves there whether ChatModule is present or not — the point
+                // is that ChatModule never takes it (owner decision 3 / Trap 5).
+                #expect(before == "translategemma", "\(entry.id) resolves to its own module, not chat")
+                #expect(after == before, "\(entry.id): ChatModule must not change its resolution")
                 #expect(after != "chat", "\(entry.id) must never resolve to chat")
                 translateChecked += 1
             } else if entry.modelType == .llm {

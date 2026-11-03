@@ -56,5 +56,9 @@ let installedModules: [ModelModule.Type] = [
     WanVideoModule.self,
     SeedVR2Module.self,
     RIFEModule.self,   // RIFE-3d: the only .interpolate module; claims RIFE-family entries only
+    // MC2-4: TranslateGemma 4B — the only `.translate` module; claims `translategemma`-family entries only. Listed
+    // before `ChatModule` (Trap 5) so the Run-sheet/module table's order matches every other model module; Chat stays
+    // last so its `.llm` claim can never move another entry's resolution.
+    TranslateGemmaModule.self,
     ChatModule.self,
 ]
