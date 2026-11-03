@@ -254,16 +254,17 @@ final class InstallManager {
             }
 
             // 1b. Some models need weights from a second HF repo bundled into the install
-            // (e.g. MusicGen's EnCodec codec is a separate repo — MG-DL1). Their files land
-            // under `encodec/` inside the model dir, so the engine's A2-pattern load path
+            // (e.g. MusicGen's EnCodec codec is a separate repo — MG-DL1; SAM-Audio's T5 text
+            // encoder — MC1-3). Their files land under the companion's own subfolder
+            // (`encodec/`, `t5/`) inside the model dir, so the engine's A2-pattern load path
             // finds them next to the model's own files.
             let companion = ModelFileSelector.companionRepo(for: hfModelId)
             var companionFiles: [HFRemoteFile] = []
             if let companion {
-                companionFiles = try await resolveFiles(for: companion)
+                companionFiles = try await resolveFiles(for: companion.repository)
             }
 
-            print("[Install] Resolved \(files.count) files" + (companion.map { " + \($0)" } ?? ""))
+            print("[Install] Resolved \(files.count) files" + (companion.map { " + \($0.repository)" } ?? ""))
 
             await MainActor.run {
                 setState(.downloading(progress: 0, downloaded: 0, total: 1), forRepo: repo)
@@ -288,7 +289,7 @@ final class InstallManager {
             }
             var plan: [DownloadPlanEntry] = files.map { .init(file: $0, repo: variant, subdir: "") }
             if let companion {
-                plan += companionFiles.map { .init(file: $0, repo: companion, subdir: "encodec/") }
+                plan += companionFiles.map { .init(file: $0, repo: companion.repository, subdir: companion.subfolder) }
             }
 
             var downloadedSoFar: Int64 = 0

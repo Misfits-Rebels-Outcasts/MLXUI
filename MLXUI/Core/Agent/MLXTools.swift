@@ -103,7 +103,7 @@ nonisolated struct InstalledModelIndex: Sendable {
         switch family {
         case "Llama-OuteTTS":             return .tts
         case "LFM2.5-Audio":              return .voice
-        case "sam-audio":                 return .unsupported
+        case "sam-audio":                 return .separate
         default:                          break
         }
         switch modelType {
@@ -121,6 +121,7 @@ nonisolated struct InstalledModelIndex: Sendable {
         case "enhance":       return .enhance
         case "voice":         return .voice
         case "interpolate":   return .interpolate
+        case "separate":      return .separate
         default:              return .unsupported  // video / unknown
         }
     }

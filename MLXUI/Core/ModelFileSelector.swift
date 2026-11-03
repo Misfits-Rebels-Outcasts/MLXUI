@@ -73,14 +73,30 @@ enum ModelFileSelector {
     /// lives in a companion repo. Bundling (rather than a runtime fetch) keeps the MLX-first
     /// A2 pattern — the runtime loads only files `InstallManager` already downloaded.
     ///
+    /// **`subfolder`** is where the companion's files land inside the installed model folder, so each engine's
+    /// load path finds them by name (MC1-3 generalised this from the hard-coded `encodec/`).
+    ///
     /// MG-DL1 decision (backlog step 3): `jasonvassallo/mlx-musicgen-small` ships the decoder
     /// and T5 encoder but **no EnCodec weights**; the 32 kHz / 4-codebook codec lives in its
     /// own mlx-community repo (the same one the mlx-examples Python reference hardcodes).
     /// Its files land under `encodec/` in the installed model dir.
-    static func companionRepo(for hfModelId: String) -> String? {
+    ///
+    /// MC1: `mlx-community/sam-audio-base` ships no text encoder, and `SAMAudio` would otherwise download
+    /// `t5-base` itself on the first run (`T5TextEncoder.resolveModelFolder` calls `HubApi().snapshot` when the
+    /// config's `text_encoder.name` is not a path). `google-t5/t5-base` (Apache-2.0) lands in `t5/`, and
+    /// `SAMAudioEngine.load` points the config at that folder.
+    struct CompanionRepo: Equatable, Sendable {
+        let repository: String
+        /// Destination inside the installed model folder, with a trailing slash.
+        let subfolder: String
+    }
+
+    static func companionRepo(for hfModelId: String) -> CompanionRepo? {
         switch hfModelId {
         case "jasonvassallo/mlx-musicgen-small":
-            return "mlx-community/encodec-32khz-float32"
+            return CompanionRepo(repository: "mlx-community/encodec-32khz-float32", subfolder: "encodec/")
+        case "mlx-community/sam-audio-base":
+            return CompanionRepo(repository: "google-t5/t5-base", subfolder: "t5/")
         default:
             return nil
         }
