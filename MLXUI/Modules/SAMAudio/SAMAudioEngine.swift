@@ -260,11 +260,73 @@ nonisolated enum SAMAudioEngine {
 
     // MARK: - Run
 
+    /// The run seed used when the caller gives none. Fixed, so the same recording gives the same two tracks every time
+    /// (MC1-9, R3). Each window's noise is `key(seed + windowIndex)`; nothing here ever seeds or reads the global
+    /// `MLXRandom` state.
+    nonisolated static let defaultSeed: UInt64 = 20_260_503
+
+    /// What one window's separation returns: the named sound and everything else, for that window's samples.
+    struct WindowTracks: Sendable {
+        var target: [Float]
+        var residual: [Float]
+    }
+
+    /// The per-window separate call, as the window loop sees it: the window's samples, its index and its seeded noise.
+    /// The engine passes the real `SAMAudio.separate`; unit tests pass a fake, so the loop (Stop between windows,
+    /// progress, the crossfade, the noise) is tested without weights.
+    typealias WindowSeparator = @Sendable (_ window: [Float], _ index: Int, _ noise: MLXArray) async throws -> WindowTracks
+
+    /// The noise for window `index`: standard normal, shape `[1, frames, channels]` (the shape of the model's audio
+    /// features for that window: `frames` = the window's codec frames, `channels` = 2 x the codec's codebook dimension),
+    /// from the explicit key `seed + index`. Evaluated here, before it can cross an `await` (MLX thread-bound streams).
+    nonisolated static func windowNoise(seed: UInt64, index: Int, frames: Int, channels: Int) throws -> MLXArray {
+        let key = MLXRandom.key(seed &+ UInt64(index))
+        let noise = MLXRandom.normal([1, frames, channels], key: key)
+        try MLXErrorGuard.evaluate(noise)
+        return noise
+    }
+
+    /// The window loop. `Task.checkCancellation()` runs **before every window** (so Stop ends a long run between
+    /// windows), `progress` gets 0...1 **after** each, and the tracks are joined with the cosine crossfade and keep
+    /// the recording's length (trimmed or zero-padded when the codec's rounding returns a few samples more or fewer).
+    /// `hopLength` and `noiseChannels` size each window's noise: `ceil(window / hopLength)` frames.
+    nonisolated static func runWindows(sampleCount: Int, plan: (windows: [Range<Int>], overlap: Int),
+                                       samples: [Float], seed: UInt64, hopLength: Int, noiseChannels: Int,
+                                       separateWindow: WindowSeparator,
+                                       progress: @Sendable (Double) -> Void) async throws -> (isolated: [Float], other: [Float]) {
+        var isolated = [Float](repeating: 0, count: sampleCount)
+        var other = [Float](repeating: 0, count: sampleCount)
+        for (index, window) in plan.windows.enumerated() {
+            try Task.checkCancellation()
+            let isOnlyWindow = plan.windows.count == 1
+            let frames = (window.count + hopLength - 1) / max(hopLength, 1)
+            let noise = try windowNoise(seed: seed, index: index, frames: frames, channels: noiseChannels)
+            let tracks = try await separateWindow(Array(samples[window]), index, noise)
+            if isOnlyWindow {
+                place(tracks.target, into: &isolated, startingAt: 0)
+                place(tracks.residual, into: &other, startingAt: 0)
+            } else {
+                accumulate(into: &isolated, window: window, values: tracks.target, overlap: plan.overlap,
+                           isFirst: index == 0, isLast: index == plan.windows.count - 1)
+                accumulate(into: &other, window: window, values: tracks.residual, overlap: plan.overlap,
+                           isFirst: index == 0, isLast: index == plan.windows.count - 1)
+            }
+            Memory.clearCache()
+            progress(Double(index + 1) / Double(plan.windows.count))
+        }
+        return (isolated, other)
+    }
+
     /// Separates the 48 kHz mono `samples` (the stage resamples first) with the installed model in `modelDirectory`.
     /// `description` is what to isolate, in the model's own words ("speech", "music"). `progress` gets 0...1 per window.
-    /// Cancellation is checked **before every window**, so Stop ends a long run between windows.
+    /// Cancellation is checked **before every window**, so Stop ends a long run between windows. `seed` makes the run
+    /// reproducible (see ``defaultSeed``). `chunkSeconds` and `overlapSeconds` default to the shipped window shape;
+    /// they are parameters so a measurement can try others without changing what ships.
     @concurrent nonisolated static func separate(_ samples: [Float], description: String, modelDirectory: URL,
                                                  maxDurationSeconds: Double? = maxDurationSeconds,
+                                                 seed: UInt64 = SAMAudioEngine.defaultSeed,
+                                                 chunkSeconds: Float = SAMAudioEngine.chunkSeconds,
+                                                 overlapSeconds: Float = SAMAudioEngine.overlapSeconds,
                                                  progress: @Sendable @escaping (Double) -> Void = { _ in }) async throws -> Result {
         do {
             guard !samples.isEmpty else { throw EngineError.emptyAudio }
@@ -287,38 +349,30 @@ nonisolated enum SAMAudioEngine {
                             overlapSamples: Int(Float(rate) * overlapSeconds))
                 : (windows: [0..<samples.count], overlap: 0)
 
-            var isolated = [Float](repeating: 0, count: samples.count)
-            var other = [Float](repeating: 0, count: samples.count)
-            for (index, window) in plan.windows.enumerated() {
-                try Task.checkCancellation()
-                let isOnlyWindow = plan.windows.count == 1
-                let chunk = MLXArray(Array(samples[window])).reshaped([1, 1, window.count])
-                try MLXErrorGuard.evaluate(chunk)
-                let result = try await loaded.model.separate(
-                    audios: chunk,
-                    descriptions: [text],
-                    odeDecodeChunkSize: odeDecodeChunkSize,
-                    _textFeatures: encoded.features,
-                    _textMask: encoded.attentionMask
-                )
-                guard let target = result.target.first, let residual = result.residual.first else {
-                    throw MLXError.caught("the model returned no tracks")
-                }
-                let targetSamples = try MLXErrorGuard.read(target, as: Float.self)
-                let residualSamples = try MLXErrorGuard.read(residual, as: Float.self)
-                if isOnlyWindow {
-                    place(targetSamples, into: &isolated, startingAt: 0)
-                    place(residualSamples, into: &other, startingAt: 0)
-                } else {
-                    accumulate(into: &isolated, window: window, values: targetSamples, overlap: plan.overlap,
-                               isFirst: index == 0, isLast: index == plan.windows.count - 1)
-                    accumulate(into: &other, window: window, values: residualSamples, overlap: plan.overlap,
-                               isFirst: index == 0, isLast: index == plan.windows.count - 1)
-                }
-                Memory.clearCache()
-                progress(Double(index + 1) / Double(plan.windows.count))
-            }
-            return Result(isolated: isolated, other: other, sampleRate: rate)
+            let model = loaded.model
+            let codec = model.config.audioCodec
+            let tracks = try await runWindows(
+                sampleCount: samples.count, plan: plan, samples: samples, seed: seed,
+                hopLength: codec.hopLength, noiseChannels: 2 * codec.codebookDim,
+                separateWindow: { window, _, noise in
+                    let chunk = MLXArray(window).reshaped([1, 1, window.count])
+                    try MLXErrorGuard.evaluate(chunk)
+                    let result = try await model.separate(
+                        audios: chunk,
+                        descriptions: [text],
+                        noise: noise,
+                        odeDecodeChunkSize: odeDecodeChunkSize,
+                        _textFeatures: encoded.features,
+                        _textMask: encoded.attentionMask
+                    )
+                    guard let target = result.target.first, let residual = result.residual.first else {
+                        throw MLXError.caught("the model returned no tracks")
+                    }
+                    return WindowTracks(target: try MLXErrorGuard.read(target, as: Float.self),
+                                        residual: try MLXErrorGuard.read(residual, as: Float.self))
+                },
+                progress: progress)
+            return Result(isolated: tracks.isolated, other: tracks.other, sampleRate: rate)
         } catch let error as StageError {
             throw error
         } catch let error as LimitError {
