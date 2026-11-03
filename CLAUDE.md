@@ -74,6 +74,10 @@ iterative port rather than left silently broken.
 
 Work is driven from `RSI/`, one reviewable cycle at a time. Not ad hoc.
 
+> **No `RSI/` folder?** It's private and not on GitHub (nor are `Design/` and `scripts/`). Outside contributors
+> follow [`docs/contributing/add-a-model.md`](docs/contributing/add-a-model.md) and the GitHub issue for their task;
+> `/add-mlxui` picks that guide automatically when `RSI/` is absent.
+
 | File | Role |
 |---|---|
 | `RSI/policies.md` | **Read first, every cycle.** Current autonomy level (**L2** — one task per cycle, scorecard-first review; promoted from L1 on 2026-09-04, journal `2026-172`) and the standing guardrails. |
