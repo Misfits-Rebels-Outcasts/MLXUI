@@ -816,6 +816,54 @@
           ],
           "descriptionSource": "mistralai/Devstral-Small-2-24B-Instruct-2512",
           "summary": "Devstral is an agentic LLM for software engineering tasks."
+        },
+        {
+          "id": "mlx-community--translategemma-4b-it-4bit",
+          "family": "translategemma",
+          "displayName": "TranslateGemma 4B",
+          "paramSize": "4B",
+          "paramCountB": 3.88,
+          "modelType": "llm",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/translategemma-4b-it-4bit",
+          "ramGB": 3.33,
+          "downloadSizeGB": 2.22,
+          "contextWindow": 2048,
+          "license": "gemma-terms-of-use",
+          "licenseUrl": "https://ai.google.dev/gemma/terms",
+          "description": "An MLX 4-bit conversion of Google's TranslateGemma 4B, a Gemma 3 fine-tune for translation, in a text-only build.",
+          "architecture": "Gemma3ForConditionalGeneration",
+          "languages": null,
+          "lastUpdated": "2026-01-16",
+          "taskTags": [
+            "translation",
+            "text-generation"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 3807,
+          "communityLikes": 11,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 3.33,
+              "downloadSizeGB": 2.22,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/translategemma-4b-it-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "curated",
+          "summary": "Google's TranslateGemma 4B, an MLX 4-bit Gemma 3 fine-tune for translating text into any language its template names — about 2.2 GB, text only."
         }
       ]
     },

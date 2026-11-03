@@ -100,7 +100,9 @@ nonisolated struct FlowServedLoadGate: Sendable {
         let directory = ModelStore.shared.directory(forHFModelID: model.hfModelId)
         let fallback = Int64(model.ramGB * 1_073_741_824)
         switch model.runnerKind {
-        case .llm:
+        // MC2: TranslateGemma leases its container from the same `ModelContainerPool` as `.llm` (Trap 8), so a Translate
+        // row's load books the same way a chat row's does.
+        case .llm, .translate:
             if await ModelContainerPool.shared.residentBytes(directory: directory) != nil { return 0 }
             return ModelWeightCharge.bytes(directory: directory, catalogFallback: fallback)
         case .decision:

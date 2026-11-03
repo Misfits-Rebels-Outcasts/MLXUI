@@ -5,7 +5,7 @@ import Foundation
 /// corrections live in `ModelEntry.runnerKind` below — the single source of truth.
 /// See `Design/pipeline-stage-sketch.md` §routing.
 nonisolated enum RunnerKind: String, Sendable {
-    case llm, asr, tts, vision, embedding, ocr, image, music, segmentation, video, upscale, rerank, decision, diarization, enhance, voice, interpolate, separate, unsupported
+    case llm, asr, tts, vision, embedding, ocr, image, music, segmentation, video, upscale, rerank, decision, diarization, enhance, voice, interpolate, separate, translate, unsupported
 }
 
 nonisolated extension ModelEntry {
@@ -17,6 +17,10 @@ nonisolated extension ModelEntry {
         case "Llama-OuteTTS":               return .tts          // catalog tags it asr
         case "LFM2.5-Audio":                return .voice        // speech-to-speech conversation; engine lives in Modules/LFMAudio (MP6-3)
         case "sam-audio":                   return .separate    // MC1: isolate a named sound; engine lives in Modules/SAMAudio
+        // MC2: TranslateGemma is a Gemma 3 fine-tune with a strict, structured translation request. Plain `.llm`
+        // would hand it to the chat sheet, the Local Server and every generic LLM workflow task; the dedicated
+        // kind keeps all of those `.llm`-only paths from offering it (the LFM2.5-Audio → `.voice` pattern).
+        case "translategemma":              return .translate
         default:                            break
         }
         switch modelType {

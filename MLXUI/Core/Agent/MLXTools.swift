@@ -99,11 +99,15 @@ nonisolated struct InstalledModelIndex: Sendable {
 
     /// Modality mapping — mirrors `ModelEntry.runnerKind` (the single source of truth), including
     /// its catalog-mislabel overrides, kept in sync here so the resolver stays nonisolated.
-    private static func kind(modelType: String, family: String) -> RunnerKind {
+    /// Internal (not private) since MC2-1 so a test can pin the family overrides this mirror must carry.
+    static func kind(modelType: String, family: String) -> RunnerKind {
         switch family {
         case "Llama-OuteTTS":             return .tts
         case "LFM2.5-Audio":              return .voice
         case "sam-audio":                 return .separate
+        // MC2: TranslateGemma routes as its own `.translate` kind (see `ModelEntry.runnerKind`). The Local Server's
+        // installed-model list filters on `.llm`, so without this mirror the translator would be listed and served.
+        case "translategemma":            return .translate
         default:                          break
         }
         switch modelType {

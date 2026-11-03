@@ -112,6 +112,10 @@ nonisolated enum ModelLoadProfile {
         // On a 19 GB Mac the shared budget is about 11.4 GiB, so this model always runs alone: the budget evicts everything else,
         // then proceeds over budget. That is intended. Implementer's call, pending owner confirmation.
         case .separate: return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 7_700_000_000, measured: true)
+        // MC2-1: TranslateGemma is the same `MLXLLM` runner as `.llm` and text-only, so it books the `.llm` row: the
+        // safetensors on disk × loadFactor, no per-call working set (no image/vision tokens). MC2-7 measures it on real
+        // weights and says whether this covers the peak. Implementer's call, pending owner confirmation.
+        case .translate: return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 0, measured: true)
         default:        return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 0, measured: false)
         }
     }

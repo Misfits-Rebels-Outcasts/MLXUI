@@ -617,7 +617,10 @@ final class AppState {
         // LLMs open the chat sheet. Everything else routes through the registry: a
         // registered module (e.g. Whisper ASR) opens its run sheet; otherwise fall back
         // to the legacy ModelRunner, which shows the "unsupported" alert.
-        if model.modelType == .llm {
+        // MC2: dispatch on the corrected `runnerKind`, never `modelType`. TranslateGemma is cataloged as `.llm`
+        // (text-only Gemma 3) but routes as `.translate`, so testing `modelType` here would open the chat sheet
+        // and bypass its module — the exact collision Trap 5 warns about.
+        if model.runnerKind == .llm {
             modelRunner.prepare(for: model)
             runningModel = model
         } else if registry.bestModule(for: model) != nil {
