@@ -419,6 +419,19 @@ nonisolated enum CatalogBridge {
             candidates: ["mlx-community/FLUX.2-klein-4B-bf16"],
             equivalence: .substitute,
             manifestFile: "flux2-klein-4b.json"),
+        // MC2-6 (owner decision 10) -- TranslateGemma 4B, the `Translate` row's only dedicated translator. `.same`: the
+        // card's repo is the pinned repo; `modelType: .llm` is explicit (the catalog card is `.llm`, but the family
+        // override routes it as `.translate`). No catflow-mlx manifest exists for it, so
+        // `translategemma-4b-it-4bit.json` is MLXUI-authored from MiMo's shape (see its "notes"). Appended **last** to
+        // the `Translate` pool, so the seed ("Ministral 3B") does not move. It is offered for `Translate` only: it is a
+        // `.translate` model and `TaskModels.taskExtraKinds` names only that task.
+        BridgeEntry(
+            display: "TranslateGemma 4B",
+            pinnedID: "mlx-community/translategemma-4b-it-4bit",
+            candidates: ["mlx-community/translategemma-4b-it-4bit"],
+            equivalence: .same,
+            manifestFile: "translategemma-4b-it-4bit.json",
+            modelType: .llm),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {
