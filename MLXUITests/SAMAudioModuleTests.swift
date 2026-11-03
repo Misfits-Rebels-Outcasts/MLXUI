@@ -249,6 +249,11 @@ struct SAMAudioModuleTests {
     @Test func theEstimatesReadAsEstimates() {
         #expect(SAMAudioEngine.estimate(seconds: 0) == SAMAudioEngine.estimatedLoadSeconds)
         #expect(SAMAudioEngine.estimate(seconds: 60) > 60)
+        // MC1-12 (R6): 60 s fixed + 1.3 s per audio second (65 s clip: 144.5 s against ~66 s measured; 30 min: 2,400 s against 1,675 s).
+        #expect(SAMAudioEngine.estimatedLoadSeconds == 60)
+        #expect(SAMAudioEngine.estimatedProcessingSecondsPerAudioSecond == 1.3)
+        #expect(abs(SAMAudioEngine.estimate(seconds: 1_800) - 2_400) < 1e-9)
+        #expect(SAMAudioEngine.spokenEstimate(SAMAudioEngine.estimate(seconds: 1_800)) == "40 minutes")
         #expect(SAMAudioEngine.spokenEstimate(45) == "45 seconds")
         #expect(SAMAudioEngine.spokenEstimate(966) == "16 minutes")
         #expect(!SAMAudioEngine.spokenEstimate(966).contains("second"))

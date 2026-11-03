@@ -102,6 +102,16 @@ nonisolated enum ModelLoadProfile {
         // flow maps at 4K, not the 22.7 MB of weights, so it is a per-call working set (the .enhance row's form), booked as 6.4 GB
         // (owner, 2026-10-29: "ramGB 6.4 decimal GB: Confirmed"). 1080p peaks near 3 GB, so smaller clips are over-booked, never under.
         case .interpolate: return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 6_400_000_000, measured: true)
+        // MC1-12 (R2): SAM-Audio Base, `phys_footprint` peak of the whole Run screen path (WAV decode, 30 s windows, model, two
+        // tracks) on the longest recording it accepts, 30 minutes: 13,528 MiB = 14.19 GB, 2026-11-03 (AM-T `SAMAudioSmokeTests`,
+        // MC1-11; 12.63 GB at 60 s, 11.52 GB at 10 s). The growth is window activations and host arrays, not the weights alone, so
+        // it is a per-call working set (the .enhance row's form): files x 1.10 + 7.70 GB. The files counted are the SAM folder
+        // INCLUDING t5/ (`safetensorsBytes(underneath:)`): 5,923,698,622 B x 1.10 = 6,516,068,484 B; with the working set the
+        // booking is 14,216,068,484 B, just over the measured 14.19 GB (the working set is 14.2 GB less the files' charge, 7.6839 GB,
+        // rounded up to the next 0.05). NOT 14.2 GB on top of the weights, which would book about 20.7 GB.
+        // On a 19 GB Mac the shared budget is about 11.4 GiB, so this model always runs alone: the budget evicts everything else,
+        // then proceeds over budget. That is intended. Implementer's call, pending owner confirmation.
+        case .separate: return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 7_700_000_000, measured: true)
         default:        return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 0, measured: false)
         }
     }

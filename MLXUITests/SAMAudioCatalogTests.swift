@@ -97,16 +97,21 @@ extension SAMAudioCatalogTests {
         #expect(e.licenseUrl == "https://huggingface.co/facebook/sam-audio-base/blob/main/LICENSE")
     }
 
-    /// MC1-1: the RAM figure is the provisional 1.5 × weights estimate, and the description says so.
-    @Test func ramGBIsTheProvisionalEstimateAndSaysSo() throws {
+    /// MC1-12: the RAM figure is the measured 30-minute worst case (14.19 GB, listed as 14.2), and the description says so.
+    /// Was the provisional 1.5 x weights estimate (8.89) in MC1-1.
+    @Test func ramGBIsTheMeasuredWorstCaseAndSaysSo() throws {
         let e = try Self.samAudio()
-        #expect(e.ramGB == 8.89)
-        // 5,925,937,582 B of selected files = 5.925937582 GB x 1.5 = 8.8889 GB, rounded up to 0.01.
-        let exactGB = Double(5_925_937_582) / 1e9
-        #expect(e.ramGB == (exactGB * 1.5 * 100).rounded() / 100)
+        #expect(e.ramGB == 14.2)
         #expect(e.variants?.first?.ramGB == e.ramGB)
-        #expect(e.description?.contains("is an estimate") == true)
-        #expect(e.description?.contains("5.93 GB download") == true)
+        let d = try #require(e.description)
+        #expect(d.contains("RAM figure is measured"))
+        #expect(d.contains("phys_footprint"))
+        #expect(d.contains("30-minute recording"))
+        #expect(d.contains("2026-11-03"))
+        #expect(d.contains("AM-T, MC1-11"))
+        #expect(!d.contains("is an estimate"))
+        #expect(!d.localizedCaseInsensitiveContains("not been measured"))
+        #expect(d.contains("Needs about 14 GB of memory; other loaded models are unloaded while it runs."))
     }
 
     @Test func metadataRendersWithNoUnsanctionedDash() throws {
@@ -177,5 +182,52 @@ extension SAMAudioCatalogTests {
             let pool = TaskModels.derivedModels(for: task, catalog: [e], claimableModelIDs: [e.id])
             #expect(!pool.contains { $0.id == e.id }, "\(task) offers SAM-Audio")
         }
+    }
+}
+
+/// MC1-12 (R2): the `.separate` row of `ModelLoadProfile`, on a fixture folder with the real file sizes of the install
+/// (sparse files: `mlx-community/sam-audio-base` 5,032,052,232 B of weights, `t5/model.safetensors` 891,646,390 B).
+struct SAMAudioBookingTests {
+    static let samWeights: Int64 = 5_032_052_232
+    static let t5Weights: Int64 = 891_646_390
+
+    private func fixture() throws -> URL {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("sam-booking-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("t5"), withIntermediateDirectories: true)
+        func sparse(_ url: URL, _ size: Int64) throws {
+            FileManager.default.createFile(atPath: url.path, contents: nil)
+            let handle = try FileHandle(forWritingTo: url)
+            defer { try? handle.close() }
+            try handle.truncate(atOffset: UInt64(size))
+        }
+        try sparse(dir.appendingPathComponent("model-00001-of-00001.safetensors"), Self.samWeights)
+        try sparse(dir.appendingPathComponent("t5/model.safetensors"), Self.t5Weights)
+        try Data("{}".utf8).write(to: dir.appendingPathComponent("config.json"))
+        return dir
+    }
+
+    @Test func theSeparateRowIsMeasuredAndABookingOfTheMeasuredPeak() throws {
+        let row = ModelLoadProfile.entry(for: .separate)
+        #expect(row.measured)
+        #expect(row.factor == ModelWeightCharge.loadFactor)
+        #expect(row.workingSetBytes == 7_700_000_000)
+        let dir = try fixture()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let files = ModelLoadProfile.safetensorsBytes(underneath: dir)
+        #expect(files == Self.samWeights + Self.t5Weights, "the folder including t5/")
+        let weights = ModelLoadProfile.charge(kind: .separate, directory: dir, catalogFallback: nil)
+        #expect(weights == 6_516_068_484, "5,923,698,622 x 1.10")
+        let booked = weights + ModelLoadProfile.workingSetBytes(for: .separate)
+        #expect(booked == 14_216_068_484)
+        // At least the measured 30-minute peak (14.19 GB, listed 14.2) and within 0.1 GB of it; not 14.2 GB on top of the weights.
+        #expect(Double(booked) >= 14.2e9 && Double(booked) <= 14.3e9, "booked \(booked)")
+    }
+
+    /// The working set is the measured peak less the files' charge, rounded up to the next 0.05 GB.
+    @Test func theWorkingSetIsThePeakLessTheChargeRoundedUp() {
+        let charge = Double(ModelWeightCharge.charge(onDiskBytes: Self.samWeights + Self.t5Weights))
+        let exact = 14.2e9 - charge
+        let roundedUp = (exact / 50_000_000).rounded(.up) * 50_000_000
+        #expect(Double(ModelLoadProfile.entry(for: .separate).workingSetBytes) == roundedUp)
     }
 }

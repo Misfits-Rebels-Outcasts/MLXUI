@@ -285,11 +285,10 @@ struct SAMAudioRealLoadTests {
     /// ~15-60 s load and prove nothing about the windows.
     ///
     /// The bound, `stopBound` = 45 s from the first window finishing to the run ending: a constant of its own, not
-    /// derived from the engine's time estimate (which can change for the Run screen's sake). The loop checks
-    /// cancellation before the next window, so the real stop is expected in well under a second; one window measured
-    /// about 11 s warm, so 45 s still covers a window that was in flight on a much slower Mac and fails a run that went
-    /// on to finish the file. MC1-10: windows are 30 s now, one takes about 21 s warm (65 s clips ran at 0.96-1.0x with
-    /// the load included), so 45 s is about two windows of slack; the clip is 150 s (6 windows, so over 100 s of work
+    /// derived from the engine's time estimate (which changes for the Run screen's sake). The loop checks
+    /// cancellation before the next window, so the real stop is expected in well under a second; windows are
+    /// 30 s, and one takes about 25 s on a 19 GB Mac (MC1-11: 30 minutes, 67 windows, 1,667 s), so 45 s covers a window that was
+    /// in flight with about 20 s to spare and fails a run that went on to finish the file. The clip is 150 s (6 windows, so over 100 s of work
     /// is left when the first window finishes) to keep a run that carries on well past the bound. Two timestamps
     /// are printed, relative to the test start, so the journal shows the stop came after the first window and not
     /// during the load. (The loop's Stop logic itself is covered without weights by `SAMAudioWindowLoopTests`.)

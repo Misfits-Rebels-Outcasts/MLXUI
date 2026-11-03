@@ -121,13 +121,15 @@ nonisolated enum SAMAudioEngine {
     /// 2026-11-02 (MC1-6, the `SAMAudioRealLoad` harness): a cold first run took about a minute, including the one-time
     /// Metal kernel compilation; a warm process reloads in about 15 s.
     nonisolated static let estimatedLoadSeconds: Double = 60
-    /// Seconds of processing per second of audio. Measured 2026-11-02 (MC1-6): the 65 s windowed clip ran at 0.65x to
-    /// 0.68x realtime warm (92-95 s wall), and the first, cold 10 s run was slower. Set to 3 s per audio second, a
-    /// conservative value; it varies with the Mac, which is why the Run screen says "about".
-    nonisolated static let estimatedProcessingSecondsPerAudioSecond: Double = 3.0
+    /// Seconds of processing per second of audio: 1.3 (R6, MC1-12; was 3.0, from the first 0.65x measurement). Measured with
+    /// 30 s windows on a 19 GB Mac: a 65 s clip took about 66 s wall including the load, 0.98x realtime (MC1-9b); a
+    /// 30-minute recording took 1,674.9 s, 1.08x realtime (MC1-11, `SAMAudioSmokeTests`). So the work is about 0.9 to 1.0
+    /// s per audio second after the load, and 1.3 leaves a margin for a slower Mac. It varies, which is why the Run
+    /// screen says "about".
+    nonisolated static let estimatedProcessingSecondsPerAudioSecond: Double = 1.3
 
-    /// The sentence the Run screen shows before a run starts: "It will take about 90 minutes" for a 30-minute
-    /// recording. Only a basis for a decision, never a promise about another Mac.
+    /// The sentence the Run screen shows before a run starts: "It will take about 40 minutes" for a 30-minute
+    /// recording (60 s + 1.3 s per audio second). Only a basis for a decision, never a promise about another Mac.
     nonisolated static func estimate(seconds: Double) -> Double {
         estimatedLoadSeconds + max(seconds, 0) * estimatedProcessingSecondsPerAudioSecond
     }
