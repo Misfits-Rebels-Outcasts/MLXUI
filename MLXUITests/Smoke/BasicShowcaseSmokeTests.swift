@@ -143,11 +143,12 @@ struct BasicShowcaseSmokeTests {
         let text = try String(contentsOf: r.dir.appendingPathComponent("photo-description.txt"), encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         ModelSmoke.check(Self.row, "10.non-empty", !text.isEmpty, text)
-        let sentences = text.split(whereSeparator: { ".!?".contains($0) }).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-        ModelSmoke.check(Self.row, "10.two-sentences-or-fewer", sentences.count <= 2, "\(sentences.count): \(text)")
+        // R13 (2026-11-04): the row no longer promises two sentences; it must stay short (at most 120 words).
+        let wordCount = text.split(whereSeparator: { $0.isWhitespace }).count
+        ModelSmoke.check(Self.row, "10.at-most-120-words", wordCount <= 120, "\(wordCount) words: \(text)")
         let lower = text.lowercased()
         ModelSmoke.check(Self.row, "10.mentions-cat-or-kitten", lower.contains("cat") || lower.contains("kitten"), text)
-        try ModelSmoke.artifact("BS4-10", "photo-description.txt", text: text, judge: "Describes the kitten photo accurately in two plain sentences.")
+        try ModelSmoke.artifact("BS4-10", "photo-description.txt", text: text, judge: "Describes the kitten photo accurately in plain words.")
     }
 
     // MARK: 11 - Picture From Words

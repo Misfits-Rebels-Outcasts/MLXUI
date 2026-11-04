@@ -560,7 +560,7 @@
    "title": "Describe a Photo",
    "filename": "10-DescribePhoto.cat",
    "category": "Basic",
-   "description": "Point it at a photo and get two plain sentences saying what's in it — handy for captions and alt text.",
+   "description": "Point it at a photo and get a short, plain description of what's in it — handy for captions and alt text.",
    "tier": "basic"
   },
   {

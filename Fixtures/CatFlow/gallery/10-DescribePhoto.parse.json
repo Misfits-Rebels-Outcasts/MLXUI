@@ -17,7 +17,7 @@
    "children": [],
    "model": "LFM2-VL 1.6B",
    "refs": [],
-   "settings": "\"Describe this photo in two plain sentences: what is in it, and where.\"",
+   "settings": "\"Describe this photo in plain words: what is in it, and where.\"",
    "task": "Describe Image"
   },
   {

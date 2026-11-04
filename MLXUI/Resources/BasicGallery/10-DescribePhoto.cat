@@ -1,5 +1,5 @@
 mlxflow 0.8
 1. Read Image       photo.jpg
-2. Describe Image   LFM2-VL 1.6B; "Describe this photo in two plain
-                    sentences: what is in it, and where."
+2. Describe Image   LFM2-VL 1.6B; "Describe this photo in plain words:
+                    what is in it, and where."
 3. Save Text        photo-description.txt
