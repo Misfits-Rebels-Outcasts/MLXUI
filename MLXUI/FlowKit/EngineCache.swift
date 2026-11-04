@@ -356,7 +356,8 @@ nonisolated final class LeasingStage: PipelineStage, @unchecked Sendable {
             else { throw CancellationError() }
         }
         // every load inside the run is the Run window's, whatever holder the engine itself names
-        return try await MemoryBudget.RunWindowScope.$holder.withValue(.runWindow) {
+        // BCC-1 (R18): the Run window's MLX buffer pool is capped at the Local Server's 1 GiB for the run (see `ServeMLXMemory.scoped`).
+        return try await ServeMLXMemory.shared.scoped { try await MemoryBudget.RunWindowScope.$holder.withValue(.runWindow) {
             let (stage, hold) = try await cache.lease(for: model, config: cacheConfig, maxWait: maxWait,
                                                       holder: .runWindow, booksWeights: booksWeights,
                                                       footprintOverride: sizedBytes) { _, _ in probe }
@@ -367,7 +368,7 @@ nonisolated final class LeasingStage: PipelineStage, @unchecked Sendable {
                 lock.lock(); active -= 1; lock.unlock()
             }
             return try await (perRun ? probe : stage).run(input, progress: progress)
-        }
+        } }
     }
 
     /// Whether a run is in progress (and so the engine is leased).
