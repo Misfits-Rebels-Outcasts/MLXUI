@@ -1,0 +1,45 @@
+{
+ "rows": [
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "invoice.pdf",
+   "task": "Read PDF"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": "Qwen3 8B",
+   "refs": [],
+   "settings": "\"vendor, invoice_number, date, due_date, total, currency\"",
+   "task": "Extract Structured"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "format=csv",
+   "task": "Table to Text"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "invoice.csv",
+   "task": "Save Text"
+  }
+ ],
+ "version": "0.8"
+}

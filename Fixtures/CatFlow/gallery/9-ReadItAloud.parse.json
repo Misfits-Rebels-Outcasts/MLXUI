@@ -1,0 +1,35 @@
+{
+ "rows": [
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "note.txt",
+   "task": "Read Text"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": "Kokoro 82M",
+   "refs": [],
+   "settings": "af_heart; seed=7",
+   "task": "Speak"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "note.wav",
+   "task": "Save Audio"
+  }
+ ],
+ "version": "0.8"
+}

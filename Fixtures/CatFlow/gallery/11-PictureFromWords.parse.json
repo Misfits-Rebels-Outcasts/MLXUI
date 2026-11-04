@@ -1,0 +1,45 @@
+{
+ "rows": [
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "\"a red bicycle leaning on a blue door, morning light, photograph\"",
+   "task": "Template"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "\"Describe the picture you want:\" ; timeout=30s; default=unchanged",
+   "task": "Human Input"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": "FLUX.2 Klein 4B",
+   "refs": [],
+   "settings": "seed=7; width=1024; height=1024",
+   "task": "Generate Image"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "picture.png",
+   "task": "Save Image"
+  }
+ ],
+ "version": "0.8"
+}

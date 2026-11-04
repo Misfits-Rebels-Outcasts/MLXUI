@@ -32,6 +32,9 @@ nonisolated struct StageConfig: Sendable, Hashable {
     /// validated there; `nil` = the stage's own default. Part of the engine-cache key (a different quantize is a different engine) and so kept by `weightsOnly`.
     /// nil = not set. Klein resolves it to the manifest default (8) at `makeStage`; every other stage ignores it.
     var quantize: Int?
+    /// BS-6 (R7): the Speak row's `trim_silence=` (Kokoro's manifest declares it, bool). `nil` = not set (the engine does not trim);
+    /// `true` trims leading/trailing near-silence; `false` is the explicit no-trim. Set only by `RealExecutor.stageConfig` for a Speak row.
+    var trimSilence: Bool?
 
     init(
         voice: String? = nil,
@@ -52,7 +55,8 @@ nonisolated struct StageConfig: Sendable, Hashable {
         query: String? = nil,
         topK: Int? = nil,
         flowTask: String? = nil,
-        quantize: Int? = nil
+        quantize: Int? = nil,
+        trimSilence: Bool? = nil
     ) {
         self.voice = voice
         self.speed = speed
@@ -70,6 +74,7 @@ nonisolated struct StageConfig: Sendable, Hashable {
         self.topK = topK
         self.flowTask = flowTask
         self.quantize = quantize
+        self.trimSilence = trimSilence
     }
 
     static let `default` = StageConfig()
@@ -79,7 +84,7 @@ nonisolated struct StageConfig: Sendable, Hashable {
     var weightsOnly: StageConfig {
         var c = self
         c.voice = nil; c.speed = 1.0; c.prompt = nil
-        c.seed = nil; c.width = nil; c.height = nil; c.steps = nil
+        c.seed = nil; c.width = nil; c.height = nil; c.steps = nil; c.trimSilence = nil
         return c
     }
 }

@@ -300,6 +300,16 @@ nonisolated enum GalleryLoader {
             return [("6-CutOutSubject-photo.jpg", "photo.jpg")]
         case "7-UpscaleSmall":
             return [("7-UpscaleSmall-small-photo.jpg", "small-photo.jpg")]
+        // BS-2 (`RSI/DelegateBasicShowcaseBacklog.md`, R4): sample inputs for the Basic showcase flows.
+        // Flow 11 reads nothing; its prompt is in row 1.
+        case "9-ReadItAloud":
+            return [("9-ReadItAloud-note.txt", "note.txt")]
+        case "10-DescribePhoto":
+            return [("10-DescribePhoto-photo.jpg", "photo.jpg")]
+        case "12-InvoiceToSpreadsheet":
+            return [("12-InvoiceToSpreadsheet-invoice.pdf", "invoice.pdf")]
+        case "13-SortAnEmail":
+            return [("13-SortAnEmail-email.txt", "email.txt")]
         default:
             return []
         }
