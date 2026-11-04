@@ -63,7 +63,7 @@ struct CatFlowGalleryReproductionTests {
 
     @Test func everyGalleryFlowParses() throws {
         let files = try allGalleryFiles()
-        #expect(files.count == 77, "the gallery drifted — expected 77 flows, found \(files.count)")
+        #expect(files.count == 82, "the gallery drifted — expected 82 flows, found \(files.count)")
 
         var checked = 0
         for f in files {
@@ -104,7 +104,7 @@ struct CatFlowGalleryReproductionTests {
     /// in `Fixtures/CatFlow/gallery/`, byte-for-byte on the canonical JSON.
     @Test func everyGalleryFlowMatchesPythonParseTree() throws {
         let files = try allGalleryFiles()
-        #expect(files.count == 77)
+        #expect(files.count == 82)
 
         var checked = 0
         for f in files {
@@ -170,11 +170,13 @@ struct CatFlowGalleryReproductionTests {
     /// shelf badge and nothing else would notice.
     @Test func theBasicShelfIsEightSourcedPositionsWhileKeepingGlobalNumbers() throws {
         let entries = GalleryLoader.loadMetadata()
-        #expect(entries.count == 77, "a move, never an add — the gallery stays 77")
+        // BS-1 (`RSI/DelegateBasicShowcaseBacklog.md`, R2/R3): five flows were added (78–82), so the gallery is now 82. BG-3 itself was "a move, never an add" (77); that arrangement is still pinned below.
+        #expect(entries.count == 82, "BS-1 added five Basic flows (78–82): the gallery is 82")
         #expect(entries.count == Set(entries.map(\.number)).count, "gallery numbers must stay unique")
 
-        let basic = entries.filter(\.isBasic)
-        #expect(basic.count == 8, "Basic Gallery is 1…8 now: 70,71,72,75,76,63,64,65")
+        // BS-1: the shelf grew to 13; this test still pins the first eight (BG-3's arrangement) and `basicShelfShowsThirteenInOrder` pins all thirteen.
+        let basic = Array(entries.filter(\.isBasic).prefix(8))
+        #expect(basic.count == 8, "Basic Gallery 1…8 is: 70,71,72,75,76,63,64,65")
         // Shelf **order** is metadata order, and the three moved entries sit after 76 (owner
         // ruling R4: they read 6, 7, 8 — not 1–3, which is where they would land if they had
         // been left in numeric position or appended before the existing basics).
@@ -193,6 +195,22 @@ struct CatFlowGalleryReproductionTests {
         for kept in [62, 66, 67, 68, 69, 73, 74, 77] {
             #expect(advance.contains(kept), "\(kept) must not be renumbered or moved (R4)")
         }
+    }
+
+    /// BS-1 (`RSI/DelegateBasicShowcaseBacklog.md`, R2 + R3): the Basic shelf reads 1–13 in
+    /// metadata order, with 9–13 exactly the five showcase flows.
+    @Test func basicShelfShowsThirteenInOrder() throws {
+        let basic = GalleryLoader.loadMetadata().filter(\.isBasic)
+        #expect(basic.count == 13)
+        #expect(basic.map(\.flowID).prefix(8).elementsEqual(["1-TranscribeAudio", "2-SummaryFromAudio",
+                "3-ExtractTableFromImage", "4-WebPageSummary", "5-ExtractWebPageLinks",
+                "6-CutOutSubject", "7-UpscaleSmall", "8-VoiceoverBed"]))
+        let showcase = Array(basic.suffix(5))
+        #expect(showcase.map(\.title) == ["Read It Aloud", "Describe a Photo", "Picture From Words",
+                                          "Invoice to Spreadsheet", "Sort an Email"])
+        #expect(showcase.map(\.number) == [78, 79, 80, 81, 82])
+        #expect(showcase.map(\.flowID) == ["9-ReadItAloud", "10-DescribePhoto", "11-PictureFromWords",
+                                           "12-InvoiceToSpreadsheet", "13-SortAnEmail"])
     }
 
     /// The mechanism R3 depends on: both shelves flatten into one `Contents/Resources/` root,
@@ -249,7 +267,8 @@ struct CatFlowGalleryReproductionTests {
             }
         }
 
-        let basics = GalleryLoader.loadMetadata().filter(\.isBasic)
+        // BS-1: flows 9–13 are on the shelf but their sample inputs ship in BS-2, which widens this back to the whole shelf.
+        let basics = Array(GalleryLoader.loadMetadata().filter(\.isBasic).prefix(8))
         #expect(basics.count == 8, "the Basic shelf is 1…8 after BG-3")
 
         var checked = 0

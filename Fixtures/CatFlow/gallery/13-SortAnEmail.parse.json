@@ -1,0 +1,74 @@
+{
+ "rows": [
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "email.txt",
+   "task": "Read Text"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "clause": {
+    "edges": [
+     {
+      "tag": "today",
+      "target": {
+       "kind": "row",
+       "number": 3
+      }
+     },
+     {
+      "tag": "later",
+      "target": {
+       "kind": "row",
+       "number": 4
+      }
+     }
+    ],
+    "kind": "decide"
+   },
+   "model": "Laya 0.4B",
+   "refs": [],
+   "settings": "\"Does this email need a reply today?\"",
+   "tags": [
+    "today",
+    "later"
+   ],
+   "task": "Classify"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": true,
+   "children": [],
+   "clause": {
+    "kind": "goto",
+    "target": {
+     "kind": "done"
+    }
+   },
+   "model": null,
+   "refs": [],
+   "settings": "reply-today.txt",
+   "task": "Save Text"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": true,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "reply-later.txt",
+   "task": "Save Text"
+  }
+ ],
+ "version": "0.8"
+}
