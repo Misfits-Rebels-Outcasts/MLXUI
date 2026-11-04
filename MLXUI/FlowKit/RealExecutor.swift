@@ -126,10 +126,16 @@ nonisolated struct RealExecutor: FlowExecutor {
         //
         // The body is `executeInner` rather than an indented block so this stays a one-line
         // wrap of the whole dispatch (the same split `MLXChatBackend.run`/`runInner` uses).
+        //
+        // BCC-1 (R18, backlog R15a): MLX's buffer pool is capped at the Local Server's 1 GiB for the length of the row. Before this a
+        // flow row ran with `EngineCache`'s limit (the memory budget, ~17 GiB): Kokoro on flow 9 left 12.9 GiB of freed buffers behind
+        // against a 1.9 GiB live peak (BCC-0).
         do {
-            return try await MLXErrorGuard.guarded {
-                try await executeInner(path: path, row: row, inputs: inputs, transcript: transcript,
-                                       context: context, usedFlowContent: usedFlowContent)
+            return try await ServeMLXMemory.shared.scoped {
+                try await MLXErrorGuard.guarded {
+                    try await executeInner(path: path, row: row, inputs: inputs, transcript: transcript,
+                                           context: context, usedFlowContent: usedFlowContent)
+                }
             }
         } catch {
             guard MLXErrorGuard.isMLXError(error) else { throw error }

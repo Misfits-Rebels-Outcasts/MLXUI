@@ -116,6 +116,21 @@ nonisolated enum ModelSmoke {
         return kr == KERN_SUCCESS ? Double(info.phys_footprint) / 1_048_576 : -1
     }
 
+    /// BCC-0 (R17): MLX's own accounting, MiB. `active` = live arrays, `cache` = freed buffers MLX is holding for reuse,
+    /// `peak` = the high-water mark of active+cache since `resetPeakMemory`. Together with `phys_footprint` this says
+    /// whether a big footprint is live data or the buffer pool.
+    static func mlxMiB() -> (active: Int, cache: Int, peak: Int) {
+        let s = MLX.Memory.snapshot()
+        return (s.activeMemory / 1_048_576, s.cacheMemory / 1_048_576, s.peakMemory / 1_048_576)
+    }
+
+    /// `mlx[active a0>a1 cache c0>c1 peak p MiB]`, appended to the detail field so the five leading
+    /// `FOOTPRINT|` fields (what `model-smoke.sh` parses by position) are unchanged.
+    static func mlxDetail(start: (active: Int, cache: Int, peak: Int)) -> String {
+        let e = mlxMiB()
+        return "mlx[active \(start.active)>\(e.active) cache \(start.cache)>\(e.cache) peak \(e.peak) MiB, cacheLimit \(MLX.Memory.cacheLimit / 1_048_576)]"
+    }
+
     final class PeakSampler: @unchecked Sendable {
         private let lock = NSLock()
         private var value: Double = 0
@@ -128,6 +143,8 @@ nonisolated enum ModelSmoke {
     static func measure<T>(_ phase: String, detail: @autoclosure () -> String = "",
                            _ body: () async throws -> T) async throws -> T {
         MLX.Memory.clearCache()
+        MLX.Memory.peakMemory = 0
+        let mlxStart = mlxMiB()
         let base = physMiB()
         let sampler = PeakSampler()
         sampler.note(base)
@@ -143,14 +160,14 @@ nonisolated enum ModelSmoke {
             value = try await body()
         } catch {
             task.cancel()
-            print("FOOTPRINT|\(clean(phase))|\(Int(base))|\(Int(sampler.peak))|\(Int(physMiB()))|threw: \(clean("\(error)"))")
+            print("FOOTPRINT|\(clean(phase))|\(Int(base))|\(Int(sampler.peak))|\(Int(physMiB()))|threw: \(clean("\(error)")) \(mlxDetail(start: mlxStart))")
             throw error
         }
         task.cancel()
         sampler.note(physMiB())
         let elapsed = (ContinuousClock.now - t0).components
         let seconds = Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18
-        print("FOOTPRINT|\(clean(phase))|\(Int(base))|\(Int(sampler.peak))|\(Int(physMiB()))|\(String(format: "%.1f s", seconds)) \(clean(detail()))")
+        print("FOOTPRINT|\(clean(phase))|\(Int(base))|\(Int(sampler.peak))|\(Int(physMiB()))|\(String(format: "%.1f s", seconds)) \(mlxDetail(start: mlxStart)) \(clean(detail()))")
         return value
     }
 
