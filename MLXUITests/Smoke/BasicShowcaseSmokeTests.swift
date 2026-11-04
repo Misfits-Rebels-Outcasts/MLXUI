@@ -87,9 +87,32 @@ struct BasicShowcaseSmokeTests {
                                     makeModelStage: makeStage,
                                     installedModelIDs: BasicShowcaseRealLoad.installedIDs(catalog), catalog: catalog)
         let doc = try GalleryLoader.loadDocument(flowID: flowID)
-        let events = try await ModelSmoke.measure("\(flowID) \(phase)") {
-            try await FlowInterpreter.run(doc, executor: executor)
+        // Peak physical footprint of this process over the run (what Activity Monitor shows), plus the process lifetime ru_maxrss;
+        // emitted per run as `SMOKE|BS4|<n>.peak-rss|INFO|…` (the FOOTPRINT line from `measure` is kept too).
+        let sampler = ModelSmoke.PeakSampler()
+        sampler.note(ModelSmoke.physMiB())
+        let watcher = Task.detached {
+            while !Task.isCancelled {
+                sampler.note(ModelSmoke.physMiB())
+                try? await Task.sleep(for: .milliseconds(20))
+            }
         }
+        let events: [FlowInterpreter.PathEvent]
+        do {
+            events = try await ModelSmoke.measure("\(flowID) \(phase)") {
+                try await FlowInterpreter.run(doc, executor: executor)
+            }
+        } catch {
+            watcher.cancel()
+            throw error
+        }
+        watcher.cancel()
+        sampler.note(ModelSmoke.physMiB())
+        var usage = rusage()
+        getrusage(RUSAGE_SELF, &usage)
+        let number = flowID.split(separator: "-").first.map(String.init) ?? flowID
+        ModelSmoke.info(Self.row, "\(number).peak-rss",
+                        String(format: "%@: peak phys_footprint %.0f MiB; process ru_maxrss %.0f MiB", phase, sampler.peak, Double(usage.ru_maxrss) / 1_048_576))
         let failed = events.filter { $0.kind == .rowFailed }
         ModelSmoke.check(Self.row, "\(flowID).no-row-failed", failed.isEmpty, failed.map { "\($0.path): \($0.message ?? "")" }.joined(separator: "; "))
         return Run(dir: ws.directory(for: flowID), events: events, cleanup: base)
