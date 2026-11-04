@@ -36,8 +36,12 @@ enum KokoroEngine {
         trimSilence: Bool? = nil,
         modelDirectory: URL
     ) async throws -> AudioBuffer {
+        // KG-2 (R34): the English G2P files come from the install (`g2p/`), never the network. Once per synthesis, before the audio
+        // thread and before any chunk; thrown unwrapped so the sentence reaches a flow row and the Run screen as written. Every Kokoro
+        // path (flow row, Run screen) comes through here.
+        try KokoroG2PCache.ensure(modelDirectory: modelDirectory)
         // WW2-3-6: load, generate and read on the one audio thread — see `MLXAudioThread` for why.
-        try await MLXAudioThread.run {
+        return try await MLXAudioThread.run {
             try await synthesizeOnAudioThread(text, voice: voice, speed: speed, seed: seed,
                                               trimSilence: trimSilence, modelDirectory: modelDirectory)
         }

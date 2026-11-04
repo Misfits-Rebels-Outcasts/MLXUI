@@ -212,4 +212,42 @@ struct KokoroG2PInstallTests {
         #expect(manager.isInstalled(entry))
         #expect(!FileManager.default.fileExists(atPath: modelDir.appendingPathComponent("g2p").path), "reconcile does not create or require it")
     }
+
+    /// R38: the sentence tells the user to Uninstall then Install. That path must leave a complete install: uninstall removes the
+    /// whole model folder including `g2p/`, install recreates it.
+    @Test @MainActor func uninstallThenInstallLeavesACompleteInstallWithG2P() async throws {
+        StubNet.reset(Self.routesForKokoro())
+        let (store, dir) = tempStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let manager = InstallManager(store: store, session: Self.session(), apiSession: Self.session())
+        let entry = kokoroEntry()
+        let modelDir = store.directory(forHFModelID: entry.hfModelId)
+        // an old install: weights and marker, no g2p/
+        try FileManager.default.createDirectory(at: modelDir.appendingPathComponent("voices"), withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: store.installedMarker(forHFModelID: entry.hfModelId).path, contents: nil)
+        manager.uninstall(entry, catalog: [entry], installedModelIDs: [entry.id])
+        #expect(!FileManager.default.fileExists(atPath: modelDir.path), "Uninstall removes the whole folder")
+        manager.install(entry)
+        let end = try await waitForTerminal(manager, entry.id)
+        #expect(end == .installed, "ended \(String(describing: end))")
+        let g2p = ((try? FileManager.default.contentsOfDirectory(atPath: modelDir.appendingPathComponent("g2p").path)) ?? []).sorted()
+        #expect(g2p == ["us_bart.safetensors", "us_bart_config.json", "us_gold.json", "us_silver.json"])
+    }
+
+    /// R38: an install with weights but no `g2p/` fails with the exact sentence and makes zero network requests.
+    @Test func synthesizeOnAnOldInstallGivesTheSentenceAndMakesNoRequest() async throws {
+        StubNet.reset([:])
+        let (store, dir) = tempStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let modelDir = store.directory(forHFModelID: "mlx-community/Kokoro-82M-bf16")
+        try FileManager.default.createDirectory(at: modelDir.appendingPathComponent("voices"), withIntermediateDirectories: true)
+        try Data([1]).write(to: modelDir.appendingPathComponent("kokoro-v1_0.safetensors"))
+        do {
+            _ = try await KokoroEngine.synthesize("Hello.", modelDirectory: modelDir)
+            Issue.record("expected a refusal")
+        } catch {
+            #expect(error.localizedDescription == "Kokoro is missing some files it needs to read text aloud. In the sidebar under Installed, click Kokoro-82M, then click Uninstall, then click Install.")
+        }
+        #expect(StubNet.paths.isEmpty, "requests: \(StubNet.paths)")
+    }
 }
