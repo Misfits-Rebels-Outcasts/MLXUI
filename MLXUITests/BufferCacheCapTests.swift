@@ -124,3 +124,46 @@ private nonisolated struct ProbeStageAudio: PipelineStage {
         return .audio(AudioBuffer(samples: [Float](repeating: 0.1, count: 2400), sampleRate: 24000))
     }
 }
+
+// BCC-3b (R22): the in-app chat / agent turn (`ModelRunner.send`, one `AgentSession` for both) runs under the same cap.
+private final class LimitRecordingSession: ChatStreamingSession, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _seen: [Int] = []
+    var seen: [Int] { lock.withLock { _seen } }
+    func streamResponse(to prompt: String) -> AsyncThrowingStream<String, Error> {
+        let (stream, continuation) = AsyncThrowingStream<String, Error>.makeStream()
+        Task {
+            lock.withLock { _seen.append(Memory.cacheLimit) }
+            continuation.yield("hello")
+            try? await Task.sleep(for: .milliseconds(5))
+            lock.withLock { _seen.append(Memory.cacheLimit) }
+            continuation.finish()
+        }
+        return stream
+    }
+}
+
+@MainActor
+struct ModelRunnerCacheCapTests {
+    @Test func aChatTurnRunsUnderTheCap() async throws {
+        let original = Memory.cacheLimit
+        defer { Memory.cacheLimit = original }
+        _ = EngineCache.shared
+        Memory.cacheLimit = 17 * 1_073_741_824
+        let entry = makeEntry(id: "bcc3b-model", displayName: "BCC3b")
+        let store = FileManager.default.temporaryDirectory.appendingPathComponent("bcc3b-store-\(UUID().uuidString)")
+        let modelDir = FileManager.default.temporaryDirectory.appendingPathComponent("bcc3b-model-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: modelDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: store); try? FileManager.default.removeItem(at: modelDir) }
+        let session = LimitRecordingSession()
+        let runner = ModelRunner()
+        runner.prepare(for: entry, in: store)
+        runner.modelDirectoryForTesting = { _ in modelDir }
+        runner.streamingSessionForTesting = { session }
+        _ = await runner.send("hi", for: entry)
+        let deadline = ContinuousClock.now + .seconds(20)
+        while runner.isRunning, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(session.seen.count == 2, "the stream ran: \(session.seen)")
+        #expect(session.seen.allSatisfy { $0 <= ServeMLXMemory.generationCacheLimit }, "limits seen during the turn: \(session.seen)")
+    }
+}
