@@ -77,6 +77,7 @@ enum KokoroEngine {
             }
             // BS-6 (R7): only an explicit `trim_silence=true` trims. Unset keeps the pre-BS-6 behaviour (no trim): the manifest's
             // declared default is `true`, and trimming every Speak row would change the audio of every existing flow; owner question.
+            // SPEC-Q244 (see the comment above): unset = no trim, as the reference.
             if trimSilence == true {
                 let trimmed = trimmedSilence(allSamples)
                 guard !trimmed.isEmpty else { throw SpeakProducedNoAudio() }

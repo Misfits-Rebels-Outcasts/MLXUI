@@ -1174,6 +1174,7 @@ nonisolated struct RealExecutor: FlowExecutor {
                 }
                 seed = value
             }
+            // SPEC-Q244: the reference `engines/tts.py` never reads `trim_silence` although the manifest declares it (default true); unset stays "no trim".
             var trimSilence: Bool?
             if let raw = settings.value(for: "trim_silence")?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
                 switch raw {
