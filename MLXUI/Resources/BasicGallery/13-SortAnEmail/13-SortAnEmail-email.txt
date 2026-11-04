@@ -1,0 +1,13 @@
+From: Daniel Tan <daniel@harbourlane.example>
+Subject: Delivery address wrong for order 4471 - truck leaves at 3pm
+
+Hi,
+
+The delivery for order 4471 is booked to our old warehouse on Jalan Kilang.
+We moved last month. The truck leaves at 3pm today, so could you confirm
+the new address below before then?
+
+  12 Harbour Lane, Unit 05-02, Singapore 098632
+
+Thanks,
+Daniel

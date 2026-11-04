@@ -267,9 +267,9 @@ struct CatFlowGalleryReproductionTests {
             }
         }
 
-        // BS-1: flows 9–13 are on the shelf but their sample inputs ship in BS-2, which widens this back to the whole shelf.
-        let basics = Array(GalleryLoader.loadMetadata().filter(\.isBasic).prefix(8))
-        #expect(basics.count == 8, "the Basic shelf is 1…8 after BG-3")
+        // BS-2 widened this from the first eight to the whole shelf once flows 9–13's sample inputs shipped.
+        let basics = GalleryLoader.loadMetadata().filter(\.isBasic)
+        #expect(basics.count == 13, "the Basic shelf is 1…13 after BS-1")
 
         var checked = 0
         for flow in basics {
