@@ -1163,7 +1163,28 @@ nonisolated struct RealExecutor: FlowExecutor {
         if desc.refName == "engines.tts.speak" {
             let voice = settings.value(for: "voice") ?? settings.firstBare()
             let speed = Float(settings.value(for: "speed") ?? "") ?? 1.0
-            return StageConfig(voice: voice, speed: speed, flowTask: "Speak")
+            // BS-6 (owner rulings R6 + R7, 2026-11-04): `seed=` and `trim_silence=` are declared by Kokoro's curated manifest and used
+            // to be dropped here. Now carried to the stage, which honours them (`KokoroEngine`); a value that cannot be read is
+            // refused by name, never ignored. `seed=auto` (a stochastic row `CachingExecutor` has not made concrete yet) means unset.
+            var seed: UInt64?
+            if let raw = settings.value(for: "seed")?.trimmingCharacters(in: .whitespacesAndNewlines), raw.lowercased() != "auto" {
+                guard let value = UInt64(raw) else {
+                    throw FlowError.invalidSettings(row: path, setting: "seed",
+                                                    detail: "must be a whole number from 0 to 4294967295 — e.g. seed=7")
+                }
+                seed = value
+            }
+            var trimSilence: Bool?
+            if let raw = settings.value(for: "trim_silence")?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+                switch raw {
+                case "true": trimSilence = true
+                case "false": trimSilence = false
+                default:
+                    throw FlowError.invalidSettings(row: path, setting: "trim_silence",
+                                                    detail: "must be true or false — e.g. trim_silence=true")
+                }
+            }
+            return StageConfig(voice: voice, speed: speed, seed: seed, flowTask: "Speak", trimSilence: trimSilence)
         }
         if desc.refName == "engines.asr.transcribe" {
             let language = settings.value(for: "lang") ?? "en"

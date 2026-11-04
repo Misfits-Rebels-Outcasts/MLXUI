@@ -17,6 +17,7 @@ nonisolated struct KokoroSDK: ModelSDK {
 
     func makeStage(for model: ModelEntry, config: StageConfig) throws -> any PipelineStage {
         let voice = config.voice ?? KokoroEngine.defaultVoice
-        return TTSStage(modelID: model.id, voice: voice, speed: config.speed)
+        return TTSStage(modelID: model.id, voice: voice, speed: config.speed,
+                        seed: config.seed, trimSilence: config.trimSilence)
     }
 }

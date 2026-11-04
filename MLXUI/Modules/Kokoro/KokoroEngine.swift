@@ -32,11 +32,14 @@ enum KokoroEngine {
         _ text: String,
         voice: String = defaultVoice,
         speed: Float = 1.0,
+        seed: UInt64? = nil,
+        trimSilence: Bool? = nil,
         modelDirectory: URL
     ) async throws -> AudioBuffer {
         // WW2-3-6: load, generate and read on the one audio thread — see `MLXAudioThread` for why.
         try await MLXAudioThread.run {
-            try await synthesizeOnAudioThread(text, voice: voice, speed: speed, modelDirectory: modelDirectory)
+            try await synthesizeOnAudioThread(text, voice: voice, speed: speed, seed: seed,
+                                              trimSilence: trimSilence, modelDirectory: modelDirectory)
         }
     }
 
@@ -44,12 +47,18 @@ enum KokoroEngine {
         _ text: String,
         voice: String,
         speed: Float,
+        seed: UInt64?,
+        trimSilence: Bool?,
         modelDirectory: URL
     ) async throws -> AudioBuffer {
         do {
             let model = try await KokoroModel.fromModelDirectory(
                 modelDirectory, textProcessor: KokoroMultilingualProcessor())
             model.speed = speed
+            // BS-6 (R6): mlx-audio-swift's Kokoro `generate` has no seed parameter, so a row's `seed=` seeds MLX's RNG here, on the
+            // audio thread, immediately before the first generate call (same thread as the generate, `MLXAudioThread`). Kokoro's
+            // synthesis draws no random numbers today, so this makes the seed part of the run's identity without changing the audio.
+            if let seed { MLXRandom.seed(seed) }
             let segments = textSegments(text)
             var allSamples: [Float] = []
             var sampleRate = model.sampleRate
@@ -66,10 +75,27 @@ enum KokoroEngine {
             guard !allSamples.isEmpty else {
                 throw SpeakProducedNoAudio()
             }
+            // BS-6 (R7): only an explicit `trim_silence=true` trims. Unset keeps the pre-BS-6 behaviour (no trim): the manifest's
+            // declared default is `true`, and trimming every Speak row would change the audio of every existing flow; owner question.
+            if trimSilence == true {
+                let trimmed = trimmedSilence(allSamples)
+                guard !trimmed.isEmpty else { throw SpeakProducedNoAudio() }
+                return AudioBuffer(samples: trimmed, sampleRate: sampleRate)
+            }
             return AudioBuffer(samples: allSamples, sampleRate: sampleRate)
         } catch {
             throw StageError.engineFailure(stage: "Kokoro TTS", underlying: error)
         }
+    }
+
+    /// Drops leading and trailing samples whose magnitude is below `threshold` (about -60 dBFS), keeping `padSeconds` of
+    /// lead-in/out so a word never starts or ends abruptly. All-quiet input returns empty. Pure, so it is unit-testable.
+    nonisolated static func trimmedSilence(_ samples: [Float], sampleRate: Int = 24_000,
+                                           threshold: Float = 0.001, padSeconds: Double = 0.05) -> [Float] {
+        guard let first = samples.firstIndex(where: { abs($0) >= threshold }),
+              let last = samples.lastIndex(where: { abs($0) >= threshold }) else { return [] }
+        let pad = Int(padSeconds * Double(sampleRate))
+        return Array(samples[max(0, first - pad)...min(samples.count - 1, last + pad)])
     }
 
     /// Split the text into the segments the Kokoro pipeline synthesizes separately — the

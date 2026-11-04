@@ -105,9 +105,10 @@ struct BasicShowcaseSmokeTests {
         let file = try AVAudioFile(forReading: urlA)
         let seconds = Double(file.length) / file.processingFormat.sampleRate
         ModelSmoke.check(Self.row, "9.wav-20-to-60-s", (20...60).contains(seconds), String(format: "%.1f s", seconds))
-        // `Speak` drops `seed=` (BS-0 finding), so this records whether Kokoro is deterministic anyway.
+        // BS-6 (R6): `Speak` now honours `seed=7`, so two runs must be byte-identical (Kokoro draws no random numbers today,
+        // so this also fails if anything non-deterministic creeps into the engine).
         let same = try Data(contentsOf: urlA) == Data(contentsOf: b.dir.appendingPathComponent("note.wav"))
-        ModelSmoke.info(Self.row, "9.two-runs-byte-identical", same ? "identical" : "different (Speak ignores seed=7; Kokoro is not deterministic here)")
+        ModelSmoke.check(Self.row, "9.two-seed7-runs-byte-identical", same, same ? "identical" : "the two note.wav files differ")
         try ModelSmoke.artifact("BS4-9", "note.wav", copying: urlA, judge: "Natural voice reading the reminder; no clipping or gaps.")
     }
 
