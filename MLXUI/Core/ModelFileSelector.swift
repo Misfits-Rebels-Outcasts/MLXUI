@@ -85,22 +85,37 @@ enum ModelFileSelector {
     /// `t5-base` itself on the first run (`T5TextEncoder.resolveModelFolder` calls `HubApi().snapshot` when the
     /// config's `text_encoder.name` is not a path). `google-t5/t5-base` (Apache-2.0) lands in `t5/`, and
     /// `SAMAudioEngine.load` points the config at that folder.
+    ///
+    /// KG-1 (R34, `RSI/DelegateKokoroG2PBacklog.md`): a model may have **several** companions, so the lookup returns a list.
+    /// Kokoro's English G2P files (`beshkenadze/kitten-tts-g2p`, 4 files, 8.7 MB) land in `g2p/`; they are fetched here, at
+    /// install time, and never at run time (the package otherwise asks huggingface.co on every text chunk).
     struct CompanionRepo: Equatable, Sendable {
         let repository: String
         /// Destination inside the installed model folder, with a trailing slash.
         let subfolder: String
+        /// Exactly these files, by name, instead of whatever `filesToDownload` selects. For a repo whose files the selector's
+        /// vocabulary does not know (`us_bart_config.json`, `us_gold.json`, ...). Every name must exist in the repo or the
+        /// install fails by name -- never a partial companion. `nil` = the selector decides (MusicGen, SAM-Audio).
+        var only: [String]? = nil
     }
 
-    static func companionRepo(for hfModelId: String) -> CompanionRepo? {
+    static func companionRepos(for hfModelId: String) -> [CompanionRepo] {
         switch hfModelId {
         case "jasonvassallo/mlx-musicgen-small":
-            return CompanionRepo(repository: "mlx-community/encodec-32khz-float32", subfolder: "encodec/")
+            return [CompanionRepo(repository: "mlx-community/encodec-32khz-float32", subfolder: "encodec/")]
         case "mlx-community/sam-audio-base":
-            return CompanionRepo(repository: "google-t5/t5-base", subfolder: "t5/")
+            return [CompanionRepo(repository: "google-t5/t5-base", subfolder: "t5/")]
+        case "mlx-community/Kokoro-82M-bf16":
+            return [CompanionRepo(repository: kokoroG2PRepository, subfolder: kokoroG2PSubfolder, only: kokoroG2PFiles)]
         default:
-            return nil
+            return []
         }
     }
+
+    /// Kokoro's English G2P companion (KG-1). The runtime copies these into the package's cache folder (KG-2); it never fetches them.
+    static let kokoroG2PRepository = "beshkenadze/kitten-tts-g2p"
+    static let kokoroG2PSubfolder = "g2p/"
+    static let kokoroG2PFiles = ["us_bart.safetensors", "us_bart_config.json", "us_gold.json", "us_silver.json"]
 
     /// True when `l` (a lowercased `X.safetensors`) has an `X.fp16.safetensors` sibling —
     /// the repo ships the same weights in both fp32 and fp16 (e.g. stabilityai/sdxl-turbo's
