@@ -118,60 +118,126 @@ struct KokoroOldInstallSmokeTests {
 
     // MARK: Phase 2 (offline)
 
-    @Test(.enabled(if: phase2Ready, "needs TEST_RUNNER_MLXUI_KOKORO_OLDINSTALL_PHASE=2 and a repaired install in the scratch store from phase 1"))
-    func phase2_flow9SpeaksOfflineOnTheRepairedInstall() async throws {
+    private static let phase2Enabled: Comment = "needs TEST_RUNNER_MLXUI_KOKORO_OLDINSTALL_PHASE=2 and a repaired install in the scratch store from phase 1"
+
+    /// Preconditions that make a pass mean something; returns the scratch install and the hub cache the package will use.
+    /// The cache folder must hold nothing but (possibly) a G2P folder seeded by an earlier phase-2 test, which is removed so each test seeds it afresh.
+    private func offlinePrep() async throws -> (target: URL, cacheRoot: URL) {
         typealias K = KokoroOldInstall
         let fm = FileManager.default
-        let entry = try #require(K.entry(), "Kokoro is not in the catalog")
         let target = K.scratchStore.directory(forHFModelID: K.hfID)
-
-        // Preconditions that make a pass mean something.
         let names = ((try? fm.contentsOfDirectory(atPath: target.appendingPathComponent("g2p").path)) ?? []).sorted()
         K.line("0.scratch-install-is-repaired", names == K.g2pNames, "g2p/ holds \(names)")
         let hubEnv = K.env["HF_HUB_CACHE"] ?? ""
-        let cacheDir = URL(fileURLWithPath: hubEnv, isDirectory: true)
         let cacheRoot = HubCache.default.cacheDirectory
-        K.line("0.hub-cache-is-the-env-folder", !hubEnv.isEmpty && cacheRoot.standardizedFileURL.path == cacheDir.standardizedFileURL.path,
+        K.line("0.hub-cache-is-the-env-folder", !hubEnv.isEmpty && cacheRoot.standardizedFileURL.path == URL(fileURLWithPath: hubEnv, isDirectory: true).standardizedFileURL.path,
                "HF_HUB_CACHE=\(hubEnv), the package would use \(cacheRoot.path)")
+        try? fm.removeItem(at: cacheRoot.appendingPathComponent("mlx-audio"))
         let before = (try? fm.contentsOfDirectory(atPath: cacheRoot.path)) ?? []
         K.line("0.hub-cache-is-empty", before.isEmpty, "contains \(before)")
         let reachable = await Self.hubReachable()
         K.line("0.network-is-off", !reachable, reachable ? "huggingface.co answered: turn Wi-Fi off, this run proves nothing" : "huggingface.co unreachable")
+        return (target, cacheRoot)
+    }
 
-        // Flow 9 through the real interpreter and RealExecutor, the Kokoro stage bound to the SCRATCH install.
-        let flowID = "9-ReadItAloud"
+    private func assertSeeded(_ cacheRoot: URL) {
+        let seeded = cacheRoot.appendingPathComponent("mlx-audio/beshkenadze_kitten-tts-g2p/us_bart.safetensors")
+        KokoroOldInstall.line("2.g2p-cache-was-seeded-from-the-install", FileManager.default.fileExists(atPath: seeded.path), seeded.path)
+    }
+
+    /// The Kokoro stage bound to the SCRATCH install; every other model goes through the registry as BS-4 does (read-only use of the real store).
+    private final class RegistryBox: @unchecked Sendable {
+        let registry: ModelRegistry
+        @MainActor init() { registry = ModelRegistry(); for module in installedModules { module.register(into: registry) } }
+    }
+
+    private func runFlow(_ flowID: String, scratchKokoro target: URL, installedModelIDs: Set<String>, wavName: String?) async throws {
+        typealias K = KokoroOldInstall
+        let fm = FileManager.default
         let base = fm.temporaryDirectory.appendingPathComponent("kg3-\(UUID().uuidString)")
         defer { try? fm.removeItem(at: base) }
         let ws = try #require(FlowWorkspace(root: base.appendingPathComponent("flows")))
         try ws.prepare(flowID: flowID, sourceDir: GalleryLoader.resourcesDirectory, bundledAssets: GalleryLoader.bundledAssets(flowID: flowID))
         let catalog = BasicShowcaseRealLoad.catalog()
+        let box = RegistryBox()
         let makeStage: @Sendable (ModelEntry, StageConfig) async throws -> any PipelineStage = { model, config in
-            guard model.id == K.entryID else { throw StageError.unsupportedModel(id: model.id, kind: model.runnerKind) }
-            let voice = config.voice ?? KokoroEngine.defaultVoice
-            let speed = config.speed, seed = config.seed, trim = config.trimSilence
-            return TTSStage(id: "kokoro.\(model.id).\(voice)", name: "Kokoro TTS (\(voice))") { text in
-                try await KokoroEngine.synthesize(text, voice: voice, speed: speed, seed: seed, trimSilence: trim, modelDirectory: target)
+            if model.id == K.entryID {
+                let voice = config.voice ?? KokoroEngine.defaultVoice
+                let speed = config.speed, seed = config.seed, trim = config.trimSilence
+                return TTSStage(id: "kokoro.\(model.id).\(voice)", name: "Kokoro TTS (\(voice))") { text in
+                    try await KokoroEngine.synthesize(text, voice: voice, speed: speed, seed: seed, trimSilence: trim, modelDirectory: target)
+                }
+            }
+            return try await MainActor.run {
+                guard let resolved = box.registry.bestModule(for: model) else { throw StageError.unsupportedModel(id: model.id, kind: model.runnerKind) }
+                return try resolved.sdk.makeStage(for: model, config: config)
             }
         }
         let executor = RealExecutor(workspace: ws, flowID: flowID, blobDirectory: base.appendingPathComponent("blobs"),
-                                    makeModelStage: makeStage, installedModelIDs: [entry.id], catalog: catalog)
+                                    makeModelStage: makeStage, installedModelIDs: installedModelIDs, catalog: catalog)
         let doc = try GalleryLoader.loadDocument(flowID: flowID)
         let events = try await FlowInterpreter.run(doc, executor: executor)
         let failed = events.filter { $0.kind == .rowFailed }
-        K.line("1.no-row-failed", failed.isEmpty, failed.map { "\($0.path): \($0.message ?? "")" }.joined(separator: "; "))
-
-        let wav = ws.directory(for: flowID).appendingPathComponent("note.wav")
+        K.line("1.\(flowID).no-row-failed", failed.isEmpty, failed.map { "\($0.path): \($0.message ?? "")" }.joined(separator: "; "))
+        guard let wavName else { return }
+        let wav = ws.directory(for: flowID).appendingPathComponent(wavName)
         if let file = try? AVAudioFile(forReading: wav) {
             let seconds = Double(file.length) / file.processingFormat.sampleRate
-            K.line("1.wav-20-to-60-s", (20...60).contains(seconds), String(format: "%.1f s", seconds))
-            let keep = K.scratch.appendingPathComponent("flow9-offline-note.wav")
+            K.line("1.\(flowID).wav-has-speech", seconds >= 1, String(format: "%.1f s", seconds))
+            if flowID.hasPrefix("9-") { K.line("1.\(flowID).wav-20-to-60-s", (20...60).contains(seconds), String(format: "%.1f s", seconds)) }
+            let keep = K.scratch.appendingPathComponent("\(flowID)-offline-\(wavName)")
             try? fm.removeItem(at: keep); try? fm.copyItem(at: wav, to: keep)
-            ModelSmoke.info(K.row, "1.wav-kept", keep.path)
+            ModelSmoke.info(K.row, "1.\(flowID).wav-kept", keep.path)
         } else {
-            K.line("1.wav-20-to-60-s", false, "no readable note.wav in \(ws.directory(for: flowID).path)")
+            K.line("1.\(flowID).wav-has-speech", false, "no readable \(wavName) in \(ws.directory(for: flowID).path)")
         }
-        let seeded = cacheRoot.appendingPathComponent("mlx-audio/beshkenadze_kitten-tts-g2p/us_bart.safetensors")
-        K.line("2.g2p-cache-was-seeded-from-the-install", fm.fileExists(atPath: seeded.path), seeded.path)
+    }
+
+    @Test(.enabled(if: phase2Ready, phase2Enabled))
+    func phase2_flow9SpeaksOfflineOnTheRepairedInstall() async throws {
+        let (target, cacheRoot) = try await offlinePrep()
+        let entry = try #require(KokoroOldInstall.entry(), "Kokoro is not in the catalog")
+        try await runFlow("9-ReadItAloud", scratchKokoro: target, installedModelIDs: [entry.id], wavName: "note.wav")
+        assertSeeded(cacheRoot)
+    }
+
+    /// Gallery 01 (Spoken Summary, an Advance flow): Read Audio, Whisper Large v3, Qwen3 8B, Speak (Kokoro), Save Audio. Runs only when Whisper and
+    /// Qwen are ALREADY installed in the real store (read-only use); Kokoro comes from the scratch install. Nothing is written to the real store.
+    @Test(.enabled(if: phase2Ready && gallery01Ready, "needs phase 2 and Whisper Large v3 + Qwen3 8B installed in the real store"))
+    func phase2_gallery01SpeaksOfflineOnTheRepairedInstall() async throws {
+        let (target, cacheRoot) = try await offlinePrep()
+        let entry = try #require(KokoroOldInstall.entry(), "Kokoro is not in the catalog")
+        let catalog = BasicShowcaseRealLoad.catalog()
+        try await runFlow("01-SpokenSummary", scratchKokoro: target,
+                          installedModelIDs: BasicShowcaseRealLoad.installedIDs(catalog).union([entry.id]), wavName: "memo-tldr.wav")
+        assertSeeded(cacheRoot)
+    }
+
+    private nonisolated static let gallery01Ready: Bool = {
+        guard let doc = try? GalleryLoader.loadDocument(flowID: "01-SpokenSummary"), let kokoro = KokoroOldInstall.entry() else { return false }
+        let catalog = BasicShowcaseRealLoad.catalog()
+        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: BasicShowcaseRealLoad.installedIDs(catalog).union([kokoro.id]),
+                                       totalRAMGB: 19, claimableModelIDs: Set(catalog.map(\.id)))
+        return !result.needs.isEmpty && !result.isBlocked && result.toDownload.isEmpty
+    }()
+
+    /// Kokoro's Run screen: `TTSRunModel` is the view-model `TTSRunView` drives (`model.synthesize(text:stage:)`), and it runs headless. The stage handed
+    /// to it is the scratch-bound TTSStage (the view's own `TTSStage(modelID:)` reads `ModelStore.shared`, which cannot be redirected). NOT covered: the
+    /// SwiftUI view itself (voice picker, button) and `LeasingStage.perRun` (ask/lease/booking). The model auto-plays the result, so this is audible.
+    @Test(.enabled(if: phase2Ready, phase2Enabled))
+    func phase2_runScreenViewModelSpeaksOffline() async throws {
+        typealias K = KokoroOldInstall
+        let (target, cacheRoot) = try await offlinePrep()
+        let stage = TTSStage(id: "kokoro.run-screen", name: "Kokoro TTS (run screen)") { text in
+            try await KokoroEngine.synthesize(text, voice: KokoroEngine.defaultVoice, speed: 1.0, modelDirectory: target)
+        }
+        let model = TTSRunModel()
+        model.synthesize(text: "This is a short offline check of the Kokoro run screen.", stage: stage)
+        let deadline = ContinuousClock.now + .seconds(300)
+        while model.isRunning, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(100)) }
+        K.line("1.run-screen.no-error", model.errorText == nil, model.errorText ?? "none")
+        K.line("1.run-screen.audio-came-out", model.didSynthesize, "didSynthesize=\(model.didSynthesize)")
+        assertSeeded(cacheRoot)
     }
 
     private static func hubReachable() async -> Bool {
