@@ -54,7 +54,7 @@
       "children": [],
       "model": null,
       "refs": [],
-      "settings": "vacation-web/; naming=\"{name}-web\"",
+      "settings": "vacation-web/; naming=\"{name}-web{ext}\"",
       "task": "Save Images"
     }
   ],
