@@ -627,14 +627,14 @@ struct CatFlowEditingTests {
         // **BG-2** (RSI/DelegateBasicImageFlowsBacklog.md, 2026-10-10): this test used
         // `Upscale` as its example, which stopped being "no runnable model" the moment
         // `"Upscale": .upscale` + `engines.diffusion.upscale` landed and `SeedVR2 3B` became
-        // its derived default. Switched to `Estimate Depth` — genuinely unserved (no
-        // `taskKinds` entry, no served prefix, no catalog model), which keeps the test's
-        // intent intact: a model-class row with no runnable model seeds nothing and warns.
+        // its derived default. Switched to `Estimate Depth`, which **MC3-8** then made runnable
+        // (Depth Anything V2 Small), so the example is `Init Latent` now — still genuinely
+        // unserved (no served prefix, no stage accepting what it hands the executor).
         let (catalog, claimable) = try loadedCatalogAndClaimable()
         let model = try editor()
         model.modelCatalog = catalog
         model.claimableModelIDs = claimable
-        model.add(task: "Estimate Depth")
+        model.add(task: "Init Latent")
         #expect(model.document.rows[0].model == nil)
         #expect(model.warning(for: model.document.rows[0].id) != nil)
         // A row whose model isn't in the derived pool warns too.

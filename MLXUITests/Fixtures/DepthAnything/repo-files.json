@@ -1,0 +1,13 @@
+{
+  "repository": "depth-anything/Depth-Anything-V2-Small-hf",
+  "revision": "5426e4f0f36572d16453bbda7a8389317b1bef99",
+  "fetched": "2026-11-06",
+  "source": "GET https://huggingface.co/api/models/depth-anything/Depth-Anything-V2-Small-hf/tree/5426e4f0f36572d16453bbda7a8389317b1bef99",
+  "files": [
+    { "path": ".gitattributes", "size": 1519 },
+    { "path": "README.md", "size": 4400 },
+    { "path": "config.json", "size": 950 },
+    { "path": "model.safetensors", "size": 99173660 },
+    { "path": "preprocessor_config.json", "size": 775 }
+  ]
+}

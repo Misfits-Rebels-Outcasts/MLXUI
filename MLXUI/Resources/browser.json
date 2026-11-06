@@ -36,7 +36,8 @@
         "segmentation",
         "videogen",
         "upscale",
-        "interpolate"
+        "interpolate",
+        "depth"
       ]
     },
     {
@@ -131,6 +132,10 @@
     "separate": {
       "icon": "waveform.path.ecg.rectangle",
       "description": "Sound Isolation"
+    },
+    "depth": {
+      "icon": "cube.transparent",
+      "description": "Depth Estimation"
     }
   },
   "domains": [
@@ -3362,6 +3367,63 @@
           ],
           "descriptionSource": "mlx-community/sam-audio-base",
           "summary": "Meta's SAM-Audio Base, converted to MLX. Isolates one named sound from a recording — speech, music, a dog barking — and returns it plus everything else, at 48 kHz."
+        }
+      ]
+    },
+    {
+      "id": "depth",
+      "name": "Depth Estimation",
+      "sfSymbol": "cube.transparent",
+      "children": null,
+      "models": [
+        {
+          "id": "depth-anything--Depth-Anything-V2-Small-hf",
+          "family": "depth-anything",
+          "displayName": "Depth Anything V2 Small",
+          "paramSize": "0.025B",
+          "paramCountB": 0.025,
+          "modelType": "depth",
+          "source": "mlx",
+          "format": "mlx-fp32",
+          "platforms": [
+            "macOS 14+"
+          ],
+          "minMacOSVersion": "14.0",
+          "hfRepo": "depth-anything",
+          "hfModelId": "depth-anything/Depth-Anything-V2-Small-hf",
+          "ramGB": 0.15,
+          "downloadSizeGB": 0.1,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf",
+          "description": "# Depth Anything V2 Small\n\nA monocular depth estimator: give it one photo and it returns a grayscale map of how near or far each pixel is — **near is bright, far is dark**. The depth is **relative**, not a measurement in metres: it says what is closer than what, not how many metres away anything is.\n\nThis is a Swift/MLX port of the official [depth-anything/Depth-Anything-V2-Small-hf](https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf) checkpoint (24.8 M parameters, fp32 as published), written for MLXUI. The weights are not converted or re-quantized: the loader reads the published safetensors and converts the PyTorch layouts in memory, so the model runs on Apple Silicon through MLX with no Python at run time.\n\n## What it does\n\nIt reads a single image and writes an 8-bit grayscale PNG at the input image's pixel size: brighter pixels are nearer the camera, darker pixels are farther away. The prediction is min–max normalised per image, so the contrast is spread across the whole range; the map is not comparable between two pictures.\n\n## Good to know\n\n- **Relative depth only.** Not metric depth, no distance in metres.\n- **One image in, one image out**, at the input's own pixel size.\n- The longest side can be at most **8,192 pixels** and the aspect ratio at most **3 : 1**; a panorama beyond either limit is refused before any work starts.\n- The output is what a downstream ControlNet-style row expects: an 8-bit grayscale PNG, near = bright.\n- Runs on the installed folder only. Nothing is downloaded at run time.\n\n## Key Details\n\n| | |\n|---|---|\n| **Architecture** | DINOv2 ViT-S/14 backbone + DPT head |\n| **Weights** | float32 (as published), 99 MB |\n| **Input** | any image the app can decode, converted to 8-bit sRGB RGB; alpha dropped, grayscale expanded |\n| **Output** | 8-bit grayscale PNG, near = bright, min–max normalised, at the input's pixel size |\n| **Base model** | [depth-anything/Depth-Anything-V2-Small-hf](https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf) |\n| **License** | Apache-2.0 |\n\n## License\n\nThe weights are governed by the [Apache-2.0 licence](https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf), the licence of the original model released by Lihe Yang et al. as part of Depth Anything V2 (paper: [Depth Anything V2](https://arxiv.org/abs/2406.09414); code: [LiheYoung/Depth-Anything](https://github.com/LiheYoung/Depth-Anything)). Notice, as the licence asks: this software includes a copy of the model's weights unmodified, and the copyright and licence notice of the original is retained here.\n\nRAM figure is a provisional estimate (1.5 × the weights, about 0.15 GB), not a measurement; the maintainers set the final `ramGB` from their own run.",
+          "architecture": "DepthAnythingForDepthEstimation",
+          "languages": null,
+          "lastUpdated": "2024-07-05",
+          "taskTags": [
+            "depth-estimation",
+            "monocular-depth-estimation",
+            "relative-depth"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 1574470,
+          "communityLikes": 75,
+          "variants": [
+            {
+              "quantization": "fp32",
+              "format": "mlx-fp32",
+              "ramGB": 0.15,
+              "downloadSizeGB": 0.1,
+              "qualityPercent": 100,
+              "hfModelId": "depth-anything/Depth-Anything-V2-Small-hf",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "depth-anything/Depth-Anything-V2-Small-hf",
+          "summary": "A Swift/MLX port of Depth Anything V2 Small. Give it one photo and it returns a grayscale map of relative depth — near is bright, far is dark. Not a measurement in metres."
         }
       ]
     }

@@ -419,6 +419,24 @@ nonisolated enum CatalogBridge {
             candidates: ["mlx-community/FLUX.2-klein-4B-bf16"],
             equivalence: .substitute,
             manifestFile: "flux2-klein-4b.json"),
+        // MC3-8 (issue #6, owner decision 8): `Estimate Depth` is served by the Depth Anything V2 Small port. The
+        // catalog card's own display name resolves it exactly (`.same`); gallery flow 62 writes "Depth Pro", the
+        // reference runtime's model, which cannot run here, so a `.substitute` row shows what actually loads — the
+        // same pattern as "SAM Base" -> SAM3 and "Z-Image Turbo (4-bit)" -> FLUX.2 Klein. `Resources/Gallery/` is
+        // never edited: the Python runtime still serves Depth Pro there. Both rows are appended last so
+        // `entry(forCandidate:)`/`TaskModels.displayName(for:)` keep naming the card "Depth Anything V2 Small".
+        BridgeEntry(
+            display: "Depth Anything V2 Small",
+            pinnedID: "depth-anything/Depth-Anything-V2-Small-hf",
+            candidates: ["depth-anything/Depth-Anything-V2-Small-hf"],
+            equivalence: .same,
+            manifestFile: "depth-anything-v2-small.json"),
+        BridgeEntry(
+            display: "Depth Pro",
+            pinnedID: "depth-anything/Depth-Anything-V2-Small-hf",
+            candidates: ["depth-anything/Depth-Anything-V2-Small-hf"],
+            equivalence: .substitute,
+            manifestFile: "depth-anything-v2-small.json"),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {

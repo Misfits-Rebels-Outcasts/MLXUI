@@ -1169,6 +1169,17 @@ nonisolated struct RealExecutor: FlowExecutor {
             let language = settings.value(for: "lang") ?? "en"
             return StageConfig(language: language, flowTask: "Transcribe")
         }
+        if desc.refName == "engines.diffusion.estimate_depth" {
+            // MC3-8 (issue #6, owner decision 7): the Estimate Depth row takes no settings. A `seed=`,
+            // `steps=`, `width=`, `height=`, `scale=` or `quantize=` on it is refused **by name**, never
+            // silently ignored (the CFM-R16-1 lesson). `DepthAnythingStage` has no knob for any of them.
+            let refusedNames = ["seed", "steps", "width", "height", "scale", "quantize"]
+            if let setting = refusedNames.first(where: { settings.value(for: $0) != nil }) {
+                throw FlowSettingRefusal(description:
+                    "Estimate Depth can't use a \(setting)= setting; remove it — Depth Anything V2 Small takes no settings.")
+            }
+            return .default
+        }
         if desc.refName.hasPrefix("engines.diffusion.") {
             let number = { (key: String) -> String? in
                 settings.value(for: key)?.trimmingCharacters(in: .whitespacesAndNewlines)

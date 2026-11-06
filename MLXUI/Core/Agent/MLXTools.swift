@@ -122,6 +122,7 @@ nonisolated struct InstalledModelIndex: Sendable {
         case "voice":         return .voice
         case "interpolate":   return .interpolate
         case "separate":      return .separate
+        case "depth":         return .depth
         default:              return .unsupported  // video / unknown
         }
     }
