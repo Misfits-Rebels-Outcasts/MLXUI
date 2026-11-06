@@ -131,8 +131,12 @@ meta = {
         "constrain_rule": "round(value/multiple)*multiple (Python round, half-to-even)",
     },
     "preprocessing_tolerance": {
-        "note": "Swift resize (vImage/CoreGraphics) differs slightly from PIL bicubic; compared separately",
-        "max_abs_delta": 0.05,
+        "note": "Swift CoreGraphics .high resize vs PIL bicubic; differences are localized at sharp edges "
+                "(median ~0), so preprocessing is compared separately from model parity",
+        "measured_on": "a, 140x140 -> 364x518: median 0, p99 0.16, max 0.47 (normalized units)",
+        "median_abs_delta": 0.01,
+        "p99_abs_delta": 0.25,
+        "max_abs_delta": 0.6,
     },
     "final_png_rule": "bicubic(F.interpolate, align_corners=False) to the input's pixel size, then min-max to 0..255",
     "cases": {},

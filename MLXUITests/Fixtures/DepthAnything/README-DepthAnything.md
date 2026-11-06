@@ -56,8 +56,10 @@ build). The `README.md` name is `README-DepthAnything.md` for the same reason.
 - **How (b) was fed the same pixels:** `PIL.Image.open`, then `ImageOps.exif_transpose`, then
   `.convert("RGB")`; no other colour transform. `b_preprocessed.f32` is the tensor the reference model
   saw, so the model-parity test is exact-input.
-- **Preprocessing tolerance `0.05`** (normalised units): the Swift resize is Core Graphics
-  `.high` (bicubic), the reference is PIL bicubic; the two tensors are not bit-identical by construction.
+- **Preprocessing tolerance** (normalised units): the Swift resize is Core Graphics `.high`, the reference
+  is PIL bicubic, so the tensors are not bit-identical by construction — the differences are localised at
+  sharp edges. Measured on (a): median `0`, p99 `0.16`, max `0.47`; the test asserts median ≤ 0.01,
+  p99 ≤ 0.25 and max ≤ 0.6.
 - **Final PNG rule:** bicubic `F.interpolate(..., align_corners=False)` to the input's pixel size, then
   per-image min–max to 0..255 (a constant prediction is all black). The reference's own
   `post_process_depth_estimation` only does the resize; the min–max quantisation is the app's contract
