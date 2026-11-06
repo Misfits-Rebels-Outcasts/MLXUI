@@ -36,7 +36,8 @@
         "segmentation",
         "videogen",
         "upscale",
-        "interpolate"
+        "interpolate",
+        "depth"
       ]
     },
     {
@@ -131,6 +132,10 @@
     "separate": {
       "icon": "waveform.path.ecg.rectangle",
       "description": "Sound Isolation"
+    },
+    "depth": {
+      "icon": "cube.transparent",
+      "description": "Depth Estimation"
     }
   },
   "domains": [
@@ -3362,6 +3367,59 @@
           ],
           "descriptionSource": "mlx-community/sam-audio-base",
           "summary": "Meta's SAM-Audio Base, converted to MLX. Isolates one named sound from a recording — speech, music, a dog barking — and returns it plus everything else, at 48 kHz."
+        }
+      ]
+    },
+    {
+      "id": "depth",
+      "name": "Depth Estimation",
+      "sfSymbol": "cube.transparent",
+      "children": null,
+      "models": [
+        {
+          "id": "depth-anything--Depth-Anything-V2-Small-hf",
+          "family": "depth-anything",
+          "displayName": "Depth Anything V2 Small",
+          "paramSize": "0.025B",
+          "paramCountB": 0.025,
+          "modelType": "depth",
+          "source": "mlx",
+          "format": "mlx-fp32",
+          "platforms": [
+            "macOS 14+"
+          ],
+          "minMacOSVersion": "14.0",
+          "hfRepo": "depth-anything",
+          "hfModelId": "depth-anything/Depth-Anything-V2-Small-hf",
+          "ramGB": 0.15,
+          "downloadSizeGB": 0.1,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf",
+          "description": null,
+          "architecture": "DepthAnythingForDepthEstimation",
+          "languages": null,
+          "lastUpdated": null,
+          "taskTags": null,
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": null,
+          "communityLikes": null,
+          "variants": [
+            {
+              "quantization": "fp32",
+              "format": "mlx-fp32",
+              "ramGB": 0.15,
+              "downloadSizeGB": 0.1,
+              "qualityPercent": 100,
+              "hfModelId": "depth-anything/Depth-Anything-V2-Small-hf",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "depth-anything/Depth-Anything-V2-Small-hf",
+          "summary": null
         }
       ]
     }

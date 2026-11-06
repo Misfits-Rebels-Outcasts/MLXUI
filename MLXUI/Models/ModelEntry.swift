@@ -5,7 +5,7 @@ nonisolated enum ModelSource: String, Codable {
 }
 
 nonisolated enum ModelType: String, Codable {
-    case llm, asr, tts, embedding, vision, ocr, video, image, music, segmentation, upscale, rerank, decision, diarization, enhance, voice, interpolate, separate
+    case llm, asr, tts, embedding, vision, ocr, video, image, music, segmentation, upscale, rerank, decision, diarization, enhance, voice, interpolate, separate, depth
     var sfSymbol: String {
         switch self {
         case .llm: "bubble.left.and.bubble.right"
@@ -26,6 +26,7 @@ nonisolated enum ModelType: String, Codable {
         case .voice: "waveform.and.mic"   // MP6-1: speech in, speech out (implementer's call, pending owner confirmation)
         case .interpolate: "forward.frame"   // RIFE-1: video frame interpolation (implementer's call, owner-confirmed 2026-10-28)
         case .separate: "waveform.path.ecg.rectangle"   // MC1-1: isolate one named sound from a recording (SAM-Audio Base)
+        case .depth: "cube.transparent"   // MC3-1: monocular depth estimation (Depth Anything V2 Small), owner 2026-11-06
         }
     }
 }

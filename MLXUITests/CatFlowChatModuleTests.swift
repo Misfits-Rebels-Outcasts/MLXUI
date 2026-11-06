@@ -93,7 +93,9 @@ struct CatFlowChatModuleTests {
         //        (RSI/DelegateModelPackBacklog.md MP7-2, MP7-0 ruled 2026-10-30), 53 → 54. Same convention.
         // MC1-1: bundled catalog gained the mlx-community/sam-audio-base `.separate` entry
         //        (sound isolation), 54 → 55. Same convention.
-        #expect(entries.count == 55, "bundled catalog drifted: \(entries.count) entries")
+        // MC3-1: bundled catalog gained the depth-anything/Depth-Anything-V2-Small-hf `.depth` entry
+        //        (monocular depth estimation, owner decisions 2026-11-06), 55 → 56. Same convention.
+        #expect(entries.count == 56, "bundled catalog drifted: \(entries.count) entries")
 
         let withChat = registry(includingChat: true)
         let withoutChat = registry(includingChat: false)
@@ -113,7 +115,7 @@ struct CatFlowChatModuleTests {
             }
             checked += 1
         }
-        #expect(checked == 55)   // MC1-1: 54 → 55 (the SAM-Audio Base `.separate` entry)
+        #expect(checked == 56)   // MC3-1: 55 → 56 (the Depth Anything V2 Small `.depth` entry)
         #expect(llmChecked == 14)   // MP1-1: Gemma 4 E4B is the 14th .llm entry (MM1: MiMo V2.6 9B was the 13th)
     }
 
