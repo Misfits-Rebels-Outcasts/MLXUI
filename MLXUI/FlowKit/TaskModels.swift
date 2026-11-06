@@ -201,7 +201,10 @@ nonisolated enum TaskModels {
         // MP3-W: "Qwen3-ASR 1.7B" appended **last** after Parakeet -- the seed does not move, never the default.
         "Transcribe": ["Whisper Tiny", "Whisper Small", "Whisper Large v3", "Voxtral Mini 4B Realtime",
                        "Parakeet TDT 0.6B v3", "Qwen3-ASR 1.7B", "LFM2.5-Audio 1.5B"],
-        "Embed": ["BGE-M3"],
+        // MC4-8 (issue #8, decision 7): "Qwen3-VL Embedding 2B" appended **last** to the `Embed` pool.
+        // "BGE-M3" stays the seed and the default, and the pool stays text-only: image `Embed` needs a
+        // language change (`list(text)` -> `list(text) | list(image)`) that is out of scope here.
+        "Embed": ["BGE-M3", "Qwen3-VL Embedding 2B"],
         "Generate": llmModels,
         "Summarize": llmModels,
         "Translate": llmModels,

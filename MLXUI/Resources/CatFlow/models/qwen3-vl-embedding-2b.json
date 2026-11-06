@@ -1,0 +1,20 @@
+{
+  "id": "mlx-community/Qwen3-VL-Embedding-2B-4bit",
+  "display": "Qwen3-VL Embedding 2B",
+  "kind": "local",
+  "engine": "mlx-embed",
+  "tasks": [
+    "Embed"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 1.8,
+    "ram_gb": 2.7
+  },
+  "source": "https://huggingface.co/mlx-community/Qwen3-VL-Embedding-2B-4bit",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true,
+  "notes": "MLXUI-authored (issue #8, MC4-8) -- catflow-mlx has no manifest for this model, so this was written in the shape of bge-m3.json. It has no checksum field, as the other MLXUI-authored manifests (the Gemma 4 pair, MiMo, Qwen3.8, Parakeet, Qwen3-ASR) have none: there is no catflow source manifest to inherit one from and the field is documentary. settings is empty on purpose: this version takes text only in workflows (image Embed needs a `list(text)` -> `list(text) | list(image)` language change, filed upstream and out of scope), applies no per-task instruction and offers no dimension choice (issue decisions 3, 7, 11). resources.disk_gb is browser.json's downloadSizeGB (1.8) and resources.ram_gb is its ramGB 2.7, the provisional 1.5x-weights estimate -- MC4-7 measures the peak and the maintainers set the final figure (decision 9; no `.embedding` row is added). Verified against mlx-community/Qwen3-VL-Embedding-2B-4bit revision c713a965783416b9467b419f2d14ca6445847455 (4-bit MLX, Apache-2.0; the official Qwen/Qwen3-VL-Embedding-2B is the parity reference only)."
+}
