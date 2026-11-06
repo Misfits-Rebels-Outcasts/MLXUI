@@ -56,5 +56,6 @@ let installedModules: [ModelModule.Type] = [
     WanVideoModule.self,
     SeedVR2Module.self,
     RIFEModule.self,   // RIFE-3d: the only .interpolate module; claims RIFE-family entries only
+    DepthAnythingModule.self,   // MC3-6: the only .depth module; claims depth-anything-family entries only
     ChatModule.self,
 ]
