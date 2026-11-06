@@ -99,6 +99,21 @@ enum DepthAnythingFixtures {
         return try #require((node as? [String: Any])?["file"] as? String)
     }
 
+    /// Append one evidence line to the test host's temporary directory, so the PR's parity numbers can be collected
+    /// from a plain run (the sandboxed host cannot write the caller's folder; the standard output is captured by
+    /// Xcode rather than relayed).
+    nonisolated static func record(_ line: String) {
+        guard let data = (line + "\n").data(using: .utf8) else { return }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("DEPTH-PARITY.txt")
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile()
+            handle.write(data)
+            try? handle.close()
+        } else {
+            try? data.write(to: url)
+        }
+    }
+
     /// Max / p99 / median absolute difference against a raw fixture.
     nonisolated static func differenceStats(_ array: MLXArray, file: String) throws -> (max: Float, p99: Float, median: Float) {
         let actual = try MLXErrorGuard.read(array.asType(.float32), as: Float.self)

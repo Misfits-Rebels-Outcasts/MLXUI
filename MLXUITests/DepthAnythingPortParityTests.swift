@@ -33,7 +33,9 @@ struct DepthAnythingPortParityTests {
     /// Compare an array with a raw fixture, printing the max |Δ| RIFE-style.
     private func compare(_ array: MLXArray, file: String, label: String) throws -> Float {
         let difference = try DepthAnythingFixtures.maxDifference(array, file: file)
-        print("DEPTH PARITY \(label) max |Δ| = \(difference)")
+        let line = "DEPTH PARITY \(label) max |Δ| = \(difference)"
+        print(line)
+        DepthAnythingFixtures.record(line)
         return difference
     }
 
@@ -96,8 +98,10 @@ struct DepthAnythingPortParityTests {
             let r = pearson(actual, reference)
             let maxDelta = zip(actual, reference).map { abs($0 - $1) }.max() ?? .infinity
             let range = (reference.max() ?? 0) - (reference.min() ?? 0)
-            print(String(format: "DEPTH PARITY predicted_depth[%@] r = %.7f max |Δ| = %.6f (range %.4f, %.3f%%)",
-                         caseName, r, maxDelta, range, range > 0 ? 100 * maxDelta / range : 0))
+            let line = String(format: "DEPTH PARITY predicted_depth[%@] r = %.7f max |Δ| = %.6f (range %.4f, %.3f%%)",
+                              caseName, r, maxDelta, range, range > 0 ? 100 * maxDelta / range : 0)
+            print(line)
+            DepthAnythingFixtures.record(line)
             #expect(r >= 0.999, "\(caseName): Pearson r \(r)")
             #expect(maxDelta <= 0.01 * range, "\(caseName): max |Δ| \(maxDelta) > 1% of range \(range)")
         }
@@ -119,8 +123,10 @@ struct DepthAnythingPortParityTests {
             let deltas = zip(actual, reference).map { abs(Int($0) - Int($1)) }
             let within2 = deltas.filter { $0 <= 2 }.count
             let fraction = Double(within2) / Double(max(deltas.count, 1))
-            print(String(format: "DEPTH PARITY final PNG[%@] within ±2 = %.4f%% max |Δ| = %d",
-                         caseName, 100 * fraction, deltas.max() ?? 0))
+            let line = String(format: "DEPTH PARITY final PNG[%@] within ±2 = %.4f%% max |Δ| = %d",
+                              caseName, 100 * fraction, deltas.max() ?? 0)
+            print(line)
+            DepthAnythingFixtures.record(line)
             #expect(fraction >= 0.999, "\(caseName): only \(fraction) within ±2 grey levels")
         }
     }
@@ -141,8 +147,10 @@ struct DepthAnythingPortParityTests {
         #expect(actual.shape == expectedShape, "preprocessed \(actual.shape) vs \(expectedShape)")
         let file = try DepthAnythingFixtures.file(for: "a", ["preprocessed"])
         let stats = try DepthAnythingFixtures.differenceStats(actual, file: file)
-        print(String(format: "DEPTH PARITY preprocessed (a) median |Δ| = %.4f p99 = %.4f max |Δ| = %.4f",
-                     stats.median, stats.p99, stats.max))
+        let line = String(format: "DEPTH PARITY preprocessed (a) median |Δ| = %.4f p99 = %.4f max |Δ| = %.4f",
+                          stats.median, stats.p99, stats.max)
+        print(line)
+        DepthAnythingFixtures.record(line)
         #expect(stats.median <= 0.01, "preprocessing: median |Δ| \(stats.median)")
         #expect(stats.p99 <= 0.25, "preprocessing: p99 |Δ| \(stats.p99)")
         #expect(stats.max <= 0.6, "preprocessing: max |Δ| \(stats.max)")

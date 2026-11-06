@@ -147,7 +147,9 @@ struct DepthAnythingBackboneRealLoadTests {
             #expect(feature.shape == shape, "feature \(index) shape \(feature.shape), expected \(shape)")
             let file = try DepthAnythingFixtures.file(for: "probe", ["features", String(index)])
             let difference = try DepthAnythingFixtures.maxDifference(feature, file: file)
-            print("DEPTH PARITY backbone feature \(index) max |Δ| = \(difference)")
+            let line = "DEPTH PARITY backbone feature \(index) max |Δ| = \(difference)"
+            print(line)
+            DepthAnythingFixtures.record(line)
             worst = max(worst, difference)
         }
         #expect(worst < 5e-4, "backbone features: max |Δ| \(worst)")
