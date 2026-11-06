@@ -419,6 +419,18 @@ nonisolated enum CatalogBridge {
             candidates: ["mlx-community/FLUX.2-klein-4B-bf16"],
             equivalence: .substitute,
             manifestFile: "flux2-klein-4b.json"),
+        // MC4-8 (issue #8, decision 7): the multimodel embedder joins the `Embed` pool **last**. The
+        // `.embedding` modelType is explicit: unlike the other rows it exists so `derivedModels(for:
+        // "Embed")` names the card by this display, and `.same` because the catalog id is the pinned
+        // id. `qwen3-vl-embedding-2b.json` is MLXUI-authored (see its own notes). Its vectors are
+        // 2048-d, so an index written by it does not mix with BGE-M3's 1024-d one (decision 8).
+        BridgeEntry(
+            display: "Qwen3-VL Embedding 2B",
+            pinnedID: "mlx-community/Qwen3-VL-Embedding-2B-4bit",
+            candidates: ["mlx-community/Qwen3-VL-Embedding-2B-4bit"],
+            equivalence: .same,
+            manifestFile: "qwen3-vl-embedding-2b.json",
+            modelType: .embedding),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {
