@@ -109,3 +109,101 @@ struct Qwen3VLEmbeddingCatalogTests {
         #expect(full.bestModule(for: chatVLM)?.descriptor.id == "vlm", "Qwen3-VL 4B must keep opening its VLM screen")
     }
 }
+
+// MC4-2: the About text, the metadata and the download file list.
+extension Qwen3VLEmbeddingCatalogTests {
+
+    /// The pinned repo's file list (`/api/models/mlx-community/Qwen3-VL-Embedding-2B-4bit?blobs=true`
+    /// at c713a96, fetched 2026-11-07), in the tree's order: name and size in bytes.
+    static let pinnedFiles: [(name: String, bytes: Int)] = [
+        (".gitattributes", 1_570),
+        ("README.md", 1_240),
+        ("added_tokens.json", 707),
+        ("chat_template.jinja", 5_519),
+        ("config.json", 1_949),
+        ("model.safetensors", 1_782_040_155),
+        ("model.safetensors.index.json", 82_780),
+        ("preprocessor_config.json", 783),
+        ("special_tokens_map.json", 613),
+        ("tokenizer.json", 11_423_701),
+        ("tokenizer_config.json", 348),
+        ("video_preprocessor_config.json", 817),
+        ("vocab.json", 2_776_833),
+    ]
+
+    /// Every field `ModelDetailView` and `ComparisonTableView` render, pinned so the only dashes
+    /// are the sanctioned nulls: Speed (no tokens/s figure for an embedder), benchmarks (the card's
+    /// MTEB-style comparisons are not the catalog's quality benchmarks), and nothing else.
+    @Test func metadataRendersWithNoUnsanctionedDash() throws {
+        let e = try entry()
+        #expect(e.architecture == "Qwen3VLForConditionalGeneration")
+        #expect(e.descriptionSource == "mlx-community/Qwen3-VL-Embedding-2B-4bit")
+        #expect(e.taskTags == ["feature-extraction", "image-text-retrieval", "multimodal-embedding"])
+        #expect(e.languages == ["multilingual"])
+        #expect(e.lastUpdated == "2026-03-13")
+        #expect(e.communityLikes == 2)
+        #expect(e.communityDownloads == 367)
+        #expect(e.formattedDownloads() != "—")
+        #expect(e.speedTokensPerSec == nil)
+        #expect(e.contextWindow != nil, "the input cap is a rendered fact, not a dash")
+        #expect(e.benchmarks == nil)
+        #expect(DataNormalizer.normalizeLicense(e.license) != "—")
+        #expect(!e.paramSize.isEmpty)
+        #expect(e.summary?.isEmpty == false)
+        let day = DateFormatter()
+        day.locale = Locale(identifier: "en_US_POSIX")
+        day.dateFormat = "yyyy-MM-dd"
+        day.isLenient = false
+        #expect(e.lastUpdated.flatMap { day.date(from: $0) } != nil)
+    }
+
+    /// The About text says what the model does, its dimensions and input limits, that its vectors
+    /// are not interchangeable with other embedders', and the licence — and makes no quality claim
+    /// the card does not make.
+    @Test func descriptionStatesTheSpaceTheDimensionsTheLimitsAndTheLicence() throws {
+        let d = try #require(try entry().description)
+        #expect(d.contains("2048-dimension"))
+        #expect(d.contains("one image"))
+        #expect(d.contains("8,192 tokens"))
+        #expect(d.contains("32K"))
+        #expect(d.contains("4,096 to 1,310,720 pixels"))
+        #expect(d.contains("1,280 vision tokens"))
+        #expect(d.contains("no video"))
+        #expect(d.contains("refused by the dimension check"))
+        #expect(d.contains("rebuilt"))
+        #expect(d.contains("Apache-2.0"))
+        #expect(d.contains("provisional estimate"))
+        for banned in ["best", "state-of-the-art", "SOTA", "outperforms", "beats", "top of the leaderboard"] {
+            #expect(!d.lowercased().contains(banned.lowercased()), "unsupported claim: \(banned)")
+        }
+    }
+
+    /// MC4-2's download contract: the pinned file list resolves to exactly the 4-bit checkpoint,
+    /// its index, configs, chat template and tokenizer — not the video processor (video is out of
+    /// scope and the Swift `Qwen3VLProcessor` reads only `preprocessor_config.json`), the README or
+    /// `.gitattributes`.
+    @Test func selectorPicksTheCheckpointTheConfigsAndTheTokenizer() throws {
+        let siblings = Self.pinnedFiles.map(\.name)
+        let out = Set(ModelFileSelector.filesToDownload(siblings: siblings))
+        #expect(out == [
+            "added_tokens.json",
+            "chat_template.jinja",
+            "config.json",
+            "model.safetensors",
+            "model.safetensors.index.json",
+            "preprocessor_config.json",
+            "special_tokens_map.json",
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "vocab.json",
+        ])
+        #expect(!out.contains("video_preprocessor_config.json"))
+        #expect(!out.contains("README.md"))
+        #expect(!out.contains(".gitattributes"))
+        // The whole repo is 1,796,337,015 B; the selected files are the same 1.80 GB after the
+        // docs and the video processor are dropped.
+        let repoBytes = Self.pinnedFiles.reduce(0) { $0 + $1.bytes }
+        #expect(repoBytes == 1_796_337_015)
+        #expect(try entry().downloadSizeGB == 1.8)
+    }
+}

@@ -2548,11 +2548,17 @@
           "contextWindow": 8192,
           "license": "apache-2.0",
           "licenseUrl": "https://huggingface.co/Qwen/Qwen3-VL-Embedding-2B",
-          "description": "# Qwen3-VL Embedding 2B\n\nQwen's multimodal embedding model: text, one image, or an image plus text becomes a single 2048-dimensional vector in one shared space, so a sentence can find a photo, a page screenshot or a receipt without OCR first. This is the mlx-community 4-bit MLX build (Apache-2.0).\n\nRAM figure is a provisional estimate (1.5× the weights) until the peak is measured; it is not a measurement.",
+          "description": "# Qwen3-VL Embedding 2B\n\nQwen's multimodal embedding model. Every input — text, one image, or an image plus text — becomes a single 2048-dimension vector in the same space, so a sentence can find a photo, a page screenshot or a receipt without OCR first. This is the mlx-community 4-bit MLX build the app runs; the official bf16 checkpoint is only the parity reference.\n\n**Input limits.** Text up to 8,192 tokens after rendering (the model itself supports 32K); one image per input, sized by the model's own processor (4,096 to 1,310,720 pixels, at most 1,280 vision tokens); no video.\n\n**Vectors don't mix with other embedders.** These are 2048-dimensional and live in Qwen3-VL's own space: a query against an index built with another embedder is refused by the dimension check, and an index built with this model has to be rebuilt when switching away and back.\n\nLicense: Apache-2.0 (the Qwen3-VL-Embedding-2B model page carries the notice). The MLX conversion is by mlx-community.\n\nRAM figure is a provisional estimate (1.5× the weights) until the peak is measured; it is not a measurement.",
           "architecture": "Qwen3VLForConditionalGeneration",
-          "languages": null,
+          "languages": [
+            "multilingual"
+          ],
           "lastUpdated": "2026-03-13",
-          "taskTags": null,
+          "taskTags": [
+            "feature-extraction",
+            "image-text-retrieval",
+            "multimodal-embedding"
+          ],
           "benchmarks": null,
           "speedTokensPerSec": null,
           "speedHardware": null,
