@@ -2,7 +2,9 @@ import Testing
 import Foundation
 @testable import MLXUI
 
-/// MP7-R (owner, Boo, 2026-11-01): the gallery hides 61, 62, 67, 68 and shows 60, 66, 69. These tests tie both facts to the live gate, so a newly served task or model is a visible change.
+/// MP7-R (owner, Boo, 2026-11-01): the gallery hides 61, 62, 67, 68 and shows 60, 66, 69. These tests tie both
+/// facts to the live gate, so a newly served task or model is a visible change. MC3-8 served `Estimate Depth`
+/// (Depth Anything V2 Small) and bridged "Depth Pro" to it, so 62 left the hidden set: it is now 61, 67, 68.
 struct GalleryHiddenFlowsTests {
     @MainActor private static func context() throws -> (catalog: [ModelEntry], claimable: Set<String>) {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
@@ -20,7 +22,7 @@ struct GalleryHiddenFlowsTests {
             let doc = try GalleryLoader.loadDocument(flowID: flow.flowID)
             if FlowRunnability.refusalReason(for: doc, catalog: catalog, installed: [], totalRAMGB: 32, claimableModelIDs: claimable) != nil { refused.insert(flow.number) }
         }
-        #expect(refused == [61, 62, 67, 68], Comment(rawValue: "\(refused.sorted())"))
+        #expect(refused == [61, 67, 68], Comment(rawValue: "\(refused.sorted())"))
         #expect(AppState.hiddenFlowNumbers == refused, "hidden = refused; a flow that becomes runnable must be un-hidden on purpose")
         #expect(AppState.hiddenFlowNumbers.isDisjoint(with: [60, 66, 69]))
     }
@@ -36,7 +38,8 @@ struct GalleryHiddenFlowsTests {
                 if let reason = need.blockingReason, reason.hasSuffix("is not supported in this app yet.") { found.append("\(flow.number) \(flow.flowID): \(reason)") }
             }
         }
-        // 62 (Depth Pro) and 68 (Base Style) are refused earlier for "isn't in the runnable-model table", not by this guard.
+        // 68 (Base Style) is refused earlier for "isn't in the runnable-model table", not by this guard.
+        // 62 runs since MC3-8 (Estimate Depth is served and "Depth Pro" bridges to Depth Anything V2 Small).
         #expect(found.sorted() == [
             "61 61-EditInPlace: Row 3: Edit Image is not supported in this app yet.",
             "67 67-DriveTheLatent: Row 1: Init Latent is not supported in this app yet.",

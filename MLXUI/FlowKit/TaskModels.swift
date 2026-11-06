@@ -17,9 +17,10 @@ import Foundation
 /// executor now serves it and `SAM3` derives (CFM-R15-1).
 nonisolated enum TaskModels {
     /// The capability declaration — a model task names the `RunnerKind` it needs. This is
-    /// what replaced the display-name pools as the *filter*. Tasks with no entry here (e.g.
-    /// `Estimate Depth`) have no runner kind and therefore no candidates — honest
-    /// "no model in this build", whatever the display-name pool used to claim. `Upscale` was
+    /// what replaced the display-name pools as the *filter*. A task with no entry here has no
+    /// runner kind and therefore no candidates — honest "no model in this build", whatever the
+    /// display-name pool used to claim. (`Estimate Depth` was the last such task until MC3 gave
+    /// it the `.depth` kind.) `Upscale` was
     /// the other example until BG-2 (2026-10-10) gave the shipped SeedVR2 runner its entry;
     /// see the `"Upscale"` case below. `Rerank` joined
     /// 2026-09-05 (MoC-3-1, `RSI/DelegateMoCBacklog.md`) — it stays honestly empty until MoC-4
@@ -89,9 +90,12 @@ nonisolated enum TaskModels {
         // `servedRefNamePrefixes`. `derivedModels(for: "Upscale", …)` therefore returned `[]`,
         // the editor's `isRunnableModel` was false, and gallery flow 64's row 2 read "needs a
         // model — pick one that runs on this Mac" while naming `SeedVR2 3B` itself.
-        // `Estimate Depth` stays out: still genuinely unserved.
+        // MC3-8: `Estimate Depth` joined once Depth Anything V2 Small gave it a stage and a catalog entry.
         "Upscale": .upscale,
         "Rerank": .rerank,
+        // MC3-8 (issue #6, owner decision 7): `Estimate Depth` is served by the Depth Anything V2 Small port.
+        // The declared task was honest-empty until MC3 gave it a runner kind, a stage and a catalog entry.
+        "Estimate Depth": .depth,
     ]
 
     /// Optional family constraints — filled only where a task genuinely needs one (a `.cat`
@@ -167,6 +171,9 @@ nonisolated enum TaskModels {
         // registry stage, which is exactly `SeedVR2Stage` for this kind.
         "engines.diffusion.upscale",          // Upscale (image → larger image) — BG-2
         "engines.rerank.",       // Rerank ([text] + query → [text], reordered) — MoC-3-1
+        // MC3-8 (owner decision 7): Depth Anything V2 Small is the first `.depth` model; the generic
+        // image→image branch in `RealExecutor.runModel` hands the row to `DepthAnythingStage`.
+        "engines.diffusion.estimate_depth",   // Estimate Depth (image → grayscale depth map) — MC3
     ]
 
     /// Whether `RealExecutor` genuinely serves `task` (CFM-R14-FIX-2). A **frame-backed** task
@@ -217,6 +224,8 @@ nonisolated enum TaskModels {
         // MP6-W: "LFM2.5-Audio 1.5B" appended **last** -- the seed ("Kokoro 82M") does not move, never the default.
         "Speak": ["Kokoro 82M", "Qwen3-TTS 1.7B", "Qwen3-TTS 0.6B", "LFM2.5-Audio 1.5B"],
         "Rerank": ["BGE Reranker", "Qwen3 Reranker 0.6B"],
+        // MC3-8: the one runnable model for the task; nothing else is appended behind it.
+        "Estimate Depth": ["Depth Anything V2 Small"],
         "Text to Table": llmModels,
         // LY-8 (RSI/DelegateLayaBacklog.md, 2026-09-27 gate D amendment, superseding LY-0's own
         // gate D "never the default"): Classify/Gate/Score had no pool entry before this —

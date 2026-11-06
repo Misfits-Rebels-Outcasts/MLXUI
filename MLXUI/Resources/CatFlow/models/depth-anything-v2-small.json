@@ -1,0 +1,20 @@
+{
+  "id": "depth-anything/Depth-Anything-V2-Small-hf",
+  "display": "Depth Anything V2 Small",
+  "kind": "local",
+  "engine": "mlx-depth",
+  "tasks": [
+    "Estimate Depth"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 0.1,
+    "ram_gb": 0.15
+  },
+  "source": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true,
+  "notes": "MLXUI-authored; no catflow-mlx manifest exists for this model. Pinned to depth-anything/Depth-Anything-V2-Small-hf revision 5426e4f0f36572d16453bbda7a8389317b1bef99 (Apache-2.0, 24.8 M parameters, fp32 as published). The Estimate Depth row takes no settings: any seed, steps, width, height, scale or quantize is refused by name in RealExecutor.stageConfig."
+}

@@ -117,9 +117,11 @@ final class AppState {
     /// exactly why this list is written out rather than described as a range.
     ///
     /// MP7-R (owner, Boo, 2026-11-01: "Gallery: 60, 66, 69 visible; hide 61, 62, 67, 68. This supersedes the 2026-08-25 hide-60-69 ruling (CFM-R12-FIX-13)."): hide exactly the bundled
-    /// 6x flows that the live gate still refuses (61 Edit Image, 62 Depth Pro, 67 and 68 the latent/checkpoint pipelines). `GalleryHiddenFlowsTests` pins the set to that rule, so a flow
-    /// that becomes runnable (or a new refused one) shows up as a deliberate change.
-    static let hiddenFlowNumbers: Set<Int> = [61, 62, 67, 68]
+    /// 6x flows that the live gate still refuses (61 Edit Image, 67 and 68 the latent/checkpoint pipelines).
+    /// `GalleryHiddenFlowsTests` pins the set to that rule, so a flow that becomes runnable (or a new refused one)
+    /// shows up as a deliberate change. MC3-8 removed 62 (See Under the Surface): `Estimate Depth` is served by
+    /// Depth Anything V2 Small and "Depth Pro" bridges to it with a shown substitution, so the live gate runs it.
+    static let hiddenFlowNumbers: Set<Int> = [61, 67, 68]
     
     /// The bundled gallery flows, in gallery order. Empty when `hideFlows` is true.
     var galleryEntries: [GalleryFlowMetadata] = []

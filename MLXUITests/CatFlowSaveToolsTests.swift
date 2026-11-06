@@ -115,11 +115,11 @@ struct CatFlowSaveToolsTests {
         // here the substitute still resolves (readiness is install-only), so they pass the live gate.
         #expect(runs("60-GenerateProductShot") == nil)
         #expect(runs("66-SeedSweep") == nil)
-        // These still refuse: Edit Image is unserved (the preflight names the task), Depth Pro has no bridge model.
-        for fid in ["61-EditInPlace", "62-SeeDepth"] {
-            let reason = runs(fid)
-            #expect(reason != nil, "\(fid) should refuse at the live gate")
-        }
+        // These still refuse: Edit Image is unserved (the preflight names the task).
+        #expect(runs("61-EditInPlace") != nil, "61-EditInPlace should refuse at the live gate")
+        // MC3-8 (owner decision 8): 62-SeeDepth runs now — `Estimate Depth` is served by Depth Anything V2 Small and
+        // its "Depth Pro" row bridges onto it with a shown substitution, so the live gate accepts it.
+        #expect(runs("62-SeeDepth") == nil, "62-SeeDepth runs since MC3-8")
     }
 
     private func makeCatalog() throws -> [ModelEntry] {
