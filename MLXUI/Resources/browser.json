@@ -2527,6 +2527,51 @@
           ],
           "descriptionSource": "mlx-community/bge-m3-mlx-fp16",
           "summary": "BGE-M3 is a versatile embedding model capable of:"
+        },
+        {
+          "id": "mlx-community--Qwen3-VL-Embedding-2B-4bit",
+          "family": "qwen3-vl-embedding",
+          "displayName": "Qwen3-VL Embedding 2B",
+          "paramSize": "2B",
+          "paramCountB": 2.0,
+          "modelType": "embedding",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Qwen3-VL-Embedding-2B-4bit",
+          "ramGB": 2.7,
+          "downloadSizeGB": 1.8,
+          "contextWindow": 8192,
+          "license": "apache-2.0",
+          "licenseUrl": "https://huggingface.co/Qwen/Qwen3-VL-Embedding-2B",
+          "description": "# Qwen3-VL Embedding 2B\n\nQwen's multimodal embedding model: text, one image, or an image plus text becomes a single 2048-dimensional vector in one shared space, so a sentence can find a photo, a page screenshot or a receipt without OCR first. This is the mlx-community 4-bit MLX build (Apache-2.0).\n\nRAM figure is a provisional estimate (1.5× the weights) until the peak is measured; it is not a measurement.",
+          "architecture": "Qwen3VLForConditionalGeneration",
+          "languages": null,
+          "lastUpdated": "2026-03-13",
+          "taskTags": null,
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 367,
+          "communityLikes": 2,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 2.7,
+              "downloadSizeGB": 1.8,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/Qwen3-VL-Embedding-2B-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/Qwen3-VL-Embedding-2B-4bit",
+          "summary": "Qwen's multimodal embedder: text, images, or both become one 2048-dimensional vector in a shared space. 4-bit MLX build."
         }
       ]
     },
