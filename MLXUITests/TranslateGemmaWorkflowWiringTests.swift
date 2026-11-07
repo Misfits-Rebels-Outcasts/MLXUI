@@ -312,6 +312,15 @@ struct TranslateGemmaWorkflowWiringTests {
         }
     }
 
+    @Test func theTranslatePoolIsExactlyGeneratePlusTranslateGemmaAndNoOtherTaskHasIt() {
+        #expect(TaskModels.models(forTask: "Translate") == TaskModels.models(forTask: "Generate") + [Self.display])
+        let others = ["Generate", "Summarize", "Answer", "Rewrite", "Draft", "Ask", "Title", "Critique", "Verify",
+                      "Revise", "Merge", "Text to Table", "Transcribe", "Embed", "Speak", "Rerank"]
+        for task in others {
+            #expect(!TaskModels.models(forTask: task).contains(Self.display), "\(task) must not offer \(Self.display)")
+        }
+    }
+
     @Test func theRowInspectorRecognisesTheTranslateModel() throws {
         let catalog = try loadCatalog()
         #expect(RealExecutor.translateBoundModel(for: Row(task: "Translate", model: Self.display), catalog: catalog)?.id
