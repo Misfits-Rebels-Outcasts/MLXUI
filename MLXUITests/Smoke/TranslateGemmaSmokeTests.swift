@@ -1,4 +1,5 @@
 import Foundation
+import MLX
 import Testing
 @testable import MLXUI
 
@@ -264,12 +265,24 @@ struct TranslateGemmaSmokeTests {
         ModelSmoke.check(Self.auto, "memory.worst-input-near-limit", (1_900...2_048).contains(worstCount), "\(worstCount) rendered tokens")
         ModelSmoke.check(Self.auto, "memory.over-limit-input-is-over", overCount > TranslateGemmaLanguages.maxPromptTokens, "\(overCount) rendered tokens")
 
-        // A private pool, so "load + first run" really loads (the other tests share `.shared`).
+        // Exactly one resident copy: earlier tests loaded the model into `.shared`. Drop everything it holds, let the
+        // released arrays free, clear MLX's buffer cache, then prove the load starts from ~0 weights.
+        await ModelContainerPool.shared.clear()
+        try await Task.sleep(for: .milliseconds(500))
+        MLX.Memory.clearCache()
+        let before = ModelSmoke.mlxMiB()
+        ModelSmoke.check(Self.auto, "memory.starts-with-no-resident-weights", before.active <= 256,
+                         "mlx active \(before.active) MiB before the load")
+        // A private pool, so "load + first run" really loads.
         let pool = ModelContainerPool(budgetBytes: 40 << 30)
         let request = TranslateGemmaEngine.Request(text: Self.english, sourceCode: "en", targetCode: "ms")
         let first = try await ModelSmoke.measure("load + first run", detail: "EN→MS, private pool") {
             try await TranslateGemmaEngine.translate(request, modelDirectory: dir, pool: pool)
         }
+        let weightsMiB = Double(ModelStore.directorySize(at: dir)) / 1_048_576
+        let afterLoad = ModelSmoke.mlxMiB()
+        ModelSmoke.check(Self.auto, "memory.one-copy-after-load", Double(afterLoad.active) <= 1.3 * weightsMiB,
+                         "mlx active \(afterLoad.active) MiB vs weights on disk \(Int(weightsMiB)) MiB (limit 1.3x)")
         ModelSmoke.check(Self.auto, "memory.load-first-run-translates", !first.cancelled && !first.text.isEmpty, first.text)
         let typical = try await ModelSmoke.measure("typical run", detail: "EN→MS, loaded") {
             try await TranslateGemmaEngine.translate(request, modelDirectory: dir, pool: pool)
