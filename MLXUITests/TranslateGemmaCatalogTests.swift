@@ -78,7 +78,7 @@ struct TranslateGemmaCatalogTests {
         // The whole pinned repo is 2,222,628,201 B = 2.22 GB (decimal, the catalog's convention).
         #expect(e.downloadSizeGB == 2.22)
         // MC2-1: provisional 1.5 x downloadSizeGB; the maintainers set the final figure from their own run (MC2-7).
-        #expect(e.ramGB == 3.33)
+        #expect(e.ramGB == 4.1)
         #expect(e.license == "gemma-terms-of-use")
         #expect(DataNormalizer.normalizeLicense(e.license) == "Gemma Terms of Use")
         #expect(e.licenseUrl == "https://ai.google.dev/gemma/terms")
@@ -140,12 +140,14 @@ struct TranslateGemmaCatalogTests {
 
     // MARK: - Memory booking (Trap 8 / decision 3)
 
-    @Test func theTranslateRowBooksLikeTheLLMRow() {
-        let llm = ModelLoadProfile.entry(for: .llm)
+    @Test func theTranslateRowBooksFilesPlusTheMeasuredWorkingSet() {
         let translate = ModelLoadProfile.entry(for: .translate)
-        #expect(translate == llm)
-        #expect(translate.workingSetBytes == 0, "text-only: same MLXLLM runner, no image working set")
+        #expect(translate.measured)
         #expect(translate.factor == ModelWeightCharge.loadFactor)
+        #expect(translate.workingSetBytes == 2_000_000_000, "MC2-11 (R2): KV and activations at 2K tokens")
+        // 2.22 GB of safetensors books at or over the measured whole-process peak, 4.08 GB (smoke, 2026-11-07).
+        let booked = ModelWeightCharge.charge(onDiskBytes: 2_220_000_000) + translate.workingSetBytes
+        #expect(booked >= 4_080_000_000, "booked \(booked)")
     }
 }
 
@@ -175,7 +177,7 @@ extension TranslateGemmaCatalogTests {
         // Detail tiles: Architecture, Context Window, RAM, Download, License, Updated, Downloads.
         #expect(DataNormalizer.normalizeArchitecture(e.architecture) == "Gemma3")
         #expect(e.contextWindow == 2048)                                 // detail/compare render "2K"
-        #expect(String(format: "%.1f", e.ramGB) == "3.3")
+        #expect(String(format: "%.1f", e.ramGB) == "4.1")
         #expect(DataNormalizer.downloadSize(gb: e.downloadSizeGB) == "2.2 GB")
         #expect(DataNormalizer.normalizeLicense(e.license) == "Gemma Terms of Use")
         #expect(e.lastUpdated == "2026-01-16")
@@ -214,9 +216,10 @@ extension TranslateGemmaCatalogTests {
         // Decision 11: the licence notice, on the page, both editions (the catalog is shared).
         #expect(d.contains("Gemma Terms of Use"))
         #expect(d.contains("https://ai.google.dev/gemma/terms"))
-        // MC2-1: the RAM figure is an estimate here; the maintainers set it from their own measurement (MC2-7).
-        #expect(d.contains("RAM figure is an estimate"))
-        #expect(d.contains("download × 1.5"))
+        // MC2-11 (R2): the RAM figure is measured (smoke, 2026-11-07), no longer the download x 1.5 estimate.
+        #expect(d.contains("RAM figure is measured"))
+        #expect(d.contains("4.08 GB"))
+        #expect(!d.contains("download × 1.5"))
         // No quality claim the card doesn't make.
         for claim in ["state-of-the-art", "best-in-class", "outperforms", "highest quality", "most accurate",
                       "better than"] {

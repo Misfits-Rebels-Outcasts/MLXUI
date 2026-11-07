@@ -25,11 +25,11 @@
   "capabilities": {},
   "resources": {
     "disk_gb": 2.22,
-    "ram_gb": 3.33
+    "ram_gb": 4.1
   },
   "source": "https://huggingface.co/mlx-community/translategemma-4b-it-4bit",
   "license": "Gemma Terms of Use",
   "manifest_version": 1,
   "pinned": true,
-  "notes": "MLXUI-authored (MC2-6) -- catflow-mlx has no manifest for this model, so this was written from mimo-v2.6-9b-optiq-4bit.json's shape. tasks is [\"Translate\"] only (owner decision 10): the model is a .translate entry and RealExecutor's .translate branch serves that row alone. temperature default 0 and max_tokens default 2048 are owner decision 7/8: greedy decoding, and the card's stated 2K-token input limit with a 2048-token output cap; the checkpoint's generation_config.json asks for sampling (do_sample/top_k 64/top_p 0.95) and is deliberately NOT used. resources.disk_gb is browser.json's downloadSizeGB (2.22, the whole pinned repo) and resources.ram_gb is its provisional ramGB 3.33 (download x 1.5, the catalog's usual 4-bit heuristic) -- the maintainers set the final figure from their own measured run. Verified against mlx-community/translategemma-4b-it-4bit revision 5788ec08c047f3f2e17808101b8d9566ac930d58."
+  "notes": "MLXUI-authored (MC2-6) -- catflow-mlx has no manifest for this model, so this was written from mimo-v2.6-9b-optiq-4bit.json's shape. tasks is [\"Translate\"] only (owner decision 10): the model is a .translate entry and RealExecutor's .translate branch serves that row alone. temperature default 0 and max_tokens default 2048 are owner decision 7/8: greedy decoding, and the card's stated 2K-token input limit with a 2048-token output cap; the checkpoint's generation_config.json asks for sampling (do_sample/top_k 64/top_p 0.95) and is deliberately NOT used. resources.disk_gb is browser.json's downloadSizeGB (2.22, the whole pinned repo) and resources.ram_gb is its ramGB 4.1 is measured, not estimated (MC2-11, owner ruling R2): whole-process phys_footprint peak 4.08 GB at the longest input the model accepts (2,048 tokens), TranslateGemmaSmokeTests on 2026-11-07, test-host baseline included, rounded up to 0.1 GB. Verified against mlx-community/translategemma-4b-it-4bit revision 5788ec08c047f3f2e17808101b8d9566ac930d58."
 }

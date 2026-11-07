@@ -5,7 +5,7 @@ import Testing
 @testable import MLXUI
 
 /// MC2-7 — the footprint measurement for TranslateGemma 4B. It **measures**; it changes no `ramGB`, limit or booking
-/// (the maintainers set `ramGB` from their own smoke and memory suite). Shape: `SAMAudioFootprintTests` /
+/// (`ramGB` 4.1 and the `.translate` booking come from `TranslateGemmaSmokeTests`' worst-input phase, MC2-11, R2). Shape: `SAMAudioFootprintTests` /
 /// `LFMAudioFootprintTests` — `phys_footprint` (`task_info(TASK_VM_INFO)`, what Activity Monitor and jetsam count)
 /// sampled every 20 ms through the whole run, plus `Memory.snapshot()`.
 ///
