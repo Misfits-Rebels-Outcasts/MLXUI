@@ -68,6 +68,10 @@ nonisolated struct RealExecutor: FlowExecutor {
         }
         return first.answer
     }
+    /// MC2-6: source-language detection for a `.translate` row (`TranslateGemma`), injected like `askLaya` so the wiring
+    /// tests are deterministic and need no real recogniser. The default is the on-device `NLLanguageRecognizer`; a
+    /// `nil` is a refusal, never a guess (owner decision 5).
+    var detectLanguage: @Sendable (String) -> String? = { TranslateGemmaLanguageDetector.detectedCode(in: $0) }
     /// CFM-R9-5: the decider's fired tag, readable after `execute` (reference box so a value
     /// type can report it through the `FlowExecutor` existential, like `MockExecutor`).
     private let tagBox = TagBox()
@@ -500,6 +504,30 @@ nonisolated struct RealExecutor: FlowExecutor {
                 in: blobDirectory)
         }
 
+        // SPEC-Q246: whether a translation specialist may replace the `Translate` frame with its own template, whether `to=` may
+        // take a code, and whether `from=` should exist are open in catflow-mlx; the conservative reading is what follows.
+        // MC2-6: TranslateGemma on a `Translate` row. The row is `.frame`-backed, but this model is not a chat model: its
+        // template takes one structured request, so the rendered frame would be rejected. Branch off **before** the frame
+        // path (Trap 6b, the `runDecider` shape): target from `to=`, source detected from the row's own input, raw input
+        // text passed to the stage. `TranslateRowRequest` also renders the Properties-tab preview, so the two can't drift.
+        if modelEntry.runnerKind == .translate {
+            guard !inputs.isEmpty else {
+                throw FlowError.badInputCardinality(row: "\(path)", expected: "a text input", got: 0)
+            }
+            let text = DeciderFrame.flatTexts(inputs).joined(separator: "\n")
+            let resolved = try TranslateRowRequest.resolve(settings: row.settings, inputText: text,
+                                                           detect: detectLanguage)
+            // `to=` is the row's language, not an engine setting: strip it before the curated manifest validates the
+            // remaining settings, so the manifest's own max_tokens/temperature defaults apply and unknown keys refuse.
+            var config = try llmRunConfig(.default, model: row.model,
+                                          rowSettings: TranslateRowRequest.engineSettings(row.settings), path: "\(path)")
+            config.sourceLanguage = resolved.sourceCode
+            config.targetLanguage = resolved.targetCode
+            let stage = try await makeModelStage(modelEntry, config)
+            let result = try await stage.run(.text(text), progress: { _ in })
+            return try persist(result, rowLabel: "\(path)")
+        }
+
         // Frame-backed: render the frame into a prompt, then run the LLM stage on it. The
         // full reference bundle feeds the renderer (B1) — `Rewrite (1,2)` sees both refs.
         // FV-2: goes through `FramePreview.render`, the same function the Properties-tab
@@ -757,6 +785,17 @@ nonisolated struct RealExecutor: FlowExecutor {
               let model = slot.modelEntry,
               model.runnerKind == .decision,
               decisionEngineFamilies.contains(model.family)
+        else { return nil }
+        return model
+    }
+
+    /// MC2-6: whether `row` names a `.translate` entry, resolved exactly as `runModel` resolves it — so the row
+    /// inspector's preview special case (`FlowRowInspectorView`) can't drift from what a real run does.
+    static func translateBoundModel(for row: Row, catalog: [ModelEntry]) -> ModelEntry? {
+        guard let display = row.model,
+              case let .runnable(slot, _, _) = CatalogBridge.resolve(display, catalog: catalog),
+              let model = slot.modelEntry,
+              model.runnerKind == .translate
         else { return nil }
         return model
     }

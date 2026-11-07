@@ -93,17 +93,31 @@ struct CatFlowChatModuleTests {
         //        (RSI/DelegateModelPackBacklog.md MP7-2, MP7-0 ruled 2026-10-30), 53 → 54. Same convention.
         // MC1-1: bundled catalog gained the mlx-community/sam-audio-base `.separate` entry
         //        (sound isolation), 54 → 55. Same convention.
-        #expect(entries.count == 55, "bundled catalog drifted: \(entries.count) entries")
+        // MC2-1: bundled catalog gained the mlx-community/translategemma-4b-it-4bit `.translate` entry
+        //        (TranslateGemma 4B, MC2), 55 → 56. Same convention.
+        #expect(entries.count == 56, "bundled catalog drifted: \(entries.count) entries")
 
         let withChat = registry(includingChat: true)
         let withoutChat = registry(includingChat: false)
 
         var checked = 0
         var llmChecked = 0
+        var translateChecked = 0
         for entry in entries {
             let before = withoutChat.bestModule(for: entry)?.descriptor.id
             let after = withChat.bestModule(for: entry)?.descriptor.id
-            if entry.modelType == .llm {
+            // MC2-1 (owner decision 3): TranslateGemma is cataloged `.llm` but routes as `.translate`, so it must NOT
+            // resolve to the chat module — the family override is what keeps it out of every `.llm`-only path. Its own
+            // module (MC2-4) claims it instead; until then it resolves to nothing.
+            if entry.runnerKind == .translate {
+                #expect(entry.modelType == .llm, "\(entry.id): the translator stays modelType llm")
+                // MC2-4 registers its own module, so it resolves there whether ChatModule is present or not — the point
+                // is that ChatModule never takes it (owner decision 3 / Trap 5).
+                #expect(before == "translategemma", "\(entry.id) resolves to its own module, not chat")
+                #expect(after == before, "\(entry.id): ChatModule must not change its resolution")
+                #expect(after != "chat", "\(entry.id) must never resolve to chat")
+                translateChecked += 1
+            } else if entry.modelType == .llm {
                 #expect(before == nil, "\(entry.id) resolved before ChatModule existed")
                 #expect(after == "chat", "\(entry.id) should resolve to chat")
                 llmChecked += 1
@@ -113,8 +127,9 @@ struct CatFlowChatModuleTests {
             }
             checked += 1
         }
-        #expect(checked == 55)   // MC1-1: 54 → 55 (the SAM-Audio Base `.separate` entry)
+        #expect(checked == 56)   // MC2-1: 55 → 56 (the TranslateGemma 4B `.translate` entry)
         #expect(llmChecked == 14)   // MP1-1: Gemma 4 E4B is the 14th .llm entry (MM1: MiMo V2.6 9B was the 13th)
+        #expect(translateChecked == 1)   // MC2-1: TranslateGemma 4B is the first (and only) `.translate` entry
     }
 
     // MARK: - Helpers

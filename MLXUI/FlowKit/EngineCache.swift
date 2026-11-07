@@ -192,6 +192,15 @@ nonisolated final class EngineCache: @unchecked Sendable, MemoryBudgetParticipan
     func bytesNeeded(for model: ModelEntry, config: StageConfig, booksWeights: Bool, footprintOverride: Int64? = nil) async -> Int64 {
         if booksWeights { return isCached(model, config: config) ? 0 : (footprintOverride ?? footprint(of: model)) }
         let directory = modelDirectory(model)
+        // MC2-4: TranslateGemma's weights live in the shared LLM pool (`ModelContainerPool`), not the VLM pool, so a
+        // Run window's load question has to ask that ledger. Its `ModelLoadProfile` row is the `.llm` form: files ×
+        // 1.10, no working set (MC2-1).
+        if model.runnerKind == .translate {
+            let resident = await ModelContainerPool.shared.residentBytes(directory: directory) != nil
+            let weights = resident ? 0 : ModelLoadProfile.charge(kind: .translate, directory: directory,
+                                                                 catalogFallback: Int64(model.ramGB * 1_073_741_824))
+            return weights + ModelLoadProfile.workingSetBytes(for: .translate)
+        }
         let resident = await ModelContainerPool.vlm.residentBytes(directory: directory) != nil
         let weights = resident ? 0 : ModelLoadProfile.charge(kind: model.runnerKind, directory: directory,
                                                              catalogFallback: Int64(model.ramGB * 1_073_741_824))

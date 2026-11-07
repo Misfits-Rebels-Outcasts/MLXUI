@@ -1,0 +1,77 @@
+{
+  "provenance": {
+    "generator": "Fixtures/TranslateGemma/make_prompt_goldens.py",
+    "generated": "2026-11-04",
+    "python": "3.13.3",
+    "jinja2": "3.1.6",
+    "environment": "ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)",
+    "template": "Fixtures/TranslateGemma/chat_template.jinja",
+    "templateSHA256": "5e85514635b80a62b64c9982810bfdfbdd482be9a59ed12c25ded2bf3aabddaf",
+    "model": "mlx-community/translategemma-4b-it-4bit @ 5788ec08c047f3f2e17808101b8d9566ac930d58"
+  },
+  "cases": [
+    {
+      "name": "a_en_to_ms",
+      "context": {
+        "bos_token": "<bos>",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "source_lang_code": "en",
+                "target_lang_code": "ms",
+                "text": "The weather is lovely today."
+              }
+            ]
+          }
+        ],
+        "add_generation_prompt": true
+      },
+      "expected": "<bos><start_of_turn>user\nYou are a professional English (en) to Malay (ms) translator. Your goal is to accurately convey the meaning and nuances of the original English text while adhering to Malay grammar, vocabulary, and cultural sensitivities.\nProduce only the Malay translation, without any additional explanations or commentary. Please translate the following English text into Malay:\n\n\nThe weather is lovely today.<end_of_turn>\n<start_of_turn>model\n"
+    },
+    {
+      "name": "b_zh_hans_to_en",
+      "context": {
+        "bos_token": "<bos>",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "source_lang_code": "zh-Hans",
+                "target_lang_code": "en",
+                "text": "今天天气很好。"
+              }
+            ]
+          }
+        ],
+        "add_generation_prompt": true
+      },
+      "expected": "<bos><start_of_turn>user\nYou are a professional Chinese (zh-Hans) to English (en) translator. Your goal is to accurately convey the meaning and nuances of the original Chinese text while adhering to English grammar, vocabulary, and cultural sensitivities.\nProduce only the English translation, without any additional explanations or commentary. Please translate the following Chinese text into English:\n\n\n今天天气很好。<end_of_turn>\n<start_of_turn>model\n"
+    },
+    {
+      "name": "c_en_gb_to_ms",
+      "context": {
+        "bos_token": "<bos>",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "source_lang_code": "en_GB",
+                "target_lang_code": "ms",
+                "text": "The weather is lovely today."
+              }
+            ]
+          }
+        ],
+        "add_generation_prompt": true
+      },
+      "expected": "<bos><start_of_turn>user\nYou are a professional English (en-GB) to Malay (ms) translator. Your goal is to accurately convey the meaning and nuances of the original English text while adhering to Malay grammar, vocabulary, and cultural sensitivities.\nProduce only the Malay translation, without any additional explanations or commentary. Please translate the following English text into Malay:\n\n\nThe weather is lovely today.<end_of_turn>\n<start_of_turn>model\n"
+    }
+  ]
+}

@@ -198,7 +198,7 @@ struct Gemma4WorkflowWiringTests {
         for task in llmModelsKeyedTasks {
             #expect(TaskModels.defaultModel(forTask: task, catalog: catalog, claimableModelIDs: claimable) == "Ministral 3B",
                     "\(task) should still seed Ministral 3B after \(Self.llmDisplay) was appended")
-            let pool = TaskModels.models(forTask: task)
+            let pool = llmPoolIgnoringTranslateGemma(forTask: task)  // MC2-6: TranslateGemma 4B is appended after the LLM pool for Translate only
             #expect(pool.last == Self.llmDisplay, "\(task): last pool name")
             #expect(pool.dropLast().last == "MiMo V2.6 9B", "\(task): should follow MiMo V2.6 9B")
             #expect(!pool.contains(Self.visionDisplay), "\(task): the vision half belongs to Describe Image only")

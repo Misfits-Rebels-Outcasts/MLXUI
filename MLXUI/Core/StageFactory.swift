@@ -32,6 +32,11 @@ nonisolated struct StageConfig: Sendable, Hashable {
     /// validated there; `nil` = the stage's own default. Part of the engine-cache key (a different quantize is a different engine) and so kept by `weightsOnly`.
     /// nil = not set. Klein resolves it to the manifest default (8) at `makeStage`; every other stage ignores it.
     var quantize: Int?
+    /// MC2-4: TranslateGemma's two codes from the pinned language table, resolved by `RealExecutor` (the target from the
+    /// row's `to=`, the source detected on the input) or by the Translate screen's per-run stage. Every other SDK
+    /// ignores them. Per-run settings, not weight settings, so `weightsOnly` drops them.
+    var sourceLanguage: String?   // translate — source language code
+    var targetLanguage: String?   // translate — target language code
     /// BS-6 (R7): the Speak row's `trim_silence=` (Kokoro's manifest declares it, bool). `nil` = not set (the engine does not trim);
     /// `true` trims leading/trailing near-silence; `false` is the explicit no-trim. Set only by `RealExecutor.stageConfig` for a Speak row.
     var trimSilence: Bool?
@@ -56,7 +61,9 @@ nonisolated struct StageConfig: Sendable, Hashable {
         topK: Int? = nil,
         flowTask: String? = nil,
         quantize: Int? = nil,
-        trimSilence: Bool? = nil
+        trimSilence: Bool? = nil,
+        sourceLanguage: String? = nil,
+        targetLanguage: String? = nil
     ) {
         self.voice = voice
         self.speed = speed
@@ -75,6 +82,8 @@ nonisolated struct StageConfig: Sendable, Hashable {
         self.flowTask = flowTask
         self.quantize = quantize
         self.trimSilence = trimSilence
+        self.sourceLanguage = sourceLanguage
+        self.targetLanguage = targetLanguage
     }
 
     static let `default` = StageConfig()
@@ -85,6 +94,7 @@ nonisolated struct StageConfig: Sendable, Hashable {
         var c = self
         c.voice = nil; c.speed = 1.0; c.prompt = nil
         c.seed = nil; c.width = nil; c.height = nil; c.steps = nil; c.trimSilence = nil
+        c.sourceLanguage = nil; c.targetLanguage = nil
         return c
     }
 }
@@ -111,7 +121,7 @@ enum StageFactory {
         }
 
         switch model.runnerKind {
-        case .llm, .asr, .tts, .embedding, .vision, .ocr, .image, .music, .segmentation, .video, .upscale, .rerank, .decision, .diarization, .enhance, .voice, .interpolate, .separate, .unsupported:
+        case .llm, .asr, .tts, .embedding, .vision, .ocr, .image, .music, .segmentation, .video, .upscale, .rerank, .decision, .diarization, .enhance, .voice, .interpolate, .separate, .translate, .unsupported:
             throw StageError.unsupportedModel(id: model.id, kind: model.runnerKind)
         }
     }

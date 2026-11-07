@@ -104,7 +104,7 @@ struct MiMoWorkflowWiringTests {
                     "\(task) should still seed Ministral 3B after \(Self.display) was appended")
             // MP1-W then appended "Gemma 4 E4B" after it (implementer's call, pending owner confirmation), so MiMo
             // is now second-to-last; the last slot is Gemma 4's (Gemma4WorkflowWiringTests).
-            let pool = TaskModels.models(forTask: task)
+            let pool = llmPoolIgnoringTranslateGemma(forTask: task)  // MC2-6: TranslateGemma 4B is appended after the LLM pool for Translate only
             #expect(pool.dropLast().last == Self.display, "\(task): \(Self.display) should be the second-to-last pool name")
             #expect(pool.dropLast(2).last == "Qwen3.8 27B", "\(task): \(Self.display) should follow Qwen3.8 27B")
         }

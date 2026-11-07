@@ -115,6 +115,10 @@ nonisolated enum TaskModels {
         // MP6-W: LFM2.5-Audio is a `.voice` model that genuinely serves exactly these two tasks through
         // `LFMAudioSDK.makeStage` (`config.flowTask`): speech to text and text to speech. No other task lists `.voice`.
         "Transcribe": [.voice], "Speak": [.voice],
+        // MC2-6 (owner decision 10): TranslateGemma 4B is a `.translate` model that serves exactly the `Translate` row
+        // (`RealExecutor`'s `.translate` branch builds its structured request). No other task lists `.translate`, so the
+        // model stays out of Summarize, Draft, the deciders and every other LLM task's pool.
+        "Translate": [.translate],
     ]
 
     /// **SPEC-Q214** (`catflow-mlx/SPEC_QUESTIONS.md`) — a `.model`-class task that runs
@@ -204,7 +208,9 @@ nonisolated enum TaskModels {
         "Embed": ["BGE-M3"],
         "Generate": llmModels,
         "Summarize": llmModels,
-        "Translate": llmModels,
+        // MC2-6 (owner decision 10): "TranslateGemma 4B" appended **last** — the seed ("Ministral 3B") does not move.
+        // It is the only `.translate` entry, so it is menu-reachable for Translate only (`taskExtraKinds`).
+        "Translate": llmModels + ["TranslateGemma 4B"],
         "Answer": llmModels,
         "Rewrite": llmModels,
         "Draft": llmModels,
