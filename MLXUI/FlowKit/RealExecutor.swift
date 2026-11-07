@@ -504,6 +504,8 @@ nonisolated struct RealExecutor: FlowExecutor {
                 in: blobDirectory)
         }
 
+        // SPEC-Q246: whether a translation specialist may replace the `Translate` frame with its own template, whether `to=` may
+        // take a code, and whether `from=` should exist are open in catflow-mlx; the conservative reading is what follows.
         // MC2-6: TranslateGemma on a `Translate` row. The row is `.frame`-backed, but this model is not a chat model: its
         // template takes one structured request, so the rendered frame would be rejected. Branch off **before** the frame
         // path (Trap 6b, the `runDecider` shape): target from `to=`, source detected from the row's own input, raw input
