@@ -1,0 +1,20 @@
+{
+  "instrumental": {
+    "caption": "upbeat electronic dance music with heavy bass, punchy drums, festival energy, 128 BPM",
+    "lyrics": "[Instrumental]",
+    "instrumental": true,
+    "vocal_language": "unknown"
+  },
+  "english_vocal": {
+    "caption": "warm acoustic singer-songwriter ballad, intimate male vocal, fingerpicked guitar, soft strings, 84 BPM",
+    "lyrics": "[Verse 1]\nThe city lights are fading slow\nI trace the roads we used to know\nEvery window holds a ghost of you\n\n[Chorus]\nBut I keep walking through the rain\nHolding on to what remains\nCalling out your name into the blue",
+    "instrumental": false,
+    "vocal_language": "en"
+  },
+  "chinese_vocal": {
+    "caption": "gentle Mandarin pop ballad, female vocal, piano and strings, emotional, 72 BPM",
+    "lyrics": "[Verse 1]\n窗外的雨还在下\n回忆在房间慢慢发芽\n那些没说完的话\n\n[Chorus]\n我还站在原地等你回答\n夜色把街灯都点亮\n你的名字还在心上",
+    "instrumental": false,
+    "vocal_language": "zh"
+  }
+}
