@@ -19,8 +19,14 @@ enum DataNormalizer {
             "stability-ai-community-license": "Stability AI Community License (RAIL++-M)",
             "lfm1.0": "LFM Open License v1.0",   // MP6-2: the HF card's license_name for LFM2.5-Audio
             "sam-license": "SAM License",   // MC1: the HF card's license_name for facebook/sam-audio-base
+            // MC2: Google's terms for TranslateGemma (the HF card's `license: gemma`), named as the owner's decision 11
+            // spells it. An exact key, checked before the substring loop below: the raw string contains "gemma", so
+            // the substring pass would otherwise return "Gemma License" — and Dictionary iteration order is not
+            // insertion order, so which one won would be arbitrary.
+            "gemma-terms-of-use": "Gemma Terms of Use",
         ]
         let lower = raw.lowercased()
+        if let exact = map[lower] { return exact }
         for (key, value) in map where lower.contains(key) {
             return value
         }

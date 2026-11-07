@@ -120,6 +120,13 @@ nonisolated enum ModelLoadProfile {
         // files x 1.10 (0.109 GB) + 4.60 GB = 4.709 GB, never under the 4.663 GB peak. Implementer's call, pending owner
         // confirmation. `ramGB` is NOT changed here: the maintainers set it from their own run.
         case .depth:    return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 4_600_000_000, measured: true)
+        // MC2-11 (R2): TranslateGemma 4B, whole-process `phys_footprint` peak of the Run screen path at the longest input the engine
+        // accepts, 2,048 rendered tokens: 4.08 GB (AM-T `TranslateGemmaSmokeTests`, 2026-11-07, 20 ms sampler, test host baseline
+        // included; one resident copy, MLX active 2,082 MiB). The contributor measured 2.80 / 3.95 / 4.18 GB on an M3 Pro. It is not
+        // the `.llm` row (files x 1.10 alone, ~2.4 GB booked): KV cache and activations at 2K tokens add ~1.4 GB above the weights,
+        // so it is a per-call working set (the .enhance row's form): files x 1.10 + 2.0 GB = 2.22 GB x 1.10 + 2.0 = ~4.4 GB, at or
+        // over the measured peak. Shorter inputs are over-booked, never under. Implementer's call, pending owner confirmation.
+        case .translate: return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 2_000_000_000, measured: true)
         default:        return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 0, measured: false)
         }
     }

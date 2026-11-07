@@ -79,6 +79,28 @@ struct CatFlowSaveToolsTests {
         #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent("shot-2.png").path))
     }
 
+    /// Gallery 21 (Photo Web Prep) names its output `{name}-web{ext}`. The reference's gallery file says `{name}-web`, which drops
+    /// every photo's extension; MLXUI fixed it in `a274785`. This runs the flow's own Save Images row settings on `photo.jpg`.
+    // SPEC-Q245
+    @Test func flow21SaveImagesKeepsTheExtension() async throws {
+        let (ws, base) = try makeWorkspace()
+        defer { teardown(base) }
+
+        let doc = try GalleryLoader.loadDocument(flowID: "21-PhotoWebPrep")
+        let row = try #require(doc.rows.last)
+        #expect(row.task == "Save Images")
+        let flowDir = ws.directory(for: "f")
+        try FileManager.default.createDirectory(at: flowDir, withIntermediateDirectories: true)
+        let photo = flowDir.appendingPathComponent("photo.jpg")
+        try makePNG().write(to: photo)
+
+        let tool = SaveImagesTool(workspace: ws, flowID: "f", settings: row.settings ?? "")
+        _ = try await tool.run(Asset(items: [Item(kind: .image, value: nil, path: photo, sourceText: nil)])) { _ in }
+        let folder = flowDir.appendingPathComponent("vacation-web")
+        let written = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        #expect(written == ["photo-web.jpg"], "wrote \(written)")
+    }
+
     @Test func saveVideoCopiesTheFile() async throws {
         let (ws, base) = try makeWorkspace()
         defer { teardown(base) }

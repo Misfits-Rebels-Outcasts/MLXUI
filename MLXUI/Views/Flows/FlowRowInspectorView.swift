@@ -1686,7 +1686,42 @@ struct FlowRowInspectorView: View {
     @ViewBuilder
     private func framePreviewSection(_ task: String, row: Row) -> some View {
         if let desc = TaskCatalog.get(task), desc.refKind == .frame {
-            if let decisionModel = RealExecutor.decisionEngineBoundModel(for: row, catalog: catalog) {
+            if let translateModel = RealExecutor.translateBoundModel(for: row, catalog: catalog) {
+                // MC2-6 / FV-2: a Translate row naming TranslateGemma sends **this model's structured request**, not the
+                // shared task frame — the frame would be rejected by its template. Rendered through the same
+                // `TranslateRowRequest` a run uses, so only the run-time data (the real input text and the language
+                // detected from it) differs from what is shown here.
+                switch Result(catching: { try translatedPreview(row: row) }) {
+                case .success(let preview):
+                    DisclosureGroup("Prompt request") {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("\(translateModel.displayName) takes a structured translation request, not the shared task frame. The target comes from to=; the source language is detected from this row's input when it runs.")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            ScrollView {
+                                Text(preview.rendered)
+                                    .font(.caption.monospaced())
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 160)
+                            Text(preview.sourceWasDetected
+                                 ? "From \(translateModel.displayName)'s chat template. The preview's sample text reads as \(TranslateGemmaLanguages.name(forTemplateCode: preview.sourceCode) ?? preview.sourceCode); a run detects the real source."
+                                 : "From \(translateModel.displayName)'s chat template. The preview's stand-in text has no detectable language, so it shows English; a run detects the real source.")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.top, 4)
+                    }
+                    .font(.caption)
+                case .failure(let error):
+                    Label("This row's translation request couldn't be rendered for preview — \(String(describing: error))",
+                          systemImage: "exclamationmark.triangle")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else if let decisionModel = RealExecutor.decisionEngineBoundModel(for: row, catalog: catalog) {
                 Text("\(decisionModel.displayName) reads the criterion, the tags and the input directly; there is no prompt frame.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -1759,6 +1794,18 @@ struct FlowRowInspectorView: View {
         return try FramePreview.render(task: task, refName: desc.refName, settings: row.settings,
                                        assets: assets, tags: tags, tools: tools,
                                        transcript: transcript, context: context)
+    }
+
+    /// MC2-6: the preview of a `.translate` row's request. The slots become the same §7 stand-ins the frame previews
+    /// use; `TranslateRowRequest` resolves `to=` strictly and detects the source from that stand-in text (falling back to
+    /// the documented preview code when the stand-in has no detectable language).
+    private func translatedPreview(row: Row) throws -> TranslateRowRequest.Preview {
+        let slots = max(model.slotsToDraw(for: rowID), 1)
+        let assets = (1...slots).map { slot in
+            Asset(items: [Item(kind: .text, value: standInInputText(slot: slot), path: nil, sourceText: nil)])
+        }
+        return try TranslateRowRequest.preview(settings: row.settings,
+                                               inputText: DeciderFrame.flatTexts(assets).joined(separator: "\n"))
     }
 
     /// The `{asset}`/`{input[N]}` stand-in for one input slot — §7's copy, built the same way

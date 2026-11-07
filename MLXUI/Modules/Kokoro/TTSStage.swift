@@ -43,10 +43,13 @@ extension TTSStage {
     /// Stage backed by the real Kokoro engine, loading the **installed** model directory for
     /// `modelID` (config + weights + voices that `InstallManager` downloads). `voice` picks
     /// the speaker; `speed` scales pacing (1.0 = normal).
-    init(modelID: String, voice: String = KokoroEngine.defaultVoice, speed: Float = 1.0) {
+    /// BS-6: `seed` seeds MLX's RNG around the generate call; `trimSilence` trims leading/trailing near-silence (see `KokoroEngine`).
+    init(modelID: String, voice: String = KokoroEngine.defaultVoice, speed: Float = 1.0,
+         seed: UInt64? = nil, trimSilence: Bool? = nil) {
         let directory = KokoroEngine.installedModelDirectory(id: modelID)
         self.init(id: "kokoro.\(modelID).\(voice)", name: "Kokoro TTS (\(voice))") { text in
-            try await KokoroEngine.synthesize(text, voice: voice, speed: speed, modelDirectory: directory)
+            try await KokoroEngine.synthesize(text, voice: voice, speed: speed, seed: seed,
+                                              trimSilence: trimSilence, modelDirectory: directory)
         }
     }
 }

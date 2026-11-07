@@ -68,6 +68,10 @@ nonisolated struct RealExecutor: FlowExecutor {
         }
         return first.answer
     }
+    /// MC2-6: source-language detection for a `.translate` row (`TranslateGemma`), injected like `askLaya` so the wiring
+    /// tests are deterministic and need no real recogniser. The default is the on-device `NLLanguageRecognizer`; a
+    /// `nil` is a refusal, never a guess (owner decision 5).
+    var detectLanguage: @Sendable (String) -> String? = { TranslateGemmaLanguageDetector.detectedCode(in: $0) }
     /// CFM-R9-5: the decider's fired tag, readable after `execute` (reference box so a value
     /// type can report it through the `FlowExecutor` existential, like `MockExecutor`).
     private let tagBox = TagBox()
@@ -126,10 +130,16 @@ nonisolated struct RealExecutor: FlowExecutor {
         //
         // The body is `executeInner` rather than an indented block so this stays a one-line
         // wrap of the whole dispatch (the same split `MLXChatBackend.run`/`runInner` uses).
+        //
+        // BCC-1 (R18, backlog R15a): MLX's buffer pool is capped at the Local Server's 1 GiB for the length of the row. Before this a
+        // flow row ran with `EngineCache`'s limit (the memory budget, ~17 GiB): Kokoro on flow 9 left 12.9 GiB of freed buffers behind
+        // against a 1.9 GiB live peak (BCC-0).
         do {
-            return try await MLXErrorGuard.guarded {
-                try await executeInner(path: path, row: row, inputs: inputs, transcript: transcript,
-                                       context: context, usedFlowContent: usedFlowContent)
+            return try await ServeMLXMemory.shared.scoped {
+                try await MLXErrorGuard.guarded {
+                    try await executeInner(path: path, row: row, inputs: inputs, transcript: transcript,
+                                           context: context, usedFlowContent: usedFlowContent)
+                }
             }
         } catch {
             guard MLXErrorGuard.isMLXError(error) else { throw error }
@@ -494,6 +504,30 @@ nonisolated struct RealExecutor: FlowExecutor {
                 in: blobDirectory)
         }
 
+        // SPEC-Q246: whether a translation specialist may replace the `Translate` frame with its own template, whether `to=` may
+        // take a code, and whether `from=` should exist are open in catflow-mlx; the conservative reading is what follows.
+        // MC2-6: TranslateGemma on a `Translate` row. The row is `.frame`-backed, but this model is not a chat model: its
+        // template takes one structured request, so the rendered frame would be rejected. Branch off **before** the frame
+        // path (Trap 6b, the `runDecider` shape): target from `to=`, source detected from the row's own input, raw input
+        // text passed to the stage. `TranslateRowRequest` also renders the Properties-tab preview, so the two can't drift.
+        if modelEntry.runnerKind == .translate {
+            guard !inputs.isEmpty else {
+                throw FlowError.badInputCardinality(row: "\(path)", expected: "a text input", got: 0)
+            }
+            let text = DeciderFrame.flatTexts(inputs).joined(separator: "\n")
+            let resolved = try TranslateRowRequest.resolve(settings: row.settings, inputText: text,
+                                                           detect: detectLanguage)
+            // `to=` is the row's language, not an engine setting: strip it before the curated manifest validates the
+            // remaining settings, so the manifest's own max_tokens/temperature defaults apply and unknown keys refuse.
+            var config = try llmRunConfig(.default, model: row.model,
+                                          rowSettings: TranslateRowRequest.engineSettings(row.settings), path: "\(path)")
+            config.sourceLanguage = resolved.sourceCode
+            config.targetLanguage = resolved.targetCode
+            let stage = try await makeModelStage(modelEntry, config)
+            let result = try await stage.run(.text(text), progress: { _ in })
+            return try persist(result, rowLabel: "\(path)")
+        }
+
         // Frame-backed: render the frame into a prompt, then run the LLM stage on it. The
         // full reference bundle feeds the renderer (B1) — `Rewrite (1,2)` sees both refs.
         // FV-2: goes through `FramePreview.render`, the same function the Properties-tab
@@ -751,6 +785,17 @@ nonisolated struct RealExecutor: FlowExecutor {
               let model = slot.modelEntry,
               model.runnerKind == .decision,
               decisionEngineFamilies.contains(model.family)
+        else { return nil }
+        return model
+    }
+
+    /// MC2-6: whether `row` names a `.translate` entry, resolved exactly as `runModel` resolves it — so the row
+    /// inspector's preview special case (`FlowRowInspectorView`) can't drift from what a real run does.
+    static func translateBoundModel(for row: Row, catalog: [ModelEntry]) -> ModelEntry? {
+        guard let display = row.model,
+              case let .runnable(slot, _, _) = CatalogBridge.resolve(display, catalog: catalog),
+              let model = slot.modelEntry,
+              model.runnerKind == .translate
         else { return nil }
         return model
     }
@@ -1163,7 +1208,29 @@ nonisolated struct RealExecutor: FlowExecutor {
         if desc.refName == "engines.tts.speak" {
             let voice = settings.value(for: "voice") ?? settings.firstBare()
             let speed = Float(settings.value(for: "speed") ?? "") ?? 1.0
-            return StageConfig(voice: voice, speed: speed, flowTask: "Speak")
+            // BS-6 (owner rulings R6 + R7, 2026-11-04): `seed=` and `trim_silence=` are declared by Kokoro's curated manifest and used
+            // to be dropped here. Now carried to the stage, which honours them (`KokoroEngine`); a value that cannot be read is
+            // refused by name, never ignored. `seed=auto` (a stochastic row `CachingExecutor` has not made concrete yet) means unset.
+            var seed: UInt64?
+            if let raw = settings.value(for: "seed")?.trimmingCharacters(in: .whitespacesAndNewlines), raw.lowercased() != "auto" {
+                guard let value = UInt64(raw) else {
+                    throw FlowError.invalidSettings(row: path, setting: "seed",
+                                                    detail: "must be a whole number from 0 to 4294967295 — e.g. seed=7")
+                }
+                seed = value
+            }
+            // SPEC-Q244: the reference `engines/tts.py` never reads `trim_silence` although the manifest declares it (default true); unset stays "no trim".
+            var trimSilence: Bool?
+            if let raw = settings.value(for: "trim_silence")?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+                switch raw {
+                case "true": trimSilence = true
+                case "false": trimSilence = false
+                default:
+                    throw FlowError.invalidSettings(row: path, setting: "trim_silence",
+                                                    detail: "must be true or false — e.g. trim_silence=true")
+                }
+            }
+            return StageConfig(voice: voice, speed: speed, seed: seed, flowTask: "Speak", trimSilence: trimSilence)
         }
         if desc.refName == "engines.asr.transcribe" {
             let language = settings.value(for: "lang") ?? "en"

@@ -101,9 +101,9 @@ final class AppState {
     static let hideNotSupportedSteps = true
 
     /// Hide individual gallery flows (badges) by gallery number. Numbers are the
-    /// `_metadata.json` `number` field (1–77 today), stable across renames. Basic Gallery's
+    /// `_metadata.json` `number` field (1–82 today), stable across renames. Basic Gallery's
     /// filenames restart at `1-`…`8-` for a friendly per-shelf look, but their `number` values
-    /// (**63–65 and 70–76**) stay in the single global sequence — hiding by number never
+    /// (**63–65, 70–76 and 78–82**) stay in the single global sequence — hiding by number never
     /// accidentally catches both an Advance Gallery flow and a same-numbered Basic Gallery one.
     /// Ranges read naturally — hide flows 60–69:
     /// `static let hiddenFlowNumbers: Set<Int> = Set(60...69)`
@@ -619,7 +619,10 @@ final class AppState {
         // LLMs open the chat sheet. Everything else routes through the registry: a
         // registered module (e.g. Whisper ASR) opens its run sheet; otherwise fall back
         // to the legacy ModelRunner, which shows the "unsupported" alert.
-        if model.modelType == .llm {
+        // MC2: dispatch on the corrected `runnerKind`, never `modelType`. TranslateGemma is cataloged as `.llm`
+        // (text-only Gemma 3) but routes as `.translate`, so testing `modelType` here would open the chat sheet
+        // and bypass its module — the exact collision Trap 5 warns about.
+        if model.runnerKind == .llm {
             modelRunner.prepare(for: model)
             runningModel = model
         } else if registry.bestModule(for: model) != nil {

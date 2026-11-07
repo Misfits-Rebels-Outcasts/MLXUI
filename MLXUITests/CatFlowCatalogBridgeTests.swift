@@ -4,6 +4,14 @@ import Foundation
 
 /// Covers CFM-R2-2: the `CatalogBridge` display-name → installable-model table and its
 /// two-sided golden tests. See `RSI/DelegateMergeBacklog.md` CFM-R2-2.
+/// The LLM pool of a task as the pool-order tests see it. MC2-6: "TranslateGemma 4B" is appended after the
+/// LLM pool for Translate only, so it is dropped here (and only for Translate) before the order assertions.
+func llmPoolIgnoringTranslateGemma(forTask task: String) -> [String] {
+    var pool = TaskModels.models(forTask: task)
+    if task == "Translate", pool.last == "TranslateGemma 4B" { pool.removeLast() }
+    return pool
+}
+
 struct CatFlowCatalogBridgeTests {
 
     // MARK: - Fixture loading (repo-relative; the test bundle doesn't carry these)
@@ -173,8 +181,9 @@ struct CatFlowCatalogBridgeTests {
         // MP6-W added "LFM2.5-Audio 1.5B", 31 -> 32 (implementer's call, pending owner confirmation; same convention).
         // MP7-W added "FLUX.2 Klein 4B", 32 -> 33 (owner-ordered MP7-W, 2026-11-01; same convention).
         // MP7-W-f added the exact display "Z-Image Turbo (4-bit)" as a `.substitute` onto Klein, 33 -> 34 (owner ruling, Boo, 2026-11-01; same convention).
-        // MC3-8 added "Depth Anything V2 Small" (`.same`) and "Depth Pro" (`.substitute` onto it), 34 -> 36 (owner decision 8; same convention).
-        #expect(CatalogBridge.entries.count == 36)
+        // MC3-8 added "Depth Anything V2 Small" (`.same`) and "Depth Pro" (`.substitute` onto it), (owner decision 8; same convention). Counted with MC2-W below: 34 -> 37.
+        // MC2-W added "TranslateGemma 4B", 34 -> 35 (same convention); the MC3-8 rows follow it, 35 -> 37 (MC2 +1, MC3 +2).
+        #expect(CatalogBridge.entries.count == 37)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
@@ -412,8 +421,9 @@ struct CatFlowCatalogBridgeTests {
         // MP6-W added "LFM2.5-Audio 1.5B", 31 -> 32 (implementer's call, pending owner confirmation; same convention).
         // MP7-W added "FLUX.2 Klein 4B", 32 -> 33 (owner-ordered MP7-W, 2026-11-01; same convention).
         // MP7-W-f added the exact display "Z-Image Turbo (4-bit)" as a `.substitute` onto Klein, 33 -> 34 (owner ruling, Boo, 2026-11-01; same convention).
-        // MC3-8 added "Depth Anything V2 Small" (`.same`) and "Depth Pro" (`.substitute` onto it), 34 -> 36 (owner decision 8; same convention).
-        #expect(CatalogBridge.entries.count == 36)
+        // MC3-8 added "Depth Anything V2 Small" (`.same`) and "Depth Pro" (`.substitute` onto it), (owner decision 8; same convention). Counted with MC2-W below: 34 -> 37.
+        // MC2-W added "TranslateGemma 4B", 34 -> 35 (same convention); the MC3-8 rows follow it, 35 -> 37 (MC2 +1, MC3 +2).
+        #expect(CatalogBridge.entries.count == 37)
     }
 
     // MARK: - MoC-4-4: Qwen3 Reranker 0.6B joins the bridge, the model on MoC-3's seam
@@ -732,7 +742,7 @@ struct CatFlowCatalogBridgeTests {
             // Q38-6 appended "Qwen3.8 27B" after it; MM-W then appended "MiMo V2.6 9B" last (implementer's
             // call, pending owner confirmation), so the 3-bit is now third-to-last. MP1-W then appended
             // "Gemma 4 E4B" last (same call), so it is fourth-to-last.
-            #expect(TaskModels.models(forTask: task).dropLast(3).last == "Qwen3.8 27B 3-bit",
+            #expect(llmPoolIgnoringTranslateGemma(forTask: task).dropLast(3).last == "Qwen3.8 27B 3-bit",
                     "\(task): Qwen3.8 27B 3-bit should directly precede the 4-bit in the pool")
         }
 
@@ -814,7 +824,7 @@ struct CatFlowCatalogBridgeTests {
             // MM-W appended "MiMo V2.6 9B" after it (implementer's call, pending owner confirmation), so
             // Qwen3.8 27B was second-to-last; MP1-W then appended "Gemma 4 E4B" (same call), so it is now
             // third-to-last (MiMo and Gemma 4 sit after it: MiMoWorkflowWiringTests, Gemma4WorkflowWiringTests).
-            let pool = TaskModels.models(forTask: task)
+            let pool = llmPoolIgnoringTranslateGemma(forTask: task)
             #expect(pool.dropLast(2).last == "Qwen3.8 27B", "\(task): Qwen3.8 27B should be the third-to-last pool name")
             #expect(pool.dropLast(3).last == "Qwen3.8 27B 3-bit",
                     "\(task): Qwen3.8 27B should come after the 3-bit")

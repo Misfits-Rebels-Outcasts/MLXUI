@@ -1,0 +1,10 @@
+mlxflow 0.8
+1. Read Text   email.txt
+2. Classify    Laya 0.4B; "Does this email need a reply today? tags:
+               today, later"
+   -> { today: 3 | later: 4 }
+
+3. Save Text   reply-today.txt
+   -> done
+
+4. Save Text   reply-later.txt

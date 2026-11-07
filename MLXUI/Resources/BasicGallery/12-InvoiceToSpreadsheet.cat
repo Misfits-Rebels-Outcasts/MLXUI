@@ -1,0 +1,6 @@
+mlxflow 0.8
+1. Read PDF             invoice.pdf
+2. Extract Structured   Qwen3 8B; "vendor, invoice_number, date, due_date,
+                        total, currency"
+3. Table to Text        format=csv
+4. Save Text            invoice.csv

@@ -20,7 +20,7 @@
    "children": [],
    "model": null,
    "refs": [],
-   "settings": "\"Enter a URL to summarize:\" ; timeout=30s; default=unchanged",
+   "settings": "\"Enter a URL to extract:\" ; timeout=30s; default=unchanged",
    "task": "Human Input"
   },
   {

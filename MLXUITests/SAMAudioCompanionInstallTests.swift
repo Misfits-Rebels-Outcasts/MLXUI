@@ -54,14 +54,18 @@ struct SAMAudioCompanionInstallTests {
 
     /// The companion's destination is its own subfolder: MusicGen keeps `encodec/`, SAM-Audio gets `t5/`.
     @Test func eachCompanionLandsInItsOwnSubfolder() throws {
-        let musicgen = try #require(ModelFileSelector.companionRepo(for: "jasonvassallo/mlx-musicgen-small"))
+        let musicgens = ModelFileSelector.companionRepos(for: "jasonvassallo/mlx-musicgen-small")
+        #expect(musicgens.count == 1)
+        let musicgen = try #require(musicgens.first)
         #expect(musicgen.repository == "mlx-community/encodec-32khz-float32")
         #expect(musicgen.subfolder == "encodec/")
-        let sam = try #require(ModelFileSelector.companionRepo(for: "mlx-community/sam-audio-base"))
+        let sams = ModelFileSelector.companionRepos(for: "mlx-community/sam-audio-base")
+        #expect(sams.count == 1)
+        let sam = try #require(sams.first)
         #expect(sam.repository == "google-t5/t5-base")
         #expect(sam.subfolder == "t5/")
         // A model with no companion keeps no subfolder.
-        #expect(ModelFileSelector.companionRepo(for: "mlx-community/DeepFilterNet-mlx") == nil)
+        #expect(ModelFileSelector.companionRepos(for: "mlx-community/DeepFilterNet-mlx").isEmpty)
     }
 
     /// Removing SAM-Audio removes its folder — and `t5/` lives inside it. The engine then reports the missing encoder

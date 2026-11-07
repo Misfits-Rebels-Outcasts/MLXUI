@@ -713,24 +713,29 @@ final class ModelRunner {
             let turnLease = TurnLease()
             defer { turnLease.release() }      // SC-2a: the model is in use for the turn — return it on every exit
             do {
-                // MLX-ERR-3: the session (and with it the weights load) is built through a factory
-                // so the test seam can replace it, and the whole turn — load, generation and the
-                // in-app MLX tools that run through the session's tool dispatch on this same task —
-                // sits inside one guard.
-                let session = try await self.streamingSession(
-                    for: model, dir: modelDir, instructions: instructions, history: history,
-                    registry: registry, fileScope: fileScope,
-                    turnConversationID: turnConversationID, turn: turnLease)
+                // BCC-3b (R22): MLX's buffer pool is capped at the Local Server's 1 GiB for the whole turn -- weights load,
+                // prefill of the history, generation and the agent tool loop (one `AgentSession`, so chat and agent are the
+                // same path). Before this a long chat grew the pool toward `EngineCache`'s limit (the memory budget).
+                try await ServeMLXMemory.shared.scoped {
+                    // MLX-ERR-3: the session (and with it the weights load) is built through a factory
+                    // so the test seam can replace it, and the whole turn — load, generation and the
+                    // in-app MLX tools that run through the session's tool dispatch on this same task —
+                    // sits inside one guard.
+                    let session = try await self.streamingSession(
+                        for: model, dir: modelDir, instructions: instructions, history: history,
+                        registry: registry, fileScope: fileScope,
+                        turnConversationID: turnConversationID, turn: turnLease)
 
-                // R-ME3-1 (owner, 2026-10-12): **stop at the error.** `makeStream` must be a
-                // closure: the producer's `Task {}` only inherits mlx-swift's `@TaskLocal` handler
-                // if it is created inside the guard (journal 2026-469).
-                try await MLXErrorGuard.guardedStream({ session.streamResponse(to: modelPrompt) }) { chunk in
-                    // A late chunk must not leak into a conversation the user switched to
-                    // (switching stops the task, but a chunk can already be in flight).
-                    guard self.activeConversationID == turnConversationID else { return false }
-                    self.transcript.appendAssistantChunk(chunk)
-                    return true
+                    // R-ME3-1 (owner, 2026-10-12): **stop at the error.** `makeStream` must be a
+                    // closure: the producer's `Task {}` only inherits mlx-swift's `@TaskLocal` handler
+                    // if it is created inside the guard (journal 2026-469).
+                    try await MLXErrorGuard.guardedStream({ session.streamResponse(to: modelPrompt) }) { chunk in
+                        // A late chunk must not leak into a conversation the user switched to
+                        // (switching stops the task, but a chunk can already be in flight).
+                        guard self.activeConversationID == turnConversationID else { return false }
+                        self.transcript.appendAssistantChunk(chunk)
+                        return true
+                    }
                 }
             } catch is CancellationError {
                 // stopped by the user — leave the partial transcript in place
