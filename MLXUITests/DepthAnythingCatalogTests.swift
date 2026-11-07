@@ -71,13 +71,14 @@ struct DepthAnythingCatalogTests {
         #expect(e.variants?.first?.recommended == true)
     }
 
-    @Test func ramGBIsTheProvisionalWeightsEstimate() throws {
+    @Test func ramGBIsTheMeasuredPeak() throws {
         let e = try depth()
-        // MC3-1's provisional figure: 1.5 × the weights (0.10 GB), about 0.15 GB. MC3-7 books the measured
-        // working set in `ModelLoadProfile`; the maintainers set the final `ramGB` from their own run.
-        #expect(e.ramGB == 0.15)
-        #expect(e.description?.contains("estimate") == true)
-        #expect(e.description?.contains("not a measurement") == true)
+        // MC3-12 (R15): the whole-process peak at 8,192 x 2,731 through the production path, 2.957 GB, rounded up to 0.1.
+        // The labelled method and date are in the About text; the booking row is in `ModelLoadProfile`.
+        #expect(e.ramGB == 3.0)
+        #expect(e.description?.contains("RAM figure is measured") == true)
+        #expect(e.description?.contains("2026-11-08") == true)
+        #expect(e.description?.contains("provisional") != true)
     }
 
     @Test func kindRoutesToDepth() throws {

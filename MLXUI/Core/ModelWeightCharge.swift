@@ -112,14 +112,18 @@ nonisolated enum ModelLoadProfile {
         // On a 19 GB Mac the shared budget is about 11.4 GiB, so this model always runs alone: the budget evicts everything else,
         // then proceeds over budget. That is intended. Implementer's call, pending owner confirmation.
         case .separate: return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 7_700_000_000, measured: true)
-        // MC3-7: Depth Anything V2 Small, whole-process `phys_footprint` peak of the whole Run path (decode, preprocess,
-        // model, bicubic upsample to the input's size, PNG), one fresh process per phase, 20 ms sampler, 2026-11-06
-        // (`DepthAnythingFootprintTests`): sample-image.png (1200x800) 2.802 GB; a 12 MP photo (4000x3000) 2.901 GB;
-        // the worst case decisions 5 allow, 8,192 px on the long side at 3:1 (8192x2731), 4.663 GB. The growth is image
-        // and attention buffers, not the 99 MB of weights, so it is a per-call working set (the `.enhance` row's form):
-        // files x 1.10 (0.109 GB) + 4.60 GB = 4.709 GB, never under the 4.663 GB peak. Implementer's call, pending owner
-        // confirmation. `ramGB` is NOT changed here: the maintainers set it from their own run.
-        case .depth:    return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 4_600_000_000, measured: true)
+        // MC3-12 (R15): Depth Anything V2 Small, whole-process `phys_footprint` peak of the whole Run path (decode, preprocess,
+        // model, bicubic upsample to the input's size, PNG) THROUGH THE PRODUCTION PATH, inside `ServeMLXMemory.shared.scoped`
+        // (the 1 GiB MLX cache cap the Run screen and flow rows both run under), one fresh process per phase, 20 ms sampler,
+        // 2026-11-08 (`DepthAnythingSmokeTests.d_memoryOnTheProductionPath`, AM-T), test-host baseline included:
+        // sample-image.png (1200x800) 2,586 MiB = 2.712 GB; a 12 MP photo (4000x3000) 2,325 MiB = 2.438 GB; the worst case
+        // decisions 5 allow, 8,192 px on the long side at 3:1 (8192x2731), 2,820 MiB = 2.957 GB. Off the cap (the direct engine
+        // call, MLX's default cache limit) the same phases peaked 2.751 / 2.425 / 3.778 GB: the cap matters only for the large
+        // image. MC3-11 found the growth over the 99 MB of weights is MLX's buffer cache plus image and attention buffers, so it
+        // is a per-call working set (the `.enhance` row's form): files x 1.10 (0.109 GB) + 2.90 GB = 3.009 GB, never under the
+        // 2.957 GB peak (the working set is 2.848 GB rounded up to 0.1 for run-to-run noise). Owner-approved (R15). `ramGB` 3.0
+        // is the same peak rounded up to 0.1.
+        case .depth:    return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 2_900_000_000, measured: true)
         // MC2-11 (R2): TranslateGemma 4B, whole-process `phys_footprint` peak of the Run screen path at the longest input the engine
         // accepts, 2,048 rendered tokens: 4.08 GB (AM-T `TranslateGemmaSmokeTests`, 2026-11-07, 20 ms sampler, test host baseline
         // included; one resident copy, MLX active 2,082 MiB). The contributor measured 2.80 / 3.95 / 4.18 GB on an M3 Pro. It is not

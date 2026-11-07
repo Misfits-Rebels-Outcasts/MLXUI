@@ -24,7 +24,7 @@ struct DepthAnythingMemoryBookingTests {
     @Test func theLedgerBooksTheMeasuredWorkingSet() {
         let row = ModelLoadProfile.entry(for: .depth)
         #expect(row.measured)
-        #expect(row.workingSetBytes == 4_600_000_000, "the booking is the measured working set (MC3-7)")
+        #expect(row.workingSetBytes == 2_900_000_000, "the booking is the measured working set (MC3-12, R15)")
         #expect(ModelLoadProfile.workingSetBytes(for: .depth) == row.workingSetBytes)
     }
 }
