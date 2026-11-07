@@ -27,10 +27,15 @@ nonisolated enum DepthAnythingEngine {
     /// Estimate depth for one image. Refuses the input limits before any model work.
     static func estimateDepth(_ image: CGImage, modelDirectory: URL) throws -> Result {
         let prepared = try DepthAnythingInput.prepare(image: image)
+        // MC3-11: the footprint above the 99 MB of weights is MLX's own buffer cache (freed activation buffers it keeps for
+        // reuse), not decode / preprocess / PNG work. Release it once the model is done and again on the way out, so the
+        // upsample and the PNG do not sit on top of it and the Run screen does not keep it afterwards.
+        defer { Memory.clearCache() }
         let loaded = try load(directory: modelDirectory)
         let input = try DepthAnythingPreprocessor.preprocess(image: prepared.image)
         let prediction = loaded.model.predictedDepth(input)
         eval(prediction)
+        Memory.clearCache()
         let gray = try DepthAnythingPostprocessor.grayscale(
             prediction: prediction, height: prepared.height, width: prepared.width)
         let grayImage = try DepthAnythingPostprocessor.image(gray: gray, width: prepared.width, height: prepared.height)
