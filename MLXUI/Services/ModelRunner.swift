@@ -905,6 +905,9 @@ final class ModelRunner {
         case .separate:
             // Unreachable in practice since MC1-4 registered SAMAudioModule (same as .interpolate above).
             showUnsupported("Sound isolation", model)
+        case .depth:
+            // Unreachable in practice since MC3-6 registered DepthAnythingModule (same as .separate above).
+            showUnsupported("Depth estimation", model)
         }
     }
 

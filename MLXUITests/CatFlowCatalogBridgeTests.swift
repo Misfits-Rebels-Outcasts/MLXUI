@@ -181,8 +181,9 @@ struct CatFlowCatalogBridgeTests {
         // MP6-W added "LFM2.5-Audio 1.5B", 31 -> 32 (implementer's call, pending owner confirmation; same convention).
         // MP7-W added "FLUX.2 Klein 4B", 32 -> 33 (owner-ordered MP7-W, 2026-11-01; same convention).
         // MP7-W-f added the exact display "Z-Image Turbo (4-bit)" as a `.substitute` onto Klein, 33 -> 34 (owner ruling, Boo, 2026-11-01; same convention).
-        // MC2-W added "TranslateGemma 4B", 34 -> 35 (same convention).
-        #expect(CatalogBridge.entries.count == 35)
+        // MC3-8 added "Depth Anything V2 Small" (`.same`) and "Depth Pro" (`.substitute` onto it), (owner decision 8; same convention). Counted with MC2-W below: 34 -> 37.
+        // MC2-W added "TranslateGemma 4B", 34 -> 35 (same convention); the MC3-8 rows follow it, 35 -> 37 (MC2 +1, MC3 +2).
+        #expect(CatalogBridge.entries.count == 37)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
@@ -420,8 +421,9 @@ struct CatFlowCatalogBridgeTests {
         // MP6-W added "LFM2.5-Audio 1.5B", 31 -> 32 (implementer's call, pending owner confirmation; same convention).
         // MP7-W added "FLUX.2 Klein 4B", 32 -> 33 (owner-ordered MP7-W, 2026-11-01; same convention).
         // MP7-W-f added the exact display "Z-Image Turbo (4-bit)" as a `.substitute` onto Klein, 33 -> 34 (owner ruling, Boo, 2026-11-01; same convention).
-        // MC2-W added "TranslateGemma 4B", 34 -> 35 (same convention).
-        #expect(CatalogBridge.entries.count == 35)
+        // MC3-8 added "Depth Anything V2 Small" (`.same`) and "Depth Pro" (`.substitute` onto it), (owner decision 8; same convention). Counted with MC2-W below: 34 -> 37.
+        // MC2-W added "TranslateGemma 4B", 34 -> 35 (same convention); the MC3-8 rows follow it, 35 -> 37 (MC2 +1, MC3 +2).
+        #expect(CatalogBridge.entries.count == 37)
     }
 
     // MARK: - MoC-4-4: Qwen3 Reranker 0.6B joins the bridge, the model on MoC-3's seam

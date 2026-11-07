@@ -1,0 +1,224 @@
+{
+  "cases": {
+    "a": {
+      "final_png": {
+        "file": "a_final.png",
+        "height": 140,
+        "width": 196
+      },
+      "input": {
+        "file": "a_input.rgb",
+        "height": 140,
+        "width": 196
+      },
+      "predicted_depth": {
+        "file": "a_predicted_depth.f32",
+        "shape": [
+          364,
+          518
+        ]
+      },
+      "preprocessed": {
+        "file": "a_preprocessed.f32",
+        "shape": [
+          1,
+          364,
+          518,
+          3
+        ]
+      }
+    },
+    "b": {
+      "fed_as": "PIL Image.open then ImageOps.exif_transpose then convert('RGB'); no other colour transform",
+      "final_png": {
+        "file": "b_final.png",
+        "height": 800,
+        "width": 1200
+      },
+      "predicted_depth": {
+        "file": "b_predicted_depth.f32",
+        "shape": [
+          518,
+          784
+        ]
+      },
+      "preprocessed": {
+        "file": "b_preprocessed.f32",
+        "shape": [
+          1,
+          518,
+          784,
+          3
+        ]
+      }
+    },
+    "probe": {
+      "features": [
+        {
+          "file": "probe_feature_0.f32",
+          "shape": [
+            1,
+            89,
+            384
+          ]
+        },
+        {
+          "file": "probe_feature_1.f32",
+          "shape": [
+            1,
+            89,
+            384
+          ]
+        },
+        {
+          "file": "probe_feature_2.f32",
+          "shape": [
+            1,
+            89,
+            384
+          ]
+        },
+        {
+          "file": "probe_feature_3.f32",
+          "shape": [
+            1,
+            89,
+            384
+          ]
+        }
+      ],
+      "fusion": {
+        "file": "probe_fusion.f32",
+        "shape": [
+          1,
+          64,
+          88,
+          64
+        ]
+      },
+      "predicted_depth": {
+        "file": "probe_predicted_depth.f32",
+        "shape": [
+          112,
+          154
+        ]
+      },
+      "preprocessed": {
+        "file": "probe_preprocessed.f32",
+        "shape": [
+          1,
+          112,
+          154,
+          3
+        ]
+      },
+      "reassemble": [
+        {
+          "file": "probe_reassemble_0.f32",
+          "shape": [
+            1,
+            32,
+            44,
+            48
+          ]
+        },
+        {
+          "file": "probe_reassemble_1.f32",
+          "shape": [
+            1,
+            16,
+            22,
+            96
+          ]
+        },
+        {
+          "file": "probe_reassemble_2.f32",
+          "shape": [
+            1,
+            8,
+            11,
+            192
+          ]
+        },
+        {
+          "file": "probe_reassemble_3.f32",
+          "shape": [
+            1,
+            4,
+            6,
+            384
+          ]
+        }
+      ]
+    }
+  },
+  "final_png_rule": "bicubic(F.interpolate, align_corners=False) to the input's pixel size, then min-max to 0..255",
+  "hf_repository": "depth-anything/Depth-Anything-V2-Small-hf",
+  "hf_revision": "5426e4f0f36572d16453bbda7a8389317b1bef99",
+  "layout": "NHWC [1,H,W,C] float32 little-endian for activations; predicted_depth H x W; PNG 8-bit grey",
+  "numpy": "2.2.6",
+  "preprocessing": {
+    "constrain_rule": "round(value/multiple)*multiple (Python round, half-to-even)",
+    "ensure_multiple_of": 14,
+    "image_mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "image_std": [
+      0.229,
+      0.224,
+      0.225
+    ],
+    "keep_aspect_ratio": true,
+    "resample": "bicubic",
+    "rescale_factor": 0.00392156862745098,
+    "size": {
+      "height": 518,
+      "width": 518
+    }
+  },
+  "preprocessing_tolerance": {
+    "max_abs_delta": 0.6,
+    "measured_on": "a, 140x140 -> 364x518: median 0, p99 0.16, max 0.47 (normalized units)",
+    "median_abs_delta": 0.01,
+    "note": "Swift CoreGraphics .high resize vs PIL bicubic; differences are localized at sharp edges (median ~0), so preprocessing is compared separately from model parity",
+    "p99_abs_delta": 0.25
+  },
+  "reference": "transformers DepthAnythingForDepthEstimation + DPTImageProcessor",
+  "size_table": [
+    {
+      "input_height": 140,
+      "input_width": 196,
+      "output_height": 364,
+      "output_width": 518
+    },
+    {
+      "input_height": 196,
+      "input_width": 140,
+      "output_height": 518,
+      "output_width": 364
+    },
+    {
+      "input_height": 518,
+      "input_width": 518,
+      "output_height": 518,
+      "output_width": 518
+    },
+    {
+      "input_height": 30,
+      "input_width": 40,
+      "output_height": 392,
+      "output_width": 518
+    },
+    {
+      "input_height": 200,
+      "input_width": 600,
+      "output_height": 168,
+      "output_width": 518
+    }
+  ],
+  "torch": "2.7.0",
+  "transformers": "5.12.0",
+  "weights_sha256": "3152477ce0d8d6978d76b995120de97cb5b928701fd0f817769f59e249a16b70"
+}

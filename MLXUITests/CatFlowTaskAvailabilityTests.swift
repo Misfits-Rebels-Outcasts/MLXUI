@@ -252,9 +252,9 @@ struct CatFlowTaskAvailabilityTests {
             "Decode Latent": .needsNewerSupport, "Denoise": .needsNewerSupport,
             // In `taskKinds` (.video) but `engines.diffusion.animate` has no served prefix.
             "Animate": .needsNewerSupport,
-            // No `taskKinds` entry and no served prefix. `Upscale` was the other entry here
-            // until BG-2 (2026-10-10) — it is `.available` above now.
-            "Estimate Depth": .needsNewerSupport,
+            // MC3-8: `Estimate Depth` left this set — Depth Anything V2 Small gave it a
+            // `.depth` `taskKinds` entry, the served prefix and a catalog model.
+            "Estimate Depth": .available,
             "Load Checkpoint": .needsNewerSupport, "Blend": .needsNewerSupport,
             "Bake LoRA": .needsNewerSupport, "Pin Model": .needsNewerSupport,
         ]
@@ -323,9 +323,8 @@ struct CatFlowTaskAvailabilityTests {
         // available 2026-08-27 when the ruling landed option (1) — the executor now serves
         // engines.diffusion.segment and SAM3 derives (CFM-R15-1). The latent family, Edit
         // Image, and Inpaint map to `.image` but no stage accepts what those rows hand the
-        // executor, so they stay marked. Estimate Depth has no catalog model and no served
-        // prefix; Upscale stopped being marked in BG-2 (2026-10-10), when SeedVR2's shipped
-        // runner got its `taskKinds` entry and its served prefix.
+        // executor, so they stay marked. Upscale stopped being marked in BG-2 (2026-10-10), and
+        // Estimate Depth in MC3-8, when Depth Anything V2 Small got its `taskKinds` entry and served prefix.
         let available = { (name: String) in
             TaskAvailability.isAvailable(name, catalog: catalog, claimableModelIDs: claimable)
         }
@@ -336,7 +335,7 @@ struct CatFlowTaskAvailabilityTests {
         #expect(!available("Decode Latent"))
         #expect(available("Generate Image"))
         #expect(available("Upscale"))
-        #expect(!available("Estimate Depth"))
+        #expect(available("Estimate Depth"))
         #expect(available("OCR"))
         #expect(available("Describe Image"))
         #expect(available("Summarize"))
@@ -441,13 +440,13 @@ struct CatFlowTaskAvailabilityTests {
                       "Extract Structured", "Text to Table",
                       "Transcribe", "Speak", "Describe Image", "OCR", "Embed",
                       "Generate Image", "Generate Video", "Generate Sound",
-                      "Segment", "Upscale", "Rerank"]
+                      "Segment", "Upscale", "Rerank", "Estimate Depth"]
         for name in served {
             #expect(TaskModels.isServedByExecutor(name), "\(name) should be executor-served")
         }
         // NOT served: a catalog model may exist for the kind, but the executor has no path.
         // The latent family and the edit/inpaint rows have no stage accepting what they hand
-        // the executor; Estimate Depth has no served prefix at all. `Rerank` moved to
+        // the executor. `Rerank` moved to
         // the served list in MoC-3-1 (RSI/DelegateMoCBacklog.md) — `engines.rerank.` is now
         // allow-listed, even though no `.rerank` catalog entry exists yet (MoC-4). Served and
         // "has a runnable candidate" are different questions: `derivedModels(for: "Rerank", …)`
@@ -457,7 +456,7 @@ struct CatFlowTaskAvailabilityTests {
         // and `CatalogBridge` has the "SeedVR2 3B" row — only the prefix was missing.
         let unserved = ["Edit Image", "Instruct Edit", "Inpaint",
                         "Init Latent", "Encode Latent", "Decode Latent", "Denoise",
-                        "Estimate Depth", "Animate"]
+                        "Animate"]
         for name in unserved {
             #expect(!TaskModels.isServedByExecutor(name), "\(name) should NOT be executor-served")
         }
