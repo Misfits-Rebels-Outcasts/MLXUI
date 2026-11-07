@@ -96,7 +96,9 @@ nonisolated enum TranslateGemmaEngine {
             defer { lease.release() }
 
             // Trap 1: the install names no EOS ids, so put `<end_of_turn>` into this container's stop set. The stop set is
-            // read from `context.configuration` at generation time, and this container is only ever used by this engine.
+            // read from `context.configuration` at generation time. The insert is idempotent (both are Sets). The container is keyed by this
+            // model's own directory and shared with the LLM pool, but nothing else leases it today (the Local Server serves `.llm` only;
+            // `TaskModels` offers the model to `Translate` only), and `<end_of_turn>` is also the correct stop for a Gemma 3 turn (MC2-10).
             await lease.container.update { context in
                 context.configuration.extraEOSTokens.insert("<end_of_turn>")
                 context.configuration.eosTokenIds.insert(endOfTurnTokenId)
