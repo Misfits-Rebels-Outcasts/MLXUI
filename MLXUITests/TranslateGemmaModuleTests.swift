@@ -217,6 +217,17 @@ struct TranslateGemmaModuleTests {
         #expect((stage as? TranslateGemmaStage)?.targetCode == "zh-Hans")
     }
 
+    @Test func weightsOnlyDropsTheTranslateLanguagesButKeepsQuantize() {
+        var config = StageConfig(sourceLanguage: "ms", targetLanguage: "zh-Hans")
+        config.trimSilence = true
+        config.quantize = 4
+        let weights = config.weightsOnly
+        #expect(weights.sourceLanguage == nil)
+        #expect(weights.targetLanguage == nil)
+        #expect(weights.trimSilence == nil)
+        #expect(weights.quantize == 4)
+    }
+
     @Test func theSDKsProbeStageRefusesWithoutLanguages() async throws {
         // The Run sheet builds this probe stage before languages are picked (MC2-5's screen replaces it per run); it
         // must exist, and a run through it must say so rather than translate from a guess.
