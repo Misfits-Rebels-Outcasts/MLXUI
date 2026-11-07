@@ -312,6 +312,22 @@ struct TranslateGemmaWorkflowWiringTests {
         }
     }
 
+    @Test func aBareChineseTargetIsRefusedNamingBothWritableCodes() {
+        for raw in ["Chinese", "chinese"] {
+            do {
+                _ = try TranslateRowRequest.targetCode(settings: "to=\(raw)")
+                Issue.record("to=\(raw) must be refused")
+            } catch let failure as TranslateRowRequest.Failure {
+                #expect(failure == .unknownTarget(raw))
+                let message = failure.description
+                #expect(message.contains("to=zh-Hans"), "\(message)")
+                #expect(message.contains("to=zh-Hant"), "\(message)")
+            } catch {
+                Issue.record("unexpected error \(error)")
+            }
+        }
+    }
+
     @Test func theTranslatePoolIsExactlyGeneratePlusTranslateGemmaAndNoOtherTaskHasIt() {
         #expect(TaskModels.models(forTask: "Translate") == TaskModels.models(forTask: "Generate") + [Self.display])
         let others = ["Generate", "Summarize", "Answer", "Rewrite", "Draft", "Ask", "Title", "Critique", "Verify",

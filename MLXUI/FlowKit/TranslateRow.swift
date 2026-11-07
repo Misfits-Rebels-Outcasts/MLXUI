@@ -24,6 +24,10 @@ nonisolated enum TranslateRowRequest {
             switch self {
             case .missingTarget:
                 return "This TranslateGemma row has no target language. Add to= with a language name or code, for example to=Malay."
+            case .unknownTarget(let raw) where raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                .caseInsensitiveCompare("Chinese") == .orderedSame:
+                // Owner ruling R6: a bare Chinese is ambiguous (the output script differs), so it is refused and names both.
+                return "\"\(raw)\" doesn't say which Chinese script to write. Set to=zh-Hans for Simplified Chinese or to=zh-Hant for Traditional Chinese."
             case .unknownTarget(let raw):
                 return "\"\(raw)\" isn't a language TranslateGemma can translate into. Set to= to a language name or code from its list, for example to=Malay or to=ms."
             case .undetectableSource:

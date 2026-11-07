@@ -44,6 +44,9 @@ struct TranslateGemmaRunModelTests {
         while model.isRunning, ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(5))
         }
+        if model.isRunning {
+            Issue.record("waitUntilIdle timed out after \(timeout) waiting for the Translate run to go idle")
+        }
     }
 
     private nonisolated static func german() -> TranslateGemmaLanguageDetector.Detection {
