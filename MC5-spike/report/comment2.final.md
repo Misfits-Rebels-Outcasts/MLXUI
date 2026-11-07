@@ -234,10 +234,11 @@ Per-slice fixtures and tolerances (each captures inputs, every stage tap, and th
 | 3g VAE decode/encode | decoded waveform, decoder-block taps, incl. one chunked decode | 2 s stereo, real latents | max abs Δ ≤ 1e-5 tiny; cos ≥ 0.999, max Δ ≤ 0.02 real |
 | 3h end-to-end | one 10 s no-LM WAV + all inter-stage hand-offs | fixed prompt/seed/settings | tiny max abs Δ ≤ 1e-5; real per-stage |
 
-Corrections the plan makes vs the issue text: reference `shift` is **1.0**, not 3.0; the duration
-floor is 10 s (so the end-to-end reference is 10 s, not 8 s); noise is injected into the fixture
-(RNG is not a parity surface); reference DiT dtype must be recorded (f32 in upstream, bf16 in our
-harness) because it changes the tolerance.
+Corrections the plan makes to earlier assumptions: the reference `shift` is **1.0** (the
+`turbo-shift3` checkpoints are the ones that use 3.0); the duration floor is **10 s**, so the
+end-to-end reference clip is 10 s; noise is injected into the fixture (RNG is not a parity
+surface); the reference DiT dtype must be recorded (f32 in upstream, bf16 in our harness) because
+it changes the tolerance.
 
 ---
 
