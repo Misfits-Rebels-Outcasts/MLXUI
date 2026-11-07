@@ -223,7 +223,7 @@ def main():
             continue
         lines.append(f"### {cfg} / {lm}\n")
         lines.append(
-            "| dur | init wall | text enc s/peak | condition s/peak | DiT 8 steps s/peak | VAE decode s/peak | gen wall (model) | process peak | MLX peak | torch@exit |"
+            "| dur | init wall | text enc s/peak | condition s/peak | DiT 8 steps s/peak | VAE decode s/peak | gen wall (model) | process peak | MLX peak | torch@exit | (all memory in GiB) |"
         )
         lines.append("|---:|---:|---|---|---|---|---:|---:|---:|---:|")
         for dur in sorted(durs):
@@ -234,10 +234,10 @@ def main():
             def cell(name):
                 if name not in sp or sp[name] is None:
                     return "—"
-                return f"{sw.get(name, 0):.2f} s / {sp[name]/1024:.2f} GB"
+                return f"{sw.get(name, 0):.2f} s / {sp[name]/1024:.2f} GiB"
 
             lines.append(
-                "| {} s | {} s | {} | {} | {} | {} | {} s | {:.2f} GB | {:.1f} GB | {:.1f} GB |".format(
+                "| {} s | {} s | {} | {} | {} | {} | {} s | {:.2f} GiB | {:.1f} GiB | {:.1f} GiB |".format(
                     dur,
                     f"{r['init_wall_s']:.1f}" if r.get("init_wall_s") else "—",
                     cell("text.encode"),
