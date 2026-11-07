@@ -71,4 +71,18 @@ nonisolated final class ServeMLXMemory: @unchecked Sendable {
         depth -= 1
         if depth == 0, read() == applied { write(saved) }
     }
+
+    /// BCC-1 (R18): the one shared way to hold the cap around a unit of MLX work outside the Local Server -- a flow row
+    /// (`RealExecutor.execute`) or a Run-window run (`LeasingStage.run`). Same `begin`/`end` pair, reference-counted, so it
+    /// nests with the server, `LFMAudioEngine.voiceTurn`, RIFE and the image model's own per-stage cap. Ends on return, throw and cancel.
+    ///
+    /// `EngineCache.shared` is touched first: its `init` sets `Memory.cacheLimit` to the memory budget (about 60% of RAM) and, by the
+    /// MP6-3h ruling, a limit changed during a hold is left alone at `end()`. Built inside the hold it would override the cap for the
+    /// whole of the first run, so it is built before.
+    func scoped<T>(_ body: () async throws -> T) async rethrows -> T {
+        _ = EngineCache.shared
+        begin()
+        defer { end() }
+        return try await body()
+    }
 }

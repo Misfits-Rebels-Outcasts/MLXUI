@@ -37,7 +37,10 @@ struct CatFlowNotRunnableTests {
                        "3-ExtractTableFromImage", "4-WebPageSummary", "5-ExtractWebPageLinks",
                        // BG-3 (RSI/DelegateBasicImageFlowsBacklog.md): 63/64/65 moved to the
                        // Basic Gallery as 6/7/8 — same contents, new flow ids.
-                       "6-CutOutSubject", "7-UpscaleSmall"] {
+                       "6-CutOutSubject", "7-UpscaleSmall",
+                       // BS-1 (RSI/DelegateBasicShowcaseBacklog.md): the five showcase flows, shelf 9–13.
+                       "9-ReadItAloud", "10-DescribePhoto", "11-PictureFromWords",
+                       "12-InvoiceToSpreadsheet", "13-SortAnEmail"] {
             #expect(try refusal(flowID) == nil, "\(flowID) should be runnable")
         }
     }

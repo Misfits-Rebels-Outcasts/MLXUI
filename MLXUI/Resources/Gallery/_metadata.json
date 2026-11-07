@@ -546,6 +546,46 @@
    "category": "Basic",
    "description": "Describe the music you want and get a short WAV back — MusicGen writes the background bed.",
    "tier": "basic"
+  },
+  {
+   "number": 78,
+   "title": "Read It Aloud",
+   "filename": "9-ReadItAloud.cat",
+   "category": "Basic",
+   "description": "Turn a text note into a spoken WAV you can listen to on the go — Kokoro reads it in a natural voice.",
+   "tier": "basic"
+  },
+  {
+   "number": 79,
+   "title": "Describe a Photo",
+   "filename": "10-DescribePhoto.cat",
+   "category": "Basic",
+   "description": "Point it at a photo and get a short, plain description of what's in it — handy for captions and alt text.",
+   "tier": "basic"
+  },
+  {
+   "number": 80,
+   "title": "Picture From Words",
+   "filename": "11-PictureFromWords.cat",
+   "category": "Basic",
+   "description": "Type what you want to see — or accept the row's own example — and FLUX.2 Klein paints it as a PNG.",
+   "tier": "basic"
+  },
+  {
+   "number": 81,
+   "title": "Invoice to Spreadsheet",
+   "filename": "12-InvoiceToSpreadsheet.cat",
+   "category": "Basic",
+   "description": "A PDF invoice in, a one-row CSV out — vendor, number, dates, total and currency, ready for Numbers or Excel.",
+   "tier": "basic"
+  },
+  {
+   "number": 82,
+   "title": "Sort an Email",
+   "filename": "13-SortAnEmail.cat",
+   "category": "Basic",
+   "description": "Laya reads one email and decides: reply today, or later. The email is filed into the matching file — nothing is generated.",
+   "tier": "basic"
   }
  ]
 }

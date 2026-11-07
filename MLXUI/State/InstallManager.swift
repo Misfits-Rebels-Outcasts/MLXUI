@@ -31,6 +31,9 @@ final class InstallManager {
     private let downloadsDir: URL
     private let installedURL: URL
     private let session: URLSession
+    /// KG-1: the session the file-listing API calls (`resolveFiles`) use. `URLSession.shared` in the app; a test hands in one
+    /// with a stub `URLProtocol` so an install can be driven end to end with no network.
+    private let apiSession: URLSession
     /// MoC-5-4: download tracking is keyed by **repo** slug, not card id — one physical
     /// download per repo, however many cards are watching it. `modelStates` (below) stays
     /// card-keyed for the UI; `setState(_:forRepo:)` fans a repo-level update out to every
@@ -45,8 +48,9 @@ final class InstallManager {
     var modelStates: [String: InstallState] = [:]
     var onInstallComplete: ((String) -> Void)?
 
-    init(store: ModelStore = .shared) {
+    init(store: ModelStore = .shared, session: URLSession? = nil, apiSession: URLSession = .shared) {
         self.store = store
+        self.apiSession = apiSession
         modelsDir = store.modelsDirectory
         downloadsDir = store.downloadsDirectory
         installedURL = store.installedRegistryURL
@@ -54,7 +58,7 @@ final class InstallManager {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 3600
-        session = URLSession(configuration: config)
+        self.session = session ?? URLSession(configuration: config)
 
         do {
             try FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
@@ -258,13 +262,13 @@ final class InstallManager {
             // encoder — MC1-3). Their files land under the companion's own subfolder
             // (`encodec/`, `t5/`) inside the model dir, so the engine's A2-pattern load path
             // finds them next to the model's own files.
-            let companion = ModelFileSelector.companionRepo(for: hfModelId)
-            var companionFiles: [HFRemoteFile] = []
-            if let companion {
-                companionFiles = try await resolveFiles(for: companion.repository)
+            let companions = ModelFileSelector.companionRepos(for: hfModelId)
+            var companionFiles: [[HFRemoteFile]] = []
+            for companion in companions {
+                companionFiles.append(try await resolveFiles(for: companion.repository, only: companion.only))
             }
 
-            print("[Install] Resolved \(files.count) files" + (companion.map { " + \($0.repository)" } ?? ""))
+            print("[Install] Resolved \(files.count) files" + companions.map { " + \($0.repository)" }.joined())
 
             await MainActor.run {
                 setState(.downloading(progress: 0, downloaded: 0, total: 1), forRepo: repo)
@@ -288,8 +292,8 @@ final class InstallManager {
                 let subdir: String
             }
             var plan: [DownloadPlanEntry] = files.map { .init(file: $0, repo: variant, subdir: "") }
-            if let companion {
-                plan += companionFiles.map { .init(file: $0, repo: companion.repository, subdir: companion.subfolder) }
+            for (companion, resolved) in zip(companions, companionFiles) {
+                plan += resolved.map { .init(file: $0, repo: companion.repository, subdir: companion.subfolder) }
             }
 
             var downloadedSoFar: Int64 = 0
@@ -422,7 +426,7 @@ final class InstallManager {
 
     // MARK: - HF API
 
-    private func resolveFiles(for modelId: String) async throws -> [HFRemoteFile] {
+    private func resolveFiles(for modelId: String, only: [String]? = nil) async throws -> [HFRemoteFile] {
         var components = URLComponents()
         components.scheme = "https"
         components.host = "huggingface.co"
@@ -438,7 +442,7 @@ final class InstallManager {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await apiSession.data(for: request)
 
         if let httpResponse = response as? HTTPURLResponse,
            let statusError = InstallError.fromHTTPStatus(httpResponse.statusCode, modelId: modelId) {
@@ -458,8 +462,18 @@ final class InstallManager {
         // Which files to download is pure, unit-tested logic (see `ModelFileSelector`).
         let sizeByName = Dictionary(
             info.siblings.map { ($0.rfilename, $0.size ?? 0) }, uniquingKeysWith: { first, _ in first })
-        var files = ModelFileSelector.filesToDownload(siblings: info.siblings.map(\.rfilename))
-            .map { HFRemoteFile(filename: $0, size: sizeByName[$0] ?? 0) }
+        let selected: [String]
+        if let only {
+            // KG-1: an exact-name companion. A missing file fails the install by name rather than installing a partial companion.
+            let missing = only.filter { sizeByName[$0] == nil }
+            guard missing.isEmpty else {
+                throw InstallError.downloadFailed("\(modelId) is missing \(missing.joined(separator: ", "))")
+            }
+            selected = only
+        } else {
+            selected = ModelFileSelector.filesToDownload(siblings: info.siblings.map(\.rfilename))
+        }
+        var files = selected.map { HFRemoteFile(filename: $0, size: sizeByName[$0] ?? 0) }
 
         // Sort: small metadata first, large weights (.safetensors) last.
         files.sort { f1, f2 in
@@ -611,7 +625,11 @@ extension URLSession {
         try FileManager.default.createDirectory(at: safeDir, withIntermediateDirectories: true)
 
         let delegate = ProgressDelegate(onProgress: progress, safeDir: safeDir)
-        let downloadSession = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        // KG-1: this builds its own session (the delegate carries the progress), so it must carry the receiver's `protocolClasses`
+        // or a test's stub `URLProtocol` would be bypassed and the install would reach the real network. `nil` in the app.
+        let downloadConfiguration = URLSessionConfiguration.default
+        downloadConfiguration.protocolClasses = configuration.protocolClasses
+        let downloadSession = URLSession(configuration: downloadConfiguration, delegate: delegate, delegateQueue: nil)
         let task = downloadSession.downloadTask(with: request)
 
         return try await withTaskCancellationHandler {

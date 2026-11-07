@@ -226,9 +226,10 @@ struct ModelFileSelectorTests {
     @Test func musicgenBundlesCompanionEncodecRepo() {
         // MG-DL1 decision — the jasonvassallo repo has no EnCodec weights; the installer
         // bundles the mlx-community EnCodec repo so the engine loads only installed files.
-        #expect(ModelFileSelector.companionRepo(for: "jasonvassallo/mlx-musicgen-small")
-                == ModelFileSelector.CompanionRepo(repository: "mlx-community/encodec-32khz-float32", subfolder: "encodec/"))
-        #expect(ModelFileSelector.companionRepo(for: "mlx-community/Kokoro-82M-bf16") == nil)
+        #expect(ModelFileSelector.companionRepos(for: "jasonvassallo/mlx-musicgen-small")
+                == [ModelFileSelector.CompanionRepo(repository: "mlx-community/encodec-32khz-float32", subfolder: "encodec/")])
+        // KG-1: Kokoro now has one companion, the English G2P repo (see `KokoroG2PInstallTests`).
+        #expect(ModelFileSelector.companionRepos(for: "mlx-community/Kokoro-82M-bf16").map(\.repository) == ["beshkenadze/kitten-tts-g2p"])
     }
 
     @Test func wan21RepoDownloadsAllThreeWeightFiles() {

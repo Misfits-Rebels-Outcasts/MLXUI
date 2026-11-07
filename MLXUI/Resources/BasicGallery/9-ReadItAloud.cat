@@ -1,0 +1,4 @@
+mlxflow 0.8
+1. Read Text    note.txt
+2. Speak        Kokoro 82M; af_heart; seed=7
+3. Save Audio   note.wav

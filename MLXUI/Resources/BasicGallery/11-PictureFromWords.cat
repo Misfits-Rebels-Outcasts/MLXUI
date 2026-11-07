@@ -1,0 +1,6 @@
+mlxflow 0.8
+1. Template         "a red bicycle leaning on a blue door, morning light,
+                    photograph"
+2. Human Input      "Describe the picture you want:" ; timeout=30s; default=unchanged
+3. Generate Image   FLUX.2 Klein 4B; seed=7; width=1024; height=1024
+4. Save Image       picture.png

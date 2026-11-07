@@ -177,8 +177,9 @@ struct CatFlowSavedFilePresentationTests {
         // Pins the same count BF-2's corpus test pins (86 — CL-8's flow 78 bumped it to 87,
         // CL-8-DROP reverted it) — see that test's failure message for what to do when this
         // fires.
-        #expect(checkedRows == 86, """
-            Corpus row count changed from 86 — if a new Save * row shipped, confirm it \
+        // BS-1 (RSI/DelegateBasicShowcaseBacklog.md): flows 9–13 add six Save rows (86 -> 92).
+        #expect(checkedRows == 92, """
+            Corpus row count changed from 92 — if a new Save * row shipped, confirm it \
             classifies correctly above, then bump this count; if a row disappeared, \
             confirm that was intentional.
             """)
