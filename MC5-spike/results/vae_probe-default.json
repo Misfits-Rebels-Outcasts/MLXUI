@@ -1,0 +1,82 @@
+{
+  "host": {
+    "chip": "Apple M3 Pro",
+    "ram_gib": 18.0
+  },
+  "env": {
+    "ACESTEP_MLX_VAE_CHUNK": null,
+    "ACESTEP_MLX_VAE_FP16": null
+  },
+  "init_wall_s": 8.23,
+  "init_footprint_mb": 10479.8,
+  "base_footprint_mb_after_free": 8383.8,
+  "mlx_vae_chunk_size": 256,
+  "vae_dtype": "mlx.core.float32",
+  "results": {
+    "250": {
+      "latent_frames": 250,
+      "seconds": 10.0,
+      "wall_s": 0.85,
+      "peak_footprint_mb": 12231.2,
+      "footprint_delta_mb": 3847.4,
+      "mlx_peak_mb": 8884.9,
+      "out_shape": [
+        1,
+        2,
+        480000
+      ]
+    },
+    "750": {
+      "latent_frames": 750,
+      "seconds": 30.0,
+      "wall_s": 3.45,
+      "peak_footprint_mb": 13366.4,
+      "footprint_delta_mb": 1134.9,
+      "mlx_peak_mb": 9024.8,
+      "out_shape": [
+        1,
+        2,
+        1440000
+      ]
+    },
+    "1500": {
+      "latent_frames": 1500,
+      "seconds": 60.0,
+      "wall_s": 6.82,
+      "peak_footprint_mb": 13244.8,
+      "footprint_delta_mb": -845.6,
+      "mlx_peak_mb": 9047.5,
+      "out_shape": [
+        1,
+        2,
+        2880000
+      ]
+    },
+    "3000": {
+      "latent_frames": 3000,
+      "seconds": 120.0,
+      "wall_s": 13.87,
+      "peak_footprint_mb": 12108.2,
+      "footprint_delta_mb": -1157.1,
+      "mlx_peak_mb": 9089.1,
+      "out_shape": [
+        1,
+        2,
+        5760000
+      ]
+    },
+    "6000": {
+      "latent_frames": 6000,
+      "seconds": 240.0,
+      "wall_s": 27.56,
+      "peak_footprint_mb": 13577.6,
+      "footprint_delta_mb": 3206.4,
+      "mlx_peak_mb": 9179.8,
+      "out_shape": [
+        1,
+        2,
+        11520000
+      ]
+    }
+  }
+}

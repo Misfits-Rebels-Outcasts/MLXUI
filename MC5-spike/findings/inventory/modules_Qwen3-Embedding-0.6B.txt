@@ -1,0 +1,41 @@
+# module shapes: /private/tmp/mc5/Ace-Step1.5/Qwen3-Embedding-0.6B/model.safetensors
+# one representative instance per normalized (layer-index-collapsed) path
+
+embed_tokens.weight
+    weight                           BF16   (151669, 1024)  numel=155309056
+
+layers.N.input_layernorm.weight
+    weight                           BF16   (1024,)  numel=1024
+
+layers.N.mlp.down_proj.weight
+    weight                           BF16   (1024, 3072)  numel=3145728
+
+layers.N.mlp.gate_proj.weight
+    weight                           BF16   (3072, 1024)  numel=3145728
+
+layers.N.mlp.up_proj.weight
+    weight                           BF16   (3072, 1024)  numel=3145728
+
+layers.N.post_attention_layernorm.weight
+    weight                           BF16   (1024,)  numel=1024
+
+layers.N.self_attn.k_norm.weight
+    weight                           BF16   (128,)  numel=128
+
+layers.N.self_attn.k_proj.weight
+    weight                           BF16   (1024, 1024)  numel=1048576
+
+layers.N.self_attn.o_proj.weight
+    weight                           BF16   (1024, 2048)  numel=2097152
+
+layers.N.self_attn.q_norm.weight
+    weight                           BF16   (128,)  numel=128
+
+layers.N.self_attn.q_proj.weight
+    weight                           BF16   (2048, 1024)  numel=2097152
+
+layers.N.self_attn.v_proj.weight
+    weight                           BF16   (1024, 1024)  numel=1048576
+
+norm.weight
+    weight                           BF16   (1024,)  numel=1024

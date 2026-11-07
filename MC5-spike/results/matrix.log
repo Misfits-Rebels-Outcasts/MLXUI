@@ -1,0 +1,40 @@
+matrix start Sat Nov  7 07:50:21 +08 2026
+=== 07:50:21 q8-bf16-nolm-30s
+--- exit 0 q8-bf16-nolm-30s 07:50:43
+=== 07:50:43 q8-bf16-nolm-120s
+--- exit 0 q8-bf16-nolm-120s 07:51:26
+=== 07:51:26 q8-bf16-nolm-240s
+--- exit 0 q8-bf16-nolm-240s 07:52:28
+=== 07:52:28 q8-bf16-lm06-30s
+--- exit 0 q8-bf16-lm06-30s 07:53:24
+=== 07:53:24 q8-bf16-lm06-120s
+--- exit 0 q8-bf16-lm06-120s 07:54:46
+=== 07:54:46 q8-bf16-lm06-240s
+--- exit 0 q8-bf16-lm06-240s 07:56:45
+=== 07:56:45 q8-4bit-nolm-30s
+--- exit 0 q8-4bit-nolm-30s 07:57:08
+=== 07:57:08 q8-4bit-nolm-120s
+--- exit 0 q8-4bit-nolm-120s 07:57:45
+=== 07:57:45 q8-4bit-nolm-240s
+--- exit 0 q8-4bit-nolm-240s 07:58:47
+=== 07:58:47 q4-nolm-instrumental
+--- exit 0 q4-nolm-instrumental 07:59:08
+=== 07:59:08 q4-nolm-english_vocal
+--- exit 0 q4-nolm-english_vocal 07:59:34
+=== 07:59:34 q4-nolm-chinese_vocal
+--- exit 0 q4-nolm-chinese_vocal 07:59:56
+=== 07:59:56 q4-lm06-instrumental
+--- exit 0 q4-lm06-instrumental 08:01:13
+=== 08:01:13 q4-lm06-english_vocal
+--- exit 0 q4-lm06-english_vocal 08:02:21
+=== 08:02:21 q4-lm06-chinese_vocal
+--- exit 0 q4-lm06-chinese_vocal 08:03:29
+=== 08:03:29 q4-lm17-instrumental
+--- exit 0 q4-lm17-instrumental 08:04:50
+=== 08:04:50 q4-lm17-english_vocal
+--- exit 0 q4-lm17-english_vocal 08:06:09
+=== 08:06:09 q4-lm17-chinese_vocal
+--- exit 0 q4-lm17-chinese_vocal 08:07:29
+=== 08:07:29 q4-lm06-instrumental-repro
+--- exit 0 q4-lm06-instrumental-repro 08:08:41
+matrix done Sat Nov  7 08:08:41 +08 2026

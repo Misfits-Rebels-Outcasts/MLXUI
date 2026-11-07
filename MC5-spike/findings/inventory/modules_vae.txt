@@ -1,0 +1,257 @@
+# module shapes: /private/tmp/mc5/Ace-Step1.5/vae/diffusion_pytorch_model.safetensors
+# one representative instance per normalized (layer-index-collapsed) path
+
+decoder.block.N.conv_t1.bias
+    bias                             BF16   (128,)  numel=128
+
+decoder.block.N.conv_t1.weight_g
+    weight_g                         BF16   (128, 1, 1)  numel=128
+
+decoder.block.N.conv_t1.weight_v
+    weight_v                         BF16   (128, 128, 4)  numel=65536
+
+decoder.block.N.res_unit1.conv1.bias
+    bias                             BF16   (128,)  numel=128
+
+decoder.block.N.res_unit1.conv1.weight_g
+    weight_g                         BF16   (128, 1, 1)  numel=128
+
+decoder.block.N.res_unit1.conv1.weight_v
+    weight_v                         BF16   (128, 128, 7)  numel=114688
+
+decoder.block.N.res_unit1.conv2.bias
+    bias                             BF16   (128,)  numel=128
+
+decoder.block.N.res_unit1.conv2.weight_g
+    weight_g                         BF16   (128, 1, 1)  numel=128
+
+decoder.block.N.res_unit1.conv2.weight_v
+    weight_v                         BF16   (128, 128, 1)  numel=16384
+
+decoder.block.N.res_unit1.snake1.alpha
+    alpha                            BF16   (1, 128, 1)  numel=128
+
+decoder.block.N.res_unit1.snake1.beta
+    beta                             BF16   (1, 128, 1)  numel=128
+
+decoder.block.N.res_unit1.snake2.alpha
+    alpha                            BF16   (1, 128, 1)  numel=128
+
+decoder.block.N.res_unit1.snake2.beta
+    beta                             BF16   (1, 128, 1)  numel=128
+
+decoder.block.N.res_unit2.conv1.bias
+    bias                             BF16   (128,)  numel=128
+
+decoder.block.N.res_unit2.conv1.weight_g
+    weight_g                         BF16   (128, 1, 1)  numel=128
+
+decoder.block.N.res_unit2.conv1.weight_v
+    weight_v                         BF16   (128, 128, 7)  numel=114688
+
+decoder.block.N.res_unit2.conv2.bias
+    bias                             BF16   (128,)  numel=128
+
+decoder.block.N.res_unit2.conv2.weight_g
+    weight_g                         BF16   (128, 1, 1)  numel=128
+
+decoder.block.N.res_unit2.conv2.weight_v
+    weight_v                         BF16   (128, 128, 1)  numel=16384
+
+decoder.block.N.res_unit2.snake1.alpha
+    alpha                            BF16   (1, 128, 1)  numel=128
+
+decoder.block.N.res_unit2.snake1.beta
+    beta                             BF16   (1, 128, 1)  numel=128
+
+decoder.block.N.res_unit2.snake2.alpha
+    alpha                            BF16   (1, 128, 1)  numel=128
+
+decoder.block.N.res_unit2.snake2.beta
+    beta                             BF16   (1, 128, 1)  numel=128
+
+decoder.block.N.res_unit3.conv1.bias
+    bias                             BF16   (128,)  numel=128
+
+decoder.block.N.res_unit3.conv1.weight_g
+    weight_g                         BF16   (128, 1, 1)  numel=128
+
+decoder.block.N.res_unit3.conv1.weight_v
+    weight_v                         BF16   (128, 128, 7)  numel=114688
+
+decoder.block.N.res_unit3.conv2.bias
+    bias                             BF16   (128,)  numel=128
+
+decoder.block.N.res_unit3.conv2.weight_g
+    weight_g                         BF16   (128, 1, 1)  numel=128
+
+decoder.block.N.res_unit3.conv2.weight_v
+    weight_v                         BF16   (128, 128, 1)  numel=16384
+
+decoder.block.N.res_unit3.snake1.alpha
+    alpha                            BF16   (1, 128, 1)  numel=128
+
+decoder.block.N.res_unit3.snake1.beta
+    beta                             BF16   (1, 128, 1)  numel=128
+
+decoder.block.N.res_unit3.snake2.alpha
+    alpha                            BF16   (1, 128, 1)  numel=128
+
+decoder.block.N.res_unit3.snake2.beta
+    beta                             BF16   (1, 128, 1)  numel=128
+
+decoder.block.N.snake1.alpha
+    alpha                            BF16   (1, 128, 1)  numel=128
+
+decoder.block.N.snake1.beta
+    beta                             BF16   (1, 128, 1)  numel=128
+
+decoder.conv1.bias
+    bias                             BF16   (2048,)  numel=2048
+
+decoder.conv1.weight_g
+    weight_g                         BF16   (2048, 1, 1)  numel=2048
+
+decoder.conv1.weight_v
+    weight_v                         BF16   (2048, 64, 7)  numel=917504
+
+decoder.conv2.weight_g
+    weight_g                         BF16   (2, 1, 1)  numel=2
+
+decoder.conv2.weight_v
+    weight_v                         BF16   (2, 128, 7)  numel=1792
+
+decoder.snake1.alpha
+    alpha                            BF16   (1, 128, 1)  numel=128
+
+decoder.snake1.beta
+    beta                             BF16   (1, 128, 1)  numel=128
+
+encoder.block.N.conv1.bias
+    bias                             BF16   (2048,)  numel=2048
+
+encoder.block.N.conv1.weight_g
+    weight_g                         BF16   (2048, 1, 1)  numel=2048
+
+encoder.block.N.conv1.weight_v
+    weight_v                         BF16   (2048, 1024, 20)  numel=41943040
+
+encoder.block.N.res_unit1.conv1.bias
+    bias                             BF16   (1024,)  numel=1024
+
+encoder.block.N.res_unit1.conv1.weight_g
+    weight_g                         BF16   (1024, 1, 1)  numel=1024
+
+encoder.block.N.res_unit1.conv1.weight_v
+    weight_v                         BF16   (1024, 1024, 7)  numel=7340032
+
+encoder.block.N.res_unit1.conv2.bias
+    bias                             BF16   (1024,)  numel=1024
+
+encoder.block.N.res_unit1.conv2.weight_g
+    weight_g                         BF16   (1024, 1, 1)  numel=1024
+
+encoder.block.N.res_unit1.conv2.weight_v
+    weight_v                         BF16   (1024, 1024, 1)  numel=1048576
+
+encoder.block.N.res_unit1.snake1.alpha
+    alpha                            BF16   (1, 1024, 1)  numel=1024
+
+encoder.block.N.res_unit1.snake1.beta
+    beta                             BF16   (1, 1024, 1)  numel=1024
+
+encoder.block.N.res_unit1.snake2.alpha
+    alpha                            BF16   (1, 1024, 1)  numel=1024
+
+encoder.block.N.res_unit1.snake2.beta
+    beta                             BF16   (1, 1024, 1)  numel=1024
+
+encoder.block.N.res_unit2.conv1.bias
+    bias                             BF16   (1024,)  numel=1024
+
+encoder.block.N.res_unit2.conv1.weight_g
+    weight_g                         BF16   (1024, 1, 1)  numel=1024
+
+encoder.block.N.res_unit2.conv1.weight_v
+    weight_v                         BF16   (1024, 1024, 7)  numel=7340032
+
+encoder.block.N.res_unit2.conv2.bias
+    bias                             BF16   (1024,)  numel=1024
+
+encoder.block.N.res_unit2.conv2.weight_g
+    weight_g                         BF16   (1024, 1, 1)  numel=1024
+
+encoder.block.N.res_unit2.conv2.weight_v
+    weight_v                         BF16   (1024, 1024, 1)  numel=1048576
+
+encoder.block.N.res_unit2.snake1.alpha
+    alpha                            BF16   (1, 1024, 1)  numel=1024
+
+encoder.block.N.res_unit2.snake1.beta
+    beta                             BF16   (1, 1024, 1)  numel=1024
+
+encoder.block.N.res_unit2.snake2.alpha
+    alpha                            BF16   (1, 1024, 1)  numel=1024
+
+encoder.block.N.res_unit2.snake2.beta
+    beta                             BF16   (1, 1024, 1)  numel=1024
+
+encoder.block.N.res_unit3.conv1.bias
+    bias                             BF16   (1024,)  numel=1024
+
+encoder.block.N.res_unit3.conv1.weight_g
+    weight_g                         BF16   (1024, 1, 1)  numel=1024
+
+encoder.block.N.res_unit3.conv1.weight_v
+    weight_v                         BF16   (1024, 1024, 7)  numel=7340032
+
+encoder.block.N.res_unit3.conv2.bias
+    bias                             BF16   (1024,)  numel=1024
+
+encoder.block.N.res_unit3.conv2.weight_g
+    weight_g                         BF16   (1024, 1, 1)  numel=1024
+
+encoder.block.N.res_unit3.conv2.weight_v
+    weight_v                         BF16   (1024, 1024, 1)  numel=1048576
+
+encoder.block.N.res_unit3.snake1.alpha
+    alpha                            BF16   (1, 1024, 1)  numel=1024
+
+encoder.block.N.res_unit3.snake1.beta
+    beta                             BF16   (1, 1024, 1)  numel=1024
+
+encoder.block.N.res_unit3.snake2.alpha
+    alpha                            BF16   (1, 1024, 1)  numel=1024
+
+encoder.block.N.res_unit3.snake2.beta
+    beta                             BF16   (1, 1024, 1)  numel=1024
+
+encoder.block.N.snake1.alpha
+    alpha                            BF16   (1, 1024, 1)  numel=1024
+
+encoder.block.N.snake1.beta
+    beta                             BF16   (1, 1024, 1)  numel=1024
+
+encoder.conv1.bias
+    bias                             BF16   (128,)  numel=128
+
+encoder.conv1.weight_g
+    weight_g                         BF16   (128, 1, 1)  numel=128
+
+encoder.conv1.weight_v
+    weight_v                         BF16   (128, 2, 7)  numel=1792
+
+encoder.conv2.bias
+    bias                             BF16   (128,)  numel=128
+
+encoder.conv2.weight_g
+    weight_g                         BF16   (128, 1, 1)  numel=128
+
+encoder.conv2.weight_v
+    weight_v                         BF16   (128, 2048, 3)  numel=786432
+
+encoder.snake1.alpha
+    alpha                            BF16   (1, 2048, 1)  numel=2048
+
+encoder.snake1.beta
+    beta                             BF16   (1, 2048, 1)  numel=2048

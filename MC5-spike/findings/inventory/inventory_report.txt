@@ -1,0 +1,167 @@
+====================================================================================================
+FILE  /private/tmp/mc5/Ace-Step1.5/acestep-v15-turbo/model.safetensors
+      size 4,787,825,604 B   tensors 677   params 2.394B
+      __metadata__ {"format": "pt"}
+      dtypes: BF16 2.394B (4.788 GB)
+
+  module (layer idx -> N)                                  n     params  dtypes             3-D shapes
+  decoder.condition_embedder.bias                          1       2.0K  BF16               
+  decoder.condition_embedder.weight                        1      4.19M  BF16               
+  decoder.layers.N.cross_attn                            144    302.00M  BF16               
+  decoder.layers.N.cross_attn_norm                        24      49.2K  BF16               
+  decoder.layers.N.mlp                                    72    905.97M  BF16               
+  decoder.layers.N.mlp_norm                               24      49.2K  BF16               
+  decoder.layers.N.scale_shift_table                      24     294.9K  BF16               1x6x2048
+  decoder.layers.N.self_attn                             144    302.00M  BF16               
+  decoder.layers.N.self_attn_norm                         24      49.2K  BF16               
+  decoder.norm_out.weight                                  1       2.0K  BF16               
+  decoder.proj_in.N.bias                                   1       2.0K  BF16               
+  decoder.proj_in.N.weight                                 1     786.4K  BF16               2048x192x2
+  decoder.proj_out.N.bias                                  1         64  BF16               
+  decoder.proj_out.N.weight                                1     262.1K  BF16               2048x64x2
+  decoder.scale_shift_table                                1       4.1K  BF16               1x2x2048
+  decoder.time_embed.linear_1                              2     526.3K  BF16               
+  decoder.time_embed.linear_2                              2      4.20M  BF16               
+  decoder.time_embed.time_proj                             2     25.18M  BF16               
+  decoder.time_embed_r.linear_1                            2     526.3K  BF16               
+  decoder.time_embed_r.linear_2                            2      4.20M  BF16               
+  decoder.time_embed_r.time_proj                           2     25.18M  BF16               
+  detokenizer.embed_tokens.bias                            1       2.0K  BF16               
+  detokenizer.embed_tokens.weight                          1      4.19M  BF16               
+  detokenizer.layers.N.input_layernorm                     2       4.1K  BF16               
+  detokenizer.layers.N.mlp                                 6     75.50M  BF16               
+  detokenizer.layers.N.post_attention_layernorm            2       4.1K  BF16               
+  detokenizer.layers.N.self_attn                          12     25.17M  BF16               
+  detokenizer.norm.weight                                  1       2.0K  BF16               
+  detokenizer.proj_out.bias                                1         64  BF16               
+  detokenizer.proj_out.weight                              1     131.1K  BF16               
+  detokenizer.special_tokens                               1      10.2K  BF16               1x5x2048
+  encoder.lyric_encoder.embed_tokens                       2      2.10M  BF16               
+  encoder.lyric_encoder.layers                            88    402.69M  BF16               
+  encoder.lyric_encoder.norm                               1       2.0K  BF16               
+  encoder.text_projector.weight                            1      2.10M  BF16               
+  encoder.timbre_encoder.embed_tokens                      2     133.1K  BF16               
+  encoder.timbre_encoder.layers                           44    201.34M  BF16               
+  encoder.timbre_encoder.norm                              1       2.0K  BF16               
+  encoder.timbre_encoder.special_token                     1       2.0K  BF16               1x1x2048
+  null_condition_emb                                       1       2.0K  BF16               1x1x2048
+  tokenizer.attention_pooler.embed_tokens                  2      4.20M  BF16               
+  tokenizer.attention_pooler.layers                       22    100.67M  BF16               
+  tokenizer.attention_pooler.norm                          1       2.0K  BF16               
+  tokenizer.attention_pooler.special_token                 1       2.0K  BF16               1x1x2048
+  tokenizer.audio_acoustic_proj.bias                       1       2.0K  BF16               
+  tokenizer.audio_acoustic_proj.weight                     1     131.1K  BF16               
+  tokenizer.quantizer.project_in                           2      12.3K  BF16               
+  tokenizer.quantizer.project_out                          2      14.3K  BF16               
+  -> module shape map: /private/tmp/mc5/findings/inventory/modules_acestep-v15-turbo.txt
+  -> full tensor list: /private/tmp/mc5/findings/inventory/names_acestep-v15-turbo.txt
+
+  LAYOUT-CONVERSION BUCKETS
+   [  25] plain param
+          e.g. decoder.layers.0.scale_shift_table  [1, 6, 2048]
+          e.g. decoder.layers.1.scale_shift_table  [1, 6, 2048]
+          e.g. decoder.layers.10.scale_shift_table  [1, 6, 2048]
+          ... (+22 more)
+   [  17] bias: unchanged
+          e.g. decoder.condition_embedder.bias  [2048]
+          e.g. decoder.proj_in.1.bias  [2048]
+          e.g. decoder.proj_out.1.bias  [64]
+          ... (+14 more)
+   [   2] Conv1d [out,in,K]->[out,K,in]
+          e.g. decoder.proj_in.1.weight  [2048, 192, 2]
+          e.g. decoder.proj_out.1.weight  [2048, 64, 2]
+
+====================================================================================================
+FILE  /private/tmp/mc5/Ace-Step1.5/Qwen3-Embedding-0.6B/model.safetensors
+      size 1,191,586,416 B   tensors 310   params 595.78M
+      __metadata__ {"format": "pt"}
+      dtypes: BF16 595.78M (1.192 GB)
+
+  module (layer idx -> N)                                  n     params  dtypes             3-D shapes
+  embed_tokens.weight                                      1    155.31M  BF16               
+  layers.N.input_layernorm                                28      28.7K  BF16               
+  layers.N.mlp                                            84    264.24M  BF16               
+  layers.N.post_attention_layernorm                       28      28.7K  BF16               
+  layers.N.self_attn                                     168    176.17M  BF16               
+  norm.weight                                              1       1.0K  BF16               
+  -> module shape map: /private/tmp/mc5/findings/inventory/modules_Qwen3-Embedding-0.6B.txt
+  -> full tensor list: /private/tmp/mc5/findings/inventory/names_Qwen3-Embedding-0.6B.txt
+
+  LAYOUT-CONVERSION BUCKETS
+
+====================================================================================================
+FILE  /private/tmp/mc5/Ace-Step1.5/acestep-5Hz-lm-1.7B/model.safetensors
+      size 3,708,521,528 B   tensors 310   params 1.854B
+      __metadata__ {"format": "pt"}
+      dtypes: BF16 1.854B (3.708 GB)
+
+  module (layer idx -> N)                                  n     params  dtypes             3-D shapes
+  embed_tokens.weight                                      1    444.83M  BF16               
+  layers.N.input_layernorm                                28      57.3K  BF16               
+  layers.N.mlp                                            84     1.057B  BF16               
+  layers.N.post_attention_layernorm                       28      57.3K  BF16               
+  layers.N.self_attn                                     168    352.33M  BF16               
+  norm.weight                                              1       2.0K  BF16               
+  -> module shape map: /private/tmp/mc5/findings/inventory/modules_acestep-5Hz-lm-1.7B.txt
+  -> full tensor list: /private/tmp/mc5/findings/inventory/names_acestep-5Hz-lm-1.7B.txt
+
+  LAYOUT-CONVERSION BUCKETS
+
+====================================================================================================
+FILE  /private/tmp/mc5/Ace-Step1.5/vae/diffusion_pytorch_model.safetensors
+      size 337,431,388 B   tensors 365   params 168.70M
+      __metadata__ {"format": "pt"}
+      dtypes: BF16 168.70M (0.337 GB)
+
+  module (layer idx -> N)                                  n     params  dtypes             3-D shapes
+  decoder.block.N.conv_t1                                 15     49.62M  BF16               128x1x1 128x128x4 256x1x1
+  decoder.block.N.res_unit1                               50     11.29M  BF16               1x128x1 1x256x1 1x512x1
+  decoder.block.N.res_unit2                               50     11.29M  BF16               1x128x1 1x256x1 1x512x1
+  decoder.block.N.res_unit3                               50     11.29M  BF16               1x128x1 1x256x1 1x512x1
+  decoder.block.N.snake1                                  10       7.9K  BF16               1x128x1 1x256x1 1x512x1
+  decoder.conv1.bias                                       1       2.0K  BF16               
+  decoder.conv1.weight_g                                   1       2.0K  BF16               2048x1x1
+  decoder.conv1.weight_v                                   1     917.5K  BF16               2048x64x7
+  decoder.conv2.weight_g                                   1          2  BF16               2x1x1
+  decoder.conv2.weight_v                                   1       1.8K  BF16               2x128x7
+  decoder.snake1.alpha                                     1        128  BF16               1x128x1
+  decoder.snake1.beta                                      1        128  BF16               1x128x1
+  encoder.block.N.conv1                                   15     49.62M  BF16               128x1x1 128x128x4 256x1x1
+  encoder.block.N.res_unit1                               50     11.29M  BF16               1x128x1 1x256x1 1x512x1
+  encoder.block.N.res_unit2                               50     11.29M  BF16               1x128x1 1x256x1 1x512x1
+  encoder.block.N.res_unit3                               50     11.29M  BF16               1x128x1 1x256x1 1x512x1
+  encoder.block.N.snake1                                  10       4.1K  BF16               1x128x1 1x256x1 1x512x1
+  encoder.conv1.bias                                       1        128  BF16               
+  encoder.conv1.weight_g                                   1        128  BF16               128x1x1
+  encoder.conv1.weight_v                                   1       1.8K  BF16               128x2x7
+  encoder.conv2.bias                                       1        128  BF16               
+  encoder.conv2.weight_g                                   1        128  BF16               128x1x1
+  encoder.conv2.weight_v                                   1     786.4K  BF16               128x2048x3
+  encoder.snake1.alpha                                     1       2.0K  BF16               1x2048x1
+  encoder.snake1.beta                                      1       2.0K  BF16               1x2048x1
+  -> module shape map: /private/tmp/mc5/findings/inventory/modules_vae.txt
+  -> full tensor list: /private/tmp/mc5/findings/inventory/names_vae.txt
+
+  LAYOUT-CONVERSION BUCKETS
+   [ 144] Snake1d [1,C,1]->[C]
+          e.g. decoder.block.0.res_unit1.snake1.alpha  [1, 1024, 1]
+          e.g. decoder.block.0.res_unit1.snake1.beta  [1, 1024, 1]
+          e.g. decoder.block.0.res_unit1.snake2.alpha  [1, 1024, 1]
+          ... (+141 more)
+   [ 138] WEIGHT_NORM fuse g*v/||v|| -> .weight
+          e.g. decoder.block.0.res_unit1.conv1.weight_g  [1024, 1, 1]
+          e.g. decoder.block.0.res_unit1.conv1.weight_v  [1024, 1024, 7]
+          e.g. decoder.block.0.res_unit1.conv2.weight_g  [1024, 1, 1]
+          ... (+135 more)
+   [  73] bias: unchanged
+          e.g. decoder.block.0.conv_t1.bias  [1024]
+          e.g. decoder.block.0.res_unit1.conv1.bias  [1024]
+          e.g. decoder.block.0.res_unit1.conv2.bias  [1024]
+          ... (+70 more)
+   [  10] WEIGHT_NORM fuse g*v/||v|| -> .weight; ConvTranspose1d: [in,out,K]->[out,K,in]
+          e.g. decoder.block.0.conv_t1.weight_g  [2048, 1, 1]
+          e.g. decoder.block.0.conv_t1.weight_v  [2048, 1024, 20]
+          e.g. decoder.block.1.conv_t1.weight_g  [1024, 1, 1]
+          ... (+7 more)
+
+GRAND TOTAL params across files: 5.013B (5,012,588,296)

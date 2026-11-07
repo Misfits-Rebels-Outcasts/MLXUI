@@ -1,0 +1,434 @@
+{
+  "host": {
+    "chip": "Apple M3 Pro",
+    "ram_gib": 18.0,
+    "macos": "27.0",
+    "torch": "2.10.0",
+    "mlx_python": "0.30.6",
+    "transformers": "4.57.6",
+    "mlx_lm": "0.29.1",
+    "python": "3.12.10"
+  },
+  "notes": [
+    "process_peak_mb is the whole-process phys_footprint peak sampled at 50 ms.",
+    "torch_mps_driver_mb is torch's MPS allocator footprint at process end; it stays resident after tensors are freed (measured: allocating+freeing 2 GiB still leaves ~2.1 GiB of footprint), so it is measurement overhead a torch-free Swift port will not have.",
+    "stage_peaks_mb is the peak phys_footprint inside that stage window, so it includes every other resident component at that time."
+  ],
+  "configs": {
+    "bf16|lm=0.6B": {
+      "30": {
+        "tag": "q8-bf16-lm06-30s",
+        "wall_gen_s": 16.1,
+        "init_wall_s": 7.79,
+        "process_peak_mb": 17199.3,
+        "init_peak_mb": 10500.3,
+        "time_costs": {
+          "lm_phase1_time": 3.2573,
+          "lm_phase2_time": 2.9322,
+          "lm_total_time": 6.1895,
+          "dit_diffusion_time_cost": 3.1293,
+          "dit_diffusion_per_step_time_cost": 0.3912,
+          "dit_total_time_cost": 7.7953,
+          "dit_sampler_mode": "euler",
+          "dit_offload_time_cost": 0.0,
+          "dit_vae_decode_time_cost": 4.6658,
+          "pipeline_total_time": 13.9849
+        },
+        "stage_peaks_mb": {
+          "text.encode": 11231.9,
+          "condition.prepare": 11393.5,
+          "dit.diffusion": 13021.0,
+          "vae.decode.mlx": 17199.3,
+          "lm.load": 11624.6,
+          "lm.generate": 11714.7
+        },
+        "stage_wall_s": {
+          "text.encode": 0.283,
+          "condition.prepare": 0.379,
+          "dit.diffusion": 3.133,
+          "vae.decode.mlx": 4.456,
+          "lm.load": 26.62,
+          "lm.generate": 6.19
+        },
+        "torch_mps_driver_mb": 7836.0,
+        "torch_mps_allocated_mb": 454.3,
+        "mlx_peak_mb": 7311.9,
+        "lm_metadata": {
+          "bpm": 60,
+          "caption": "An energetic and driving chiptune track built on a foundation of punchy electronic drums with gated reverb snares and a relentless sequenced synth bassline. The soundscape is dominated by layers of bright, digital synthesizers playing catchy arpeggiated melodies and powerful chord stabs reminiscent of classic video game music. The arrangement follows a dynamic structure with clear builds into high-energy melodic sections that function like choruses, contrasted with brief breakdowns where atmospheric pads create space before slamming back into the main groove. A recurring siren-like synth effect adds to the propulsive, action-oriented mood throughout.",
+          "duration": 30,
+          "keyscale": "E major",
+          "language": "unknown",
+          "timesignature": "4"
+        },
+        "wavs": [
+          "/private/tmp/mc5/out/wav/q8-bf16-lm06-30s_0.wav"
+        ]
+      },
+      "120": {
+        "tag": "q8-bf16-lm06-120s",
+        "wall_gen_s": 40.81,
+        "init_wall_s": 7.24,
+        "process_peak_mb": 17225.0,
+        "init_peak_mb": 10562.8,
+        "time_costs": {
+          "lm_phase1_time": 2.5152,
+          "lm_phase2_time": 11.2735,
+          "lm_total_time": 13.7887,
+          "dit_diffusion_time_cost": 12.0822,
+          "dit_diffusion_per_step_time_cost": 1.5103,
+          "dit_total_time_cost": 24.3699,
+          "dit_sampler_mode": "euler",
+          "dit_offload_time_cost": 0.0,
+          "dit_vae_decode_time_cost": 12.2874,
+          "pipeline_total_time": 38.1587
+        },
+        "stage_peaks_mb": {
+          "text.encode": 11467.4,
+          "condition.prepare": 11629.8,
+          "dit.diffusion": 13491.2,
+          "vae.decode.mlx": 17225.0,
+          "lm.load": 11686.6,
+          "lm.generate": 11725.1
+        },
+        "stage_wall_s": {
+          "text.encode": 0.257,
+          "condition.prepare": 0.379,
+          "dit.diffusion": 12.089,
+          "vae.decode.mlx": 12.057,
+          "lm.load": 26.999,
+          "lm.generate": 13.789
+        },
+        "torch_mps_driver_mb": 7879.6,
+        "torch_mps_allocated_mb": 454.3,
+        "mlx_peak_mb": 7352.1,
+        "lm_metadata": {
+          "bpm": 60,
+          "caption": "An energetic, driving progressive trance track built on layers of synthesized sound. The foundation is a powerful four-on-the-floor kick drum and crisp hi-hats, creating an insistent pumping rhythm. Layered on top are multiple bright, arpeggiated synth leads that carry soaring melodic themes, underpinned by lush, atmospheric pads drenched in reverb. The structure follows a classic EDM formula with dynamic build-ups featuring filter sweeps and accelerating snare rolls, leading into euphoric drops where all the synth elements converge for maximum impact. A brief breakdown offers a moment of respite before launching back into the high-energy finale.",
+          "duration": 120,
+          "keyscale": "C major",
+          "language": "unknown",
+          "timesignature": "4"
+        },
+        "wavs": [
+          "/private/tmp/mc5/out/wav/q8-bf16-lm06-120s_0.wav"
+        ]
+      },
+      "240": {
+        "tag": "q8-bf16-lm06-240s",
+        "wall_gen_s": 79.17,
+        "init_wall_s": 7.56,
+        "process_peak_mb": 17276.1,
+        "init_peak_mb": 10643.1,
+        "time_costs": {
+          "lm_phase1_time": 2.3007,
+          "lm_phase2_time": 24.1373,
+          "lm_total_time": 26.438,
+          "dit_diffusion_time_cost": 23.9455,
+          "dit_diffusion_per_step_time_cost": 2.9932,
+          "dit_total_time_cost": 45.7963,
+          "dit_sampler_mode": "euler",
+          "dit_offload_time_cost": 0.0,
+          "dit_vae_decode_time_cost": 21.8504,
+          "pipeline_total_time": 72.2343
+        },
+        "stage_peaks_mb": {
+          "text.encode": 11869.7,
+          "condition.prepare": 12034.9,
+          "dit.diffusion": 13950.8,
+          "vae.decode.mlx": 17276.1,
+          "lm.load": 11680.1,
+          "lm.generate": 11724.2
+        },
+        "stage_wall_s": {
+          "text.encode": 0.22,
+          "condition.prepare": 0.387,
+          "dit.diffusion": 23.952,
+          "vae.decode.mlx": 21.62,
+          "lm.load": 27.045,
+          "lm.generate": 26.439
+        },
+        "torch_mps_driver_mb": 7951.8,
+        "torch_mps_allocated_mb": 454.3,
+        "mlx_peak_mb": 7423.2,
+        "lm_metadata": {
+          "bpm": 60,
+          "caption": "An energetic and driving chiptune track built on a foundation of a punchy, synthesized drum machine beat and a plucky, arpeggiated synth bassline. The soundscape is densely layered with various retro video game-style synthesizers, including square and pulse wave leads that carry the main melodies. The arrangement evolves through the addition and subtraction of synth layers, creating dynamic shifts between sparser sections and more complex, harmonically rich passages. The overall mood is upbeat, nostalgic, and propulsive, reminiscent of classic 8-bit or 16-bit console game music.",
+          "duration": 240,
+          "keyscale": "C minor",
+          "language": "unknown",
+          "timesignature": "4"
+        },
+        "wavs": [
+          "/private/tmp/mc5/out/wav/q8-bf16-lm06-240s_0.wav"
+        ]
+      }
+    },
+    "bf16|lm=1.7B": {
+      "30": {
+        "tag": "q4-lm17-instrumental",
+        "wall_gen_s": 49.66,
+        "init_wall_s": 9.28,
+        "process_peak_mb": 17360.1,
+        "init_peak_mb": 10645.5,
+        "time_costs": {
+          "lm_phase1_time": 6.1481,
+          "lm_phase2_time": 17.4925,
+          "lm_total_time": 23.6406,
+          "dit_diffusion_time_cost": 15.0643,
+          "dit_diffusion_per_step_time_cost": 1.883,
+          "dit_total_time_cost": 21.5953,
+          "dit_sampler_mode": "euler",
+          "dit_offload_time_cost": 0.0,
+          "dit_vae_decode_time_cost": 6.5306,
+          "pipeline_total_time": 45.2359
+        },
+        "stage_peaks_mb": {
+          "text.encode": 13384.0,
+          "condition.prepare": 13607.7,
+          "dit.diffusion": 15458.7,
+          "vae.decode.mlx": 17360.1,
+          "lm.load": 13431.8,
+          "lm.generate": 13629.9
+        },
+        "stage_wall_s": {
+          "text.encode": 0.059,
+          "condition.prepare": 1.545,
+          "dit.diffusion": 15.07,
+          "vae.decode.mlx": 6.315,
+          "lm.load": 15.801,
+          "lm.generate": 23.641
+        },
+        "torch_mps_driver_mb": 10181.5,
+        "torch_mps_allocated_mb": 454.3,
+        "mlx_peak_mb": 9595.3,
+        "lm_metadata": {
+          "bpm": 120,
+          "caption": "An energetic electro house track driven by a punchy four-on-the-floor drum machine beat and a driving synth bassline. The song opens with its signature plucky arpeggiated synth melody before transitioning into an atmospheric breakdown featuring lush pads and piano-like chords that build anticipation. A powerful drop reintroduces the main groove with added layers of synths creating a full, dynamic soundscape. The structure repeats for a second intense drop after another brief melodic interlude, maintaining high energy throughout until it fades out on the opening arpeggio motif.",
+          "duration": 30,
+          "keyscale": "A minor",
+          "language": "unknown",
+          "timesignature": "4"
+        },
+        "wavs": [
+          "/private/tmp/mc5/out/wav/q4-lm17-instrumental_0.wav",
+          "/private/tmp/mc5/out/wav/q4-lm17-instrumental_1.wav"
+        ]
+      }
+    },
+    "bf16|lm=none": {
+      "30": {
+        "tag": "q8-bf16-nolm-30s",
+        "wall_gen_s": 8.72,
+        "init_wall_s": 7.92,
+        "process_peak_mb": 16377.1,
+        "init_peak_mb": 10562.8,
+        "time_costs": {
+          "dit_diffusion_time_cost": 2.9437,
+          "dit_diffusion_per_step_time_cost": 0.368,
+          "dit_total_time_cost": 6.8704,
+          "dit_sampler_mode": "euler",
+          "dit_offload_time_cost": 0.0,
+          "dit_vae_decode_time_cost": 3.9261,
+          "pipeline_total_time": 6.8704
+        },
+        "stage_peaks_mb": {
+          "text.encode": 10886.4,
+          "condition.prepare": 11043.2,
+          "dit.diffusion": 12578.7,
+          "vae.decode.mlx": 16377.1
+        },
+        "stage_wall_s": {
+          "text.encode": 0.091,
+          "condition.prepare": 0.878,
+          "dit.diffusion": 3.019,
+          "vae.decode.mlx": 3.702
+        },
+        "torch_mps_driver_mb": 6581.5,
+        "torch_mps_allocated_mb": 454.3,
+        "mlx_peak_mb": 6047.5,
+        "lm_metadata": null,
+        "wavs": [
+          "/private/tmp/mc5/out/wav/q8-bf16-nolm-30s_0.wav"
+        ]
+      },
+      "120": {
+        "tag": "q8-bf16-nolm-120s",
+        "wall_gen_s": 24.26,
+        "init_wall_s": 13.22,
+        "process_peak_mb": 16848.0,
+        "init_peak_mb": 10642.2,
+        "time_costs": {
+          "dit_diffusion_time_cost": 10.0122,
+          "dit_diffusion_per_step_time_cost": 1.2515,
+          "dit_total_time_cost": 21.6188,
+          "dit_sampler_mode": "euler",
+          "dit_offload_time_cost": 0.0,
+          "dit_vae_decode_time_cost": 11.6063,
+          "pipeline_total_time": 21.6188
+        },
+        "stage_peaks_mb": {
+          "text.encode": 11047.4,
+          "condition.prepare": 11163.9,
+          "dit.diffusion": 13053.2,
+          "vae.decode.mlx": 16848.0
+        },
+        "stage_wall_s": {
+          "text.encode": 0.084,
+          "condition.prepare": 0.487,
+          "dit.diffusion": 10.327,
+          "vae.decode.mlx": 11.398
+        },
+        "torch_mps_driver_mb": 6658.0,
+        "torch_mps_allocated_mb": 454.3,
+        "mlx_peak_mb": 6087.7,
+        "lm_metadata": null,
+        "wavs": [
+          "/private/tmp/mc5/out/wav/q8-bf16-nolm-120s_0.wav"
+        ]
+      },
+      "240": {
+        "tag": "q8-bf16-nolm-240s",
+        "wall_gen_s": 49.81,
+        "init_wall_s": 7.21,
+        "process_peak_mb": 16994.6,
+        "init_peak_mb": 10802.6,
+        "time_costs": {
+          "dit_diffusion_time_cost": 21.8798,
+          "dit_diffusion_per_step_time_cost": 2.735,
+          "dit_total_time_cost": 43.5267,
+          "dit_sampler_mode": "euler",
+          "dit_offload_time_cost": 0.0,
+          "dit_vae_decode_time_cost": 21.6458,
+          "pipeline_total_time": 43.5267
+        },
+        "stage_peaks_mb": {
+          "text.encode": 11046.8,
+          "condition.prepare": 11140.6,
+          "dit.diffusion": 13082.1,
+          "vae.decode.mlx": 16994.6
+        },
+        "stage_wall_s": {
+          "text.encode": 0.081,
+          "condition.prepare": 1.017,
+          "dit.diffusion": 22.394,
+          "vae.decode.mlx": 21.486
+        },
+        "torch_mps_driver_mb": 6777.6,
+        "torch_mps_allocated_mb": 454.3,
+        "mlx_peak_mb": 6158.8,
+        "lm_metadata": null,
+        "wavs": [
+          "/private/tmp/mc5/out/wav/q8-bf16-nolm-240s_0.wav"
+        ]
+      }
+    },
+    "bf16-4bit|lm=none": {
+      "120": {
+        "tag": "q8-4bit-nolm-120s",
+        "wall_gen_s": 24.15,
+        "init_wall_s": 7.51,
+        "process_peak_mb": 16839.7,
+        "init_peak_mb": 11411.6,
+        "time_costs": {
+          "dit_diffusion_time_cost": 9.6705,
+          "dit_diffusion_per_step_time_cost": 1.2088,
+          "dit_total_time_cost": 21.6073,
+          "dit_sampler_mode": "euler",
+          "dit_offload_time_cost": 0.0,
+          "dit_vae_decode_time_cost": 11.9365,
+          "pipeline_total_time": 21.6073
+        },
+        "stage_peaks_mb": {
+          "text.encode": 11811.2,
+          "condition.prepare": 11947.7,
+          "dit.diffusion": 13752.4,
+          "vae.decode.mlx": 16839.7
+        },
+        "stage_wall_s": {
+          "text.encode": 0.08,
+          "condition.prepare": 0.599,
+          "dit.diffusion": 9.981,
+          "vae.decode.mlx": 11.671
+        },
+        "torch_mps_driver_mb": 4500.3,
+        "torch_mps_allocated_mb": 454.3,
+        "mlx_peak_mb": 3930.0,
+        "lm_metadata": null,
+        "wavs": [
+          "/private/tmp/mc5/out/wav/q8-4bit-nolm-120s_0.wav"
+        ]
+      },
+      "240": {
+        "tag": "q8-4bit-nolm-240s",
+        "wall_gen_s": 49.0,
+        "init_wall_s": 8.76,
+        "process_peak_mb": 17018.8,
+        "init_peak_mb": 11453.8,
+        "time_costs": {
+          "dit_diffusion_time_cost": 22.0793,
+          "dit_diffusion_per_step_time_cost": 2.7599,
+          "dit_total_time_cost": 43.8923,
+          "dit_sampler_mode": "euler",
+          "dit_offload_time_cost": 0.0,
+          "dit_vae_decode_time_cost": 21.8124,
+          "pipeline_total_time": 43.8923
+        },
+        "stage_peaks_mb": {
+          "text.encode": 11827.0,
+          "condition.prepare": 11991.9,
+          "dit.diffusion": 13743.7,
+          "vae.decode.mlx": 17018.8
+        },
+        "stage_wall_s": {
+          "text.encode": 0.094,
+          "condition.prepare": 0.668,
+          "dit.diffusion": 22.722,
+          "vae.decode.mlx": 21.637
+        },
+        "torch_mps_driver_mb": 4619.9,
+        "torch_mps_allocated_mb": 454.3,
+        "mlx_peak_mb": 4001.2,
+        "lm_metadata": null,
+        "wavs": [
+          "/private/tmp/mc5/out/wav/q8-4bit-nolm-240s_0.wav"
+        ]
+      },
+      "30": {
+        "tag": "q8-4bit-nolm-30s",
+        "wall_gen_s": 8.58,
+        "init_wall_s": 9.04,
+        "process_peak_mb": 16669.7,
+        "init_peak_mb": 11506.7,
+        "time_costs": {
+          "dit_diffusion_time_cost": 2.6302,
+          "dit_diffusion_per_step_time_cost": 0.3288,
+          "dit_total_time_cost": 6.5688,
+          "dit_sampler_mode": "euler",
+          "dit_offload_time_cost": 0.0,
+          "dit_vae_decode_time_cost": 3.9384,
+          "pipeline_total_time": 6.5688
+        },
+        "stage_peaks_mb": {
+          "text.encode": 11654.7,
+          "condition.prepare": 11804.2,
+          "dit.diffusion": 12518.3,
+          "vae.decode.mlx": 16669.7
+        },
+        "stage_wall_s": {
+          "text.encode": 0.074,
+          "condition.prepare": 1.048,
+          "dit.diffusion": 2.7,
+          "vae.decode.mlx": 3.836
+        },
+        "torch_mps_driver_mb": 4423.8,
+        "torch_mps_allocated_mb": 454.3,
+        "mlx_peak_mb": 3889.8,
+        "lm_metadata": null,
+        "wavs": [
+          "/private/tmp/mc5/out/wav/q8-4bit-nolm-30s_0.wav"
+        ]
+      }
+    }
+  }
+}

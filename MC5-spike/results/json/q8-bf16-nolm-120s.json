@@ -1,0 +1,372 @@
+{
+  "ticket": "MC5-1 spike / MLXUI#10",
+  "pinned": {
+    "hf_repo": "ACE-Step/Ace-Step1.5 @ 19671f406d603126926c1b7e2adc169acbcade22",
+    "upstream_repo": "ace-step/ACE-Step-1.5 @ ca1e85fe9430179831e6bc6be790c332190a3866",
+    "mlx_swift": "0.32.3 (1960120)",
+    "mlx_swift_lm": "3.32.3 (3b339ad)"
+  },
+  "host": {
+    "chip": "Apple M3 Pro",
+    "model": "Mac15,6",
+    "ram_bytes": 19327352832,
+    "ram_gib": 18.0,
+    "macos": "27.0",
+    "kernel": "27.0.0",
+    "python": "3.12.10",
+    "torch": "2.10.0",
+    "mlx_python": "0.30.6",
+    "transformers": "4.57.6",
+    "milestone": "MC5-1",
+    "mlx_lm": "0.29.1",
+    "safetensors": "0.7.0",
+    "uv_lock": "version = 1"
+  },
+  "config": {
+    "name": "bf16",
+    "lm": "none",
+    "duration_s": 120.0,
+    "seed": 12345,
+    "steps": 8,
+    "shift": 1.0,
+    "caption": "upbeat electronic dance music with heavy bass, punchy drums, festival energy, 128 BPM",
+    "lyrics": "[Instrumental]",
+    "instrumental": true,
+    "vocal_language": "unknown",
+    "staged_free": true,
+    "batch": 1
+  },
+  "stages": {
+    "condition.prepare": {
+      "count": 1,
+      "total_s": 0.487,
+      "peak_footprint_mb": 11163.9,
+      "start_footprint_mb": 11047.4,
+      "peak_delta_mb": 116.5
+    },
+    "dit.diffusion": {
+      "count": 1,
+      "total_s": 10.327,
+      "peak_footprint_mb": 13053.2,
+      "start_footprint_mb": 11172.6,
+      "peak_delta_mb": 1880.5
+    },
+    "generate.total": {
+      "count": 1,
+      "total_s": 23.755,
+      "peak_footprint_mb": 16848.0,
+      "start_footprint_mb": 10849.3,
+      "peak_delta_mb": 5998.7
+    },
+    "init": {
+      "count": 1,
+      "total_s": 13.216,
+      "peak_footprint_mb": 10642.2,
+      "start_footprint_mb": 364.9,
+      "peak_delta_mb": 10277.3
+    },
+    "init.load_text_encoder": {
+      "count": 1,
+      "total_s": 1.258,
+      "peak_footprint_mb": 6322.2,
+      "start_footprint_mb": 3653.1,
+      "peak_delta_mb": 2669.1
+    },
+    "init.load_torch_dit": {
+      "count": 1,
+      "total_s": 4.716,
+      "peak_footprint_mb": 5740.3,
+      "start_footprint_mb": 364.9,
+      "peak_delta_mb": 5375.5
+    },
+    "init.load_torch_vae": {
+      "count": 1,
+      "total_s": 5.458,
+      "peak_footprint_mb": 5740.3,
+      "start_footprint_mb": 3532.5,
+      "peak_delta_mb": 2207.9
+    },
+    "init.mlx_dit": {
+      "count": 1,
+      "total_s": 0.412,
+      "peak_footprint_mb": 9050.5,
+      "start_footprint_mb": 7215.0,
+      "peak_delta_mb": 1835.5
+    },
+    "init.mlx_vae": {
+      "count": 1,
+      "total_s": 1.369,
+      "peak_footprint_mb": 10642.2,
+      "start_footprint_mb": 9244.6,
+      "peak_delta_mb": 1397.6
+    },
+    "lyric.encode": {
+      "count": 1,
+      "total_s": 0.002,
+      "peak_footprint_mb": 11047.4,
+      "start_footprint_mb": 11047.4,
+      "peak_delta_mb": 0.0
+    },
+    "text.encode": {
+      "count": 1,
+      "total_s": 0.084,
+      "peak_footprint_mb": 11047.4,
+      "start_footprint_mb": 11033.6,
+      "peak_delta_mb": 13.8
+    },
+    "vae.decode.mlx": {
+      "count": 1,
+      "total_s": 11.398,
+      "peak_footprint_mb": 16848.0,
+      "start_footprint_mb": 9789.6,
+      "peak_delta_mb": 7058.4
+    },
+    "vae.decode.tiled": {
+      "count": 1,
+      "total_s": 11.398,
+      "peak_footprint_mb": 16848.0,
+      "start_footprint_mb": 9789.6,
+      "peak_delta_mb": 7058.4
+    }
+  },
+  "time_costs": {
+    "dit_diffusion_time_cost": 10.0122,
+    "dit_diffusion_per_step_time_cost": 1.2515,
+    "dit_total_time_cost": 21.6188,
+    "dit_sampler_mode": "euler",
+    "dit_offload_time_cost": 0.0,
+    "dit_vae_decode_time_cost": 11.6063,
+    "pipeline_total_time": 21.6188
+  },
+  "patches": [
+    "loaded torch condition encoder in bfloat16; released redundant torch DiT decoder",
+    "native MLX DiT decoder built from /private/tmp/mc5/Ace-Step1.5/acestep-v15-turbo/model.safetensors (476 tensors, bfloat16)"
+  ],
+  "wavs": [
+    {
+      "index": 0,
+      "orig_path": "/private/tmp/mc5/out/json/audio/q8-bf16-nolm-120s/1e7cd07a-685a-915c-6f6b-0dfc535fe080.wav",
+      "key": "1e7cd07a-685a-915c-6f6b-0dfc535fe080",
+      "params": {
+        "task_type": "text2music",
+        "instruction": "Fill the audio semantic mask based on the given conditions:",
+        "reference_audio": null,
+        "src_audio": null,
+        "audio_codes": "",
+        "caption": "upbeat electronic dance music with heavy bass, punchy drums, festival energy, 128 BPM",
+        "global_caption": "",
+        "instrumental": true,
+        "vocal_language": "unknown",
+        "bpm": null,
+        "keyscale": "",
+        "timesignature": "",
+        "duration": 120.0,
+        "enable_normalization": true,
+        "normalization_db": -1.0,
+        "fade_in_duration": 0.0,
+        "fade_out_duration": 0.0,
+        "latent_shift": 0.0,
+        "latent_rescale": 1.0,
+        "inference_steps": 8,
+        "seed": 12345,
+        "guidance_scale": 1.0,
+        "use_adg": false,
+        "cfg_interval_start": 0.0,
+        "cfg_interval_end": 1.0,
+        "shift": 1.0,
+        "infer_method": "ode",
+        "sampler_mode": "euler",
+        "velocity_norm_threshold": 0.0,
+        "velocity_ema_factor": 0.0,
+        "dcw_enabled": null,
+        "dcw_mode": "double",
+        "dcw_scaler": 0.05,
+        "dcw_high_scaler": 0.02,
+        "dcw_wavelet": "haar",
+        "timesteps": null,
+        "repainting_start": 0.0,
+        "repainting_end": -1,
+        "chunk_mask_mode": "auto",
+        "repaint_latent_crossfade_frames": 10,
+        "repaint_wav_crossfade_sec": 0.0,
+        "repaint_mode": "balanced",
+        "repaint_strength": 0.5,
+        "retake_seed": null,
+        "retake_variance": 0.0,
+        "flow_edit_morph": false,
+        "flow_edit_source_caption": "",
+        "flow_edit_source_lyrics": "",
+        "flow_edit_n_min": 0.0,
+        "flow_edit_n_max": 1.0,
+        "flow_edit_n_avg": 1,
+        "audio_cover_strength": 1.0,
+        "cover_noise_strength": 0.0,
+        "thinking": false,
+        "lm_temperature": 0.85,
+        "lm_cfg_scale": 2.0,
+        "lm_top_k": 0,
+        "lm_top_p": 0.9,
+        "lm_negative_prompt": "NO USER INPUT",
+        "use_cot_metas": false,
+        "use_cot_caption": false,
+        "use_cot_lyrics": false,
+        "use_cot_language": false,
+        "use_constrained_decoding": false,
+        "cot_bpm": null,
+        "cot_keyscale": "",
+        "cot_timesignature": "",
+        "cot_duration": null,
+        "cot_vocal_language": "unknown",
+        "cot_caption": "",
+        "cot_lyrics": "",
+        "lora_loaded": false,
+        "use_lora": false,
+        "lora_scale": 1.0,
+        "lora_weights_hash": "",
+        "audio_format": "wav"
+      },
+      "saved": "/private/tmp/mc5/out/wav/q8-bf16-nolm-120s_0.wav"
+    }
+  ],
+  "ok": true,
+  "gpu_config": {
+    "tier": "tier5",
+    "gpu_memory_gb": 13.32,
+    "max_duration_with_lm": 480,
+    "max_duration_without_lm": 600,
+    "recommended_backend": "mlx",
+    "offload_to_cpu_default": false,
+    "offload_dit_to_cpu_default": false
+  },
+  "init": {
+    "ok": true,
+    "status": "[OK] Model initialized successfully on mps\nMain model: /private/tmp/mc5/Ace-Step1.5/acestep-v15-turbo\nVAE: /private/tmp/mc5/Ace-Step1.5/vae\nText encoder: /private/tmp/mc5/Ace-Step1.5/Qwen3-Embedding-0.6B\nDtype: torch.bfloat16\nAttention: sdpa\nCompiled: False\nQuantization: Disabled\nOffload to CPU: False\nOffload DiT to CPU: False\nMLX DiT: Active (native MLX)\nMLX VAE: Active (native MLX)",
+    "wall_s": 13.22,
+    "peak_footprint_mb": 10642.2,
+    "torch_model": {
+      "params_bytes": 1636827276,
+      "params": 818413638
+    },
+    "torch_vae": {
+      "params_bytes": 337390852,
+      "params": 168695426
+    },
+    "torch_text_encoder": {
+      "params_bytes": 1191553024,
+      "params": 595776512
+    },
+    "mlx_dit": {
+      "params_bytes": 3150917760,
+      "params": 1575458880
+    },
+    "mlx_vae": {
+      "params_bytes": 337321216,
+      "params": 168660608
+    },
+    "use_mlx_dit": true,
+    "use_mlx_vae": true,
+    "dtype": "torch.bfloat16"
+  },
+  "params": {
+    "thinking": false,
+    "inference_steps": 8,
+    "guidance_scale": 1.0,
+    "shift": 1.0,
+    "infer_method": "ode",
+    "use_adg": false,
+    "dcw_enabled": null,
+    "audio_format": "wav"
+  },
+  "wall_s": 24.26,
+  "result": {
+    "success": true,
+    "status_message": "Generation completed successfully!",
+    "error": null
+  },
+  "extra_keys": [
+    "chunk_masks",
+    "context_latents",
+    "encoder_attention_mask",
+    "encoder_hidden_states",
+    "latent_masks",
+    "lm_metadata",
+    "lyric_token_idss",
+    "pred_latents",
+    "retake_seed_value",
+    "retake_variance",
+    "seed_value",
+    "spans",
+    "src_latents",
+    "target_latents",
+    "time_costs"
+  ],
+  "process_peak_footprint_mb": 16848.0,
+  "mlx_mem_end": {
+    "mlx_active": 3531020704,
+    "mlx_peak": 6383442324,
+    "mlx_cache": 46481408
+  },
+  "torch_mem_end": {
+    "torch_mps_allocated": 476418048,
+    "torch_mps_driver": 6981386240
+  },
+  "ru_maxrss_mb": 4027.4,
+  "marks": [
+    {
+      "t": 9.04,
+      "what": "init.load_torch_dit: 4.72s fp=3532.3MB (delta +3175.2MB)"
+    },
+    {
+      "t": 14.49,
+      "what": "init.load_torch_vae: 5.46s fp=4221.4MB (delta +689.0MB)"
+    },
+    {
+      "t": 15.75,
+      "what": "init.load_text_encoder: 1.26s fp=6229.2MB (delta +2007.8MB)"
+    },
+    {
+      "t": 16.16,
+      "what": "init.mlx_dit: 0.41s fp=9244.3MB (delta +3015.1MB)"
+    },
+    {
+      "t": 17.53,
+      "what": "init.mlx_vae: 1.37s fp=10805.3MB (delta +1560.9MB)"
+    },
+    {
+      "t": 17.53,
+      "what": "init: 13.22s fp=10805.3MB (delta +10448.2MB)"
+    },
+    {
+      "t": 17.84,
+      "what": "text.encode: 0.08s fp=11042.8MB (delta +16.2MB)"
+    },
+    {
+      "t": 17.84,
+      "what": "lyric.encode: 0.00s fp=11043.5MB (delta +0.7MB)"
+    },
+    {
+      "t": 18.33,
+      "what": "condition.prepare: 0.49s fp=11172.6MB (delta +128.2MB)"
+    },
+    {
+      "t": 28.65,
+      "what": "dit.diffusion: 10.33s fp=11847.6MB (delta +675.0MB)"
+    },
+    {
+      "t": 29.5,
+      "what": "staged free: torch text encoder + condition encoder released before VAE decode"
+    },
+    {
+      "t": 41.0,
+      "what": "vae.decode.mlx: 11.40s fp=7390.7MB (delta -2406.6MB)"
+    },
+    {
+      "t": 41.0,
+      "what": "vae.decode.tiled: 11.40s fp=7390.7MB (delta -2406.6MB)"
+    },
+    {
+      "t": 41.29,
+      "what": "generate.total: 23.76s fp=7390.8MB (delta -3414.5MB)"
+    }
+  ]
+}

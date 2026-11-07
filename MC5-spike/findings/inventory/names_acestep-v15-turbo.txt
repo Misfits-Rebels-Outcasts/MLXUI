@@ -1,0 +1,680 @@
+# /private/tmp/mc5/Ace-Step1.5/acestep-v15-turbo/model.safetensors
+# size 4787825604 B, 677 tensors
+# name                                                                   dtype  shape                           numel  conversion
+decoder.condition_embedder.bias                                        BF16   [2048]                           2048  bias: unchanged
+decoder.condition_embedder.weight                                      BF16   [2048, 2048]                  4194304  
+decoder.layers.0.cross_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.0.cross_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.0.cross_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.0.cross_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.0.cross_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.0.cross_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.0.cross_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.0.mlp.down_proj.weight                                  BF16   [2048, 6144]                 12582912  
+decoder.layers.0.mlp.gate_proj.weight                                  BF16   [6144, 2048]                 12582912  
+decoder.layers.0.mlp.up_proj.weight                                    BF16   [6144, 2048]                 12582912  
+decoder.layers.0.mlp_norm.weight                                       BF16   [2048]                           2048  
+decoder.layers.0.scale_shift_table                                     BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.0.self_attn.k_norm.weight                               BF16   [128]                             128  
+decoder.layers.0.self_attn.k_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.0.self_attn.o_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.0.self_attn.q_norm.weight                               BF16   [128]                             128  
+decoder.layers.0.self_attn.q_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.0.self_attn.v_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.0.self_attn_norm.weight                                 BF16   [2048]                           2048  
+decoder.layers.1.cross_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.1.cross_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.1.cross_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.1.cross_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.1.cross_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.1.cross_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.1.cross_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.1.mlp.down_proj.weight                                  BF16   [2048, 6144]                 12582912  
+decoder.layers.1.mlp.gate_proj.weight                                  BF16   [6144, 2048]                 12582912  
+decoder.layers.1.mlp.up_proj.weight                                    BF16   [6144, 2048]                 12582912  
+decoder.layers.1.mlp_norm.weight                                       BF16   [2048]                           2048  
+decoder.layers.1.scale_shift_table                                     BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.1.self_attn.k_norm.weight                               BF16   [128]                             128  
+decoder.layers.1.self_attn.k_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.1.self_attn.o_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.1.self_attn.q_norm.weight                               BF16   [128]                             128  
+decoder.layers.1.self_attn.q_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.1.self_attn.v_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.1.self_attn_norm.weight                                 BF16   [2048]                           2048  
+decoder.layers.10.cross_attn.k_norm.weight                             BF16   [128]                             128  
+decoder.layers.10.cross_attn.k_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.10.cross_attn.o_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.10.cross_attn.q_norm.weight                             BF16   [128]                             128  
+decoder.layers.10.cross_attn.q_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.10.cross_attn.v_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.10.cross_attn_norm.weight                               BF16   [2048]                           2048  
+decoder.layers.10.mlp.down_proj.weight                                 BF16   [2048, 6144]                 12582912  
+decoder.layers.10.mlp.gate_proj.weight                                 BF16   [6144, 2048]                 12582912  
+decoder.layers.10.mlp.up_proj.weight                                   BF16   [6144, 2048]                 12582912  
+decoder.layers.10.mlp_norm.weight                                      BF16   [2048]                           2048  
+decoder.layers.10.scale_shift_table                                    BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.10.self_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.10.self_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.10.self_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.10.self_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.10.self_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.10.self_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.10.self_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.11.cross_attn.k_norm.weight                             BF16   [128]                             128  
+decoder.layers.11.cross_attn.k_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.11.cross_attn.o_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.11.cross_attn.q_norm.weight                             BF16   [128]                             128  
+decoder.layers.11.cross_attn.q_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.11.cross_attn.v_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.11.cross_attn_norm.weight                               BF16   [2048]                           2048  
+decoder.layers.11.mlp.down_proj.weight                                 BF16   [2048, 6144]                 12582912  
+decoder.layers.11.mlp.gate_proj.weight                                 BF16   [6144, 2048]                 12582912  
+decoder.layers.11.mlp.up_proj.weight                                   BF16   [6144, 2048]                 12582912  
+decoder.layers.11.mlp_norm.weight                                      BF16   [2048]                           2048  
+decoder.layers.11.scale_shift_table                                    BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.11.self_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.11.self_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.11.self_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.11.self_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.11.self_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.11.self_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.11.self_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.12.cross_attn.k_norm.weight                             BF16   [128]                             128  
+decoder.layers.12.cross_attn.k_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.12.cross_attn.o_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.12.cross_attn.q_norm.weight                             BF16   [128]                             128  
+decoder.layers.12.cross_attn.q_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.12.cross_attn.v_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.12.cross_attn_norm.weight                               BF16   [2048]                           2048  
+decoder.layers.12.mlp.down_proj.weight                                 BF16   [2048, 6144]                 12582912  
+decoder.layers.12.mlp.gate_proj.weight                                 BF16   [6144, 2048]                 12582912  
+decoder.layers.12.mlp.up_proj.weight                                   BF16   [6144, 2048]                 12582912  
+decoder.layers.12.mlp_norm.weight                                      BF16   [2048]                           2048  
+decoder.layers.12.scale_shift_table                                    BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.12.self_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.12.self_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.12.self_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.12.self_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.12.self_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.12.self_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.12.self_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.13.cross_attn.k_norm.weight                             BF16   [128]                             128  
+decoder.layers.13.cross_attn.k_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.13.cross_attn.o_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.13.cross_attn.q_norm.weight                             BF16   [128]                             128  
+decoder.layers.13.cross_attn.q_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.13.cross_attn.v_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.13.cross_attn_norm.weight                               BF16   [2048]                           2048  
+decoder.layers.13.mlp.down_proj.weight                                 BF16   [2048, 6144]                 12582912  
+decoder.layers.13.mlp.gate_proj.weight                                 BF16   [6144, 2048]                 12582912  
+decoder.layers.13.mlp.up_proj.weight                                   BF16   [6144, 2048]                 12582912  
+decoder.layers.13.mlp_norm.weight                                      BF16   [2048]                           2048  
+decoder.layers.13.scale_shift_table                                    BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.13.self_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.13.self_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.13.self_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.13.self_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.13.self_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.13.self_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.13.self_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.14.cross_attn.k_norm.weight                             BF16   [128]                             128  
+decoder.layers.14.cross_attn.k_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.14.cross_attn.o_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.14.cross_attn.q_norm.weight                             BF16   [128]                             128  
+decoder.layers.14.cross_attn.q_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.14.cross_attn.v_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.14.cross_attn_norm.weight                               BF16   [2048]                           2048  
+decoder.layers.14.mlp.down_proj.weight                                 BF16   [2048, 6144]                 12582912  
+decoder.layers.14.mlp.gate_proj.weight                                 BF16   [6144, 2048]                 12582912  
+decoder.layers.14.mlp.up_proj.weight                                   BF16   [6144, 2048]                 12582912  
+decoder.layers.14.mlp_norm.weight                                      BF16   [2048]                           2048  
+decoder.layers.14.scale_shift_table                                    BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.14.self_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.14.self_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.14.self_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.14.self_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.14.self_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.14.self_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.14.self_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.15.cross_attn.k_norm.weight                             BF16   [128]                             128  
+decoder.layers.15.cross_attn.k_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.15.cross_attn.o_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.15.cross_attn.q_norm.weight                             BF16   [128]                             128  
+decoder.layers.15.cross_attn.q_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.15.cross_attn.v_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.15.cross_attn_norm.weight                               BF16   [2048]                           2048  
+decoder.layers.15.mlp.down_proj.weight                                 BF16   [2048, 6144]                 12582912  
+decoder.layers.15.mlp.gate_proj.weight                                 BF16   [6144, 2048]                 12582912  
+decoder.layers.15.mlp.up_proj.weight                                   BF16   [6144, 2048]                 12582912  
+decoder.layers.15.mlp_norm.weight                                      BF16   [2048]                           2048  
+decoder.layers.15.scale_shift_table                                    BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.15.self_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.15.self_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.15.self_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.15.self_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.15.self_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.15.self_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.15.self_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.16.cross_attn.k_norm.weight                             BF16   [128]                             128  
+decoder.layers.16.cross_attn.k_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.16.cross_attn.o_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.16.cross_attn.q_norm.weight                             BF16   [128]                             128  
+decoder.layers.16.cross_attn.q_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.16.cross_attn.v_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.16.cross_attn_norm.weight                               BF16   [2048]                           2048  
+decoder.layers.16.mlp.down_proj.weight                                 BF16   [2048, 6144]                 12582912  
+decoder.layers.16.mlp.gate_proj.weight                                 BF16   [6144, 2048]                 12582912  
+decoder.layers.16.mlp.up_proj.weight                                   BF16   [6144, 2048]                 12582912  
+decoder.layers.16.mlp_norm.weight                                      BF16   [2048]                           2048  
+decoder.layers.16.scale_shift_table                                    BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.16.self_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.16.self_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.16.self_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.16.self_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.16.self_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.16.self_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.16.self_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.17.cross_attn.k_norm.weight                             BF16   [128]                             128  
+decoder.layers.17.cross_attn.k_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.17.cross_attn.o_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.17.cross_attn.q_norm.weight                             BF16   [128]                             128  
+decoder.layers.17.cross_attn.q_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.17.cross_attn.v_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.17.cross_attn_norm.weight                               BF16   [2048]                           2048  
+decoder.layers.17.mlp.down_proj.weight                                 BF16   [2048, 6144]                 12582912  
+decoder.layers.17.mlp.gate_proj.weight                                 BF16   [6144, 2048]                 12582912  
+decoder.layers.17.mlp.up_proj.weight                                   BF16   [6144, 2048]                 12582912  
+decoder.layers.17.mlp_norm.weight                                      BF16   [2048]                           2048  
+decoder.layers.17.scale_shift_table                                    BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.17.self_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.17.self_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.17.self_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.17.self_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.17.self_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.17.self_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.17.self_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.18.cross_attn.k_norm.weight                             BF16   [128]                             128  
+decoder.layers.18.cross_attn.k_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.18.cross_attn.o_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.18.cross_attn.q_norm.weight                             BF16   [128]                             128  
+decoder.layers.18.cross_attn.q_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.18.cross_attn.v_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.18.cross_attn_norm.weight                               BF16   [2048]                           2048  
+decoder.layers.18.mlp.down_proj.weight                                 BF16   [2048, 6144]                 12582912  
+decoder.layers.18.mlp.gate_proj.weight                                 BF16   [6144, 2048]                 12582912  
+decoder.layers.18.mlp.up_proj.weight                                   BF16   [6144, 2048]                 12582912  
+decoder.layers.18.mlp_norm.weight                                      BF16   [2048]                           2048  
+decoder.layers.18.scale_shift_table                                    BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.18.self_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.18.self_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.18.self_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.18.self_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.18.self_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.18.self_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.18.self_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.19.cross_attn.k_norm.weight                             BF16   [128]                             128  
+decoder.layers.19.cross_attn.k_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.19.cross_attn.o_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.19.cross_attn.q_norm.weight                             BF16   [128]                             128  
+decoder.layers.19.cross_attn.q_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.19.cross_attn.v_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.19.cross_attn_norm.weight                               BF16   [2048]                           2048  
+decoder.layers.19.mlp.down_proj.weight                                 BF16   [2048, 6144]                 12582912  
+decoder.layers.19.mlp.gate_proj.weight                                 BF16   [6144, 2048]                 12582912  
+decoder.layers.19.mlp.up_proj.weight                                   BF16   [6144, 2048]                 12582912  
+decoder.layers.19.mlp_norm.weight                                      BF16   [2048]                           2048  
+decoder.layers.19.scale_shift_table                                    BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.19.self_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.19.self_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.19.self_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.19.self_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.19.self_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.19.self_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.19.self_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.2.cross_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.2.cross_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.2.cross_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.2.cross_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.2.cross_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.2.cross_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.2.cross_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.2.mlp.down_proj.weight                                  BF16   [2048, 6144]                 12582912  
+decoder.layers.2.mlp.gate_proj.weight                                  BF16   [6144, 2048]                 12582912  
+decoder.layers.2.mlp.up_proj.weight                                    BF16   [6144, 2048]                 12582912  
+decoder.layers.2.mlp_norm.weight                                       BF16   [2048]                           2048  
+decoder.layers.2.scale_shift_table                                     BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.2.self_attn.k_norm.weight                               BF16   [128]                             128  
+decoder.layers.2.self_attn.k_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.2.self_attn.o_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.2.self_attn.q_norm.weight                               BF16   [128]                             128  
+decoder.layers.2.self_attn.q_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.2.self_attn.v_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.2.self_attn_norm.weight                                 BF16   [2048]                           2048  
+decoder.layers.20.cross_attn.k_norm.weight                             BF16   [128]                             128  
+decoder.layers.20.cross_attn.k_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.20.cross_attn.o_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.20.cross_attn.q_norm.weight                             BF16   [128]                             128  
+decoder.layers.20.cross_attn.q_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.20.cross_attn.v_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.20.cross_attn_norm.weight                               BF16   [2048]                           2048  
+decoder.layers.20.mlp.down_proj.weight                                 BF16   [2048, 6144]                 12582912  
+decoder.layers.20.mlp.gate_proj.weight                                 BF16   [6144, 2048]                 12582912  
+decoder.layers.20.mlp.up_proj.weight                                   BF16   [6144, 2048]                 12582912  
+decoder.layers.20.mlp_norm.weight                                      BF16   [2048]                           2048  
+decoder.layers.20.scale_shift_table                                    BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.20.self_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.20.self_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.20.self_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.20.self_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.20.self_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.20.self_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.20.self_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.21.cross_attn.k_norm.weight                             BF16   [128]                             128  
+decoder.layers.21.cross_attn.k_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.21.cross_attn.o_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.21.cross_attn.q_norm.weight                             BF16   [128]                             128  
+decoder.layers.21.cross_attn.q_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.21.cross_attn.v_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.21.cross_attn_norm.weight                               BF16   [2048]                           2048  
+decoder.layers.21.mlp.down_proj.weight                                 BF16   [2048, 6144]                 12582912  
+decoder.layers.21.mlp.gate_proj.weight                                 BF16   [6144, 2048]                 12582912  
+decoder.layers.21.mlp.up_proj.weight                                   BF16   [6144, 2048]                 12582912  
+decoder.layers.21.mlp_norm.weight                                      BF16   [2048]                           2048  
+decoder.layers.21.scale_shift_table                                    BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.21.self_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.21.self_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.21.self_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.21.self_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.21.self_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.21.self_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.21.self_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.22.cross_attn.k_norm.weight                             BF16   [128]                             128  
+decoder.layers.22.cross_attn.k_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.22.cross_attn.o_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.22.cross_attn.q_norm.weight                             BF16   [128]                             128  
+decoder.layers.22.cross_attn.q_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.22.cross_attn.v_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.22.cross_attn_norm.weight                               BF16   [2048]                           2048  
+decoder.layers.22.mlp.down_proj.weight                                 BF16   [2048, 6144]                 12582912  
+decoder.layers.22.mlp.gate_proj.weight                                 BF16   [6144, 2048]                 12582912  
+decoder.layers.22.mlp.up_proj.weight                                   BF16   [6144, 2048]                 12582912  
+decoder.layers.22.mlp_norm.weight                                      BF16   [2048]                           2048  
+decoder.layers.22.scale_shift_table                                    BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.22.self_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.22.self_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.22.self_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.22.self_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.22.self_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.22.self_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.22.self_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.23.cross_attn.k_norm.weight                             BF16   [128]                             128  
+decoder.layers.23.cross_attn.k_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.23.cross_attn.o_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.23.cross_attn.q_norm.weight                             BF16   [128]                             128  
+decoder.layers.23.cross_attn.q_proj.weight                             BF16   [2048, 2048]                  4194304  
+decoder.layers.23.cross_attn.v_proj.weight                             BF16   [1024, 2048]                  2097152  
+decoder.layers.23.cross_attn_norm.weight                               BF16   [2048]                           2048  
+decoder.layers.23.mlp.down_proj.weight                                 BF16   [2048, 6144]                 12582912  
+decoder.layers.23.mlp.gate_proj.weight                                 BF16   [6144, 2048]                 12582912  
+decoder.layers.23.mlp.up_proj.weight                                   BF16   [6144, 2048]                 12582912  
+decoder.layers.23.mlp_norm.weight                                      BF16   [2048]                           2048  
+decoder.layers.23.scale_shift_table                                    BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.23.self_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.23.self_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.23.self_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.23.self_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.23.self_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.23.self_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.23.self_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.3.cross_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.3.cross_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.3.cross_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.3.cross_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.3.cross_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.3.cross_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.3.cross_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.3.mlp.down_proj.weight                                  BF16   [2048, 6144]                 12582912  
+decoder.layers.3.mlp.gate_proj.weight                                  BF16   [6144, 2048]                 12582912  
+decoder.layers.3.mlp.up_proj.weight                                    BF16   [6144, 2048]                 12582912  
+decoder.layers.3.mlp_norm.weight                                       BF16   [2048]                           2048  
+decoder.layers.3.scale_shift_table                                     BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.3.self_attn.k_norm.weight                               BF16   [128]                             128  
+decoder.layers.3.self_attn.k_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.3.self_attn.o_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.3.self_attn.q_norm.weight                               BF16   [128]                             128  
+decoder.layers.3.self_attn.q_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.3.self_attn.v_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.3.self_attn_norm.weight                                 BF16   [2048]                           2048  
+decoder.layers.4.cross_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.4.cross_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.4.cross_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.4.cross_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.4.cross_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.4.cross_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.4.cross_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.4.mlp.down_proj.weight                                  BF16   [2048, 6144]                 12582912  
+decoder.layers.4.mlp.gate_proj.weight                                  BF16   [6144, 2048]                 12582912  
+decoder.layers.4.mlp.up_proj.weight                                    BF16   [6144, 2048]                 12582912  
+decoder.layers.4.mlp_norm.weight                                       BF16   [2048]                           2048  
+decoder.layers.4.scale_shift_table                                     BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.4.self_attn.k_norm.weight                               BF16   [128]                             128  
+decoder.layers.4.self_attn.k_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.4.self_attn.o_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.4.self_attn.q_norm.weight                               BF16   [128]                             128  
+decoder.layers.4.self_attn.q_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.4.self_attn.v_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.4.self_attn_norm.weight                                 BF16   [2048]                           2048  
+decoder.layers.5.cross_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.5.cross_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.5.cross_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.5.cross_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.5.cross_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.5.cross_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.5.cross_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.5.mlp.down_proj.weight                                  BF16   [2048, 6144]                 12582912  
+decoder.layers.5.mlp.gate_proj.weight                                  BF16   [6144, 2048]                 12582912  
+decoder.layers.5.mlp.up_proj.weight                                    BF16   [6144, 2048]                 12582912  
+decoder.layers.5.mlp_norm.weight                                       BF16   [2048]                           2048  
+decoder.layers.5.scale_shift_table                                     BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.5.self_attn.k_norm.weight                               BF16   [128]                             128  
+decoder.layers.5.self_attn.k_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.5.self_attn.o_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.5.self_attn.q_norm.weight                               BF16   [128]                             128  
+decoder.layers.5.self_attn.q_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.5.self_attn.v_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.5.self_attn_norm.weight                                 BF16   [2048]                           2048  
+decoder.layers.6.cross_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.6.cross_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.6.cross_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.6.cross_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.6.cross_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.6.cross_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.6.cross_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.6.mlp.down_proj.weight                                  BF16   [2048, 6144]                 12582912  
+decoder.layers.6.mlp.gate_proj.weight                                  BF16   [6144, 2048]                 12582912  
+decoder.layers.6.mlp.up_proj.weight                                    BF16   [6144, 2048]                 12582912  
+decoder.layers.6.mlp_norm.weight                                       BF16   [2048]                           2048  
+decoder.layers.6.scale_shift_table                                     BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.6.self_attn.k_norm.weight                               BF16   [128]                             128  
+decoder.layers.6.self_attn.k_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.6.self_attn.o_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.6.self_attn.q_norm.weight                               BF16   [128]                             128  
+decoder.layers.6.self_attn.q_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.6.self_attn.v_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.6.self_attn_norm.weight                                 BF16   [2048]                           2048  
+decoder.layers.7.cross_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.7.cross_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.7.cross_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.7.cross_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.7.cross_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.7.cross_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.7.cross_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.7.mlp.down_proj.weight                                  BF16   [2048, 6144]                 12582912  
+decoder.layers.7.mlp.gate_proj.weight                                  BF16   [6144, 2048]                 12582912  
+decoder.layers.7.mlp.up_proj.weight                                    BF16   [6144, 2048]                 12582912  
+decoder.layers.7.mlp_norm.weight                                       BF16   [2048]                           2048  
+decoder.layers.7.scale_shift_table                                     BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.7.self_attn.k_norm.weight                               BF16   [128]                             128  
+decoder.layers.7.self_attn.k_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.7.self_attn.o_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.7.self_attn.q_norm.weight                               BF16   [128]                             128  
+decoder.layers.7.self_attn.q_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.7.self_attn.v_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.7.self_attn_norm.weight                                 BF16   [2048]                           2048  
+decoder.layers.8.cross_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.8.cross_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.8.cross_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.8.cross_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.8.cross_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.8.cross_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.8.cross_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.8.mlp.down_proj.weight                                  BF16   [2048, 6144]                 12582912  
+decoder.layers.8.mlp.gate_proj.weight                                  BF16   [6144, 2048]                 12582912  
+decoder.layers.8.mlp.up_proj.weight                                    BF16   [6144, 2048]                 12582912  
+decoder.layers.8.mlp_norm.weight                                       BF16   [2048]                           2048  
+decoder.layers.8.scale_shift_table                                     BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.8.self_attn.k_norm.weight                               BF16   [128]                             128  
+decoder.layers.8.self_attn.k_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.8.self_attn.o_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.8.self_attn.q_norm.weight                               BF16   [128]                             128  
+decoder.layers.8.self_attn.q_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.8.self_attn.v_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.8.self_attn_norm.weight                                 BF16   [2048]                           2048  
+decoder.layers.9.cross_attn.k_norm.weight                              BF16   [128]                             128  
+decoder.layers.9.cross_attn.k_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.9.cross_attn.o_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.9.cross_attn.q_norm.weight                              BF16   [128]                             128  
+decoder.layers.9.cross_attn.q_proj.weight                              BF16   [2048, 2048]                  4194304  
+decoder.layers.9.cross_attn.v_proj.weight                              BF16   [1024, 2048]                  2097152  
+decoder.layers.9.cross_attn_norm.weight                                BF16   [2048]                           2048  
+decoder.layers.9.mlp.down_proj.weight                                  BF16   [2048, 6144]                 12582912  
+decoder.layers.9.mlp.gate_proj.weight                                  BF16   [6144, 2048]                 12582912  
+decoder.layers.9.mlp.up_proj.weight                                    BF16   [6144, 2048]                 12582912  
+decoder.layers.9.mlp_norm.weight                                       BF16   [2048]                           2048  
+decoder.layers.9.scale_shift_table                                     BF16   [1, 6, 2048]                    12288  plain param
+decoder.layers.9.self_attn.k_norm.weight                               BF16   [128]                             128  
+decoder.layers.9.self_attn.k_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.9.self_attn.o_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.9.self_attn.q_norm.weight                               BF16   [128]                             128  
+decoder.layers.9.self_attn.q_proj.weight                               BF16   [2048, 2048]                  4194304  
+decoder.layers.9.self_attn.v_proj.weight                               BF16   [1024, 2048]                  2097152  
+decoder.layers.9.self_attn_norm.weight                                 BF16   [2048]                           2048  
+decoder.norm_out.weight                                                BF16   [2048]                           2048  
+decoder.proj_in.1.bias                                                 BF16   [2048]                           2048  bias: unchanged
+decoder.proj_in.1.weight                                               BF16   [2048, 192, 2]                 786432  Conv1d [out,in,K]->[out,K,in]
+decoder.proj_out.1.bias                                                BF16   [64]                               64  bias: unchanged
+decoder.proj_out.1.weight                                              BF16   [2048, 64, 2]                  262144  Conv1d [out,in,K]->[out,K,in]
+decoder.scale_shift_table                                              BF16   [1, 2, 2048]                     4096  plain param
+decoder.time_embed.linear_1.bias                                       BF16   [2048]                           2048  bias: unchanged
+decoder.time_embed.linear_1.weight                                     BF16   [2048, 256]                    524288  
+decoder.time_embed.linear_2.bias                                       BF16   [2048]                           2048  bias: unchanged
+decoder.time_embed.linear_2.weight                                     BF16   [2048, 2048]                  4194304  
+decoder.time_embed.time_proj.bias                                      BF16   [12288]                         12288  bias: unchanged
+decoder.time_embed.time_proj.weight                                    BF16   [12288, 2048]                25165824  
+decoder.time_embed_r.linear_1.bias                                     BF16   [2048]                           2048  bias: unchanged
+decoder.time_embed_r.linear_1.weight                                   BF16   [2048, 256]                    524288  
+decoder.time_embed_r.linear_2.bias                                     BF16   [2048]                           2048  bias: unchanged
+decoder.time_embed_r.linear_2.weight                                   BF16   [2048, 2048]                  4194304  
+decoder.time_embed_r.time_proj.bias                                    BF16   [12288]                         12288  bias: unchanged
+decoder.time_embed_r.time_proj.weight                                  BF16   [12288, 2048]                25165824  
+detokenizer.embed_tokens.bias                                          BF16   [2048]                           2048  bias: unchanged
+detokenizer.embed_tokens.weight                                        BF16   [2048, 2048]                  4194304  
+detokenizer.layers.0.input_layernorm.weight                            BF16   [2048]                           2048  
+detokenizer.layers.0.mlp.down_proj.weight                              BF16   [2048, 6144]                 12582912  
+detokenizer.layers.0.mlp.gate_proj.weight                              BF16   [6144, 2048]                 12582912  
+detokenizer.layers.0.mlp.up_proj.weight                                BF16   [6144, 2048]                 12582912  
+detokenizer.layers.0.post_attention_layernorm.weight                   BF16   [2048]                           2048  
+detokenizer.layers.0.self_attn.k_norm.weight                           BF16   [128]                             128  
+detokenizer.layers.0.self_attn.k_proj.weight                           BF16   [1024, 2048]                  2097152  
+detokenizer.layers.0.self_attn.o_proj.weight                           BF16   [2048, 2048]                  4194304  
+detokenizer.layers.0.self_attn.q_norm.weight                           BF16   [128]                             128  
+detokenizer.layers.0.self_attn.q_proj.weight                           BF16   [2048, 2048]                  4194304  
+detokenizer.layers.0.self_attn.v_proj.weight                           BF16   [1024, 2048]                  2097152  
+detokenizer.layers.1.input_layernorm.weight                            BF16   [2048]                           2048  
+detokenizer.layers.1.mlp.down_proj.weight                              BF16   [2048, 6144]                 12582912  
+detokenizer.layers.1.mlp.gate_proj.weight                              BF16   [6144, 2048]                 12582912  
+detokenizer.layers.1.mlp.up_proj.weight                                BF16   [6144, 2048]                 12582912  
+detokenizer.layers.1.post_attention_layernorm.weight                   BF16   [2048]                           2048  
+detokenizer.layers.1.self_attn.k_norm.weight                           BF16   [128]                             128  
+detokenizer.layers.1.self_attn.k_proj.weight                           BF16   [1024, 2048]                  2097152  
+detokenizer.layers.1.self_attn.o_proj.weight                           BF16   [2048, 2048]                  4194304  
+detokenizer.layers.1.self_attn.q_norm.weight                           BF16   [128]                             128  
+detokenizer.layers.1.self_attn.q_proj.weight                           BF16   [2048, 2048]                  4194304  
+detokenizer.layers.1.self_attn.v_proj.weight                           BF16   [1024, 2048]                  2097152  
+detokenizer.norm.weight                                                BF16   [2048]                           2048  
+detokenizer.proj_out.bias                                              BF16   [64]                               64  bias: unchanged
+detokenizer.proj_out.weight                                            BF16   [64, 2048]                     131072  
+detokenizer.special_tokens                                             BF16   [1, 5, 2048]                    10240  
+encoder.lyric_encoder.embed_tokens.bias                                BF16   [2048]                           2048  bias: unchanged
+encoder.lyric_encoder.embed_tokens.weight                              BF16   [2048, 1024]                  2097152  
+encoder.lyric_encoder.layers.0.input_layernorm.weight                  BF16   [2048]                           2048  
+encoder.lyric_encoder.layers.0.mlp.down_proj.weight                    BF16   [2048, 6144]                 12582912  
+encoder.lyric_encoder.layers.0.mlp.gate_proj.weight                    BF16   [6144, 2048]                 12582912  
+encoder.lyric_encoder.layers.0.mlp.up_proj.weight                      BF16   [6144, 2048]                 12582912  
+encoder.lyric_encoder.layers.0.post_attention_layernorm.weight         BF16   [2048]                           2048  
+encoder.lyric_encoder.layers.0.self_attn.k_norm.weight                 BF16   [128]                             128  
+encoder.lyric_encoder.layers.0.self_attn.k_proj.weight                 BF16   [1024, 2048]                  2097152  
+encoder.lyric_encoder.layers.0.self_attn.o_proj.weight                 BF16   [2048, 2048]                  4194304  
+encoder.lyric_encoder.layers.0.self_attn.q_norm.weight                 BF16   [128]                             128  
+encoder.lyric_encoder.layers.0.self_attn.q_proj.weight                 BF16   [2048, 2048]                  4194304  
+encoder.lyric_encoder.layers.0.self_attn.v_proj.weight                 BF16   [1024, 2048]                  2097152  
+encoder.lyric_encoder.layers.1.input_layernorm.weight                  BF16   [2048]                           2048  
+encoder.lyric_encoder.layers.1.mlp.down_proj.weight                    BF16   [2048, 6144]                 12582912  
+encoder.lyric_encoder.layers.1.mlp.gate_proj.weight                    BF16   [6144, 2048]                 12582912  
+encoder.lyric_encoder.layers.1.mlp.up_proj.weight                      BF16   [6144, 2048]                 12582912  
+encoder.lyric_encoder.layers.1.post_attention_layernorm.weight         BF16   [2048]                           2048  
+encoder.lyric_encoder.layers.1.self_attn.k_norm.weight                 BF16   [128]                             128  
+encoder.lyric_encoder.layers.1.self_attn.k_proj.weight                 BF16   [1024, 2048]                  2097152  
+encoder.lyric_encoder.layers.1.self_attn.o_proj.weight                 BF16   [2048, 2048]                  4194304  
+encoder.lyric_encoder.layers.1.self_attn.q_norm.weight                 BF16   [128]                             128  
+encoder.lyric_encoder.layers.1.self_attn.q_proj.weight                 BF16   [2048, 2048]                  4194304  
+encoder.lyric_encoder.layers.1.self_attn.v_proj.weight                 BF16   [1024, 2048]                  2097152  
+encoder.lyric_encoder.layers.2.input_layernorm.weight                  BF16   [2048]                           2048  
+encoder.lyric_encoder.layers.2.mlp.down_proj.weight                    BF16   [2048, 6144]                 12582912  
+encoder.lyric_encoder.layers.2.mlp.gate_proj.weight                    BF16   [6144, 2048]                 12582912  
+encoder.lyric_encoder.layers.2.mlp.up_proj.weight                      BF16   [6144, 2048]                 12582912  
+encoder.lyric_encoder.layers.2.post_attention_layernorm.weight         BF16   [2048]                           2048  
+encoder.lyric_encoder.layers.2.self_attn.k_norm.weight                 BF16   [128]                             128  
+encoder.lyric_encoder.layers.2.self_attn.k_proj.weight                 BF16   [1024, 2048]                  2097152  
+encoder.lyric_encoder.layers.2.self_attn.o_proj.weight                 BF16   [2048, 2048]                  4194304  
+encoder.lyric_encoder.layers.2.self_attn.q_norm.weight                 BF16   [128]                             128  
+encoder.lyric_encoder.layers.2.self_attn.q_proj.weight                 BF16   [2048, 2048]                  4194304  
+encoder.lyric_encoder.layers.2.self_attn.v_proj.weight                 BF16   [1024, 2048]                  2097152  
+encoder.lyric_encoder.layers.3.input_layernorm.weight                  BF16   [2048]                           2048  
+encoder.lyric_encoder.layers.3.mlp.down_proj.weight                    BF16   [2048, 6144]                 12582912  
+encoder.lyric_encoder.layers.3.mlp.gate_proj.weight                    BF16   [6144, 2048]                 12582912  
+encoder.lyric_encoder.layers.3.mlp.up_proj.weight                      BF16   [6144, 2048]                 12582912  
+encoder.lyric_encoder.layers.3.post_attention_layernorm.weight         BF16   [2048]                           2048  
+encoder.lyric_encoder.layers.3.self_attn.k_norm.weight                 BF16   [128]                             128  
+encoder.lyric_encoder.layers.3.self_attn.k_proj.weight                 BF16   [1024, 2048]                  2097152  
+encoder.lyric_encoder.layers.3.self_attn.o_proj.weight                 BF16   [2048, 2048]                  4194304  
+encoder.lyric_encoder.layers.3.self_attn.q_norm.weight                 BF16   [128]                             128  
+encoder.lyric_encoder.layers.3.self_attn.q_proj.weight                 BF16   [2048, 2048]                  4194304  
+encoder.lyric_encoder.layers.3.self_attn.v_proj.weight                 BF16   [1024, 2048]                  2097152  
+encoder.lyric_encoder.layers.4.input_layernorm.weight                  BF16   [2048]                           2048  
+encoder.lyric_encoder.layers.4.mlp.down_proj.weight                    BF16   [2048, 6144]                 12582912  
+encoder.lyric_encoder.layers.4.mlp.gate_proj.weight                    BF16   [6144, 2048]                 12582912  
+encoder.lyric_encoder.layers.4.mlp.up_proj.weight                      BF16   [6144, 2048]                 12582912  
+encoder.lyric_encoder.layers.4.post_attention_layernorm.weight         BF16   [2048]                           2048  
+encoder.lyric_encoder.layers.4.self_attn.k_norm.weight                 BF16   [128]                             128  
+encoder.lyric_encoder.layers.4.self_attn.k_proj.weight                 BF16   [1024, 2048]                  2097152  
+encoder.lyric_encoder.layers.4.self_attn.o_proj.weight                 BF16   [2048, 2048]                  4194304  
+encoder.lyric_encoder.layers.4.self_attn.q_norm.weight                 BF16   [128]                             128  
+encoder.lyric_encoder.layers.4.self_attn.q_proj.weight                 BF16   [2048, 2048]                  4194304  
+encoder.lyric_encoder.layers.4.self_attn.v_proj.weight                 BF16   [1024, 2048]                  2097152  
+encoder.lyric_encoder.layers.5.input_layernorm.weight                  BF16   [2048]                           2048  
+encoder.lyric_encoder.layers.5.mlp.down_proj.weight                    BF16   [2048, 6144]                 12582912  
+encoder.lyric_encoder.layers.5.mlp.gate_proj.weight                    BF16   [6144, 2048]                 12582912  
+encoder.lyric_encoder.layers.5.mlp.up_proj.weight                      BF16   [6144, 2048]                 12582912  
+encoder.lyric_encoder.layers.5.post_attention_layernorm.weight         BF16   [2048]                           2048  
+encoder.lyric_encoder.layers.5.self_attn.k_norm.weight                 BF16   [128]                             128  
+encoder.lyric_encoder.layers.5.self_attn.k_proj.weight                 BF16   [1024, 2048]                  2097152  
+encoder.lyric_encoder.layers.5.self_attn.o_proj.weight                 BF16   [2048, 2048]                  4194304  
+encoder.lyric_encoder.layers.5.self_attn.q_norm.weight                 BF16   [128]                             128  
+encoder.lyric_encoder.layers.5.self_attn.q_proj.weight                 BF16   [2048, 2048]                  4194304  
+encoder.lyric_encoder.layers.5.self_attn.v_proj.weight                 BF16   [1024, 2048]                  2097152  
+encoder.lyric_encoder.layers.6.input_layernorm.weight                  BF16   [2048]                           2048  
+encoder.lyric_encoder.layers.6.mlp.down_proj.weight                    BF16   [2048, 6144]                 12582912  
+encoder.lyric_encoder.layers.6.mlp.gate_proj.weight                    BF16   [6144, 2048]                 12582912  
+encoder.lyric_encoder.layers.6.mlp.up_proj.weight                      BF16   [6144, 2048]                 12582912  
+encoder.lyric_encoder.layers.6.post_attention_layernorm.weight         BF16   [2048]                           2048  
+encoder.lyric_encoder.layers.6.self_attn.k_norm.weight                 BF16   [128]                             128  
+encoder.lyric_encoder.layers.6.self_attn.k_proj.weight                 BF16   [1024, 2048]                  2097152  
+encoder.lyric_encoder.layers.6.self_attn.o_proj.weight                 BF16   [2048, 2048]                  4194304  
+encoder.lyric_encoder.layers.6.self_attn.q_norm.weight                 BF16   [128]                             128  
+encoder.lyric_encoder.layers.6.self_attn.q_proj.weight                 BF16   [2048, 2048]                  4194304  
+encoder.lyric_encoder.layers.6.self_attn.v_proj.weight                 BF16   [1024, 2048]                  2097152  
+encoder.lyric_encoder.layers.7.input_layernorm.weight                  BF16   [2048]                           2048  
+encoder.lyric_encoder.layers.7.mlp.down_proj.weight                    BF16   [2048, 6144]                 12582912  
+encoder.lyric_encoder.layers.7.mlp.gate_proj.weight                    BF16   [6144, 2048]                 12582912  
+encoder.lyric_encoder.layers.7.mlp.up_proj.weight                      BF16   [6144, 2048]                 12582912  
+encoder.lyric_encoder.layers.7.post_attention_layernorm.weight         BF16   [2048]                           2048  
+encoder.lyric_encoder.layers.7.self_attn.k_norm.weight                 BF16   [128]                             128  
+encoder.lyric_encoder.layers.7.self_attn.k_proj.weight                 BF16   [1024, 2048]                  2097152  
+encoder.lyric_encoder.layers.7.self_attn.o_proj.weight                 BF16   [2048, 2048]                  4194304  
+encoder.lyric_encoder.layers.7.self_attn.q_norm.weight                 BF16   [128]                             128  
+encoder.lyric_encoder.layers.7.self_attn.q_proj.weight                 BF16   [2048, 2048]                  4194304  
+encoder.lyric_encoder.layers.7.self_attn.v_proj.weight                 BF16   [1024, 2048]                  2097152  
+encoder.lyric_encoder.norm.weight                                      BF16   [2048]                           2048  
+encoder.text_projector.weight                                          BF16   [2048, 1024]                  2097152  
+encoder.timbre_encoder.embed_tokens.bias                               BF16   [2048]                           2048  bias: unchanged
+encoder.timbre_encoder.embed_tokens.weight                             BF16   [2048, 64]                     131072  
+encoder.timbre_encoder.layers.0.input_layernorm.weight                 BF16   [2048]                           2048  
+encoder.timbre_encoder.layers.0.mlp.down_proj.weight                   BF16   [2048, 6144]                 12582912  
+encoder.timbre_encoder.layers.0.mlp.gate_proj.weight                   BF16   [6144, 2048]                 12582912  
+encoder.timbre_encoder.layers.0.mlp.up_proj.weight                     BF16   [6144, 2048]                 12582912  
+encoder.timbre_encoder.layers.0.post_attention_layernorm.weight        BF16   [2048]                           2048  
+encoder.timbre_encoder.layers.0.self_attn.k_norm.weight                BF16   [128]                             128  
+encoder.timbre_encoder.layers.0.self_attn.k_proj.weight                BF16   [1024, 2048]                  2097152  
+encoder.timbre_encoder.layers.0.self_attn.o_proj.weight                BF16   [2048, 2048]                  4194304  
+encoder.timbre_encoder.layers.0.self_attn.q_norm.weight                BF16   [128]                             128  
+encoder.timbre_encoder.layers.0.self_attn.q_proj.weight                BF16   [2048, 2048]                  4194304  
+encoder.timbre_encoder.layers.0.self_attn.v_proj.weight                BF16   [1024, 2048]                  2097152  
+encoder.timbre_encoder.layers.1.input_layernorm.weight                 BF16   [2048]                           2048  
+encoder.timbre_encoder.layers.1.mlp.down_proj.weight                   BF16   [2048, 6144]                 12582912  
+encoder.timbre_encoder.layers.1.mlp.gate_proj.weight                   BF16   [6144, 2048]                 12582912  
+encoder.timbre_encoder.layers.1.mlp.up_proj.weight                     BF16   [6144, 2048]                 12582912  
+encoder.timbre_encoder.layers.1.post_attention_layernorm.weight        BF16   [2048]                           2048  
+encoder.timbre_encoder.layers.1.self_attn.k_norm.weight                BF16   [128]                             128  
+encoder.timbre_encoder.layers.1.self_attn.k_proj.weight                BF16   [1024, 2048]                  2097152  
+encoder.timbre_encoder.layers.1.self_attn.o_proj.weight                BF16   [2048, 2048]                  4194304  
+encoder.timbre_encoder.layers.1.self_attn.q_norm.weight                BF16   [128]                             128  
+encoder.timbre_encoder.layers.1.self_attn.q_proj.weight                BF16   [2048, 2048]                  4194304  
+encoder.timbre_encoder.layers.1.self_attn.v_proj.weight                BF16   [1024, 2048]                  2097152  
+encoder.timbre_encoder.layers.2.input_layernorm.weight                 BF16   [2048]                           2048  
+encoder.timbre_encoder.layers.2.mlp.down_proj.weight                   BF16   [2048, 6144]                 12582912  
+encoder.timbre_encoder.layers.2.mlp.gate_proj.weight                   BF16   [6144, 2048]                 12582912  
+encoder.timbre_encoder.layers.2.mlp.up_proj.weight                     BF16   [6144, 2048]                 12582912  
+encoder.timbre_encoder.layers.2.post_attention_layernorm.weight        BF16   [2048]                           2048  
+encoder.timbre_encoder.layers.2.self_attn.k_norm.weight                BF16   [128]                             128  
+encoder.timbre_encoder.layers.2.self_attn.k_proj.weight                BF16   [1024, 2048]                  2097152  
+encoder.timbre_encoder.layers.2.self_attn.o_proj.weight                BF16   [2048, 2048]                  4194304  
+encoder.timbre_encoder.layers.2.self_attn.q_norm.weight                BF16   [128]                             128  
+encoder.timbre_encoder.layers.2.self_attn.q_proj.weight                BF16   [2048, 2048]                  4194304  
+encoder.timbre_encoder.layers.2.self_attn.v_proj.weight                BF16   [1024, 2048]                  2097152  
+encoder.timbre_encoder.layers.3.input_layernorm.weight                 BF16   [2048]                           2048  
+encoder.timbre_encoder.layers.3.mlp.down_proj.weight                   BF16   [2048, 6144]                 12582912  
+encoder.timbre_encoder.layers.3.mlp.gate_proj.weight                   BF16   [6144, 2048]                 12582912  
+encoder.timbre_encoder.layers.3.mlp.up_proj.weight                     BF16   [6144, 2048]                 12582912  
+encoder.timbre_encoder.layers.3.post_attention_layernorm.weight        BF16   [2048]                           2048  
+encoder.timbre_encoder.layers.3.self_attn.k_norm.weight                BF16   [128]                             128  
+encoder.timbre_encoder.layers.3.self_attn.k_proj.weight                BF16   [1024, 2048]                  2097152  
+encoder.timbre_encoder.layers.3.self_attn.o_proj.weight                BF16   [2048, 2048]                  4194304  
+encoder.timbre_encoder.layers.3.self_attn.q_norm.weight                BF16   [128]                             128  
+encoder.timbre_encoder.layers.3.self_attn.q_proj.weight                BF16   [2048, 2048]                  4194304  
+encoder.timbre_encoder.layers.3.self_attn.v_proj.weight                BF16   [1024, 2048]                  2097152  
+encoder.timbre_encoder.norm.weight                                     BF16   [2048]                           2048  
+encoder.timbre_encoder.special_token                                   BF16   [1, 1, 2048]                     2048  
+null_condition_emb                                                     BF16   [1, 1, 2048]                     2048  
+tokenizer.attention_pooler.embed_tokens.bias                           BF16   [2048]                           2048  bias: unchanged
+tokenizer.attention_pooler.embed_tokens.weight                         BF16   [2048, 2048]                  4194304  
+tokenizer.attention_pooler.layers.0.input_layernorm.weight             BF16   [2048]                           2048  
+tokenizer.attention_pooler.layers.0.mlp.down_proj.weight               BF16   [2048, 6144]                 12582912  
+tokenizer.attention_pooler.layers.0.mlp.gate_proj.weight               BF16   [6144, 2048]                 12582912  
+tokenizer.attention_pooler.layers.0.mlp.up_proj.weight                 BF16   [6144, 2048]                 12582912  
+tokenizer.attention_pooler.layers.0.post_attention_layernorm.weight    BF16   [2048]                           2048  
+tokenizer.attention_pooler.layers.0.self_attn.k_norm.weight            BF16   [128]                             128  
+tokenizer.attention_pooler.layers.0.self_attn.k_proj.weight            BF16   [1024, 2048]                  2097152  
+tokenizer.attention_pooler.layers.0.self_attn.o_proj.weight            BF16   [2048, 2048]                  4194304  
+tokenizer.attention_pooler.layers.0.self_attn.q_norm.weight            BF16   [128]                             128  
+tokenizer.attention_pooler.layers.0.self_attn.q_proj.weight            BF16   [2048, 2048]                  4194304  
+tokenizer.attention_pooler.layers.0.self_attn.v_proj.weight            BF16   [1024, 2048]                  2097152  
+tokenizer.attention_pooler.layers.1.input_layernorm.weight             BF16   [2048]                           2048  
+tokenizer.attention_pooler.layers.1.mlp.down_proj.weight               BF16   [2048, 6144]                 12582912  
+tokenizer.attention_pooler.layers.1.mlp.gate_proj.weight               BF16   [6144, 2048]                 12582912  
+tokenizer.attention_pooler.layers.1.mlp.up_proj.weight                 BF16   [6144, 2048]                 12582912  
+tokenizer.attention_pooler.layers.1.post_attention_layernorm.weight    BF16   [2048]                           2048  
+tokenizer.attention_pooler.layers.1.self_attn.k_norm.weight            BF16   [128]                             128  
+tokenizer.attention_pooler.layers.1.self_attn.k_proj.weight            BF16   [1024, 2048]                  2097152  
+tokenizer.attention_pooler.layers.1.self_attn.o_proj.weight            BF16   [2048, 2048]                  4194304  
+tokenizer.attention_pooler.layers.1.self_attn.q_norm.weight            BF16   [128]                             128  
+tokenizer.attention_pooler.layers.1.self_attn.q_proj.weight            BF16   [2048, 2048]                  4194304  
+tokenizer.attention_pooler.layers.1.self_attn.v_proj.weight            BF16   [1024, 2048]                  2097152  
+tokenizer.attention_pooler.norm.weight                                 BF16   [2048]                           2048  
+tokenizer.attention_pooler.special_token                               BF16   [1, 1, 2048]                     2048  
+tokenizer.audio_acoustic_proj.bias                                     BF16   [2048]                           2048  bias: unchanged
+tokenizer.audio_acoustic_proj.weight                                   BF16   [2048, 64]                     131072  
+tokenizer.quantizer.project_in.bias                                    BF16   [6]                                 6  bias: unchanged
+tokenizer.quantizer.project_in.weight                                  BF16   [6, 2048]                       12288  
+tokenizer.quantizer.project_out.bias                                   BF16   [2048]                           2048  bias: unchanged
+tokenizer.quantizer.project_out.weight                                 BF16   [2048, 6]                       12288  

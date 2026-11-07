@@ -1,0 +1,494 @@
+{
+  "ticket": "MC5-1 spike / MLXUI#10",
+  "pinned": {
+    "hf_repo": "ACE-Step/Ace-Step1.5 @ 19671f406d603126926c1b7e2adc169acbcade22",
+    "upstream_repo": "ace-step/ACE-Step-1.5 @ ca1e85fe9430179831e6bc6be790c332190a3866",
+    "mlx_swift": "0.32.3 (1960120)",
+    "mlx_swift_lm": "3.32.3 (3b339ad)"
+  },
+  "host": {
+    "chip": "Apple M3 Pro",
+    "model": "Mac15,6",
+    "ram_bytes": 19327352832,
+    "ram_gib": 18.0,
+    "macos": "27.0",
+    "kernel": "27.0.0",
+    "python": "3.12.10",
+    "torch": "2.10.0",
+    "mlx_python": "0.30.6",
+    "transformers": "4.57.6",
+    "milestone": "MC5-1",
+    "mlx_lm": "0.29.1",
+    "safetensors": "0.7.0",
+    "uv_lock": "version = 1"
+  },
+  "config": {
+    "name": "bf16",
+    "lm": "1.7B",
+    "duration_s": 30.0,
+    "seed": 20251106,
+    "steps": 8,
+    "shift": 1.0,
+    "caption": "gentle Mandarin pop ballad, female vocal, piano and strings, emotional, 72 BPM",
+    "lyrics": "[Verse 1]\n\u7a97\u5916\u7684\u96e8\u8fd8\u5728\u4e0b\n\u56de\u5fc6\u5728\u623f\u95f4\u6162\u6162\u53d1\u82bd\n\u90a3\u4e9b\u6ca1\u8bf4\u5b8c\u7684\u8bdd\n\n[Chorus]\n\u6211\u8fd8\u7ad9\u5728\u539f\u5730\u7b49\u4f60\u56de\u7b54\n\u591c\u8272\u628a\u8857\u706f\u90fd\u70b9\u4eae\n\u4f60\u7684\u540d\u5b57\u8fd8\u5728\u5fc3\u4e0a",
+    "instrumental": false,
+    "vocal_language": "zh",
+    "staged_free": true,
+    "batch": 2
+  },
+  "stages": {
+    "condition.prepare": {
+      "count": 1,
+      "total_s": 0.613,
+      "peak_footprint_mb": 13604.0,
+      "start_footprint_mb": 13405.6,
+      "peak_delta_mb": 198.4
+    },
+    "dit.diffusion": {
+      "count": 1,
+      "total_s": 16.095,
+      "peak_footprint_mb": 15538.0,
+      "start_footprint_mb": 13676.2,
+      "peak_delta_mb": 1861.8
+    },
+    "generate.total": {
+      "count": 1,
+      "total_s": 27.558,
+      "peak_footprint_mb": 17349.4,
+      "start_footprint_mb": 13277.4,
+      "peak_delta_mb": 4072.0
+    },
+    "init": {
+      "count": 1,
+      "total_s": 7.849,
+      "peak_footprint_mb": 10661.1,
+      "start_footprint_mb": 365.6,
+      "peak_delta_mb": 10295.5
+    },
+    "init.load_text_encoder": {
+      "count": 1,
+      "total_s": 1.215,
+      "peak_footprint_mb": 6934.5,
+      "start_footprint_mb": 3652.3,
+      "peak_delta_mb": 3282.3
+    },
+    "init.load_torch_dit": {
+      "count": 1,
+      "total_s": 4.057,
+      "peak_footprint_mb": 5740.9,
+      "start_footprint_mb": 365.6,
+      "peak_delta_mb": 5375.3
+    },
+    "init.load_torch_vae": {
+      "count": 1,
+      "total_s": 0.887,
+      "peak_footprint_mb": 5740.9,
+      "start_footprint_mb": 3533.1,
+      "peak_delta_mb": 2207.8
+    },
+    "init.mlx_dit": {
+      "count": 1,
+      "total_s": 0.529,
+      "peak_footprint_mb": 9202.4,
+      "start_footprint_mb": 6957.0,
+      "peak_delta_mb": 2245.4
+    },
+    "init.mlx_vae": {
+      "count": 1,
+      "total_s": 1.159,
+      "peak_footprint_mb": 10661.1,
+      "start_footprint_mb": 9241.1,
+      "peak_delta_mb": 1420.0
+    },
+    "lm.generate": {
+      "count": 1,
+      "total_s": 22.599,
+      "peak_footprint_mb": 13677.8,
+      "start_footprint_mb": 13429.9,
+      "peak_delta_mb": 247.9
+    },
+    "lm.load": {
+      "count": 1,
+      "total_s": 16.196,
+      "peak_footprint_mb": 13474.9,
+      "start_footprint_mb": 10837.7,
+      "peak_delta_mb": 2637.2
+    },
+    "lyric.encode": {
+      "count": 1,
+      "total_s": 0.002,
+      "peak_footprint_mb": 13372.1,
+      "start_footprint_mb": 13405.6,
+      "peak_delta_mb": -33.5
+    },
+    "text.encode": {
+      "count": 1,
+      "total_s": 0.06,
+      "peak_footprint_mb": 13372.1,
+      "start_footprint_mb": 13372.1,
+      "peak_delta_mb": 0.0
+    },
+    "vae.decode.mlx": {
+      "count": 1,
+      "total_s": 6.458,
+      "peak_footprint_mb": 17349.4,
+      "start_footprint_mb": 13450.7,
+      "peak_delta_mb": 3898.7
+    },
+    "vae.decode.tiled": {
+      "count": 1,
+      "total_s": 6.458,
+      "peak_footprint_mb": 17349.4,
+      "start_footprint_mb": 13450.7,
+      "peak_delta_mb": 3898.7
+    }
+  },
+  "time_costs": {
+    "lm_phase1_time": 5.114,
+    "lm_phase2_time": 17.4841,
+    "lm_total_time": 22.5981,
+    "dit_diffusion_time_cost": 16.0869,
+    "dit_diffusion_per_step_time_cost": 2.0109,
+    "dit_total_time_cost": 24.2665,
+    "dit_sampler_mode": "euler",
+    "dit_offload_time_cost": 0.0,
+    "dit_vae_decode_time_cost": 8.1792,
+    "pipeline_total_time": 46.8646
+  },
+  "patches": [
+    "loaded torch condition encoder in bfloat16; released redundant torch DiT decoder",
+    "native MLX DiT decoder built from /private/tmp/mc5/Ace-Step1.5/acestep-v15-turbo/model.safetensors (476 tensors, bfloat16)"
+  ],
+  "wavs": [
+    {
+      "index": 0,
+      "orig_path": "/private/tmp/mc5/out/json/audio/q4-lm17-chinese_vocal/f33d3c16-6bd7-d158-de1f-f260f0e4bdb5.wav",
+      "key": "f33d3c16-6bd7-d158-de1f-f260f0e4bdb5",
+      "params": {
+        "task_type": "text2music",
+        "instruction": "Fill the audio semantic mask based on the given conditions:",
+        "reference_audio": null,
+        "src_audio": null,
+        "audio_codes": "<|audio_code_32531|><|audio_code_5746|><|audio_code_63872|><|audio_code_2856|><|audio_code_36480|><|audio_code_63384|><|audio_code_51184|><|audio_code_53120|><|audio_code_41452|><|audio_code_23288|><|audio_code_63958|><|audio_code_23483|><|audio_code_1362|><|audio_code_38019|><|audio_code_33026|><|audio_code_58170|><|audio_code_54641|><|audio_code_31184|><|audio_code_22482|><|audio_code_13813|><|audio_code_2542|><|audio_code_2168|><|audio_code_15744|><|audio_code_24045|><|audio_code_43030|><|audio_code_24063|><|audio_code_53257|><|audio_code_3565|><|audio_code_10591|><|audio_code_11783|><|audio_code_41628|><|audio_code_17975|><|audio_code_11910|><|audio_code_52759|><|audio_code_41039|><|audio_code_9205|><|audio_code_4618|><|audio_code_62696|><|audio_code_12398|><|audio_code_57943|><|audio_code_44551|><|audio_code_12991|><|audio_code_24948|><|audio_code_53569|><|audio_code_3393|><|audio_code_1204|><|audio_code_35779|><|audio_code_11221|><|audio_code_53481|><|audio_code_24023|><|audio_code_15303|><|audio_code_46021|><|audio_code_25975|><|audio_code_14293|><|audio_code_50984|><|audio_code_18496|><|audio_code_31119|><|audio_code_24030|><|audio_code_62445|><|audio_code_54399|><|audio_code_63298|><|audio_code_11320|><|audio_code_12531|><|audio_code_62339|><|audio_code_61785|><|audio_code_37776|><|audio_code_51120|><|audio_code_55232|><|audio_code_27616|><|audio_code_61168|><|audio_code_6840|><|audio_code_44320|><|audio_code_37348|><|audio_code_2041|><|audio_code_7858|><|audio_code_11591|><|audio_code_35111|><|audio_code_4370|><|audio_code_20912|><|audio_code_14903|><|audio_code_8790|><|audio_code_46887|><|audio_code_47050|><|audio_code_3343|><|audio_code_36810|><|audio_code_43513|><|audio_code_41416|><|audio_code_42464|><|audio_code_6448|><|audio_code_20354|><|audio_code_58675|><|audio_code_15239|><|audio_code_46663|><|audio_code_55750|><|audio_code_54231|><|audio_code_34135|><|audio_code_12741|><|audio_code_17915|><|audio_code_41955|><|audio_code_11715|><|audio_code_63938|><|audio_code_25912|><|audio_code_4550|><|audio_code_26641|><|audio_code_24681|><|audio_code_38971|><|audio_code_13257|><|audio_code_50943|><|audio_code_20336|><|audio_code_12794|><|audio_code_15654|><|audio_code_26839|><|audio_code_11702|><|audio_code_11151|><|audio_code_25199|><|audio_code_53119|><|audio_code_38383|><|audio_code_11766|><|audio_code_56316|><|audio_code_36298|><|audio_code_21476|><|audio_code_27587|><|audio_code_42919|><|audio_code_53192|><|audio_code_43647|><|audio_code_12737|><|audio_code_3054|><|audio_code_27695|><|audio_code_12044|><|audio_code_34047|><|audio_code_5071|><|audio_code_2053|><|audio_code_26415|><|audio_code_62423|><|audio_code_36335|><|audio_code_56024|><|audio_code_21350|><|audio_code_38080|><|audio_code_16641|><|audio_code_51184|><|audio_code_33807|><|audio_code_35847|><|audio_code_35847|><|audio_code_35847|><|audio_code_35847|><|audio_code_35847|><|audio_code_35847|><|audio_code_35847|><|audio_code_35847|><|audio_code_35847|>",
+        "caption": "gentle Mandarin pop ballad, female vocal, piano and strings, emotional, 72 BPM",
+        "global_caption": "",
+        "instrumental": false,
+        "vocal_language": "zh",
+        "bpm": null,
+        "keyscale": "",
+        "timesignature": "",
+        "duration": 30.0,
+        "enable_normalization": true,
+        "normalization_db": -1.0,
+        "fade_in_duration": 0.0,
+        "fade_out_duration": 0.0,
+        "latent_shift": 0.0,
+        "latent_rescale": 1.0,
+        "inference_steps": 8,
+        "seed": 20251106,
+        "guidance_scale": 1.0,
+        "use_adg": false,
+        "cfg_interval_start": 0.0,
+        "cfg_interval_end": 1.0,
+        "shift": 1.0,
+        "infer_method": "ode",
+        "sampler_mode": "euler",
+        "velocity_norm_threshold": 0.0,
+        "velocity_ema_factor": 0.0,
+        "dcw_enabled": null,
+        "dcw_mode": "double",
+        "dcw_scaler": 0.05,
+        "dcw_high_scaler": 0.02,
+        "dcw_wavelet": "haar",
+        "timesteps": null,
+        "repainting_start": 0.0,
+        "repainting_end": -1,
+        "chunk_mask_mode": "auto",
+        "repaint_latent_crossfade_frames": 10,
+        "repaint_wav_crossfade_sec": 0.0,
+        "repaint_mode": "balanced",
+        "repaint_strength": 0.5,
+        "retake_seed": null,
+        "retake_variance": 0.0,
+        "flow_edit_morph": false,
+        "flow_edit_source_caption": "",
+        "flow_edit_source_lyrics": "",
+        "flow_edit_n_min": 0.0,
+        "flow_edit_n_max": 1.0,
+        "flow_edit_n_avg": 1,
+        "audio_cover_strength": 1.0,
+        "cover_noise_strength": 0.0,
+        "thinking": true,
+        "lm_temperature": 0.85,
+        "lm_cfg_scale": 2.0,
+        "lm_top_k": 0,
+        "lm_top_p": 0.9,
+        "lm_negative_prompt": "NO USER INPUT",
+        "use_cot_metas": true,
+        "use_cot_caption": true,
+        "use_cot_lyrics": false,
+        "use_cot_language": true,
+        "use_constrained_decoding": true,
+        "cot_bpm": 87,
+        "cot_keyscale": "B\u266d major",
+        "cot_timesignature": "4",
+        "cot_duration": null,
+        "cot_vocal_language": "unknown",
+        "cot_caption": "",
+        "cot_lyrics": "",
+        "lora_loaded": false,
+        "use_lora": false,
+        "lora_scale": 1.0,
+        "lora_weights_hash": "",
+        "audio_format": "wav"
+      },
+      "saved": "/private/tmp/mc5/out/wav/q4-lm17-chinese_vocal_0.wav"
+    },
+    {
+      "index": 1,
+      "orig_path": "/private/tmp/mc5/out/json/audio/q4-lm17-chinese_vocal/e5ed68cf-f053-5531-c72c-3afe026690e1.wav",
+      "key": "e5ed68cf-f053-5531-c72c-3afe026690e1",
+      "params": {
+        "task_type": "text2music",
+        "instruction": "Fill the audio semantic mask based on the given conditions:",
+        "reference_audio": null,
+        "src_audio": null,
+        "audio_codes": "<|audio_code_63080|><|audio_code_11896|><|audio_code_5808|><|audio_code_31001|><|audio_code_13350|><|audio_code_58620|><|audio_code_62441|><|audio_code_58552|><|audio_code_3320|><|audio_code_28880|><|audio_code_12698|><|audio_code_53579|><|audio_code_33187|><|audio_code_6085|><|audio_code_9999|><|audio_code_24583|><|audio_code_11174|><|audio_code_63449|><|audio_code_18672|><|audio_code_8662|><|audio_code_27974|><|audio_code_11999|><|audio_code_52677|><|audio_code_33787|><|audio_code_52689|><|audio_code_16455|><|audio_code_751|><|audio_code_151|><|audio_code_34327|><|audio_code_51055|><|audio_code_34510|><|audio_code_48591|><|audio_code_7373|><|audio_code_52775|><|audio_code_22020|><|audio_code_42500|><|audio_code_14985|><|audio_code_44283|><|audio_code_55991|><|audio_code_25707|><|audio_code_50208|><|audio_code_10430|><|audio_code_12842|><|audio_code_63896|><|audio_code_22002|><|audio_code_13016|><|audio_code_26719|><|audio_code_25040|><|audio_code_58872|><|audio_code_37072|><|audio_code_25588|><|audio_code_46066|><|audio_code_12647|><|audio_code_52686|><|audio_code_39986|><|audio_code_23715|><|audio_code_18895|><|audio_code_871|><|audio_code_10263|><|audio_code_40711|><|audio_code_11202|><|audio_code_34784|><|audio_code_36226|><|audio_code_26797|><|audio_code_10007|><|audio_code_62047|><|audio_code_42062|><|audio_code_13381|><|audio_code_2109|><|audio_code_35155|><|audio_code_57130|><|audio_code_25546|><|audio_code_4550|><|audio_code_388|><|audio_code_50024|><|audio_code_25331|><|audio_code_6575|><|audio_code_49022|><|audio_code_54696|><|audio_code_63443|><|audio_code_3271|><|audio_code_3239|><|audio_code_199|><|audio_code_34583|><|audio_code_10743|><|audio_code_32023|><|audio_code_36816|><|audio_code_19143|><|audio_code_50181|><|audio_code_10951|><|audio_code_52793|><|audio_code_55608|><|audio_code_18041|><|audio_code_52485|><|audio_code_30598|><|audio_code_2455|><|audio_code_52869|><|audio_code_33262|><|audio_code_2319|><|audio_code_61898|><|audio_code_28099|><|audio_code_61906|><|audio_code_992|><|audio_code_56270|><|audio_code_10471|><|audio_code_17496|><|audio_code_30906|><|audio_code_2023|><|audio_code_51735|><|audio_code_22566|><|audio_code_36798|><|audio_code_55823|><|audio_code_17303|><|audio_code_44632|><|audio_code_50704|><|audio_code_10808|><|audio_code_2064|><|audio_code_31724|><|audio_code_1749|><|audio_code_23497|><|audio_code_39922|><|audio_code_15031|><|audio_code_46596|><|audio_code_45079|><|audio_code_24006|><|audio_code_2399|><|audio_code_26128|><|audio_code_50684|><|audio_code_28280|><|audio_code_63769|><|audio_code_30718|><|audio_code_3637|><|audio_code_14335|><|audio_code_57860|><|audio_code_512|><|audio_code_27672|><|audio_code_8760|><|audio_code_27672|><|audio_code_8240|><|audio_code_40464|><|audio_code_56368|><|audio_code_32927|><|audio_code_35847|><|audio_code_35847|><|audio_code_35847|><|audio_code_35847|><|audio_code_35847|><|audio_code_35847|><|audio_code_35847|><|audio_code_62151|>",
+        "caption": "gentle Mandarin pop ballad, female vocal, piano and strings, emotional, 72 BPM",
+        "global_caption": "",
+        "instrumental": false,
+        "vocal_language": "zh",
+        "bpm": null,
+        "keyscale": "",
+        "timesignature": "",
+        "duration": 30.0,
+        "enable_normalization": true,
+        "normalization_db": -1.0,
+        "fade_in_duration": 0.0,
+        "fade_out_duration": 0.0,
+        "latent_shift": 0.0,
+        "latent_rescale": 1.0,
+        "inference_steps": 8,
+        "seed": 20251107,
+        "guidance_scale": 1.0,
+        "use_adg": false,
+        "cfg_interval_start": 0.0,
+        "cfg_interval_end": 1.0,
+        "shift": 1.0,
+        "infer_method": "ode",
+        "sampler_mode": "euler",
+        "velocity_norm_threshold": 0.0,
+        "velocity_ema_factor": 0.0,
+        "dcw_enabled": null,
+        "dcw_mode": "double",
+        "dcw_scaler": 0.05,
+        "dcw_high_scaler": 0.02,
+        "dcw_wavelet": "haar",
+        "timesteps": null,
+        "repainting_start": 0.0,
+        "repainting_end": -1,
+        "chunk_mask_mode": "auto",
+        "repaint_latent_crossfade_frames": 10,
+        "repaint_wav_crossfade_sec": 0.0,
+        "repaint_mode": "balanced",
+        "repaint_strength": 0.5,
+        "retake_seed": null,
+        "retake_variance": 0.0,
+        "flow_edit_morph": false,
+        "flow_edit_source_caption": "",
+        "flow_edit_source_lyrics": "",
+        "flow_edit_n_min": 0.0,
+        "flow_edit_n_max": 1.0,
+        "flow_edit_n_avg": 1,
+        "audio_cover_strength": 1.0,
+        "cover_noise_strength": 0.0,
+        "thinking": true,
+        "lm_temperature": 0.85,
+        "lm_cfg_scale": 2.0,
+        "lm_top_k": 0,
+        "lm_top_p": 0.9,
+        "lm_negative_prompt": "NO USER INPUT",
+        "use_cot_metas": true,
+        "use_cot_caption": true,
+        "use_cot_lyrics": false,
+        "use_cot_language": true,
+        "use_constrained_decoding": true,
+        "cot_bpm": 87,
+        "cot_keyscale": "B\u266d major",
+        "cot_timesignature": "4",
+        "cot_duration": null,
+        "cot_vocal_language": "unknown",
+        "cot_caption": "",
+        "cot_lyrics": "",
+        "lora_loaded": false,
+        "use_lora": false,
+        "lora_scale": 1.0,
+        "lora_weights_hash": "",
+        "audio_format": "wav"
+      },
+      "saved": "/private/tmp/mc5/out/wav/q4-lm17-chinese_vocal_1.wav"
+    }
+  ],
+  "ok": true,
+  "gpu_config": {
+    "tier": "tier5",
+    "gpu_memory_gb": 13.32,
+    "max_duration_with_lm": 480,
+    "max_duration_without_lm": 600,
+    "recommended_backend": "mlx",
+    "offload_to_cpu_default": false,
+    "offload_dit_to_cpu_default": false
+  },
+  "init": {
+    "ok": true,
+    "status": "[OK] Model initialized successfully on mps\nMain model: /private/tmp/mc5/Ace-Step1.5/acestep-v15-turbo\nVAE: /private/tmp/mc5/Ace-Step1.5/vae\nText encoder: /private/tmp/mc5/Ace-Step1.5/Qwen3-Embedding-0.6B\nDtype: torch.bfloat16\nAttention: sdpa\nCompiled: False\nQuantization: Disabled\nOffload to CPU: False\nOffload DiT to CPU: False\nMLX DiT: Active (native MLX)\nMLX VAE: Active (native MLX)",
+    "wall_s": 7.85,
+    "peak_footprint_mb": 10661.1,
+    "torch_model": {
+      "params_bytes": 1636827276,
+      "params": 818413638
+    },
+    "torch_vae": {
+      "params_bytes": 337390852,
+      "params": 168695426
+    },
+    "torch_text_encoder": {
+      "params_bytes": 1191553024,
+      "params": 595776512
+    },
+    "mlx_dit": {
+      "params_bytes": 3150917760,
+      "params": 1575458880
+    },
+    "mlx_vae": {
+      "params_bytes": 337321216,
+      "params": 168660608
+    },
+    "use_mlx_dit": true,
+    "use_mlx_vae": true,
+    "dtype": "torch.bfloat16"
+  },
+  "lm_init": {
+    "ok": true,
+    "status": "\u2705 5Hz LM initialized successfully\nModel: /private/tmp/mc5/Ace-Step1.5/acestep-5Hz-lm-1.7B\nBackend: MLX (Apple Silicon native)\nDevice: Apple Silicon GPU",
+    "model": "acestep-5Hz-lm-1.7B"
+  },
+  "params": {
+    "thinking": true,
+    "inference_steps": 8,
+    "guidance_scale": 1.0,
+    "shift": 1.0,
+    "infer_method": "ode",
+    "use_adg": false,
+    "dcw_enabled": null,
+    "audio_format": "wav"
+  },
+  "wall_s": 50.72,
+  "result": {
+    "success": true,
+    "status_message": "\u2705 LM chunk 1: phase1_time: 5.11s, phase2_time: 17.48s, total_time: 22.60s\nGeneration completed successfully!",
+    "error": null
+  },
+  "extra_keys": [
+    "chunk_masks",
+    "context_latents",
+    "encoder_attention_mask",
+    "encoder_hidden_states",
+    "latent_masks",
+    "lm_metadata",
+    "lyric_token_idss",
+    "pred_latents",
+    "retake_seed_value",
+    "retake_variance",
+    "seed_value",
+    "spans",
+    "src_latents",
+    "target_latents",
+    "time_costs"
+  ],
+  "lm_metadata": {
+    "bpm": 87,
+    "caption": "A gentle and sentimental Mandopop ballad featuring a clean, melodic piano playing arpeggiated chords over a soft, atmospheric synth pad. A clear, breathy female vocal delivers an emotional and heartfelt melody. The arrangement is supported by a simple, steady drum machine beat and a subtle bassline that follows the chord progression. The overall mood is romantic and introspective, with a clean and polished production style.",
+    "duration": 30,
+    "keyscale": "B\u266d major",
+    "language": "zh",
+    "timesignature": "4"
+  },
+  "process_peak_footprint_mb": 17349.4,
+  "mlx_mem_end": {
+    "mlx_active": 7231073730,
+    "mlx_peak": 10061409730,
+    "mlx_cache": 11730944
+  },
+  "torch_mem_end": {
+    "torch_mps_allocated": 476418048,
+    "torch_mps_driver": 10675912704
+  },
+  "ru_maxrss_mb": 3947.6,
+  "marks": [
+    {
+      "t": 8.37,
+      "what": "init.load_torch_dit: 4.06s fp=3532.9MB (delta +3175.5MB)"
+    },
+    {
+      "t": 9.26,
+      "what": "init.load_torch_vae: 0.89s fp=4221.0MB (delta +688.1MB)"
+    },
+    {
+      "t": 10.47,
+      "what": "init.load_text_encoder: 1.21s fp=6228.4MB (delta +2007.4MB)"
+    },
+    {
+      "t": 11.0,
+      "what": "init.mlx_dit: 0.53s fp=9240.8MB (delta +3012.4MB)"
+    },
+    {
+      "t": 12.16,
+      "what": "init.mlx_vae: 1.16s fp=10804.8MB (delta +1564.0MB)"
+    },
+    {
+      "t": 12.16,
+      "what": "init: 7.85s fp=10804.8MB (delta +10447.4MB)"
+    },
+    {
+      "t": 28.36,
+      "what": "lm.load: 16.20s fp=13429.4MB (delta +2624.5MB)"
+    },
+    {
+      "t": 50.96,
+      "what": "lm.generate: 22.60s fp=13211.2MB (delta -218.2MB)"
+    },
+    {
+      "t": 51.85,
+      "what": "text.encode: 0.06s fp=13373.1MB (delta +7.1MB)"
+    },
+    {
+      "t": 51.85,
+      "what": "lyric.encode: 0.00s fp=13373.8MB (delta +0.7MB)"
+    },
+    {
+      "t": 52.47,
+      "what": "condition.prepare: 0.61s fp=13617.0MB (delta +242.5MB)"
+    },
+    {
+      "t": 68.56,
+      "what": "dit.diffusion: 16.09s fp=15538.3MB (delta +1921.2MB)"
+    },
+    {
+      "t": 69.58,
+      "what": "staged free: torch text encoder + condition encoder released before VAE decode"
+    },
+    {
+      "t": 76.07,
+      "what": "vae.decode.mlx: 6.46s fp=14904.6MB (delta +1447.5MB)"
+    },
+    {
+      "t": 76.07,
+      "what": "vae.decode.tiled: 6.46s fp=14904.6MB (delta +1447.5MB)"
+    },
+    {
+      "t": 78.52,
+      "what": "generate.total: 27.56s fp=11262.7MB (delta -1948.4MB)"
+    }
+  ]
+}

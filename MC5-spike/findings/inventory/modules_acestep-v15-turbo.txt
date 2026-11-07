@@ -1,0 +1,326 @@
+# module shapes: /private/tmp/mc5/Ace-Step1.5/acestep-v15-turbo/model.safetensors
+# one representative instance per normalized (layer-index-collapsed) path
+
+decoder.condition_embedder.bias
+    bias                             BF16   (2048,)  numel=2048
+
+decoder.condition_embedder.weight
+    weight                           BF16   (2048, 2048)  numel=4194304
+
+decoder.layers.N.cross_attn.k_norm.weight
+    weight                           BF16   (128,)  numel=128
+
+decoder.layers.N.cross_attn.k_proj.weight
+    weight                           BF16   (1024, 2048)  numel=2097152
+
+decoder.layers.N.cross_attn.o_proj.weight
+    weight                           BF16   (2048, 2048)  numel=4194304
+
+decoder.layers.N.cross_attn.q_norm.weight
+    weight                           BF16   (128,)  numel=128
+
+decoder.layers.N.cross_attn.q_proj.weight
+    weight                           BF16   (2048, 2048)  numel=4194304
+
+decoder.layers.N.cross_attn.v_proj.weight
+    weight                           BF16   (1024, 2048)  numel=2097152
+
+decoder.layers.N.cross_attn_norm.weight
+    weight                           BF16   (2048,)  numel=2048
+
+decoder.layers.N.mlp.down_proj.weight
+    weight                           BF16   (2048, 6144)  numel=12582912
+
+decoder.layers.N.mlp.gate_proj.weight
+    weight                           BF16   (6144, 2048)  numel=12582912
+
+decoder.layers.N.mlp.up_proj.weight
+    weight                           BF16   (6144, 2048)  numel=12582912
+
+decoder.layers.N.mlp_norm.weight
+    weight                           BF16   (2048,)  numel=2048
+
+decoder.layers.N.scale_shift_table
+    scale_shift_table                BF16   (1, 6, 2048)  numel=12288
+
+decoder.layers.N.self_attn.k_norm.weight
+    weight                           BF16   (128,)  numel=128
+
+decoder.layers.N.self_attn.k_proj.weight
+    weight                           BF16   (1024, 2048)  numel=2097152
+
+decoder.layers.N.self_attn.o_proj.weight
+    weight                           BF16   (2048, 2048)  numel=4194304
+
+decoder.layers.N.self_attn.q_norm.weight
+    weight                           BF16   (128,)  numel=128
+
+decoder.layers.N.self_attn.q_proj.weight
+    weight                           BF16   (2048, 2048)  numel=4194304
+
+decoder.layers.N.self_attn.v_proj.weight
+    weight                           BF16   (1024, 2048)  numel=2097152
+
+decoder.layers.N.self_attn_norm.weight
+    weight                           BF16   (2048,)  numel=2048
+
+decoder.norm_out.weight
+    weight                           BF16   (2048,)  numel=2048
+
+decoder.proj_in.N.bias
+    bias                             BF16   (2048,)  numel=2048
+
+decoder.proj_in.N.weight
+    weight                           BF16   (2048, 192, 2)  numel=786432
+
+decoder.proj_out.N.bias
+    bias                             BF16   (64,)  numel=64
+
+decoder.proj_out.N.weight
+    weight                           BF16   (2048, 64, 2)  numel=262144
+
+decoder.scale_shift_table
+    scale_shift_table                BF16   (1, 2, 2048)  numel=4096
+
+decoder.time_embed.linear_1.bias
+    bias                             BF16   (2048,)  numel=2048
+
+decoder.time_embed.linear_1.weight
+    weight                           BF16   (2048, 256)  numel=524288
+
+decoder.time_embed.linear_2.bias
+    bias                             BF16   (2048,)  numel=2048
+
+decoder.time_embed.linear_2.weight
+    weight                           BF16   (2048, 2048)  numel=4194304
+
+decoder.time_embed.time_proj.bias
+    bias                             BF16   (12288,)  numel=12288
+
+decoder.time_embed.time_proj.weight
+    weight                           BF16   (12288, 2048)  numel=25165824
+
+decoder.time_embed_r.linear_1.bias
+    bias                             BF16   (2048,)  numel=2048
+
+decoder.time_embed_r.linear_1.weight
+    weight                           BF16   (2048, 256)  numel=524288
+
+decoder.time_embed_r.linear_2.bias
+    bias                             BF16   (2048,)  numel=2048
+
+decoder.time_embed_r.linear_2.weight
+    weight                           BF16   (2048, 2048)  numel=4194304
+
+decoder.time_embed_r.time_proj.bias
+    bias                             BF16   (12288,)  numel=12288
+
+decoder.time_embed_r.time_proj.weight
+    weight                           BF16   (12288, 2048)  numel=25165824
+
+detokenizer.embed_tokens.bias
+    bias                             BF16   (2048,)  numel=2048
+
+detokenizer.embed_tokens.weight
+    weight                           BF16   (2048, 2048)  numel=4194304
+
+detokenizer.layers.N.input_layernorm.weight
+    weight                           BF16   (2048,)  numel=2048
+
+detokenizer.layers.N.mlp.down_proj.weight
+    weight                           BF16   (2048, 6144)  numel=12582912
+
+detokenizer.layers.N.mlp.gate_proj.weight
+    weight                           BF16   (6144, 2048)  numel=12582912
+
+detokenizer.layers.N.mlp.up_proj.weight
+    weight                           BF16   (6144, 2048)  numel=12582912
+
+detokenizer.layers.N.post_attention_layernorm.weight
+    weight                           BF16   (2048,)  numel=2048
+
+detokenizer.layers.N.self_attn.k_norm.weight
+    weight                           BF16   (128,)  numel=128
+
+detokenizer.layers.N.self_attn.k_proj.weight
+    weight                           BF16   (1024, 2048)  numel=2097152
+
+detokenizer.layers.N.self_attn.o_proj.weight
+    weight                           BF16   (2048, 2048)  numel=4194304
+
+detokenizer.layers.N.self_attn.q_norm.weight
+    weight                           BF16   (128,)  numel=128
+
+detokenizer.layers.N.self_attn.q_proj.weight
+    weight                           BF16   (2048, 2048)  numel=4194304
+
+detokenizer.layers.N.self_attn.v_proj.weight
+    weight                           BF16   (1024, 2048)  numel=2097152
+
+detokenizer.norm.weight
+    weight                           BF16   (2048,)  numel=2048
+
+detokenizer.proj_out.bias
+    bias                             BF16   (64,)  numel=64
+
+detokenizer.proj_out.weight
+    weight                           BF16   (64, 2048)  numel=131072
+
+detokenizer.special_tokens
+    special_tokens                   BF16   (1, 5, 2048)  numel=10240
+
+encoder.lyric_encoder.embed_tokens.bias
+    bias                             BF16   (2048,)  numel=2048
+
+encoder.lyric_encoder.embed_tokens.weight
+    weight                           BF16   (2048, 1024)  numel=2097152
+
+encoder.lyric_encoder.layers.N.input_layernorm.weight
+    weight                           BF16   (2048,)  numel=2048
+
+encoder.lyric_encoder.layers.N.mlp.down_proj.weight
+    weight                           BF16   (2048, 6144)  numel=12582912
+
+encoder.lyric_encoder.layers.N.mlp.gate_proj.weight
+    weight                           BF16   (6144, 2048)  numel=12582912
+
+encoder.lyric_encoder.layers.N.mlp.up_proj.weight
+    weight                           BF16   (6144, 2048)  numel=12582912
+
+encoder.lyric_encoder.layers.N.post_attention_layernorm.weight
+    weight                           BF16   (2048,)  numel=2048
+
+encoder.lyric_encoder.layers.N.self_attn.k_norm.weight
+    weight                           BF16   (128,)  numel=128
+
+encoder.lyric_encoder.layers.N.self_attn.k_proj.weight
+    weight                           BF16   (1024, 2048)  numel=2097152
+
+encoder.lyric_encoder.layers.N.self_attn.o_proj.weight
+    weight                           BF16   (2048, 2048)  numel=4194304
+
+encoder.lyric_encoder.layers.N.self_attn.q_norm.weight
+    weight                           BF16   (128,)  numel=128
+
+encoder.lyric_encoder.layers.N.self_attn.q_proj.weight
+    weight                           BF16   (2048, 2048)  numel=4194304
+
+encoder.lyric_encoder.layers.N.self_attn.v_proj.weight
+    weight                           BF16   (1024, 2048)  numel=2097152
+
+encoder.lyric_encoder.norm.weight
+    weight                           BF16   (2048,)  numel=2048
+
+encoder.text_projector.weight
+    weight                           BF16   (2048, 1024)  numel=2097152
+
+encoder.timbre_encoder.embed_tokens.bias
+    bias                             BF16   (2048,)  numel=2048
+
+encoder.timbre_encoder.embed_tokens.weight
+    weight                           BF16   (2048, 64)  numel=131072
+
+encoder.timbre_encoder.layers.N.input_layernorm.weight
+    weight                           BF16   (2048,)  numel=2048
+
+encoder.timbre_encoder.layers.N.mlp.down_proj.weight
+    weight                           BF16   (2048, 6144)  numel=12582912
+
+encoder.timbre_encoder.layers.N.mlp.gate_proj.weight
+    weight                           BF16   (6144, 2048)  numel=12582912
+
+encoder.timbre_encoder.layers.N.mlp.up_proj.weight
+    weight                           BF16   (6144, 2048)  numel=12582912
+
+encoder.timbre_encoder.layers.N.post_attention_layernorm.weight
+    weight                           BF16   (2048,)  numel=2048
+
+encoder.timbre_encoder.layers.N.self_attn.k_norm.weight
+    weight                           BF16   (128,)  numel=128
+
+encoder.timbre_encoder.layers.N.self_attn.k_proj.weight
+    weight                           BF16   (1024, 2048)  numel=2097152
+
+encoder.timbre_encoder.layers.N.self_attn.o_proj.weight
+    weight                           BF16   (2048, 2048)  numel=4194304
+
+encoder.timbre_encoder.layers.N.self_attn.q_norm.weight
+    weight                           BF16   (128,)  numel=128
+
+encoder.timbre_encoder.layers.N.self_attn.q_proj.weight
+    weight                           BF16   (2048, 2048)  numel=4194304
+
+encoder.timbre_encoder.layers.N.self_attn.v_proj.weight
+    weight                           BF16   (1024, 2048)  numel=2097152
+
+encoder.timbre_encoder.norm.weight
+    weight                           BF16   (2048,)  numel=2048
+
+encoder.timbre_encoder.special_token
+    special_token                    BF16   (1, 1, 2048)  numel=2048
+
+null_condition_emb
+    null_condition_emb               BF16   (1, 1, 2048)  numel=2048
+
+tokenizer.attention_pooler.embed_tokens.bias
+    bias                             BF16   (2048,)  numel=2048
+
+tokenizer.attention_pooler.embed_tokens.weight
+    weight                           BF16   (2048, 2048)  numel=4194304
+
+tokenizer.attention_pooler.layers.N.input_layernorm.weight
+    weight                           BF16   (2048,)  numel=2048
+
+tokenizer.attention_pooler.layers.N.mlp.down_proj.weight
+    weight                           BF16   (2048, 6144)  numel=12582912
+
+tokenizer.attention_pooler.layers.N.mlp.gate_proj.weight
+    weight                           BF16   (6144, 2048)  numel=12582912
+
+tokenizer.attention_pooler.layers.N.mlp.up_proj.weight
+    weight                           BF16   (6144, 2048)  numel=12582912
+
+tokenizer.attention_pooler.layers.N.post_attention_layernorm.weight
+    weight                           BF16   (2048,)  numel=2048
+
+tokenizer.attention_pooler.layers.N.self_attn.k_norm.weight
+    weight                           BF16   (128,)  numel=128
+
+tokenizer.attention_pooler.layers.N.self_attn.k_proj.weight
+    weight                           BF16   (1024, 2048)  numel=2097152
+
+tokenizer.attention_pooler.layers.N.self_attn.o_proj.weight
+    weight                           BF16   (2048, 2048)  numel=4194304
+
+tokenizer.attention_pooler.layers.N.self_attn.q_norm.weight
+    weight                           BF16   (128,)  numel=128
+
+tokenizer.attention_pooler.layers.N.self_attn.q_proj.weight
+    weight                           BF16   (2048, 2048)  numel=4194304
+
+tokenizer.attention_pooler.layers.N.self_attn.v_proj.weight
+    weight                           BF16   (1024, 2048)  numel=2097152
+
+tokenizer.attention_pooler.norm.weight
+    weight                           BF16   (2048,)  numel=2048
+
+tokenizer.attention_pooler.special_token
+    special_token                    BF16   (1, 1, 2048)  numel=2048
+
+tokenizer.audio_acoustic_proj.bias
+    bias                             BF16   (2048,)  numel=2048
+
+tokenizer.audio_acoustic_proj.weight
+    weight                           BF16   (2048, 64)  numel=131072
+
+tokenizer.quantizer.project_in.bias
+    bias                             BF16   (6,)  numel=6
+
+tokenizer.quantizer.project_in.weight
+    weight                           BF16   (6, 2048)  numel=12288
+
+tokenizer.quantizer.project_out.bias
+    bias                             BF16   (2048,)  numel=2048
+
+tokenizer.quantizer.project_out.weight
+    weight                           BF16   (2048, 6)  numel=12288
