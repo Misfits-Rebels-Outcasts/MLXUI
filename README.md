@@ -97,7 +97,48 @@ install in the catalog are the same models your workflows use — no separate se
 <!-- Items marked *(hidden in-app)* are built but switched off behind an in-app flag right
      now — pruning candidates if you don't want to announce them before they're switched on. -->
 
-### New models since the last release
+### Three new models — translation, sound isolation and depth
+
+- **TranslateGemma 4B** — Google's translation-only Gemma 3 fine-tune, with its own **Translate**
+  screen: *From* (Auto-detect or any language) → *To*, a swap button, Copy, and a live token count
+  against the model's 2K-token limit (an over-long input is refused before any work starts).
+  Evaluated on 55 languages; text only. In AI Workflows it serves the **Translate** row
+  (`to=` sets the target, the source is detected). About 4.1 GB RAM, measured.
+- **SAM-Audio Base** — Meta's sound isolation model. Give it a recording and a short
+  description of what to keep ("speech", "music", "dog barking") and it returns two tracks: that
+  sound on its own, and everything else. Unlike DeepFilterNet's noise cleanup, it pulls out *one*
+  named sound. Long files are processed in 30-second windows, up to 30 minutes. Its T5-base text
+  encoder is installed alongside it, so nothing downloads at run time. About 14.2 GB RAM, measured.
+- **Depth Anything V2 Small** — monocular depth estimation on a native Swift/MLX port (DINOv2
+  backbone + DPT head): one photo in, a grayscale depth map out (near is bright, far is dark;
+  relative depth, not metres). It has its own Run screen and serves the **Estimate Depth** row in
+  AI Workflows, where a sample flow's "Depth Pro" row now runs on it as a clearly labelled
+  substitute. About 3 GB RAM, measured.
+
+### AI Workflows — five more Basic flows
+
+The Basic gallery grows from 8 to **13** ready-to-run flows, each with sample inputs:
+**Read It Aloud** (text → Kokoro speech), **Describe a Photo** (LFM2-VL), **Picture From Words**
+(FLUX.2 Klein 4B, with a prompt you can change before it runs), **Invoice to Spreadsheet** (PDF →
+structured fields → CSV) and **Sort an Email** (Laya decides "reply today" or "later" and
+branches). The **Speak** row now honours `seed=` and `trim_silence=`.
+
+### Steadier memory, and Kokoro works offline
+
+- **MLX's buffer cache is capped at 1 GiB** for flow rows, Run windows, and in-app chat and agent
+  turns, and is released when a model is done, so long sessions no longer grow memory that MLX
+  was merely holding on to.
+- **Kokoro runs fully offline.** Its English pronunciation (G2P) files are now installed with the
+  model instead of being fetched on first use. An older install says plainly that a reinstall is
+  needed.
+
+### For contributors
+
+A new guide, [`docs/contributing/add-a-model.md`](docs/contributing/add-a-model.md), walks through
+adding a model end to end — catalog entry, module, Run UI and AI Workflows wiring — and includes
+a prompt you can hand to an AI coding agent.
+
+### Earlier: new models since the last release
 
 - **FLUX.2 Klein 4B** — text-to-image on a native MLX port (Qwen3 text encoder → DiT → VAE, one
   stage resident at a time to keep memory low). It is now the default *Generate Image* model, the
@@ -403,6 +444,9 @@ Prism ML's [Ternary-Bonsai-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2
   - Image generation (Flux, SDXL-Turbo) → text prompt + on-device generated image
   - Music generation (MusicGen) → text description + on-device generated WAV
   - Decision (Laya, CLM, Clef Flash) → typed question + confidence-scored answer, no generated text
+  - Translation (TranslateGemma) → From/To pickers with auto-detect + translated text
+  - Sound isolation (SAM-Audio) → audio + a description of the sound → two tracks
+  - Depth (Depth Anything V2) → photo in, depth map out
 - **Pipeline runner** — chain models together (transcribe → summarize → speak) in a
   single workflow
 - **Command palette (⌘K)** — find and run any model instantly
@@ -427,12 +471,14 @@ Every model listed here is downloadable and has a working Run UI.
 | **Text-to-Speech** (4) | Kokoro, Qwen3-TTS, Chatterbox, Orpheus | 82M – 3B |
 | **Embeddings** (4) | all-MiniLM-L6, embeddinggemma, ModernBERT-embed, bge-m3 | 18M – 568M |
 | **Image Generation** | FLUX.1-Lite-8B, SDXL-Turbo, **FLUX.2 Klein 4B** | 3.5B – 8B |
-| **Audio** | **LFM2.5-Audio 1.5B** (voice), **DeepFilterNet 3** (cleanup), **Sortformer 4spk v2.1** (diarization) | 1.5B and under |
+| **Audio** | **LFM2.5-Audio 1.5B** (voice), **DeepFilterNet 3** (cleanup), **Sortformer 4spk v2.1** (diarization), **SAM-Audio Base** (sound isolation) | — |
+| **Translation** (1) | **TranslateGemma 4B** | 4B |
+| **Depth** (1) | **Depth Anything V2 Small** | small |
 | **Video** | **RIFE 4.25** (frame interpolation) | small |
 | **Music Generation** (1) | **MusicGen-small** | 615M (float32, ~2.5 GB) |
 | **Decision** (3) | **Laya 0.4B**, **CLM 8B**, **Clef Flash** | 0.4B – 9B |
 
-The bundled `browser.json` catalog currently lists **54 models**. New models
+The bundled `browser.json` catalog currently lists **57 models**. New models
 and Run UIs are added with every release.
 
 ### Engine coverage
@@ -457,6 +503,9 @@ and Run UIs are added with every release.
 | Image | Diffusion (FLUX.2 Klein 4B) | ✅ | ✅ | ✅ | Native MLX |
 | Video | Frame interpolation (RIFE 4.25) | ✅ | ✅ | ✅ | Native MLX + AVFoundation |
 | Text | Decision / classification (Laya, CLM, Clef Flash) | ✅ | ✅ | ✅ | Native MLX encoders + decision heads |
+| Text | Translation (TranslateGemma 4B) | ✅ | ✅ | ✅ | MLXLLM |
+| Audio | Sound isolation (SAM-Audio Base) | ✅ | ✅ | ✅ | Native MLX + T5-base encoder |
+| Image | Depth estimation (Depth Anything V2 Small) | ✅ | ✅ | ✅ | Native MLX (DINOv2 + DPT) |
 
 ✅ = built &emsp; ⬜ = available for contribution
 
@@ -501,9 +550,9 @@ storage layout, and engine-to-model dispatch.
 ### Build
 
 ```bash
-git clone https://github.com/your-org/MLXUI.git
+git clone https://github.com/Misfits-Rebels-Outcasts/MLXUI.git
 cd MLXUI
-open PipelineStudio.xcodeproj
+open MLXUI.xcodeproj
 ```
 
 Two schemes are available:
@@ -517,7 +566,7 @@ Select your preferred scheme, pick **My Mac**, and press ⌘R.
 
 ### First run
 
-1. The app opens with a catalog of ~28 models organized by category
+1. The app opens with a catalog of 57 models organized by category
 2. Browse or search with ⌘K
 3. Click **Install** on any model — it downloads from Hugging Face
 4. Once installed, click **Run** to open the model's dedicated interface
@@ -531,6 +580,9 @@ The core contribution path: **add a Run UI for a model type that doesn't have on
 Every model in the catalog should eventually have a working Run button.
 
 ### How to add a new model type
+
+The full walkthrough is in [`docs/contributing/add-a-model.md`](docs/contributing/add-a-model.md).
+In short:
 
 1. Pick an unsupported row from the [Engine coverage](#engine-coverage) table
    above (the ⬜ rows)
@@ -579,7 +631,7 @@ Every model in the catalog should eventually have a working Run button.
 ## Roadmap
 
 ### Done
-- [x] Browse, filter, and compare 54 models
+- [x] Browse, filter, and compare 57 models
 - [x] Hardware-aware RAM/bandwidth filtering
 - [x] One-click install from Hugging Face with progress tracking
 - [x] Gated-repo auth flow (Hugging Face token via Keychain)
@@ -623,6 +675,10 @@ Every model in the catalog should eventually have a working Run button.
 - [x] Parakeet TDT 0.6B v3 and Qwen3-ASR 1.7B speech-to-text; Gemma 4 E4B Vision restored
 - [x] Local Server: structured output (`response_format` / `text.format`) via grammar-constrained decoding
 - [x] mlx-swift 0.32.3 / mlx-swift-lm 3.32.3
+- [x] TranslateGemma 4B (Translate screen + Translate row), SAM-Audio Base sound isolation,
+      Depth Anything V2 Small (Run screen + Estimate Depth row)
+- [x] Five more Basic gallery flows (13 in all); Kokoro fully offline; 1 GiB MLX buffer-cache cap
+- [x] Contributor guide for adding a model
 
 ### In progress
 - [ ] Local Server: MCP and served flows, then embeddings/audio endpoints and LAN access
