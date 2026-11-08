@@ -16,9 +16,13 @@ import Foundation
     static func make(
         scope: FlowScope,
         appState: AppState,
-        transforms: [String: TransformDef] = [:]
+        transforms: [String: TransformDef] = [:],
+        blobDirectory: URL? = nil,
+        servedLoadGate useServedLoadGate: Bool = true
     ) -> RealExecutor {
-        let blobDir = scope.directory.appendingPathComponent(".blobs", isDirectory: true)
+        // MT1-3: a chat model-tool call writes under the conversation's `assets/.blobs/` and has no served-load question
+        // to park on; flows pass neither parameter and are unchanged.
+        let blobDir = blobDirectory ?? scope.directory.appendingPathComponent(".blobs", isDirectory: true)
         let catalog = appState.browserData?.domains.flatMap { $0.allModels } ?? []
         let installed = appState.flowReadyModelIDs
 
@@ -53,6 +57,7 @@ import Foundation
                                     catalog: catalog)
         executor.transforms = transforms
         // SC-5b (gate D): a row whose load would stop keeping a served model ready asks first (parks the run).
+        guard useServedLoadGate else { return executor }
         let gate = FlowServedLoadGate.live(flowID: scope.locationID, cache: cache) { model in
             await MainActor.run { !(appState.registry.bestModule(for: model)?.sdk is StageBooksOwnWeights) }
         }
