@@ -295,7 +295,7 @@ final class FlowEditorModel {
         case "Save Image": return "image.png"
         case "Save Video": return "video.mp4"
         case "Save Audio": return "audio.wav"
-        case "Save Images": return "images"
+        case "Save Images": return "images/"
         case "Save Context": return "context.ctx"
         default: return nil
         }
@@ -328,14 +328,28 @@ final class FlowEditorModel {
         if task == "Save Image" || task == "Save Video", let ext = knownUpstreamExtension(for: rowID) {
             name = ((name as NSString).deletingPathExtension as NSString).appendingPathExtension(ext) ?? name
         }
+        // A folder name keeps its trailing slash (`images/`, `images-2/`) and `images` ==
+        // `images/` when comparing; `NSString.deletingPathExtension` would drop the slash.
+        func key(_ p: String) -> String {
+            var k = p.lowercased()
+            while k.hasSuffix("/") { k.removeLast() }
+            return k
+        }
         let taken = Set(allRows().filter { $0.id != rowID && ($0.task ?? "").hasPrefix("Save") }
-            .compactMap { FlowSettings($0.settings).pathValue()?.lowercased() })
-        var candidate = name
+            .compactMap { FlowSettings($0.settings).pathValue().map(key) })
+        let isFolder = name.hasSuffix("/")
+        let base = isFolder ? String(name.dropLast()) : name
+        let stem = isFolder ? base : (base as NSString).deletingPathExtension
+        let ext = isFolder ? "" : (base as NSString).pathExtension
+        func named(_ n: Int?) -> String {
+            let suffix = n.map { "-\($0)" } ?? ""
+            if isFolder { return "\(stem)\(suffix)/" }
+            return ext.isEmpty ? "\(stem)\(suffix)" : "\(stem)\(suffix).\(ext)"
+        }
+        var candidate = named(nil)
         var n = 2
-        let stem = (name as NSString).deletingPathExtension
-        let ext = (name as NSString).pathExtension
-        while taken.contains(candidate.lowercased()) {
-            candidate = ext.isEmpty ? "\(stem)-\(n)" : "\(stem)-\(n).\(ext)"
+        while taken.contains(key(candidate)) {
+            candidate = named(n)
             n += 1
         }
         replaceRow(id: rowID) { $0.settings = FlowSettingsEditor.replacePath(candidate, in: nil) }

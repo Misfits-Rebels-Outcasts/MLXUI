@@ -25,7 +25,7 @@ struct CatFlowSaveDefaultNameTests {
 
     @Test(arguments: [
         ("Save Text", "output.txt"), ("Save Image", "image.png"), ("Save Video", "video.mp4"),
-        ("Save Audio", "audio.wav"), ("Save Images", "images"), ("Save Context", "context.ctx"),
+        ("Save Audio", "audio.wav"), ("Save Images", "images/"), ("Save Context", "context.ctx"),
     ])
     func seedsDefaultAndOneUndoRemovesRowAndPath(task: String, expected: String) throws {
         let m = try editor()
@@ -62,7 +62,15 @@ struct CatFlowSaveDefaultNameTests {
         #expect(paths == ["image.png", "image-2.png", "image-3.png"])
         m.add(task: "Save Images")
         m.add(task: "Save Images")
-        #expect(path(m, m.document.rows[4].id) == "images-2")
+        #expect(path(m, m.document.rows[4].id) == "images-2/")
+    }
+
+    @Test func folderCollisionIgnoresTrailingSlashAndKeepsIt() throws {
+        let m = try editor([row("Save Images", settings: "images")])   // no slash
+        m.add(task: "Save Images")
+        m.add(task: "Save Images")
+        let paths = m.document.rows.compactMap { FlowSettings($0.settings).pathValue() }
+        #expect(paths == ["images", "images-2/", "images-3/"])
     }
 
     @Test func roundTripsByteStable() throws {
