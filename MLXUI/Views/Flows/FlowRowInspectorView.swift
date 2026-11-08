@@ -582,9 +582,9 @@ struct FlowRowInspectorView: View {
     /// path would make the row's save fail, so nothing is written instead.
     private func saveFilenameField(_ row: Row) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("File name")
+            Text(row.task == "Save Images" ? "Folder" : "File name")
                 .font(.subheadline.weight(.semibold))
-            TextField("output.txt", text: Binding(
+            TextField(FlowEditorModel.defaultSavePath(forTask: row.task ?? "") ?? "output.txt", text: Binding(
                 get: { FlowSettings(row.settings).pathValue() ?? "" },
                 set: { newValue in
                     guard !newValue.isEmpty else { return }

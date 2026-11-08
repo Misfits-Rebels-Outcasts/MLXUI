@@ -272,6 +272,7 @@ final class FlowEditorModel {
             }
             selectedRowID = newRow.id
             startNewChainIfItIgnoresUpstream(newRow.id)
+            seedSavePath(newRow.id)
             // BG-1 (R2, `RSI/DelegateBasicImageFlowsBacklog.md`): a seeded model must be
             // **pinned** in the same edit that adds the row. `setModel` has always called
             // `reconcileModelsBlock()`; this seed path did not, so a fresh `Generate Image`
@@ -282,6 +283,77 @@ final class FlowEditorModel {
             reconcileModelsBlock()
             reaimClauseTargets(before: before, after: document.rows)
         }
+    }
+
+    // MARK: - Save-row default file name (SF)
+
+    /// SF — the generic default path token of a `Save *` task: what the row saves, named by
+    /// kind. `Save Images` names a folder. Nil for any other task.
+    nonisolated static func defaultSavePath(forTask task: String) -> String? {
+        switch task {
+        case "Save Text": return "output.txt"
+        case "Save Image": return "image.png"
+        case "Save Video": return "video.mp4"
+        case "Save Audio": return "audio.wav"
+        case "Save Images": return "images"
+        case "Save Context": return "context.ctx"
+        default: return nil
+        }
+    }
+
+    /// SF — the extension (no dot, as written) of the file the row feeding `rowID` produces,
+    /// when it is knowable: the upstream row is the first row ref, else the row above
+    /// (honouring a chain break), and only a `Read Image` / `Read Video` row names its file.
+    func knownUpstreamExtension(for rowID: UUID) -> String? {
+        guard let r = row(withID: rowID) else { return nil }
+        let upstream: Row?
+        if let first = r.refs.first {
+            if case .rowRef(let id) = first { upstream = row(withID: id) } else { upstream = nil }
+        } else {
+            upstream = previousRow(before: rowID)
+        }
+        guard let upstream, let task = upstream.task,
+              task == "Read Image" || task == "Read Video",
+              let path = FlowSettings(upstream.settings).pathValue() else { return nil }
+        let ext = (path as NSString).pathExtension
+        return ext.isEmpty ? nil : ext
+    }
+
+    /// SF — the default path for the freshly inserted Save row `rowID`: the kind's generic
+    /// name, the upstream extension winning for image/video when known, and a `-2`/`-3`
+    /// suffix when another Save row in the flow already uses the name.
+    private func seedSavePath(_ rowID: UUID) {
+        guard let r = row(withID: rowID), let task = r.task, r.settings == nil,
+              var name = Self.defaultSavePath(forTask: task) else { return }
+        if task == "Save Image" || task == "Save Video", let ext = knownUpstreamExtension(for: rowID) {
+            name = ((name as NSString).deletingPathExtension as NSString).appendingPathExtension(ext) ?? name
+        }
+        let taken = Set(allRows().filter { $0.id != rowID && ($0.task ?? "").hasPrefix("Save") }
+            .compactMap { FlowSettings($0.settings).pathValue()?.lowercased() })
+        var candidate = name
+        var n = 2
+        let stem = (name as NSString).deletingPathExtension
+        let ext = (name as NSString).pathExtension
+        while taken.contains(candidate.lowercased()) {
+            candidate = ext.isEmpty ? "\(stem)-\(n)" : "\(stem)-\(n).\(ext)"
+            n += 1
+        }
+        replaceRow(id: rowID) { $0.settings = FlowSettingsEditor.replacePath(candidate, in: nil) }
+    }
+
+    /// SF — the editor-only soft warning for a Save row whose file name contradicts what the
+    /// writer produces. Not a validator rule.
+    private func saveNameWarning(for r: Row, path: String) -> String? {
+        guard let task = r.task, let name = FlowSettings(r.settings).pathValue() else { return nil }
+        let ext = (name as NSString).pathExtension
+        if task == "Save Audio", ext.lowercased() != "wav" {
+            return "Row \(path): Save Audio always writes WAV — name the file .wav."
+        }
+        if task == "Save Image" || task == "Save Video",
+           let upstream = knownUpstreamExtension(for: r.id), ext.lowercased() != upstream.lowercased() {
+            return "Row \(path): this row copies a .\(upstream) unchanged — name it .\(upstream)."
+        }
+        return nil
     }
 
     /// RP-1-FIX-1 — a row that takes no upstream input (`RowSources`) added below another row
@@ -331,6 +403,7 @@ final class FlowEditorModel {
             insertChild(newRow, into: blockID, below: selectedRowID)
             selectedRowID = newRow.id
             startNewChainIfItIgnoresUpstream(newRow.id)
+            seedSavePath(newRow.id)
             // BG-1 — same pin-on-seed rule as `add(task:)`, for the block-child seed path.
             reconcileModelsBlock()
             reaimClauseTargets(before: before, after: document.rows)
@@ -1447,6 +1520,9 @@ final class FlowEditorModel {
                 return nil
             }
             return ("Row \(path) needs an input — nothing feeds it.", true)
+        }
+        if r.blockKind == nil, let sentence = saveNameWarning(for: r, path: path) {
+            return (sentence, false)
         }
         return nil
     }
