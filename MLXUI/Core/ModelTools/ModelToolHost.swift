@@ -17,12 +17,17 @@ nonisolated struct ModelInstallNeed: Sendable, Equatable {
     let downloadGB: Double
 }
 
-/// A progress line for the chip (`Transcribing…`). MT1 has no emitter inside the executor, so the
-/// runner reports only the phases it owns.
+/// A progress line for the chip (`Transcribing…`). The runner reports the phases it owns; from
+/// MT1-3b the executor can add a `detail` line and a `fraction` through `RowProgress.report`
+/// (nothing emits yet).
 nonisolated struct ModelToolProgress: Sendable, Equatable {
     enum Phase: String, Sendable { case preparing, running, saving }
     let toolName: String
     let phase: Phase
+    /// A line reported from inside the row (`RowProgress.message`); nil for a runner phase.
+    var detail: String? = nil
+    /// 0…1 when the row knows it.
+    var fraction: Double? = nil
 }
 
 nonisolated struct ModelToolHost: Sendable {

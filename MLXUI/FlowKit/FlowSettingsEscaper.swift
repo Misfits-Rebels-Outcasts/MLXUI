@@ -16,6 +16,10 @@ import Foundation
 nonisolated enum FlowSettingsEscaper {
     /// `value` as a double-quoted settings token: `\` → `\\`, `"` → `\"`, a line break → `\n`,
     /// a tab → `\t`. A lone `\r` counts as a line break; `\r\n` is one.
+    // SPEC-Q250: the read side, `FlowSettings.unquote`, replaces `\n` / `\t` BEFORE `\\`, so a quoted
+    // value holding a backslash followed by n or t (`C:\new`) is altered on read (it comes back with
+    // a newline). This escaper emits the right text; the asymmetry is in the shared reader. Filed as
+    // Q250 in catflow-mlx/SPEC_QUESTIONS.md; `unquote` is deliberately unchanged.
     static func quoted(_ value: String) -> String {
         var out = "\""
         var previousWasCR = false

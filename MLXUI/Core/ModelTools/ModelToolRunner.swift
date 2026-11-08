@@ -251,7 +251,16 @@ nonisolated struct ModelToolRunner: Sendable {
         let started = Date()
         let output: Asset
         do {
-            output = try await executor.execute(path: "1", row: row, inputs: inputs, transcript: nil, context: nil, usedFlowContent: nil)
+            // MT1-3b: with a host, the row can report progress through `RowProgress.report`; without one, no sink is bound.
+            let toolName = spec.name
+            let sink: RowProgress.Sink? = host.map { host in
+                { @Sendable (update: RowProgress) in
+                    host.progress(ModelToolProgress(toolName: toolName, phase: .running,
+                                                    detail: update.message, fraction: update.fraction))
+                }
+            }
+            output = try await executor.execute(path: "1", row: row, inputs: inputs, transcript: nil, context: nil,
+                                                usedFlowContent: nil, progress: sink)
         } catch {
             if error is CancellationError { return .failure(ToolFailure("the request was stopped.")) }
             return .failure(ToolFailure(FlowErrorDisplay.sentence(for: error)))
