@@ -3,17 +3,15 @@
 //  MLXUI — agentic chat tools, slice AG4c.
 //
 //  Media tools that let a text chat model reach into audio/image modalities:
-//    • transcribe_audio — audio URL → text via MLXWhisperEngine (ASR)
-//    • ocr_image        — image URL → extracted text via the OCR/VLM engines
+//    • transcribe_audio — audio → text
+//    • ocr_image        — image → extracted text
 //
-//  Input arrives as an http(s) URL (fetched over the app's `network.client` entitlement, like
-//  AG2's `fetch_url`) — NOT a local file path, which would need AG5's human-approved
-//  `files.user-selected.read-write`. So these stay inside the current sandbox posture.
-//
-//  Decode + inference reuse the app's existing nonisolated engines/helpers (AudioFileReader +
-//  AudioResampler, ImageLoader, MLXWhisperEngine, VLM/Paddle/Dots/DeepSeek OCR engines). The
-//  network transfer + heavy decode can't be unit-tested (offline CI, no weights); the pure bits
-//  (OCR engine routing) live in a `static` helper with synchronous tests.
+//  MT1-3: both are now thin names over `ModelTool` (Core/ModelTools). The model is chosen by
+//  `CapabilityResolver` (not `InstalledModelIndex`, and not an id substring) and the work runs as a
+//  one-row flow through `RealExecutor`, so a Parakeet-only Mac transcribes with Parakeet and an OCR
+//  model is picked by its claim. The input is an http(s) `url` (fetched over `network.client`, like
+//  `fetch_url`, via `MediaFetch` below), a granted `path`, or an `asset` handle in a Model Tools chat.
+//  With no `ModelToolHost` bound the result is the same plain text as before.
 //
 
 import Foundation
@@ -75,142 +73,36 @@ nonisolated enum MediaFetch {
     }
 }
 
-/// Transcribes speech from an audio file at an http(s) URL using a locally-installed ASR model.
+/// Transcribes speech from an audio file (`url`, `path` or `asset`) using a locally-installed ASR model.
 nonisolated struct TranscribeAudioTool: AgentTool {
     let name = "transcribe_audio"
-    let toolDescription = """
-        Transcribe speech from an audio file at an http(s) URL into text, using a locally-installed \
-        speech-to-text model. Supports common audio formats (wav, mp3, m4a, …). Read-only.
-        """
-    let parameters: [ToolParameter] = [
-        .required("url", type: .string, description: "The absolute http(s) URL of the audio file.")
-    ]
+    private var tool: ModelTool? { ModelToolSpec.spec(named: name).map(ModelTool.init) }
+    var toolDescription: String { tool?.toolDescription ?? "" }
+    var parameters: [ToolParameter] { tool?.parameters ?? [] }
 
     func execute(arguments: [String: JSONValue]) async throws -> String {
-        let raw = (arguments.string("url") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { return "Error: missing required 'url' argument." }
-        guard let modelID = InstalledModelIndex.loadInstalled().best(kind: .asr) else {
-            return "Error: no speech-to-text model is installed. Install one from the Browse tab first."
-        }
-
-        let data: Data
-        let ext: String
-        switch await MediaFetch.fetchData(raw) {
-        case .failure(let message): return "Error: \(message)"
-        case .success(let bytes, let fileExtension): (data, ext) = (bytes, fileExtension)
-        }
-
-        // AVFoundation sniffs by file extension, so keep the URL's extension on the temp file.
-        let tmp = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-audio-\(UUID().uuidString)")
-            .appendingPathExtension(ext.isEmpty ? "audio" : ext)
-        do {
-            try data.write(to: tmp)
-            defer { try? FileManager.default.removeItem(at: tmp) }
-            let buffer = try AudioFileReader.read(tmp)
-            let samples = try AudioResampler.resample(buffer, to: 16_000).samples
-            let text = try await MLXWhisperEngine.transcribe(
-                samples,
-                modelDirectory: MLXWhisperEngine.installedModelDirectory(id: modelID),
-                language: nil)
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? "(no speech detected in the audio)" : trimmed
-        } catch {
-            return "Error: could not process the audio: \(error.localizedDescription)"
-        }
+        guard let tool else { return "Error: \(name) isn't available." }
+        return try await tool.execute(arguments: arguments)
     }
 }
 
-/// Extracts text from an image at an http(s) URL using a locally-installed OCR (or vision) model.
+/// Extracts text from an image (`url`, `path` or `asset`) using a locally-installed OCR (or vision) model.
 nonisolated struct OCRImageTool: AgentTool {
     let name = "ocr_image"
-    let toolDescription = """
-        Extract the text from an image at an http(s) URL using a locally-installed OCR or vision \
-        model. Returns the transcribed text in reading order. Read-only.
-        """
-    let parameters: [ToolParameter] = [
-        .required("url", type: .string, description: "The absolute http(s) URL of the image.")
-    ]
+    private var tool: ModelTool? { ModelToolSpec.spec(named: name).map(ModelTool.init) }
+    var toolDescription: String { tool?.toolDescription ?? "" }
+    var parameters: [ToolParameter] { tool?.parameters ?? [] }
 
     func execute(arguments: [String: JSONValue]) async throws -> String {
-        let raw = (arguments.string("url") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { return "Error: missing required 'url' argument." }
-        // Prefer a dedicated OCR model; fall back to a general vision model.
-        let index = InstalledModelIndex.loadInstalled()
-        guard let entry = index.bestEntry(kind: .ocr) ?? index.bestEntry(kind: .vision) else {
-            return "Error: no OCR or vision model is installed. Install one from the Browse tab first."
-        }
-        let modelID = entry.id
-
-        let data: Data
-        switch await MediaFetch.fetchData(raw) {
-        case .failure(let message): return "Error: \(message)"
-        case .success(let bytes, _): data = bytes
-        }
-        guard let image = ImageLoader.decodedCGImage(from: data) else {
-            return "Error: could not decode an image from \(raw)."
-        }
-
-        do {
-            let text = try await Self.run(image: image, modelID: modelID, hfModelID: entry.hfModelId)
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? "(no text found in the image)" : trimmed
-        } catch {
-            return "Error: could not read text from the image: \(error.localizedDescription)"
-        }
+        guard let tool else { return "Error: \(name) isn't available." }
+        return try await tool.execute(arguments: arguments)
     }
 
-    /// The engine dispatch, shared by `execute` (above) and CW-3's attachment importer. Behaviour
-    /// is identical — this only moved the `switch` out of `execute`.
-    static func run(image: CGImage, modelID: String, hfModelID: String) async throws -> String {
-        switch backend(forModelID: modelID) {
-        case .paddle:
-            return try await PaddleOCREngine.generate(
-                image: image,
-                modelDir: PaddleOCREngine.installedModelDirectory(id: modelID),
-                maxTokens: OCRSDK.ocrMaxTokens)
-        case .deepseek:
-            return try await DeepSeekOCREngine.generate(
-                image: image,
-                modelDir: DeepSeekOCREngine.installedModelDirectory(id: modelID),
-                maxTokens: OCRSDK.ocrMaxTokens)
-        case .dots:
-            return try await DotsOCREngine.generate(
-                image: image,
-                modelDir: DotsOCREngine.installedModelDirectory(id: modelID),
-                maxTokens: OCRSDK.ocrMaxTokens)
-        case .vlm:
-            return try await VLMEngine.generate(
-                prompt: OCRSDK.ocrPrompt,
-                image: image,
-                modelDir: VLMEngine.installedModelDirectory(hfModelID: hfModelID),
-                maxTokens: OCRSDK.ocrMaxTokens)
-        }
-    }
-
-    /// CW-3's entry point for the attachment importer: OCR **a local file** (the container copy),
-    /// picking the same backend as `execute` and returning `nil` when no OCR/vision model is
-    /// installed. `execute`'s behaviour, schema and description are unchanged.
-    static func recognizeText(in file: URL) async -> String? {
-        let index = InstalledModelIndex.loadInstalled()
-        guard let entry = index.bestEntry(kind: .ocr) ?? index.bestEntry(kind: .vision) else {
-            return nil
-        }
-        guard let data = try? Data(contentsOf: file),
-              let image = ImageLoader.decodedCGImage(from: data)
-        else { return nil }
-        return try? await run(image: image, modelID: entry.id, hfModelID: entry.hfModelId)
-    }
-
-    /// Which engine runs a given OCR/vision model, mirroring the per-module `ModelSDK.claim`
-    /// predicates (which match on the model id/repo). Pure, so it is unit-testable.
-    enum Backend: Equatable { case paddle, deepseek, dots, vlm }
-
-    static func backend(forModelID id: String) -> Backend {
-        let h = id.lowercased()
-        if h.contains("paddleocr") { return .paddle }
-        if h.contains("deepseek-ocr") { return .deepseek }
-        if h.contains("dots") { return .dots }
-        return .vlm  // olmOCR / qwen2.5-vl OCR / any vision model → shared MLXVLM engine
+    /// CW-3's entry point for the attachment importer: OCR **a local file** (the container copy) through the same
+    /// resolver and row path as the tool, returning `nil` when no OCR/vision model is *installed* (so the "no OCR" note
+    /// still shows) or the read fails. Never offers a download.
+    static func recognizeText(in file: URL, runtime: ModelToolRuntime?) async -> String? {
+        guard let runtime, let spec = ModelToolSpec.spec(named: "ocr_image") else { return nil }
+        return await ModelToolRunner(spec: spec, runtime: runtime).recognize(file: file)
     }
 }

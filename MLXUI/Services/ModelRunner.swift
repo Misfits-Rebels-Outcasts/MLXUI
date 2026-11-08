@@ -106,6 +106,11 @@ final class ModelRunner {
     /// `FolderGrants` store so the wrench menu updates live.
     private(set) var folderGrantPaths: [String] = FolderGrants.grantedPaths()
 
+    /// MT1-3: where the chat's model tools get the app's catalog and install state (set by `AppState`). Called once per
+    /// turn on the main actor, so a download that finished since the last turn is seen. `nil` = no model tools in this
+    /// runner (tests that don't wire one).
+    @ObservationIgnored var modelToolRuntimeProvider: (@MainActor () -> ModelToolRuntime?)?
+
     private var currentTask: Task<Void, Never>?
 
     /// Bumped by every `send` and by `stop()`. A turn captures it before its attachment import and
@@ -472,10 +477,11 @@ final class ModelRunner {
     /// The OCR step for one attachment copy: the test override when there is one, else the real
     /// `OCRImageTool` entry point.
     private static func ocrForAttachment(
-        override: (@Sendable (URL) async -> String?)?
+        override: (@Sendable (URL) async -> String?)?,
+        runtime: ModelToolRuntime?
     ) -> @Sendable (URL) async -> String? {
         if let override { return override }
-        return { stored in await OCRImageTool.recognizeText(in: stored) }
+        return { stored in await OCRImageTool.recognizeText(in: stored, runtime: runtime) }
     }
 
     /// Where a model's files are: the test seam when set, else `ModelStore`.
@@ -571,7 +577,7 @@ final class ModelRunner {
                 let attachment = try await AttachmentImporter.importAttachment(
                     from: url, into: directory, ordinal: index, window: window,
                     inlineBytesSoFar: inlineBytes,
-                    ocr: Self.ocrForAttachment(override: ocrOverride),
+                    ocr: Self.ocrForAttachment(override: ocrOverride, runtime: modelToolRuntimeProvider?()),
                     copier: copier)
                 inlineBytes += attachment.inlineText?.utf8.count ?? 0
                 result.append(attachment)
@@ -702,6 +708,7 @@ final class ModelRunner {
             workingFolder: conversation?.effectiveWorkingFolder,
             grants: grants,
             edition: edition)
+        let toolRuntime = modelToolRuntimeProvider?()
         let attachmentsNote = ChatAttachment.environmentNote(for: readyAttachments)
         let instructions = environmentBlock(
             conversation: conversation, edition: edition, grants: grants,
@@ -723,7 +730,7 @@ final class ModelRunner {
                     // sits inside one guard.
                     let session = try await self.streamingSession(
                         for: model, dir: modelDir, instructions: instructions, history: history,
-                        registry: registry, fileScope: fileScope,
+                        registry: registry, fileScope: fileScope, modelToolRuntime: toolRuntime,
                         turnConversationID: turnConversationID, turn: turnLease)
 
                     // R-ME3-1 (owner, 2026-10-12): **stop at the error.** `makeStream` must be a
@@ -950,6 +957,7 @@ final class ModelRunner {
         history: [Chat.Message],
         registry: ToolRegistry,
         fileScope: FileScope?,
+        modelToolRuntime: ModelToolRuntime?,
         turnConversationID: UUID?,
         turn: TurnLease
     ) async throws -> any ChatStreamingSession {
@@ -963,6 +971,7 @@ final class ModelRunner {
             history: history,
             registry: registry,
             fileScope: fileScope,
+            modelToolRuntime: modelToolRuntime,
             // 512 was too tight once reasoning models entered the picture:
             // Qwen3's <think> block alone can run 250–500 tokens, so the
             // generation was being truncated *before* the tool call was

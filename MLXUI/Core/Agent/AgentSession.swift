@@ -30,6 +30,11 @@ nonisolated final class AgentSession {
     /// The conversation's folder scope, bound as a `@TaskLocal` for every dispatch (CW-1 C1).
     /// `nil` — flows, the Local Server, tests — means the tools behave exactly as before.
     private let fileScope: FileScope?
+    /// MT1-3: bound for every dispatch like `fileScope`, so the model tools find the app's catalog/install state
+    /// (`modelToolRuntime`) and, in a Model Tools chat, the conversation's assets (`modelToolHost`). Both `nil`
+    /// for flows, the Local Server and tests: the tools then answer in plain text, as before.
+    private let modelToolRuntime: ModelToolRuntime?
+    private let modelToolHost: ModelToolHost?
     private let parameters: GenerateParameters
     private let maxToolCalls: Int
     private let approve: @Sendable (ToolCall, any AgentTool) async -> Bool
@@ -49,6 +54,8 @@ nonisolated final class AgentSession {
         history: [Chat.Message] = [],
         registry: ToolRegistry = ToolRegistry(),
         fileScope: FileScope? = nil,
+        modelToolRuntime: ModelToolRuntime? = nil,
+        modelToolHost: ModelToolHost? = nil,
         parameters: GenerateParameters = .init(),
         maxToolCalls: Int = 8,
         approve: @escaping @Sendable (ToolCall, any AgentTool) async -> Bool = { _, _ in true },
@@ -59,6 +66,8 @@ nonisolated final class AgentSession {
         self.history = history
         self.registry = registry
         self.fileScope = fileScope
+        self.modelToolRuntime = modelToolRuntime
+        self.modelToolHost = modelToolHost
         self.parameters = parameters
         self.maxToolCalls = maxToolCalls
         self.approve = approve
@@ -80,6 +89,8 @@ nonisolated final class AgentSession {
         let approve = approve
         let onEvent = onEvent
         let fileScope = fileScope
+        let modelToolRuntime = modelToolRuntime
+        let modelToolHost = modelToolHost
         let budget = ToolBudget(limit: maxToolCalls)
 
         // The scope is bound *inside* the dispatch closure, not around `streamResponse`:
@@ -88,8 +99,12 @@ nonisolated final class AgentSession {
         // and the `withTimeout` task-group path (CW-1's propagation test is the guard).
         let dispatch: @Sendable (ToolCall) async throws -> String = { call in
             let result = await FileScope.$current.withValue(fileScope) {
-                await AgentSession.dispatch(
-                    call, registry: registry, budget: budget, approve: approve, onEvent: onEvent)
+                await ModelToolRuntime.$current.withValue(modelToolRuntime) {
+                    await ModelToolHost.$current.withValue(modelToolHost) {
+                        await AgentSession.dispatch(
+                            call, registry: registry, budget: budget, approve: approve, onEvent: onEvent)
+                    }
+                }
             }
             return result.modelResult
         }

@@ -4,33 +4,13 @@ import MLXLMCommon
 @testable import MLXUI
 
 /// AG4c — media tools (`transcribe_audio`, `ocr_image`). The network transfer + audio/image
-/// decode + inference aren't unit-testable (offline CI, no weights); the pure OCR engine-routing
-/// helper + protocol conformance are tested synchronously.
+/// decode + inference aren't unit-testable (offline CI, no weights); protocol conformance is tested
+/// synchronously (engine choice moved to the resolver in MT1-3).
 struct MediaToolsTests {
 
-    // MARK: OCR engine routing
-
-    @Test func ocrRoutesPaddleByModelID() {
-        #expect(OCRImageTool.backend(forModelID: "mlx-community--PaddleOCR-VL-0.9B-4bit") == .paddle)
-    }
-
-    @Test func ocrRoutesDeepSeekByModelID() {
-        #expect(OCRImageTool.backend(forModelID: "mlx-community--DeepSeek-OCR-2-bf16") == .deepseek)
-    }
-
-    @Test func ocrRoutesDotsByModelID() {
-        #expect(OCRImageTool.backend(forModelID: "mlx-community--dots.mocr-4bit") == .dots)
-    }
-
-    @Test func ocrRoutesOtherToSharedVLMEngine() {
-        // olmOCR (Qwen2-VL arch) and any generic vision model run on the shared MLXVLM engine.
-        #expect(OCRImageTool.backend(forModelID: "mlx-community--olmOCR-2-7B-1025-mlx-4bit") == .vlm)
-        #expect(OCRImageTool.backend(forModelID: "mlx-community--Qwen3-VL-4B-Instruct-4bit") == .vlm)
-    }
-
-    @Test func ocrRoutingIsCaseInsensitive() {
-        #expect(OCRImageTool.backend(forModelID: "SOME-PADDLEOCR-MODEL") == .paddle)
-    }
+    // MT1-3: the id-substring OCR routing (`OCRImageTool.backend(forModelID:)`) and its five tests are retired. The
+    // engine is picked by the registry's claim through the one-row flow; see ModelToolRunnerTests
+    // (`ocrPicksTheInstalledModelByClaim`).
 
     // MARK: URL validation is shared with fetch_url (rejects non-http schemes)
 
@@ -55,7 +35,10 @@ struct MediaToolsTests {
         for tool: any AgentTool in [TranscribeAudioTool(), OCRImageTool()] {
             let fn = tool.toolSpec["function"] as? [String: any Sendable]
             let params = fn?["parameters"] as? [String: any Sendable]
-            #expect(params?["required"] as? [String] == ["url"])
+            // MT1-3: the input is `url` OR `asset` OR `path`, so none of them is individually required.
+            #expect(params?["required"] as? [String] == [])
+            let properties = params?["properties"] as? [String: any Sendable]
+            #expect(properties?["url"] != nil && properties?["asset"] != nil && properties?["path"] != nil)
         }
     }
 }
