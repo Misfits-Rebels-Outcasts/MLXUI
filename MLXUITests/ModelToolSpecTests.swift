@@ -20,8 +20,9 @@ struct ModelToolSpecTests {
     }
 
     @Test func everyTaskIsServedWithARunnerKindAndMatchingKinds() throws {
-        for spec in ModelToolSpec.modelTools {
-            let task = try #require(spec.task)
+        for spec in ModelToolSpec.all {
+            // list_capabilities and read_asset run no model (task nil): skipped here on purpose, pinned by the assertion below.
+            guard let task = spec.task else { continue }
             let desc = try #require(TaskCatalog.get(task), "\(spec.name): \(task) is not a task")
             #expect(TaskModels.isServedByExecutor(task), "\(spec.name)")
             #expect(TaskModels.runnerKind(forTask: task) != nil, "\(spec.name)")
@@ -127,6 +128,14 @@ struct ModelToolSpecTests {
         let spec = try #require(ModelToolSpec.spec(named: "generate_image"))
         #expect(spec.unknownArguments(in: ["seed", "seconds", "prompt"]) == ["seconds", "prompt"])
         #expect(ModelToolSpec.spec(named: "ocr_image")?.unknownArguments(in: ["language"]) == ["language"])
+    }
+
+    @Test func generateImageLimits() throws {
+        let image = try #require(ModelToolSpec.spec(named: "generate_image"))
+        #expect(image.param(named: "steps")?.type == .integer(min: 1, max: 50))
+        for name in ["width", "height"] {
+            #expect(image.param(named: name)?.type == .integer(min: 1, max: nil), "\(name) has no upper bound")
+        }
     }
 
     @Test func droppedThingsStayDropped() {
