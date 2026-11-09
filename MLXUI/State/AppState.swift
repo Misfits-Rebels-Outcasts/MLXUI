@@ -78,6 +78,11 @@ final class AppState {
     /// them. Every surface asks `LocalServerGate.isAvailable`, never this flag directly.
     static let hideLocalServer = false
 
+    /// Set to `true` to hide the Chat sidebar page (MT2-2): no sidebar row, no page. Saved conversations are
+    /// kept on disk, and the per-model chat sheet is unaffected. Every Chat surface asks `ChatGate.isAvailable`,
+    /// never this flag directly.
+    static let hideChat = false
+
     /// Kill switch for the Local Server's prompt cache (`RSI/DelegatePromptCacheBacklog.md` rule 10,
     /// ruling C1). **Shipped `false` (cache on) at Review PC-A, 2026-10-08.** Set it `true` to switch
     /// the cache off everywhere. Every prompt-cache path asks `PromptCache.isEnabled`, never this
@@ -195,9 +200,24 @@ final class AppState {
     // Comparison
     var comparisonSet: [ModelEntry] = []
 
+    /// Catalog id to display name, for the Chat page's per-conversation model badge (MT2-3).
+    var catalogDisplayNames: [String: String] {
+        var names: [String: String] = [:]
+        for model in browserData?.domains.flatMap({ $0.allModels }) ?? [] { names[model.id] = model.displayName }
+        return names
+    }
+
+    /// Installed models the chat can run (`runnerKind == .llm`), in catalog order. The Chat page picks from these.
+    var installedChatModels: [ModelEntry] {
+        (browserData?.domains.flatMap { $0.allModels } ?? [])
+            .filter { $0.runnerKind == .llm && installedModelIDs.contains($0.id) }
+    }
+
     // Installation
     var installManager = InstallManager()
     var modelRunner = ModelRunner()
+    /// MT2-1: the one API chat views use; the runner above stays the single generation engine.
+    @ObservationIgnored lazy var chat = ChatController(runner: modelRunner)
     /// S1-5 — the Local Server's view-model. Only ever used through `LocalServerGate`.
     let localServer = LocalServerController.shared
 
@@ -625,7 +645,7 @@ final class AppState {
         // (text-only Gemma 3) but routes as `.translate`, so testing `modelType` here would open the chat sheet
         // and bypass its module — the exact collision Trap 5 warns about.
         if model.runnerKind == .llm {
-            modelRunner.prepare(for: model)
+            chat.acquire(.bench, model: model)
             runningModel = model
         } else if registry.bestModule(for: model) != nil {
             asrRunModel = model
@@ -637,12 +657,21 @@ final class AppState {
     /// `false` when the user declined the "stop keeping a served model ready?" question (SC-5a-b).
     @discardableResult
     func sendPrompt(_ text: String, attachments: [URL] = []) async -> Bool {
-        guard let model = runningModel else { return true }
-        return await modelRunner.send(text, attachments: attachments, for: model)
+        guard runningModel != nil else { return true }
+        return await chat.send(text, attachments: attachments, from: .bench)
+    }
+
+    /// MT2-5: the chat sheet's "Open in Chat". The caller dismisses the sheet; this hands the conversation over and
+    /// selects the Chat item. `false` (nothing changed) when the gate is closed or the sheet is waiting.
+    @discardableResult
+    func openBenchInChat() -> Bool {
+        guard chat.openBenchInChat(installedChatModels: installedChatModels) else { return false }
+        selectedSection = .chat
+        return true
     }
 
     func stopModel() {
-        modelRunner.stop()
+        chat.stop(from: .bench)
     }
 
     // ── Comparison ──
@@ -760,6 +789,8 @@ enum SidebarItem: Hashable {
     case browse(String)
     case overview
     case aiWorkflows
+    /// MT2-2: the Chat page; offered only while `ChatGate.isAvailable`.
+    case chat
     /// SC-4b: the Local Server screen; offered only while `LocalServerGate.isEnabled`.
     case server
     var isHome: Bool { if case .home = self { return true }; return false }

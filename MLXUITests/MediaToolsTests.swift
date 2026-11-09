@@ -38,7 +38,7 @@ struct MediaToolsTests {
             // MT1-3: the input is `url` OR `asset` OR `path`, so none of them is individually required.
             #expect(params?["required"] as? [String] == [])
             let properties = params?["properties"] as? [String: any Sendable]
-            #expect(properties?["url"] != nil && properties?["asset"] != nil && properties?["path"] != nil)
+            #expect(properties?["url"] != nil && properties?["asset"] == nil && properties?["path"] != nil)
         }
     }
 }

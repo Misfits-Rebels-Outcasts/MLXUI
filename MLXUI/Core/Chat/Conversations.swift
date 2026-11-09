@@ -22,8 +22,9 @@ import MLXLMCommon
 /// One chat conversation with one model.
 struct Conversation: Identifiable, Codable, Sendable, Equatable {
     let id: UUID
-    /// Catalog id of the model this conversation belongs to.
-    let modelID: String
+    /// Catalog id of the model that last answered in this conversation (MT2-3; it was the creating model until
+    /// then). Still a required, always-encoded key, so older builds read new files.
+    var modelID: String
     /// Shown in the conversation list; derived from the first prompt once one exists.
     var title: String
     let createdAt: Date
@@ -171,6 +172,21 @@ nonisolated enum ConversationStore {
                 return try? decoder.decode(Conversation.self, from: data)
             }
             .filter { $0.modelID == modelID }
+            .sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    /// Every persisted conversation of every model, newest `updatedAt` first (MT2-1; the Chat page's list).
+    static func allConversations(in directory: URL = defaultDirectory()) -> [Conversation] {
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil)) ?? []
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return files
+            .filter { $0.pathExtension == "json" }
+            .compactMap { url -> Conversation? in
+                guard let data = try? Data(contentsOf: url) else { return nil }
+                return try? decoder.decode(Conversation.self, from: data)
+            }
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 

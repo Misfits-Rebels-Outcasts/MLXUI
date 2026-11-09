@@ -46,6 +46,13 @@ extension ModelToolRunner {
         return .failure(ToolFailure("give the input for \(spec.name)."))
     }
 
+    /// MT1-FIX-2: the file tools' rejections lead with "Error: " but not all do ("No folder is attached
+    /// to this chat..."), so strip it only when it is there. A blind `dropFirst(7)` cut real text.
+    static func withoutErrorPrefix(_ message: String) -> String {
+        let prefix = "Error: "
+        return message.hasPrefix(prefix) ? String(message.dropFirst(prefix.count)) : message
+    }
+
     private func resolveHandle(_ handle: String, kind: Kind, host: ModelToolHost?) -> Result<ResolvedModelToolInput, ToolFailure> {
         guard let host else {
             return .failure(ToolFailure("asset handles are only available in a chat. Give a path or url instead."))
@@ -73,7 +80,7 @@ extension ModelToolRunner {
         let copy = scratch.appendingPathComponent("input-\(UUID().uuidString)").appendingPathExtension(ext.isEmpty ? "bin" : ext)
         #if DIRECT_BUILD
         switch PathPolicy.resolve(raw, roots: runtime.pathRoots ?? PathPolicy.defaultRoots, base: ScopedFileTools.workingFolderBase()) {
-        case .rejected(let message): return .failure(ToolFailure(String(message.dropFirst("Error: ".count))))
+        case .rejected(let message): return .failure(ToolFailure(Self.withoutErrorPrefix(message)))
         case .allowed(let file):
             do { try FileManager.default.copyItem(at: file, to: copy) } catch {
                 return .failure(ToolFailure("couldn't read \(file.path)."))
@@ -82,8 +89,8 @@ extension ModelToolRunner {
         #else
         let container = runtime.pathRoots?.first ?? ModelStore.shared.baseDirectory
         guard let access = ScopedFileTools.access(raw, container: container, roots: runtime.pathRoots) else {
-            return .failure(ToolFailure(String(ScopedFileTools.rejection(for: raw, container: container, roots: runtime.pathRoots)
-                .dropFirst("Error: ".count))))
+            return .failure(ToolFailure(Self.withoutErrorPrefix(
+                ScopedFileTools.rejection(for: raw, container: container, roots: runtime.pathRoots))))
         }
         // A granted file is readable only inside its security scope, so the copy is made there.
         let copied: Bool? = FolderGrants.withScopedRead(to: access.url, grants: access.grants,

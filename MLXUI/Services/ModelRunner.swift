@@ -19,12 +19,16 @@ struct ChatMessage: Identifiable, Sendable, Equatable {
     /// CW-3: files this turn carried. The bubble shows `text` plus chips; the model sees
     /// `ChatAttachment.modelFacing(text:attachments:)`.
     var attachments: [ChatAttachment]
+    /// MT2-3: the model that wrote this assistant turn (catalog id); `nil` for user turns and for turns saved
+    /// before this field existed. Stamped when the bubble is created, so a chat that changes model keeps the record.
+    var modelID: String?
 
-    init(id: UUID = UUID(), role: Role, text: String, attachments: [ChatAttachment] = []) {
+    init(id: UUID = UUID(), role: Role, text: String, attachments: [ChatAttachment] = [], modelID: String? = nil) {
         self.id = id
         self.role = role
         self.text = text
         self.attachments = attachments
+        self.modelID = modelID
     }
 }
 
@@ -32,7 +36,7 @@ struct ChatMessage: Identifiable, Sendable, Equatable {
 /// before CW-3 would fail to decode and `ConversationStore` would silently skip it — the user's
 /// chat history would vanish (the backlog's trap).
 extension ChatMessage: Codable {
-    private enum CodingKeys: String, CodingKey { case id, role, text, attachments }
+    private enum CodingKeys: String, CodingKey { case id, role, text, attachments, modelID }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -40,6 +44,7 @@ extension ChatMessage: Codable {
         role = try c.decode(Role.self, forKey: .role)
         text = try c.decode(String.self, forKey: .text)
         attachments = try c.decodeIfPresent([ChatAttachment].self, forKey: .attachments) ?? []
+        modelID = try c.decodeIfPresent(String.self, forKey: .modelID)     // MT2-3: absent in older files
     }
 
     func encode(to encoder: Encoder) throws {
@@ -48,6 +53,7 @@ extension ChatMessage: Codable {
         try c.encode(role, forKey: .role)
         try c.encode(text, forKey: .text)
         try c.encode(attachments, forKey: .attachments)
+        try c.encodeIfPresent(modelID, forKey: .modelID)                  // only when set: older builds never see the key
     }
 }
 
@@ -79,6 +85,9 @@ final class ModelRunner {
     /// The model whose conversations are loaded (set in `prepare`, independent of weight
     /// loading, which happens lazily on the first send).
     private var preparedModelID: String?
+    /// What `conversations` was loaded for (MT2-2): lets a model-scoped `prepare` tell a list the Chat page loaded
+    /// (`.all`) from its own, even when `preparedModelID` matches. `nil` until something is loaded.
+    private var loadedScope: ChatScope?
 
     /// Where this runner persists conversations. `prepare(for:in:)` sets it, so a test's temp
     /// directory and the app's real one both flow through the same save/delete path (CW-2).
@@ -143,6 +152,9 @@ final class ModelRunner {
     /// build a `ModelContainer`, so a seam that replaced the session only *after* `containerForModel`
     /// would be unreachable. `nil` in the app.
     @ObservationIgnored var streamingSessionForTesting: (@Sendable () -> any ChatStreamingSession)?
+
+    /// Test seam (MT2-4): told which model a turn's session was built for and the history it was given.
+    @ObservationIgnored var sessionRequestForTesting: (@Sendable (_ modelID: String, _ history: [Chat.Message]) -> Void)?
     #endif
 
     /// S1-1: loaded weights live in the shared `ModelContainerPool` (chat, flow rows and the
@@ -226,26 +238,82 @@ final class ModelRunner {
     func prepare(
         for model: ModelEntry, in directory: URL = ConversationStore.defaultDirectory()
     ) {
+        prepare(scope: .model(model.id), in: directory)
+    }
+
+    /// `prepare(for:in:)` generalised (MT2-1): `.model(id)` is exactly the old behaviour; `.all` lists every
+    /// conversation of every model (the Chat page).
+    /// `preloaded` (MT2-3) hands `.all` a list the caller already holds, so no file is read.
+    func prepare(scope: ChatScope, in directory: URL = ConversationStore.defaultDirectory(),
+                 preloaded: [Conversation]? = nil) {
         conversationDirectory = directory
-        if preparedModelID != model.id {
-            preparedModelID = model.id
-            conversations = ConversationStore.conversations(
-                forModelID: model.id, in: directory)
+        switch scope {
+        case .model(let id):
+            if preparedModelID != id || loadedScope == .all {
+                preparedModelID = id
+                loadedScope = .model(id)
+                conversations = ConversationStore.conversations(forModelID: id, in: directory)
+                if let mostRecent = conversations.first {
+                    activeConversationID = mostRecent.id
+                    transcript.load(mostRecent.items)
+                } else {
+                    startNewConversation(modelID: id)
+                }
+            }
+        case .all:
+            preparedModelID = nil
+            loadedScope = .all
+            conversations = preloaded ?? ConversationStore.allConversations(in: directory)
             if let mostRecent = conversations.first {
                 activeConversationID = mostRecent.id
                 transcript.load(mostRecent.items)
             } else {
-                startNewConversation(modelID: model.id)
+                activeConversationID = nil
+                transcript.reset()
             }
         }
+        errorMessage = nil
+    }
+
+    /// The loaded conversations as a value, live transcript included, for `ChatController` to park while
+    /// another surface holds the runner. Does not save or reorder anything.
+    func release() -> ChatWorkingSet {
+        ChatWorkingSet(
+            scope: loadedScope ?? preparedModelID.map(ChatScope.model) ?? .all,
+            conversations: conversations,
+            activeConversationID: activeConversationID,
+            transcriptItems: transcript.items)
+    }
+
+    /// MT2-5: the loaded list becomes the every-model list (`others` merged under it) **without** touching the active
+    /// conversation, its transcript or a running turn. This is how the sheet hands its conversation to the Chat page:
+    /// a blank, memory-only chat (with its attached folders) must not be reloaded from disk, and a turn in flight keeps
+    /// streaming into the same transcript.
+    func widenToAll(with others: [Conversation]) {
+        conversations = ChatConversationList.merge(disk: others, live: conversations)
+        preparedModelID = nil
+        loadedScope = .all
+    }
+
+    /// Put a parked working set back.
+    func adopt(_ set: ChatWorkingSet) {
+        if isRunning { stop() }
+        loadedScope = set.scope
+        switch set.scope {
+        case .model(let id): preparedModelID = id
+        case .all: preparedModelID = nil
+        }
+        conversations = set.conversations
+        activeConversationID = set.activeConversationID
+        transcript.load(set.transcriptItems)
         errorMessage = nil
     }
 
     // MARK: - Conversations
 
     /// Start a new conversation (an existing empty one is reused instead of stacking blanks).
-    func newConversation() {
-        guard let modelID = preparedModelID else { return }
+    func newConversation(for modelID: String? = nil) {
+        guard let modelID = modelID ?? preparedModelID else { return }
         if isRunning { stop() }
         saveActiveConversation()
         if let existing = conversations.first(where: { $0.items.isEmpty }) {
@@ -624,6 +692,7 @@ final class ModelRunner {
 
         // Prior turns become the model's rehydrated history; the new prompt goes on top.
         if activeConversationID == nil {
+            if loadedScope == nil { loadedScope = .model(model.id) }
             preparedModelID = model.id
             startNewConversation(modelID: model.id)
         }
@@ -680,6 +749,10 @@ final class ModelRunner {
         }
         guard generation == turnGeneration, activeConversationID == turnConversationID, isRunning else { return true }
 
+        // MT2-3: `Conversation.modelID` is the *last* model used; the bench's filtered list follows it.
+        if let index = conversations.firstIndex(where: { $0.id == activeConversationID }) {
+            conversations[index].modelID = model.id
+        }
         transcript.addUserMessage(trimmed, attachments: readyAttachments)
         // CW-C-FIX-1: the model gets the same thing the transcript shows. `send` used to pass the
         // bare `trimmed` text as the prompt, so an attachment's contents reached the **bubble** and
@@ -707,7 +780,9 @@ final class ModelRunner {
             attached: conversation?.attachedFolders ?? [],
             workingFolder: conversation?.effectiveWorkingFolder,
             grants: grants,
-            edition: edition)
+            edition: edition,
+            attachmentsFolder: activeConversationID.map {
+                ConversationStore.attachmentsDirectory(for: $0).path })
         let toolRuntime = modelToolRuntimeProvider?()
         let attachmentsNote = ChatAttachment.environmentNote(for: readyAttachments)
         let instructions = environmentBlock(
@@ -740,7 +815,7 @@ final class ModelRunner {
                         // A late chunk must not leak into a conversation the user switched to
                         // (switching stops the task, but a chunk can already be in flight).
                         guard self.activeConversationID == turnConversationID else { return false }
-                        self.transcript.appendAssistantChunk(chunk)
+                        self.transcript.appendAssistantChunk(chunk, modelID: model.id)
                         return true
                     }
                 }
@@ -962,7 +1037,10 @@ final class ModelRunner {
         turn: TurnLease
     ) async throws -> any ChatStreamingSession {
         #if DEBUG
-        if let injected = streamingSessionForTesting { return injected() }
+        if let injected = streamingSessionForTesting {
+            sessionRequestForTesting?(model.id, history)
+            return injected()
+        }
         #endif
         let container = try await leasedContainerForModel(model, dir: dir, turn: turn)
         return AgentSession(
