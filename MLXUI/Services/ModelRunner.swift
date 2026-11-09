@@ -762,7 +762,7 @@ final class ModelRunner {
         let modelPrompt = ChatAttachment.prompt(text: trimmed, attachments: readyAttachments)
 
         // Snapshot the enabled tools for this turn (Sendable to hand to the nonisolated session).
-        let registry = ToolRegistry(availableTools.filter { enabledToolNames.contains($0.name) })
+        let armedTools = availableTools.filter { enabledToolNames.contains($0.name) }
 
         // CW-2: the scope is the conversation's attached folders (G1), rebuilt on *every* turn so a
         // revoke or a detach takes effect on the next message.
@@ -803,15 +803,24 @@ final class ModelRunner {
                     // so the test seam can replace it, and the whole turn — load, generation and the
                     // in-app MLX tools that run through the session's tool dispatch on this same task —
                     // sits inside one guard.
-                    let session = try await self.streamingSession(
-                        for: model, dir: modelDir, instructions: instructions, history: history,
-                        registry: registry, fileScope: fileScope, modelToolRuntime: toolRuntime,
-                        turnConversationID: turnConversationID, turn: turnLease)
+                    let router = try await self.chatRouter(
+                        for: model, dir: modelDir, history: history,
+                        fileScope: fileScope, modelToolRuntime: toolRuntime, turn: turnLease)
+                    let routerTurn = RouterTurn(
+                        instructions: instructions,
+                        history: .folded(history.map(MLXChatRouter.routerMessage)),
+                        prompt: modelPrompt,
+                        tools: armedTools,
+                        approve: self.routerApprove(),
+                        onToolEvent: self.routerToolEventSink(turnConversationID: turnConversationID))
 
                     // R-ME3-1 (owner, 2026-10-12): **stop at the error.** `makeStream` must be a
                     // closure: the producer's `Task {}` only inherits mlx-swift's `@TaskLocal` handler
-                    // if it is created inside the guard (journal 2026-469).
-                    try await MLXErrorGuard.guardedStream({ session.streamResponse(to: modelPrompt) }) { chunk in
+                    // if it is created inside the guard (journal 2026-469) -- `streamTurn` creates it.
+                    try await MLXErrorGuard.guardedStream({ router.streamTurn(routerTurn) }) { event in
+                        // Only the reply text drives the transcript here; tool cards come through
+                        // `onToolEvent` exactly as before (the stream's tool events are the neutral summary).
+                        guard case .text(let chunk) = event else { return true }
                         // A late chunk must not leak into a conversation the user switched to
                         // (switching stops the task, but a chunk can already be in flight).
                         guard self.activeConversationID == turnConversationID else { return false }
@@ -915,12 +924,12 @@ final class ModelRunner {
     /// Present the approval sheet and await the user's decision. Called by `AgentSession` for
     /// tools whose `requiresApproval` is true. The call's arguments ride along so the sheet can
     /// show what is being approved (EF-3, D10); nothing else about the gate changes.
-    private func requestApproval(for tool: any AgentTool, call: ToolCall) async -> Bool {
+    private func requestApproval(for tool: any AgentTool, arguments: [String: JSONValue]) async -> Bool {
         await withCheckedContinuation { continuation in
             self.pendingApproval = PendingApproval(
                 toolName: tool.name,
                 toolDescription: tool.toolDescription,
-                arguments: call.function.arguments,
+                arguments: arguments,
                 respond: { continuation.resume(returning: $0) }
             )
         }
@@ -1019,64 +1028,66 @@ final class ModelRunner {
         func release() { hold?.release(); hold = nil }
     }
 
-    /// Build the streaming session for one turn — the single place `send` gets one (MLX-ERR-3).
+    /// Build the router for one turn — the single place `send` gets one (MLX-ERR-3, MT3-1).
     ///
     /// Extracted from `send` so the test seam can replace the **whole** session, weights load
     /// included: `streamingSessionForTesting` is checked first, so a test never needs a
     /// `ModelContainer`, which nothing in this suite can build. The `parameters`/`approve`/`onEvent`
-    /// wiring is unchanged from when it lived inline in `send`.
-    private func streamingSession(
+    /// wiring is unchanged from when it lived inline in `send`; it now sits in `MLXChatRouter` /
+    /// `RouterTurn` (MT3-1) and the leased container is still taken here, before the guard.
+    private func chatRouter(
         for model: ModelEntry,
         dir: URL,
-        instructions: String?,
         history: [Chat.Message],
-        registry: ToolRegistry,
         fileScope: FileScope?,
         modelToolRuntime: ModelToolRuntime?,
-        turnConversationID: UUID?,
         turn: TurnLease
-    ) async throws -> any ChatStreamingSession {
+    ) async throws -> any ChatRouter {
+        let identity = RouterIdentity(
+            displayName: model.displayName, kind: .mlx,
+            contextSize: ContextWindow.tokens(for: model, modelDirectory: dir))
         #if DEBUG
         if let injected = streamingSessionForTesting {
             sessionRequestForTesting?(model.id, history)
-            return injected()
+            return MLXChatRouter(identity: identity) { _, _ in injected() }
         }
         #endif
         let container = try await leasedContainerForModel(model, dir: dir, turn: turn)
-        return AgentSession(
-            model: container,
-            instructions: instructions,
-            history: history,
-            registry: registry,
+        return MLXChatRouter(
+            identity: identity,
+            container: container,
             fileScope: fileScope,
             modelToolRuntime: modelToolRuntime,
-            // 512 was too tight once reasoning models entered the picture:
-            // Qwen3's <think> block alone can run 250–500 tokens, so the
-            // generation was being truncated *before* the tool call was
-            // emitted. The symptom is indistinguishable from "the model
-            // chose not to call a tool" — reasoning text, then nothing.
-            parameters: GenerateParameters(maxTokens: 2048, temperature: 0.7),
-            maxToolCalls: agentToolSettings.toolCallLimit,
-            approve: { [weak self] call, tool in
-                switch await self?.approvalDecision(for: tool) {
-                case .autoApprove:     return true
-                case .prompt:
-                    return await self?.requestApproval(for: tool, call: call) ?? false
-                case .autoDeny, .none: return false
-                }
-            },
-            onEvent: { [weak self] event in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    // Late events stay out of a switched-to conversation; the
-                    // audit log records the session regardless.
-                    if self.activeConversationID == turnConversationID {
-                        self.transcript.apply(event)
-                    }
-                    self.auditLog.record(event)
-                }
+            maxToolCalls: agentToolSettings.toolCallLimit)
+    }
+
+    /// The `RouterTurn.approve` gate: the persisted policy, asking the user when it says prompt.
+    private func routerApprove() -> @Sendable (any AgentTool, [String: JSONValue]) async -> Bool {
+        { [weak self] tool, arguments in
+            switch await self?.approvalDecision(for: tool) {
+            case .autoApprove:     return true
+            case .prompt:
+                return await self?.requestApproval(for: tool, arguments: arguments) ?? false
+            case .autoDeny, .none: return false
             }
-        )
+        }
+    }
+
+    /// The `RouterTurn.onToolEvent` sink for one turn.
+    private func routerToolEventSink(
+        turnConversationID: UUID?
+    ) -> @Sendable (AgentToolEvent) -> Void {
+        { [weak self] event in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // Late events stay out of a switched-to conversation; the
+                // audit log records the session regardless.
+                if self.activeConversationID == turnConversationID {
+                    self.transcript.apply(event)
+                }
+                self.auditLog.record(event)
+            }
+        }
     }
 
     private func showUnsupported(_ type: String, _ model: ModelEntry) {

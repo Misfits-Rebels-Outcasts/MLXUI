@@ -149,7 +149,7 @@ struct ChatAttachmentTests {
             encoding: .utf8)
         #expect(source.contains(
             "let modelPrompt = ChatAttachment.prompt(text: trimmed, attachments: readyAttachments)"))
-        #expect(source.contains("session.streamResponse(to: modelPrompt)"))
+        #expect(source.contains("prompt: modelPrompt,"))   // MT3-1: the call site moved into `RouterTurn(prompt:)`; `ChatRouterTests` pins the router hands it to the session unchanged
         // …and nothing hands the bare text to the model.
         #expect(!source.contains("streamResponse(to: trimmed)"))
     }
