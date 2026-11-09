@@ -661,6 +661,15 @@ final class AppState {
         return await chat.send(text, attachments: attachments, from: .bench)
     }
 
+    /// MT2-5: the chat sheet's "Open in Chat". The caller dismisses the sheet; this hands the conversation over and
+    /// selects the Chat item. `false` (nothing changed) when the gate is closed or the sheet is waiting.
+    @discardableResult
+    func openBenchInChat() -> Bool {
+        guard chat.openBenchInChat(installedChatModels: installedChatModels) else { return false }
+        selectedSection = .chat
+        return true
+    }
+
     func stopModel() {
         chat.stop(from: .bench)
     }

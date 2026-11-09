@@ -246,6 +246,13 @@ struct ChatView: View {
             }
             Spacer()
             exportMenu
+            if surface == .bench, onDone != nil, ChatGate.isAvailable {
+                Button("Open in Chat") {
+                    if appState.openBenchInChat() { onDone?() }
+                }
+                .disabled(!controller.canOpenBenchInChat)
+                .help("Continue this conversation on the Chat page")
+            }
             if !runner.availableTools.isEmpty {
                 toolsMenu
             }

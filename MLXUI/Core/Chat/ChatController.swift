@@ -166,6 +166,41 @@ final class ChatController {
     /// After the bench goes away the page, if it is on screen, takes the runner back.
     var pageShouldReacquire: Bool { holder == nil }
 
+    // MARK: - Open in Chat (MT2-5)
+
+    /// Whether the sheet may hand its conversation to the page: the gate is open, the sheet holds the runner and is not
+    /// itself waiting for it.
+    var canOpenBenchInChat: Bool {
+        ChatGate.isAvailable && holder == .bench && !waiting.contains(.bench)
+    }
+
+    /// Pass the runner from the sheet to the page **in place**: the same conversation, transcript, attached folders and
+    /// any running turn carry over (nothing is reloaded or stopped), the rest of the chats join the list, the page's
+    /// model becomes the conversation's when installed, and the sheet's draft moves to the page. A turn the sheet
+    /// started now belongs to the page, so the sheet going away (`stop(from: .bench)`) leaves it running.
+    /// The caller dismisses the sheet and selects the Chat item.
+    @discardableResult
+    func openBenchInChat(installedChatModels: [ModelEntry]) -> Bool {
+        guard canOpenBenchInChat else { return false }
+        pageCandidates = installedChatModels
+        var others = loadedIndex()
+        if let page = parked.removeValue(forKey: .page) {
+            // The page was on screen under the sheet: keep its chats (including a blank one) in the list.
+            others = ChatConversationList.merge(disk: others, live: page.conversations)
+        }
+        runner.widenToAll(with: others)
+        holder = .page
+        waiting.remove(.page)
+        if runner.isRunning { startedBy = .page }
+        let modelID = runner.conversations.first { $0.id == runner.activeConversationID }?.modelID
+        if let match = installedChatModels.first(where: { $0.id == modelID }) { models[.page] = match }
+        else if models[.page] == nil { models[.page] = models[.bench] }
+        let carried = draft(for: .bench)
+        if carried != ChatDraft() { setDraft(carried, for: .page) }
+        drafts[.bench] = nil
+        return true
+    }
+
     // MARK: - The Chat page's model and its menu (MT2-4)
 
     /// Loads the facts of any model the menu has not shown yet.

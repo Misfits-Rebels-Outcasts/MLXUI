@@ -285,6 +285,16 @@ final class ModelRunner {
             transcriptItems: transcript.items)
     }
 
+    /// MT2-5: the loaded list becomes the every-model list (`others` merged under it) **without** touching the active
+    /// conversation, its transcript or a running turn. This is how the sheet hands its conversation to the Chat page:
+    /// a blank, memory-only chat (with its attached folders) must not be reloaded from disk, and a turn in flight keeps
+    /// streaming into the same transcript.
+    func widenToAll(with others: [Conversation]) {
+        conversations = ChatConversationList.merge(disk: others, live: conversations)
+        preparedModelID = nil
+        loadedScope = .all
+    }
+
     /// Put a parked working set back.
     func adopt(_ set: ChatWorkingSet) {
         if isRunning { stop() }
