@@ -98,13 +98,14 @@ struct TranscriptBuilder {
     }
 
     /// Append a streamed assistant text chunk, extending the open bubble or starting a new one.
-    mutating func appendAssistantChunk(_ chunk: String) {
+    /// `modelID` (MT2-3) is stamped on a bubble when it is *created*; extending an open bubble leaves it alone.
+    mutating func appendAssistantChunk(_ chunk: String, modelID: String? = nil) {
         guard !chunk.isEmpty else { return }
         if let i = openAssistantIndex, case .message(var m) = items[i], m.role == .assistant {
             m.text += chunk
             items[i] = .message(m)
         } else {
-            items.append(.message(ChatMessage(role: .assistant, text: chunk)))
+            items.append(.message(ChatMessage(role: .assistant, text: chunk, modelID: modelID)))
             openAssistantIndex = items.count - 1
         }
     }

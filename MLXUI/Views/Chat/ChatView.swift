@@ -178,11 +178,20 @@ struct ChatView: View {
             .padding(12)
             Divider()
             List(selection: conversationSelection) {
+                let names = surface == .page ? appState.catalogDisplayNames : [:]
                 ForEach(controller.conversations) { conversation in
                     VStack(alignment: .leading, spacing: 2) {
                         Text(conversation.title)
                             .font(.callout)
                             .lineLimit(1)
+                        // MT2-3: the Chat page lists every model's chats, so each row names its model.
+                        if surface == .page {
+                            Text(ChatConversationBadge.make(modelID: conversation.modelID, catalog: names,
+                                                            installedIDs: appState.installedModelIDs).text)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
                         if !conversation.items.isEmpty {
                             Text(conversation.updatedAt, format: .relative(presentation: .named))
                                 .font(.caption2)

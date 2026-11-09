@@ -200,6 +200,13 @@ final class AppState {
     // Comparison
     var comparisonSet: [ModelEntry] = []
 
+    /// Catalog id to display name, for the Chat page's per-conversation model badge (MT2-3).
+    var catalogDisplayNames: [String: String] {
+        var names: [String: String] = [:]
+        for model in browserData?.domains.flatMap({ $0.allModels }) ?? [] { names[model.id] = model.displayName }
+        return names
+    }
+
     /// Installed models the chat can run (`runnerKind == .llm`), in catalog order. The Chat page picks from these.
     var installedChatModels: [ModelEntry] {
         (browserData?.domains.flatMap { $0.allModels } ?? [])

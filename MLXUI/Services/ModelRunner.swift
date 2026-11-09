@@ -19,12 +19,16 @@ struct ChatMessage: Identifiable, Sendable, Equatable {
     /// CW-3: files this turn carried. The bubble shows `text` plus chips; the model sees
     /// `ChatAttachment.modelFacing(text:attachments:)`.
     var attachments: [ChatAttachment]
+    /// MT2-3: the model that wrote this assistant turn (catalog id); `nil` for user turns and for turns saved
+    /// before this field existed. Stamped when the bubble is created, so a chat that changes model keeps the record.
+    var modelID: String?
 
-    init(id: UUID = UUID(), role: Role, text: String, attachments: [ChatAttachment] = []) {
+    init(id: UUID = UUID(), role: Role, text: String, attachments: [ChatAttachment] = [], modelID: String? = nil) {
         self.id = id
         self.role = role
         self.text = text
         self.attachments = attachments
+        self.modelID = modelID
     }
 }
 
@@ -32,7 +36,7 @@ struct ChatMessage: Identifiable, Sendable, Equatable {
 /// before CW-3 would fail to decode and `ConversationStore` would silently skip it — the user's
 /// chat history would vanish (the backlog's trap).
 extension ChatMessage: Codable {
-    private enum CodingKeys: String, CodingKey { case id, role, text, attachments }
+    private enum CodingKeys: String, CodingKey { case id, role, text, attachments, modelID }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -40,6 +44,7 @@ extension ChatMessage: Codable {
         role = try c.decode(Role.self, forKey: .role)
         text = try c.decode(String.self, forKey: .text)
         attachments = try c.decodeIfPresent([ChatAttachment].self, forKey: .attachments) ?? []
+        modelID = try c.decodeIfPresent(String.self, forKey: .modelID)     // MT2-3: absent in older files
     }
 
     func encode(to encoder: Encoder) throws {
@@ -48,6 +53,7 @@ extension ChatMessage: Codable {
         try c.encode(role, forKey: .role)
         try c.encode(text, forKey: .text)
         try c.encode(attachments, forKey: .attachments)
+        try c.encodeIfPresent(modelID, forKey: .modelID)                  // only when set: older builds never see the key
     }
 }
 
@@ -234,7 +240,9 @@ final class ModelRunner {
 
     /// `prepare(for:in:)` generalised (MT2-1): `.model(id)` is exactly the old behaviour; `.all` lists every
     /// conversation of every model (the Chat page).
-    func prepare(scope: ChatScope, in directory: URL = ConversationStore.defaultDirectory()) {
+    /// `preloaded` (MT2-3) hands `.all` a list the caller already holds, so no file is read.
+    func prepare(scope: ChatScope, in directory: URL = ConversationStore.defaultDirectory(),
+                 preloaded: [Conversation]? = nil) {
         conversationDirectory = directory
         switch scope {
         case .model(let id):
@@ -252,7 +260,7 @@ final class ModelRunner {
         case .all:
             preparedModelID = nil
             loadedScope = .all
-            conversations = ConversationStore.allConversations(in: directory)
+            conversations = preloaded ?? ConversationStore.allConversations(in: directory)
             if let mostRecent = conversations.first {
                 activeConversationID = mostRecent.id
                 transcript.load(mostRecent.items)
@@ -728,6 +736,10 @@ final class ModelRunner {
         }
         guard generation == turnGeneration, activeConversationID == turnConversationID, isRunning else { return true }
 
+        // MT2-3: `Conversation.modelID` is the *last* model used; the bench's filtered list follows it.
+        if let index = conversations.firstIndex(where: { $0.id == activeConversationID }) {
+            conversations[index].modelID = model.id
+        }
         transcript.addUserMessage(trimmed, attachments: readyAttachments)
         // CW-C-FIX-1: the model gets the same thing the transcript shows. `send` used to pass the
         // bare `trimmed` text as the prompt, so an attachment's contents reached the **bubble** and
@@ -788,7 +800,7 @@ final class ModelRunner {
                         // A late chunk must not leak into a conversation the user switched to
                         // (switching stops the task, but a chunk can already be in flight).
                         guard self.activeConversationID == turnConversationID else { return false }
-                        self.transcript.appendAssistantChunk(chunk)
+                        self.transcript.appendAssistantChunk(chunk, modelID: model.id)
                         return true
                     }
                 }

@@ -55,6 +55,12 @@ enum ChatLease: Equatable, Sendable {
 final class ChatController {
     let runner: ModelRunner
     @ObservationIgnored private let conversationDirectory: URL
+    /// How the every-model list is read from disk (`ConversationStore.allConversations`); a seam so a test can count
+    /// reads. Called only by `loadedIndex()`.
+    @ObservationIgnored private let readAll: (URL) -> [Conversation]
+    /// The every-model list, loaded once (owner ruling 2026-11-09: no file read on a sidebar click, page appear or
+    /// install change) and dropped when something may have changed on disk behind the page's back.
+    @ObservationIgnored private var index: [Conversation]?
 
     private(set) var holder: ChatSurface?
     private var models: [ChatSurface: ModelEntry] = [:]
@@ -67,10 +73,23 @@ final class ChatController {
     /// Installed chat models as of the last `refreshPageModel` (a selected conversation picks its model from here).
     private var pageCandidates: [ModelEntry] = []
 
-    init(runner: ModelRunner, conversationDirectory: URL = ConversationStore.defaultDirectory()) {
+    init(runner: ModelRunner, conversationDirectory: URL = ConversationStore.defaultDirectory(),
+         readAllConversations: @escaping (URL) -> [Conversation] = { ConversationStore.allConversations(in: $0) }) {
         self.runner = runner
         self.conversationDirectory = conversationDirectory
+        self.readAll = readAllConversations
     }
+
+    /// The cached every-model list; the first call (and the first after `invalidateIndex`) reads the directory.
+    private func loadedIndex() -> [Conversation] {
+        if let index { return index }
+        let loaded = readAll(conversationDirectory)
+        index = loaded
+        return loaded
+    }
+
+    /// Something may have written or removed a conversation file without the page seeing it.
+    private func invalidateIndex() { index = nil }
 
     // MARK: - Lease
 
@@ -91,6 +110,7 @@ final class ChatController {
             parked[current] = runner.release()
         }
         waiting.remove(surface)
+        let previous = holder
         holder = surface
         switch surface {
         case .bench:
@@ -100,8 +120,16 @@ final class ChatController {
                 runner.prepare(for: model, in: conversationDirectory)
             }
         case .page:
-            if let set = parked.removeValue(forKey: .page) { runner.adopt(set) }
-            else { runner.prepare(scope: .all, in: conversationDirectory) }
+            // Already bound and nothing happened elsewhere: the runner's own state is the truth, so no read.
+            if previous == .page, parked[.page] == nil { break }
+            if var set = parked.removeValue(forKey: .page) {
+                // The sheet may have saved or deleted chats while this set was parked: one read, merged under the
+                // live set (live entries win; a blank, memory-only chat is kept).
+                if index == nil { set.conversations = ChatConversationList.merge(disk: loadedIndex(), live: set.conversations) }
+                runner.adopt(set)
+            } else {
+                runner.prepare(scope: .all, in: conversationDirectory, preloaded: loadedIndex())
+            }
         }
         return .granted
     }
@@ -109,7 +137,8 @@ final class ChatController {
     /// The surface is going away. The bench's draft does not outlive its sheet (as before).
     func release(_ surface: ChatSurface) {
         waiting.remove(surface)
-        if surface == .bench { drafts[.bench] = nil }
+        // The sheet may have saved, renamed or deleted chats on disk.
+        if surface == .bench { drafts[.bench] = nil; invalidateIndex() }
         if holder == surface { holder = nil }
     }
 
@@ -138,7 +167,8 @@ final class ChatController {
     /// else the first installed. `nil` leaves the page on its empty state.
     func refreshPageModel(installedChatModels: [ModelEntry]) {
         pageCandidates = installedChatModels
-        let newest = ConversationStore.allConversations(in: conversationDirectory).map(\.modelID)
+        // Live list when the page holds the runner, else the cached one: never a fresh directory read.
+        let newest = (holder == .page ? runner.conversations : loadedIndex()).map(\.modelID)
         models[.page] = ChatPageModel.resolve(current: models[.page], newestConversationModelIDs: newest,
                                               installed: installedChatModels)
     }
@@ -175,6 +205,7 @@ final class ChatController {
     func delete(_ id: UUID, on surface: ChatSurface) {
         guard holder == surface else { return }
         runner.deleteConversation(id)
+        invalidateIndex()
     }
 
     // MARK: - Generation

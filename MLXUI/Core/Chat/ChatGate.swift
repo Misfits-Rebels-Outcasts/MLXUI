@@ -46,3 +46,30 @@ nonisolated enum ChatPageModel {
         return installed.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }.first
     }
 }
+
+/// Pure helpers for the unified conversation list (MT2-3).
+nonisolated enum ChatConversationList {
+    /// `live` (the page's working set) over `disk` (a fresh read): a live conversation replaces the disk copy with
+    /// the same id; chats only on disk are added; chats only live (blank, memory-only) are kept. Newest first.
+    static func merge(disk: [Conversation], live: [Conversation]) -> [Conversation] {
+        let liveIDs = Set(live.map(\.id))
+        let merged = live + disk.filter { !liveIDs.contains($0.id) }
+        return merged.sorted { $0.updatedAt > $1.updatedAt }
+    }
+}
+
+/// What a list row says about the model behind a conversation (plain facts only).
+nonisolated struct ChatConversationBadge: Equatable, Sendable {
+    let name: String
+    let installed: Bool
+
+    /// "Qwen3.5 9B", or "Qwen3.5 9B · not installed".
+    var text: String { installed ? name : "\(name) · not installed" }
+
+    /// `catalog` maps catalog id to display name; an id the catalog no longer knows shows its id without the
+    /// `mlx-community--` prefix.
+    static func make(modelID: String, catalog: [String: String], installedIDs: Set<String>) -> ChatConversationBadge {
+        let name = catalog[modelID] ?? modelID.replacingOccurrences(of: "mlx-community--", with: "")
+        return ChatConversationBadge(name: name, installed: installedIDs.contains(modelID))
+    }
+}
