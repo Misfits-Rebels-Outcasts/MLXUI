@@ -70,11 +70,16 @@ final class ChatController {
     /// Surfaces that asked for the runner while another surface was generating; they show a notice and bind
     /// themselves when the turn ends (`bindWhenFree`).
     private(set) var waiting: Set<ChatSurface> = []
+    /// What the model menu says about each installed model, loaded once per model (file reads) and kept.
+    private(set) var modelFacts: [String: ChatModelFacts] = [:]
+    @ObservationIgnored private let factsLoader: (ModelEntry) -> ChatModelFacts
     /// Installed chat models as of the last `refreshPageModel` (a selected conversation picks its model from here).
     private var pageCandidates: [ModelEntry] = []
 
     init(runner: ModelRunner, conversationDirectory: URL = ConversationStore.defaultDirectory(),
-         readAllConversations: @escaping (URL) -> [Conversation] = { ConversationStore.allConversations(in: $0) }) {
+         readAllConversations: @escaping (URL) -> [Conversation] = { ConversationStore.allConversations(in: $0) },
+         factsLoader: @escaping (ModelEntry) -> ChatModelFacts = { ChatModelFacts.load(for: $0) }) {
+        self.factsLoader = factsLoader
         self.runner = runner
         self.conversationDirectory = conversationDirectory
         self.readAll = readAllConversations
@@ -161,7 +166,22 @@ final class ChatController {
     /// After the bench goes away the page, if it is on screen, takes the runner back.
     var pageShouldReacquire: Bool { holder == nil }
 
-    // MARK: - The Chat page's model (MT2-2; the model menu is MT2-4)
+    // MARK: - The Chat page's model and its menu (MT2-4)
+
+    /// Loads the facts of any model the menu has not shown yet.
+    func loadModelFacts(for models: [ModelEntry]) {
+        for model in models where modelFacts[model.id] == nil { modelFacts[model.id] = factsLoader(model) }
+    }
+
+    /// Switch the page's model from the composer menu. It applies from the **next** turn: `send` reads the model
+    /// when a turn starts, and the earlier messages (and their stamps) are untouched. Refused while a turn is
+    /// running (one generation app-wide, and the header must not name a model that is not the one answering).
+    @discardableResult
+    func selectPageModel(_ model: ModelEntry) -> Bool {
+        guard !runner.isRunning, holder == .page || holder == nil else { return false }
+        models[.page] = model
+        return true
+    }
 
     /// Choose the page's model from what is installed: keep the current one, else the newest conversation's,
     /// else the first installed. `nil` leaves the page on its empty state.

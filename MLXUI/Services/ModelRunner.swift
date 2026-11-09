@@ -152,6 +152,9 @@ final class ModelRunner {
     /// build a `ModelContainer`, so a seam that replaced the session only *after* `containerForModel`
     /// would be unreachable. `nil` in the app.
     @ObservationIgnored var streamingSessionForTesting: (@Sendable () -> any ChatStreamingSession)?
+
+    /// Test seam (MT2-4): told which model a turn's session was built for and the history it was given.
+    @ObservationIgnored var sessionRequestForTesting: (@Sendable (_ modelID: String, _ history: [Chat.Message]) -> Void)?
     #endif
 
     /// S1-1: loaded weights live in the shared `ModelContainerPool` (chat, flow rows and the
@@ -1022,7 +1025,10 @@ final class ModelRunner {
         turn: TurnLease
     ) async throws -> any ChatStreamingSession {
         #if DEBUG
-        if let injected = streamingSessionForTesting { return injected() }
+        if let injected = streamingSessionForTesting {
+            sessionRequestForTesting?(model.id, history)
+            return injected()
+        }
         #endif
         let container = try await leasedContainerForModel(model, dir: dir, turn: turn)
         return AgentSession(

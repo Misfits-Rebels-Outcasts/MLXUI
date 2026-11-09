@@ -707,6 +707,7 @@ struct ChatView: View {
             }
             HStack(spacing: 8) {
                 attachMenu
+                if surface == .page { modelMenu }
                 TextField("Message \(model.displayName)…", text: promptBinding, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...4)
@@ -762,6 +763,36 @@ struct ChatView: View {
     }
 
     // MARK: - Composer: folders (CW-2, D1/D5)
+
+    /// MT2-4 (Chat page only): the model for the next turn. Installed chat models with plain facts; disabled while a
+    /// turn runs, so the header never names a model that is not the one answering.
+    private var modelMenu: some View {
+        let installed = appState.installedChatModels
+        let items = ChatModelMenu.items(installed: installed, selectedID: controller.model(for: surface)?.id,
+                                        facts: controller.modelFacts)
+        return Menu {
+            ForEach(items) { item in
+                Button {
+                    if let chosen = installed.first(where: { $0.id == item.id }) { controller.selectPageModel(chosen) }
+                } label: {
+                    Text(item.isSelected ? "✓ \(item.name)" : item.name)
+                    if !item.facts.isEmpty { Text(item.facts) }
+                }
+            }
+            Divider()
+            if let target = ChatModelMenu.getMoreTarget(visibleSectionIDs: appState.visibleSections.map(\.id)) {
+                Button(ChatModelMenu.getMoreTitle) { appState.selectedSection = target }
+            }
+        } label: {
+            Label(model.displayName, systemImage: "cpu")
+                .lineLimit(1)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .disabled(runner.isRunning)
+        .help(runner.isRunning ? "The model can be changed when the reply is finished." : "Model for the next message")
+        .task(id: installed.map(\.id)) { controller.loadModelFacts(for: installed) }
+    }
 
     /// "+" — Add folder… and the folders this chat can use, one click to attach or detach (D5).
     /// **Add files…** arrives in CW-3; the v1 menu is deliberately this short.
