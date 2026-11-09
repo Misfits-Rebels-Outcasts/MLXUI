@@ -198,6 +198,8 @@ final class AppState {
     // Installation
     var installManager = InstallManager()
     var modelRunner = ModelRunner()
+    /// MT2-1: the one API chat views use; the runner above stays the single generation engine.
+    @ObservationIgnored lazy var chat = ChatController(runner: modelRunner)
     /// S1-5 — the Local Server's view-model. Only ever used through `LocalServerGate`.
     let localServer = LocalServerController.shared
 
@@ -625,7 +627,7 @@ final class AppState {
         // (text-only Gemma 3) but routes as `.translate`, so testing `modelType` here would open the chat sheet
         // and bypass its module — the exact collision Trap 5 warns about.
         if model.runnerKind == .llm {
-            modelRunner.prepare(for: model)
+            chat.acquire(.bench, model: model)
             runningModel = model
         } else if registry.bestModule(for: model) != nil {
             asrRunModel = model
@@ -637,12 +639,12 @@ final class AppState {
     /// `false` when the user declined the "stop keeping a served model ready?" question (SC-5a-b).
     @discardableResult
     func sendPrompt(_ text: String, attachments: [URL] = []) async -> Bool {
-        guard let model = runningModel else { return true }
-        return await modelRunner.send(text, attachments: attachments, for: model)
+        guard runningModel != nil else { return true }
+        return await chat.send(text, attachments: attachments, from: .bench)
     }
 
     func stopModel() {
-        modelRunner.stop()
+        chat.stop(from: .bench)
     }
 
     // ── Comparison ──

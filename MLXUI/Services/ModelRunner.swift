@@ -226,18 +226,59 @@ final class ModelRunner {
     func prepare(
         for model: ModelEntry, in directory: URL = ConversationStore.defaultDirectory()
     ) {
+        prepare(scope: .model(model.id), in: directory)
+    }
+
+    /// `prepare(for:in:)` generalised (MT2-1): `.model(id)` is exactly the old behaviour; `.all` lists every
+    /// conversation of every model (the Chat page).
+    func prepare(scope: ChatScope, in directory: URL = ConversationStore.defaultDirectory()) {
         conversationDirectory = directory
-        if preparedModelID != model.id {
-            preparedModelID = model.id
-            conversations = ConversationStore.conversations(
-                forModelID: model.id, in: directory)
+        switch scope {
+        case .model(let id):
+            if preparedModelID != id {
+                preparedModelID = id
+                conversations = ConversationStore.conversations(forModelID: id, in: directory)
+                if let mostRecent = conversations.first {
+                    activeConversationID = mostRecent.id
+                    transcript.load(mostRecent.items)
+                } else {
+                    startNewConversation(modelID: id)
+                }
+            }
+        case .all:
+            preparedModelID = nil
+            conversations = ConversationStore.allConversations(in: directory)
             if let mostRecent = conversations.first {
                 activeConversationID = mostRecent.id
                 transcript.load(mostRecent.items)
             } else {
-                startNewConversation(modelID: model.id)
+                activeConversationID = nil
+                transcript.reset()
             }
         }
+        errorMessage = nil
+    }
+
+    /// The loaded conversations as a value, live transcript included, for `ChatController` to park while
+    /// another surface holds the runner. Does not save or reorder anything.
+    func release() -> ChatWorkingSet {
+        ChatWorkingSet(
+            scope: preparedModelID.map(ChatScope.model) ?? .all,
+            conversations: conversations,
+            activeConversationID: activeConversationID,
+            transcriptItems: transcript.items)
+    }
+
+    /// Put a parked working set back.
+    func adopt(_ set: ChatWorkingSet) {
+        if isRunning { stop() }
+        switch set.scope {
+        case .model(let id): preparedModelID = id
+        case .all: preparedModelID = nil
+        }
+        conversations = set.conversations
+        activeConversationID = set.activeConversationID
+        transcript.load(set.transcriptItems)
         errorMessage = nil
     }
 

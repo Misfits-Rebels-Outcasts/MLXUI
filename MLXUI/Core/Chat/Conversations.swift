@@ -174,6 +174,21 @@ nonisolated enum ConversationStore {
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
+    /// Every persisted conversation of every model, newest `updatedAt` first (MT2-1; the Chat page's list).
+    static func allConversations(in directory: URL = defaultDirectory()) -> [Conversation] {
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil)) ?? []
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return files
+            .filter { $0.pathExtension == "json" }
+            .compactMap { url -> Conversation? in
+                guard let data = try? Data(contentsOf: url) else { return nil }
+                return try? decoder.decode(Conversation.self, from: data)
+            }
+            .sorted { $0.updatedAt > $1.updatedAt }
+    }
+
     static func save(_ conversation: Conversation, in directory: URL = defaultDirectory()) {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
