@@ -14,13 +14,23 @@ import MLXLMCommon
 
 nonisolated struct ModelTool: AgentTool {
     let spec: ModelToolSpec
+    /// MT1-FIX-1: whether the schema advertises the `asset` argument. Fixed at construction because
+    /// schemas are read outside a dispatch, where the `ModelToolHost` task-local is not bound. `false`
+    /// (no host: nothing hands out handles) shows only path/url (and text). MT4 builds with `true`
+    /// when it binds a host. Execution is unchanged: a handle is accepted whenever a host is bound.
+    let advertisesAssets: Bool
+
+    init(spec: ModelToolSpec, advertisesAssets: Bool = false) {
+        self.spec = spec
+        self.advertisesAssets = advertisesAssets
+    }
 
     var name: String { spec.name }
     var toolDescription: String { spec.description }
 
     var parameters: [ToolParameter] {
         var out: [ToolParameter] = []
-        for input in ModelToolRunner.inputArgumentNames(for: spec) {
+        for input in ModelToolRunner.inputArgumentNames(for: spec) where advertisesAssets || input != "asset" {
             out.append(.optional(input, type: .string, description: Self.inputDescription(input)))
         }
         for param in spec.params {
@@ -42,7 +52,11 @@ nonisolated struct ModelTool: AgentTool {
     }
 
     /// Every tool, in table order.
-    static var all: [ModelTool] { ModelToolSpec.all.map { ModelTool(spec: $0) } }
+    static var all: [ModelTool] { all(advertisingAssets: false) }
+
+    static func all(advertisingAssets: Bool) -> [ModelTool] {
+        ModelToolSpec.all.map { ModelTool(spec: $0, advertisesAssets: advertisingAssets) }
+    }
 
     func execute(arguments: [String: JSONValue]) async throws -> String {
         switch spec.name {

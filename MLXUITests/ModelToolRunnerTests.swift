@@ -462,9 +462,9 @@ nonisolated final class MT13Executor: FlowExecutor, @unchecked Sendable {
         #expect(try required("ocr_image") == [])
         #expect(try required("translate") == ["to"])
         #expect(try required("read_asset") == ["asset"])
-        #expect(Set(try #require(ModelTool.all.first { $0.name == "transcribe_audio" }).parameters.map(\.name))
+        #expect(Set(try #require(ModelTool.all(advertisingAssets: true).first { $0.name == "transcribe_audio" }).parameters.map(\.name))
                 == ["asset", "path", "url", "language"])
-        #expect(Set(try #require(ModelTool.all.first { $0.name == "speak" }).parameters.map(\.name)) == ["text", "asset", "voice"])
+        #expect(Set(try #require(ModelTool.all(advertisingAssets: true).first { $0.name == "speak" }).parameters.map(\.name)) == ["text", "asset", "voice"])
     }
 
     @Test func backCompatToolsKeepTheirNamesAndAcceptUrl() {
@@ -472,7 +472,7 @@ nonisolated final class MT13Executor: FlowExecutor, @unchecked Sendable {
         #expect(OCRImageTool().name == "ocr_image")
         for tool: any AgentTool in [TranscribeAudioTool(), OCRImageTool()] {
             let names = tool.parameters.map(\.name)
-            #expect(names.contains("url") && names.contains("asset") && names.contains("path"))
+            #expect(names.contains("url") && !names.contains("asset") && names.contains("path"))
         }
     }
 

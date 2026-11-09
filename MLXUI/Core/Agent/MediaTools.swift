@@ -76,7 +76,11 @@ nonisolated enum MediaFetch {
 /// Transcribes speech from an audio file (`url`, `path` or `asset`) using a locally-installed ASR model.
 nonisolated struct TranscribeAudioTool: AgentTool {
     let name = "transcribe_audio"
-    private var tool: ModelTool? { ModelToolSpec.spec(named: name).map(ModelTool.init) }
+    /// MT1-FIX-1: `asset` is advertised only when MT4 builds the tool for a host-bound chat.
+    var advertisesAssets = false
+    private var tool: ModelTool? {
+        ModelToolSpec.spec(named: name).map { ModelTool(spec: $0, advertisesAssets: advertisesAssets) }
+    }
     var toolDescription: String { tool?.toolDescription ?? "" }
     var parameters: [ToolParameter] { tool?.parameters ?? [] }
 
@@ -89,7 +93,11 @@ nonisolated struct TranscribeAudioTool: AgentTool {
 /// Extracts text from an image (`url`, `path` or `asset`) using a locally-installed OCR (or vision) model.
 nonisolated struct OCRImageTool: AgentTool {
     let name = "ocr_image"
-    private var tool: ModelTool? { ModelToolSpec.spec(named: name).map(ModelTool.init) }
+    /// MT1-FIX-1: `asset` is advertised only when MT4 builds the tool for a host-bound chat.
+    var advertisesAssets = false
+    private var tool: ModelTool? {
+        ModelToolSpec.spec(named: name).map { ModelTool(spec: $0, advertisesAssets: advertisesAssets) }
+    }
     var toolDescription: String { tool?.toolDescription ?? "" }
     var parameters: [ToolParameter] { tool?.parameters ?? [] }
 
