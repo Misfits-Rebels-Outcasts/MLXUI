@@ -90,6 +90,15 @@ struct TranscriptBuilder {
         openAssistantIndex = nil
     }
 
+    /// MT3-3: drop the last item when it is a user message nobody answered (an Apple Intelligence overflow). `false` otherwise.
+    @discardableResult
+    mutating func removeTrailingUserMessage() -> Bool {
+        guard let last = items.last, case .message(let m) = last, m.role == .user else { return false }
+        items.removeLast()
+        openAssistantIndex = nil
+        return true
+    }
+
     /// Append a user prompt; closes any open assistant bubble.
     mutating func addUserMessage(_ text: String, attachments: [ChatAttachment] = []) {
         items.append(.message(

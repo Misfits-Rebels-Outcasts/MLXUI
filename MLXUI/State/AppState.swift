@@ -213,6 +213,13 @@ final class AppState {
             .filter { $0.runnerKind == .llm && installedModelIDs.contains($0.id) }
     }
 
+    /// MT3-3: re-resolve the Chat page's model (Apple Intelligence first when ready; see `ChatDefaultRouter`).
+    func refreshChatPage() {
+        let catalog = (browserData?.domains.flatMap { $0.allModels } ?? []).filter { $0.runnerKind == .llm }
+        chat.refreshPageModel(installedChatModels: installedChatModels, catalog: catalog, totalRAMGB: systemInfo.totalRAMGB,
+                              isRunnable: { claimableModelIDs.contains($0.id) })
+    }
+
     // Installation
     var installManager = InstallManager()
     var modelRunner = ModelRunner()

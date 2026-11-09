@@ -78,6 +78,10 @@ final class ModelRunner {
     private(set) var transcript = TranscriptBuilder()
     var isRunning = false
     var errorMessage: String?
+    /// MT3-3: set when an Apple Intelligence turn overflowed its window; the banner offers to continue elsewhere. Cleared by the next send.
+    var contextNotice: ChatContextNotice?
+    /// MT3-3: a typed Apple Intelligence failure (guardrail, language, refusal, ...) for the banner; `errorMessage` carries its sentence.
+    var appleFailure: AppleFoundationToolError?
 
     /// Persisted conversations for the current model, newest first, and the one on screen.
     private(set) var conversations: [Conversation] = []
@@ -161,6 +165,23 @@ final class ModelRunner {
     /// Local Server share one owner), so repeated sends — and a flow row using the same model —
     /// don't reload.
     @ObservationIgnored private let pool: ModelContainerPool
+    /// MT3-3: the one Apple Intelligence router (its live-session LRU lives in it), created on first use.
+    @ObservationIgnored private var appleRouterInstance: AppleFoundationRouter?
+
+    /// The shared Apple Intelligence router, or `nil` when the system model is unavailable (below macOS 26, or not opted in).
+    func appleRouter() -> AppleFoundationRouter? {
+        if let appleRouterInstance { return appleRouterInstance }
+        guard let chatter = AppleFoundationAvailability.makeToolChatter() else { return nil }
+        let router = AppleFoundationRouter(chatter: chatter)
+        appleRouterInstance = router
+        return router
+    }
+
+    /// Drop a conversation's live Apple Intelligence session (it was deleted, or another router answered in it).
+    func forgetAppleSession(_ conversationID: UUID?) {
+        guard let conversationID else { return }
+        appleRouterInstance?.forget(conversationID: conversationID)
+    }
 
     /// SC-5a (gate D): asks before a turn's model load pushes out a model other apps are being served; the chat sheet
     /// presents its question.
@@ -373,6 +394,7 @@ final class ModelRunner {
     func deleteConversation(_ id: UUID) {
         guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
         if id == activeConversationID, isRunning { stop() }
+        forgetAppleSession(id)
         ConversationStore.delete(id: id, in: conversationDirectory)
         conversations.remove(at: index)
         guard id == activeConversationID else { return }
@@ -669,6 +691,7 @@ final class ModelRunner {
         // M1: a file on its own is a turn — "what is in this file?" needs no typed text. The text
         // check that used to live here now runs *after* the import, against what actually arrived.
         guard !trimmed.isEmpty || !attachments.isEmpty, !isRunning else { return true }
+        let isApple = AppleIntelligenceChat.isApple(model.id)
 
         #if DEBUG
         let modelDir = modelDirectoryForTesting?(model.id)
@@ -677,18 +700,27 @@ final class ModelRunner {
         let modelDir = ModelStore.shared.directory(forModelID: model.id)
         #endif
 
-        guard FileManager.default.fileExists(atPath: modelDir.path) else {
+        // MT3-3: Apple Intelligence has no files and loads nothing of ours, so neither the files check nor the served-model
+        // admission applies; it only needs the system model to be reachable.
+        if isApple {
+            guard appleRouter() != nil else {
+                errorMessage = "Apple Intelligence isn't available on this Mac."
+                return true
+            }
+        } else if !FileManager.default.fileExists(atPath: modelDir.path) {
             errorMessage = "Model files not found. Please reinstall."
             return true
         }
 
         // SC-7 (gate F): in Dedicated server mode no model loads here. false = nothing sent, so the composer keeps what was typed.
-        if let refusal = RunAdmission.canLoadModel(surface: .chat) {
+        if !isApple, let refusal = RunAdmission.canLoadModel(surface: .chat) {
             errorMessage = refusal.sentence
             return false
         }
 
         errorMessage = nil
+        contextNotice = nil
+        appleFailure = nil
 
         // Prior turns become the model's rehydrated history; the new prompt goes on top.
         if activeConversationID == nil {
@@ -743,7 +775,8 @@ final class ModelRunner {
 
         // SC-5a (gate D): ask before the turn if loading this model would stop keeping a served one ready. Cancel: the
         // turn doesn't start — nothing appended, nothing loaded, no error banner.
-        guard await confirmLoad(model, dir: modelDir) else {
+        let confirmed = isApple ? true : await confirmLoad(model, dir: modelDir)
+        guard confirmed else {
             if generation == turnGeneration { isRunning = false }
             return false
         }
@@ -806,9 +839,15 @@ final class ModelRunner {
                     let router = try await self.chatRouter(
                         for: model, dir: modelDir, history: history,
                         fileScope: fileScope, modelToolRuntime: toolRuntime, turn: turnLease)
+                    let folded = history.map(MLXChatRouter.routerMessage)
+                    // MT3-3: Apple Intelligence keeps a live session per conversation (a miss folds `history`); any other router
+                    // answering in a conversation makes that session stale, so it is dropped.
+                    if !isApple { self.forgetAppleSession(turnConversationID) }
                     let routerTurn = RouterTurn(
                         instructions: instructions,
-                        history: .folded(history.map(MLXChatRouter.routerMessage)),
+                        history: isApple && turnConversationID != nil
+                            ? .live(conversationID: turnConversationID ?? UUID(), fallback: folded)
+                            : .folded(folded),
                         prompt: modelPrompt,
                         tools: armedTools,
                         approve: self.routerApprove(),
@@ -820,6 +859,13 @@ final class ModelRunner {
                     try await MLXErrorGuard.guardedStream({ router.streamTurn(routerTurn) }) { event in
                         // Only the reply text drives the transcript here; tool cards come through
                         // `onToolEvent` exactly as before (the stream's tool events are the neutral summary).
+                        if case .contextExceeded(let limit) = event {
+                            if self.activeConversationID == turnConversationID {
+                                self.contextNotice = ChatContextNotice(
+                                    limit: limit, prompt: trimmed, attachments: attachments, conversationID: turnConversationID)
+                            }
+                            return false
+                        }
                         guard case .text(let chunk) = event else { return true }
                         // A late chunk must not leak into a conversation the user switched to
                         // (switching stops the task, but a chunk can already be in flight).
@@ -830,7 +876,16 @@ final class ModelRunner {
                 }
             } catch is CancellationError {
                 // stopped by the user — leave the partial transcript in place
+                if isApple { self.forgetAppleSession(turnConversationID) }
+            } catch let failure as AppleFoundationToolError {
+                // MT3-3: Apple Intelligence's own typed failures carry their own sentence (and the banner's buttons).
+                self.forgetAppleSession(turnConversationID)
+                if !Task.isCancelled {
+                    self.errorMessage = failure.userMessage
+                    self.appleFailure = failure
+                }
             } catch {
+                if isApple { self.forgetAppleSession(turnConversationID) }
                 if !Task.isCancelled {
                     self.errorMessage = "Failed: \(MLXErrorGuard.sentence(for: error))"
                 }
@@ -846,6 +901,16 @@ final class ModelRunner {
             }
         }
         return true
+    }
+
+    /// MT3-3: after a context overflow, send the unanswered message again with `model` (the banner's "Continue with ..."). The
+    /// unanswered user bubble is removed first, so the conversation does not show the message twice.
+    @discardableResult
+    func retryUnanswered(with model: ModelEntry) async -> Bool {
+        guard let notice = contextNotice, !isRunning, notice.conversationID == activeConversationID,
+              transcript.removeTrailingUserMessage() else { return false }
+        saveActiveConversation()
+        return await send(notice.prompt, attachments: notice.attachments, for: model)
     }
 
     func stop() {
@@ -1043,6 +1108,10 @@ final class ModelRunner {
         modelToolRuntime: ModelToolRuntime?,
         turn: TurnLease
     ) async throws -> any ChatRouter {
+        if AppleIntelligenceChat.isApple(model.id) {
+            guard let router = appleRouter() else { throw AppleFoundationToolError.assetsUnavailable }
+            return router
+        }
         let identity = RouterIdentity(
             displayName: model.displayName, kind: .mlx,
             contextSize: ContextWindow.tokens(for: model, modelDirectory: dir))
