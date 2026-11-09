@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModels
+import enum MLXLMCommon.JSONValue   // the tool-argument type the app's tools already take (only this symbol: MLXLMCommon has its own `Tool`)
 
 /// AFM-2 — the seam between `RealExecutor`'s Apple Foundation Models dispatch (availability-
 /// agnostic) and the real `FoundationModels` framework (macOS 26+). **This is the one file in
@@ -93,6 +94,58 @@ extension AppleFoundationChatStreaming {
     /// Streamers that can't count (fixtures, and any SDK without `tokenCount(for:)`).
     func promptTokenCount(instructions: String, prompt: String) async -> Int? { nil }
     var contextSize: Int? { nil }
+}
+
+// MARK: - MT3-2: tool-calling chat seam (untagged)
+
+/// MT3-2 — one tool, as the router describes it to Apple Foundation Models. Plain data (no
+/// `FoundationModels` types, no availability tag): the router builds these from `AgentTool`s and the
+/// real seam turns them into runtime-built `GenerationSchema`s (MT3-0: `GenerationSchema(type:
+/// GeneratedContent.self, properties:)`, `Arguments == GeneratedContent`).
+nonisolated struct AppleFoundationToolSpec: Sendable, Equatable {
+    enum Kind: Sendable, Equatable { case string, integer, number, boolean }
+    struct Property: Sendable, Equatable {
+        let name: String
+        let description: String
+        let kind: Kind
+        let required: Bool
+    }
+    let name: String
+    let description: String
+    let properties: [Property]
+}
+
+/// Runs one tool call for the session. Called from inside `Tool.call`; **must not throw** (a model-caused
+/// error is a corrective string, MT3-0: a throwing tool surfaces from `respond` as `ToolCallError` and ends the turn).
+typealias AppleFoundationToolHandler = @Sendable (_ toolName: String, _ arguments: [String: JSONValue]) async -> String
+
+/// A session that may be reused across turns (`LanguageModelSession` keeps its transcript). One
+/// `respond` at a time: a second while one is running is a programmer error in the SDK, so the router serialises.
+nonisolated protocol AppleFoundationToolSession: AnyObject, Sendable {
+    /// Snapshots (whole reply so far) and a trailing `.usage`. Failures are `AppleFoundationToolError`.
+    func respond(prompt: String) -> AsyncThrowingStream<AppleFoundationChatEvent, Error>
+}
+
+/// Typed failures for the chat router (superset of `AppleFoundationChatError`, which the Local Server's
+/// exhaustive switch still uses unchanged).
+nonisolated enum AppleFoundationToolError: Error, Sendable, Equatable {
+    case contextWindowExceeded(limit: Int?, tokenCount: Int?)
+    case guardrailViolation
+    case unsupportedLanguage
+    case refusal
+    case rateLimited
+    case timeout
+    case assetsUnavailable
+    case failed
+}
+
+nonisolated protocol AppleFoundationToolChatting: Sendable {
+    /// `SystemLanguageModel.contextSize`, or `nil` when unknown.
+    var contextSize: Int? { get }
+    func makeSession(instructions: String?, tools: [AppleFoundationToolSpec],
+                     handler: @escaping AppleFoundationToolHandler) -> any AppleFoundationToolSession
+    /// Tokens `instructions` + `tools` occupy (`SystemLanguageModel.tokenCount(for:)`, macOS 26.4+); `nil` when it can't count.
+    func toolTokenCount(instructions: String?, tools: [AppleFoundationToolSpec]) async -> Int?
 }
 
 /// The real executor. `@available(macOS 26, *)` because `LanguageModelSession` and
@@ -209,6 +262,161 @@ nonisolated enum AppleFoundationErrorMapper {
     }
 }
 
+/// MT3-2 — the typed error map for the chat router. Same two generations as `map(_:)`: 26.x
+/// `GenerationError`, 27 `LanguageModelError` / `SystemLanguageModel.Error`.
+@available(macOS 26, *)
+nonisolated extension AppleFoundationErrorMapper {
+    static func mapDetailed(_ error: Error) -> AppleFoundationToolError {
+        if let error = error as? AppleFoundationToolError { return error }
+        if let error = error as? LanguageModelSession.GenerationError {
+            switch error {
+            case .exceededContextWindowSize:
+                return .contextWindowExceeded(limit: SystemLanguageModel.default.contextSize, tokenCount: nil)
+            case .guardrailViolation: return .guardrailViolation
+            case .unsupportedLanguageOrLocale: return .unsupportedLanguage
+            case .refusal: return .refusal
+            case .rateLimited: return .rateLimited
+            case .assetsUnavailable: return .assetsUnavailable
+            default: return .failed
+            }
+        }
+        if #available(macOS 27, *) {
+            if let error = error as? LanguageModelError {
+                switch error {
+                case .contextSizeExceeded(let exceeded):
+                    return .contextWindowExceeded(limit: exceeded.contextSize, tokenCount: exceeded.tokenCount)
+                case .guardrailViolation: return .guardrailViolation
+                case .unsupportedLanguageOrLocale: return .unsupportedLanguage
+                case .refusal: return .refusal
+                case .rateLimited: return .rateLimited
+                case .timeout: return .timeout
+                default: return .failed
+                }
+            }
+            if let error = error as? SystemLanguageModel.Error {
+                switch error {
+                case .assetsUnavailable: return .assetsUnavailable
+                @unknown default: return .failed
+                }
+            }
+        }
+        return .failed
+    }
+}
+
+/// MT3-2 — an `AgentTool`-shaped FoundationModels `Tool` whose schema is built at runtime (MT3-0 item 1).
+@available(macOS 26, *)
+nonisolated struct AppleFoundationRuntimeTool: Tool {
+    typealias Arguments = GeneratedContent
+    typealias Output = String
+
+    let name: String
+    let description: String
+    let parameters: GenerationSchema
+    let handler: AppleFoundationToolHandler
+
+    init(spec: AppleFoundationToolSpec, handler: @escaping AppleFoundationToolHandler) {
+        var props: [GenerationSchema.Property] = []
+        for p in spec.properties {
+            switch p.kind {
+            case .string:
+                props.append(p.required
+                    ? GenerationSchema.Property(name: p.name, description: p.description, type: String.self)
+                    : GenerationSchema.Property(name: p.name, description: p.description, type: String?.self))
+            case .integer:
+                props.append(p.required
+                    ? GenerationSchema.Property(name: p.name, description: p.description, type: Int.self)
+                    : GenerationSchema.Property(name: p.name, description: p.description, type: Int?.self))
+            case .number:
+                props.append(p.required
+                    ? GenerationSchema.Property(name: p.name, description: p.description, type: Double.self)
+                    : GenerationSchema.Property(name: p.name, description: p.description, type: Double?.self))
+            case .boolean:
+                props.append(p.required
+                    ? GenerationSchema.Property(name: p.name, description: p.description, type: Bool.self)
+                    : GenerationSchema.Property(name: p.name, description: p.description, type: Bool?.self))
+            }
+        }
+        self.name = spec.name
+        self.description = spec.description
+        self.parameters = GenerationSchema(type: GeneratedContent.self, description: spec.description, properties: props)
+        self.handler = handler
+    }
+
+    func call(arguments: GeneratedContent) async throws -> String {
+        let decoded = try? JSONDecoder().decode([String: JSONValue].self, from: Data(arguments.jsonString.utf8))
+        return await handler(name, decoded ?? [:])
+    }
+}
+
+@available(macOS 26, *)
+nonisolated final class AppleFoundationToolSessionImpl: AppleFoundationToolSession, @unchecked Sendable {
+    private let session: LanguageModelSession
+
+    init(instructions: String?, tools: [AppleFoundationToolSpec], handler: @escaping AppleFoundationToolHandler) {
+        let runtimeTools: [any Tool] = tools.map { AppleFoundationRuntimeTool(spec: $0, handler: handler) }
+        if let instructions, !instructions.isEmpty {
+            session = LanguageModelSession(tools: runtimeTools, instructions: instructions)
+        } else {
+            session = LanguageModelSession(tools: runtimeTools)
+        }
+    }
+
+    func respond(prompt: String) -> AsyncThrowingStream<AppleFoundationChatEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    for try await snapshot in session.streamResponse(to: prompt) {
+                        let text: String = snapshot.content
+                        continuation.yield(.snapshot(text))
+                    }
+                    if !Task.isCancelled, let usage = await usage() { continuation.yield(usage) }
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: AppleFoundationErrorMapper.mapDetailed(error))
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// Context in use after the turn (everything before the reply) and the reply itself (macOS 26.4+).
+    private func usage() async -> AppleFoundationChatEvent? {
+        guard #available(macOS 26.4, *) else { return nil }
+        let entries = Array(session.transcript)
+        guard let reply = entries.last, case .response = reply else { return nil }
+        let model = SystemLanguageModel.default
+        guard let prompt = try? await model.tokenCount(for: Array(entries.dropLast())),
+              let completion = try? await model.tokenCount(for: [reply]) else { return nil }
+        return .usage(promptTokens: prompt, completionTokens: completion)
+    }
+}
+
+@available(macOS 26, *)
+nonisolated struct AppleFoundationToolChatter: AppleFoundationToolChatting {
+    var contextSize: Int? { SystemLanguageModel.default.contextSize }
+
+    func makeSession(instructions: String?, tools: [AppleFoundationToolSpec],
+                     handler: @escaping AppleFoundationToolHandler) -> any AppleFoundationToolSession {
+        AppleFoundationToolSessionImpl(instructions: instructions, tools: tools, handler: handler)
+    }
+
+    func toolTokenCount(instructions: String?, tools: [AppleFoundationToolSpec]) async -> Int? {
+        guard #available(macOS 26.4, *) else { return nil }
+        let model = SystemLanguageModel.default
+        let runtimeTools: [any Tool] = tools.map { AppleFoundationRuntimeTool(spec: $0, handler: { _, _ in "" }) }
+        var total = 0
+        if let instructions, !instructions.isEmpty {
+            guard let n = try? await model.tokenCount(for: Instructions(instructions)) else { return nil }
+            total += n
+        }
+        guard let n = try? await model.tokenCount(for: runtimeTools) else { return nil }
+        return total + n
+    }
+}
+
 /// The real availability checker. `@available(macOS 26, *)` for `SystemLanguageModel`.
 /// Maps `SystemLanguageModel.Availability` to `Readiness` per AFM-1's table, verbatim.
 @available(macOS 26, *)
@@ -249,13 +457,15 @@ nonisolated enum AppleFoundationAvailability {
     static var executorOverride: (any AppleFoundationExecuting)?
     /// Test-only, as above — for the Local Server's streaming chat seam (S1-4).
     static var chatStreamerOverride: (any AppleFoundationChatStreaming)?
+    /// Test-only, as above — for the chat router's tool-calling seam (MT3-2).
+    static var toolChatterOverride: (any AppleFoundationToolChatting)?
 
     /// The current machine's Apple Intelligence state, mapped to `Readiness`, or `nil` when
     /// `useRealSystem` is off or the OS is below macOS 26 — a slot simply **absent** from the
     /// pool (AFM-1), not an error.
-    static func currentReadiness() -> Readiness? {
+    static func currentReadiness(forceReal: Bool = false) -> Readiness? {
         if let checkerOverride { return checkerOverride.readiness }
-        guard useRealSystem else { return nil }
+        guard useRealSystem || forceReal else { return nil }
         guard #available(macOS 26, *) else { return nil }
         return SystemLanguageModelAvailabilityChecker().readiness
     }
@@ -276,5 +486,15 @@ nonisolated enum AppleFoundationAvailability {
         guard useRealSystem else { return nil }
         guard #available(macOS 26, *) else { return nil }
         return AppleFoundationModelExecutor()
+    }
+
+    /// The real tool-calling chat seam (MT3-2), or `nil` on the same conditions as `makeExecutor()`.
+    /// `forceReal` skips the `useRealSystem` opt-in (the owner-run real tests); it still needs the OS and
+    /// still returns `nil` when the OS is below macOS 26. Readiness is the caller's question (`currentReadiness`).
+    static func makeToolChatter(forceReal: Bool = false) -> (any AppleFoundationToolChatting)? {
+        if let toolChatterOverride { return toolChatterOverride }
+        guard useRealSystem || forceReal else { return nil }
+        guard #available(macOS 26, *) else { return nil }
+        return AppleFoundationToolChatter()
     }
 }
