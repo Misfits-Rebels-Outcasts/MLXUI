@@ -41,20 +41,39 @@ nonisolated enum PathPolicy {
         ".bash_history",
     ]
 
+    /// True when `url` is on the denylist (CW-FIX-3): equal to, or inside, one of `deniedSubpaths`
+    /// under the home directory. Same standardize + symlink resolution as `isAllowed`, because
+    /// `isAllowed` is built on this — there is one denylist.
+    ///
+    /// `exempt` lists folders that are never denied even when a deny entry covers them (the
+    /// current conversation's own attachments copy). A path equal to or inside an exempt folder
+    /// is not denied; nothing else changes. `home` is a seam for tests.
+    static func isDenied(
+        _ url: URL,
+        exempt: [URL] = [],
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> Bool {
+        let target = url.standardizedFileURL.resolvingSymlinksInPath().path
+        for folder in exempt {
+            let base = folder.standardizedFileURL.resolvingSymlinksInPath().path
+            if target == base || target.hasPrefix("\(base)/") { return false }
+        }
+        let homePath = home.standardizedFileURL.resolvingSymlinksInPath().path
+        for denied in deniedSubpaths {
+            let full = "\(homePath)/\(denied)"
+            if target == full || target.hasPrefix("\(full)/") { return true }
+        }
+        return false
+    }
+
     /// True when `url` sits inside an allowed root and outside every denied path.
     ///
     /// Symlinks are resolved before either check. Without that,
     /// `~/link-to-dot-ssh` and `~/../../etc/passwd` both look fine as strings and
     /// both escape the allowlist.
     static func isAllowed(_ url: URL, roots: [URL] = defaultRoots) -> Bool {
+        if isDenied(url) { return false }
         let target = url.standardizedFileURL.resolvingSymlinksInPath().path
-        let home = FileManager.default.homeDirectoryForCurrentUser
-            .standardizedFileURL.resolvingSymlinksInPath().path
-
-        for denied in deniedSubpaths {
-            let full = "\(home)/\(denied)"
-            if target == full || target.hasPrefix("\(full)/") { return false }
-        }
         for root in roots {
             let base = root.standardizedFileURL.resolvingSymlinksInPath().path
             if target == base || target.hasPrefix("\(base)/") { return true }

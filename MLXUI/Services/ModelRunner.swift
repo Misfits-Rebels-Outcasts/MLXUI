@@ -780,7 +780,9 @@ final class ModelRunner {
             attached: conversation?.attachedFolders ?? [],
             workingFolder: conversation?.effectiveWorkingFolder,
             grants: grants,
-            edition: edition)
+            edition: edition,
+            attachmentsFolder: activeConversationID.map {
+                ConversationStore.attachmentsDirectory(for: $0).path })
         let toolRuntime = modelToolRuntimeProvider?()
         let attachmentsNote = ChatAttachment.environmentNote(for: readyAttachments)
         let instructions = environmentBlock(

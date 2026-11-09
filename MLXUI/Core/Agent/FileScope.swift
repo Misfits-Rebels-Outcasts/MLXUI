@@ -25,9 +25,15 @@ nonisolated struct FileScope: Sendable, Equatable {
     /// The folder relative paths resolve against, or `nil` for "no working folder".
     let workingFolder: String?
 
-    init(folders: [String], workingFolder: String? = nil) {
+    /// This conversation's own attachments folder (CW-FIX-3), or `nil` when none is bound. The
+    /// Direct file tools exempt it from the denylist and add it to their roots, so a tool can read
+    /// the copy of a file the user attached. Only the current conversation's folder, never another's.
+    let attachmentsFolder: String?
+
+    init(folders: [String], workingFolder: String? = nil, attachmentsFolder: String? = nil) {
         self.folders = folders
         self.workingFolder = workingFolder
+        self.attachmentsFolder = attachmentsFolder
     }
 
     /// The scope bound for the current tool dispatch, when one is bound.
@@ -45,7 +51,8 @@ nonisolated struct FileScope: Sendable, Equatable {
         attached: [String],
         workingFolder: String?,
         grants: [FolderGrant],
-        edition: Edition
+        edition: Edition,
+        attachmentsFolder: String? = nil
     ) -> FileScope {
         switch edition {
         case .appStore:
@@ -60,10 +67,12 @@ nonisolated struct FileScope: Sendable, Equatable {
                 else { return false }
                 return canonical == wanted
             }
-            return FileScope(folders: folders, workingFolder: working ?? folders.first)
+            return FileScope(folders: folders, workingFolder: working ?? folders.first,
+                             attachmentsFolder: attachmentsFolder)
         case .direct:
             let working = attached.first { $0 == workingFolder } ?? attached.first
-            return FileScope(folders: attached, workingFolder: working)
+            return FileScope(folders: attached, workingFolder: working,
+                             attachmentsFolder: attachmentsFolder)
         }
     }
 

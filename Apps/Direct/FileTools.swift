@@ -41,6 +41,10 @@ nonisolated enum DirectFileScope {
             guard seen.insert(url.standardizedFileURL.path).inserted else { continue }
             roots.append(url)
         }
+        if let attachments = FileScope.current?.attachmentsFolder {
+            let url = URL(fileURLWithPath: attachments, isDirectory: true)
+            if seen.insert(url.standardizedFileURL.path).inserted { roots.append(url) }
+        }
         return roots
     }
 
@@ -48,8 +52,11 @@ nonisolated enum DirectFileScope {
     /// always done this through `allowedRoots`; a folder attached by hand must not be a way around
     /// it (CW-1-FIX-1 nit).
     static func denial(for url: URL) -> String? {
-        let refused = PathPolicy.resolve(url.path, roots: [])
-        guard case .rejected = refused else { return nil }   // not listed: the user may attach it
+        // CW-FIX-3: deny-list only. The old `resolve(…, roots: [])` refused every path, because an
+        // empty allowlist allows nothing. The current chat's own attachments copy is exempt.
+        let exempt = FileScope.current?.attachmentsFolder
+            .map { [URL(fileURLWithPath: $0, isDirectory: true)] } ?? []
+        guard PathPolicy.isDenied(url, exempt: exempt) else { return nil }   // not listed: the user may attach it
         return "Error: \(url.path) is not a path these tools may use."
     }
 
