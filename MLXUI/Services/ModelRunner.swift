@@ -79,6 +79,9 @@ final class ModelRunner {
     /// The model whose conversations are loaded (set in `prepare`, independent of weight
     /// loading, which happens lazily on the first send).
     private var preparedModelID: String?
+    /// What `conversations` was loaded for (MT2-2): lets a model-scoped `prepare` tell a list the Chat page loaded
+    /// (`.all`) from its own, even when `preparedModelID` matches. `nil` until something is loaded.
+    private var loadedScope: ChatScope?
 
     /// Where this runner persists conversations. `prepare(for:in:)` sets it, so a test's temp
     /// directory and the app's real one both flow through the same save/delete path (CW-2).
@@ -235,8 +238,9 @@ final class ModelRunner {
         conversationDirectory = directory
         switch scope {
         case .model(let id):
-            if preparedModelID != id {
+            if preparedModelID != id || loadedScope == .all {
                 preparedModelID = id
+                loadedScope = .model(id)
                 conversations = ConversationStore.conversations(forModelID: id, in: directory)
                 if let mostRecent = conversations.first {
                     activeConversationID = mostRecent.id
@@ -247,6 +251,7 @@ final class ModelRunner {
             }
         case .all:
             preparedModelID = nil
+            loadedScope = .all
             conversations = ConversationStore.allConversations(in: directory)
             if let mostRecent = conversations.first {
                 activeConversationID = mostRecent.id
@@ -263,7 +268,7 @@ final class ModelRunner {
     /// another surface holds the runner. Does not save or reorder anything.
     func release() -> ChatWorkingSet {
         ChatWorkingSet(
-            scope: preparedModelID.map(ChatScope.model) ?? .all,
+            scope: loadedScope ?? preparedModelID.map(ChatScope.model) ?? .all,
             conversations: conversations,
             activeConversationID: activeConversationID,
             transcriptItems: transcript.items)
@@ -272,6 +277,7 @@ final class ModelRunner {
     /// Put a parked working set back.
     func adopt(_ set: ChatWorkingSet) {
         if isRunning { stop() }
+        loadedScope = set.scope
         switch set.scope {
         case .model(let id): preparedModelID = id
         case .all: preparedModelID = nil
@@ -285,8 +291,8 @@ final class ModelRunner {
     // MARK: - Conversations
 
     /// Start a new conversation (an existing empty one is reused instead of stacking blanks).
-    func newConversation() {
-        guard let modelID = preparedModelID else { return }
+    func newConversation(for modelID: String? = nil) {
+        guard let modelID = modelID ?? preparedModelID else { return }
         if isRunning { stop() }
         saveActiveConversation()
         if let existing = conversations.first(where: { $0.items.isEmpty }) {
@@ -665,6 +671,7 @@ final class ModelRunner {
 
         // Prior turns become the model's rehydrated history; the new prompt goes on top.
         if activeConversationID == nil {
+            if loadedScope == nil { loadedScope = .model(model.id) }
             preparedModelID = model.id
             startNewConversation(modelID: model.id)
         }

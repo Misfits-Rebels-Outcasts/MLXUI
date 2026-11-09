@@ -78,6 +78,11 @@ final class AppState {
     /// them. Every surface asks `LocalServerGate.isAvailable`, never this flag directly.
     static let hideLocalServer = false
 
+    /// Set to `true` to hide the Chat sidebar page (MT2-2): no sidebar row, no page. Saved conversations are
+    /// kept on disk, and the per-model chat sheet is unaffected. Every Chat surface asks `ChatGate.isAvailable`,
+    /// never this flag directly.
+    static let hideChat = false
+
     /// Kill switch for the Local Server's prompt cache (`RSI/DelegatePromptCacheBacklog.md` rule 10,
     /// ruling C1). **Shipped `false` (cache on) at Review PC-A, 2026-10-08.** Set it `true` to switch
     /// the cache off everywhere. Every prompt-cache path asks `PromptCache.isEnabled`, never this
@@ -194,6 +199,12 @@ final class AppState {
 
     // Comparison
     var comparisonSet: [ModelEntry] = []
+
+    /// Installed models the chat can run (`runnerKind == .llm`), in catalog order. The Chat page picks from these.
+    var installedChatModels: [ModelEntry] {
+        (browserData?.domains.flatMap { $0.allModels } ?? [])
+            .filter { $0.runnerKind == .llm && installedModelIDs.contains($0.id) }
+    }
 
     // Installation
     var installManager = InstallManager()
@@ -762,6 +773,8 @@ enum SidebarItem: Hashable {
     case browse(String)
     case overview
     case aiWorkflows
+    /// MT2-2: the Chat page; offered only while `ChatGate.isAvailable`.
+    case chat
     /// SC-4b: the Local Server screen; offered only while `LocalServerGate.isEnabled`.
     case server
     var isHome: Bool { if case .home = self { return true }; return false }

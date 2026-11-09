@@ -48,6 +48,30 @@ struct ChatView: View {
     private var controller: ChatController { appState.chat }
     private var runner: ModelRunner { controller.runner }
     private var model: ModelEntry { controller.model(for: surface) ?? initialModel }
+    /// Whether this surface drives the runner right now (MT2-2).
+    private var holdsLease: Bool { controller.holds(surface) }
+
+    /// Shown over a surface that was refused the runner because another one is generating.
+    private var waitingNotice: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "hourglass").font(.largeTitle).foregroundStyle(.secondary)
+            Text(surface == .bench ? "Chat is answering on the Chat page." : "A model's chat window is answering.")
+                .font(.headline)
+            Text("This chat opens as soon as it finishes.")
+                .font(.callout).foregroundStyle(.secondary)
+            HStack {
+                Button("Stop it") { controller.stopCurrentGeneration() }
+                if surface == .bench, ChatGate.isAvailable {
+                    Button("Open Chat") {
+                        appState.selectedSection = .chat
+                        onDone?()
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.background)
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -87,14 +111,30 @@ struct ChatView: View {
         // sizing, and on macOS 14 it collapsed this one to a small, unusable box. A column in the
         // layout is deterministic in a sheet, and the sheet is free to keep one size because the
         // pane is only 240 pt of it.
-        .frame(
-            minWidth: 840, idealWidth: 1100, maxWidth: .infinity,
-            minHeight: 520, idealHeight: 620, maxHeight: .infinity)
         .onAppear { controller.acquire(surface, model: model) }
-        .servedLoadConfirmation(runner.loadConfirmer)      // SC-5a (gate D)
+        // MT2-2: the bench and the page can both be in the hierarchy. The page takes the runner back when the
+        // sheet lets go of it; a surface that was refused while the other generated binds itself when it ends.
+        .onChange(of: controller.holder) { _, new in
+            if surface == .page, new == nil { controller.acquire(.page) }
+        }
+        .onChange(of: runner.isRunning) { _, running in
+            if !running { controller.bindWhenFree(surface) }
+        }
+        .overlay {
+            if controller.waiting.contains(surface) { waitingNotice }
+        }
+        // SC-5a (gate D) — the served-load question and the approval question are presented only by the surface
+        // that holds the runner. Gated inside the binding (not by a conditional modifier), so the view's identity
+        // never changes when the lease moves.
         .sheet(item: Binding(
-            get: { runner.pendingApproval },
-            set: { if $0 == nil { runner.resolveApproval(false) } }
+            get: { holdsLease ? runner.loadConfirmer.question : nil },
+            set: { if $0 == nil, holdsLease { runner.loadConfirmer.respond(false) } }
+        )) { question in
+            ServedLoadConfirmSheet(message: question.message) { runner.loadConfirmer.respond($0) }
+        }
+        .sheet(item: Binding(
+            get: { holdsLease ? runner.pendingApproval : nil },
+            set: { if $0 == nil, holdsLease { runner.resolveApproval(false) } }
         )) { pending in
             approvalSheet(pending)
         }
@@ -132,7 +172,7 @@ struct ChatView: View {
                     Image(systemName: "square.and.pencil")
                 }
                 .buttonStyle(.plain)
-                .keyboardShortcut("n", modifiers: .command)
+                .keyboardShortcut(holdsLease ? KeyboardShortcut("n", modifiers: .command) : nil)
                 .help("New conversation (⌘N)")
             }
             .padding(12)
@@ -206,7 +246,7 @@ struct ChatView: View {
                 Image(systemName: "sidebar.right")
             }
             .buttonStyle(.plain)
-            .keyboardShortcut("i", modifiers: [.command, .option])
+            .keyboardShortcut(holdsLease ? KeyboardShortcut("i", modifiers: [.command, .option]) : nil)
             .help("Show chat details")
             if let onDone {
                 Button("Done") {
