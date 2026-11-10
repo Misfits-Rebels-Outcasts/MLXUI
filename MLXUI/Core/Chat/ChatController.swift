@@ -75,11 +75,18 @@ final class ChatController {
     @ObservationIgnored private let factsLoader: (ModelEntry) -> ChatModelFacts
     /// Installed chat models as of the last `refreshPageModel` (a selected conversation picks its model from here).
     private var pageCandidates: [ModelEntry] = []
+    /// MT3-3: Apple Intelligence's readiness as of the last refresh (`nil` = below macOS 26 / not opted in: the menu row is absent).
+    private(set) var appleReadiness: Readiness?
+    @ObservationIgnored private let readinessProvider: () -> Readiness?
+    /// MT3-3: when nothing is installed and Apple Intelligence is not ready, the catalog model the empty page recommends.
+    private(set) var pageRecommendation: ModelEntry?
 
     init(runner: ModelRunner, conversationDirectory: URL = ConversationStore.defaultDirectory(),
          readAllConversations: @escaping (URL) -> [Conversation] = { ConversationStore.allConversations(in: $0) },
-         factsLoader: @escaping (ModelEntry) -> ChatModelFacts = { ChatModelFacts.load(for: $0) }) {
+         factsLoader: @escaping (ModelEntry) -> ChatModelFacts = { ChatModelFacts.load(for: $0) },
+         readinessProvider: @escaping () -> Readiness? = { AppleFoundationAvailability.currentReadiness() }) {
         self.factsLoader = factsLoader
+        self.readinessProvider = readinessProvider
         self.runner = runner
         self.conversationDirectory = conversationDirectory
         self.readAll = readAllConversations
@@ -214,18 +221,88 @@ final class ChatController {
     @discardableResult
     func selectPageModel(_ model: ModelEntry) -> Bool {
         guard !runner.isRunning, holder == .page || holder == nil else { return false }
+        // MT3-3: Apple Intelligence can be chosen only while it is ready.
+        if AppleIntelligenceChat.isApple(model.id) {
+            appleReadiness = readinessProvider()
+            guard appleReadiness == .ready else { return false }
+        }
         models[.page] = model
         return true
     }
 
+    /// The menu's Apple Intelligence row for the current readiness (re-read, so turning it on in Settings shows when the menu opens).
+    func appleMenuEntry() -> AppleIntelligenceMenuEntry? {
+        appleReadiness = readinessProvider()
+        return AppleIntelligenceMenuEntry.make(readiness: appleReadiness)
+    }
+
     /// Choose the page's model from what is installed: keep the current one, else the newest conversation's,
     /// else the first installed. `nil` leaves the page on its empty state.
-    func refreshPageModel(installedChatModels: [ModelEntry]) {
+    func refreshPageModel(installedChatModels: [ModelEntry], catalog: [ModelEntry] = [], totalRAMGB: Double = 0,
+                          isRunnable: (ModelEntry) -> Bool = { _ in true }) {
         pageCandidates = installedChatModels
+        appleReadiness = readinessProvider()
+        // Keep the current choice while it still works: an installed model, or Apple Intelligence while ready.
+        if let current = models[.page] {
+            if AppleIntelligenceChat.isApple(current.id) {
+                if appleReadiness == .ready { return }
+            } else if let kept = installedChatModels.first(where: { $0.id == current.id }) {
+                models[.page] = kept
+                return
+            }
+        }
         // Live list when the page holds the runner, else the cached one: never a fresh directory read.
         let newest = (holder == .page ? runner.conversations : loadedIndex()).map(\.modelID)
-        models[.page] = ChatPageModel.resolve(current: models[.page], newestConversationModelIDs: newest,
-                                              installed: installedChatModels)
+        let toolCapable = Set(installedChatModels.filter { modelFacts[$0.id]?.canUseTools == true }.map(\.id))
+        let decision = ChatDefaultRouter.decide(
+            appleReadiness: appleReadiness, recentRouterIDs: newest, installed: installedChatModels,
+            installedToolCapableIDs: toolCapable, catalog: catalog, totalRAMGB: totalRAMGB, isRunnable: isRunnable)
+        pageRecommendation = nil
+        switch decision {
+        case .appleIntelligence: models[.page] = AppleIntelligenceChat.entry
+        case .installedModel(let id): models[.page] = installedChatModels.first { $0.id == id }
+        case .recommend(let id): models[.page] = nil; pageRecommendation = catalog.first { $0.id == id }
+        case .nothing: models[.page] = nil
+        }
+    }
+
+    // MARK: - Banners (MT3-3)
+
+    /// The banner for the page's last Apple Intelligence failure or overflow, or nil.
+    func banner(installedChatModels: [ModelEntry]) -> ChatBanner? {
+        let toolCapable = Set(installedChatModels.filter { modelFacts[$0.id]?.canUseTools == true }.map(\.id))
+        let windows = modelFacts.compactMapValues(\.usableTokens)
+        if let notice = runner.contextNotice {
+            return ChatBanner.contextExceeded(limit: notice.limit, installed: installedChatModels, installedToolCapableIDs: toolCapable,
+                                              promptTokens: runner.unansweredPromptTokens, windows: windows)
+        }
+        if let failure = runner.appleFailure {
+            return ChatBanner.failure(failure, installed: installedChatModels, installedToolCapableIDs: toolCapable,
+                                      promptTokens: runner.unansweredPromptTokens, windows: windows)
+        }
+        return nil
+    }
+
+    /// "Continue with ‹model›": switch the page to that model and send the unanswered message again. A message too big for
+    /// the model is refused first (plain sentence in `runner.errorMessage`), before the page model or the transcript changes.
+    @discardableResult
+    func continueAfterOverflow(with model: ModelEntry) async -> Bool {
+        let usable = modelFacts[model.id]?.usableTokens
+        if let refusal = runner.continueRefusal(with: model, usableTokens: usable) {
+            runner.errorMessage = refusal
+            return false
+        }
+        guard selectPageModel(model) else { return false }
+        startedBy = .page
+        return await runner.retryUnanswered(with: model, usableTokens: usable)
+    }
+
+    /// "Start a new chat" from a banner.
+    func startNewChatAfterBanner(on surface: ChatSurface) {
+        runner.contextNotice = nil
+        runner.appleFailure = nil
+        runner.errorMessage = nil
+        newConversation(on: surface)
     }
 
     // MARK: - Drafts
@@ -251,9 +328,13 @@ final class ChatController {
         guard holder == surface else { return }
         runner.selectConversation(id)
         // On the page, a selected chat continues with its own model when that model is installed.
-        if surface == .page, let chosen = runner.conversations.first(where: { $0.id == id }),
-           let match = pageCandidates.first(where: { $0.id == chosen.modelID }) {
-            models[.page] = match
+        if surface == .page, let chosen = runner.conversations.first(where: { $0.id == id }) {
+            if AppleIntelligenceChat.isApple(chosen.modelID) {
+                // Back to a conversation Apple Intelligence answered: use it again while it is ready.
+                if readinessProvider() == .ready { models[.page] = AppleIntelligenceChat.entry }
+            } else if let match = pageCandidates.first(where: { $0.id == chosen.modelID }) {
+                models[.page] = match
+            }
         }
     }
 

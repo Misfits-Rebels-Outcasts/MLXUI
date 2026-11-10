@@ -21,10 +21,8 @@ struct ChatPageView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { appState.chat.refreshPageModel(installedChatModels: appState.installedChatModels) }
-        .onChange(of: appState.installedModelIDs) { _, _ in
-            appState.chat.refreshPageModel(installedChatModels: appState.installedChatModels)
-        }
+        .onAppear { appState.refreshChatPage() }
+        .onChange(of: appState.installedModelIDs) { _, _ in appState.refreshChatPage() }
     }
 
     private var emptyState: some View {
@@ -34,6 +32,13 @@ struct ChatPageView: View {
             Text("No chat model installed").font(.title3)
             Text("Install a chat model to start a conversation here.")
                 .font(.callout).foregroundStyle(.secondary)
+            // MT3-3: the smallest tool-capable chat model that fits this Mac (plain facts, no rating).
+            if let pick = appState.chat.pageRecommendation {
+                Text("\(pick.displayName) can use tools and fits this Mac (about \(String(format: "%.1f", pick.downloadSizeGB)) GB to download).")
+                    .font(.callout).foregroundStyle(.secondary)
+                Button("Download \(pick.displayName)") { appState.installModel(pick) }
+                    .buttonStyle(.bordered)
+            }
             if let section = appState.visibleSections.first(where: { $0.id == "chat-text" }) ?? appState.visibleSections.first {
                 Button("Browse models") { appState.selectedSection = .browse(section.id) }
                     .buttonStyle(.borderedProminent)

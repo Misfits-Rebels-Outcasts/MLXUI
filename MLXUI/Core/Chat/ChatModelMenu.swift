@@ -18,6 +18,11 @@ nonisolated struct ChatModelFacts: Equatable, Sendable {
     /// Reads the installed `config.json` and weights, exactly as the Connect sheet does. File reads: call it once
     /// per model, not per render.
     static func load(for model: ModelEntry) -> ChatModelFacts {
+        // MT3-3: the system model has no files to read; its window comes from the OS through the seam when it can.
+        if AppleIntelligenceChat.isApple(model.id) {
+            return ChatModelFacts(canUseTools: true,
+                                  usableTokens: AppleFoundationAvailability.makeToolChatter()?.contextSize ?? AppleIntelligenceChat.defaultContextTokens)
+        }
         let directory = ModelStore.shared.directory(forModelID: model.id)
         let facts = ServeModelFacts.facts(modelID: model.id,
                                           configData: ModelContainerPool.configData(directory: directory),
@@ -32,6 +37,12 @@ nonisolated struct ChatModelMenuItem: Equatable, Identifiable, Sendable {
     /// "Can use tools · 32K tokens of context on this Mac"; empty until the facts are loaded.
     let facts: String
     let isSelected: Bool
+    /// MT3-3: a dimmed row (Apple Intelligence not ready) is shown but cannot be chosen.
+    var isEnabled = true
+    /// Why a dimmed row is dimmed.
+    var note: String?
+    /// The fix-it action for a dimmed row (`.enableAppleIntelligence`).
+    var action: SetupAction?
 }
 
 nonisolated enum ChatModelMenu {
@@ -40,8 +51,18 @@ nonisolated enum ChatModelMenu {
     static let chatSectionID = "chat-text"
 
     /// Installed chat models only (`runnerKind == .llm`), by name; the selected one is marked.
-    static func items(installed: [ModelEntry], selectedID: String?, facts: [String: ChatModelFacts]) -> [ChatModelMenuItem] {
-        installed
+    /// MT3-3: Apple Intelligence is listed **first** when `apple` is non-nil (ready: chooseable; otherwise dimmed with its reason and
+    /// fix-it action); `nil` = the OS is below macOS 26 and the row is absent.
+    static func items(installed: [ModelEntry], selectedID: String?, facts: [String: ChatModelFacts],
+                      apple: AppleIntelligenceMenuEntry? = nil, appleContextTokens: Int? = nil) -> [ChatModelMenuItem] {
+        let appleItems: [ChatModelMenuItem] = apple.map { entry in
+            [ChatModelMenuItem(
+                id: AppleIntelligenceChat.modelID, name: AppleIntelligenceChat.displayName,
+                facts: entry.isEnabled ? factsText(ChatModelFacts(canUseTools: true, usableTokens: appleContextTokens ?? AppleIntelligenceChat.defaultContextTokens)) : "",
+                isSelected: AppleIntelligenceChat.modelID == selectedID,
+                isEnabled: entry.isEnabled, note: entry.reason, action: entry.action)]
+        } ?? []
+        return appleItems + installed
             .filter { $0.runnerKind == .llm }
             .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
             .map { model in

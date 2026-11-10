@@ -44,6 +44,15 @@ nonisolated struct ChatInspectorModel: Sendable, Equatable {
         }
     }
 
+    /// MT3-FIX-2: the part of a tool card's result the model actually receives. Apple Intelligence gets at most
+    /// `AppleFoundationRouter.maxToolOutputCharacters` of it (the router cuts the rest), so the meter counts only that;
+    /// MLX models get the whole result.
+    static func modelVisibleToolResult(_ result: String?, isApple: Bool) -> String {
+        let text = result ?? ""
+        guard isApple else { return text }
+        return String(text.prefix(AppleFoundationRouter.maxToolOutputCharacters))
+    }
+
     /// The meter for one turn's inputs. `estimatedTokens` is passed in already counted, so the
     /// view can feed it the same text the model is about to receive.
     static func meter(estimatedTokens: Int, window: Int) -> Meter {

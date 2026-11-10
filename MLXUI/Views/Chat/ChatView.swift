@@ -85,7 +85,9 @@ struct ChatView: View {
                 if let error = exportError {
                     errorBar(error)
                 }
-                if let error = runner.errorMessage {
+                if surface == .page, let banner = controller.banner(installedChatModels: appState.installedChatModels) {
+                    bannerBar(banner)
+                } else if let error = runner.errorMessage {
                     errorBar(error)
                 }
                 Divider()
@@ -186,8 +188,11 @@ struct ChatView: View {
                             .lineLimit(1)
                         // MT2-3: the Chat page lists every model's chats, so each row names its model.
                         if surface == .page {
-                            Text(ChatConversationBadge.make(modelID: conversation.modelID, catalog: names,
-                                                            installedIDs: appState.installedModelIDs).text)
+                            Text(ChatConversationBadge.make(
+                                modelID: conversation.modelID,
+                                catalog: names.merging([AppleIntelligenceChat.modelID: AppleIntelligenceChat.displayName]) { a, _ in a },
+                                installedIDs: controller.appleReadiness == .ready
+                                    ? appState.installedModelIDs.union([AppleIntelligenceChat.modelID]) : appState.installedModelIDs).text)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
@@ -240,7 +245,7 @@ struct ChatView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(model.displayName)
                     .font(.headline)
-                Text("Running locally · MLX")
+                Text(ChatModelLabels.headerSubtitle(modelID: model.id))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -423,6 +428,16 @@ struct ChatView: View {
                 Text(message.text)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                // MT3-FIX-1: which model wrote this answer (the Chat page lists every model's chats).
+                if surface == .page, let badge = ChatModelLabels.answerBadge(
+                    role: message.role, modelID: message.modelID,
+                    catalog: appState.catalogDisplayNames,
+                    installedIDs: controller.appleReadiness == .ready
+                        ? appState.installedModelIDs.union([AppleIntelligenceChat.modelID]) : appState.installedModelIDs) {
+                    Text(badge)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
                 // CW-3: the bubble shows what was attached; the model saw the contents.
                 if !message.attachments.isEmpty {
                     attachmentChips(message.attachments)
@@ -688,6 +703,44 @@ struct ChatView: View {
 
     // MARK: - Error
 
+    /// MT3-3: an Apple Intelligence overflow or refusal: one sentence and its buttons (plan §3.3).
+    private func bannerBar(_ banner: ChatBanner) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+            Text(banner.text)
+                .font(.caption)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(Array(banner.buttons.enumerated()), id: \.offset) { index, button in
+                if case .openSettings(let pane) = button {
+                    SettingsOpener(pane: pane) { Text(banner.buttonTitles[index]) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                } else {
+                    Button(banner.buttonTitles[index]) { perform(button) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                }
+            }
+        }
+        .foregroundStyle(.orange)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.orange.opacity(0.10))
+    }
+
+    private func perform(_ button: ChatBanner.Button) {
+        switch button {
+        case .continueWith(let modelID, _):
+            if let chosen = appState.installedChatModels.first(where: { $0.id == modelID }) {
+                Task { await controller.continueAfterOverflow(with: chosen) }
+            }
+        case .startNewChat:
+            controller.startNewChatAfterBanner(on: surface)
+        case .openSettings:
+            break   // rendered as a `SettingsOpener` in `bannerBar`
+        }
+    }
+
     private func errorBar(_ message: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -775,15 +828,26 @@ struct ChatView: View {
     /// turn runs, so the header never names a model that is not the one answering.
     private var modelMenu: some View {
         let installed = appState.installedChatModels
+        let apple = controller.appleMenuEntry()
         let items = ChatModelMenu.items(installed: installed, selectedID: controller.model(for: surface)?.id,
-                                        facts: controller.modelFacts)
+                                        facts: controller.modelFacts, apple: apple,
+                                        appleContextTokens: controller.modelFacts[AppleIntelligenceChat.modelID]?.usableTokens)
         return Menu {
             ForEach(items) { item in
-                Button {
-                    if let chosen = installed.first(where: { $0.id == item.id }) { controller.selectPageModel(chosen) }
-                } label: {
-                    Text(item.isSelected ? "✓ \(item.name)" : item.name)
-                    if !item.facts.isEmpty { Text(item.facts) }
+                if item.isEnabled {
+                    Button {
+                        if AppleIntelligenceChat.isApple(item.id) { controller.selectPageModel(AppleIntelligenceChat.entry) }
+                        else if let chosen = installed.first(where: { $0.id == item.id }) { controller.selectPageModel(chosen) }
+                    } label: {
+                        Text(item.isSelected ? "✓ \(item.name)" : item.name)
+                        if !item.facts.isEmpty { Text(item.facts) }
+                    }
+                } else {
+                    // Dimmed with the reason, and the one fix-it button when there is one (AFM-1's `.enableAppleIntelligence`).
+                    Text("\(item.name) — \(item.note ?? "not available")")
+                    if let action = item.action, let pane = settingsPane(for: action) {
+                        SettingsOpener(pane: pane) { Text(AppleIntelligenceMenuEntry.turnOnTitle) }
+                    }
                 }
             }
             Divider()
@@ -798,7 +862,9 @@ struct ChatView: View {
         .fixedSize()
         .disabled(runner.isRunning)
         .help(runner.isRunning ? "The model can be changed when the reply is finished." : "Model for the next message")
-        .task(id: installed.map(\.id)) { controller.loadModelFacts(for: installed) }
+        .task(id: installed.map(\.id)) {
+            controller.loadModelFacts(for: installed + (apple?.isEnabled == true ? [AppleIntelligenceChat.entry] : []))
+        }
     }
 
     /// "+" — Add folder… and the folders this chat can use, one click to attach or detach (D5).
