@@ -245,7 +245,7 @@ struct ChatView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(model.displayName)
                     .font(.headline)
-                Text("Running locally · MLX")
+                Text(ChatModelLabels.headerSubtitle(modelID: model.id))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -428,6 +428,16 @@ struct ChatView: View {
                 Text(message.text)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                // MT3-FIX-1: which model wrote this answer (the Chat page lists every model's chats).
+                if surface == .page, let badge = ChatModelLabels.answerBadge(
+                    role: message.role, modelID: message.modelID,
+                    catalog: appState.catalogDisplayNames,
+                    installedIDs: controller.appleReadiness == .ready
+                        ? appState.installedModelIDs.union([AppleIntelligenceChat.modelID]) : appState.installedModelIDs) {
+                    Text(badge)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
                 // CW-3: the bubble shows what was attached; the model saw the contents.
                 if !message.attachments.isEmpty {
                     attachmentChips(message.attachments)

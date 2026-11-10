@@ -32,6 +32,24 @@ nonisolated enum AppleIntelligenceChat {
         speedEstimated: nil, communityDownloads: nil, communityLikes: nil, variants: nil)
 }
 
+/// MT3-FIX-1 — the two plain facts the Chat view prints from a model id: the header subtitle and the per-answer badge.
+nonisolated enum ChatModelLabels {
+    /// "Running locally · MLX" is true only for an MLX model; the system model runs on this Mac but not on MLX.
+    static func headerSubtitle(modelID: String) -> String {
+        AppleIntelligenceChat.isApple(modelID) ? "Running on this Mac · Apple Intelligence" : "Running locally · MLX"
+    }
+
+    /// The small secondary line under an assistant answer: the model that wrote it (the stamp from MT2-3), named as the
+    /// conversation list names it ("Qwen3.5 9B", "Apple Intelligence", "<name> · not installed"). `nil` for a user
+    /// message or an answer with no stamp (older conversations).
+    static func answerBadge(role: ChatMessage.Role, modelID: String?, catalog: [String: String], installedIDs: Set<String>) -> String? {
+        guard role == .assistant, let modelID, !modelID.isEmpty else { return nil }
+        var names = catalog
+        names[AppleIntelligenceChat.modelID] = AppleIntelligenceChat.displayName
+        return ChatConversationBadge.make(modelID: modelID, catalog: names, installedIDs: installedIDs).text
+    }
+}
+
 /// The Apple Intelligence row of the composer's model menu.
 nonisolated struct AppleIntelligenceMenuEntry: Equatable, Sendable {
     let isEnabled: Bool
