@@ -142,6 +142,9 @@ final class ModelRunner {
     /// `nil` in the app, which is the only thing that makes the `try` below a no-op.
     @ObservationIgnored var afterImportForTesting: (@Sendable () async throws -> Void)?
 
+    /// Test seam only. The usable window `send` admits against; the app reads `ChatModelFacts` (what the model menu shows).
+    @ObservationIgnored var usableTokensForTesting: (@Sendable (String) -> Int?)?
+
     /// Test seam only. Where `send` looks for a model's files; the app always uses `ModelStore`.
     @ObservationIgnored var modelDirectoryForTesting: (@Sendable (String) -> URL)?
 
@@ -773,6 +776,21 @@ final class ModelRunner {
             return true
         }
 
+        // MT4-0: refuse a message the model cannot take, BEFORE the load and before the transcript changes. The tokens are the
+        // prompt as the model will see it (typed text plus inline attachment text) and the history prefilled with it. Apple
+        // Intelligence has its own pre-flight in the seam. An unknown window admits. false = nothing sent, so the composer
+        // gives back what it cleared (the attachments stay imported in the conversation's folder and are reused on resend).
+        if !isApple {
+            let window = usableWindow(for: model)
+            let tokens = ChatContinueFit.sendTokens(
+                prompt: ChatAttachment.prompt(text: trimmed, attachments: readyAttachments), history: history.map(\.content))
+            if !ChatContinueFit.admits(promptTokens: tokens, window: window), let window {
+                errorMessage = ChatContinueFit.sendRefusal(promptTokens: tokens, modelName: model.displayName, window: window)
+                isRunning = false
+                return false
+            }
+        }
+
         // SC-5a (gate D): ask before the turn if loading this model would stop keeping a served one ready. Cancel: the
         // turn doesn't start — nothing appended, nothing loaded, no error banner.
         let confirmed = isApple ? true : await confirmLoad(model, dir: modelDir)
@@ -913,13 +931,21 @@ final class ModelRunner {
         return ChatContinueFit.promptTokens(utf8Count: max(bytes, notice.prompt.utf8.count))
     }
 
+    /// MT4-0: the window `send` admits against: the model menu's usable-tokens fact, else the catalog window, else unknown.
+    func usableWindow(for model: ModelEntry) -> Int? {
+        #if DEBUG
+        if let seam = usableTokensForTesting { return seam(model.id) }
+        #endif
+        return ChatModelFacts.load(for: model).usableTokens ?? model.contextWindow
+    }
+
     /// The plain sentence when `model` cannot take the unanswered message, else nil. `usableTokens` is the model's usable window
     /// on this Mac (the menu's fact); unknown falls back to the catalog window.
     func continueRefusal(with model: ModelEntry, usableTokens: Int?) -> String? {
         guard let tokens = unansweredPromptTokens else { return nil }
-        guard let window = usableTokens ?? model.contextWindow else { return nil }
-        return ChatContinueFit.fits(promptTokens: tokens, window: window)
-            ? nil : ChatContinueFit.refusal(promptTokens: tokens, modelName: model.displayName, window: window)
+        let window = usableTokens ?? model.contextWindow
+        guard !ChatContinueFit.admits(promptTokens: tokens, window: window), let window else { return nil }
+        return ChatContinueFit.refusal(promptTokens: tokens, modelName: model.displayName, window: window)
     }
 
     /// MT3-3: after a context overflow, send the unanswered message again with `model` (the banner's "Continue with ..."). The
