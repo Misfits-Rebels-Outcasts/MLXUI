@@ -813,7 +813,11 @@ final class ModelRunner {
         let modelPrompt = ChatAttachment.prompt(text: trimmed, attachments: readyAttachments)
 
         // Snapshot the enabled tools for this turn (Sendable to hand to the nonisolated session).
-        let armedTools = availableTools.filter { enabledToolNames.contains($0.name) }
+        var armedTools = availableTools.filter { enabledToolNames.contains($0.name) }
+        // MT4-1 (owner ruling 2026-11-10): Apple Intelligence is not offered read_clipboard, write_clipboard, fetch_url (and,
+        // as the same rule, calculator, run_javascript, datetime) unless what the user typed calls for it. MLX is unchanged
+        // here. Model tools are not offered to the chat yet (MT4-2), so `modelToolsEnabled` is false.
+        if isApple { armedTools = Self.exposedTools(armedTools, prompt: trimmed) }
 
         // CW-2: the scope is the conversation's attached folders (G1), rebuilt on *every* turn so a
         // revoke or a detach takes effect on the next message.
@@ -929,6 +933,15 @@ final class ModelRunner {
             if case .message(let m) = item { return total + m.text.utf8.count } else { return total }
         }
         return ChatContinueFit.promptTokens(utf8Count: max(bytes, notice.prompt.utf8.count))
+    }
+
+    /// MT4-1: the Apple Intelligence tool set for one turn (`ToolExposurePolicy`), keeping the registry's order.
+    static func exposedTools(_ tools: [any AgentTool], prompt: String) -> [any AgentTool] {
+        let output = ToolExposurePolicy.select(ToolExposurePolicy.Input(
+            router: .appleIntelligence, modelToolsEnabled: false, prompt: prompt,
+            enabledTools: tools.map(\.name), gateAmbiguousTools: true))
+        let keep = Set(output.tools)
+        return tools.filter { keep.contains($0.name) }
     }
 
     /// MT4-0: the window `send` admits against: the model menu's usable-tokens fact, else the catalog window, else unknown.
