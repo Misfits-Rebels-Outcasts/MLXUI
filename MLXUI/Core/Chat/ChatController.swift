@@ -270,20 +270,31 @@ final class ChatController {
 
     /// The banner for the page's last Apple Intelligence failure or overflow, or nil.
     func banner(installedChatModels: [ModelEntry]) -> ChatBanner? {
+        let toolCapable = Set(installedChatModels.filter { modelFacts[$0.id]?.canUseTools == true }.map(\.id))
+        let windows = modelFacts.compactMapValues(\.usableTokens)
         if let notice = runner.contextNotice {
-            let toolCapable = Set(installedChatModels.filter { modelFacts[$0.id]?.canUseTools == true }.map(\.id))
-            return ChatBanner.contextExceeded(limit: notice.limit, installed: installedChatModels, installedToolCapableIDs: toolCapable)
+            return ChatBanner.contextExceeded(limit: notice.limit, installed: installedChatModels, installedToolCapableIDs: toolCapable,
+                                              promptTokens: runner.unansweredPromptTokens, windows: windows)
         }
-        if let failure = runner.appleFailure { return ChatBanner.failure(failure, installed: installedChatModels) }
+        if let failure = runner.appleFailure {
+            return ChatBanner.failure(failure, installed: installedChatModels, installedToolCapableIDs: toolCapable,
+                                      promptTokens: runner.unansweredPromptTokens, windows: windows)
+        }
         return nil
     }
 
-    /// "Continue with ‹model›": switch the page to that model and send the unanswered message again.
+    /// "Continue with ‹model›": switch the page to that model and send the unanswered message again. A message too big for
+    /// the model is refused first (plain sentence in `runner.errorMessage`), before the page model or the transcript changes.
     @discardableResult
     func continueAfterOverflow(with model: ModelEntry) async -> Bool {
+        let usable = modelFacts[model.id]?.usableTokens
+        if let refusal = runner.continueRefusal(with: model, usableTokens: usable) {
+            runner.errorMessage = refusal
+            return false
+        }
         guard selectPageModel(model) else { return false }
         startedBy = .page
-        return await runner.retryUnanswered(with: model)
+        return await runner.retryUnanswered(with: model, usableTokens: usable)
     }
 
     /// "Start a new chat" from a banner.

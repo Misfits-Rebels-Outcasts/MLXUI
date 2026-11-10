@@ -161,11 +161,20 @@ nonisolated struct ChatBanner: Equatable, Sendable {
         }
     }
 
-    /// Plan §3.3. `installed` are the installed chat models; the offer names the first (by name) whose tool format is known, else
-    /// the first by name, else no "continue" button.
-    static func contextExceeded(limit: Int?, installed: [ModelEntry], installedToolCapableIDs: Set<String>) -> ChatBanner {
+    /// Plan §3.3 and MT3-FIX-4. `installed` are the installed chat models. The offer names the first, in ruling C's order
+    /// (tool-capable by name, then the others by name), whose usable window fits the unanswered message
+    /// (`ChatContinueFit`); with none that fits, only "Start a new chat" and a sentence that promises no continue.
+    /// `promptTokens` nil means "unknown": nothing is filtered by size. `windows` maps model id to its usable tokens
+    /// (the facts the model menu shows); a model with no entry falls back to its catalog `contextWindow`.
+    static func contextExceeded(limit: Int?, installed: [ModelEntry], installedToolCapableIDs: Set<String>,
+                                promptTokens: Int? = nil, windows: [String: Int] = [:]) -> ChatBanner {
         let byName = installed.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
-        let pick = byName.first { installedToolCapableIDs.contains($0.id) } ?? byName.first
+        let ordered = byName.filter { installedToolCapableIDs.contains($0.id) } + byName.filter { !installedToolCapableIDs.contains($0.id) }
+        let pick = ordered.first { model in
+            guard let promptTokens else { return true }
+            guard let window = windows[model.id] ?? model.contextWindow else { return true }     // size unknown: don't hide it
+            return ChatContinueFit.fits(promptTokens: promptTokens, window: window)
+        }
         var buttons: [Button] = []
         if let pick { buttons.append(.continueWith(modelID: pick.id, name: pick.displayName)) }
         buttons.append(.startNewChat)
@@ -176,9 +185,11 @@ nonisolated struct ChatBanner: Equatable, Sendable {
     }
 
     /// Guardrail, language, refusal, rate limit, timeout, assets: the router's own sentence; a new chat clears a refused one.
-    static func failure(_ error: AppleFoundationToolError, installed: [ModelEntry]) -> ChatBanner {
+    static func failure(_ error: AppleFoundationToolError, installed: [ModelEntry],
+                        installedToolCapableIDs: Set<String> = [], promptTokens: Int? = nil, windows: [String: Int] = [:]) -> ChatBanner {
         if case .contextWindowExceeded(let limit, _) = error {
-            return contextExceeded(limit: limit, installed: installed, installedToolCapableIDs: [])
+            return contextExceeded(limit: limit, installed: installed, installedToolCapableIDs: installedToolCapableIDs,
+                                   promptTokens: promptTokens, windows: windows)
         }
         var buttons: [Button] = []
         switch error {
@@ -186,6 +197,24 @@ nonisolated struct ChatBanner: Equatable, Sendable {
         default: break
         }
         return ChatBanner(text: error.userMessage, buttons: buttons)
+    }
+}
+
+/// MT3-FIX-4 — does the unanswered message fit a model's window? Pure.
+nonisolated enum ChatContinueFit {
+    /// Room left for the reply: 2,048 tokens, but never more than a quarter of a small window (so a 4K model still has a
+    /// 1K margin rather than none). The hand-over also sends the earlier turns, so callers pass them in `promptTokens`.
+    static func replyMargin(window: Int) -> Int { min(2_048, max(0, window) / 4) }
+
+    static func fits(promptTokens: Int, window: Int) -> Bool { promptTokens + replyMargin(window: window) <= window }
+
+    /// What a message of this many UTF-8 bytes (plus the earlier turns) costs, by the app's own estimate.
+    static func promptTokens(utf8Count: Int) -> Int { ChatAttachment.estimatedTokens(forUTF8Count: utf8Count) }
+
+    /// The plain sentence for a refused Continue.
+    static func refusal(promptTokens: Int, modelName: String, window: Int) -> String {
+        "This message is about \(ChatModelMenu.tokenText(promptTokens)) tokens; \(modelName) fits about "
+            + "\(ChatModelMenu.tokenText(max(0, window - replyMargin(window: window)))). Start a new chat or attach it as a file."
     }
 }
 

@@ -903,12 +903,36 @@ final class ModelRunner {
         return true
     }
 
+    /// MT3-FIX-4: tokens the hand-over would prefill: the unanswered message and the earlier turns (attachments re-import
+    /// against the new model's window, so they add nothing here).
+    var unansweredPromptTokens: Int? {
+        guard let notice = contextNotice, notice.conversationID == activeConversationID else { return nil }
+        let bytes = transcript.items.reduce(0) { total, item in
+            if case .message(let m) = item { return total + m.text.utf8.count } else { return total }
+        }
+        return ChatContinueFit.promptTokens(utf8Count: max(bytes, notice.prompt.utf8.count))
+    }
+
+    /// The plain sentence when `model` cannot take the unanswered message, else nil. `usableTokens` is the model's usable window
+    /// on this Mac (the menu's fact); unknown falls back to the catalog window.
+    func continueRefusal(with model: ModelEntry, usableTokens: Int?) -> String? {
+        guard let tokens = unansweredPromptTokens else { return nil }
+        guard let window = usableTokens ?? model.contextWindow else { return nil }
+        return ChatContinueFit.fits(promptTokens: tokens, window: window)
+            ? nil : ChatContinueFit.refusal(promptTokens: tokens, modelName: model.displayName, window: window)
+    }
+
     /// MT3-3: after a context overflow, send the unanswered message again with `model` (the banner's "Continue with ..."). The
     /// unanswered user bubble is removed first, so the conversation does not show the message twice.
     @discardableResult
-    func retryUnanswered(with model: ModelEntry) async -> Bool {
-        guard let notice = contextNotice, !isRunning, notice.conversationID == activeConversationID,
-              transcript.removeTrailingUserMessage() else { return false }
+    func retryUnanswered(with model: ModelEntry, usableTokens: Int? = nil) async -> Bool {
+        guard let notice = contextNotice, !isRunning, notice.conversationID == activeConversationID else { return false }
+        // The size check runs before anything is removed: a refused Continue leaves the bubble, the saved chat and the banner.
+        if let refusal = continueRefusal(with: model, usableTokens: usableTokens) {
+            errorMessage = refusal
+            return false
+        }
+        guard transcript.removeTrailingUserMessage() else { return false }
         saveActiveConversation()
         return await send(notice.prompt, attachments: notice.attachments, for: model)
     }
