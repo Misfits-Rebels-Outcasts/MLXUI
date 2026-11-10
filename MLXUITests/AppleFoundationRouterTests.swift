@@ -511,6 +511,18 @@ struct AppleFoundationRouterTests {
         #expect(AppleFoundationErrorMapper.mapDetailed(LanguageModelError.rateLimited(.init(resetDate: nil, debugDescription: "x"))) == .rateLimited)
     }
 
+    // MT3-FIX-3 — the overflow wording the framework used for ~570K tokens with tools armed.
+    struct PrivateOverflowError: Error, CustomStringConvertible {
+        var description: String { "Provided 570,100 tokens, but the maximum allowed is 8,192.::Provided 570,100 tokens, but the maximum allowed is 8,192.: The operation couldn\u{2019}t be completed." }
+    }
+
+    @Test func aPrivateFrameworkOverflowSentenceMapsToContextExceeded() {
+        #expect(AppleFoundationErrorMapper.mapDetailed(PrivateOverflowError()) == .contextWindowExceeded(limit: 8192, tokenCount: nil))
+        #expect(AppleFoundationErrorMapper.overflowLimit(inDescription: "Provided 9 tokens, but the maximum allowed is 4,096.") == 4096)
+        #expect(AppleFoundationErrorMapper.overflowLimit(inDescription: "something else failed") == nil)
+        #expect(AppleFoundationErrorMapper.mapDetailed(CocoaError(.fileNoSuchFile)) == .failed)
+    }
+
     // MARK: owner-run real tests (Apple Intelligence ready + TEST_RUNNER_MLXUI_TEST_REAL_AFM=1)
 
     nonisolated static var realEnabled: Bool {
@@ -574,5 +586,19 @@ struct AppleFoundationRouterTests {
         let events = try await collect(router.streamTurn(RouterTurn(prompt: "Summarize: " + big)))
         print("MT3-2 real overflow:", events)
         #expect(events.contains { if case .contextExceeded = $0 { return true } else { return false } })
+    }
+
+    /// MT3-FIX-3: ~20K and ~500K tokens, with and without tools armed, are a `.contextExceeded` event from the router.
+    @Test(.enabled(if: realEnabled, "needs Apple Intelligence ready and MLXUI_TEST_REAL_AFM=1"),
+          arguments: [(90_000, false), (90_000, true), (2_250_000, false), (2_250_000, true)])
+    func realAnyPromptPastTheWindowIsAContextExceededEvent(chars: Int, withTools: Bool) async throws {
+        let chatter = try #require(AppleFoundationAvailability.makeToolChatter(forceReal: true))
+        let router = AppleFoundationRouter(chatter: chatter)
+        let text = String(repeating: "The quick brown fox jumps over the lazy dog. Chapter marker: LONGFILE-OK.\n", count: chars / 75)
+        let tools: [any AgentTool] = withTools ? [DateTimeTool()] : []
+        let events = try await collect(router.streamTurn(RouterTurn(
+            instructions: "You are helpful.", history: .live(conversationID: UUID(), fallback: []),
+            prompt: "Summarize: " + text, tools: tools)))
+        #expect(events.contains(.contextExceeded(limit: 8192)))
     }
 }

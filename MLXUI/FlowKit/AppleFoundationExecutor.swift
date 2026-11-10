@@ -268,6 +268,8 @@ nonisolated enum AppleFoundationErrorMapper {
 nonisolated extension AppleFoundationErrorMapper {
     static func mapDetailed(_ error: Error) -> AppleFoundationToolError {
         if let error = error as? AppleFoundationToolError { return error }
+        // MT3-FIX-3: a throwing tool wraps its error; look through it.
+        if let wrapped = error as? LanguageModelSession.ToolCallError { return mapDetailed(wrapped.underlyingError) }
         if let error = error as? LanguageModelSession.GenerationError {
             switch error {
             case .exceededContextWindowSize:
@@ -300,7 +302,19 @@ nonisolated extension AppleFoundationErrorMapper {
                 }
             }
         }
+        // MT3-FIX-3: with tools armed, a huge prompt came back as a private `GenerativeFunctionsFoundation.GenerativeError`
+        // ("Provided 570,100 tokens, but the maximum allowed is 8,192."), a type this file cannot name. Read its sentence.
+        if let limit = overflowLimit(inDescription: String(describing: error)) {
+            return .contextWindowExceeded(limit: limit, tokenCount: nil)
+        }
         return .failed
+    }
+
+    /// The window size in an "…tokens, but the maximum allowed is N…" sentence, else `nil`.
+    static func overflowLimit(inDescription text: String) -> Int? {
+        guard let range = text.range(of: "tokens, but the maximum allowed is ") else { return nil }
+        let digits = text[range.upperBound...].prefix { $0.isNumber || $0 == "," }.replacingOccurrences(of: ",", with: "")
+        return Int(digits)
     }
 }
 
@@ -366,6 +380,9 @@ nonisolated final class AppleFoundationToolSessionImpl: AppleFoundationToolSessi
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
+                    // MT3-FIX-3: a prompt far past the window can come back from the framework as `guardrailViolation`
+                    // ("May contain unsafe content", seen at ~450K tokens) instead of `contextSizeExceeded`. Count first.
+                    if let over = await Self.overflow(of: prompt) { throw over }
                     for try await snapshot in session.streamResponse(to: prompt) {
                         let text: String = snapshot.content
                         continuation.yield(.snapshot(text))
@@ -380,6 +397,16 @@ nonisolated final class AppleFoundationToolSessionImpl: AppleFoundationToolSessi
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    /// `.contextWindowExceeded` when the prompt alone cannot fit the window: the model's own count where it has one
+    /// (macOS 26.4+), otherwise a byte estimate no real text beats (16 bytes per token).
+    static func overflow(of prompt: String) async -> AppleFoundationToolError? {
+        let limit = SystemLanguageModel.default.contextSize
+        if #available(macOS 26.4, *), let count = try? await SystemLanguageModel.default.tokenCount(for: prompt) {
+            return count > limit ? .contextWindowExceeded(limit: limit, tokenCount: count) : nil
+        }
+        return prompt.utf8.count > limit * 16 ? .contextWindowExceeded(limit: limit, tokenCount: nil) : nil
     }
 
     /// Context in use after the turn (everything before the reply) and the reply itself (macOS 26.4+).
