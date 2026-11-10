@@ -572,7 +572,8 @@ struct ChatInspectorView: View {
         parts.append(contentsOf: runner.transcript.items.compactMap { item in
             switch item {
             case .message(let message): return message.text
-            case .tool(let activity): return activity.result ?? ""
+            case .tool(let activity):
+                return ChatInspectorModel.modelVisibleToolResult(activity.result, isApple: AppleIntelligenceChat.isApple(model.id))
             }
         })
         parts.append(draft)
