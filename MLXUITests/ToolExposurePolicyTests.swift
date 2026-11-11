@@ -26,7 +26,7 @@ struct ToolExposurePolicyTests {
     @Test func afmWithAnImageAndNothingInstalledOffersListCapabilitiesAndTheDownloadableImageTools() {
         let statuses = ["ocr_image": download, "describe_image": download, "upscale_image": download, "segment_image": download,
                         "estimate_depth": download]
-        let out = ToolExposurePolicy.select(input(.appleIntelligence, turn: [.image], statuses: statuses))
+        let out = ToolExposurePolicy.select(input(.appleIntelligence, turn: [.image], prompt: "Describe this image, upscale it, segment it and estimate its depth", statuses: statuses))
         #expect(out.tools == ["list_capabilities", "ocr_image", "describe_image", "upscale_image", "segment_image", "estimate_depth"])
         #expect(out.tools.count <= AppleFoundationToolBudget.maxTools)
     }
@@ -43,7 +43,7 @@ struct ToolExposurePolicyTests {
     }
 
     @Test func aToolThatCannotRunOrDoesNotExistIsDroppedWithItsReason() {
-        let out = ToolExposurePolicy.select(input(turn: [.image], statuses: ["ocr_image": .cantRun(reason: "Needs 20 GB"), "describe_image": ready]))
+        let out = ToolExposurePolicy.select(input(turn: [.image], prompt: "describe this image and upscale it", statuses: ["ocr_image": .cantRun(reason: "Needs 20 GB"), "describe_image": ready]))
         #expect(out.tools == ["list_capabilities", "describe_image"])
         #expect(reasons(out)["ocr_image"] == .cantRun("Needs 20 GB"))
         #expect(reasons(out)["upscale_image"] == .notAvailable)
@@ -58,8 +58,8 @@ struct ToolExposurePolicyTests {
 
     @Test func readyComesBeforeNeedsDownloadWithinAGroup() {
         let statuses = ["ocr_image": download, "describe_image": ready, "upscale_image": download, "segment_image": ready, "estimate_depth": download]
-        let out = ToolExposurePolicy.select(input(turn: [.image], statuses: statuses))
-        #expect(out.tools == ["list_capabilities", "describe_image", "segment_image", "ocr_image", "upscale_image", "estimate_depth"])
+        let out = ToolExposurePolicy.select(input(turn: [.image], prompt: "Describe this image, upscale it, segment it and estimate its depth", statuses: statuses))
+        #expect(out.tools == ["list_capabilities", "ocr_image", "describe_image", "segment_image", "upscale_image", "estimate_depth"])
     }
 
     @Test func generatorsAreOfferedOnlyWhenThePromptCallsForThem() {
@@ -87,13 +87,13 @@ struct ToolExposurePolicyTests {
         var statuses = Dictionary(uniqueKeysWithValues: (imageTools + ["transcribe_audio"]).map { ($0, ready) })
         statuses["transcribe_audio"] = ready
         let enabled = ["read_file", "list_directory", "search_files", "embed_text", "summarize"]
-        let afm = ToolExposurePolicy.select(input(.appleIntelligence, turn: [.image, .audio], statuses: statuses, enabled: enabled))
-        #expect(afm.tools == ["list_capabilities", "ocr_image", "describe_image", "upscale_image", "segment_image", "estimate_depth"])
-        #expect(reasons(afm)["transcribe_audio"] == .overBudget)
+        let afm = ToolExposurePolicy.select(input(.appleIntelligence, turn: [.image, .audio], prompt: "Describe this image, upscale it, segment it and estimate its depth", statuses: statuses, enabled: enabled))
+        #expect(afm.tools == ["list_capabilities", "ocr_image", "transcribe_audio", "describe_image", "upscale_image", "segment_image"])
+        #expect(reasons(afm)["estimate_depth"] == .overBudget)
         #expect(reasons(afm)["read_file"] == .overBudget)
-        let mlx = ToolExposurePolicy.select(input(turn: [.image, .audio], statuses: statuses, enabled: enabled))
+        let mlx = ToolExposurePolicy.select(input(turn: [.image, .audio], prompt: "Describe this image, upscale it, segment it and estimate its depth", statuses: statuses, enabled: enabled))
         #expect(mlx.tools.count == 10)
-        #expect(Array(mlx.tools.prefix(7)) == ["list_capabilities", "ocr_image", "describe_image", "upscale_image", "segment_image", "estimate_depth", "transcribe_audio"])
+        #expect(Array(mlx.tools.prefix(7)) == ["list_capabilities", "ocr_image", "transcribe_audio", "describe_image", "upscale_image", "segment_image", "estimate_depth"])
         #expect(Array(mlx.tools.suffix(3)) == ["read_file", "list_directory", "search_files"])
     }
 
@@ -162,9 +162,64 @@ struct ToolExposurePolicyTests {
     }
 
     @Test func nonAmbiguousToolsAreNeverGated() {
-        for name in ["read_file", "write_file", "embed_text", "summarize", "transcribe_audio", "ocr_image"] {
+        for name in ["read_file", "write_file", "transcribe_audio", "ocr_image"] {
             #expect(ToolExposurePolicy.turnCalls(name, prompt: "hello"))
         }
+    }
+
+    // MARK: MT4-2b
+
+    private var imageStatuses: [String: ModelToolStatus] {
+        Dictionary(uniqueKeysWithValues: (ToolExposurePolicy.toolsForInputKind[.image] ?? []).map { ($0, download) })
+    }
+
+    /// (a) prompt -> the image tools offered on an image turn (Apple Intelligence, nothing generator-ready).
+    @Test func anImageTurnOffersOcrByDefaultAndOnlyTheImageToolsThePromptCallsFor() {
+        let table: [(String, [String])] = [
+            ("", ["list_capabilities", "ocr_image"]),
+            ("What does this say?", ["list_capabilities", "ocr_image"]),
+            ("Upscale this photo", ["list_capabilities", "ocr_image", "upscale_image"]),
+            ("Cut out the dog", ["list_capabilities", "ocr_image", "segment_image"]),
+            ("Estimate the depth of this scene", ["list_capabilities", "ocr_image", "estimate_depth"]),
+            ("Describe this image", ["list_capabilities", "ocr_image", "describe_image"]),
+        ]
+        for (prompt, expected) in table {
+            let out = ToolExposurePolicy.select(input(.appleIntelligence, turn: [.image], prompt: prompt, statuses: imageStatuses))
+            #expect(out.tools == expected, "prompt: \(prompt)")
+        }
+    }
+
+    /// (a) called-for generators rank ahead of uncalled image tools.
+    @Test func calledForGeneratorsRankAheadOfImageToolsUnderTheAppleBudget() {
+        var statuses = imageStatuses
+        for g in ToolExposurePolicy.generatorTools { statuses[g] = ready }
+        let out = ToolExposurePolicy.select(input(.appleIntelligence, turn: [.image], prompt: "Translate the text in this image and read it aloud",
+                                                  statuses: statuses))
+        #expect(out.tools.contains("translate") && out.tools.contains("speak") && out.tools.contains("ocr_image"))
+        #expect(out.tools.count <= AppleFoundationToolBudget.maxTools)
+    }
+
+    /// The conversation's assets include this turn's: a kind attached this turn is not re-offered in full by rule 4.
+    @Test func anImageAttachedThisTurnIsNotReofferedInFullByTheConversationRule() {
+        let out = ToolExposurePolicy.select(input(.appleIntelligence, conversation: [.image], turn: [.image], prompt: "What's the total on this receipt?",
+                                                  statuses: imageStatuses))
+        #expect(out.tools == ["list_capabilities", "ocr_image"])
+    }
+
+    /// (b) embed_text / summarize / semantic_search follow the gate.
+    @Test func embedSummarizeAndSemanticSearchNeedATurnCue() {
+        let tools = ["embed_text", "summarize", "semantic_search"]
+        func offered(_ prompt: String, gate: Bool = true) -> [String] {
+            ToolExposurePolicy.select(input(.appleIntelligence, models: false, prompt: prompt, enabled: tools, gate: gate)).tools
+        }
+        #expect(offered("What is the capital of France?").isEmpty)
+        #expect(offered("Search my documents for the invoice").contains("semantic_search"))
+        #expect(offered("Summarize this").contains("summarize"))
+        #expect(offered("Give me a summary").contains("summarize"))
+        #expect(offered("Embed this sentence").contains("embed_text"))
+        #expect(offered("Index my notes").contains("semantic_search"))
+        #expect(offered("What is the capital of France?", gate: false) == tools)
+        #expect(!ToolExposurePolicy.turnCalls("embed_text", prompt: "hello"))
     }
 
     // MARK: wired into the Apple Intelligence send
