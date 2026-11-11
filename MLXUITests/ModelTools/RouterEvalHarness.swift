@@ -195,7 +195,8 @@ enum RouterEvalPlanner {
 
         let allTools = ModelRunner.defaultTools()
         let enabledNames = ModelRunner.defaultEnabledToolNames()
-        let enabled = allTools.filter { enabledNames.contains($0.name) }
+        // MT4-6b: `echo` is the DEBUG-only demo tool; leave it out so a Debug run sees the offered set a Release build has.
+        let enabled = allTools.filter { enabledNames.contains($0.name) && $0.name != "echo" }
         let policy = ToolExposurePolicy.select(ToolExposurePolicy.Input(
             router: setup.router, modelToolsEnabled: true,
             conversationAssetKinds: conversationKinds, turnAssetKinds: turnKinds,

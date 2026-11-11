@@ -59,7 +59,8 @@ struct ToolExposurePolicyTests {
     @Test func readyComesBeforeNeedsDownloadWithinAGroup() {
         let statuses = ["ocr_image": download, "describe_image": ready, "upscale_image": download, "segment_image": ready, "estimate_depth": download]
         let out = ToolExposurePolicy.select(input(turn: [.image], prompt: "Describe this image, upscale it, segment it and estimate its depth", statuses: statuses))
-        #expect(out.tools == ["list_capabilities", "ocr_image", "describe_image", "segment_image", "upscale_image", "estimate_depth"])
+        // MT4-6b F2: the ready cued tools rank ahead of the default that still needs a download (was: ocr_image second).
+        #expect(out.tools == ["list_capabilities", "describe_image", "segment_image", "ocr_image", "upscale_image", "estimate_depth"])
     }
 
     @Test func generatorsAreOfferedOnlyWhenThePromptCallsForThem() {
@@ -74,7 +75,8 @@ struct ToolExposurePolicyTests {
     @Test func kindsAlreadyInTheConversationKeepTheirToolsAfterTheTurnsOwn() {
         let statuses = ["transcribe_audio": ready, "ocr_image": ready, "describe_image": ready]
         let out = ToolExposurePolicy.select(input(conversation: [.audio, .image], turn: [.audio], statuses: statuses))
-        #expect(out.tools == ["list_capabilities", "transcribe_audio", "ocr_image", "describe_image"])
+        // MT4-6b F1: an earlier turn's image kind offers ocr_image by default and describe_image only when cued (was: + "describe_image").
+        #expect(out.tools == ["list_capabilities", "transcribe_audio", "ocr_image"])
     }
 
     @Test func readAssetOnlyForAnOversizedTextAsset() {
@@ -220,6 +222,76 @@ struct ToolExposurePolicyTests {
         #expect(offered("Index my notes").contains("semantic_search"))
         #expect(offered("What is the capital of France?", gate: false) == tools)
         #expect(!ToolExposurePolicy.turnCalls("embed_text", prompt: "hello"))
+    }
+
+    // MARK: MT4-6b (F5, F1, F2, F3)
+
+    /// F5: with model tools on, rule 5 does not re-offer a name that is a model tool (the legacy `ocr_image` / `transcribe_audio`)
+    /// without the status check; every other enabled tool is kept.
+    @Test func ruleFiveSkipsModelToolNamesButKeepsOtherEnabledToolsWhenModelToolsAreOn() {
+        let enabled = ["transcribe_audio", "ocr_image", "echo", "read_file", "list_directory", "search_files"]
+        let out = ToolExposurePolicy.select(input(.appleIntelligence, prompt: "hello", statuses: ["ocr_image": .cantRun(reason: "x")], enabled: enabled))
+        #expect(out.tools == ["list_capabilities", "echo", "read_file", "list_directory", "search_files"])
+        // A model tool whose rule offered it is still offered once, through the rule, with its status check.
+        let audio = ToolExposurePolicy.select(input(.appleIntelligence, turn: [.audio], prompt: "hello", statuses: ["transcribe_audio": ready], enabled: enabled))
+        #expect(audio.tools == ["list_capabilities", "transcribe_audio", "echo", "read_file", "list_directory", "search_files"])
+        // Model tools off: the legacy set is exactly as before, the legacy names included.
+        let off = ToolExposurePolicy.select(input(.appleIntelligence, models: false, enabled: enabled))
+        #expect(off.tools == enabled)
+    }
+
+    /// F1: an earlier turn's image kind offers `ocr_image` by default and the other image tools only when the prompt calls for them.
+    @Test func anEarlierTurnsImageKindOffersOcrByDefaultAndOnlyCuedTools() {
+        let table: [(String, [String])] = [
+            ("Thanks, that is helpful.", ["list_capabilities", "ocr_image"]),
+            ("Upscale it", ["list_capabilities", "ocr_image", "upscale_image"]),
+            ("Cut out the dog", ["list_capabilities", "ocr_image", "segment_image"]),
+            ("Now describe it", ["list_capabilities", "ocr_image", "describe_image"]),
+        ]
+        for (prompt, expected) in table {
+            let out = ToolExposurePolicy.select(input(.appleIntelligence, conversation: [.image], prompt: prompt, statuses: imageStatuses))
+            #expect(out.tools == expected, "prompt: \(prompt)")
+        }
+        // The same turn with the image attached gives the same set (rule 4 and rule 2 share one path).
+        let attached = ToolExposurePolicy.select(input(.appleIntelligence, conversation: [.image], turn: [.image], prompt: "Upscale it", statuses: imageStatuses))
+        #expect(attached.tools == ["list_capabilities", "ocr_image", "upscale_image"])
+    }
+
+    /// F2: a cued, ready tool is ahead of a default that needs a download; with a ready default, or with no cue, nothing moves.
+    @Test func aCuedReadyToolRanksAheadOfADefaultThatNeedsADownload() {
+        let statuses: [String: ModelToolStatus] = ["ocr_image": download, "describe_image": ready]
+        let cued = ToolExposurePolicy.select(input(.appleIntelligence, turn: [.image], prompt: "Describe this photo", statuses: statuses))
+        #expect(cued.tools == ["list_capabilities", "describe_image", "ocr_image"])
+        let uncued = ToolExposurePolicy.select(input(.appleIntelligence, turn: [.image], prompt: "What does this say?", statuses: statuses))
+        #expect(uncued.tools == ["list_capabilities", "ocr_image"])
+        let readyDefault = ToolExposurePolicy.select(input(.appleIntelligence, turn: [.image], prompt: "Describe this photo", statuses: ["ocr_image": ready, "describe_image": ready]))
+        #expect(readyDefault.tools == ["list_capabilities", "ocr_image", "describe_image"])
+    }
+
+    /// F3: ordinary prompts that used to arm an ambiguous tool arm nothing.
+    @Test func ordinaryPromptsNoLongerArmAnAmbiguousTool() {
+        let negatives: [(String, String)] = [
+            ("What is the time complexity of quicksort?", "datetime"), ("How do I improve my time management?", "datetime"),
+            ("What day did the Second World War start?", "datetime"), ("Explain how a database index speeds up queries.", "semantic_search"),
+            ("Give me a summary of Hamlet.", "summarize"), ("Is there a script that writes better emails?", "run_javascript"),
+            ("Write a short story about a robot named Js.", "run_javascript"), ("Which do you prefer, 3x4 or 4x3 shelves?", "calculator"),
+        ]
+        for (prompt, tool) in negatives { #expect(!ToolExposurePolicy.turnCalls(tool, prompt: prompt), "\(prompt) arms \(tool)") }
+    }
+
+    /// F3 recall: the obvious phrasings still arm their tool.
+    @Test func obviousPhrasingsStillArmTheirTool() {
+        let positives: [(String, String)] = [
+            ("What time is it?", "datetime"), ("what time is it right now", "datetime"), ("What's the date today?", "datetime"),
+            ("What is today's date", "datetime"), ("What's the current time in Tokyo?", "datetime"), ("how many days until Friday?", "datetime"),
+            ("What day is it?", "datetime"), ("What day of the week is it", "datetime"), ("what is the date?", "datetime"),
+            ("Index my notes", "semantic_search"), ("Search my documents for the invoice", "semantic_search"), ("search the notes folder for rent", "semantic_search"),
+            ("Summarize this", "summarize"), ("Give me a summary", "summarize"), ("summary of this article", "summarize"), ("TL;DR please", "summarize"),
+            ("Calculate 15% of 80", "calculator"), ("what is 17*8", "calculator"), ("what is 3 x 4", "calculator"), ("12 plus 30", "calculator"),
+            ("Run this script", "run_javascript"), ("run this javascript snippet", "run_javascript"), ("execute this JS", "run_javascript"),
+            ("run the code below", "run_javascript"), ("node.js snippet", "run_javascript"),
+        ]
+        for (prompt, tool) in positives { #expect(ToolExposurePolicy.turnCalls(tool, prompt: prompt), "\(prompt) does not arm \(tool)") }
     }
 
     // MARK: wired into the Apple Intelligence send

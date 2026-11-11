@@ -116,38 +116,51 @@ nonisolated enum ToolExposurePolicy {
             return names.enumerated().sorted { (rank($0.element), $0.offset) < (rank($1.element), $1.offset) }.map(\.element)
         }
 
+        /// The tools of an input kind: `head` is the default tool (image: `ocr_image`; audio: its tool), `later` the other tools of the
+        /// kind the prompt calls for (MT4-2b). MT4-6b F2: a cued tool that is ready goes ahead of a default that still needs a download.
+        func kindTools(_ kind: Kind) -> (head: [String], later: [String]) {
+            var defaults: [String] = [], cued: [String] = []
+            for name in ordered(toolsForInputKind[kind] ?? []) {
+                guard kind == .image, name != "ocr_image" else { defaults.append(name); continue }
+                if name == "describe_image", input.router.hasVision {
+                    if seen.insert(name).inserted { dropped.append(Dropped(name: name, reason: .routerHasVision)) }
+                    continue
+                }
+                if imageToolCalled(name, prompt: input.prompt) { cued.append(name) }
+            }
+            let defaultNeedsDownload = defaults.contains { if case .needsDownload? = input.statuses[$0] { return true } else { return false } }
+            guard defaultNeedsDownload else { return (defaults, cued) }
+            let readyCued = cued.filter { if case .ready? = input.statuses[$0] { return true } else { return false } }
+            return (readyCued + defaults, cued.filter { !readyCued.contains($0) })
+        }
+
         if input.modelToolsEnabled {
             // 1. Always.
             modelTool("list_capabilities")
             if input.hasOversizedTextAsset { modelTool("read_asset") }
             // 2. Input kind of what was attached this turn. Audio: its tool. Image (MT4-2b): `ocr_image` by default; the other
             //    image tools only after the generators below, and only when the prompt calls for them.
-            var cuedImageTools: [String] = []
+            var cuedLater: [String] = []
             for kind in [Kind.image, .audio] where input.turnAssetKinds.contains(kind) {
-                for name in ordered(toolsForInputKind[kind] ?? []) {
-                    if kind == .image, name != "ocr_image" {
-                        if name == "describe_image", input.router.hasVision { dropped.append(Dropped(name: name, reason: .routerHasVision)); seen.insert(name); continue }
-                        if imageToolCalled(name, prompt: input.prompt) { cuedImageTools.append(name) }
-                        continue
-                    }
-                    modelTool(name)
-                }
+                let group = kindTools(kind)
+                group.head.forEach(modelTool)
+                cuedLater += group.later
             }
             // 3. Generators, only when the prompt calls for them (ahead of the cued image tools).
             for name in ordered(generatorTools) where generatorCalled(name, prompt: input.prompt) { modelTool(name) }
-            for name in cuedImageTools { modelTool(name) }
-            // 4. Kinds already in the conversation.
-            //    A kind attached this turn is already handled by rule 2 (the conversation's assets include this turn's), so only
-            //    earlier-turn kinds land here; otherwise the five image tools would return on the turn the image arrives.
+            for name in cuedLater { modelTool(name) }
+            // 4. Kinds already in the conversation (MT4-6b F1): an earlier turn's kind is treated exactly like this turn's in rule 2:
+            //    its default tool, plus only the other tools of the kind the prompt calls for. (The conversation's assets include
+            //    this turn's, so only earlier-turn kinds land here.)
             for kind in [Kind.image, .audio] where input.conversationAssetKinds.contains(kind) && !input.turnAssetKinds.contains(kind) {
-                for name in ordered(toolsForInputKind[kind] ?? []) {
-                    if name == "describe_image", input.router.hasVision { continue }
-                    modelTool(name)
-                }
+                let group = kindTools(kind)
+                (group.head + group.later).forEach(modelTool)
             }
         }
-        // 5. The user's enabled non-model tools fill what is left, in today's order.
+        // 5. The user's enabled non-model tools fill what is left, in today's order. With model tools on, a name that is also a
+        //    model tool (the legacy `ocr_image` / `transcribe_audio`) belongs to rules 1-4, which check its status (MT4-6b F5).
         for name in input.enabledTools {
+            if input.modelToolsEnabled, ModelToolSpec.spec(named: name) != nil { continue }
             if input.gateAmbiguousTools, ambiguousTools.contains(name), !turnCalls(name, prompt: input.prompt) {
                 if seen.insert(name).inserted { dropped.append(Dropped(name: name, reason: .notCalledFor)) }
                 continue
@@ -208,12 +221,12 @@ nonisolated enum ToolExposurePolicy {
     private static let urlCue = #"(https?://|www\.|\b[a-z0-9-]+\.(com|org|net|io|dev|app|ai|edu|gov|co|uk|de|fr|jp|info|me)\b|\b(website|web page|webpage|url|link|web site)\b)"#
     private static let writeClipboardCue = #"\b(copy|put|place|save|write|set|send|add)\b.{0,80}\bclipboard\b|\bcopy (this|that|it)\b"#
     private static let readClipboardCue = #"(\bclipboard\b|\b(what|that|text) i (just )?copied\b|\bpaste what i\b)"#
-    private static let calculatorCue = #"(\d\s*[+\-*/×÷^x]\s*\d|\d\s*%|\b(calculate|compute|calculator|percent\w*|sum of|square root|multipl\w*|divided?\b|plus|minus|times)\b.*\d|\d.*\b(plus|minus|times|divided by|multiplied by|percent)\b)"#
+    private static let calculatorCue = #"(\d\s*[+\-*/×÷^]\s*\d|\d\s+x\s+\d|\d\s*%|\b(calculate|compute|calculator|percent\w*|sum of|square root|multipl\w*|divided?\b|plus|minus|times)\b.*\d|\d.*\b(plus|minus|times|divided by|multiplied by|percent)\b)"#
     private static let embedCue = #"\b(embed\w*|embedding\w*|vectori[sz]\w*|cosine|similarity)\b"#
-    private static let summarizeCue = #"\b(summari[sz]\w*|summary|summaries|tl;?dr|recap|condense)\b"#
-    private static let searchCue = #"(\b(search\w*|index\w*|find (in|across|among)|look (up )?in)\b.{0,60}\b(my |the |our )?(documents?|docs|notes?|files?|library|knowledge base|folder)\b|\bmy (documents?|notes|files)\b|\bsemantic\b|\bindex\w*\b)"#
-    private static let javascriptCue = #"\b(javascript|js|script|run (this |the |some )?code|node\.?js)\b"#
-    private static let dateTimeCue = #"\b(time|date|today|tonight|now|day|days|week|month|year|when|yesterday|tomorrow|o'clock|clock|weekday)\b"#
+    private static let summarizeCue = #"\b(summari[sz]\w*|tl;?dr|recap|condense)\b|\b(summary|summaries)\b(?! of (?!(this|that|these|those|it|my|the (text|document|article|attached|following|above|file|page|passage|email|conversation|meeting|chat|notes?|paper|report|transcript|recording|thread))\b))"#
+    private static let searchCue = #"(\b(search\w*|index\w*|find (in|across|among)|look (up )?in)\b.{0,60}\b(my |the |our )?(documents?|docs|notes?|files?|library|knowledge base|folder)\b|\bmy (documents?|notes|files)\b|\bsemantic\b)"#
+    private static let javascriptCue = #"\b(javascript|node\.?js|(run|execute) (this |the |some |a |my )?(code|script|snippet|js)|(js|script) (snippet|code))\b"#
+    private static let dateTimeCue = #"(\bwhat time is it\b|\bwhat('s| is) the (current |exact )?(time|date)\s*(now|today|right now|in [a-z ]+)?\s*[?.!]?\s*$|\bcurrent (time|date)\b|\btoday'?s date\b|\bthe date today\b|\bwhat('s| is) today\b|\bwhat (day|date) (is|of the week is) (it|today|tomorrow|yesterday)\b|\bday of the week\b|\bhow many (days|weeks|months|hours|minutes) (until|till|left|since|before|are left|to go)\b|\bdays? (until|till) )"#
 
     private static func matches(_ text: String, _ pattern: String) -> Bool {
         text.range(of: pattern, options: .regularExpression) != nil

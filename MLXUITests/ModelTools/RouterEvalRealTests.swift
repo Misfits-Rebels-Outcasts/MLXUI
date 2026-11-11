@@ -45,6 +45,13 @@ struct RouterEvalRealTests {
         }
         let report = RouterEvalReport(routerName: "Apple Intelligence", outcomes: outcomes)
         announce(report)
+        // MT4-6b: the same pass counting ANY call (not only the first) as the case's tool, for the journal.
+        let anyCall = outcomes.filter { o in
+            guard let expected = o.expectedTool else { return o.calls.isEmpty }
+            let accept = cases.first { $0.id == o.id }?.expected.accept ?? []
+            return o.calls.contains { $0.name == expected || accept.contains($0.name) } || (o.calls.isEmpty && accept.contains("none"))
+        }
+        print("ROUTER-EVAL-ANYCALL Apple Intelligence any-call tool-choice \(anyCall.count)/\(outcomes.count); first-call misses that an any-call count rescues: \(outcomes.filter { !$0.toolChoiceOK }.map(\.id).filter { id in anyCall.contains { $0.id == id } })")
         #expect(report.errors.isEmpty, "turns failed: \(report.errors.map { "\($0.id): \($0.error ?? "")" })")
     }
 

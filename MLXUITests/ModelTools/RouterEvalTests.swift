@@ -195,7 +195,7 @@ struct RouterEvalTests {
         }
     }
 
-    // MARK: findings (measurements; none of these changes the policy)
+    // MARK: findings (measurements; MT4-6b fixed F1, F2, F3 and F5 and updated their pins, F4 stays a measurement)
 
     /// What the policy offers for a prompt, by name.
     private func offered(_ prompt: String, _ setup: RouterEvalSetup, attached: [String] = [], earlier: [String] = [],
@@ -205,30 +205,44 @@ struct RouterEvalTests {
         return RouterEvalPlanner.plan(testCase, setup: setup).offered
     }
 
-    /// Finding F1 (inherited, MT4-2b rule 4): after an image turn, every later turn offers all five image tools again, whatever
-    /// the user types. With Apple Intelligence's budget of 6 that is the whole set: list_capabilities and the five image tools.
-    @Test func findingF1TheImageToolsReturnOnEveryLaterTurn() {
+    /// Finding F1 (FIXED in MT4-6b, rule 4): an earlier turn's image kind used to offer all five image tools on every later
+    /// turn. Now it is treated like rule 2 treats this turn's kind: `ocr_image` by default, the others only when cued.
+    /// Was: [list_capabilities, ocr_image, describe_image, upscale_image, segment_image, estimate_depth].
+    @Test func findingF1TheImageToolsNoLongerFloodLaterTurns() {
         let later = offered("Thanks, that is helpful.", .appleIntelligence, earlier: ["image"])
         print("MT46 F1 turn 2, no image attached, prompt 'Thanks...': Apple offers", later)
-        #expect(later == ["list_capabilities", "ocr_image", "describe_image", "upscale_image", "segment_image", "estimate_depth"])
+        // `echo` is the DEBUG-only demo tool, so compare without it.
+        #expect(Array(later.filter { $0 != "echo" }.prefix(5)) == ["list_capabilities", "ocr_image", "read_file", "list_directory", "search_files"])
+        for tool in ["describe_image", "upscale_image", "segment_image", "estimate_depth"] { #expect(!later.contains(tool)) }
+        // A cue on the later turn still offers the cued tool (the intended trade: no cue, no tool).
+        let cuedUpscale = offered("Make it bigger: upscale it please.", .appleIntelligence, earlier: ["image"])
+        let cuedSegment = offered("Cut out the dog.", .appleIntelligence, earlier: ["image"])
+        #expect(cuedUpscale.contains("upscale_image") && !cuedUpscale.contains("segment_image"))
+        #expect(cuedSegment.contains("segment_image") && !cuedSegment.contains("upscale_image"))
         let plain = offered("Thanks, that is helpful.", .appleIntelligence)
         print("MT46 F1 same prompt in a chat that never had an image: Apple offers", plain)
     }
 
-    /// Finding F2 (inherited): the readiness ordering of rule 2 only reorders inside one rule's group, and the default image
-    /// group is the single tool ocr_image. With ocr_image a download away and describe_image installed, a "describe this"
-    /// turn lists the not-installed ocr_image ahead of the installed describe_image.
-    @Test func findingF2AReadyCuedToolCanSitBehindADownloadDefault() {
+    /// Finding F2 (FIXED in MT4-6b): a cued, ready tool ranks ahead of a default tool that still needs a download. With ocr_image
+    /// a download away and describe_image installed, a "describe this" turn used to list ocr_image first.
+    @Test func findingF2AReadyCuedToolNowSitsAheadOfADownloadDefault() {
         let list = offered("Describe this photo for me.", .appleIntelligence, attached: ["image"],
                            statuses: ["ocr_image": "needsDownload", "describe_image": "ready"])
         print("MT46 F2 image + 'Describe this photo', ocr_image needsDownload, describe_image ready: Apple offers", list)
         let ocr = list.firstIndex(of: "ocr_image"), describe = list.firstIndex(of: "describe_image")
         #expect(ocr != nil && describe != nil)
-        if let ocr, let describe { #expect(ocr < describe) }
+        if let ocr, let describe { #expect(describe < ocr) }
+        // When the default is ready, nothing changes; an uncued turn still offers the not-ready default (it raises the install card).
+        let readyDefault = offered("Describe this photo for me.", .appleIntelligence, attached: ["image"],
+                                   statuses: ["ocr_image": "ready", "describe_image": "ready"])
+        #expect(Array(readyDefault.prefix(3)) == ["list_capabilities", "ocr_image", "describe_image"])
+        let uncued = offered("What does this say?", .appleIntelligence, attached: ["image"],
+                             statuses: ["ocr_image": "needsDownload", "describe_image": "ready"])
+        #expect(Array(uncued.prefix(2)) == ["list_capabilities", "ocr_image"] && !uncued.contains("describe_image"))
     }
 
-    /// Finding F3 (inherited): the cue heuristic is broad. Ordinary prompts that arm an ambiguous tool they do not want.
-    @Test func findingF3TheCueHeuristicArmsToolsOnOrdinaryPrompts() {
+    /// Finding F3 (FIXED in MT4-6b): the cue heuristic used to arm an ambiguous tool on 8 of these 8 ordinary prompts. Now none.
+    @Test func findingF3TheCueHeuristicNoLongerArmsToolsOnOrdinaryPrompts() {
         let probes: [(String, String)] = [
             ("What is the time complexity of quicksort?", "datetime"),
             ("How do I improve my time management?", "datetime"),
@@ -251,7 +265,7 @@ struct RouterEvalTests {
             let names = Set(offered(testCase.prompt, .appleIntelligence)).intersection(ToolExposurePolicy.ambiguousTools)
             #expect(names.isEmpty, "\(testCase.id) arms \(names)")
         }
-        #expect(armed == probes.count, "the cue breadth changed (finding F3): update the measurement")
+        #expect(armed == 0, "the cue breadth regressed (finding F3)")
     }
 
     /// Finding F4 (inherited): the cues are English-only. The non-English eval cases miss under the gate and not without it.
@@ -303,13 +317,14 @@ struct RouterEvalTests {
         #expect(on.hit < off.hit)                                 // ...and costs the cases the cue heuristic misses (the English-only ones)
     }
 
-    /// Finding F5 (new): with no image or audio attached, the legacy-named enabled tools `ocr_image` and `transcribe_audio` are
-    /// not model-tool rule 2 offers: they come through rule 5 (the user's enabled tools) with no status check, and `ChatToolSet`
-    /// maps them to `ModelTool`. So a plain turn offers them even when the model tool cannot run here, and they take budget.
-    @Test func findingF5LegacyNamedToolsBypassTheStatusCheckWhenNothingIsAttached() {
+    /// Finding F5 (FIXED in MT4-6b): the legacy-named enabled tools `ocr_image` and `transcribe_audio` used to come through rule 5
+    /// with no status check on a plain turn. Now rule 5 skips every name that is a model tool when model tools are on.
+    @Test func findingF5LegacyNamedToolsNoLongerBypassTheStatusCheckWhenNothingIsAttached() {
         let plain = offered("What is the capital of France?", .appleIntelligence,
                             statuses: ["ocr_image": "cantRun", "transcribe_audio": "none"])
         print("MT46 F5 plain prompt, ocr_image cantRun, transcribe_audio unavailable: Apple offers", plain)
-        #expect(plain.contains("ocr_image") && plain.contains("transcribe_audio"))
+        #expect(!plain.contains("ocr_image") && !plain.contains("transcribe_audio"))
+        // The non-model enabled tools are untouched.
+        #expect(plain.contains("read_file") && plain.contains("list_directory"))
     }
 }
