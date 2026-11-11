@@ -96,7 +96,10 @@ nonisolated struct ModelToolHost: Sendable {
     @TaskLocal static var current: ModelToolHost?
 
     /// The sentence a declined download returns to the router (plan §3.8).
+    /// The start of every declined-download sentence (the chip recognises a declined card by it).
+    static let declineSentencePrefix = "The user chose not to download "
+
     static func declineSentence(for model: String) -> String {
-        "The user chose not to download \(model). Answer without it, or say what it would need."
+        "\(declineSentencePrefix)\(model). Answer without it, or say what it would need."
     }
 }

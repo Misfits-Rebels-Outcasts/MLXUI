@@ -111,7 +111,8 @@ struct ChatView: View {
                     attachFile: { url in
                         if !pendingFiles.contains(url) { pendingFiles.append(url) }
                     },
-                    showInTranscript: $scrollTarget)
+                    showInTranscript: $scrollTarget,
+                    showsModelTools: ChatController.modelToolsEnabled(for: surface))
                 .frame(width: 240)
             }
         }
@@ -424,8 +425,26 @@ struct ChatView: View {
         case .message(let message):
             messageRow(message)
         case .tool(let activity):
-            toolCard(activity)
+            if let chip = modelToolChip(for: activity) {
+                chip
+            } else {
+                toolCard(activity)
+            }
         }
+    }
+
+    /// MT4-4: on the Chat page a model-tool call is a chip (and its output inline). The bench keeps the old card, and so does any
+    /// card with no asset behind it (a plain-text result written before Model Tools).
+    private func modelToolChip(for activity: ToolActivity) -> ModelToolChipView? {
+        guard surface == .page, let conversationID = runner.activeConversationID else { return nil }
+        let store = runner.assetStore(for: conversationID)
+        let records = store.all
+        guard let chip = ModelToolChip.make(toolName: activity.name, id: activity.id, status: activity.status,
+                                            result: activity.result, records: records) else { return nil }
+        let output = chip.outputHandle.flatMap { handle in
+            records.first { $0.handle == handle }.map { (record: $0, url: store.url(for: $0)) }
+        }
+        return ModelToolChipView(chip: chip, output: output)
     }
 
     private func messageRow(_ message: ChatMessage) -> some View {
