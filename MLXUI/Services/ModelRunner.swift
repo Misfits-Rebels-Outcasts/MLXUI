@@ -124,6 +124,10 @@ final class ModelRunner {
     /// runner (tests that don't wire one).
     @ObservationIgnored var modelToolRuntimeProvider: (@MainActor () -> ModelToolRuntime?)?
 
+    /// MT4-3: the install card a model tool waits on when its model is not on this Mac (plan §3.8). `AppState` hands it the
+    /// install engine; with none wired (tests) every install request is declined, as before.
+    let installCoordinator = ModelInstallCoordinator()
+
     /// MT4-2 (ruling D): Model Tools are on in the Chat page and off in the bench sheet. `ChatController` sets it from the surface
     /// that holds the runner. On: attachments become assets (no eager OCR), the environment block lists their handles, and the
     /// turn's tools come from `ToolExposurePolicy` with the model tools in it. Off: exactly the CW behaviour.
@@ -874,7 +878,18 @@ final class ModelRunner {
                 let window = usableWindow(for: model) ?? ChatAttachment.minimumInlineBytes * 4
                 budget = ChatAttachment.estimatedTokens(forUTF8Count: ChatAttachment.inlineByteBudget(window: window))
             }
-            return ModelToolHost(assets: store, inlineBudgetTokens: budget)
+            let coordinator = installCoordinator
+            let provider = modelToolRuntimeProvider
+            return ModelToolHost(
+                assets: store,
+                // MT4-3: a missing model asks on the install card; the same call resumes when it is installed.
+                installRequest: { need in await coordinator.request(need, conversationID: turnConversationID) },
+                progress: { update in
+                    // The call has picked up again: "Installed. Continuing..." has done its job.
+                    if update.phase == .running { Task { @MainActor in coordinator.toolResumed(update.toolName) } }
+                },
+                refreshRuntime: { await MainActor.run { provider?() } },
+                inlineBudgetTokens: budget)
         }
         // MT4-1/MT4-2: the tools this turn offers. Apple Intelligence is not offered read_clipboard, write_clipboard, fetch_url
         // (and, as the same rule, calculator, run_javascript, datetime) unless what the user typed calls for it (owner ruling
@@ -966,6 +981,7 @@ final class ModelRunner {
             self.currentTask = nil
             self.pendingApproval?.respond(false)  // release any in-flight approval
             self.pendingApproval = nil
+            self.installCoordinator.cancelAll()   // MT4-3: no card outlives its turn
             // Persist the finished (or interrupted) turn. When the user already switched
             // conversations, the switch saved the partial transcript itself.
             if self.activeConversationID == turnConversationID {
@@ -1036,6 +1052,7 @@ final class ModelRunner {
         isRunning = false
         pendingApproval?.respond(false)
         pendingApproval = nil
+        installCoordinator.cancelAll()      // MT4-3: Stop answers an open install card as Cancel and stops its download
     }
 
     // MARK: - Approval

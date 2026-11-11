@@ -82,6 +82,14 @@ struct ChatView: View {
                 header
                 Divider()
                 transcript
+                // MT4-3: a model tool waiting on a download (plan §3.8). Shown by the surface that holds the runner.
+                if holdsLease {
+                    ForEach(runner.installCoordinator.cards.filter { $0.conversationID == runner.activeConversationID }) { card in
+                        ModelInstallCardView(
+                            card: card, coordinator: runner.installCoordinator,
+                            installState: appState.installManager.modelStates[card.target.id] ?? .idle)
+                    }
+                }
                 if let error = exportError {
                     errorBar(error)
                 }

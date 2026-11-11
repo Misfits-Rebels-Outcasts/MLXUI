@@ -15,6 +15,37 @@ nonisolated struct ModelInstallNeed: Sendable, Equatable {
     let modelDisplayName: String
     let modelID: String
     let downloadGB: Double
+    /// MT4-3 ("Choose another..."): the other fitting, not-installed candidates for the same tool, in preference order.
+    var alternatives: [ModelInstallOption] = []
+}
+
+/// One model the install card can offer (the need's own, or an alternative).
+nonisolated struct ModelInstallOption: Sendable, Equatable, Identifiable {
+    /// The catalog id (`ModelEntry.id`).
+    let id: String
+    let displayName: String
+    let downloadGB: Double
+}
+
+/// MT4-3: what one turn remembers about the installs it was refused (plan §3.8: "the policy then drops that tool for the
+/// rest of the turn, so the router can't loop on it"). A host is built per turn, so this lives exactly one turn. The tool
+/// set a session holds is fixed when the turn starts, so "dropped" is enforced where the call lands: a later call to a
+/// declined tool answers with the same sentence and asks nothing.
+nonisolated final class ModelToolTurnState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var declined: [String: String] = [:]
+
+    init() {}
+
+    func markDeclined(tool: String, sentence: String) {
+        lock.lock(); defer { lock.unlock() }
+        declined[tool] = sentence
+    }
+
+    func declinedSentence(for tool: String) -> String? {
+        lock.lock(); defer { lock.unlock() }
+        return declined[tool]
+    }
 }
 
 /// A progress line for the chip (`Transcribing…`). The runner reports the phases it owns; from
@@ -33,9 +64,14 @@ nonisolated struct ModelToolProgress: Sendable, Equatable {
 nonisolated struct ModelToolHost: Sendable {
     let assets: ChatAssetStore
     /// Asked when the chosen model must be downloaded first. `true` = installed, go on. MT1 binds
-    /// `declineAllInstalls`; MT4 binds the card.
+    /// `declineAllInstalls`; MT4-3 binds the install card (`ModelInstallCoordinator`).
     let installRequest: @Sendable (ModelInstallNeed) async -> Bool
     let progress: @Sendable (ModelToolProgress) -> Void
+    /// MT4-3: the runtime as it is now, asked once after an install so the same call re-resolves (and re-runs preflight) against
+    /// the new state. `nil` = the runtime the call started with is used (tests, MT1 behaviour).
+    let refreshRuntime: (@Sendable () async -> ModelToolRuntime?)?
+    /// MT4-3: this turn's declined installs.
+    let turn: ModelToolTurnState
     /// The inline budget for a text result, in estimated tokens (plan §3.7 step 6). A parameter,
     /// not a constant: Apple Intelligence 1,000, MLX the CW D6 budget.
     let inlineBudgetTokens: Int
@@ -46,10 +82,14 @@ nonisolated struct ModelToolHost: Sendable {
     init(assets: ChatAssetStore,
          installRequest: @escaping @Sendable (ModelInstallNeed) async -> Bool = ModelToolHost.declineAllInstalls,
          progress: @escaping @Sendable (ModelToolProgress) -> Void = ModelToolHost.ignoreProgress,
+         refreshRuntime: (@Sendable () async -> ModelToolRuntime?)? = nil,
+         turn: ModelToolTurnState = ModelToolTurnState(),
          inlineBudgetTokens: Int = 1000) {
         self.assets = assets
         self.installRequest = installRequest
         self.progress = progress
+        self.refreshRuntime = refreshRuntime
+        self.turn = turn
         self.inlineBudgetTokens = inlineBudgetTokens
     }
 

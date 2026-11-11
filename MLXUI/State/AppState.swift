@@ -305,6 +305,8 @@ final class AppState {
         reloadWorkspaces()
         // MT1-3: the chat's model tools read the catalog and install state as they are at the start of each turn.
         modelRunner.modelToolRuntimeProvider = { [weak self] in self.map { ModelToolRuntime.live(appState: $0) } }
+        // MT4-3: the install card downloads through the app's own install path, and only from its button.
+        modelRunner.installCoordinator.installer = AppModelInstaller(appState: self)
     }
 
     /// CFM-R12-1: refresh the "My Workflows" shelf from the flow folder. Called at launch and

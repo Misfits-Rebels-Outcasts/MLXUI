@@ -193,38 +193,63 @@ nonisolated struct ModelToolRunner: Sendable {
         }
         guard spec.task != nil else { return .failure(ToolFailure("\(spec.name) runs no model.")) }
 
-        // 2. the model — CapabilityResolver only
-        let status = CapabilityResolver.status(
-            for: spec, catalog: runtime.catalog, installedModelIDs: runtime.installedModelIDs,
-            claimableModelIDs: runtime.claimableModelIDs, totalRAMGB: runtime.totalRAMGB)
-        let entry: ModelEntry
-        switch status {
-        case .ready(let e): entry = e
-        case .needsDownload(let e, _): entry = e
-        case .cantRun(let reason): return .failure(ToolFailure(reason))
-        case .none: return .failure(ToolFailure(Self.noModelSentence(for: spec)))
-        }
-        let display = TaskModels.displayName(for: entry)
+        // MT4-3: a tool whose download the user already refused this turn is dropped for the rest of it.
+        if let sentence = host?.turn.declinedSentence(for: spec.name) { return .declined(sentence) }
 
-        // 3. the row, and the same gates a flow passes
-        let text = Self.rowText(spec: spec, modelDisplay: display, values: values)
-        guard let (doc, row) = Self.oneRowDocument(spec: spec, modelDisplay: display, values: values) else {
-            return .failure(ToolFailure("couldn't build the request for \(spec.name)."))
-        }
-        if case .notRunnable(let reason) = FlowRunner.canRun(doc) { return .failure(ToolFailure(reason)) }
+        // 2-3. the model (CapabilityResolver only), the row, and the same gates a flow passes. A download asks the user
+        // (MT4-3: the install card); on "installed" the SAME call resolves again against the refreshed runtime, with the
+        // same arguments, and goes on. The router never sees the pause.
+        var runtime = self.runtime
+        var asked = false
+        var resolved: (display: String, text: String, row: Row)?
+        resolving: while true {
+            let status = CapabilityResolver.status(
+                for: spec, catalog: runtime.catalog, installedModelIDs: runtime.installedModelIDs,
+                claimableModelIDs: runtime.claimableModelIDs, totalRAMGB: runtime.totalRAMGB)
+            let entry: ModelEntry
+            switch status {
+            case .ready(let e): entry = e
+            case .needsDownload(let e, _): entry = e
+            case .cantRun(let reason): return .failure(ToolFailure(reason))
+            case .none: return .failure(ToolFailure(Self.noModelSentence(for: spec)))
+            }
+            let shown = TaskModels.displayName(for: entry)
+            let rowText = Self.rowText(spec: spec, modelDisplay: shown, values: values)
+            guard let (doc, built) = Self.oneRowDocument(spec: spec, modelDisplay: shown, values: values) else {
+                return .failure(ToolFailure("couldn't build the request for \(spec.name)."))
+            }
+            if case .notRunnable(let reason) = FlowRunner.canRun(doc) { return .failure(ToolFailure(reason)) }
 
-        let preflight = FlowPreflight.run(doc, catalog: runtime.catalog, installedModelIDs: runtime.installedModelIDs,
-                                          totalRAMGB: runtime.totalRAMGB, claimableModelIDs: runtime.claimableModelIDs)
-        if let reason = FlowPreflight.blockedReason(preflight, totalRAMGB: runtime.totalRAMGB) {
-            return .failure(ToolFailure(reason))
+            let preflight = FlowPreflight.run(doc, catalog: runtime.catalog, installedModelIDs: runtime.installedModelIDs,
+                                              totalRAMGB: runtime.totalRAMGB, claimableModelIDs: runtime.claimableModelIDs)
+            if let reason = FlowPreflight.blockedReason(preflight, totalRAMGB: runtime.totalRAMGB) {
+                return .failure(ToolFailure(reason))
+            }
+            if let need = preflight.downloadSet.first {
+                // Nothing downloads here. A host asks the user; with no host it is today's sentence.
+                guard let host else { return .failure(ToolFailure(Self.noModelSentence(for: spec))) }
+                if asked {
+                    // The user said yes and the model still is not there: say so once rather than ask again.
+                    return .failure(ToolFailure("\(shown) did not finish installing. Try again in a moment."))
+                }
+                let ask = ModelInstallNeed(
+                    toolName: spec.name, modelDisplayName: shown, modelID: need.id, downloadGB: preflight.totalDownloadGB,
+                    alternatives: Self.alternatives(for: spec, excluding: need.id, runtime: runtime))
+                guard await host.installRequest(ask) else {
+                    let sentence = ModelToolHost.declineSentence(for: shown)
+                    host.turn.markDeclined(tool: spec.name, sentence: sentence)
+                    return .declined(sentence)
+                }
+                asked = true
+                // Without a way to look again (MT1 behaviour, tests) an accepted install goes straight on, as it did.
+                guard let refresh = host.refreshRuntime else { resolved = (shown, rowText, built); break resolving }
+                if let fresh = await refresh() { runtime = fresh }
+                continue resolving
+            }
+            resolved = (shown, rowText, built)
+            break resolving
         }
-        if let need = preflight.downloadSet.first {
-            // Nothing downloads here. A host asks the user (MT1: always declines); with no host it is today's sentence.
-            guard let host else { return .failure(ToolFailure(Self.noModelSentence(for: spec))) }
-            let ask = ModelInstallNeed(toolName: spec.name, modelDisplayName: display, modelID: need.id,
-                                       downloadGB: preflight.totalDownloadGB)
-            guard await host.installRequest(ask) else { return .declined(ModelToolHost.declineSentence(for: display)) }
-        }
+        guard let (display, text, row) = resolved else { return .failure(ToolFailure("couldn't build the request for \(spec.name).")) }
 
         // 4. the input
         let scratch = FileManager.default.temporaryDirectory
@@ -271,6 +296,18 @@ nonisolated struct ModelToolRunner: Sendable {
         guard let item = output.items.first else { return .failure(ToolFailure("\(spec.name) produced nothing.")) }
         return .output(item, model: display, rowText: text, inputHandles: inputHandles,
                        milliseconds: Int(Date().timeIntervalSince(started) * 1000))
+    }
+
+    /// MT4-3 ("Choose another..."): the tool's other candidates that fit this Mac and are not installed, in preference order.
+    static func alternatives(for spec: ModelToolSpec, excluding modelID: String, runtime: ModelToolRuntime,
+                             limit: Int = 4) -> [ModelInstallOption] {
+        guard let task = spec.task else { return [] }
+        return CapabilityResolver.orderedCandidates(task: task, kinds: spec.kinds, catalog: runtime.catalog,
+                                                    claimableModelIDs: runtime.claimableModelIDs)
+            .filter { $0.id != modelID && !runtime.installedModelIDs.contains($0.id)
+                && CapabilityResolver.fits($0, totalRAMGB: runtime.totalRAMGB) }
+            .prefix(limit)
+            .map { ModelInstallOption(id: $0.id, displayName: TaskModels.displayName(for: $0), downloadGB: $0.downloadSizeGB) }
     }
 
     // MARK: - Result
