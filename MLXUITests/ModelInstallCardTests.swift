@@ -350,7 +350,7 @@ extension ModelEntry {
         try audio(in: root, host: host)
         let first = try await run("transcribe_audio", ["asset": .string("a1")], runtime: rt, host: host)
         let second = try await run("transcribe_audio", ["asset": .string("a1")], runtime: rt, host: host)
-        #expect(first.hasPrefix("The user chose not to download ") && first.hasSuffix("Answer without it, or say what it would need."))
+        #expect(first.hasPrefix("The tool did not run and produced nothing") && first.hasSuffix("or ask for something that needs no download."))
         #expect(second == first)
         #expect(asked.get == ["transcribe_audio"])                                  // the second call asked nothing
         _ = try await run("speak", ["text": .string("hi")], runtime: rt, host: host)
@@ -442,7 +442,7 @@ extension ModelEntry {
         coordinator.startDownload(try #require(coordinator.cards.first).id)
         coordinator.cancelAll()                                                     // Stop mid-download
         let out = try await call.value
-        #expect(out.hasPrefix("The user chose not to download "))
+        #expect(out.hasPrefix("The tool did not run and produced nothing"))
         #expect(exec.rows.isEmpty)
         #expect(fake.cancels.count == 1)
     }

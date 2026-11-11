@@ -128,7 +128,8 @@ struct RouterEvalTests {
         let testCase = try #require(cases.first { $0.id == "m02" })                  // describe_image needs a download
         let outcome = await RouterEvalRunner.runOne(router: ScriptedEvalRouter.oracle(cases: cases), setup: .mlxToday, testCase: testCase)
         #expect(outcome.installAsks == ["describe_image"] && outcome.toolChoiceOK && outcome.expectedNeedsDownload)
-        #expect(outcome.text.contains("The user chose not to download"))
+        // the scripted router echoes only the first 40 characters of the result
+        #expect(outcome.text.contains("The tool did not run and produced nothin"))
         var accepting = RouterEvalSetup.mlxToday; accepting.acceptInstalls = true
         let installed = await RouterEvalRunner.runOne(router: ScriptedEvalRouter.oracle(cases: cases), setup: accepting, testCase: testCase)
         #expect(installed.installAsks == ["describe_image"] && installed.text.contains("busy street market"))

@@ -141,6 +141,6 @@ import Foundation
                                     modelID: "m", downloadGB: 0.6)
         #expect(await host.installRequest(need) == false)
         #expect(ModelToolHost.declineSentence(for: "Parakeet TDT 0.6B v3")
-                == "The user chose not to download Parakeet TDT 0.6B v3. Answer without it, or say what it would need.")
+                == "The tool did not run and produced nothing: the user chose not to download Parakeet TDT 0.6B v3, so no result exists. Do not say the task was done. Tell the user it was not done, and that they can ask again and choose Download & continue to install Parakeet TDT 0.6B v3, or ask for something that needs no download.")
     }
 }

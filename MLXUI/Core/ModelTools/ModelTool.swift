@@ -30,8 +30,9 @@ nonisolated struct ModelTool: AgentTool {
 
     var parameters: [ToolParameter] {
         var out: [ToolParameter] = []
+        let textOrAsset = spec.input == .some(.text) && advertisesAssets
         for input in ModelToolRunner.inputArgumentNames(for: spec) where advertisesAssets || input != "asset" {
-            out.append(.optional(input, type: .string, description: Self.inputDescription(input)))
+            out.append(.optional(input, type: .string, description: Self.inputDescription(input, textOrAsset: textOrAsset)))
         }
         for param in spec.params {
             let type: ToolParameterType = { if case .integer = param.type { return .int } else { return .string } }()
@@ -42,7 +43,14 @@ nonisolated struct ModelTool: AgentTool {
         return out
     }
 
-    static func inputDescription(_ name: String) -> String {
+    static func inputDescription(_ name: String, textOrAsset: Bool = false) -> String {
+        if textOrAsset {
+            // MT4-7-FIX-1: a text tool takes the text itself or a text asset's handle, never both.
+            switch name {
+            case "asset": return "Handle of a text in this chat, e.g. a1. Give text or asset, not both."
+            default: return "The text itself. Give text or asset, not both."
+            }
+        }
         switch name {
         case "asset": return "Handle of a file or text in this chat, e.g. a1. Give one input: asset, path, url or text."
         case "path": return "Path of a file in a folder attached to this chat."

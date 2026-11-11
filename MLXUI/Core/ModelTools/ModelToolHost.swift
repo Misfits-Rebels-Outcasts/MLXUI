@@ -97,9 +97,13 @@ nonisolated struct ModelToolHost: Sendable {
 
     /// The sentence a declined download returns to the router (plan §3.8).
     /// The start of every declined-download sentence (the chip recognises a declined card by it).
-    static let declineSentencePrefix = "The user chose not to download "
+    /// MT4-7-FIX-2: leads with the fact the model must not get wrong (Apple Intelligence once answered "The image has been
+    /// upscaled." after a Cancel).
+    static let declineSentencePrefix = "The tool did not run and produced nothing"
 
     static func declineSentence(for model: String) -> String {
-        "\(declineSentencePrefix)\(model). Answer without it, or say what it would need."
+        "\(declineSentencePrefix): the user chose not to download \(model), so no result exists. "
+            + "Do not say the task was done. Tell the user it was not done, and that they can ask again and choose "
+            + "Download & continue to install \(model), or ask for something that needs no download."
     }
 }

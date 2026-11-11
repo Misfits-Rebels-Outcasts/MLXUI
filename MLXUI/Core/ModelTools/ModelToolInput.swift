@@ -28,7 +28,10 @@ extension ModelToolRunner {
         let path = arguments.string("path")?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
         let url = arguments.string("url")?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
         let text = arguments.string("text")?.nonEmptyKeepingWhitespace
-        let given = [asset, path, url, text].compactMap { $0 }
+        // MT4-7-FIX-1 (owner, 2026-11-12): a text tool given both `text` and `asset` (Apple Intelligence sends both) uses the
+        // text and ignores the asset. Only that pair; any other mix still refuses.
+        let ignoredAsset = kind == .text && text != nil && asset != nil && path == nil && url == nil
+        let given = [ignoredAsset ? nil : asset, path, url, text].compactMap { $0 }
         let names = Self.inputArgumentNames(for: spec)
         guard given.count == 1 else {
             let list = names.joined(separator: ", ")

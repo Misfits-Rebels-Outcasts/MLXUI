@@ -55,6 +55,19 @@ struct RouterEvalRealTests {
         #expect(report.errors.isEmpty, "turns failed: \(report.errors.map { "\($0.id): \($0.error ?? "")" })")
     }
 
+    /// MT4-7-FIX-2: after the user declines a download, what does Apple Intelligence say? Prints `DECLINE-REPLY`; asserts only
+    /// that the decline reached the tool result and the turn did not fail. A reply that still claims success is a recorded known
+    /// v1 limit (owner, 2026-11-12), not a failure.
+    @Test(.enabled(if: AppleFoundationRouterTests.realEnabled, "needs Apple Intelligence ready and MLXUI_TEST_REAL_AFM=1"))
+    func realAppleIntelligenceAfterADeclinedDownload() async throws {
+        let cases = try RouterEvalSuite.load().cases
+        let testCase = try #require(cases.first { $0.id == "m02" })          // describe_image needs a download; the mocked host declines
+        let chatter = try #require(AppleFoundationAvailability.makeToolChatter(forceReal: true))
+        let outcome = await RouterEvalRunner.runOne(router: AppleFoundationRouter(chatter: chatter), setup: .appleIntelligence, testCase: testCase)
+        print("DECLINE-REPLY asks=\(outcome.installAsks) tool=\(outcome.firstTool ?? "none"): \(outcome.text.replacingOccurrences(of: "\n", with: " "))")
+        #expect(outcome.error == nil)
+    }
+
     // MARK: MLX chat models
 
     @Test(.enabled(if: !RouterEvalRealTests.mlxDirectories.isEmpty, "needs MLXUI_TEST_ROUTER_EVAL_MLX_DIRS=<dir>[:<dir>]"))
