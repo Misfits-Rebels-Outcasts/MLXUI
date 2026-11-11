@@ -1,5 +1,7 @@
 import Foundation
 import CoreGraphics
+import SwiftUI
+import AppKit
 import Testing
 @testable import MLXUI
 
@@ -205,5 +207,18 @@ struct AskInChatTests {
         #expect(app.selectedSection == .chat)
         #expect(app.chat.holder == .page)
         #expect(app.chat.draft(for: .page).files.map(\.lastPathComponent) == ["transcript.txt"])
+    }
+
+    /// A Run UI hosted with no `AppState` in the environment (the render tests, previews) must not trap: the button is absent.
+    @Test func theButtonHostedWithoutAppStateDoesNotCrashAndShowsNothing() {
+        ChatGate.overrideForTesting = true; defer { ChatGate.overrideForTesting = nil }
+        let host = NSHostingView(rootView: AskInChatButton { .text("x", name: "x") })
+        host.frame = NSRect(x: 0, y: 0, width: 200, height: 40)
+        host.layoutSubtreeIfNeeded()
+        #expect(host.fittingSize.width < 1)                                              // empty: no button was built
+        // and with the state present it is a real button
+        let withState = NSHostingView(rootView: AskInChatButton { .text("x", name: "x") }.environment(AppState()))
+        withState.layoutSubtreeIfNeeded()
+        #expect(withState.fittingSize.width > 20)
     }
 }
