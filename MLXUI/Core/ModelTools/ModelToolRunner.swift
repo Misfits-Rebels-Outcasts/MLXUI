@@ -27,6 +27,9 @@ nonisolated struct ModelToolRuntime: Sendable {
     /// Tests only: the roots a `path` input may come from, in place of the live grant store. The first one stands in for
     /// the app container when the file is copied out of its security scope.
     var pathRoots: [URL]? = nil
+    /// Tests only (MT4-2): the app-container stand-in. When set, the App Store container rule applies to `pathRoots` (the container is
+    /// dropped as a root except this chat's own attachments and assets). Left nil, `pathRoots` are used literally, as before MT4-2.
+    var pathContainer: URL? = nil
 
     @TaskLocal static var current: ModelToolRuntime?
 }

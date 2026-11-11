@@ -64,6 +64,32 @@ nonisolated enum RouterHistory: Sendable, Equatable {
     }
 }
 
+/// MT4-2: the per-turn context a tool needs when it runs: the chat's folder scope, the app's model catalog/install state and
+/// the conversation's assets. A router whose tools run outside an `AgentSession` (Apple Intelligence) binds it around each
+/// call with `run`, exactly as `AgentSession.streamResponse` does for the MLX router. All `nil` = no context (flows, tests).
+nonisolated struct RouterToolContext: Sendable {
+    var fileScope: FileScope?
+    var modelToolRuntime: ModelToolRuntime?
+    var modelToolHost: ModelToolHost?
+
+    init(fileScope: FileScope? = nil, modelToolRuntime: ModelToolRuntime? = nil, modelToolHost: ModelToolHost? = nil) {
+        self.fileScope = fileScope
+        self.modelToolRuntime = modelToolRuntime
+        self.modelToolHost = modelToolHost
+    }
+
+    /// Run `body` with the context bound as task-locals.
+    func run<T: Sendable>(_ body: @Sendable () async throws -> T) async rethrows -> T {
+        try await FileScope.$current.withValue(fileScope) {
+            try await ModelToolRuntime.$current.withValue(modelToolRuntime) {
+                try await ModelToolHost.$current.withValue(modelToolHost) {
+                    try await body()
+                }
+            }
+        }
+    }
+}
+
 /// Everything one turn needs. `Sendable`: it crosses into the router's task.
 nonisolated struct RouterTurn: Sendable {
     /// The system / environment text, if any.
@@ -77,6 +103,9 @@ nonisolated struct RouterTurn: Sendable {
     var approve: @Sendable (_ tool: any AgentTool, _ arguments: [String: JSONValue]) async -> Bool
     /// Full-fidelity tool lifecycle (transcript cards, audit log).
     var onToolEvent: @Sendable (AgentToolEvent) -> Void
+    /// MT4-2: bound around each tool call by a router that runs tools itself (Apple Intelligence). The MLX router binds the
+    /// same three values through its `AgentSession` and ignores this.
+    var toolContext: RouterToolContext?
 
     init(
         instructions: String? = nil,
@@ -84,8 +113,10 @@ nonisolated struct RouterTurn: Sendable {
         prompt: String,
         tools: [any AgentTool] = [],
         approve: @escaping @Sendable (any AgentTool, [String: JSONValue]) async -> Bool = { _, _ in true },
-        onToolEvent: @escaping @Sendable (AgentToolEvent) -> Void = { _ in }
+        onToolEvent: @escaping @Sendable (AgentToolEvent) -> Void = { _ in },
+        toolContext: RouterToolContext? = nil
     ) {
+        self.toolContext = toolContext
         self.instructions = instructions
         self.history = history
         self.prompt = prompt

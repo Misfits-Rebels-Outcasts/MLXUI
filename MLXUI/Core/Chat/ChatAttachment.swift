@@ -38,6 +38,11 @@ nonisolated struct ChatAttachment: Identifiable, Codable, Sendable, Equatable {
     let byteCount: Int
     /// Exactly the text sent for `.inline` / `.ocr`; `nil` for `.reference`.
     let inlineText: String?
+    /// MT4-2: the handle (`a1`) this file was registered under in the chat's `ChatAssetStore`, and its `Kind` raw value,
+    /// when Model Tools was on for the turn. `nil` for every CW (Model Tools off) attachment, and for a file that is not
+    /// text, image or audio. Both are optional, so a conversation saved before MT4-2 decodes unchanged.
+    let assetHandle: String?
+    let assetKind: String?
 
     init(
         id: UUID = UUID(),
@@ -45,7 +50,9 @@ nonisolated struct ChatAttachment: Identifiable, Codable, Sendable, Equatable {
         storedPath: String,
         mode: ChatAttachmentMode,
         byteCount: Int,
-        inlineText: String? = nil
+        inlineText: String? = nil,
+        assetHandle: String? = nil,
+        assetKind: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -53,6 +60,14 @@ nonisolated struct ChatAttachment: Identifiable, Codable, Sendable, Equatable {
         self.mode = mode
         self.byteCount = byteCount
         self.inlineText = inlineText
+        self.assetHandle = assetHandle
+        self.assetKind = assetKind
+    }
+
+    /// This attachment, registered as asset `handle` of `kind`.
+    func registered(handle: String, kind: String) -> ChatAttachment {
+        ChatAttachment(id: id, name: name, storedPath: storedPath, mode: mode, byteCount: byteCount,
+                       inlineText: inlineText, assetHandle: handle, assetKind: kind)
     }
 
     // MARK: - The budget (C11)
@@ -110,10 +125,17 @@ nonisolated struct ChatAttachment: Identifiable, Codable, Sendable, Equatable {
     /// escaped: a file called `a"b.txt` would otherwise close the tag early (B6).
     static func modelFacing(_ attachment: ChatAttachment) -> String {
         let name = escapedAttribute(attachment.name)
+        // MT4-2: a registered file is named by its handle (the router passes it to a tool), and a by-reference one carries no
+        // path: a model told only a handle cannot try `read_file` on a 2 MB file (≈65k tokens, minutes of prefill).
+        let asset = attachment.assetHandle.map { " asset=\"\(escapedAttribute($0))\"" } ?? ""
         switch attachment.mode {
         case .inline, .ocr:
-            return "<attachment name=\"\(name)\">\n\(attachment.inlineText ?? "")\n</attachment>"
+            return "<attachment name=\"\(name)\"\(asset)>\n\(attachment.inlineText ?? "")\n</attachment>"
         case .reference:
+            if let handle = attachment.assetHandle {
+                let kind = attachment.assetKind.map { " kind=\"\(escapedAttribute($0))\"" } ?? ""
+                return "<attachment name=\"\(name)\" asset=\"\(escapedAttribute(handle))\"\(kind) mode=\"reference\"/>"
+            }
             let path = escapedAttribute(attachment.storedPath)
             return "<attachment name=\"\(name)\" path=\"\(path)\" mode=\"reference\"/>"
         }
@@ -144,12 +166,15 @@ nonisolated struct ChatAttachment: Identifiable, Codable, Sendable, Equatable {
     /// True when this reference is an image we could not OCR. `read_file` on a PNG only ever
     /// answers "not UTF-8 text", so the model must not be told to try (B3).
     var isUnreadImage: Bool {
-        mode == .reference && Self.imageExtensions.contains(
+        mode == .reference && assetHandle == nil && Self.imageExtensions.contains(
             URL(fileURLWithPath: name).pathExtension.lowercased())
     }
 
     /// The chip badge: reference images that failed OCR read "no OCR" rather than "reference".
-    var badgeLabel: String { isUnreadImage ? "no OCR" : mode.rawValue }
+    var badgeLabel: String {
+        if mode == .reference, assetHandle != nil { return "asset" }
+        return isUnreadImage ? "no OCR" : mode.rawValue
+    }
 
     static let imageExtensions: Set<String> = [
         "png", "jpg", "jpeg", "heic", "heif", "tiff", "tif", "gif", "bmp", "webp",
@@ -158,7 +183,8 @@ nonisolated struct ChatAttachment: Identifiable, Codable, Sendable, Equatable {
     /// One short line per by-reference attachment, for `ChatEnvironment.instructions`. Inlined and
     /// OCR'd files are already in the user message, so they need no line.
     static func environmentNote(for attachments: [ChatAttachment]) -> String? {
-        let referenced = attachments.filter { $0.mode == .reference }
+        // MT4-2: a file registered as an asset is described by `assetNote` instead (a handle, not a path).
+        let referenced = attachments.filter { $0.mode == .reference && $0.assetHandle == nil }
         guard !referenced.isEmpty else { return nil }
         let lines = referenced.map { attachment -> String in
             guard attachment.isUnreadImage else {
@@ -169,5 +195,28 @@ nonisolated struct ChatAttachment: Identifiable, Codable, Sendable, Equatable {
                 + " installed. Tell the user to install one from Browse."
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// MT4-2: one short line per by-reference attachment that was registered as an asset (Model Tools on). It names the
+    /// handle and the way to use it; a text file is read a page at a time through `read_asset`, never whole. Inlined files
+    /// are already in the message and carry their handle in the tag, so they need no line.
+    static func assetNote(for attachments: [ChatAttachment], assets: ChatAssetStore?) -> String? {
+        let lines = attachments.compactMap { attachment -> String? in
+            guard attachment.mode == .reference, let handle = attachment.assetHandle else { return nil }
+            switch attachment.assetKind {
+            case "image":
+                return "Attached image \(attachment.name) is asset \(handle) (image)."
+                    + " Pass asset \"\(handle)\" to an image tool."
+            case "audio":
+                return "Attached audio \(attachment.name) is asset \(handle) (audio)."
+                    + " Pass asset \"\(handle)\" to transcribe_audio."
+            default:
+                let words = assets?.record(handle)?.words
+                let size = words.map { ", \($0) words" } ?? ""
+                return "Attached file \(attachment.name) is asset \(handle) (text\(size))."
+                    + " It is not in this message: call read_asset with asset \"\(handle)\", a page at a time."
+            }
+        }
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 }

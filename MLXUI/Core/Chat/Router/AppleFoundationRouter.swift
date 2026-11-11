@@ -167,7 +167,8 @@ nonisolated final class AppleFoundationRouter: ChatRouter, @unchecked Sendable {
                                       folded: history.filter { $0.role != .system })
         let state = ToolBridge.TurnState(
             tools: Dictionary(selection.included.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first }),
-            approve: turn.approve, onToolEvent: turn.onToolEvent, continuation: continuation, maxCalls: maxToolCalls)
+            approve: turn.approve, onToolEvent: turn.onToolEvent, continuation: continuation, maxCalls: maxToolCalls,
+            context: turn.toolContext)
         entry.bridge.begin(state)
         defer {
             entry.bridge.end()
@@ -342,6 +343,8 @@ nonisolated final class AppleFoundationRouter: ChatRouter, @unchecked Sendable {
             let onToolEvent: @Sendable (AgentToolEvent) -> Void
             let continuation: AsyncThrowingStream<RouterEvent, Error>.Continuation
             let maxCalls: Int
+            /// MT4-2: the chat's folder scope, model-tool runtime and assets, bound around the call.
+            var context: RouterToolContext? = nil
         }
 
         private let lock = NSLock()
@@ -388,9 +391,13 @@ nonisolated final class AppleFoundationRouter: ChatRouter, @unchecked Sendable {
             emit(.started(name: name, arguments: arguments))
             do {
                 let output: String
+                let context = state.context
+                let execute: @Sendable () async throws -> String = {
+                    if let context { return try await context.run { try await tool.execute(arguments: arguments) } }
+                    return try await tool.execute(arguments: arguments)
+                }
                 if let timeout = tool.executionTimeout {
-                    guard let result = try await AgentSession.withTimeout(
-                        seconds: timeout, operation: { try await tool.execute(arguments: arguments) })
+                    guard let result = try await AgentSession.withTimeout(seconds: timeout, operation: execute)
                     else {
                         let message = "timed out after \(Int(timeout))s"
                         emit(.failed(name: name, message: message))
@@ -398,7 +405,7 @@ nonisolated final class AppleFoundationRouter: ChatRouter, @unchecked Sendable {
                     }
                     output = result
                 } else {
-                    output = try await tool.execute(arguments: arguments)
+                    output = try await execute()
                 }
                 emit(.finished(name: name, result: output))
                 return Self.modelResult(output)

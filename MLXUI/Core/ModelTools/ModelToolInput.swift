@@ -41,7 +41,7 @@ extension ModelToolRunner {
             return .success(ResolvedModelToolInput(asset: Asset(items: [Item(kind: .text, value: text)])))
         }
         if let asset { return resolveHandle(asset, kind: kind, host: host) }
-        if let path { return resolvePath(path, kind: kind, scratch: scratch) }
+        if let path { return resolvePath(path, kind: kind, scratch: scratch, host: host) }
         if let url { return await resolveURL(url, kind: kind, scratch: scratch) }
         return .failure(ToolFailure("give the input for \(spec.name)."))
     }
@@ -74,23 +74,37 @@ extension ModelToolRunner {
         return .success(ResolvedModelToolInput(asset: Asset(items: [Item(kind: kind, path: file)]), handles: [record.handle]))
     }
 
-    private func resolvePath(_ raw: String, kind: Kind, scratch: URL) -> Result<ResolvedModelToolInput, ToolFailure> {
+    private func resolvePath(_ raw: String, kind: Kind, scratch: URL, host: ModelToolHost?) -> Result<ResolvedModelToolInput, ToolFailure> {
         try? FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         let ext = URL(fileURLWithPath: raw).pathExtension
         let copy = scratch.appendingPathComponent("input-\(UUID().uuidString)").appendingPathExtension(ext.isEmpty ? "bin" : ext)
         #if DIRECT_BUILD
-        switch PathPolicy.resolve(raw, roots: runtime.pathRoots ?? PathPolicy.defaultRoots, base: ScopedFileTools.workingFolderBase()) {
-        case .rejected(let message): return .failure(ToolFailure(Self.withoutErrorPrefix(message)))
+        // MT4-2 (owner ruling 2026-11-09): only the folders attached to this chat, not all of home as `read_file` may.
+        let scope = FileScope.current
+        let roots = runtime.pathRoots ?? ModelToolPathScope.directRoots(scope: scope, assets: host?.assets.directory)
+        switch PathPolicy.resolve(raw, roots: roots, base: ScopedFileTools.workingFolderBase()) {
+        case .rejected(let message): return .failure(ToolFailure(ModelToolPathScope.refusal(message, scope: scope)))
         case .allowed(let file):
             do { try FileManager.default.copyItem(at: file, to: copy) } catch {
                 return .failure(ToolFailure("couldn't read \(file.path)."))
             }
         }
         #else
-        let container = runtime.pathRoots?.first ?? ModelStore.shared.baseDirectory
-        guard let access = ScopedFileTools.access(raw, container: container, roots: runtime.pathRoots) else {
+        let container = runtime.pathContainer ?? runtime.pathRoots?.first ?? ModelStore.shared.baseDirectory
+        // MT4-2 (owner ruling 2026-11-09): attached/granted folders, and from the app container only this chat's own attachments
+        // and assets folders (not the models, installed.json or another chat's files, which `read_file` can reach). Production
+        // (no `pathRoots`) always narrows; a test seam with `pathRoots` alone keeps its roots literal.
+        let roots: [URL]
+        if runtime.pathRoots == nil || runtime.pathContainer != nil {
+            roots = ModelToolPathScope.appStoreRoots(
+                base: runtime.pathRoots ?? FileScope.roots(container: container), container: container,
+                scope: FileScope.current, assets: host?.assets.directory)
+        } else {
+            roots = runtime.pathRoots ?? []
+        }
+        guard let access = ScopedFileTools.access(raw, container: container, roots: roots) else {
             return .failure(ToolFailure(Self.withoutErrorPrefix(
-                ScopedFileTools.rejection(for: raw, container: container, roots: runtime.pathRoots))))
+                ScopedFileTools.rejection(for: raw, container: container, roots: roots))))
         }
         // A granted file is readable only inside its security scope, so the copy is made there.
         let copied: Bool? = FolderGrants.withScopedRead(to: access.url, grants: access.grants,

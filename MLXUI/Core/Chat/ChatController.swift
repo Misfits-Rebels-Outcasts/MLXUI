@@ -294,6 +294,7 @@ final class ChatController {
         }
         guard selectPageModel(model) else { return false }
         startedBy = .page
+        runner.modelToolsEnabled = Self.modelToolsEnabled(for: .page)
         return await runner.retryUnanswered(with: model, usableTokens: usable)
     }
 
@@ -351,8 +352,13 @@ final class ChatController {
     func send(_ text: String, attachments: [URL] = [], from surface: ChatSurface) async -> Bool {
         guard holder == surface, let model = models[surface] else { return true }
         if !runner.isRunning { startedBy = surface }
+        // MT4-2 (ruling D): Model Tools are on in the Chat page and off in the bench sheet.
+        runner.modelToolsEnabled = Self.modelToolsEnabled(for: surface)
         return await runner.send(text, attachments: attachments, for: model)
     }
+
+    /// Ruling D: "use my models" is on in the Chat page, off in the bench sheet.
+    static func modelToolsEnabled(for surface: ChatSurface) -> Bool { surface == .page }
 
     /// Stops the runner, unless a different surface owns the turn in flight.
     func stop(from surface: ChatSurface) {
