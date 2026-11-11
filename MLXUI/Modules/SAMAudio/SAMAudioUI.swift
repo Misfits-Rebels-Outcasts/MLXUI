@@ -178,6 +178,8 @@ struct SAMAudioRunView: View {
             Spacer()
             Button("Save WAV…") { model.save(track, suggestedName: audioURL) }
                 .disabled(model.buffer(track) == nil)
+            AskInChatButton { model.buffer(track).map { .audio($0, name: track.fileSuffix) } }
+                .disabled(model.buffer(track) == nil)
         }
         .padding(.vertical, 2)
     }

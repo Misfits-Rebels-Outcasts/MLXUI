@@ -72,7 +72,7 @@ final class LFMSpeakRunModel {
     var didSynthesize = false
     var isPlaying = false
     var errorText: String?
-    private var buffer: AudioBuffer?
+    private(set) var buffer: AudioBuffer?
     private var player: AVAudioPlayer?
     private var task: Task<Void, Never>?
     private var run = 0

@@ -116,6 +116,7 @@ struct ImageQARunView: View {
                     .foregroundStyle(.green).font(.subheadline.bold())
                 Spacer()
                 Button("Copy") { copy(answer) }
+                AskInChatButton { .text(answer, name: "image-answer") }
             }
             ScrollView {
                 Text(answer).textSelection(.enabled)

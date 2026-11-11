@@ -205,6 +205,7 @@ struct SeedVR2RunView: View {
                     } label: {
                         Label("Save PNG…", systemImage: "square.and.arrow.down")
                     }
+                    AskInChatButton { .image(result, name: "upscaled-image") }
                 }
             }
         }

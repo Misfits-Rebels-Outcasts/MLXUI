@@ -679,6 +679,17 @@ final class AppState {
         return true
     }
 
+    /// MT4-5: a Run UI's "Ask in Chat". Writes the result to a file, starts a new Chat-page conversation with it waiting
+    /// in the composer, and selects the Chat item. `false` (nothing changed) when the gate is closed, a turn is running or
+    /// the file could not be written. The caller dismisses its sheet on `true`.
+    @discardableResult
+    func askInChat(_ result: AskInChatResult) -> Bool {
+        guard chat.canAskInChat, let file = try? result.writeTemporaryFile() else { return false }
+        guard chat.askInChat(files: [file]) else { return false }
+        selectedSection = .chat
+        return true
+    }
+
     func stopModel() {
         chat.stop(from: .bench)
     }

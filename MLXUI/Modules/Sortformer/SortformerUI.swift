@@ -140,6 +140,8 @@ struct SortformerRunView: View {
                 Spacer()
                 Button("Copy as Text") { copy(SpeakerSegments.text(result.segments)) }.disabled(result.segments.isEmpty)
                 Button("Copy as CSV") { copy(SpeakerSegments.csv(result.segments)) }.disabled(result.segments.isEmpty)
+                AskInChatButton { .text(SpeakerSegments.text(result.segments), name: "speakers") }
+                    .disabled(result.segments.isEmpty)
             }
             if !result.segments.isEmpty {
                 SpeakerTimelineView(segments: result.segments, duration: result.duration)

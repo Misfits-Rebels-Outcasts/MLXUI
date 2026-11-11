@@ -117,6 +117,7 @@ struct DepthAnythingRunView: View {
                 .frame(maxWidth: 220)
                 Spacer()
                 Button("Save PNG…") { model.save() }
+                AskInChatButton { model.grayImage.map { .image($0, name: "depth-map") } }
             }
         }
     }

@@ -129,6 +129,7 @@ struct MusicGenRunView: View {
                 Button { save() } label: {
                     Label("Save WAV…", systemImage: "square.and.arrow.down")
                 }
+                AskInChatButton { model.buffer.map { .audio($0, name: "music") } }
                 Text(model.durationLabel)
                     .font(.callout.monospacedDigit()).foregroundStyle(.secondary)
                 Spacer()
@@ -183,7 +184,7 @@ final class MusicGenRunModel: NSObject, AVAudioPlayerDelegate {
     var isPlaying = false
     var durationLabel = ""
 
-    private var buffer: AudioBuffer?
+    private(set) var buffer: AudioBuffer?
     private var player: AVAudioPlayer?
 
     func generate(prompt: String, stage: any PipelineStage) {

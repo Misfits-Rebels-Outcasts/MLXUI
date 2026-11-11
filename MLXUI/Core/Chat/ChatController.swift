@@ -67,6 +67,9 @@ final class ChatController {
     private var drafts: [ChatSurface: ChatDraft] = [:]
     private var parked: [ChatSurface: ChatWorkingSet] = [:]
     private var startedBy: ChatSurface?
+    /// MT4-5: files an "Ask in Chat" asked the page to start a new conversation with. Applied by `acquire(.page)` (the one
+    /// place the page takes the runner), so it lands whether the page is already bound, waiting, or not yet on screen.
+    @ObservationIgnored private var pendingAskInChat: [URL] = []
     /// Surfaces that asked for the runner while another surface was generating; they show a notice and bind
     /// themselves when the turn ends (`bindWhenFree`).
     private(set) var waiting: Set<ChatSurface> = []
@@ -133,7 +136,7 @@ final class ChatController {
             }
         case .page:
             // Already bound and nothing happened elsewhere: the runner's own state is the truth, so no read.
-            if previous == .page, parked[.page] == nil { break }
+            if previous == .page, parked[.page] == nil { applyPendingAskInChat(); break }
             if var set = parked.removeValue(forKey: .page) {
                 // The sheet may have saved or deleted chats while this set was parked: one read, merged under the
                 // live set (live entries win; a blank, memory-only chat is kept).
@@ -142,8 +145,38 @@ final class ChatController {
             } else {
                 runner.prepare(scope: .all, in: conversationDirectory, preloaded: loadedIndex())
             }
+            applyPendingAskInChat()
         }
         return .granted
+    }
+
+    // MARK: - Ask in Chat (MT4-5)
+
+    /// A Run UI's "Ask in Chat": the page starts a **new** conversation with `files` waiting in its composer. They become
+    /// asset `a1` (…) through the ordinary send path when the user sends (Model Tools are on in the page), so nothing is
+    /// registered, loaded or sent until then. Returns `false`, changing nothing, when the gate is closed or a turn is
+    /// running (a new conversation would stop it). When another surface still holds the runner the request waits and
+    /// is applied when the page binds.
+    @discardableResult
+    func askInChat(files: [URL]) -> Bool {
+        guard ChatGate.isAvailable, !runner.isRunning, !files.isEmpty else { return false }
+        pendingAskInChat = files
+        if acquire(.page) == .unavailable { pendingAskInChat = []; return false }
+        return true
+    }
+
+    /// Whether `askInChat` would be accepted right now (the button's enabled state).
+    var canAskInChat: Bool { ChatGate.isAvailable && !runner.isRunning }
+
+    private func applyPendingAskInChat() {
+        guard !pendingAskInChat.isEmpty else { return }
+        let files = pendingAskInChat
+        pendingAskInChat = []
+        runner.newConversation(for: models[.page]?.id)
+        // Whatever the user had half-typed or attached stays; the result joins it.
+        var draft = draft(for: .page)
+        for file in files where !draft.files.contains(file) { draft.files.append(file) }
+        setDraft(draft, for: .page)
     }
 
     /// The surface is going away. The bench's draft does not outlive its sheet (as before).

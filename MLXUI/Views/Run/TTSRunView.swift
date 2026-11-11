@@ -127,6 +127,7 @@ struct TTSRunView: View {
                 .foregroundStyle(.green).font(.subheadline.bold())
             Button { model.play() } label: { Label("Play", systemImage: "play.fill") }
             Button { model.save() } label: { Label("Save WAV…", systemImage: "square.and.arrow.down") }
+            AskInChatButton { model.buffer.map { .audio($0, name: "speech") } }
             Spacer()
         }
         .padding(10)
@@ -167,7 +168,7 @@ final class TTSRunModel {
     var didSynthesize = false
     var errorText: String?
 
-    private var buffer: AudioBuffer?
+    private(set) var buffer: AudioBuffer?
     private var player: AVAudioPlayer?
 
     func synthesize(text: String, stage: any PipelineStage) {
