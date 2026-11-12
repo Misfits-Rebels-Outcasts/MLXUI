@@ -28,6 +28,10 @@ struct FlowEditorView: View {
     /// FIP-2 — a `Read *` row whose file isn't there yet, or nil. Warn only (owner ruling):
     /// renders as a banner, never disables Run.
     @State private var inputAdvisory: FlowPreflight.RowAdvisory?
+    /// MT5-2: what a chat's flow left out, dismissible, for this open session only.
+    @State private var leftOut: [String]
+    /// MT5-2: the folder was made for this editor (a chat's attachments); removed if it closes unsaved.
+    private let removeFolderIfUnsaved: Bool
 
     /// CFM-R17-3: non-nil when the flow being edited lives inside a workspace — the model
     /// then saves into and resolves against the shared workspace directory.
@@ -35,8 +39,11 @@ struct FlowEditorView: View {
 
     init(flowID: String = UUID().uuidString, name: String = "Untitled Flow",
          document: FlowDocument? = nil, savedText: String? = nil,
-         workspace: WorkspaceRef? = nil, fileURL: URL? = nil) {
+         workspace: WorkspaceRef? = nil, fileURL: URL? = nil,
+         leftOut: [String] = [], removeFolderIfUnsaved: Bool = false) {
         self.workspaceRef = workspace
+        _leftOut = State(initialValue: leftOut)
+        self.removeFolderIfUnsaved = removeFolderIfUnsaved
         // KW-1-1: a workspace flow opened from disk (a `WorkspaceRef` naming an existing
         // document) already has a file at `workspace.fileURL` — seed `savedURL` so a rename's
         // stale-sibling guard recognizes that file as this editor's own and clears it, instead
@@ -86,6 +93,24 @@ struct FlowEditorView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
             }
+            // MT5-2: a flow made from a chat says what it did not carry over.
+            if !leftOut.isEmpty {
+                HStack(alignment: .top, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Made from your chat. Not carried over:").font(.callout.weight(.medium))
+                        ForEach(leftOut, id: \.self) { Text($0).font(.caption) }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Button { leftOut = [] } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.plain)
+                        .help("Dismiss")
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
             // FIP-2 — same non-blocking shape `FlowListView`'s setup advisory renders: names
             // the row and the missing file, never disables Run below.
             if let advisory = inputAdvisory {
@@ -118,6 +143,15 @@ struct FlowEditorView: View {
             }
         }
         .frame(minWidth: 620, minHeight: 420)
+        .onDisappear {
+            // MT5-2: closed without a save → drop the folder made for it. Pushing a view over the editor also
+            // disappears it, so only a flow no longer on the stack counts.
+            guard removeFolderIfUnsaved else { return }
+            let flowID = model.flowID
+            let stillOpen = appState.route.contains { if case .editor(let t) = $0 { return t.flowID == flowID }; return false }
+            ModelToolWorkflowHandoff.discardIfUnsaved(flowID: flowID, workspace: model.workspace,
+                                                      saved: model.savedURL != nil, stillOpen: stillOpen)
+        }
         .navigationTitle(model.name.isEmpty ? "Untitled Flow" : model.name)
         // CFM-R12-3 item 5: removing a block header asks — never delete N rows on one
         // keystroke without saying so.

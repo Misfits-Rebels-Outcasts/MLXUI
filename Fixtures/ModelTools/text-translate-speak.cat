@@ -1,0 +1,6 @@
+mlxflow 0.8
+1. Template           "Good morning, the meeting is at nine."
+2. Translate          TranslateGemma 4B; to="Malay"
+3. Speak              Kokoro 82M
+4. Save Audio         speech.wav
+5. Save Text    (2)   translation.txt

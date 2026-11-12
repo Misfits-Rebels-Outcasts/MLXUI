@@ -105,7 +105,9 @@ struct MLXUIApp: App {
                                                    document: target.document,
                                                    savedText: target.savedText,
                                                    workspace: target.workspace,
-                                                   fileURL: target.fileURL)
+                                                   fileURL: target.fileURL,
+                                                   leftOut: target.leftOut,
+                                                   removeFolderIfUnsaved: target.removeFolderIfUnsaved)
                                 case .workspace(let ws):
                                     // CFM-R17-3: a workspace page — the flows in it, its
                                     // shared files, Reveal in Finder on the shared directory.

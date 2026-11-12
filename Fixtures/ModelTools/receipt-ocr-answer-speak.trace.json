@@ -1,0 +1,15 @@
+{
+  "assets": [
+    { "handle": "a1", "kind": "image", "name": "receipt.jpg", "fileName": "a1.jpg" },
+    { "handle": "a2", "kind": "text", "name": "OCR text", "fileName": "a2.txt", "text": "TOTAL RM 84.20",
+      "rowText": "1. OCR   PaddleOCR-VL-1.5", "model": "PaddleOCR-VL-1.5" },
+    { "handle": "a3", "kind": "audio", "name": "Speech", "fileName": "a3.wav",
+      "rowText": "1. Speak   Kokoro 82M", "model": "Kokoro 82M" }
+  ],
+  "events": [
+    { "kind": "user", "text": "What's the total? read it out", "attachments": ["a1"] },
+    { "kind": "tool", "tool": "ocr_image", "assetArgument": "a1", "output": "a2" },
+    { "kind": "tool", "tool": "speak", "text": "The total is RM 84.20.", "output": "a3" },
+    { "kind": "assistant", "text": "The total is RM 84.20.", "modelID": "apple-intelligence" }
+  ]
+}

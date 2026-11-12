@@ -1,0 +1,9 @@
+mlxflow 0.8
+1. Read Image         receipt.jpg
+2. OCR                PaddleOCR-VL-1.5
+3. Template           "Context:\n{input}\n\nQuestion: What's the total?
+                      read it out"
+4. Answer             apple-foundation @ system
+5. Speak              Kokoro 82M
+6. Save Audio         speech.wav
+7. Save Text    (4)   answer.txt

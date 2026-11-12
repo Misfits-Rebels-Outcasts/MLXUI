@@ -1,0 +1,13 @@
+{
+  "assets": [
+    { "handle": "a1", "kind": "text", "name": "Translation", "fileName": "a1.txt", "text": "Selamat pagi, mesyuarat pada pukul sembilan.",
+      "rowText": "1. Translate   TranslateGemma 4B; to=\"Malay\"", "model": "TranslateGemma 4B" },
+    { "handle": "a2", "kind": "audio", "name": "Speech", "fileName": "a2.wav",
+      "rowText": "1. Speak   Kokoro 82M", "model": "Kokoro 82M" }
+  ],
+  "events": [
+    { "kind": "user", "text": "Translate this to Malay and read it out: Good morning, the meeting is at nine." },
+    { "kind": "tool", "tool": "translate", "text": "Good morning, the meeting is at nine.", "output": "a1" },
+    { "kind": "tool", "tool": "speak", "assetArgument": "a1", "output": "a2" }
+  ]
+}
