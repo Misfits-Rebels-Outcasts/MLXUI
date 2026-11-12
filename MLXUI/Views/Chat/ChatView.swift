@@ -75,11 +75,53 @@ struct ChatView: View {
         .background(.background)
     }
 
+    /// CP-4: the persisted conversations-column width, shared by the page and the sheet.
+    @AppStorage("chatSidebarWidth") private var sidebarWidth: Double = ChatSidebarWidth.defaultWidth
+    @State private var sidebarDragStart: Double?
+    @State private var cursorPushed = false
+
+    private func popResizeCursor() {
+        if cursorPushed {
+            NSCursor.pop()
+            cursorPushed = false
+        }
+    }
+
+    /// A ~6 pt strip over the divider: drag to resize, double-click to reset.
+    private var sidebarResizeHandle: some View {
+        Color.clear
+            .frame(width: 6)
+            .contentShape(Rectangle())
+            .onHover { inside in
+                if inside, !cursorPushed {
+                    NSCursor.resizeLeftRight.push()
+                    cursorPushed = true
+                } else if !inside, sidebarDragStart == nil {
+                    popResizeCursor()
+                }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { drag in
+                        let start = sidebarDragStart ?? ChatSidebarWidth.clamp(sidebarWidth)
+                        sidebarDragStart = start
+                        sidebarWidth = ChatSidebarWidth.clamp(start + drag.translation.width)
+                    }
+                    .onEnded { _ in sidebarDragStart = nil }
+            )
+            .onTapGesture(count: 2) { sidebarWidth = ChatSidebarWidth.defaultWidth }
+            .onDisappear {
+                sidebarDragStart = nil
+                popResizeCursor()
+            }
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             conversationSidebar
-                .frame(width: 210)
+                .frame(width: ChatSidebarWidth.clamp(sidebarWidth))
             Divider()
+                .overlay { sidebarResizeHandle }
             VStack(spacing: 0) {
                 header
                 Divider()
