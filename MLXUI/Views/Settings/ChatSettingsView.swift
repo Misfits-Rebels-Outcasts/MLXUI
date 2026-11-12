@@ -29,12 +29,10 @@ struct ChatSettingsView: View {
                     ForEach(ChatTextSize.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
                 Text("Meeting notes")
-                    .font(.callout)
-                    .chatTextSize(.listTitle, ChatTextSize(stored: listStored))
+                    .font(ChatTextSize(stored: listStored).font(.listTitle, standard: .callout))
                 Text("Qwen3 8B · 2 hours ago")
-                    .font(.caption2)
+                    .font(ChatTextSize(stored: listStored).font(.listDetail, standard: .caption2))
                     .foregroundStyle(.secondary)
-                    .chatTextSize(.listDetail, ChatTextSize(stored: listStored))
             }
         }
         .formStyle(.grouped)

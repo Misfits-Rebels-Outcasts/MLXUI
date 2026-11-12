@@ -1,3 +1,4 @@
+import SwiftUI
 import Testing
 @testable import MLXUI
 
@@ -39,5 +40,27 @@ struct ChatTextSizeTests {
         #expect(ChatTextSize(stored: "huge") == .standard)
         #expect(ChatTextSize(stored: "") == .standard)
         #expect(ChatTextSize.allCases == [.small, .standard, .large, .extraLarge])
+    }
+
+    /// CP-5-FIX-1: Settings and ChatView read the same two `@AppStorage` keys, pinned by name — a rename
+    /// on one side would silently disconnect the setting.
+    @Test func storageKeysArePinned() {
+        #expect(ChatTextSize.messageKey == "chatMessageTextSize")
+        #expect(ChatTextSize.listKey == "chatListTextSize")
+    }
+
+    /// CP-5-FIX-1: the font a row gets. `.standard` returns the call site's own style (nothing shifts);
+    /// any other step must return an explicit size, which is what makes the setting visible.
+    @Test func fontFollowsTheStepAndStandardKeepsTheCallSitesStyle() {
+        #expect(ChatTextSize.standard.font(.listTitle, standard: .callout) == .callout)
+        #expect(ChatTextSize.standard.font(.listDetail, standard: .caption2) == .caption2)
+        for step in [ChatTextSize.small, .large, .extraLarge] {
+            #expect(step.font(.listTitle, standard: .callout) == .system(size: step.points(for: .listTitle)))
+            #expect(step.font(.listTitle, standard: .callout) != .callout)
+        }
+    }
+
+    @Test func grabWidthIsWiderThanTheOldStrip() {
+        #expect(ChatSidebarWidth.grabWidth >= 8 && ChatSidebarWidth.grabWidth <= 10)
     }
 }

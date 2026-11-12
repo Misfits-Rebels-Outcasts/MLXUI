@@ -96,10 +96,10 @@ struct ChatView: View {
         }
     }
 
-    /// A ~6 pt strip over the divider: drag to resize, double-click to reset.
+    /// A 10 pt strip centred on the divider line: drag to resize, double-click to reset.
     private var sidebarResizeHandle: some View {
         Color.clear
-            .frame(width: 6)
+            .frame(width: ChatSidebarWidth.grabWidth)
             .contentShape(Rectangle())
             .onHover { inside in
                 sidebarHandleHovering = inside
@@ -289,8 +289,7 @@ struct ChatView: View {
                 ForEach(controller.conversations) { conversation in
                     VStack(alignment: .leading, spacing: 2) {
                         Text(conversation.title)
-                            .font(.callout)
-                            .chatTextSize(.listTitle, listSize)
+                            .font(listSize.font(.listTitle, standard: .callout))
                             .lineLimit(1)
                         // MT2-3: the Chat page lists every model's chats, so each row names its model.
                         if surface == .page {
@@ -299,15 +298,13 @@ struct ChatView: View {
                                 catalog: names.merging([AppleIntelligenceChat.modelID: AppleIntelligenceChat.displayName]) { a, _ in a },
                                 installedIDs: controller.appleReadiness == .ready
                                     ? appState.installedModelIDs.union([AppleIntelligenceChat.modelID]) : appState.installedModelIDs).text)
-                                .font(.caption2)
-                                .chatTextSize(.listDetail, listSize)
+                                .font(listSize.font(.listDetail, standard: .caption2))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
                         if !conversation.items.isEmpty {
                             Text(conversation.updatedAt, format: .relative(presentation: .named))
-                                .font(.caption2)
-                                .chatTextSize(.listDetail, listSize)
+                                .font(listSize.font(.listDetail, standard: .caption2))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -666,8 +663,7 @@ struct ChatView: View {
             }
             if let result = activity.result, !result.isEmpty {
                 Text(result)
-                    .font(.caption)
-                    .chatTextSize(.toolResult, messageSize)
+                    .font(messageSize.font(.toolResult, standard: .caption))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

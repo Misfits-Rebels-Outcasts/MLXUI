@@ -42,6 +42,12 @@ nonisolated enum ChatTextSize: String, CaseIterable, Sendable, Equatable {
         self == .standard ? nil : points(for: role)
     }
 
+    /// The font for a role: the call site's own style at `.standard` (so nothing shifts), explicit points otherwise.
+    /// Use this *instead of* `.font(x).chatTextSize(...)` — an inner `.font` beats an outer override (CP-5-FIX-1).
+    func font(_ role: Role, standard: Font) -> Font {
+        overridePoints(for: role).map { Font.system(size: $0) } ?? standard
+    }
+
     var title: String {
         switch self {
         case .small: return "Small"
