@@ -255,24 +255,36 @@ struct ChatView: View {
     // MARK: - Header
 
     private var header: some View {
+        // CP-1: wide variant first (labelled "Open in Chat", title capped so its ideal width is
+        // bounded); when that does not fit, the icon-only variant, whose title truncates instead.
+        ViewThatFits(in: .horizontal) {
+            headerRow(compact: false)
+            headerRow(compact: true)
+        }
+    }
+
+    private func headerRow(compact: Bool) -> some View {
         HStack(spacing: 8) {
             Image(systemName: model.modelType.sfSymbol)
                 .foregroundStyle(.secondary)
+                .fixedSize()
             VStack(alignment: .leading, spacing: 1) {
                 Text(model.displayName)
                     .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 Text(ChatModelLabels.headerSubtitle(modelID: model.id))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
-            Spacer()
+            .frame(maxWidth: compact ? .infinity : 320, alignment: .leading)
+            .layoutPriority(-1)
+            Spacer(minLength: 8)
             exportMenu
             if surface == .bench, onDone != nil, ChatGate.isAvailable {
-                Button("Open in Chat") {
-                    if appState.openBenchInChat() { onDone?() }
-                }
-                .disabled(!controller.canOpenBenchInChat)
-                .help("Continue this conversation on the Chat page")
+                openInChatButton(compact: compact)
             }
             if !runner.availableTools.isEmpty {
                 toolsMenu
@@ -291,9 +303,30 @@ struct ChatView: View {
                     onDone()
                 }
                 .keyboardShortcut(.cancelAction)
+                .fixedSize()
             }
         }
         .padding(12)
+    }
+
+    @ViewBuilder
+    private func openInChatButton(compact: Bool) -> some View {
+        let button = Button {
+            if appState.openBenchInChat() { onDone?() }
+        } label: {
+            Label("Open in Chat", systemImage: "arrow.up.forward.app")
+        }
+        .disabled(!controller.canOpenBenchInChat)
+        if compact {
+            button
+                .labelStyle(.iconOnly)
+                .help("Open in Chat")
+                .fixedSize()
+        } else {
+            button
+                .help("Continue this conversation on the Chat page")
+                .fixedSize()
+        }
     }
 
     /// CX-2 (D4a): export the **active** conversation. Placed before the tools menu and Done so
