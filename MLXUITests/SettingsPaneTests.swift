@@ -26,10 +26,12 @@ struct SettingsPaneTests {
         #expect(SettingsPane.providers.rawValue == "providers")
         #expect(SettingsPane.agentTools.rawValue == "agentTools")
         #expect(SettingsPane.privacy.rawValue == "privacy")
+        #expect(SettingsPane.localServer.rawValue == "localServer")
+        #expect(SettingsPane.chat.rawValue == "chat")
     }
 
     @Test func allCasesOrderIsTheTabOrder() {
-        #expect(SettingsPane.allCases == [.models, .providers, .agentTools, .privacy, .localServer])   // S1-5: the fifth pane is last
+        #expect(SettingsPane.allCases == [.models, .providers, .agentTools, .privacy, .localServer, .chat])   // S1-5: localServer fifth; CP-5: chat appended last
     }
 
     @Test func existingSetupActionEqualityStillHolds() {

@@ -91,18 +91,28 @@ struct LocalServerPolicyTests {
     }
 
     @Test func theLocalServerPaneFollowsTheGateAndOnlyTheGate() {
-        let hidden = LocalServerPolicy.visibleSettingsPanes(gateAvailable: false, hideProvidersPrivacy: false)
+        let hidden = LocalServerPolicy.visibleSettingsPanes(gateAvailable: false, hideProvidersPrivacy: false, chatAvailable: false)
         #expect(hidden == [.models, .providers, .agentTools, .privacy])                       // today's four
-        let shown = LocalServerPolicy.visibleSettingsPanes(gateAvailable: true, hideProvidersPrivacy: false)
+        let shown = LocalServerPolicy.visibleSettingsPanes(gateAvailable: true, hideProvidersPrivacy: false, chatAvailable: false)
         #expect(shown == [.models, .providers, .agentTools, .privacy, .localServer])          // a fifth
         // R12: not behind hideProvidersPrivacy.
-        let providersHidden = LocalServerPolicy.visibleSettingsPanes(gateAvailable: true, hideProvidersPrivacy: true)
+        let providersHidden = LocalServerPolicy.visibleSettingsPanes(gateAvailable: true, hideProvidersPrivacy: true, chatAvailable: false)
         #expect(providersHidden == [.models, .agentTools, .localServer])
-        #expect(LocalServerPolicy.visibleSettingsPanes(gateAvailable: false, hideProvidersPrivacy: true) == [.models, .agentTools])
+        #expect(LocalServerPolicy.visibleSettingsPanes(gateAvailable: false, hideProvidersPrivacy: true, chatAvailable: false) == [.models, .agentTools])
+    }
+
+    @Test func theChatPaneFollowsTheChatGateAndIsLast() {   // CP-5
+        let withChat = LocalServerPolicy.visibleSettingsPanes(gateAvailable: false, hideProvidersPrivacy: false, chatAvailable: true)
+        #expect(withChat == [.models, .providers, .agentTools, .privacy, .chat])
+        let all = LocalServerPolicy.visibleSettingsPanes(gateAvailable: true, hideProvidersPrivacy: false, chatAvailable: true)
+        #expect(all == [.models, .providers, .agentTools, .privacy, .localServer, .chat])
+        #expect(LocalServerPolicy.visibleSettingsPanes(gateAvailable: true, hideProvidersPrivacy: true, chatAvailable: true) == [.models, .agentTools, .localServer, .chat])
+        #expect(!LocalServerPolicy.visibleSettingsPanes(gateAvailable: true, hideProvidersPrivacy: false, chatAvailable: false).contains(.chat))
+        #expect(LocalServerPolicy.resolvedPane(.chat, visible: [.models, .agentTools]) == .models)
     }
 
     @Test func aStalePaneSelectionLandsOnModels() {
-        let hidden = LocalServerPolicy.visibleSettingsPanes(gateAvailable: false, hideProvidersPrivacy: false)
+        let hidden = LocalServerPolicy.visibleSettingsPanes(gateAvailable: false, hideProvidersPrivacy: false, chatAvailable: false)
         #expect(LocalServerPolicy.resolvedPane(.localServer, visible: hidden) == .models)
         #expect(LocalServerPolicy.resolvedPane(.privacy, visible: hidden) == .privacy)
     }

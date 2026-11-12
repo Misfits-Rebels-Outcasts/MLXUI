@@ -50,13 +50,21 @@ struct SettingsRootView: View {
                     .tabItem { Label(SettingsPane.localServer.title, systemImage: SettingsPane.localServer.systemImage) }
                     .tag(SettingsPane.localServer)
             }
+
+            // CP-5 — text size, only while Chat is in this build.
+            if ChatGate.isAvailable {
+                ChatSettingsView()
+                    .tabItem { Label(SettingsPane.chat.title, systemImage: SettingsPane.chat.systemImage) }
+                    .tag(SettingsPane.chat)
+            }
         }
         .onAppear {
             // A prior launch (before this flag was set, or with it toggled back) may have left
             // `selectedPane` pointed at a tab that's hidden now — land on Models instead of a
             // pane the TabView no longer offers.
             let visible = LocalServerPolicy.visibleSettingsPanes(
-                gateAvailable: LocalServerGate.isAvailable, hideProvidersPrivacy: AppState.hideProvidersPrivacy)
+                gateAvailable: LocalServerGate.isAvailable, hideProvidersPrivacy: AppState.hideProvidersPrivacy,
+                chatAvailable: ChatGate.isAvailable)
             selectedPane = LocalServerPolicy.resolvedPane(selectedPane, visible: visible)
         }
     }

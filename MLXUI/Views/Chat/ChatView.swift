@@ -77,6 +77,11 @@ struct ChatView: View {
 
     /// CP-4: the persisted conversations-column width, shared by the page and the sheet.
     @AppStorage("chatSidebarWidth") private var sidebarWidth: Double = ChatSidebarWidth.defaultWidth
+    /// CP-5: text sizes (stored raw; `.standard` overrides nothing).
+    @AppStorage(ChatTextSize.messageKey) private var messageSizeRaw = ChatTextSize.standard.rawValue
+    @AppStorage(ChatTextSize.listKey) private var listSizeRaw = ChatTextSize.standard.rawValue
+    private var messageSize: ChatTextSize { ChatTextSize(stored: messageSizeRaw) }
+    private var listSize: ChatTextSize { ChatTextSize(stored: listSizeRaw) }
     @State private var sidebarDragStart: Double?
     @State private var cursorPushed = false
     @State private var sidebarHandleHovering = false
@@ -174,6 +179,20 @@ struct ChatView: View {
         // sizing, and on macOS 14 it collapsed this one to a small, unusable box. A column in the
         // layout is deterministic in a sheet, and the sheet is free to keep one size because the
         // pane is only 240 pt of it.
+        // CP-5: ⌘= ⌘- ⌘0 step the message size on the surface that holds the lease only.
+        .background {
+            Group {
+                Button("Larger Text") { messageSizeRaw = messageSize.steppedUp.rawValue }
+                    .keyboardShortcut(holdsLease ? KeyboardShortcut("=", modifiers: .command) : nil)
+                Button("Smaller Text") { messageSizeRaw = messageSize.steppedDown.rawValue }
+                    .keyboardShortcut(holdsLease ? KeyboardShortcut("-", modifiers: .command) : nil)
+                Button("Standard Text") { messageSizeRaw = ChatTextSize.reset.rawValue }
+                    .keyboardShortcut(holdsLease ? KeyboardShortcut("0", modifiers: .command) : nil)
+            }
+            .opacity(0)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
         .onAppear { controller.acquire(surface, model: model) }
         // MT2-2: the bench and the page can both be in the hierarchy. The page takes the runner back when the
         // sheet lets go of it; a surface that was refused while the other generated binds itself when it ends.
@@ -249,6 +268,7 @@ struct ChatView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(conversation.title)
                             .font(.callout)
+                            .chatTextSize(.listTitle, listSize)
                             .lineLimit(1)
                         // MT2-3: the Chat page lists every model's chats, so each row names its model.
                         if surface == .page {
@@ -258,12 +278,14 @@ struct ChatView: View {
                                 installedIDs: controller.appleReadiness == .ready
                                     ? appState.installedModelIDs.union([AppleIntelligenceChat.modelID]) : appState.installedModelIDs).text)
                                 .font(.caption2)
+                                .chatTextSize(.listDetail, listSize)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
                         if !conversation.items.isEmpty {
                             Text(conversation.updatedAt, format: .relative(presentation: .named))
                                 .font(.caption2)
+                                .chatTextSize(.listDetail, listSize)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -541,6 +563,7 @@ struct ChatView: View {
             if isUser { Spacer(minLength: 40) }
             VStack(alignment: .leading, spacing: 6) {
                 Text(message.text)
+                    .chatTextSize(.message, messageSize)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 // MT3-FIX-1: which model wrote this answer (the Chat page lists every model's chats).
@@ -622,6 +645,7 @@ struct ChatView: View {
             if let result = activity.result, !result.isEmpty {
                 Text(result)
                     .font(.caption)
+                    .chatTextSize(.toolResult, messageSize)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

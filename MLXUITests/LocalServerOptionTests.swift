@@ -150,7 +150,7 @@ struct LocalServerOptionTests {
         #expect(!ConnectSheetPresentation.isPresented(requested: true))
         #expect(LocalServerPolicy.shouldTerminateAfterLastWindowClosed(status: .running(port: 1212)))
         #expect(LocalServerPolicy.visibleSettingsPanes(gateAvailable: LocalServerGate.isAvailable,
-                                                       hideProvidersPrivacy: false).contains(.localServer))   // the option's home
+                                                       hideProvidersPrivacy: false, chatAvailable: false).contains(.localServer))   // the option's home
 
         await c.setServed(optModel, true)                              // the Serve toggle's action
         c.presentConnect(for: optModel)
@@ -175,7 +175,7 @@ struct LocalServerOptionTests {
         #expect(!LocalServerGate.isEnabled)
         #expect(!controller(defaults).surfacesVisible)
         #expect(!LocalServerPolicy.visibleSettingsPanes(gateAvailable: LocalServerGate.isAvailable,
-                                                        hideProvidersPrivacy: false).contains(.localServer))
+                                                        hideProvidersPrivacy: false, chatAvailable: false).contains(.localServer))
         #expect(!ServeToggleVisibility.shouldShow(state: .installed, isInstalledOnDisk: true, runnerKind: .llm))
         #expect(LocalServerPolicy.shouldTerminateAfterLastWindowClosed(status: .running(port: 1212)))
     }

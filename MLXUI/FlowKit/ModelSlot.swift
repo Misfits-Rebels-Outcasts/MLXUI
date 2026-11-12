@@ -127,6 +127,8 @@ nonisolated enum SettingsPane: String, CaseIterable, Sendable, Equatable {
     /// S1-5 — the Local Server pane (owner ruling R12: a fifth pane). Only offered while
     /// `LocalServerGate.isAvailable`; its raw value is a new persisted key, so it stays stable.
     case localServer
+    /// CP-5 — chat text size. Appended, so every earlier raw value and tab position is unchanged.
+    case chat
 
     /// The tab title, and the pane's own heading inside the window.
     var title: String {
@@ -136,6 +138,7 @@ nonisolated enum SettingsPane: String, CaseIterable, Sendable, Equatable {
         case .agentTools: return "Tools"
         case .privacy: return "Privacy"
         case .localServer: return "Local Server"
+        case .chat: return "Chat"
         }
     }
 
@@ -147,6 +150,7 @@ nonisolated enum SettingsPane: String, CaseIterable, Sendable, Equatable {
         case .agentTools: return "wrench.and.screwdriver"
         case .privacy: return "hand.raised"
         case .localServer: return "network"
+        case .chat: return "bubble.left.and.bubble.right"
         }
     }
 }

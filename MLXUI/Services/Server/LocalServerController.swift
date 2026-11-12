@@ -50,11 +50,12 @@ enum LocalServerPolicy {
 
     /// The tabs Settings shows: Providers and Privacy follow `hideProvidersPrivacy`; **Local Server
     /// follows the gate and nothing else** (R12 — "not behind `hideProvidersPrivacy`").
-    static func visibleSettingsPanes(gateAvailable: Bool, hideProvidersPrivacy: Bool) -> [SettingsPane] {
+    static func visibleSettingsPanes(gateAvailable: Bool, hideProvidersPrivacy: Bool, chatAvailable: Bool) -> [SettingsPane] {
         SettingsPane.allCases.filter { pane in
             switch pane {
             case .providers, .privacy: return !hideProvidersPrivacy
             case .localServer: return gateAvailable
+            case .chat: return chatAvailable
             case .models, .agentTools: return true
             }
         }
