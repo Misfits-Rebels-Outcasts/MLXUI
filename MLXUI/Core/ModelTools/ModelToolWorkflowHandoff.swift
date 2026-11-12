@@ -46,6 +46,15 @@ nonisolated enum ModelToolWorkflowHandoff {
         return String(trimmed.prefix(60))
     }
 
+    /// `name`, or `name 2`, `name 3`… when a saved flow already has it (compared as the file name the editor would write).
+    static func uniqueName(_ name: String, among taken: Set<String>) -> String {
+        func isTaken(_ candidate: String) -> Bool { taken.contains(FlowEditorModel.sanitizedFileName(candidate).lowercased()) }
+        guard isTaken(name) else { return name }
+        var n = 2
+        while isTaken("\(name) \(n)") { n += 1 }
+        return "\(name) \(n)"
+    }
+
     /// Make the flow folder, copy the attachments in, and return the target for the editor. On any failure the folder is
     /// removed again and the error is plain: no half-built flow opens.
     static func prepare(flow: ModelToolFlow, chatTitle: String?, assetsDirectory: URL,
@@ -56,6 +65,8 @@ nonisolated enum ModelToolWorkflowHandoff {
         for copy in flow.copies where !fm.fileExists(atPath: assetsDirectory.appendingPathComponent(copy.source).path) {
             throw Failure.missingSource(copy.destination)
         }
+        // Read before the folder exists, so it can only list flows that were already saved.
+        let existingFlowNames = Set(UserFlowStore.scan(workspace: workspace, bundledFlowIDs: []).map { $0.title.lowercased() })
         let flowID = UUID().uuidString
         let dir = workspace.directory(for: flowID)
         do {
@@ -69,8 +80,8 @@ nonisolated enum ModelToolWorkflowHandoff {
             let failed = flow.copies.first?.destination ?? "a file"
             throw Failure.copyFailed(failed)
         }
-        var target = FlowEditTarget(flowID: flowID, name: workflowName(chatTitle: chatTitle), document: flow.document,
-                                    savedText: nil)
+        let name = uniqueName(workflowName(chatTitle: chatTitle), among: existingFlowNames)
+        var target = FlowEditTarget(flowID: flowID, name: name, document: flow.document, savedText: nil)
         target.leftOut = flow.banner.map(\.line)
         target.removeFolderIfUnsaved = true
         return target

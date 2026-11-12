@@ -33,6 +33,35 @@ nonisolated enum ModelToolFlowBuilder {
         text.range(of: #"\{(input(:\d+)?|\d+)\}"#, options: .regularExpression) != nil
     }
 
+    /// What the Template under an Answer must say: the producing turn's question and one placeholder per context row.
+    struct AnswerExpectation: Sendable, Equatable {
+        let question: String
+        let contextCount: Int
+    }
+
+    static func answerBody(question: String, contextCount: Int) -> String {
+        switch contextCount {
+        case 0: return question
+        case 1: return "Context:\n{input}" + (question.isEmpty ? "" : "\n\nQuestion: " + question)
+        default:
+            let slots = (1...contextCount).map { "{\($0)}" }.joined(separator: "\n\n")
+            return "Context:\n" + slots + (question.isEmpty ? "" : "\n\nQuestion: " + question)
+        }
+    }
+
+    /// How many Answer rows are not fed exactly the Template their producing turn calls for (its question, its context
+    /// count): catches a mis-bound turn as well as a dropped placeholder.
+    static func answersMisfed(rows: [Row], expected: [UUID: AnswerExpectation]) -> Int {
+        var bad = 0
+        for (i, row) in rows.enumerated() {
+            guard let want = expected[row.id] else { continue }
+            guard i > 0, rows[i - 1].task == "Template",
+                  rows[i - 1].settings == FlowSettingsEscaper.quoted(answerBody(question: want.question, contextCount: want.contextCount))
+            else { bad += 1; continue }
+        }
+        return bad
+    }
+
     /// A Template pattern that reads its input: `{input}`, `{input:N}` or `{N}`.
     static func carriesContext(_ pattern: String) -> Bool { hasPlaceholder(pattern) }
 
@@ -107,6 +136,8 @@ nonisolated enum ModelToolFlowBuilder {
         /// The Answer row a turn's tools consumed router text from (the latest one).
         var routerAnswerByConsumingTurn: [Int: UUID] = [:]
         var contextLost = false
+        /// Per Answer row: the question and context count its Template must carry (the producing turn's).
+        var answerExpectations: [UUID: AnswerExpectation] = [:]
 
         // Banner counters.
         var leftOutTools: [(name: String, count: Int)] = []
@@ -120,6 +151,7 @@ nonisolated enum ModelToolFlowBuilder {
         var emptyText = 0
         var contextTrimmed = false
         var unsaved: [String] = []
+        var stepsNeedingMissingFile: [String] = []
 
         init(trace: ModelToolTrace, catalog: ModelToolFlowCatalog) {
             self.trace = trace
@@ -147,8 +179,8 @@ nonisolated enum ModelToolFlowBuilder {
             if let c = current { turns.append(c) }
 
             for index in turns.indices {
-                for event in turns[index].events where event.kind == .tool {
-                    handleTool(event, turnIndex: index)
+                for (position, event) in turns[index].events.enumerated() where event.kind == .tool {
+                    handleTool(event, turnIndex: index, position: position)
                 }
             }
             emitOutputs()
@@ -251,7 +283,7 @@ nonisolated enum ModelToolFlowBuilder {
 
         // MARK: A tool call
 
-        mutating func handleTool(_ event: ModelToolTrace.Event, turnIndex: Int) {
+        mutating func handleTool(_ event: ModelToolTrace.Event, turnIndex: Int, position: Int) {
             guard let name = event.tool, name != "list_capabilities", name != "read_asset" else { return }
             guard let spec = ModelToolSpec.spec(named: name), spec.task != nil else {
                 if event.ok == false { failedCalls += 1 } else { countLeftOut(name) }
@@ -271,12 +303,17 @@ nonisolated enum ModelToolFlowBuilder {
             if let handle = event.assetArgument, !handle.isEmpty {
                 source = producer(forHandle: handle)
             } else if let text = event.text {
-                source = inlineSource(text, turnIndex: turnIndex)
+                source = inlineSource(text, turnIndex: turnIndex, position: position)
             } else {
                 emptyText += 1
                 source = nil
             }
-            guard let source else { return }
+            guard let source else {
+                if let handle = event.assetArgument, let a = assets[ModelToolTrace.normalizedHandle(handle)], a.rowText == nil, a.missing == true {
+                    stepsNeedingMissingFile.append("\(parsed.task ?? name) with \(display) (its file \(a.name) is gone)")
+                }
+                return
+            }
 
             let id = emit(Row(task: parsed.task, model: display, settings: parsed.settings, refs: refs(for: source)))
             rowOfHandle[out] = id
@@ -290,7 +327,7 @@ nonisolated enum ModelToolFlowBuilder {
 
         /// A tool's inline `text` (F-4): a step's output it repeats, a literal source when it is the user's own text,
         /// otherwise the router's answer.
-        mutating func inlineSource(_ text: String, turnIndex: Int) -> UUID? {
+        mutating func inlineSource(_ text: String, turnIndex: Int, position: Int) -> UUID? {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { emptyText += 1; return nil }
             if let asset = trace.assets.first(where: {
@@ -305,21 +342,28 @@ nonisolated enum ModelToolFlowBuilder {
             let inAttachment = turn.attachments.contains { (assets[$0]?.text ?? "").contains(trimmed) }
             if inUser || inAttachment { return literal(text) }
             // The router wrote this text in some turn, maybe an earlier one: that turn's question and context feed it.
-            let producing = producingTurn(of: trimmed, consumedIn: turnIndex)
+            let producing = producingTurn(of: trimmed, consumedIn: turnIndex, before: position)
             guard let id = answerPair(turnIndex: producing, key: trimmed) else { return nil }
             routerAnswerByConsumingTurn[turnIndex] = id
             return id
         }
 
-        /// The turn whose assistant reply is `text`: the most recent exact match up to `turn`, else the most recent reply
-        /// containing it, else the consuming turn itself.
-        func producingTurn(of text: String, consumedIn turn: Int) -> Int {
-            func replies(_ i: Int) -> [String] {
-                turns[i].events.filter { $0.kind == .assistant }
-                    .map { ($0.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        /// The turn whose assistant reply the router wrote `text` as, by transcript order: only a reply that comes BEFORE
+        /// the call counts (an earlier turn, or an earlier event of the same turn). Among the preceding replies the
+        /// EARLIEST exact match wins, then the earliest containing it: a later reply that merely repeats the text (the
+        /// router echoing it after a `speak`) is not where it was written, and the first one carries the real question
+        /// and context. A reply after the call never counts. With no preceding reply the consuming turn is the producer.
+        func producingTurn(of text: String, consumedIn turn: Int, before position: Int) -> Int {
+            var earlier: [(turn: Int, text: String)] = []
+            for t in 0...turn {
+                for (i, event) in turns[t].events.enumerated() where event.kind == .assistant {
+                    if t == turn && i >= position { break }
+                    let reply = (event.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !reply.isEmpty { earlier.append((t, reply)) }
+                }
             }
-            for i in stride(from: turn, through: 0, by: -1) where replies(i).contains(text) { return i }
-            for i in stride(from: turn, through: 0, by: -1) where replies(i).contains(where: { $0.contains(text) }) { return i }
+            if let hit = earlier.first(where: { $0.text == text }) { return hit.turn }
+            if let hit = earlier.first(where: { $0.text.contains(text) }) { return hit.turn }
             return turn
         }
 
@@ -361,14 +405,7 @@ nonisolated enum ModelToolFlowBuilder {
             }
             if context.count > 4 { context = Array(context.suffix(4)); contextTrimmed = true }
 
-            var body = ""
-            switch context.count {
-            case 0: body = question
-            case 1: body = "Context:\n{input}" + (question.isEmpty ? "" : "\n\nQuestion: " + question)
-            default:
-                let slots = (1...context.count).map { "{\($0)}" }.joined(separator: "\n\n")
-                body = "Context:\n" + slots + (question.isEmpty ? "" : "\n\nQuestion: " + question)
-            }
+            let body = ModelToolFlowBuilder.answerBody(question: question, contextCount: context.count)
             guard !body.isEmpty else { emptyText += 1; return nil }
             // A question with no {input} must never feed an Answer that had context to read (MT5-2-FIX-1).
             if !context.isEmpty && !ModelToolFlowBuilder.carriesContext(body) { contextLost = true; return nil }
@@ -379,6 +416,7 @@ nonisolated enum ModelToolFlowBuilder {
             emit(Row(task: "Template", settings: FlowSettingsEscaper.quoted(body), refs: refs))
             let answer = emit(Row(task: "Answer", model: router))
             if !context.isEmpty { contextfulAnswers.insert(answer) }
+            answerExpectations[answer] = AnswerExpectation(question: question, contextCount: context.count)
             answerRows[cacheKey] = answer
             consumedRouterTexts.insert(key)
             return answer
@@ -493,10 +531,12 @@ nonisolated enum ModelToolFlowBuilder {
                 }
             }
             add(.missingAttachment, missingNames.count, missingNames)
+            add(.stepNeedsMissingFile, stepsNeedingMissingFile.count, stepsNeedingMissingFile)
             add(.unconsumedAttachment, idle.count, idle)
             add(.contextTrimmed, contextTrimmed ? 1 : 0)
             add(.unsavedOutput, unsaved.count, unsaved)
-            add(.contextLost, (contextLost || ModelToolFlowBuilder.answersMissingContext(rows: rows, contextful: contextfulAnswers) > 0) ? 1 : 0)
+            add(.contextLost, (contextLost || ModelToolFlowBuilder.answersMissingContext(rows: rows, contextful: contextfulAnswers) > 0
+                || ModelToolFlowBuilder.answersMisfed(rows: rows, expected: answerExpectations) > 0) ? 1 : 0)
             return out
         }
 
@@ -513,7 +553,8 @@ nonisolated enum ModelToolFlowBuilder {
             let text = CatSerializer.serialize(document)
             return ModelToolFlow(document: document, text: text, copies: copies, banner: banner(),
                                  roundTrips: Builder.roundTrips(document, text: text)
-                                    && ModelToolFlowBuilder.answersMissingContext(rows: rows, contextful: contextfulAnswers) == 0)
+                                    && ModelToolFlowBuilder.answersMissingContext(rows: rows, contextful: contextfulAnswers) == 0
+                                    && ModelToolFlowBuilder.answersMisfed(rows: rows, expected: answerExpectations) == 0)
         }
 
         static func roundTrips(_ document: FlowDocument, text: String) -> Bool {
