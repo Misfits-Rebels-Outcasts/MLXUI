@@ -79,6 +79,7 @@ struct ChatView: View {
     @AppStorage("chatSidebarWidth") private var sidebarWidth: Double = ChatSidebarWidth.defaultWidth
     @State private var sidebarDragStart: Double?
     @State private var cursorPushed = false
+    @State private var sidebarHandleHovering = false
 
     private func popResizeCursor() {
         if cursorPushed {
@@ -93,6 +94,7 @@ struct ChatView: View {
             .frame(width: 6)
             .contentShape(Rectangle())
             .onHover { inside in
+                sidebarHandleHovering = inside
                 if inside, !cursorPushed {
                     NSCursor.resizeLeftRight.push()
                     cursorPushed = true
@@ -107,7 +109,10 @@ struct ChatView: View {
                         sidebarDragStart = start
                         sidebarWidth = ChatSidebarWidth.clamp(start + drag.translation.width)
                     }
-                    .onEnded { _ in sidebarDragStart = nil }
+                    .onEnded { _ in
+                        sidebarDragStart = nil
+                        if !sidebarHandleHovering { popResizeCursor() }
+                    }
             )
             .onTapGesture(count: 2) { sidebarWidth = ChatSidebarWidth.defaultWidth }
             .onDisappear {
@@ -122,6 +127,7 @@ struct ChatView: View {
                 .frame(width: ChatSidebarWidth.clamp(sidebarWidth))
             Divider()
                 .overlay { sidebarResizeHandle }
+                .zIndex(1)
             VStack(spacing: 0) {
                 header
                 Divider()
