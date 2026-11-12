@@ -30,6 +30,8 @@ nonisolated struct ModelToolRuntime: Sendable {
     /// Tests only (MT4-2): the app-container stand-in. When set, the App Store container rule applies to `pathRoots` (the container is
     /// dropped as a root except this chat's own attachments and assets). Left nil, `pathRoots` are used literally, as before MT4-2.
     var pathContainer: URL? = nil
+    /// Tests only (MT4-7-FIX-4, C): the voice names a TTS model offers, in place of reading the installed model's `voices/` folder.
+    var voiceLookup: (@Sendable (ModelEntry) -> [String]?)? = nil
 
     @TaskLocal static var current: ModelToolRuntime?
 }
@@ -125,6 +127,31 @@ nonisolated struct ModelToolRunner: Sendable {
         return tokens
     }
 
+    /// MT4-7-FIX-4 (C): Apple Intelligence sends `voice: "default"` (or a made-up name) and the engine throws "Voice 'default' not
+    /// found". The setting is dropped when it is a placeholder, or when the model's voices are known and it is not one of them
+    /// (a case-only difference is corrected to the model's spelling). With no known list only the placeholders go.
+    static func droppingUnknownVoice(from values: [String: Value], spec: ModelToolSpec, voices: [String]?) -> [String: Value] {
+        guard spec.param(named: "voice") != nil, case .string(let raw)? = values["voice"] else { return values }
+        let voice = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        var out = values
+        if voice.isEmpty || ["default", "auto", "none", "null", "undefined"].contains(voice.lowercased()) {
+            out["voice"] = nil
+        } else if let voices, !voices.isEmpty {
+            if voices.contains(voice) { out["voice"] = .string(voice) }
+            else if let same = voices.first(where: { $0.caseInsensitiveCompare(voice) == .orderedSame }) { out["voice"] = .string(same) }
+            else { out["voice"] = nil }
+        }
+        return out
+    }
+
+    /// The voices a resolved model offers: the test seam, else Kokoro's installed `voices/` folder. `nil` = not known.
+    static func voices(of entry: ModelEntry, runtime: ModelToolRuntime) -> [String]? {
+        if let lookup = runtime.voiceLookup { return lookup(entry) }
+        guard entry.hfModelId.localizedCaseInsensitiveContains("kokoro") else { return nil }
+        let names = KokoroEngine.availableVoices(modelID: entry.id)
+        return names.isEmpty ? nil : names
+    }
+
     /// The row text for `spec` on `modelDisplay`.
     static func rowText(spec: ModelToolSpec, modelDisplay: String, values: [String: Value]) -> String {
         guard let task = spec.task else { return "" }
@@ -186,12 +213,13 @@ nonisolated struct ModelToolRunner: Sendable {
         host?.progress(ModelToolProgress(toolName: spec.name, phase: .preparing))
 
         // 1. arguments
-        let values: [String: Value]
+        let typedValues: [String: Value]
         switch Self.validate(arguments, for: spec) {
         case .failure(let failure): return .failure(failure)
-        case .success(let typed): values = typed
+        case .success(let typed): typedValues = typed
         }
         guard spec.task != nil else { return .failure(ToolFailure("\(spec.name) runs no model.")) }
+        let requested = typedValues
 
         // MT4-3: a tool whose download the user already refused this turn is dropped for the rest of it.
         if let sentence = host?.turn.declinedSentence(for: spec.name) { return .declined(sentence) }
@@ -214,6 +242,8 @@ nonisolated struct ModelToolRunner: Sendable {
             case .none: return .failure(ToolFailure(Self.noModelSentence(for: spec)))
             }
             let shown = TaskModels.displayName(for: entry)
+            // MT4-7-FIX-4 (C): an unknown or "default" voice is dropped before the row is built, so the model uses its own default.
+            let values = Self.droppingUnknownVoice(from: requested, spec: spec, voices: Self.voices(of: entry, runtime: runtime))
             let rowText = Self.rowText(spec: spec, modelDisplay: shown, values: values)
             guard let (doc, built) = Self.oneRowDocument(spec: spec, modelDisplay: shown, values: values) else {
                 return .failure(ToolFailure("couldn't build the request for \(spec.name)."))
@@ -234,7 +264,8 @@ nonisolated struct ModelToolRunner: Sendable {
                 }
                 let ask = ModelInstallNeed(
                     toolName: spec.name, modelDisplayName: shown, modelID: need.id, downloadGB: preflight.totalDownloadGB,
-                    alternatives: Self.alternatives(for: spec, excluding: need.id, runtime: runtime))
+                    alternatives: Self.alternatives(for: spec, excluding: need.id, runtime: runtime),
+                    candidates: Self.candidates(for: spec, excluding: need.id, runtime: runtime))
                 guard await host.installRequest(ask) else {
                     let sentence = ModelToolHost.declineSentence(for: shown)
                     host.turn.markDeclined(tool: spec.name, sentence: sentence)
@@ -307,6 +338,15 @@ nonisolated struct ModelToolRunner: Sendable {
             .filter { $0.id != modelID && !runtime.installedModelIDs.contains($0.id)
                 && CapabilityResolver.fits($0, totalRAMGB: runtime.totalRAMGB) }
             .prefix(limit)
+            .map { ModelInstallOption(id: $0.id, displayName: TaskModels.displayName(for: $0), downloadGB: $0.downloadSizeGB) }
+    }
+
+    /// MT4-7-FIX-4 (D): every not-installed candidate of the tool, any size, in preference order.
+    static func candidates(for spec: ModelToolSpec, excluding modelID: String, runtime: ModelToolRuntime) -> [ModelInstallOption] {
+        guard let task = spec.task else { return [] }
+        return CapabilityResolver.orderedCandidates(task: task, kinds: spec.kinds, catalog: runtime.catalog,
+                                                    claimableModelIDs: runtime.claimableModelIDs)
+            .filter { $0.id != modelID && !runtime.installedModelIDs.contains($0.id) }
             .map { ModelInstallOption(id: $0.id, displayName: TaskModels.displayName(for: $0), downloadGB: $0.downloadSizeGB) }
     }
 

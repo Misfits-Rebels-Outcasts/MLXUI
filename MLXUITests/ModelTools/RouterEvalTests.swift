@@ -213,7 +213,8 @@ struct RouterEvalTests {
         let later = offered("Thanks, that is helpful.", .appleIntelligence, earlier: ["image"])
         print("MT46 F1 turn 2, no image attached, prompt 'Thanks...': Apple offers", later)
         // `echo` is the DEBUG-only demo tool, so compare without it.
-        #expect(Array(later.filter { $0 != "echo" }.prefix(5)) == ["list_capabilities", "ocr_image", "read_file", "list_directory", "search_files"])
+        #expect(Array(later.filter { $0 != "echo" }.prefix(2)) == ["list_capabilities", "ocr_image"])
+        for tool in ["read_file", "list_directory", "search_files"] { #expect(!later.contains(tool)) }   // MT4-7-FIX-4
         for tool in ["describe_image", "upscale_image", "segment_image", "estimate_depth"] { #expect(!later.contains(tool)) }
         // A cue on the later turn still offers the cued tool (the intended trade: no cue, no tool).
         let cuedUpscale = offered("Make it bigger: upscale it please.", .appleIntelligence, earlier: ["image"])
@@ -326,6 +327,6 @@ struct RouterEvalTests {
         print("MT46 F5 plain prompt, ocr_image cantRun, transcribe_audio unavailable: Apple offers", plain)
         #expect(!plain.contains("ocr_image") && !plain.contains("transcribe_audio"))
         // The non-model enabled tools are untouched.
-        #expect(plain.contains("read_file") && plain.contains("list_directory"))
+        #expect(!plain.contains("read_file") && !plain.contains("list_directory"))   // MT4-7-FIX-4: Apple file tools need a cue or a folder
     }
 }

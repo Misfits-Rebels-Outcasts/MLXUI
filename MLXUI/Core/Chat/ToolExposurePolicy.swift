@@ -44,6 +44,8 @@ nonisolated enum ToolExposurePolicy {
         /// The user's enabled non-model tools, in today's order.
         var enabledTools: [String] = []
         var gateAmbiguousTools = false
+        /// The chat has a folder attached: read_file, list_directory and search_files need no cue word then (Apple Intelligence).
+        var foldersAttached = false
     }
 
     enum DropReason: Sendable, Equatable {
@@ -146,6 +148,8 @@ nonisolated enum ToolExposurePolicy {
                 group.head.forEach(modelTool)
                 cuedLater += group.later
             }
+            // 2b. MT4-7-FIX-4 (B): a prompt that says OCR, or names an image/PDF file path, offers `ocr_image` even with nothing attached.
+            if ocrCalled(prompt: input.prompt) { modelTool("ocr_image") }
             // 3. Generators, only when the prompt calls for them (ahead of the cued image tools).
             for name in ordered(generatorTools) where generatorCalled(name, prompt: input.prompt) { modelTool(name) }
             for name in cuedLater { modelTool(name) }
@@ -161,6 +165,17 @@ nonisolated enum ToolExposurePolicy {
         //    model tool (the legacy `ocr_image` / `transcribe_audio`) belongs to rules 1-4, which check its status (MT4-6b F5).
         for name in input.enabledTools {
             if input.modelToolsEnabled, ModelToolSpec.spec(named: name) != nil { continue }
+            // MT4-7-FIX-4 (A1): the shell is never offered to either router unless the typed prompt asks to run a command.
+            if name == shellToolName, input.modelToolsEnabled || input.gateAmbiguousTools, !shellCalled(prompt: input.prompt) {
+                if seen.insert(name).inserted { dropped.append(Dropped(name: name, reason: .notCalledFor)) }
+                continue
+            }
+            // MT4-7-FIX-4 (A1, owner 2026-11-12 option a): for the budgeted router the file tools need a cue (or an attached folder).
+            if input.gateAmbiguousTools, fileTools.contains(name),
+               !fileToolCalled(name, prompt: input.prompt, foldersAttached: input.foldersAttached) {
+                if seen.insert(name).inserted { dropped.append(Dropped(name: name, reason: .notCalledFor)) }
+                continue
+            }
             if input.gateAmbiguousTools, ambiguousTools.contains(name), !turnCalls(name, prompt: input.prompt) {
                 if seen.insert(name).inserted { dropped.append(Dropped(name: name, reason: .notCalledFor)) }
                 continue
@@ -205,6 +220,39 @@ nonisolated enum ToolExposurePolicy {
         case "estimate_depth": return matches(text, #"\b(depth|how far|distance|depth map|3d)\b"#)
         default: return false
         }
+    }
+
+    /// The file tools the policy withholds from the gated (Apple Intelligence) router without a cue.
+    static let fileTools: Set<String> = ["read_file", "list_directory", "search_files", "write_file", "edit_file"]
+
+    /// MT4-7-FIX-4 (A1): does the prompt (or an attached folder) call for this file tool?
+    /// read/list: a path, name.ext, or file/folder/directory/path; or a folder is attached. search: a search verb with a file cue,
+    /// or a folder is attached. write/edit: a write/save/create/edit verb with a file cue (an attached folder alone is not enough).
+    static func fileToolCalled(_ tool: String, prompt: String, foldersAttached: Bool) -> Bool {
+        let text = prompt.lowercased()
+        let fileCue = matches(text, #"(?:^|\s)(?:~|\.{1,2})?/\S+|\b[\w-]+\.[a-z][a-z0-9]{1,4}\b|\b(files?|folders?|director(?:y|ies)|paths?)\b"#)
+        switch tool {
+        case "read_file", "list_directory": return foldersAttached || fileCue
+        case "search_files":
+            return foldersAttached || (fileCue && matches(text, #"\b(search\w*|find|grep|look(?:ing)? (?:for|up))\b"#))
+        case "write_file", "edit_file":
+            return fileCue && matches(text, #"\b(write|save|create|edit|change|modify|update|append|rename|overwrite|replace|rewrite|add)\b"#)
+        default: return true
+        }
+    }
+
+    /// The shell tool's name (`ChatEnvironment.shellToolName`).
+    static let shellToolName = "run_shell"
+
+    /// MT4-7-FIX-4 (A1): does the typed prompt ask to run a command? "run/execute a command", "shell", "terminal", "bash"/"zsh",
+    /// "command line", or a backticked command line. A bare "run OCR on /path" is not one.
+    static func shellCalled(prompt: String) -> Bool {
+        matches(prompt.lowercased(), #"(\b(run|execute|exec)\b.{0,24}\b(commands?|cmd)\b|\bshell\b|\bterminal\b|\bbash\b|\bzsh\b|\bcommand.?line\b|`[^`\n]*\S[^`\n]*`)"#)
+    }
+
+    /// MT4-7-FIX-4 (B): does the prompt say OCR or name an image / PDF file?
+    static func ocrCalled(prompt: String) -> Bool {
+        matches(prompt.lowercased(), #"(\bocr\b|\.(jpe?g|png|heic|tiff?|pdf)\b)"#)
     }
 
     static func generatorCalled(_ tool: String, prompt: String) -> Bool {

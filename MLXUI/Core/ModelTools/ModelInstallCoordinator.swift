@@ -88,7 +88,26 @@ final class ModelInstallCoordinator {
                 alternatives: need.alternatives.filter { diskFits($0, installer) }, phase: .offering)
             if let reason = diskRefusal(gb: need.downloadGB, installer) { card.phase = .wontFit(reason) }
             cardID = card.id
-            cards.append(card)
+            // MT4-7-FIX-4 (D): a candidate that is already downloading (started from Browse) becomes the card's model and the card
+            // joins it: progress from the existing download, no second one, and Cancel detaches rather than stops it.
+            if let activeID = ([need.modelID] + need.candidates.map(\.id)).first(where: { id in
+                installer.entry(forModelID: id).map { installer.state(of: $0).isActive } ?? false
+            }), let activeEntry = installer.entry(forModelID: activeID) {
+                if activeID != card.target.id {
+                    let known = ([card.target] + need.alternatives + need.candidates).first { $0.id == activeID }
+                    let previous = card.target
+                    card.alternatives.removeAll { $0.id == activeID }
+                    if diskFits(previous, installer) { card.alternatives.append(previous) }
+                    card.target = known ?? ModelInstallOption(id: activeID, displayName: activeEntry.displayName,
+                                                              downloadGB: activeEntry.downloadSizeGB)
+                }
+                card.startedDownload = false
+                card.phase = .downloading
+                cards.append(card)
+                watch(cardID, activeEntry)
+            } else {
+                cards.append(card)
+            }
         }
         return await withTaskCancellationHandler {
             await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in

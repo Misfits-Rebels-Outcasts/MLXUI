@@ -285,7 +285,25 @@ final class ChatController {
             }
         }
         // Live list when the page holds the runner, else the cached one: never a fresh directory read.
-        let newest = (holder == .page ? runner.conversations : loadedIndex()).map(\.modelID)
+        let source = holder == .page ? runner.conversations : loadedIndex()
+        let newest = source.map(\.modelID)
+        // MT4-7-FIX-3: with no current choice (a relaunch), reopen on the model the chat last ran on, not the default router's pick.
+        if models[.page] == nil {
+            let own = holder == .page ? source.first(where: { $0.id == runner.activeConversationID }) : nil
+            if let saved = (own ?? source.first)?.modelID {
+                if AppleIntelligenceChat.isApple(saved) {
+                    if appleReadiness == .ready {
+                        models[.page] = AppleIntelligenceChat.entry
+                        pageRecommendation = nil
+                        return
+                    }
+                } else if let match = installedChatModels.first(where: { $0.id == saved }) {
+                    models[.page] = match
+                    pageRecommendation = nil
+                    return
+                }
+            }
+        }
         let toolCapable = Set(installedChatModels.filter { modelFacts[$0.id]?.canUseTools == true }.map(\.id))
         let decision = ChatDefaultRouter.decide(
             appleReadiness: appleReadiness, recentRouterIDs: newest, installed: installedChatModels,

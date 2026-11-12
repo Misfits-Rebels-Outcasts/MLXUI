@@ -73,11 +73,31 @@ nonisolated final class ChatAssetStore: @unchecked Sendable {
     /// the output into `aN.<ext>` (same volume, so the rename is free).
     var blobDirectory: URL { directory.appendingPathComponent(".blobs", isDirectory: true) }
 
-    var all: [ChatAssetRecord] { lock.withLock { records } }
+    /// The assets whose file is on disk: what a tool can use.
+    var all: [ChatAssetRecord] { allRecords.filter { !isMissing($0) } }
+
+    /// MT4-7-FIX-4 (E): every asset the chat ever recorded, including one whose file was deleted or trashed. The chip, the inline
+    /// player's "no longer on disk" line and the inspector's Assets list read this, so the provenance (model, time) survives.
+    var allRecords: [ChatAssetRecord] { lock.withLock { records } }
+
+    /// Whether the record's file is gone from disk.
+    func isMissing(_ record: ChatAssetRecord) -> Bool {
+        !FileManager.default.fileExists(atPath: url(for: record).path)
+    }
 
     func record(_ handle: String) -> ChatAssetRecord? {
         let wanted = Self.normalized(handle)
         return lock.withLock { records.first { $0.handle == wanted } }
+    }
+
+    /// MT4-7-FIX-4 (B): a handle (`a1`, forgiving case and spaces), else an asset's exact (case-sensitive) name or stored file
+    /// name when that matches exactly one asset in the chat. Zero or several matches: `nil`.
+    func resolve(_ reference: String) -> ChatAssetRecord? {
+        if let byHandle = record(reference) { return byHandle }
+        let wanted = reference.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !wanted.isEmpty else { return nil }
+        let matches = all.filter { $0.name == wanted || $0.fileName == wanted }
+        return matches.count == 1 ? matches[0] : nil
     }
 
     func url(for record: ChatAssetRecord) -> URL {
@@ -186,10 +206,8 @@ nonisolated final class ChatAssetStore: @unchecked Sendable {
         } else if let array = try? decoder.decode([ChatAssetRecord].self, from: data) {
             decoded = array
         }
-        // A file the user (or a crash) removed is no longer an asset (its handle stays spent).
-        let alive = decoded.filter {
-            FileManager.default.fileExists(atPath: directory.appendingPathComponent($0.fileName).path)
-        }
-        return (alive, max(next, (decoded.compactMap { Int($0.handle.dropFirst()) }.max() ?? 0) + 1))
+        // MT4-7-FIX-4 (E): a record whose file was removed (by the user or a crash) is kept: it is just not usable (`all` leaves it
+        // out, `isMissing` says so), so its chip keeps the model and time and the inspector lists it as missing.
+        return (decoded, max(next, (decoded.compactMap { Int($0.handle.dropFirst()) }.max() ?? 0) + 1))
     }
 }

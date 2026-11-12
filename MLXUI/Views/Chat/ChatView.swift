@@ -44,6 +44,8 @@ struct ChatView: View {
     @AppStorage("chatInspectorShown") private var showsInspector = false
     /// CW-5: a tool card the inspector asked the transcript to scroll to.
     @State private var scrollTarget: UUID?
+    /// MT4-7-FIX-4 (A2): presents the tool-approval question as an app-modal window.
+    @State private var approvals = ApprovalPresenter(host: AppKitApprovalHost())
 
     private var controller: ChatController { appState.chat }
     private var runner: ModelRunner { controller.runner }
@@ -143,12 +145,15 @@ struct ChatView: View {
         )) { question in
             ServedLoadConfirmSheet(message: question.message) { runner.loadConfirmer.respond($0) }
         }
-        .sheet(item: Binding(
-            get: { holdsLease ? runner.pendingApproval : nil },
-            set: { if $0 == nil, holdsLease { runner.resolveApproval(false) } }
-        )) { pending in
-            approvalSheet(pending)
+        // MT4-7-FIX-4 (A2): the approval question is an app-modal window (frontmost over any sheet, Allow armed after a moment),
+        // not a sheet of this view, which queued behind a Run UI sheet. Still presented only by the surface that holds the runner.
+        .onChange(of: holdsLease ? runner.pendingApproval?.id : nil, initial: true) { _, _ in
+            approvals.resolve = { [runner] id, approved in
+                if runner.pendingApproval?.id == id { runner.resolveApproval(approved) }
+            }
+            approvals.sync(pending: holdsLease ? runner.pendingApproval : nil, holdsLease: holdsLease)
         }
+        .onDisappear { approvals.dismissDenying() }
         .sheet(isPresented: $showAuditLog) {
             AuditLogView(runner: runner)
         }
@@ -438,7 +443,7 @@ struct ChatView: View {
     private func modelToolChip(for activity: ToolActivity) -> ModelToolChipView? {
         guard surface == .page, let conversationID = runner.activeConversationID else { return nil }
         let store = runner.assetStore(for: conversationID)
-        let records = store.all
+        let records = store.allRecords   // MT4-7-FIX-4 (E): a record whose file is gone still feeds the chip and the player's message
         guard let chip = ModelToolChip.make(toolName: activity.name, id: activity.id, status: activity.status,
                                             result: activity.result, records: records) else { return nil }
         let output = chip.outputHandle.flatMap { handle in
@@ -654,77 +659,6 @@ struct ChatView: View {
         guard let target else { return }
         withAnimation(.easeOut(duration: 0.15)) {
             proxy.scrollTo(target, anchor: .bottom)
-        }
-    }
-
-    // MARK: - Approval sheet
-
-    private func approvalSheet(_ pending: PendingApproval) -> some View {
-        let sections = ApprovalPreview.sections(
-            toolName: pending.toolName,
-            arguments: pending.arguments)
-        return VStack(alignment: .leading, spacing: 14) {
-            Label("Allow tool call?", systemImage: "wrench.and.screwdriver")
-                .font(.headline)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(pending.toolName)
-                    .font(.callout.monospaced().weight(.semibold))
-                Text(pending.toolDescription)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            if sections.isEmpty {
-                Text("The model wants to run this tool. Allow it to proceed?")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                // D10: the same arguments the old sheet hid — bounded, coloured, selectable.
-                Text("The model wants to run this tool with the arguments below.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(sections.indices, id: \.self) { index in
-                            approvalSection(sections[index])
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxHeight: 320)
-            }
-            HStack {
-                Spacer()
-                Button("Deny") { runner.resolveApproval(false) }
-                    .keyboardShortcut(.cancelAction)
-                Button("Allow") { runner.resolveApproval(true) }
-                    .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
-            }
-        }
-        .padding(20)
-        .frame(width: sections.isEmpty ? 360 : 560)
-    }
-
-    /// One labelled argument block: monospaced and selectable, red for a removal and green for an
-    /// addition (D10).
-    private func approvalSection(_ section: ApprovalPreview.Section) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(section.title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Text(section.body)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(tint(for: section.style))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private func tint(for style: ApprovalPreview.Style) -> Color {
-        switch style {
-        case .removed: return .red
-        case .added: return .green
-        case .plain, .code: return .primary
         }
     }
 

@@ -320,7 +320,9 @@ struct ChatInspectorView: View {
     }
 
     private var assetListing: ChatAssetListing {
-        ChatAssetListing.make(records: assetStore?.all ?? [], items: runner.transcript.items)
+        let records = assetStore?.allRecords ?? []
+        let missing = Set(records.filter { assetStore?.isMissing($0) == true }.map(\.handle))
+        return ChatAssetListing.make(records: records, items: runner.transcript.items, missingHandles: missing)
     }
 
     @ViewBuilder
@@ -333,13 +335,13 @@ struct ChatInspectorView: View {
     }
 
     private func assetRow(_ row: ChatAssetListing.Row) -> some View {
-        let url = assetStore?.record(row.handle).flatMap { assetStore?.url(for: $0) }
+        let url = row.missing ? nil : assetStore?.record(row.handle).flatMap { assetStore?.url(for: $0) }
         return HStack(spacing: 4) {
             Image(systemName: Self.assetIcon(row.kind)).font(.caption2).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 0) {
                 Text("\(row.handle)  \(row.name)").font(.caption).lineLimit(1)
-                Text(row.origin.isEmpty ? row.size : "\(row.origin) · \(row.size)")
-                    .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                Text(row.missing ? "Missing: no longer on disk" : (row.origin.isEmpty ? row.size : "\(row.origin) · \(row.size)"))
+                    .font(.caption2).foregroundStyle(row.missing ? Color.orange : Color.secondary).lineLimit(1)
             }
             Spacer(minLength: 4)
         }

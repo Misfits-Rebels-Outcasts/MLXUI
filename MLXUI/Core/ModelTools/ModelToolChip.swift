@@ -134,6 +134,8 @@ struct ChatAssetListing: Equatable {
         let origin: String
         /// The tool card that made it (for "Show in transcript"); nil for an attachment.
         let activityID: UUID?
+        /// The file is gone from disk (the row stays, marked).
+        var missing = false
         var id: String { handle }
     }
 
@@ -141,7 +143,7 @@ struct ChatAssetListing: Equatable {
     /// The distinct tool models that ran in this chat, in first-use order.
     let modelsUsed: [String]
 
-    static func make(records: [ChatAssetRecord], items: [TranscriptItem]) -> ChatAssetListing {
+    static func make(records: [ChatAssetRecord], items: [TranscriptItem], missingHandles: Set<String> = []) -> ChatAssetListing {
         var producer: [String: UUID] = [:]
         for item in items {
             guard case .tool(let activity) = item, case .finished = activity.status,
@@ -156,7 +158,8 @@ struct ChatAssetListing: Equatable {
             let task = record.provenance.rowText.flatMap(Self.task(inRowText:))
             let origin = made ? [record.provenance.model, task].compactMap { $0 }.joined(separator: " · ") : "attached"
             return Row(handle: record.handle, name: record.name, kind: record.kind, size: byteString(record.bytes),
-                       origin: origin, activityID: producer[record.handle])
+                       origin: origin, activityID: producer[record.handle],
+                       missing: missingHandles.contains(record.handle))
         }
         return ChatAssetListing(rows: rows, modelsUsed: models)
     }

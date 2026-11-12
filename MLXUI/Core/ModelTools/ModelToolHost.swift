@@ -17,6 +17,9 @@ nonisolated struct ModelInstallNeed: Sendable, Equatable {
     let downloadGB: Double
     /// MT4-3 ("Choose another..."): the other fitting, not-installed candidates for the same tool, in preference order.
     var alternatives: [ModelInstallOption] = []
+    /// MT4-7-FIX-4 (D): every not-installed candidate for the same tool, fitting or not, in preference order. The card looks here
+    /// for a model that is already downloading (from Browse) and joins it instead of proposing another.
+    var candidates: [ModelInstallOption] = []
 }
 
 /// One model the install card can offer (the need's own, or an alternative).

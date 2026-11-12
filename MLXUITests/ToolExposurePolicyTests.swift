@@ -124,19 +124,19 @@ struct ToolExposurePolicyTests {
     }
 
     @Test func aPlainQuestionOffersNoAmbiguousTool() {
-        #expect(offered("What is the capital of France?") == ["read_file"])
+        #expect(offered("What is the capital of France?") == [])
     }
 
     @Test func theTimeQuestionOffersDatetime() {
-        #expect(offered("What time is it?") == ["datetime", "read_file"])
+        #expect(offered("What time is it?") == ["datetime"])
     }
 
     @Test func copyToTheClipboardOffersWriteClipboardNotRead() {
-        #expect(offered("Copy hello-mt3 to my clipboard") == ["write_clipboard", "read_file"])
+        #expect(offered("Copy hello-mt3 to my clipboard") == ["write_clipboard"])
     }
 
     @Test func readingTheClipboardOffersReadClipboardNotWrite() {
-        #expect(offered("Summarize what's on my clipboard") == ["read_clipboard", "read_file"])
+        #expect(offered("Summarize what's on my clipboard") == ["read_clipboard"])
     }
 
     @Test func aUrlOrWebsiteCueOffersFetchURL() {

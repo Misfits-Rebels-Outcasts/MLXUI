@@ -33,11 +33,16 @@ extension ModelToolRunner {
         let ignoredAsset = kind == .text && text != nil && asset != nil && path == nil && url == nil
         let given = [ignoredAsset ? nil : asset, path, url, text].compactMap { $0 }
         let names = Self.inputArgumentNames(for: spec)
-        guard given.count == 1 else {
-            let list = names.joined(separator: ", ")
-            return .failure(ToolFailure(given.isEmpty
-                ? "give the input for \(spec.name) as exactly one of: \(list)."
-                : "give only one of \(list) for \(spec.name)."))
+        if given.isEmpty {
+            return .failure(ToolFailure("give the input for \(spec.name) as exactly one of: \(names.joined(separator: ", "))."))
+        }
+        // MT4-7-FIX-4 (B): several inputs given (Apple Intelligence sends asset and path together): the asset wins when it
+        // resolves (a handle, or an exact file name matching one asset), else the path, else the url. Text still wins for text tools.
+        if given.count > 1 {
+            if text != nil { return .failure(ToolFailure("give only one of \(names.joined(separator: ", ")) for \(spec.name).")) }
+            if let asset, let host, host.assets.resolve(asset) != nil { return resolveHandle(asset, kind: kind, host: host) }
+            if let path { return resolvePath(path, kind: kind, scratch: scratch, host: host) }
+            if let url { return await resolveURL(url, kind: kind, scratch: scratch) }
         }
 
         if let text {
@@ -60,9 +65,12 @@ extension ModelToolRunner {
         guard let host else {
             return .failure(ToolFailure("asset handles are only available in a chat. Give a path or url instead."))
         }
-        guard let record = host.assets.record(handle) else {
+        guard let record = host.assets.resolve(handle) else {
             let known = host.assets.all.map { "\($0.handle) (\($0.kind))" }.joined(separator: ", ")
             return .failure(ToolFailure("no asset \"\(handle)\". " + (known.isEmpty ? "This chat has no assets yet." : "Known assets: \(known).")))
+        }
+        guard !host.assets.isMissing(record) else {
+            return .failure(ToolFailure("asset \(record.handle) (\(record.name)) is no longer on disk."))
         }
         guard record.kind == kind.rawValue else {
             return .failure(ToolFailure("asset \(record.handle) is \(record.kind), but \(spec.name) needs \(kind.rawValue)."))

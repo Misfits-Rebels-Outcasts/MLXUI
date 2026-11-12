@@ -73,7 +73,7 @@ nonisolated enum ChatToolSet {
             router: request.router, modelToolsEnabled: request.modelToolsEnabled,
             conversationAssetKinds: conversationKinds, turnAssetKinds: turnKinds, hasOversizedTextAsset: oversized,
             prompt: request.prompt, statuses: statuses, enabledTools: names,
-            gateAmbiguousTools: request.gateAmbiguousTools))
+            gateAmbiguousTools: request.gateAmbiguousTools, foldersAttached: request.foldersAttached))
 
         let byName = Dictionary(enabled.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
         let tools: [any AgentTool] = output.tools.compactMap { name in
