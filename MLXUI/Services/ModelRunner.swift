@@ -437,6 +437,25 @@ final class ModelRunner {
         }
     }
 
+    /// CP-2: delete every loaded conversation (the page: all models' chats; a bench: that model's).
+    /// Mirrors `deleteConversation`, then lands where deleting the last chat would: a fresh
+    /// empty chat when a model is prepared, otherwise nothing selected.
+    func deleteAllConversations() {
+        if isRunning { stop() }
+        for conversation in conversations {
+            forgetAppleSession(conversation.id)
+            assetStores[conversation.id] = nil
+            ConversationStore.delete(id: conversation.id, in: conversationDirectory)
+        }
+        conversations.removeAll()
+        if let modelID = preparedModelID {
+            startNewConversation(modelID: modelID)
+        } else {
+            activeConversationID = nil
+            transcript.reset()
+        }
+    }
+
     // MARK: - Attached folders (CW-2, D1/D2/D5)
 
     /// The active conversation's attached folders, in attach order. What the composer's chips and

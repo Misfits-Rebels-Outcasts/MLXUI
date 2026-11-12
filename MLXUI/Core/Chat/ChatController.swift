@@ -396,6 +396,13 @@ final class ChatController {
         invalidateIndex()
     }
 
+    /// CP-2: remove every conversation this surface lists.
+    func deleteAll(on surface: ChatSurface) {
+        guard holder == surface else { return }
+        runner.deleteAllConversations()
+        invalidateIndex()
+    }
+
     // MARK: - Generation
 
     /// `false` only when the user declined the served-load question (see `ModelRunner.send`).

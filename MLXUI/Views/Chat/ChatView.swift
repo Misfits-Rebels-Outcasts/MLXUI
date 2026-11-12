@@ -38,6 +38,9 @@ struct ChatView: View {
     }
     @State private var showAuditLog = false
     @State private var conversationToDelete: Conversation?
+    /// CP-2: the "Delete All Conversations…" confirmation.
+    @State private var confirmsDeleteAll = false
+    private var deleteAllModelName: String? { surface == .bench ? model.displayName : nil }
     /// CX-2: a failed export. Its own message — `runner.errorMessage` belongs to model runs.
     @State private var exportError: String?
     /// CW-4: the right sidebar. Persisted, so it comes back the way the user left it.
@@ -241,6 +244,15 @@ struct ChatView: View {
         } message: { _ in
             Text("This permanently removes the conversation from this Mac.")
         }
+        .confirmationDialog(
+            ChatDeleteAllText.title(count: controller.conversations.count, modelName: deleteAllModelName),
+            isPresented: $confirmsDeleteAll
+        ) {
+            Button("Delete All", role: .destructive) { controller.deleteAll(on: surface) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(ChatDeleteAllText.message(modelName: deleteAllModelName))
+        }
     }
 
     // MARK: - Conversation sidebar
@@ -251,6 +263,16 @@ struct ChatView: View {
                 Text("Chats")
                     .font(.headline)
                 Spacer()
+                Menu {
+                    Button("Delete All Conversations…", role: .destructive) { confirmsDeleteAll = true }
+                        .disabled(runner.isRunning || controller.conversations.isEmpty)
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("More")
                 Button {
                     controller.newConversation(on: surface)
                 } label: {
