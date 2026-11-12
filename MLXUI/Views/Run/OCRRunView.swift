@@ -142,6 +142,7 @@ struct OCRRunView: View {
                     .foregroundStyle(.green).font(.subheadline.bold())
                 Spacer()
                 Button("Copy") { copy(text) }
+                AskInChatButton { .text(text, name: "extracted-text") }
             }
             ScrollView {
                 Text(text).textSelection(.enabled).font(.body.monospaced())

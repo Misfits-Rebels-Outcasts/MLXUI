@@ -28,20 +28,38 @@ extension ModelToolRunner {
         let path = arguments.string("path")?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
         let url = arguments.string("url")?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
         let text = arguments.string("text")?.nonEmptyKeepingWhitespace
-        let given = [asset, path, url, text].compactMap { $0 }
+        // MT4-7-FIX-1 (owner, 2026-11-12): a text tool given both `text` and `asset` (Apple Intelligence sends both) uses the
+        // text and ignores the asset. Only that pair; any other mix still refuses.
+        let ignoredAsset = kind == .text && text != nil && asset != nil && path == nil && url == nil
+        let given = [ignoredAsset ? nil : asset, path, url, text].compactMap { $0 }
         let names = Self.inputArgumentNames(for: spec)
-        guard given.count == 1 else {
-            let list = names.joined(separator: ", ")
-            return .failure(ToolFailure(given.isEmpty
-                ? "give the input for \(spec.name) as exactly one of: \(list)."
-                : "give only one of \(list) for \(spec.name)."))
+        if given.isEmpty {
+            return .failure(ToolFailure("give the input for \(spec.name) as exactly one of: \(names.joined(separator: ", "))."))
+        }
+        // MT4-7-FIX-4 (B): several inputs given (Apple Intelligence sends asset and path together): the asset wins when it
+        // resolves (a handle, or an exact file name matching one asset), else the path, else the url. Text still wins for text tools.
+        if given.count > 1 {
+            if text != nil { return .failure(ToolFailure("give only one of \(names.joined(separator: ", ")) for \(spec.name).")) }
+            if let asset, let host, host.assets.resolve(asset) != nil { return resolveHandle(asset, kind: kind, host: host) }
+            if let path { return resolvePath(path, kind: kind, scratch: scratch, host: host) }
+            if let url { return await resolveURL(url, kind: kind, scratch: scratch) }
         }
 
         if let text {
             return .success(ResolvedModelToolInput(asset: Asset(items: [Item(kind: .text, value: text)])))
         }
-        if let asset { return resolveHandle(asset, kind: kind, host: host) }
-        if let path { return resolvePath(path, kind: kind, scratch: scratch) }
+        if let asset {
+            // MT4-7-FIX-5 (step 31b): Apple Intelligence names a file in an attached folder ("receipt-A.jpg") as an `asset`. When it is
+            // not a handle and no asset in this chat has that name, try it as a path in the chat's scope (the same checks as `path`);
+            // if that fails too, the answer is the usual "no asset ..." sentence.
+            if !ChatAssetStore.looksLikeHandle(asset), host?.assets.resolve(asset) == nil,
+               !(host?.assets.all.contains { $0.name == asset || $0.fileName == asset } ?? false),
+               case .success(let found) = resolvePath(asset, kind: kind, scratch: scratch, host: host) {
+                return .success(found)
+            }
+            return resolveHandle(asset, kind: kind, host: host)
+        }
+        if let path { return resolvePath(path, kind: kind, scratch: scratch, host: host) }
         if let url { return await resolveURL(url, kind: kind, scratch: scratch) }
         return .failure(ToolFailure("give the input for \(spec.name)."))
     }
@@ -57,9 +75,12 @@ extension ModelToolRunner {
         guard let host else {
             return .failure(ToolFailure("asset handles are only available in a chat. Give a path or url instead."))
         }
-        guard let record = host.assets.record(handle) else {
+        guard let record = host.assets.resolve(handle) else {
             let known = host.assets.all.map { "\($0.handle) (\($0.kind))" }.joined(separator: ", ")
             return .failure(ToolFailure("no asset \"\(handle)\". " + (known.isEmpty ? "This chat has no assets yet." : "Known assets: \(known).")))
+        }
+        guard !host.assets.isMissing(record) else {
+            return .failure(ToolFailure("asset \(record.handle) (\(record.name)) is no longer on disk."))
         }
         guard record.kind == kind.rawValue else {
             return .failure(ToolFailure("asset \(record.handle) is \(record.kind), but \(spec.name) needs \(kind.rawValue)."))
@@ -74,23 +95,37 @@ extension ModelToolRunner {
         return .success(ResolvedModelToolInput(asset: Asset(items: [Item(kind: kind, path: file)]), handles: [record.handle]))
     }
 
-    private func resolvePath(_ raw: String, kind: Kind, scratch: URL) -> Result<ResolvedModelToolInput, ToolFailure> {
+    private func resolvePath(_ raw: String, kind: Kind, scratch: URL, host: ModelToolHost?) -> Result<ResolvedModelToolInput, ToolFailure> {
         try? FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         let ext = URL(fileURLWithPath: raw).pathExtension
         let copy = scratch.appendingPathComponent("input-\(UUID().uuidString)").appendingPathExtension(ext.isEmpty ? "bin" : ext)
         #if DIRECT_BUILD
-        switch PathPolicy.resolve(raw, roots: runtime.pathRoots ?? PathPolicy.defaultRoots, base: ScopedFileTools.workingFolderBase()) {
-        case .rejected(let message): return .failure(ToolFailure(Self.withoutErrorPrefix(message)))
+        // MT4-2 (owner ruling 2026-11-09): only the folders attached to this chat, not all of home as `read_file` may.
+        let scope = FileScope.current
+        let roots = runtime.pathRoots ?? ModelToolPathScope.directRoots(scope: scope, assets: host?.assets.directory)
+        switch PathPolicy.resolve(raw, roots: roots, base: ScopedFileTools.workingFolderBase()) {
+        case .rejected(let message): return .failure(ToolFailure(ModelToolPathScope.refusal(message, scope: scope)))
         case .allowed(let file):
             do { try FileManager.default.copyItem(at: file, to: copy) } catch {
                 return .failure(ToolFailure("couldn't read \(file.path)."))
             }
         }
         #else
-        let container = runtime.pathRoots?.first ?? ModelStore.shared.baseDirectory
-        guard let access = ScopedFileTools.access(raw, container: container, roots: runtime.pathRoots) else {
+        let container = runtime.pathContainer ?? runtime.pathRoots?.first ?? ModelStore.shared.baseDirectory
+        // MT4-2 (owner ruling 2026-11-09): attached/granted folders, and from the app container only this chat's own attachments
+        // and assets folders (not the models, installed.json or another chat's files, which `read_file` can reach). Production
+        // (no `pathRoots`) always narrows; a test seam with `pathRoots` alone keeps its roots literal.
+        let roots: [URL]
+        if runtime.pathRoots == nil || runtime.pathContainer != nil {
+            roots = ModelToolPathScope.appStoreRoots(
+                base: runtime.pathRoots ?? FileScope.roots(container: container), container: container,
+                scope: FileScope.current, assets: host?.assets.directory)
+        } else {
+            roots = runtime.pathRoots ?? []
+        }
+        guard let access = ScopedFileTools.access(raw, container: container, roots: roots) else {
             return .failure(ToolFailure(Self.withoutErrorPrefix(
-                ScopedFileTools.rejection(for: raw, container: container, roots: runtime.pathRoots))))
+                ScopedFileTools.rejection(for: raw, container: container, roots: roots))))
         }
         // A granted file is readable only inside its security scope, so the copy is made there.
         let copied: Bool? = FolderGrants.withScopedRead(to: access.url, grants: access.grants,

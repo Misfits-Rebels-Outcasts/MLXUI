@@ -124,6 +124,26 @@ final class ModelRunner {
     /// runner (tests that don't wire one).
     @ObservationIgnored var modelToolRuntimeProvider: (@MainActor () -> ModelToolRuntime?)?
 
+    /// MT4-3: the install card a model tool waits on when its model is not on this Mac (plan §3.8). `AppState` hands it the
+    /// install engine; with none wired (tests) every install request is declined, as before.
+    let installCoordinator = ModelInstallCoordinator()
+
+    /// MT4-2 (ruling D): Model Tools are on in the Chat page and off in the bench sheet. `ChatController` sets it from the surface
+    /// that holds the runner. On: attachments become assets (no eager OCR), the environment block lists their handles, and the
+    /// turn's tools come from `ToolExposurePolicy` with the model tools in it. Off: exactly the CW behaviour.
+    @ObservationIgnored var modelToolsEnabled = false
+
+    /// One asset store per conversation (it numbers handles and persists `index.json`), created on first use.
+    @ObservationIgnored private var assetStores: [UUID: ChatAssetStore] = [:]
+
+    /// The conversation's assets (`conversations/<uuid>/assets/`).
+    func assetStore(for conversationID: UUID) -> ChatAssetStore {
+        if let store = assetStores[conversationID] { return store }
+        let store = ChatAssetStore(conversationID: conversationID, in: conversationDirectory)
+        assetStores[conversationID] = store
+        return store
+    }
+
     private var currentTask: Task<Void, Never>?
 
     /// Bumped by every `send` and by `stop()`. A turn captures it before its attachment import and
@@ -142,6 +162,9 @@ final class ModelRunner {
     /// `nil` in the app, which is the only thing that makes the `try` below a no-op.
     @ObservationIgnored var afterImportForTesting: (@Sendable () async throws -> Void)?
 
+    /// Test seam only. The usable window `send` admits against; the app reads `ChatModelFacts` (what the model menu shows).
+    @ObservationIgnored var usableTokensForTesting: (@Sendable (String) -> Int?)?
+
     /// Test seam only. Where `send` looks for a model's files; the app always uses `ModelStore`.
     @ObservationIgnored var modelDirectoryForTesting: (@Sendable (String) -> URL)?
 
@@ -159,6 +182,10 @@ final class ModelRunner {
 
     /// Test seam (MT2-4): told which model a turn's session was built for and the history it was given.
     @ObservationIgnored var sessionRequestForTesting: (@Sendable (_ modelID: String, _ history: [Chat.Message]) -> Void)?
+
+    /// Test seam (MT4-2): sees the `RouterTurn` a send hands the router (its tools, instructions, prompt and tool context), when
+    /// the session is injected.
+    @ObservationIgnored var routerTurnForTesting: (@Sendable (RouterTurn) -> Void)?
     #endif
 
     /// S1-1: loaded weights live in the shared `ModelContainerPool` (chat, flow rows and the
@@ -395,6 +422,7 @@ final class ModelRunner {
         guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
         if id == activeConversationID, isRunning { stop() }
         forgetAppleSession(id)
+        assetStores[id] = nil
         ConversationStore.delete(id: id, in: conversationDirectory)
         conversations.remove(at: index)
         guard id == activeConversationID else { return }
@@ -609,6 +637,7 @@ final class ModelRunner {
         grants: [FolderGrant],
         homePath: String?,
         attachmentsNote: String?,
+        assetNote: String? = nil,
         modelDirectory: URL
     ) -> String? {
         // CW-FIX: a template that can't render tools gets no folder or tool text. `.unknown` stays
@@ -628,7 +657,8 @@ final class ModelRunner {
             writeEnabled: enabledToolNames.contains("write_file")
                 || enabledToolNames.contains("edit_file"),
             homePath: homePath,
-            attachmentsNote: attachmentsNote)
+            attachmentsNote: attachmentsNote,
+            assetNote: assetNote)
     }
 
     /// Import the files this message carries (CW-3): copy into the conversation's attachments
@@ -636,7 +666,8 @@ final class ModelRunner {
     /// reported and skipped, never a reason to lose the message. `async` because the image branch
     /// awaits OCR.
     private func prepareAttachments(
-        _ urls: [URL], for model: ModelEntry, in modelDirectory: URL, of conversationID: UUID
+        _ urls: [URL], for model: ModelEntry, in modelDirectory: URL, of conversationID: UUID,
+        assets: ChatAssetStore? = nil
     ) async -> [ChatAttachment] {
         guard !urls.isEmpty else { return [] }
         var chosen = urls
@@ -664,12 +695,17 @@ final class ModelRunner {
         #endif
         for (index, url) in chosen.enumerated() {
             do {
-                let attachment = try await AttachmentImporter.importAttachment(
+                // MT4-2 (ruling I): with Model Tools on, an image is not OCR'd here; it becomes an image asset and the router
+                // calls `ocr_image` when the question needs it.
+                var attachment = try await AttachmentImporter.importAttachment(
                     from: url, into: directory, ordinal: index, window: window,
                     inlineBytesSoFar: inlineBytes,
-                    ocr: Self.ocrForAttachment(override: ocrOverride, runtime: modelToolRuntimeProvider?()),
+                    ocr: assets == nil
+                        ? Self.ocrForAttachment(override: ocrOverride, runtime: modelToolRuntimeProvider?())
+                        : nil,
                     copier: copier)
                 inlineBytes += attachment.inlineText?.utf8.count ?? 0
+                if let assets { attachment = ChatAttachmentAssets.register(attachment, in: assets) }
                 result.append(attachment)
             } catch let failure as AttachmentImporter.Failure {
                 errorMessage = failure.message
@@ -747,9 +783,11 @@ final class ModelRunner {
         // turn both carry the final result. A file that cannot be attached reports and drops out;
         // the message still sends.
         var readyAttachments: [ChatAttachment] = []
+        // MT4-2: the conversation's assets exist only while Model Tools is on for this turn (the Chat page).
+        let turnAssets: ChatAssetStore? = modelToolsEnabled ? turnConversationID.map { assetStore(for: $0) } : nil
         if !attachments.isEmpty, let conversationID = turnConversationID {
             readyAttachments = await prepareAttachments(
-                attachments, for: model, in: modelDir, of: conversationID)
+                attachments, for: model, in: modelDir, of: conversationID, assets: turnAssets)
         }
 
         // B1: the import can take seconds, so re-check what it was started for. A `stop()` bumps
@@ -771,6 +809,21 @@ final class ModelRunner {
         guard !trimmed.isEmpty || !readyAttachments.isEmpty else {
             isRunning = false
             return true
+        }
+
+        // MT4-0: refuse a message the model cannot take, BEFORE the load and before the transcript changes. The tokens are the
+        // prompt as the model will see it (typed text plus inline attachment text) and the history prefilled with it. Apple
+        // Intelligence has its own pre-flight in the seam. An unknown window admits. false = nothing sent, so the composer
+        // gives back what it cleared (the attachments stay imported in the conversation's folder and are reused on resend).
+        if !isApple {
+            let window = usableWindow(for: model)
+            let tokens = ChatContinueFit.sendTokens(
+                prompt: ChatAttachment.prompt(text: trimmed, attachments: readyAttachments), history: history.map(\.content))
+            if !ChatContinueFit.admits(promptTokens: tokens, window: window), let window {
+                errorMessage = ChatContinueFit.sendRefusal(promptTokens: tokens, modelName: model.displayName, window: window)
+                isRunning = false
+                return false
+            }
         }
 
         // SC-5a (gate D): ask before the turn if loading this model would stop keeping a served one ready. Cancel: the
@@ -795,7 +848,7 @@ final class ModelRunner {
         let modelPrompt = ChatAttachment.prompt(text: trimmed, attachments: readyAttachments)
 
         // Snapshot the enabled tools for this turn (Sendable to hand to the nonisolated session).
-        let armedTools = availableTools.filter { enabledToolNames.contains($0.name) }
+        var armedTools = availableTools.filter { enabledToolNames.contains($0.name) }
 
         // CW-2: the scope is the conversation's attached folders (G1), rebuilt on *every* turn so a
         // revoke or a detach takes effect on the next message.
@@ -817,10 +870,42 @@ final class ModelRunner {
             attachmentsFolder: activeConversationID.map {
                 ConversationStore.attachmentsDirectory(for: $0).path })
         let toolRuntime = modelToolRuntimeProvider?()
+        // MT4-2: the host carries the chat's assets to every model tool (a handle in, a handle out). Apple Intelligence reads a
+        // text result inline up to 1,000 tokens; an MLX model up to the CW per-file inline budget for its window.
+        let toolHost: ModelToolHost? = turnAssets.map { store in
+            var budget = 1000
+            if !isApple {
+                let window = usableWindow(for: model) ?? ChatAttachment.minimumInlineBytes * 4
+                budget = ChatAttachment.estimatedTokens(forUTF8Count: ChatAttachment.inlineByteBudget(window: window))
+            }
+            let coordinator = installCoordinator
+            let provider = modelToolRuntimeProvider
+            return ModelToolHost(
+                assets: store,
+                // MT4-3: a missing model asks on the install card; the same call resumes when it is installed.
+                installRequest: { need in await coordinator.request(need, conversationID: turnConversationID) },
+                progress: { update in
+                    // The call has picked up again: "Installed. Continuing..." has done its job.
+                    if update.phase == .running { Task { @MainActor in coordinator.toolResumed(update.toolName) } }
+                },
+                refreshRuntime: { await MainActor.run { provider?() } },
+                inlineBudgetTokens: budget)
+        }
+        // MT4-1/MT4-2: the tools this turn offers. Apple Intelligence is not offered read_clipboard, write_clipboard, fetch_url
+        // (and, as the same rule, calculator, run_javascript, datetime) unless what the user typed calls for it (owner ruling
+        // 2026-11-10); MLX is not gated. With Model Tools on (the Chat page) the policy also offers the model tools: budget
+        // 6 for Apple Intelligence, 10 for MLX.
+        armedTools = ChatToolSet.select(enabled: armedTools, ChatToolSet.Request(
+            router: isApple ? .appleIntelligence : .mlx(hasVision: false),
+            modelToolsEnabled: turnAssets != nil, gateAmbiguousTools: isApple, prompt: trimmed,
+            runtime: toolRuntime, assets: turnAssets, turnAttachments: readyAttachments,
+            inlineBudgetTokens: toolHost?.inlineBudgetTokens ?? 1000,
+            foldersAttached: !(conversation?.attachedFolders.isEmpty ?? true))).tools
         let attachmentsNote = ChatAttachment.environmentNote(for: readyAttachments)
+        let assetNote = ChatAttachment.assetNote(for: readyAttachments, assets: turnAssets)
         let instructions = environmentBlock(
             conversation: conversation, edition: edition, grants: grants,
-            homePath: homePath, attachmentsNote: attachmentsNote,
+            homePath: homePath, attachmentsNote: attachmentsNote, assetNote: assetNote,
             modelDirectory: modelDir)
 
         currentTask = Task { [weak self] in
@@ -838,7 +923,7 @@ final class ModelRunner {
                     // sits inside one guard.
                     let router = try await self.chatRouter(
                         for: model, dir: modelDir, history: history,
-                        fileScope: fileScope, modelToolRuntime: toolRuntime, turn: turnLease)
+                        fileScope: fileScope, modelToolRuntime: toolRuntime, modelToolHost: toolHost, turn: turnLease)
                     let folded = history.map(MLXChatRouter.routerMessage)
                     // MT3-3: Apple Intelligence keeps a live session per conversation (a miss folds `history`); any other router
                     // answering in a conversation makes that session stale, so it is dropped.
@@ -851,7 +936,9 @@ final class ModelRunner {
                         prompt: modelPrompt,
                         tools: armedTools,
                         approve: self.routerApprove(),
-                        onToolEvent: self.routerToolEventSink(turnConversationID: turnConversationID))
+                        onToolEvent: self.routerToolEventSink(turnConversationID: turnConversationID),
+                        toolContext: RouterToolContext(
+                            fileScope: fileScope, modelToolRuntime: toolRuntime, modelToolHost: toolHost))
 
                     // R-ME3-1 (owner, 2026-10-12): **stop at the error.** `makeStream` must be a
                     // closure: the producer's `Task {}` only inherits mlx-swift's `@TaskLocal` handler
@@ -894,6 +981,7 @@ final class ModelRunner {
             self.currentTask = nil
             self.pendingApproval?.respond(false)  // release any in-flight approval
             self.pendingApproval = nil
+            self.installCoordinator.cancelAll()   // MT4-3: no card outlives its turn
             // Persist the finished (or interrupted) turn. When the user already switched
             // conversations, the switch saved the partial transcript itself.
             if self.activeConversationID == turnConversationID {
@@ -913,13 +1001,30 @@ final class ModelRunner {
         return ChatContinueFit.promptTokens(utf8Count: max(bytes, notice.prompt.utf8.count))
     }
 
+    /// MT4-1: the Apple Intelligence tool set for one turn (`ToolExposurePolicy`), keeping the registry's order.
+    /// MT4-2: `send` now goes through `ChatToolSet` (which adds the model tools on the Chat page); this is the Apple Intelligence
+    /// set with Model Tools off, which the measurement tests and the policy tests still use.
+    static func exposedTools(_ tools: [any AgentTool], prompt: String) -> [any AgentTool] {
+        ChatToolSet.select(enabled: tools, ChatToolSet.Request(
+            router: .appleIntelligence, modelToolsEnabled: false, gateAmbiguousTools: true, prompt: prompt,
+            runtime: nil, assets: nil, inlineBudgetTokens: 1000)).tools
+    }
+
+    /// MT4-0: the window `send` admits against: the model menu's usable-tokens fact, else the catalog window, else unknown.
+    func usableWindow(for model: ModelEntry) -> Int? {
+        #if DEBUG
+        if let seam = usableTokensForTesting { return seam(model.id) }
+        #endif
+        return ChatModelFacts.load(for: model).usableTokens ?? model.contextWindow
+    }
+
     /// The plain sentence when `model` cannot take the unanswered message, else nil. `usableTokens` is the model's usable window
     /// on this Mac (the menu's fact); unknown falls back to the catalog window.
     func continueRefusal(with model: ModelEntry, usableTokens: Int?) -> String? {
         guard let tokens = unansweredPromptTokens else { return nil }
-        guard let window = usableTokens ?? model.contextWindow else { return nil }
-        return ChatContinueFit.fits(promptTokens: tokens, window: window)
-            ? nil : ChatContinueFit.refusal(promptTokens: tokens, modelName: model.displayName, window: window)
+        let window = usableTokens ?? model.contextWindow
+        guard !ChatContinueFit.admits(promptTokens: tokens, window: window), let window else { return nil }
+        return ChatContinueFit.refusal(promptTokens: tokens, modelName: model.displayName, window: window)
     }
 
     /// MT3-3: after a context overflow, send the unanswered message again with `model` (the banner's "Continue with ..."). The
@@ -947,6 +1052,7 @@ final class ModelRunner {
         isRunning = false
         pendingApproval?.respond(false)
         pendingApproval = nil
+        installCoordinator.cancelAll()      // MT4-3: Stop answers an open install card as Cancel and stops its download
     }
 
     // MARK: - Approval
@@ -1130,6 +1236,7 @@ final class ModelRunner {
         history: [Chat.Message],
         fileScope: FileScope?,
         modelToolRuntime: ModelToolRuntime?,
+        modelToolHost: ModelToolHost? = nil,
         turn: TurnLease
     ) async throws -> any ChatRouter {
         if AppleIntelligenceChat.isApple(model.id) {
@@ -1142,7 +1249,8 @@ final class ModelRunner {
         #if DEBUG
         if let injected = streamingSessionForTesting {
             sessionRequestForTesting?(model.id, history)
-            return MLXChatRouter(identity: identity) { _, _ in injected() }
+            let observe = routerTurnForTesting
+            return MLXChatRouter(identity: identity) { turn, _ in observe?(turn); return injected() }
         }
         #endif
         let container = try await leasedContainerForModel(model, dir: dir, turn: turn)
@@ -1151,6 +1259,7 @@ final class ModelRunner {
             container: container,
             fileScope: fileScope,
             modelToolRuntime: modelToolRuntime,
+            modelToolHost: modelToolHost,
             maxToolCalls: agentToolSettings.toolCallLimit)
     }
 

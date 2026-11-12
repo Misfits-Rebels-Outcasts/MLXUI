@@ -30,8 +30,9 @@ nonisolated struct ModelTool: AgentTool {
 
     var parameters: [ToolParameter] {
         var out: [ToolParameter] = []
+        let textOrAsset = spec.input == .some(.text) && advertisesAssets
         for input in ModelToolRunner.inputArgumentNames(for: spec) where advertisesAssets || input != "asset" {
-            out.append(.optional(input, type: .string, description: Self.inputDescription(input)))
+            out.append(.optional(input, type: .string, description: Self.inputDescription(input, textOrAsset: textOrAsset, assets: advertisesAssets)))
         }
         for param in spec.params {
             let type: ToolParameterType = { if case .integer = param.type { return .int } else { return .string } }()
@@ -42,11 +43,20 @@ nonisolated struct ModelTool: AgentTool {
         return out
     }
 
-    static func inputDescription(_ name: String) -> String {
+    static func inputDescription(_ name: String, textOrAsset: Bool = false, assets: Bool = true) -> String {
+        if textOrAsset {
+            // MT4-7-FIX-1: a text tool takes the text itself or a text asset's handle, never both.
+            switch name {
+            case "asset": return "Handle of a text in this chat, e.g. a1. Give text or asset, not both."
+            default: return "The text itself. Give text or asset, not both."
+            }
+        }
         switch name {
-        case "asset": return "Handle of a file or text in this chat, e.g. a1. Give one input: asset, path, url or text."
-        case "path": return "Path of a file in a folder attached to this chat."
-        case "url": return "The absolute http(s) URL of the file."
+        case "asset": return "Handle of a file in this chat, e.g. a1 (a file name from this chat also works). Preferred: if you give asset it is used and path and url are ignored. Give one input."
+        case "path": return assets ? "Path of a file in a folder attached to this chat. Only used when no asset is given."
+                                   : "Path of a file in a folder attached to this chat."
+        case "url": return assets ? "The absolute http(s) URL of the file. Only used when no asset or path is given."
+                                  : "The absolute http(s) URL of the file. Only used when no path is given."
         default: return "The text itself."
         }
     }
@@ -113,7 +123,7 @@ nonisolated struct ModelTool: AgentTool {
         }
         guard let host = ModelToolHost.current else { return ToolFailure("read_asset is only available in a chat.").text }
         guard case .string(let handle)? = typed["asset"] else { return ToolFailure("read_asset needs the \"asset\" argument.").text }
-        guard let record = host.assets.record(handle) else {
+        guard let record = host.assets.resolve(handle) else {
             let known = host.assets.all.map { "\($0.handle) (\($0.kind))" }.joined(separator: ", ")
             return ToolFailure("no asset \"\(handle)\". " + (known.isEmpty ? "This chat has no assets yet." : "Known assets: \(known).")).text
         }

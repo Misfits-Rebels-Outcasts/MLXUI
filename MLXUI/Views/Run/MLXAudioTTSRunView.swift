@@ -133,6 +133,7 @@ struct MLXAudioTTSRunView: View {
                 .foregroundStyle(.green).font(.subheadline.bold())
             Button { model.play() } label: { Label("Play", systemImage: "play.fill") }
             Button { model.save() } label: { Label("Save WAV…", systemImage: "square.and.arrow.down") }
+            AskInChatButton { model.buffer.map { .audio($0, name: "speech") } }
             Spacer()
         }
         .padding(10)

@@ -113,6 +113,7 @@ struct ASRRunView: View {
                     .foregroundStyle(.green).font(.subheadline.bold())
                 Spacer()
                 Button("Copy") { copy(transcript) }
+                AskInChatButton { .text(transcript, name: "transcript") }
             }
             ScrollView {
                 Text(transcript).textSelection(.enabled)

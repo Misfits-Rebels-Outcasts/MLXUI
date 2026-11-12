@@ -33,24 +33,28 @@ nonisolated enum ChatEnvironment {
     ///   - writeEnabled: whether `write_file` / `edit_file` are on.
     ///   - homePath: the user's home directory (Direct guidance only), or `nil`.
     ///   - attachmentsNote: CW-3's one line per by-reference attachment; always `nil` for now.
+    ///   - assetNote: MT4-2's one line per attachment registered as an asset (Model Tools on). Unlike `attachmentsNote` it
+    ///     is kept when there is no folder and no file tool, because a handle is useful with neither.
     static func instructions(
         scope: FileScope,
         edition: FileScope.Edition,
         fileToolsEnabled: Set<String>,
         writeEnabled: Bool,
         homePath: String? = nil,
-        attachmentsNote: String? = nil
+        attachmentsNote: String? = nil,
+        assetNote: String? = nil
     ) -> String? {
         let fileToolsOn = !fileToolsEnabled.isDisjoint(with: fileToolNames)
         let canWrite = writeEnabled && !fileToolsEnabled.isDisjoint(with: writeToolNames)
         let shellOn = fileToolsEnabled.contains(shellToolName)
 
         var lines: [String] = []
-        guard folderLines(
+        let hasFolderLines = folderLines(
             scope, fileToolsOn: fileToolsOn, canWrite: canWrite, shellOn: shellOn,
             edition: edition, homePath: homePath, into: &lines)
-        else { return nil }
-        if let attachmentsNote, !attachmentsNote.isEmpty { lines.append(attachmentsNote) }
+        if hasFolderLines, let attachmentsNote, !attachmentsNote.isEmpty { lines.append(attachmentsNote) }
+        if let assetNote, !assetNote.isEmpty { lines.append(assetNote) }
+        guard hasFolderLines || !lines.isEmpty else { return nil }
         return lines.filter { !$0.isEmpty }.joined(separator: "\n")
     }
 

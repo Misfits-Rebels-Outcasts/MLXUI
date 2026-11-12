@@ -313,6 +313,7 @@ struct LFMTranscribeView: View {
                     Spacer()
                     Button("Copy") { model.copy() }
                     Button("Save…") { model.save(suggestedName: Self.transcriptName(for: audioURL)) }
+                    AskInChatButton { .text(transcript, name: "transcript") }
                 }
                 ScrollView {
                     Text(transcript).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
@@ -399,6 +400,7 @@ struct LFMSpeakView: View {
                     Button { model.play() } label: { Label("Play", systemImage: "play.fill") }
                     Button { model.stopPlayback() } label: { Label("Stop", systemImage: "stop.fill") }.disabled(!model.isPlaying)
                     Button { model.save() } label: { Label("Save WAV…", systemImage: "square.and.arrow.down") }
+                    AskInChatButton { model.buffer.map { .audio($0, name: "speech") } }
                     Spacer()
                 }
             }

@@ -338,6 +338,49 @@ nonisolated final class MT13Executor: FlowExecutor, @unchecked Sendable {
         #expect(exec.inputs.first?.first?.items.first?.value == "hello there")
     }
 
+    // MARK: MT4-7-FIX-1: text and asset together
+
+    @Test func fix1AskingSpeakWithTextAndAnAssetSpeaksTheText() async throws {
+        let root = tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let h = host(root)
+        let exec = MT13Executor.file(kind: .audio, ext: "wav")
+        let rt = try runtime(installed: [Self.kokoro], executor: exec)
+        // Apple Intelligence's exact call from the smoke: both inputs. "a2" need not even exist: it is ignored, not looked up.
+        let out = try json(try await run("speak", ["text": .string("The total from the receipt is $30.24."), "asset": .string("a2")],
+                                         runtime: rt, host: h))
+        #expect(out["kind"] as? String == "audio")
+        #expect(exec.inputs.first?.first?.items.first?.value == "The total from the receipt is $30.24.")
+    }
+
+    @Test func fix1EveryTextInputToolAcceptsTextWithAnAsset() async throws {
+        let root = tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let h = host(root)
+        let rt = try runtime(installed: [Self.kokoro], executor: MT13Executor.file(kind: .audio, ext: "wav"))
+        for spec in ModelToolSpec.all where spec.input == .some(.text) && spec.task != nil {
+            let resolved = await ModelToolRunner(spec: spec, runtime: rt).resolveInput(
+                arguments: ["text": .string("hello"), "asset": .string("a9")], host: h, scratch: root)
+            guard case .success(let input) = resolved else { Issue.record("\(spec.name) refused text + asset"); continue }
+            #expect(input.asset?.items.first?.value == "hello" && input.handles.isEmpty, "\(spec.name)")
+        }
+    }
+
+    @Test func fix1TextWithAPathStillRefuses() async throws {
+        let rt = try runtime(installed: [Self.kokoro], executor: .text("x"))
+        let out = try await run("speak", ["text": .string("hi"), "path": .string("/tmp/x")], runtime: rt, host: nil)
+        #expect(out.hasPrefix("Error:"))
+    }
+
+    @Test func fix1TextToolSchemasSayGiveTextOrAssetNotBoth() throws {
+        for tool in ModelTool.all(advertisingAssets: true) where tool.spec.input == .some(.text) && tool.spec.param(named: "asset") == nil {
+            for name in ["text", "asset"] {
+                let fn = tool.toolSpec["function"] as? [String: any Sendable]
+                let props = (fn?["parameters"] as? [String: any Sendable])?["properties"] as? [String: Any]
+                let description = try #require((props?[name] as? [String: Any])?["description"] as? String, "\(tool.name).\(name)")
+                #expect(description.contains("Give text or asset, not both."), "\(tool.name).\(name)")
+            }
+        }
+    }
+
     // MARK: F6, the resolver, the decline path
 
     @Test func f6OnlyParakeetInstalledRunsParakeetNotWhisper() async throws {
@@ -390,8 +433,11 @@ nonisolated final class MT13Executor: FlowExecutor, @unchecked Sendable {
         let rt = try runtime(installed: [], executor: exec)
         let out = try await run("transcribe_audio", ["asset": .string("a1")], runtime: rt, host: h)
         let need = try #require(asked.value.first)
-        #expect(out == "The user chose not to download \(need.modelDisplayName). Answer without it, or say what it would need.")
+        #expect(out == "The tool did not run and produced nothing: the user chose not to download \(need.modelDisplayName), so no result exists. Do not say the task was done. Tell the user it was not done, and that they can ask again and choose Download & continue to install \(need.modelDisplayName), or ask for something that needs no download.")
         #expect(need.toolName == "transcribe_audio")
+        // MT4-7-FIX-2: leads with the fact, and tells the user what they can do
+        #expect(out.hasPrefix("The tool did not run and produced nothing"))
+        #expect(out.contains("Do not say the task was done") && out.contains("Download & continue"))
         #expect(need.downloadGB > 0)
         #expect(exec.rows.isEmpty)
         #expect(exec.executorsMade == 0)

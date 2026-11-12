@@ -114,7 +114,9 @@ final class InstallManager {
         }
 
         setState(.resolving, forRepo: repo)
-        let task = Task { await downloadModel(model, repo: repo, onComplete: onComplete) }
+        let token = UUID()
+        downloadTokens[repo] = token
+        let task = Task { await downloadModel(model, repo: repo, token: token, onComplete: onComplete) }
         downloadTasksByRepo[repo] = task
     }
 
@@ -128,16 +130,32 @@ final class InstallManager {
 
     /// MoC-5-4: writes `state` into every card currently watching `repo` — one download's
     /// progress reaching every card that shares it.
-    private func setState(_ state: InstallState, forRepo repo: String) {
+    private func setState(_ state: InstallState, forRepo repo: String, token: UUID? = nil) {
+        // MT4-7-FIX-4 (D): a progress update queued by a download that was since cancelled (or replaced) must not overwrite the
+        // state `cancel` set: it used to leave Browse showing the model downloading, frozen at the last byte count.
+        if let token, !isCurrent(repo: repo, token: token) { return }
         for cardID in cardIDsByRepo[repo] ?? [] {
             modelStates[cardID] = state
         }
+    }
+
+    /// The token of the download now running for each repo; a download whose token is no longer here was cancelled or replaced.
+    private var downloadTokens: [String: UUID] = [:]
+
+    private func isCurrent(repo: String, token: UUID) -> Bool { downloadTokens[repo] == token }
+
+    /// Forget the download's task, but only if it is still the current one (a stale task must not clear a newer download).
+    private func clearTask(forRepo repo: String, token: UUID) {
+        guard isCurrent(repo: repo, token: token) else { return }
+        downloadTasksByRepo[repo] = nil
+        downloadTokens[repo] = nil
     }
 
     func cancel(_ model: ModelEntry) {
         let repo = ModelStore.repoSlug(for: model.hfModelId)
         downloadTasksByRepo[repo]?.cancel()
         downloadTasksByRepo[repo] = nil
+        downloadTokens[repo] = nil
         setState(.idle, forRepo: repo)
         // MoC-5-2: the download's scratch directory is repo-keyed (see `downloadModel`),
         // matching where it was actually written.
@@ -239,7 +257,7 @@ final class InstallManager {
     /// `repo` is the slug `install` already computed — threaded through rather than
     /// recomputed, and used for every `modelStates` update (`setState(_:forRepo:)`) so a
     /// download started by one card reaches every card watching the same repo (MoC-5-4).
-    private func downloadModel(_ model: ModelEntry, repo: String, onComplete: @escaping (String) -> Void) async {
+    private func downloadModel(_ model: ModelEntry, repo: String, token: UUID, onComplete: @escaping (String) -> Void) async {
         let modelId = model.id
         let hfModelId = model.hfModelId
         let variant = model.variants?.first?.hfModelId ?? hfModelId
@@ -251,8 +269,8 @@ final class InstallManager {
             let files = try await resolveFiles(for: variant)
             guard !files.isEmpty else {
                 await MainActor.run {
-                    setState(.error("No downloadable files found", canRetry: false), forRepo: repo)
-                    downloadTasksByRepo[repo] = nil
+                    setState(.error("No downloadable files found", canRetry: false), forRepo: repo, token: token)
+                    clearTask(forRepo: repo, token: token)
                 }
                 return
             }
@@ -270,8 +288,10 @@ final class InstallManager {
 
             print("[Install] Resolved \(files.count) files" + companions.map { " + \($0.repository)" }.joined())
 
+            // MT4-7-FIX-4 (D): a download cancelled while its files were being resolved must not come back.
+            guard !Task.isCancelled, await MainActor.run(body: { isCurrent(repo: repo, token: token) }) else { return }
             await MainActor.run {
-                setState(.downloading(progress: 0, downloaded: 0, total: 1), forRepo: repo)
+                setState(.downloading(progress: 0, downloaded: 0, total: 1), forRepo: repo, token: token)
             }
 
             // 2. Create download directory. MoC-5-2: repo-keyed (not card-keyed) so two
@@ -306,8 +326,8 @@ final class InstallManager {
                 let localName = entry.subdir + file.filename
                 guard let downloadURL = buildDownloadURL(model: entry.repo, filename: file.filename) else {
                     await MainActor.run {
-                        setState(.error("Invalid URL for \(file.filename)", canRetry: false), forRepo: repo)
-                        downloadTasksByRepo[repo] = nil
+                        setState(.error("Invalid URL for \(file.filename)", canRetry: false), forRepo: repo, token: token)
+                        clearTask(forRepo: repo, token: token)
                     }
                     return
                 }
@@ -329,7 +349,7 @@ final class InstallManager {
                                 progress: DownloadProgress.fraction(downloaded: downloaded, total: total),
                                 downloaded: downloaded,
                                 total: max(total, 1)
-                            ), forRepo: repo)
+                            ), forRepo: repo, token: token)
                         }
                     }
                     // Get actual file size from response if API didn't provide it
@@ -358,19 +378,19 @@ final class InstallManager {
                     let msg = error.localizedDescription
                     print("[Install] Download failed: \(msg)")
                     await MainActor.run {
-                        setState(.error(msg, canRetry: true), forRepo: repo)
-                        downloadTasksByRepo[repo] = nil
+                        setState(.error(msg, canRetry: true), forRepo: repo, token: token)
+                        clearTask(forRepo: repo, token: token)
                     }
                     return
                 }
             }
 
             // 4. Verify
-            await MainActor.run { setState(.verifying, forRepo: repo) }
+            await MainActor.run { setState(.verifying, forRepo: repo, token: token) }
             guard verifyFiles(tempFiles) else {
                 await MainActor.run {
-                    setState(.error("File verification failed", canRetry: true), forRepo: repo)
-                    downloadTasksByRepo[repo] = nil
+                    setState(.error("File verification failed", canRetry: true), forRepo: repo, token: token)
+                    clearTask(forRepo: repo, token: token)
                 }
                 return
             }
@@ -388,8 +408,8 @@ final class InstallManager {
 
             print("[Install] Success: \(model.displayName)")
             await MainActor.run {
-                setState(.installed, forRepo: repo)
-                downloadTasksByRepo[repo] = nil
+                setState(.installed, forRepo: repo, token: token)
+                clearTask(forRepo: repo, token: token)
                 // MoC-5-4: one `onComplete` closure exists per repo-download (the
                 // originating `install` call's) — invoke it once per card watching this
                 // repo, so every sibling's `AppState.installedModelIDs` picks it up, not
@@ -403,15 +423,15 @@ final class InstallManager {
             print("[Install] Gated model — needs HF token: \(modelId)")
             await MainActor.run {
                 setState(.needsAuth(
-                    "This model is gated. Add a HuggingFace token in Settings, then retry."), forRepo: repo)
-                downloadTasksByRepo[repo] = nil
+                    "This model is gated. Add a HuggingFace token in Settings, then retry."), forRepo: repo, token: token)
+                clearTask(forRepo: repo, token: token)
             }
         } catch {
             if Task.isCancelled { return }
             print("[Install] Error: \(error.localizedDescription)")
             await MainActor.run {
-                setState(.error(error.localizedDescription, canRetry: true), forRepo: repo)
-                downloadTasksByRepo[repo] = nil
+                setState(.error(error.localizedDescription, canRetry: true), forRepo: repo, token: token)
+                clearTask(forRepo: repo, token: token)
             }
         }
     }

@@ -120,6 +120,7 @@ struct SDXLTurboRunView: View {
                 Button { save(image) } label: {
                     Label("Save PNG…", systemImage: "square.and.arrow.down")
                 }
+                AskInChatButton { .image(image, name: "sdxl-turbo-image") }
                 Spacer()
             }
         }

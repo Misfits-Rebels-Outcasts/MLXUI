@@ -305,6 +305,8 @@ final class AppState {
         reloadWorkspaces()
         // MT1-3: the chat's model tools read the catalog and install state as they are at the start of each turn.
         modelRunner.modelToolRuntimeProvider = { [weak self] in self.map { ModelToolRuntime.live(appState: $0) } }
+        // MT4-3: the install card downloads through the app's own install path, and only from its button.
+        modelRunner.installCoordinator.installer = AppModelInstaller(appState: self)
     }
 
     /// CFM-R12-1: refresh the "My Workflows" shelf from the flow folder. Called at launch and
@@ -673,6 +675,17 @@ final class AppState {
     @discardableResult
     func openBenchInChat() -> Bool {
         guard chat.openBenchInChat(installedChatModels: installedChatModels) else { return false }
+        selectedSection = .chat
+        return true
+    }
+
+    /// MT4-5: a Run UI's "Ask in Chat". Writes the result to a file, starts a new Chat-page conversation with it waiting
+    /// in the composer, and selects the Chat item. `false` (nothing changed) when the gate is closed, a turn is running or
+    /// the file could not be written. The caller dismisses its sheet on `true`.
+    @discardableResult
+    func askInChat(_ result: AskInChatResult) -> Bool {
+        guard chat.canAskInChat, let file = try? result.writeTemporaryFile() else { return false }
+        guard chat.askInChat(files: [file]) else { return false }
         selectedSection = .chat
         return true
     }

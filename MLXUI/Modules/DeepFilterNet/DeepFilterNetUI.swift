@@ -128,6 +128,7 @@ struct DeepFilterNetRunView: View {
                     .keyboardShortcut(.space, modifiers: [])
                 Spacer()
                 Button("Save Cleaned Audio…") { model.save(suggestedName: audioURL) }
+                AskInChatButton { model.cleaned.map { .audio($0, name: "cleaned-audio") } }
             }
             Text("Switch between Original and Cleaned while playing to compare; playback keeps its place.")
                 .font(.caption).foregroundStyle(.secondary)

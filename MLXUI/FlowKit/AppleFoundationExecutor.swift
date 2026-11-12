@@ -369,7 +369,15 @@ nonisolated final class AppleFoundationToolSessionImpl: AppleFoundationToolSessi
 
     init(instructions: String?, tools: [AppleFoundationToolSpec], handler: @escaping AppleFoundationToolHandler) {
         let runtimeTools: [any Tool] = tools.map { AppleFoundationRuntimeTool(spec: $0, handler: handler) }
-        if let instructions, !instructions.isEmpty {
+        // MT4-7-FIX-6: no tools means a session built without the `tools:` argument at all (an armed tool, even a harmless one,
+        // makes the model refuse long writing).
+        if runtimeTools.isEmpty {
+            if let instructions, !instructions.isEmpty {
+                session = LanguageModelSession(instructions: instructions)
+            } else {
+                session = LanguageModelSession()
+            }
+        } else if let instructions, !instructions.isEmpty {
             session = LanguageModelSession(tools: runtimeTools, instructions: instructions)
         } else {
             session = LanguageModelSession(tools: runtimeTools)

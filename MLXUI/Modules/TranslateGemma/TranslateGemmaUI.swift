@@ -182,6 +182,8 @@ struct TranslateGemmaRunView: View {
                 Spacer()
                 Button("Copy") { model.copyResult() }
                     .disabled(!model.canCopy)
+                AskInChatButton { model.resultText.map { .text($0, name: "translation") } }
+                    .disabled(!model.canCopy)
             }
             ScrollView {
                 Text(model.resultText ?? (model.didStop ? "Stopped." : "The translation appears here."))

@@ -308,6 +308,7 @@ struct Flux2KleinRunView: View {
                 Label("Ready", systemImage: "checkmark.circle.fill").foregroundStyle(.green).font(.subheadline.bold())
                 if let seed = model.usedSeed { Text("Seed \(seed)").font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
                 Button { save(image) } label: { Label("Save PNG…", systemImage: "square.and.arrow.down") }
+                AskInChatButton { .image(image, name: "flux2-klein-image") }
                 Spacer()
             }
         }

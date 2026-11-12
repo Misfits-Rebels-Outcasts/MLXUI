@@ -24,6 +24,8 @@ struct ChatInspectorView: View {
     let attachFile: (URL) -> Void
     /// CW-5: set to a tool card's id to ask the transcript to scroll to it.
     @Binding var showInTranscript: UUID?
+    /// MT4-4: the Chat page (Model Tools on) lists the chat's assets under Files and adds "This chat". The bench is unchanged.
+    var showsModelTools = false
 
     @State private var expanded: Set<String> = []
     @State private var levels: [String: FolderListing.Result] = [:]
@@ -44,6 +46,10 @@ struct ChatInspectorView: View {
                 Divider()
                 filesSection
                 Divider()
+                if showsModelTools {
+                    thisChatSection
+                    Divider()
+                }
                 sessionSection
             }
             .padding(12)
@@ -283,10 +289,13 @@ struct ChatInspectorView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            if showsModelTools { assetsList }
             if evaluation.entries.isEmpty {
-                Text("Nothing yet. Tool calls that touch files show up here.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                if !(showsModelTools && !assetListing.rows.isEmpty) {
+                    Text("Nothing yet. Tool calls that touch files show up here.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             } else {
                 if !evaluation.changes.isEmpty {
                     group("New · Edited", entries: evaluation.changes)
@@ -300,6 +309,75 @@ struct ChatInspectorView: View {
             }
             if selectedPath != nil {
                 previewPane
+            }
+        }
+    }
+
+    // MARK: - Assets and "This chat" (MT4-4)
+
+    private var assetStore: ChatAssetStore? {
+        runner.activeConversationID.map { runner.assetStore(for: $0) }
+    }
+
+    private var assetListing: ChatAssetListing {
+        let records = assetStore?.allRecords ?? []
+        let missing = Set(records.filter { assetStore?.isMissing($0) == true }.map(\.handle))
+        return ChatAssetListing.make(records: records, items: runner.transcript.items, missingHandles: missing)
+    }
+
+    @ViewBuilder
+    private var assetsList: some View {
+        let listing = assetListing
+        if !listing.rows.isEmpty {
+            Text("Assets").font(.caption2).foregroundStyle(.secondary)
+            ForEach(listing.rows) { row in assetRow(row) }
+        }
+    }
+
+    private func assetRow(_ row: ChatAssetListing.Row) -> some View {
+        let url = row.missing ? nil : assetStore?.record(row.handle).flatMap { assetStore?.url(for: $0) }
+        return HStack(spacing: 4) {
+            Image(systemName: Self.assetIcon(row.kind)).font(.caption2).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("\(row.handle)  \(row.name)").font(.caption).lineLimit(1)
+                Text(row.missing ? "Missing: no longer on disk" : (row.origin.isEmpty ? row.size : "\(row.origin) · \(row.size)"))
+                    .font(.caption2).foregroundStyle(row.missing ? Color.orange : Color.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 4)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { if let url { NSWorkspace.shared.open(url) } }
+        .contextMenu {
+            if let url {
+                Button("Open") { NSWorkspace.shared.open(url) }
+                Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+            }
+            if let activityID = row.activityID {
+                Button("Show in transcript") { showInTranscript = activityID }
+            }
+        }
+        .help("\(row.handle): \(row.name)")
+    }
+
+    private static func assetIcon(_ kind: String) -> String {
+        switch kind {
+        case "audio": return "waveform"
+        case "image": return "photo"
+        case "video": return "film"
+        default: return "doc.text"
+        }
+    }
+
+    /// "This chat": the chat model with how full its window is, and the models the tools used.
+    private var thisChatSection: some View {
+        let listing = assetListing
+        let percent = Int((currentMeter.fraction * 100).rounded())
+        return VStack(alignment: .leading, spacing: 6) {
+            sectionTitle("This chat")
+            Text("\(model.displayName) · \(percent)%").font(.caption)
+            Text("Models used: \(listing.modelsUsed.count)").font(.caption).foregroundStyle(.secondary)
+            ForEach(listing.modelsUsed, id: \.self) { name in
+                Text(name).font(.caption2).foregroundStyle(.secondary).padding(.leading, 8)
             }
         }
     }
@@ -550,12 +628,16 @@ struct ChatInspectorView: View {
         }
     }
 
-    private var meterView: some View {
-        let meter = ChatInspectorModel.meter(
+    private var currentMeter: ChatInspectorModel.Meter {
+        ChatInspectorModel.meter(
             estimatedTokens: ChatInspectorModel.estimatedTokens(of: environmentAndHistory),
             window: ContextWindow.tokens(
                 for: model,
                 modelDirectory: ModelStore.shared.directory(forModelID: model.id)))
+    }
+
+    private var meterView: some View {
+        let meter = currentMeter
         return VStack(alignment: .leading, spacing: 3) {
             Text("Context used").font(.caption2).foregroundStyle(.secondary)
             ProgressView(value: min(1, meter.fraction))

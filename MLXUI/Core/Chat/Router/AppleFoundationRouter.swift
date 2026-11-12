@@ -39,6 +39,44 @@ nonisolated enum AppleFoundationToolBudget {
     static func headroom(tokens: Int) -> Int { tokenBudget - tokens }
 }
 
+/// MT4-1 — enforce `AppleFoundationToolBudget.tokenBudget` at run time. Pure: the caller supplies the counter.
+nonisolated enum AppleFoundationToolTrim {
+    struct Result: Equatable, Sendable {
+        /// In the order given.
+        let kept: [String]
+        /// In the order removed (lowest priority first).
+        let dropped: [String]
+        /// The count of `kept`; nil when the counter could not count (then nothing was trimmed).
+        let tokens: Int?
+        /// The count before any trimming.
+        let tokensBefore: Int?
+        let countCalls: Int
+    }
+
+    /// `tools` are in priority order (highest first). While the count is over `budget`, the LAST tool that is not `protected` goes,
+    /// never below `minimumKept` tools. A counter that returns nil (no token counting on this OS) leaves the list as it was: the
+    /// count cap alone applies. A single over-budget top-priority tool is kept.
+    static func trim(tools: [String], protected: Set<String>, budget: Int, minimumKept: Int = 1,
+                     count: ([String]) async -> Int?) async -> Result {
+        var kept = tools
+        var dropped: [String] = []
+        var calls = 1
+        guard var tokens = await count(kept) else {
+            return Result(kept: kept, dropped: [], tokens: nil, tokensBefore: nil, countCalls: calls)
+        }
+        let before = tokens
+        while tokens > budget, kept.count > minimumKept,
+              let index = kept.lastIndex(where: { !protected.contains($0) }) {
+            let removed = kept.remove(at: index)
+            guard let next = await count(kept) else { kept.insert(removed, at: index); break }
+            calls += 1
+            dropped.append(removed)
+            tokens = next
+        }
+        return Result(kept: kept, dropped: dropped, tokens: tokens, tokensBefore: before, countCalls: calls)
+    }
+}
+
 extension AppleFoundationToolError {
     /// One sentence for the banner. The UI adds the buttons (MT3-3).
     nonisolated var userMessage: String {
@@ -115,11 +153,13 @@ nonisolated final class AppleFoundationRouter: ChatRouter, @unchecked Sendable {
     }
 
     private func run(_ turn: RouterTurn, _ continuation: AsyncThrowingStream<RouterEvent, Error>.Continuation) async {
-        let selection = Self.select(turn.tools, limit: maxTools)
+        let capped = Self.select(turn.tools, limit: maxTools)
         let history = turn.history.foldedMessages
+        let historySystem = history.filter { $0.role == .system }.map(\.content)
+        // MT4-1: the 1,500-token budget (instructions + tool schemas) is enforced here, not only pinned by a test.
+        let selection = await enforceTokenBudget(capped, turnInstructions: turn.instructions, historySystem: historySystem)
         let instructions = Self.composeInstructions(
-            turn.instructions, historySystem: history.filter { $0.role == .system }.map(\.content),
-            unavailable: selection.dropped)
+            turn.instructions, historySystem: historySystem, unavailable: selection.dropped)
         let specs = selection.included.map(Self.spec(for:))
         let signature = specs.map(\.name).joined(separator: ",") + "|" + (instructions ?? "")
 
@@ -127,7 +167,8 @@ nonisolated final class AppleFoundationRouter: ChatRouter, @unchecked Sendable {
                                       folded: history.filter { $0.role != .system })
         let state = ToolBridge.TurnState(
             tools: Dictionary(selection.included.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first }),
-            approve: turn.approve, onToolEvent: turn.onToolEvent, continuation: continuation, maxCalls: maxToolCalls)
+            approve: turn.approve, onToolEvent: turn.onToolEvent, continuation: continuation, maxCalls: maxToolCalls,
+            context: turn.toolContext)
         entry.bridge.begin(state)
         defer {
             entry.bridge.end()
@@ -160,6 +201,51 @@ nonisolated final class AppleFoundationRouter: ChatRouter, @unchecked Sendable {
             discard(entry)
             continuation.finish(throwing: error)
         }
+    }
+
+    /// What the last turn's token enforcement did (for the journal's measurements and the tests).
+    struct TrimReport: Equatable, Sendable {
+        let tokensBefore: Int?
+        let tokensAfter: Int?
+        let dropped: [String]
+        let countCalls: Int
+        let seconds: Double
+    }
+    private var report: TrimReport?
+    private var countCache: [String: Int] = [:]
+    var lastTrimReport: TrimReport? { lock.withLock { report } }
+
+    /// Drops tools from the end of the priority order until instructions + schemas fit `tokenBudget`. `list_capabilities` is
+    /// never dropped. The "not available" note is counted too, because it costs tokens. A count is cached by tool-name
+    /// signature, so an unchanged tool set costs nothing on the next turn.
+    private func enforceTokenBudget(
+        _ selection: (included: [any AgentTool], dropped: [String]), turnInstructions: String?, historySystem: [String]
+    ) async -> (included: [any AgentTool], dropped: [String]) {
+        let started = ContinuousClock.now
+        let all = selection.included
+        let names = all.map(\.name)
+        let count: @Sendable ([String]) async -> Int? = { [self] kept in
+            let removed = names.filter { !kept.contains($0) }
+            let instructions = Self.composeInstructions(
+                turnInstructions, historySystem: historySystem, unavailable: selection.dropped + removed)
+            let key = kept.joined(separator: ",") + "|" + (instructions ?? "")
+            if let cached = lock.withLock({ countCache[key] }) { return cached }
+            let specs = all.filter { kept.contains($0.name) }.map(Self.spec(for:))
+            guard let tokens = await chatter.toolTokenCount(instructions: instructions, tools: specs) else { return nil }
+            lock.withLock { if countCache.count > 64 { countCache.removeAll() }; countCache[key] = tokens }
+            return tokens
+        }
+        let result = await AppleFoundationToolTrim.trim(
+            tools: names, protected: ["list_capabilities"], budget: AppleFoundationToolBudget.tokenBudget, count: count)
+        let elapsed = ContinuousClock.now - started
+        let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
+        lock.withLock {
+            report = TrimReport(tokensBefore: result.tokensBefore, tokensAfter: result.tokens, dropped: result.dropped,
+                                countCalls: result.countCalls, seconds: seconds)
+        }
+        guard !result.dropped.isEmpty else { return selection }
+        let kept = Set(result.kept)
+        return (all.filter { kept.contains($0.name) }, selection.dropped + result.dropped)
     }
 
     /// A live session for the conversation when the tool set and instructions still match and it isn't mid-turn;
@@ -257,6 +343,8 @@ nonisolated final class AppleFoundationRouter: ChatRouter, @unchecked Sendable {
             let onToolEvent: @Sendable (AgentToolEvent) -> Void
             let continuation: AsyncThrowingStream<RouterEvent, Error>.Continuation
             let maxCalls: Int
+            /// MT4-2: the chat's folder scope, model-tool runtime and assets, bound around the call.
+            var context: RouterToolContext? = nil
         }
 
         private let lock = NSLock()
@@ -303,9 +391,13 @@ nonisolated final class AppleFoundationRouter: ChatRouter, @unchecked Sendable {
             emit(.started(name: name, arguments: arguments))
             do {
                 let output: String
+                let context = state.context
+                let execute: @Sendable () async throws -> String = {
+                    if let context { return try await context.run { try await tool.execute(arguments: arguments) } }
+                    return try await tool.execute(arguments: arguments)
+                }
                 if let timeout = tool.executionTimeout {
-                    guard let result = try await AgentSession.withTimeout(
-                        seconds: timeout, operation: { try await tool.execute(arguments: arguments) })
+                    guard let result = try await AgentSession.withTimeout(seconds: timeout, operation: execute)
                     else {
                         let message = "timed out after \(Int(timeout))s"
                         emit(.failed(name: name, message: message))
@@ -313,7 +405,7 @@ nonisolated final class AppleFoundationRouter: ChatRouter, @unchecked Sendable {
                     }
                     output = result
                 } else {
-                    output = try await tool.execute(arguments: arguments)
+                    output = try await execute()
                 }
                 emit(.finished(name: name, result: output))
                 return Self.modelResult(output)

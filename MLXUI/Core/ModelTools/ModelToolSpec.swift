@@ -98,7 +98,7 @@ nonisolated struct ModelToolSpec: Sendable, Equatable {
         ModelToolSpec(
             name: "speak", task: "Speak", input: .text, output: .audio,
             params: [Param(name: "voice", type: .string, required: false, placement: .setting(rowKey: "voice"),
-                           description: "Voice name. Omit for the default voice.")],
+                           description: "Optional voice name. Omit it for the default voice; never send \"default\".")],
             kinds: nil,
             description: "Turn text into spoken audio."),
         ModelToolSpec(

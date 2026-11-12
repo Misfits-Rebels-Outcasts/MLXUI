@@ -211,6 +211,25 @@ nonisolated enum ChatContinueFit {
     /// What a message of this many UTF-8 bytes (plus the earlier turns) costs, by the app's own estimate.
     static func promptTokens(utf8Count: Int) -> Int { ChatAttachment.estimatedTokens(forUTF8Count: utf8Count) }
 
+    /// MT4-0: the one admission both "Continue with X" (FIX-4) and every MLX send use. `window` nil (unknown) admits.
+    static func admits(promptTokens: Int, window: Int?) -> Bool {
+        guard let window else { return true }
+        return fits(promptTokens: promptTokens, window: window)
+    }
+
+    /// MT4-0: tokens of a send as the model will see it: the rendered prompt (typed text plus inline attachment text) and the
+    /// history that is prefilled with it. By-reference attachments add only the short path note already in the prompt.
+    static func sendTokens(prompt: String, history: [String]) -> Int {
+        promptTokens(utf8Count: history.reduce(prompt.utf8.count) { $0 + $1.utf8.count })
+    }
+
+    /// MT4-0: the plain sentence for a send that cannot fit, naming the usable window and the alternatives.
+    static func sendRefusal(promptTokens: Int, modelName: String, window: Int) -> String {
+        "This message is about \(ChatModelMenu.tokenText(promptTokens)) tokens, more than \(modelName) can take at once "
+            + "(about \(ChatModelMenu.tokenText(max(0, window - replyMargin(window: window)))) usable on this Mac). "
+            + "Attach it as a file or start a new chat."
+    }
+
     /// The plain sentence for a refused Continue.
     static func refusal(promptTokens: Int, modelName: String, window: Int) -> String {
         "This message is about \(ChatModelMenu.tokenText(promptTokens)) tokens; \(modelName) fits about "
