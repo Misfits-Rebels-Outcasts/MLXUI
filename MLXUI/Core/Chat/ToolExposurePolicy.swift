@@ -138,7 +138,9 @@ nonisolated enum ToolExposurePolicy {
 
         if input.modelToolsEnabled {
             // 1. Always.
-            modelTool("list_capabilities")
+            // MT4-7-FIX-6: for Apple Intelligence it is not offered on its own (added below, once the rest is known): any armed tool
+            // makes the model refuse long writing, and a turn that calls for no tool should have none.
+            if !input.gateAmbiguousTools { modelTool("list_capabilities") }
             if input.hasOversizedTextAsset { modelTool("read_asset") }
             // 2. Input kind of what was attached this turn. Audio: its tool. Image (MT4-2b): `ocr_image` by default; the other
             //    image tools only after the generators below, and only when the prompt calls for them.
@@ -181,6 +183,18 @@ nonisolated enum ToolExposurePolicy {
                 continue
             }
             offer(name, status: nil)
+        }
+
+        // MT4-7-FIX-6 (owner, 2026-11-12), Apple Intelligence only: `list_capabilities` leads when anything else is offered, or on a
+        // capability cue; with nothing else the turn gets NO tools (the router then builds a session without any).
+        if input.modelToolsEnabled, input.gateAmbiguousTools, !seen.contains("list_capabilities"),
+           !tools.isEmpty || capabilitiesCalled(prompt: input.prompt) {
+            seen.insert("list_capabilities")
+            if input.declinedThisTurn.contains("list_capabilities") {
+                dropped.append(Dropped(name: "list_capabilities", reason: .declinedThisTurn))
+            } else {
+                tools.insert("list_capabilities", at: 0)
+            }
         }
 
         // Budget (the legacy set, with model tools off and the gate off, is never cut: it is "today's" set).
@@ -239,6 +253,11 @@ nonisolated enum ToolExposurePolicy {
             return fileCue && matches(text, #"\b(write|save|create|edit|change|modify|update|append|rename|overwrite|replace|rewrite|add)\b"#)
         default: return true
         }
+    }
+
+    /// MT4-7-FIX-6: does the prompt ask what the assistant (or the user's models) can do?
+    static func capabilitiesCalled(prompt: String) -> Bool {
+        matches(prompt.lowercased(), #"(\bwhat (can|could) you (do|help)\b|\bcapabilit\w*|\b(which|what) (models?|tools?)\b|\b(my|your) (models?|tools?)\b|\bcan you\b.{0,40}\b(models?|tools?)\b)"#)
     }
 
     /// The shell tool's name (`ChatEnvironment.shellToolName`).
