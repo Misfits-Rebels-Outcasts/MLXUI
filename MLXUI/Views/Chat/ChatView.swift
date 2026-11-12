@@ -38,6 +38,9 @@ struct ChatView: View {
     }
     @State private var showAuditLog = false
     @State private var conversationToDelete: Conversation?
+    /// CP-2: the "Delete All Conversations…" confirmation.
+    @State private var confirmsDeleteAll = false
+    private var deleteAllModelName: String? { surface == .bench ? model.displayName : nil }
     /// CX-2: a failed export. Its own message — `runner.errorMessage` belongs to model runs.
     @State private var exportError: String?
     /// CW-4: the right sidebar. Persisted, so it comes back the way the user left it.
@@ -75,11 +78,64 @@ struct ChatView: View {
         .background(.background)
     }
 
+    /// CP-4: the persisted conversations-column width, shared by the page and the sheet.
+    @AppStorage("chatSidebarWidth") private var sidebarWidth: Double = ChatSidebarWidth.defaultWidth
+    /// CP-5: text sizes (stored raw; `.standard` overrides nothing).
+    @AppStorage(ChatTextSize.messageKey) private var messageSizeRaw = ChatTextSize.standard.rawValue
+    @AppStorage(ChatTextSize.listKey) private var listSizeRaw = ChatTextSize.standard.rawValue
+    private var messageSize: ChatTextSize { ChatTextSize(stored: messageSizeRaw) }
+    private var listSize: ChatTextSize { ChatTextSize(stored: listSizeRaw) }
+    @State private var sidebarDragStart: Double?
+    @State private var cursorPushed = false
+    @State private var sidebarHandleHovering = false
+
+    private func popResizeCursor() {
+        if cursorPushed {
+            NSCursor.pop()
+            cursorPushed = false
+        }
+    }
+
+    /// A 10 pt strip centred on the divider line: drag to resize, double-click to reset.
+    private var sidebarResizeHandle: some View {
+        Color.clear
+            .frame(width: ChatSidebarWidth.grabWidth)
+            .contentShape(Rectangle())
+            .onHover { inside in
+                sidebarHandleHovering = inside
+                if inside, !cursorPushed {
+                    NSCursor.resizeLeftRight.push()
+                    cursorPushed = true
+                } else if !inside, sidebarDragStart == nil {
+                    popResizeCursor()
+                }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { drag in
+                        let start = sidebarDragStart ?? ChatSidebarWidth.clamp(sidebarWidth)
+                        sidebarDragStart = start
+                        sidebarWidth = ChatSidebarWidth.clamp(start + drag.translation.width)
+                    }
+                    .onEnded { _ in
+                        sidebarDragStart = nil
+                        if !sidebarHandleHovering { popResizeCursor() }
+                    }
+            )
+            .onTapGesture(count: 2) { sidebarWidth = ChatSidebarWidth.defaultWidth }
+            .onDisappear {
+                sidebarDragStart = nil
+                popResizeCursor()
+            }
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             conversationSidebar
-                .frame(width: 210)
+                .frame(width: ChatSidebarWidth.clamp(sidebarWidth))
             Divider()
+                .overlay { sidebarResizeHandle }
+                .zIndex(1)
             VStack(spacing: 0) {
                 header
                 Divider()
@@ -126,6 +182,20 @@ struct ChatView: View {
         // sizing, and on macOS 14 it collapsed this one to a small, unusable box. A column in the
         // layout is deterministic in a sheet, and the sheet is free to keep one size because the
         // pane is only 240 pt of it.
+        // CP-5: ⌘= ⌘- ⌘0 step the message size on the surface that holds the lease only.
+        .background {
+            Group {
+                Button("Larger Text") { messageSizeRaw = messageSize.steppedUp.rawValue }
+                    .keyboardShortcut(holdsLease ? KeyboardShortcut("=", modifiers: .command) : nil)
+                Button("Smaller Text") { messageSizeRaw = messageSize.steppedDown.rawValue }
+                    .keyboardShortcut(holdsLease ? KeyboardShortcut("-", modifiers: .command) : nil)
+                Button("Standard Text") { messageSizeRaw = ChatTextSize.reset.rawValue }
+                    .keyboardShortcut(holdsLease ? KeyboardShortcut("0", modifiers: .command) : nil)
+            }
+            .opacity(0)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
         .onAppear { controller.acquire(surface, model: model) }
         // MT2-2: the bench and the page can both be in the hierarchy. The page takes the runner back when the
         // sheet lets go of it; a surface that was refused while the other generated binds itself when it ends.
@@ -174,6 +244,15 @@ struct ChatView: View {
         } message: { _ in
             Text("This permanently removes the conversation from this Mac.")
         }
+        .confirmationDialog(
+            ChatDeleteAllText.title(count: controller.conversations.count, modelName: deleteAllModelName),
+            isPresented: $confirmsDeleteAll
+        ) {
+            Button("Delete All", role: .destructive) { controller.deleteAll(on: surface) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(ChatDeleteAllText.message(modelName: deleteAllModelName))
+        }
     }
 
     // MARK: - Conversation sidebar
@@ -184,6 +263,16 @@ struct ChatView: View {
                 Text("Chats")
                     .font(.headline)
                 Spacer()
+                Menu {
+                    Button("Delete All Conversations…", role: .destructive) { confirmsDeleteAll = true }
+                        .disabled(runner.isRunning || controller.conversations.isEmpty)
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("More")
                 Button {
                     controller.newConversation(on: surface)
                 } label: {
@@ -200,7 +289,7 @@ struct ChatView: View {
                 ForEach(controller.conversations) { conversation in
                     VStack(alignment: .leading, spacing: 2) {
                         Text(conversation.title)
-                            .font(.callout)
+                            .font(listSize.font(.listTitle, standard: .callout))
                             .lineLimit(1)
                         // MT2-3: the Chat page lists every model's chats, so each row names its model.
                         if surface == .page {
@@ -209,13 +298,13 @@ struct ChatView: View {
                                 catalog: names.merging([AppleIntelligenceChat.modelID: AppleIntelligenceChat.displayName]) { a, _ in a },
                                 installedIDs: controller.appleReadiness == .ready
                                     ? appState.installedModelIDs.union([AppleIntelligenceChat.modelID]) : appState.installedModelIDs).text)
-                                .font(.caption2)
+                                .font(listSize.font(.listDetail, standard: .caption2))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
                         if !conversation.items.isEmpty {
                             Text(conversation.updatedAt, format: .relative(presentation: .named))
-                                .font(.caption2)
+                                .font(listSize.font(.listDetail, standard: .caption2))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -255,24 +344,36 @@ struct ChatView: View {
     // MARK: - Header
 
     private var header: some View {
+        // CP-1: wide variant first (labelled "Open in Chat", title capped so its ideal width is
+        // bounded); when that does not fit, the icon-only variant, whose title truncates instead.
+        ViewThatFits(in: .horizontal) {
+            headerRow(compact: false)
+            headerRow(compact: true)
+        }
+    }
+
+    private func headerRow(compact: Bool) -> some View {
         HStack(spacing: 8) {
             Image(systemName: model.modelType.sfSymbol)
                 .foregroundStyle(.secondary)
+                .fixedSize()
             VStack(alignment: .leading, spacing: 1) {
                 Text(model.displayName)
                     .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 Text(ChatModelLabels.headerSubtitle(modelID: model.id))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
-            Spacer()
+            .frame(maxWidth: compact ? .infinity : 320, alignment: .leading)
+            .layoutPriority(-1)
+            Spacer(minLength: 8)
             exportMenu
             if surface == .bench, onDone != nil, ChatGate.isAvailable {
-                Button("Open in Chat") {
-                    if appState.openBenchInChat() { onDone?() }
-                }
-                .disabled(!controller.canOpenBenchInChat)
-                .help("Continue this conversation on the Chat page")
+                openInChatButton(compact: compact)
             }
             if !runner.availableTools.isEmpty {
                 toolsMenu
@@ -291,9 +392,30 @@ struct ChatView: View {
                     onDone()
                 }
                 .keyboardShortcut(.cancelAction)
+                .fixedSize()
             }
         }
         .padding(12)
+    }
+
+    @ViewBuilder
+    private func openInChatButton(compact: Bool) -> some View {
+        let button = Button {
+            if appState.openBenchInChat() { onDone?() }
+        } label: {
+            Label("Open in Chat", systemImage: "arrow.up.forward.app")
+        }
+        .disabled(!controller.canOpenBenchInChat)
+        if compact {
+            button
+                .labelStyle(.iconOnly)
+                .help("Open in Chat")
+                .fixedSize()
+        } else {
+            button
+                .help("Continue this conversation on the Chat page")
+                .fixedSize()
+        }
     }
 
     /// CX-2 (D4a): export the **active** conversation. Placed before the tools menu and Done so
@@ -460,6 +582,7 @@ struct ChatView: View {
             if isUser { Spacer(minLength: 40) }
             VStack(alignment: .leading, spacing: 6) {
                 Text(message.text)
+                    .chatTextSize(.message, messageSize)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 // MT3-FIX-1: which model wrote this answer (the Chat page lists every model's chats).
@@ -540,7 +663,7 @@ struct ChatView: View {
             }
             if let result = activity.result, !result.isEmpty {
                 Text(result)
-                    .font(.caption)
+                    .font(messageSize.font(.toolResult, standard: .caption))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

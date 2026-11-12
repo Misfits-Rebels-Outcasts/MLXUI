@@ -393,7 +393,32 @@ final class ChatController {
     func delete(_ id: UUID, on surface: ChatSurface) {
         guard holder == surface else { return }
         runner.deleteConversation(id)
+        forgetParked([id])
         invalidateIndex()
+    }
+
+    /// CP-2: delete every conversation the surface lists (the page: all models' chats; the bench: that model's).
+    func deleteAll(on surface: ChatSurface) {
+        guard holder == surface else { return }
+        let ids = Set(runner.conversations.map(\.id))
+        runner.deleteAllConversations()
+        forgetParked(ids)
+        invalidateIndex()
+    }
+
+    /// CP-2-FIX-1: a conversation deleted on either surface must be gone from both. The other surface's working set may be
+    /// parked in memory (the page under a Run sheet; a sheet's last set after it closed) and holds a copy: `acquire` merges
+    /// it back over the disk, which would resurrect the chat in the list and let the next save write its file again.
+    private func forgetParked(_ ids: Set<UUID>) {
+        for key in Array(parked.keys) {
+            guard var set = parked[key] else { continue }
+            set.conversations.removeAll { ids.contains($0.id) }
+            if let active = set.activeConversationID, ids.contains(active) {
+                set.activeConversationID = set.conversations.first?.id
+                set.transcriptItems = set.conversations.first?.items ?? []
+            }
+            parked[key] = set
+        }
     }
 
     // MARK: - Generation
