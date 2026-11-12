@@ -1,0 +1,7 @@
+mlxflow 0.8
+1. Read Audio   meeting.m4a
+2. Transcribe   Parakeet TDT 0.6B v3
+3. Template     "Context:\n{input}\n\nQuestion: Summarize the meeting and
+                list the action items."
+4. Answer       apple-foundation @ system
+5. Save Text    answer.txt

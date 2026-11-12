@@ -1,0 +1,12 @@
+{
+  "assets": [
+    { "handle": "a1", "kind": "audio", "name": "meeting.m4a", "fileName": "a1.m4a" },
+    { "handle": "a2", "kind": "text", "name": "Transcript", "fileName": "a2.txt", "text": "Alice will send the budget. Bob books the room.",
+      "rowText": "1. Transcribe   Parakeet TDT 0.6B v3", "model": "Parakeet TDT 0.6B v3" }
+  ],
+  "events": [
+    { "kind": "user", "text": "Summarize the meeting and list the action items.", "attachments": ["a1"] },
+    { "kind": "tool", "tool": "transcribe_audio", "assetArgument": "a1", "output": "a2" },
+    { "kind": "assistant", "text": "Action items: Alice sends the budget; Bob books the room.", "modelID": "apple-intelligence" }
+  ]
+}
