@@ -7,42 +7,84 @@
 import SwiftUI
 import AppKit
 
-/// App-modal, so it is frontmost over any sheet and blocks the windows (and sheets) under it. Escape denies.
+/// The approval window. Escape denies.
 private final class ApprovalPanel: NSPanel {
     var onCancel: (() -> Void)?
     override var canBecomeKey: Bool { true }
     override func cancelOperation(_ sender: Any?) { onCancel?() }
 }
 
+/// Presents the question as a sheet on the TOPMOST window or sheet of the app, so it is frontmost over a Run UI sheet and the
+/// window under it cannot be clicked until it is answered.
+///
+/// It is deliberately NOT `NSApp.runModal`: a modal run loop does not service the main dispatch queue or main-actor tasks
+/// (MT4-7-FIX-5: with `runModal` the panel showed no arguments and Allow never armed, because the SwiftUI task that arms it and
+/// the layout pass never ran; a real-panel test hung inside the loop). A sheet leaves the run loop alone.
+/// With no window to attach to, it is a floating panel above everything.
 @MainActor
 final class AppKitApprovalHost: ApprovalWindowHosting {
     private var panel: ApprovalPanel?
+    private weak var parent: NSWindow?
 
     func showModal(for pending: PendingApproval, presenter: ApprovalPresenter) {
         closeModal()
-        let panel = ApprovalPanel(contentViewController: NSHostingController(
-            rootView: ApprovalContentView(pending: pending, presenter: presenter)))
+        let hosting = NSHostingController(rootView: ApprovalContentView(pending: pending, presenter: presenter))
+        let panel = ApprovalPanel(contentViewController: hosting)
         panel.styleMask = [.titled]
         panel.title = "Allow tool call?"
         panel.isReleasedWhenClosed = false
         panel.onCancel = { [weak presenter] in presenter?.deny() }
-        panel.center()
         self.panel = panel
-        NSApp.activate()
-        // Run the modal loop after the SwiftUI update that asked for it has finished.
-        Task { @MainActor [weak self] in
-            guard let self, self.panel === panel else { return }
-            NSApp.runModal(for: panel)
-            panel.orderOut(nil)
-            if self.panel === panel { self.panel = nil }
+        // MT4-7-FIX-5: the window is sized to the content, and again once the first layout pass has run. Left alone it kept the
+        // height of the first (empty ScrollView) layout, so the arguments and the buttons sat below the fold.
+        Self.fit(panel, to: hosting)
+        DispatchQueue.main.async { [weak panel, weak hosting] in
+            guard let panel, let hosting else { return }
+            Self.fit(panel, to: hosting)
         }
+        NSApp.activate()
+        if let top = Self.topmostWindow() {
+            parent = top
+            top.beginSheet(panel, completionHandler: nil)
+        } else {
+            panel.level = .modalPanel
+            panel.center()
+            panel.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    static func fit(_ panel: NSWindow, to hosting: NSHostingController<ApprovalContentView>) {
+        hosting.view.layoutSubtreeIfNeeded()
+        let size = hosting.view.fittingSize
+        guard size.width > 0, size.height > 0 else { return }
+        panel.setContentSize(size)
+    }
+
+    /// The end of the deepest sheet chain among the visible windows (a Run UI sheet, or a sheet on a sheet), else the key or main
+    /// window: the approval goes over whatever is frontmost, so nothing under it can be clicked.
+    static func topmostWindow() -> NSWindow? {
+        func end(of window: NSWindow) -> (window: NSWindow, depth: Int) {
+            var top = window, depth = 0
+            while let sheet = top.attachedSheet { top = sheet; depth += 1 }
+            return (top, depth)
+        }
+        let visible = NSApp.windows.filter { $0.isVisible && !($0 is ApprovalPanel) }
+        let preferred = [NSApp.keyWindow, NSApp.mainWindow].compactMap { $0 } + visible
+        var best: (window: NSWindow, depth: Int)?
+        for window in preferred {
+            let candidate = end(of: window)
+            if let current = best, current.depth >= candidate.depth { continue }
+            best = candidate
+        }
+        return best?.window
     }
 
     func closeModal() {
         guard let panel else { return }
         self.panel = nil
-        if NSApp.modalWindow === panel { NSApp.abortModal() }
+        if let sheetParent = panel.sheetParent ?? parent, sheetParent.attachedSheet === panel { sheetParent.endSheet(panel) }
         panel.orderOut(nil)
+        parent = nil
     }
 }
 
@@ -51,7 +93,6 @@ final class AppKitApprovalHost: ApprovalWindowHosting {
 struct ApprovalContentView: View {
     let pending: PendingApproval
     let presenter: ApprovalPresenter
-    @State private var armed = false
 
     var body: some View {
         let sections = ApprovalPreview.sections(toolName: pending.toolName, arguments: pending.arguments)
@@ -87,18 +128,17 @@ struct ApprovalContentView: View {
                 Spacer()
                 Button("Deny") { presenter.deny() }
                     .keyboardShortcut(.defaultAction)
-                Button("Allow") { presenter.allow() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!armed)
+                // Re-evaluated on a timeline against the presenter's own clock (the same flag `allow()` honours), so the button
+                // cannot stay greyed because some other task did not run (MT4-7-FIX-5).
+                TimelineView(.periodic(from: .now, by: 0.1)) { context in
+                    Button("Allow") { presenter.allow() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!presenter.isAllowEnabled(at: context.date))
+                }
             }
         }
         .padding(20)
         .frame(width: sections.isEmpty ? 360 : 560)
-        .task {
-            let wait = presenter.secondsUntilArmed()
-            if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
-            armed = presenter.isAllowEnabled()
-        }
     }
 
     /// One labelled argument block: monospaced and selectable, red for a removal and green for an addition (D10).

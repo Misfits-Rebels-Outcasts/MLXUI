@@ -48,7 +48,17 @@ extension ModelToolRunner {
         if let text {
             return .success(ResolvedModelToolInput(asset: Asset(items: [Item(kind: .text, value: text)])))
         }
-        if let asset { return resolveHandle(asset, kind: kind, host: host) }
+        if let asset {
+            // MT4-7-FIX-5 (step 31b): Apple Intelligence names a file in an attached folder ("receipt-A.jpg") as an `asset`. When it is
+            // not a handle and no asset in this chat has that name, try it as a path in the chat's scope (the same checks as `path`);
+            // if that fails too, the answer is the usual "no asset ..." sentence.
+            if !ChatAssetStore.looksLikeHandle(asset), host?.assets.resolve(asset) == nil,
+               !(host?.assets.all.contains { $0.name == asset || $0.fileName == asset } ?? false),
+               case .success(let found) = resolvePath(asset, kind: kind, scratch: scratch, host: host) {
+                return .success(found)
+            }
+            return resolveHandle(asset, kind: kind, host: host)
+        }
         if let path { return resolvePath(path, kind: kind, scratch: scratch, host: host) }
         if let url { return await resolveURL(url, kind: kind, scratch: scratch) }
         return .failure(ToolFailure("give the input for \(spec.name)."))

@@ -4,8 +4,8 @@
 //
 //  The approval used to be a SwiftUI `.sheet(item:)` on `ChatView`. A window shows one sheet at a time, so with a Run UI sheet
 //  open (a `.sheet` on the root window) the approval was queued behind it: invisible, then popping up under the pointer the
-//  moment the Run sheet closed. A click meant for the Run sheet could approve a `run_shell`. The question is now an app-modal
-//  window (`AppKitApprovalHost`), frontmost over any sheet, and Allow stays disabled for a moment after it appears.
+//  moment the Run sheet closed. A click meant for the Run sheet could approve a `run_shell`. The question is now a sheet on the
+//  topmost window or sheet (`AppKitApprovalHost`), frontmost over any sheet, and Allow stays disabled for a moment after it appears.
 //
 //  This file holds the part a unit test can cover: which question is on screen, when the window is shown or closed, the
 //  click-through guard's clock, and that a question is answered once. The AppKit modality itself is not unit-tested.
@@ -26,7 +26,7 @@ struct ApprovalArming: Equatable, Sendable {
 /// What the presenter needs from the window system (`AppKitApprovalHost` in the app, a fake in tests).
 @MainActor
 protocol ApprovalWindowHosting: AnyObject {
-    /// Put the question in an app-modal window above every sheet.
+    /// Put the question in a window above every sheet, blocking the window under it.
     func showModal(for pending: PendingApproval, presenter: ApprovalPresenter)
     /// Take it down (no-op when none is up).
     func closeModal()
@@ -65,7 +65,10 @@ final class ApprovalPresenter {
     }
 
     /// Whether the Allow button is live now.
-    func isAllowEnabled() -> Bool { arming?.isArmed(at: now()) ?? false }
+    func isAllowEnabled() -> Bool { isAllowEnabled(at: now()) }
+
+    /// The same, at a given time (a view's timeline date).
+    func isAllowEnabled(at date: Date) -> Bool { arming?.isArmed(at: date) ?? false }
 
     func secondsUntilArmed() -> TimeInterval { arming?.remaining(at: now()) ?? 0 }
 

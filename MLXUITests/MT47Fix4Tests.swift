@@ -164,6 +164,51 @@ import MLXLMCommon
         #expect(second.temporaryFiles.count == 1)               // the url was never fetched
     }
 
+    // MT4-7-FIX-5 (step 31b): Apple sends a file name from an attached folder as `asset`.
+    @Test func anAssetThatIsNotAnAssetIsTriedAsAPathInTheAttachedFolder() async throws {
+        let root = tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let folder = root.appendingPathComponent("folderA", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        _ = try image(folder, "receipt-A.jpg")
+        let h = host(root)                                                       // no assets in this chat
+        let scope = FileScope(folders: [folder.path], workingFolder: folder.path)
+        let byName = await FileScope.$current.withValue(scope) {
+            try? await resolve("ocr_image", ["asset": .string("receipt-A.jpg")], host: h, root: root, roots: [folder])
+        }
+        guard case .success(let input)? = byName else { Issue.record("a file name in the attached folder was refused: \(String(describing: byName))"); return }
+        #expect(input.handles.isEmpty && input.temporaryFiles.count == 1)
+        // a full path in `asset` works the same way
+        let byPath = await FileScope.$current.withValue(scope) {
+            try? await resolve("ocr_image", ["asset": .string(folder.appendingPathComponent("receipt-A.jpg").path)], host: h, root: root, roots: [folder])
+        }
+        guard case .success? = byPath else { Issue.record("a full path in asset was refused"); return }
+        // a name that is nowhere, and one outside the scope, keep the usual sentence
+        for ref in ["nowhere.jpg", "/etc/hosts"] {
+            let out = await FileScope.$current.withValue(scope) {
+                try? await resolve("ocr_image", ["asset": .string(ref)], host: h, root: root, roots: [folder])
+            }
+            guard case .failure(let failure)? = out else { Issue.record("accepted \(ref)"); continue }
+            #expect(failure.text == "Error: no asset \"\(ref)\". This chat has no assets yet.", "\(ref)")
+        }
+    }
+
+    @Test func aNameThatMatchesTwoAssetsIsNeverGuessedAsAPath() async throws {
+        let root = tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let folder = root.appendingPathComponent("folderA", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        _ = try image(folder, "receipt.jpg")                                    // the same name exists in the folder
+        let h = host(root)
+        let file = try image(root)
+        _ = try h.assets.importFile(file, kind: "image")
+        _ = try h.assets.importFile(file, kind: "image")                        // two assets called receipt.jpg
+        let scope = FileScope(folders: [folder.path], workingFolder: folder.path)
+        let out = await FileScope.$current.withValue(scope) {
+            try? await resolve("ocr_image", ["asset": .string("receipt.jpg")], host: h, root: root, roots: [folder])
+        }
+        guard case .failure(let failure)? = out else { Issue.record("an ambiguous name was resolved"); return }
+        #expect(failure.text.hasPrefix("Error: no asset \"receipt.jpg\"."))
+    }
+
     @Test func textStillWinsAndAPathOnATextToolStillRefuses() async throws {
         let root = tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
         guard case .success(let input) = try await resolve("speak", ["text": .string("hi"), "asset": .string("a9")], host: host(root), root: root) else {
