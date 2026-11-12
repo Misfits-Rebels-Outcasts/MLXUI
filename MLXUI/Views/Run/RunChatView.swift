@@ -17,6 +17,8 @@ struct RunChatView: View {
             .frame(
                 minWidth: 840, idealWidth: 1100, maxWidth: .infinity,
                 minHeight: 520, idealHeight: 620, maxHeight: .infinity)
+            // CP-3-SPIKE: lets the sheet's window be resized and remembers its size.
+            .background(RunChatSheetResizer())
             .onDisappear {
                 appState.chat.stop(from: .bench)
                 appState.chat.release(.bench)
