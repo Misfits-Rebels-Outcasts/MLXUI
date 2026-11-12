@@ -19,6 +19,12 @@ nonisolated struct FlowEditTarget: Hashable, Identifiable {
     /// the plain-flow equivalent KW-1-1 only wired for workspace flows. nil for a brand-new
     /// flow that has never been written.
     var fileURL: URL? = nil
+    /// MT5-2: the "left out" lines of a flow built from a chat (`ModelToolFlow.banner`), shown at the top of the editor
+    /// for this session only. Not part of identity.
+    var leftOut: [String] = []
+    /// MT5-2: the flow folder was made just for this editor (a chat's attachments were copied into it); remove it when
+    /// the editor closes without a save.
+    var removeFolderIfUnsaved = false
 
     var id: String {
         if let workspace { return "w-\(workspace.workspaceID)/\(workspace.flowFile)" }

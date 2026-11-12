@@ -26,7 +26,11 @@ struct ChatInspectorView: View {
     @Binding var showInTranscript: UUID?
     /// MT4-4: the Chat page (Model Tools on) lists the chat's assets under Files and adds "This chat". The bench is unchanged.
     var showsModelTools = false
+    /// MT5-2: the catalog (router displays, pins) and the way into the flow editor. `nil` hand-off = workflows are off.
+    var catalogModels: [ModelEntry] = []
+    var openWorkflowEditor: ((FlowEditTarget) -> Void)? = nil
 
+    @State private var workflowError: String?
     @State private var expanded: Set<String> = []
     @State private var levels: [String: FolderListing.Result] = [:]
     /// CW-5: the file whose preview is open, and its loaded content.
@@ -378,6 +382,42 @@ struct ChatInspectorView: View {
             Text("Models used: \(listing.modelsUsed.count)").font(.caption).foregroundStyle(.secondary)
             ForEach(listing.modelsUsed, id: \.self) { name in
                 Text(name).font(.caption2).foregroundStyle(.secondary).padding(.leading, 8)
+            }
+            saveAsWorkflowControl
+        }
+    }
+
+    /// MT5-2: "Save as workflow": the chat's model-tool steps as an unsaved flow in the editor.
+    @ViewBuilder
+    private var saveAsWorkflowControl: some View {
+        if let store = assetStore, let conversationID = runner.activeConversationID {
+            // Not rebuilt on every streamed token: while a reply runs the button is off anyway.
+            let flow = runner.isRunning
+                ? ModelToolFlowBuilder.build(ModelToolTrace(events: [], assets: []))
+                : ModelToolTraceAdapter.flow(items: runner.transcript.items, store: store, models: catalogModels)
+            let state = ModelToolWorkflowHandoff.availability(
+                flow: flow, isRunning: runner.isRunning, workflowsAvailable: openWorkflowEditor != nil)
+            Button {
+                let title = runner.conversations.first { $0.id == conversationID }?.title
+                do {
+                    let target = try ModelToolWorkflowHandoff.prepare(
+                        flow: flow, chatTitle: title, assetsDirectory: store.directory, workspace: FlowWorkspace.shared)
+                    workflowError = nil
+                    openWorkflowEditor?(target)
+                } catch {
+                    workflowError = (error as? ModelToolWorkflowHandoff.Failure)?.description ?? "Couldn't make a workflow from this chat."
+                }
+            } label: {
+                Label("Save as workflow", systemImage: "square.and.arrow.down.on.square")
+            }
+            .controlSize(.small)
+            .disabled(!state.enabled)
+            .help(state.reason ?? "Open this chat's model steps as a new workflow in the editor")
+            if let reason = state.reason {
+                Text(reason).font(.caption2).foregroundStyle(.secondary)
+            }
+            if let workflowError {
+                Text(workflowError).font(.caption2).foregroundStyle(.red)
             }
         }
     }

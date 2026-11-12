@@ -114,7 +114,9 @@ struct ChatView: View {
                         if !pendingFiles.contains(url) { pendingFiles.append(url) }
                     },
                     showInTranscript: $scrollTarget,
-                    showsModelTools: ChatController.modelToolsEnabled(for: surface))
+                    showsModelTools: ChatController.modelToolsEnabled(for: surface),
+                    catalogModels: appState.browserData?.domains.flatMap { $0.allModels } ?? [],
+                    openWorkflowEditor: AppState.hideAutomate ? nil : { target in appState.route.append(.editor(target)) })
                 .frame(width: 240)
             }
         }
