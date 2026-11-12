@@ -33,6 +33,18 @@ nonisolated enum ModelToolFlowBuilder {
         text.range(of: #"\{(input(:\d+)?|\d+)\}"#, options: .regularExpression) != nil
     }
 
+    /// A Template pattern that reads its input: `{input}`, `{input:N}` or `{N}`.
+    static func carriesContext(_ pattern: String) -> Bool { hasPlaceholder(pattern) }
+
+    /// How many of the `contextful` Answer rows are fed by a Template with no placeholder (the invariant check).
+    static func answersMissingContext(rows: [Row], contextful: Set<UUID>) -> Int {
+        var bad = 0
+        for (i, row) in rows.enumerated() where row.task == "Answer" && contextful.contains(row.id) {
+            guard i > 0, rows[i - 1].task == "Template", carriesContext(rows[i - 1].settings ?? "") else { bad += 1; continue }
+        }
+        return bad
+    }
+
     /// A file name a `.cat` row can hold: lowercase (an uppercase-leading word reads as a model), `[a-z0-9_-]` plus one extension.
     static func fileName(_ raw: String, kind: String, fallbackBase: String) -> String {
         let ext = kind == "text" ? "txt" : cleanExtension(raw, kind: kind)
@@ -89,6 +101,12 @@ nonisolated enum ModelToolFlowBuilder {
         var turns: [Turn] = []
         var textOutputs: [Int: [String]] = [:]
         var consumedRouterTexts: Set<String> = []
+        /// Answer rows whose turn had text context (attachments or earlier text outputs): each must be fed a Template
+        /// that carries it (MT5-2-FIX-1 invariant).
+        var contextfulAnswers: Set<UUID> = []
+        /// The Answer row a turn's tools consumed router text from (the latest one).
+        var routerAnswerByConsumingTurn: [Int: UUID] = [:]
+        var contextLost = false
 
         // Banner counters.
         var leftOutTools: [(name: String, count: Int)] = []
@@ -286,7 +304,29 @@ nonisolated enum ModelToolFlowBuilder {
             let inUser = turn.userText.contains(text) || turn.userText.contains(trimmed)
             let inAttachment = turn.attachments.contains { (assets[$0]?.text ?? "").contains(trimmed) }
             if inUser || inAttachment { return literal(text) }
-            return answerPair(turnIndex: turnIndex, key: trimmed)
+            // The router wrote this text in some turn, maybe an earlier one: that turn's question and context feed it.
+            let producing = producingTurn(of: trimmed, consumedIn: turnIndex)
+            guard let id = answerPair(turnIndex: producing, key: trimmed) else { return nil }
+            routerAnswerByConsumingTurn[turnIndex] = id
+            return id
+        }
+
+        /// The turn whose assistant reply is `text`: the most recent exact match up to `turn`, else the most recent reply
+        /// containing it, else the consuming turn itself.
+        func producingTurn(of text: String, consumedIn turn: Int) -> Int {
+            func replies(_ i: Int) -> [String] {
+                turns[i].events.filter { $0.kind == .assistant }
+                    .map { ($0.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            }
+            for i in stride(from: turn, through: 0, by: -1) where replies(i).contains(text) { return i }
+            for i in stride(from: turn, through: 0, by: -1) where replies(i).contains(where: { $0.contains(text) }) { return i }
+            return turn
+        }
+
+        /// Text a turn's answer can draw on: its readable text attachments and the text its steps produced so far.
+        func hasOwnContext(turn: Int) -> Bool {
+            if !(textOutputs[turn] ?? []).isEmpty { return true }
+            return turns[turn].attachments.contains { assets[$0]?.kind == "text" && assets[$0]?.rowText == nil && assets[$0]?.missing != true }
         }
 
         mutating func literal(_ text: String) -> UUID {
@@ -330,12 +370,15 @@ nonisolated enum ModelToolFlowBuilder {
                 body = "Context:\n" + slots + (question.isEmpty ? "" : "\n\nQuestion: " + question)
             }
             guard !body.isEmpty else { emptyText += 1; return nil }
+            // A question with no {input} must never feed an Answer that had context to read (MT5-2-FIX-1).
+            if !context.isEmpty && !ModelToolFlowBuilder.carriesContext(body) { contextLost = true; return nil }
 
             var refs: [Ref] = []
             if context.count == 1 { refs = self.refs(for: context[0]) }
             else if context.count > 1 { refs = context.map { Ref.rowRef($0) } }
             emit(Row(task: "Template", settings: FlowSettingsEscaper.quoted(body), refs: refs))
             let answer = emit(Row(task: "Answer", model: router))
+            if !context.isEmpty { contextfulAnswers.insert(answer) }
             answerRows[cacheKey] = answer
             consumedRouterTexts.insert(key)
             return answer
@@ -378,7 +421,12 @@ nonisolated enum ModelToolFlowBuilder {
             if let reply = finalReply,
                turns[reply.turn].events.contains(where: { $0.kind == .tool })
                 || turns[reply.turn].attachments.contains(where: { assets[$0]?.kind == "text" }) {
-                replyAnswer = answerPair(turnIndex: reply.turn, key: reply.text)
+                if !hasOwnContext(turn: reply.turn), let earlier = routerAnswerByConsumingTurn[reply.turn] {
+                    // The reply only restates router text an earlier Answer already produced: save that one.
+                    replyAnswer = earlier
+                } else {
+                    replyAnswer = answerPair(turnIndex: reply.turn, key: reply.text)
+                }
             }
 
             // Media nothing downstream used.
@@ -448,6 +496,7 @@ nonisolated enum ModelToolFlowBuilder {
             add(.unconsumedAttachment, idle.count, idle)
             add(.contextTrimmed, contextTrimmed ? 1 : 0)
             add(.unsavedOutput, unsaved.count, unsaved)
+            add(.contextLost, (contextLost || ModelToolFlowBuilder.answersMissingContext(rows: rows, contextful: contextfulAnswers) > 0) ? 1 : 0)
             return out
         }
 
@@ -463,7 +512,8 @@ nonisolated enum ModelToolFlowBuilder {
             document.modelsOrder = pinOrder
             let text = CatSerializer.serialize(document)
             return ModelToolFlow(document: document, text: text, copies: copies, banner: banner(),
-                                 roundTrips: Builder.roundTrips(document, text: text))
+                                 roundTrips: Builder.roundTrips(document, text: text)
+                                    && ModelToolFlowBuilder.answersMissingContext(rows: rows, contextful: contextfulAnswers) == 0)
         }
 
         static func roundTrips(_ document: FlowDocument, text: String) -> Bool {

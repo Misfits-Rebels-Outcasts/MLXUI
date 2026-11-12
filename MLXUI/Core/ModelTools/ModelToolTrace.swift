@@ -99,7 +99,7 @@ nonisolated struct ModelToolFlowBannerEntry: Sendable, Equatable {
         case leftOutTools, failedCalls, droppedReplies, history
         case unwritableModel, unresolvedModel, noRouter
         case missingAttachment, unconsumedAttachment
-        case braceToken, dependsOnLeftOut, contextTrimmed, unsavedOutput, emptyText
+        case braceToken, dependsOnLeftOut, contextTrimmed, unsavedOutput, emptyText, contextLost
     }
     var kind: Kind
     var count: Int
@@ -122,6 +122,7 @@ nonisolated struct ModelToolFlowBannerEntry: Sendable, Equatable {
         case .dependsOnLeftOut: return "Left out: \(count) step\(count == 1 ? "" : "s") that needed something left out above."
         case .contextTrimmed: return "An answer read more than four earlier results; the flow keeps the latest four."
         case .unsavedOutput: return "Not saved: an output of a kind a flow cannot save (\(list))."
+        case .contextLost: return "Not saved: an answer in this chat would lose the text it was given."
         case .emptyText: return "Left out: \(count) step\(count == 1 ? "" : "s") with no text."
         }
     }
