@@ -13,7 +13,7 @@ struct RunChatSheetResizer: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 
     final class ResizerView: NSView {
-        private var endResize: NSObjectProtocol?
+        private var observers: [NSObjectProtocol] = []
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
@@ -25,31 +25,58 @@ struct RunChatSheetResizer: NSViewRepresentable {
             }
         }
 
-        deinit { if let endResize { NotificationCenter.default.removeObserver(endResize) } }
+        deinit { observers.forEach { NotificationCenter.default.removeObserver($0) } }
 
         private func stopObserving() {
-            if let endResize { NotificationCenter.default.removeObserver(endResize) }
-            endResize = nil
+            observers.forEach { NotificationCenter.default.removeObserver($0) }
+            observers = []
+        }
+
+        /// SwiftUI re-lays out the sheet's window and can reset its limits, so both minimums are (re)applied here
+        /// on every resize and window update, and a frame that is already below the floor is snapped back.
+        private func enforceFloor(_ window: NSWindow) {
+            let content = RunChatSheetSize.minSize
+            let frameMin = window.frameRect(forContentRect: NSRect(origin: .zero, size: content)).size
+            if window.contentMinSize != content { window.contentMinSize = content }
+            if window.minSize != frameMin { window.minSize = frameMin }
+            if !window.styleMask.contains(.resizable) { window.styleMask.insert(.resizable) }
+            let current = window.contentRect(forFrameRect: window.frame).size
+            if let target = RunChatSheetSize.snapTarget(for: current) {
+                var frame = window.frame
+                let newSize = window.frameRect(forContentRect: NSRect(origin: .zero, size: target)).size
+                frame.origin.y = frame.maxY - newSize.height          // keep the top edge where it was
+                frame.size = newSize
+                window.setFrame(frame, display: true)
+            }
         }
 
         private func configure(_ window: NSWindow) {
-            window.styleMask.insert(.resizable)
-            window.contentMinSize = RunChatSheetSize.minSize
+            enforceFloor(window)
             let screen = window.screen?.visibleFrame.size ?? NSScreen.main?.visibleFrame.size ?? .zero
             if let raw = UserDefaults.standard.string(forKey: RunChatSheetSize.storageKey),
                let saved = RunChatSheetSize.parse(raw) {
                 window.setContentSize(RunChatSheetSize.clamp(saved, screen: screen))
             }
             stopObserving()
-            endResize = NotificationCenter.default.addObserver(
+            let center = NotificationCenter.default
+            for name in [NSWindow.didResizeNotification, NSWindow.didUpdateNotification] {
+                observers.append(center.addObserver(forName: name, object: window, queue: .main) { note in
+                    MainActor.assumeIsolated {
+                        if let window = note.object as? NSWindow { self.enforceFloor(window) }
+                    }
+                })
+            }
+            observers.append(center.addObserver(
                 forName: NSWindow.didEndLiveResizeNotification, object: window, queue: .main
             ) { note in
                 MainActor.assumeIsolated {
                     guard let window = note.object as? NSWindow else { return }
                     let size = window.contentRect(forFrameRect: window.frame).size
-                    UserDefaults.standard.set(RunChatSheetSize.encode(size), forKey: RunChatSheetSize.storageKey)
+                    // Never write a size below the floor (CP-3-SPIKE-FIX-1).
+                    guard let value = RunChatSheetSize.storableValue(for: size) else { return }
+                    UserDefaults.standard.set(value, forKey: RunChatSheetSize.storageKey)
                 }
-            }
+            })
         }
     }
 }

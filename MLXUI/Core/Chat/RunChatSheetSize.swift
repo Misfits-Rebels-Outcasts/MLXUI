@@ -28,4 +28,20 @@ nonisolated enum RunChatSheetSize {
         let h = size.height.isFinite ? size.height : minSize.height
         return CGSize(width: min(max(w, minSize.width), maxW), height: min(max(h, minSize.height), maxH))
     }
+
+    /// CP-3-SPIKE-FIX-1: whether `size` meets the floor in both dimensions.
+    static func meetsMinimum(_ size: CGSize) -> Bool {
+        size.width.isFinite && size.height.isFinite && size.width >= minSize.width && size.height >= minSize.height
+    }
+
+    /// CP-3-SPIKE-FIX-1: the string to write for a resize that just ended, or `nil` when it must not be written
+    /// (below the floor, or not a real size). A size below the minimum is never stored.
+    static func storableValue(for size: CGSize) -> String? {
+        meetsMinimum(size) ? encode(size) : nil
+    }
+
+    /// CP-3-SPIKE-FIX-1: the content size to snap a window back to when a resize went below the floor, else `nil`.
+    static func snapTarget(for contentSize: CGSize) -> CGSize? {
+        meetsMinimum(contentSize) ? nil : clamp(contentSize, screen: CGSize(width: Double.greatestFiniteMagnitude, height: Double.greatestFiniteMagnitude))
+    }
 }

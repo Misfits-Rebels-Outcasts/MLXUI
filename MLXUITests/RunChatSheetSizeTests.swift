@@ -34,4 +34,21 @@ struct RunChatSheetSizeTests {
             #expect(RunChatSheetSize.parse(bad) == nil, "\(bad)")
         }
     }
+
+    /// CP-3-SPIKE-FIX-1: a size below the floor is never written.
+    @Test func aSizeBelowTheMinimumIsNeverStored() {
+        for small in [CGSize(width: 839, height: 900), CGSize(width: 900, height: 519), CGSize(width: 300, height: 0),
+                      CGSize(width: 2, height: 0), CGSize(width: Double.nan, height: 600)] {
+            #expect(RunChatSheetSize.storableValue(for: small) == nil, "\(small)")
+        }
+        #expect(RunChatSheetSize.storableValue(for: CGSize(width: 840, height: 520)) == "840,520")
+        #expect(RunChatSheetSize.storableValue(for: CGSize(width: 1100, height: 620)) == "1100,620")
+    }
+
+    @Test func snapTargetOnlyWhenBelowTheFloor() {
+        #expect(RunChatSheetSize.snapTarget(for: CGSize(width: 1100, height: 620)) == nil)
+        #expect(RunChatSheetSize.snapTarget(for: CGSize(width: 840, height: 520)) == nil)
+        #expect(RunChatSheetSize.snapTarget(for: CGSize(width: 600, height: 0)) == CGSize(width: 840, height: 520))
+        #expect(RunChatSheetSize.snapTarget(for: CGSize(width: 1000, height: 300)) == CGSize(width: 1000, height: 520))
+    }
 }
