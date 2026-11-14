@@ -16,6 +16,7 @@ import Testing
 ///      `~/Library/Application Support/AI Browser/` when the host is unsandboxed (run on the `MLXUI-Direct` host or an
 ///      unsandboxed test host; the sandboxed `MLXUI` host looks in its own empty container and skips). Read-only: only
 ///      `.installed` markers are looked at here, and the engines read the weights.
+/// Optional `MLXUI_BASIC_EXPANSION_ONLY=17` (or `14,15`) restricts the run to those flows.
 /// Models: TranslateGemma 4B (14), Depth Anything V2 Small (15), Qwen3.5 9B (16), Gemma 4 E4B + Kokoro 82M (17),
 /// Ministral 3B (18).
 ///
@@ -25,10 +26,23 @@ import Testing
 nonisolated enum BasicExpansionRealLoad {
     static var optedIn: Bool { ProcessInfo.processInfo.environment["MLXUI_BASIC_EXPANSION_SMOKE"] == "1" }
 
+    /// Catalog ids whose **repo** has the `.installed` marker in `ModelStore.shared` (keyed by `hfModelId`, so a card that
+    /// shares its repo with another, like `Gemma 4 E4B Vision` and `Gemma 4 E4B`, is ready when the repo is).
+    static func installedIDs(_ catalog: [ModelEntry]) -> Set<String> {
+        let store = ModelStore.shared
+        return Set(catalog.filter { FileManager.default.fileExists(atPath: store.installedMarker(forHFModelID: $0.hfModelId).path) }.map(\.id))
+    }
+
     static func ready(_ flowID: String) -> Bool {
         guard optedIn, let doc = try? GalleryLoader.loadDocument(flowID: flowID) else { return false }
+        // `MLXUI_BASIC_EXPANSION_ONLY=17` (comma list of flow numbers) runs just those flows, in a process of their own: the
+        // suite's flows share one process and `EngineCache`, so a later flow's footprint includes the earlier flows' resident models.
+        if let only = ProcessInfo.processInfo.environment["MLXUI_BASIC_EXPANSION_ONLY"], !only.isEmpty {
+            let number = flowID.split(separator: "-").first.map(String.init) ?? flowID
+            guard only.split(separator: ",").map({ $0.trimmingCharacters(in: .whitespaces) }).contains(number) else { return false }
+        }
         let catalog = BasicShowcaseRealLoad.catalog()
-        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: BasicShowcaseRealLoad.installedIDs(catalog),
+        let result = FlowPreflight.run(doc, catalog: catalog, installedModelIDs: BasicExpansionRealLoad.installedIDs(catalog),
                                        totalRAMGB: 19, claimableModelIDs: Set(catalog.map(\.id)))
         return !result.needs.isEmpty && !result.isBlocked && result.toDownload.isEmpty
     }
@@ -114,7 +128,7 @@ struct BasicExpansionSmokeTests {
         }
         let executor = RealExecutor(workspace: ws, flowID: flowID, blobDirectory: base.appendingPathComponent("blobs"),
                                     makeModelStage: makeStage,
-                                    installedModelIDs: BasicShowcaseRealLoad.installedIDs(catalog), catalog: catalog)
+                                    installedModelIDs: BasicExpansionRealLoad.installedIDs(catalog), catalog: catalog)
         let doc = try GalleryLoader.loadDocument(flowID: flowID)
         let sampler = ModelSmoke.PeakSampler()
         sampler.note(ModelSmoke.physMiB())
@@ -143,6 +157,17 @@ struct BasicExpansionSmokeTests {
         let failed = events.filter { $0.kind == .rowFailed }
         ModelSmoke.check(Self.row, "\(flowID).no-row-failed", failed.isEmpty, failed.map { "\($0.path): \($0.message ?? "")" }.joined(separator: "; "))
         return Run(dir: ws.directory(for: flowID), events: events, texts: texts.values, peakMiB: sampler.peak, cleanup: base)
+    }
+
+    /// Artifacts are optional: with `MLXUI_SMOKE_OUT` unset nothing is written (and `ModelSmoke.artifact` would record an issue).
+    private func save(_ row: String, _ name: String, copying source: URL, judge: String? = nil) {
+        guard ModelSmoke.out != nil else { return }
+        _ = try? ModelSmoke.artifact(row, name, copying: source, judge: judge)
+    }
+
+    private func save(_ row: String, _ name: String, text: String, judge: String? = nil) {
+        guard ModelSmoke.out != nil else { return }
+        _ = try? ModelSmoke.artifact(row, name, text: text, judge: judge)
     }
 
     private func decoded(_ url: URL) throws -> CGImage {
@@ -175,7 +200,7 @@ struct BasicExpansionSmokeTests {
         ModelSmoke.check(Self.row, "14.not-the-input", text != BasicExpansionInputsTests.letterText.trimmingCharacters(in: .whitespacesAndNewlines), "output equals the English letter")
         ModelSmoke.check(Self.row, "14.has-14-November-or-Sabtu", text.contains("14 November") || text.contains("Sabtu"), text)
         print("RAW|BX4-14|letter-malay|\(text)")
-        _ = try? ModelSmoke.artifact("BX4-14", "letter-malay.txt", text: text, judge: "Fluent Malay; keeps 14 November, 9 to 1, Block C, the phone number.")
+        save("BX4-14", "letter-malay.txt", text: text, judge: "Fluent Malay; keeps 14 November, 9 to 1, Block C, the phone number.")
     }
 
     // MARK: 15 - See the Depth
@@ -200,7 +225,7 @@ struct BasicExpansionSmokeTests {
         ModelSmoke.check(Self.row, "15.pixel-stddev-above-zero", std > 0, String(format: "stddev %.2f, mean %.1f", std, mean))
         let kind = Double(colourful) / Double(n) > 0.05 ? "colour-mapped" : "grey"
         ModelSmoke.info(Self.row, "15.output-kind", "\(kind) (\(colourful) of \(n) pixels have channels differing by more than 8)")
-        _ = try? ModelSmoke.artifact("BX4-15", "photo-depth.png", copying: r.dir.appendingPathComponent("photo-depth.png"), judge: "Near things light, far things dark; the kitten reads as nearer than the background.")
+        save("BX4-15", "photo-depth.png", copying: r.dir.appendingPathComponent("photo-depth.png"), judge: "Near things light, far things dark; the kitten reads as nearer than the background.")
     }
 
     // MARK: 16 - Ask a Document
@@ -218,7 +243,7 @@ struct BasicExpansionSmokeTests {
         let eighteenForNewStaff = lower.contains("18") && !(lower.contains("5 year") || lower.contains("five year") || lower.contains("5-year"))
         ModelSmoke.check(Self.row, "16.does-not-give-18-days-to-new-staff", !eighteenForNewStaff, text)
         print("RAW|BX4-16|answer|\(text)")
-        _ = try? ModelSmoke.artifact("BX4-16", "answer.txt", text: text, judge: "14 days, usable after the 3-month probation; no sick-leave mix-up.")
+        save("BX4-16", "answer.txt", text: text, judge: "14 days, usable after the 3-month probation; no sick-leave mix-up.")
     }
 
     // MARK: 17 - Story From a Photo
@@ -233,8 +258,8 @@ struct BasicExpansionSmokeTests {
         // Verbatim, for the hard-stop report: nothing here strips or edits the model's output.
         print("RAW|BX4-17|row2|\(description)")
         print("RAW|BX4-17|row3|\(story)")
-        _ = try? ModelSmoke.artifact("BX4-17", "row2-description.raw.txt", text: description)
-        _ = try? ModelSmoke.artifact("BX4-17", "row3-story.raw.txt", text: story, judge: "A gentle bedtime story, about 120 words, plain text.")
+        save("BX4-17", "row2-description.raw.txt", text: description)
+        save("BX4-17", "row3-story.raw.txt", text: story, judge: "A gentle bedtime story, about 120 words, plain text.")
         ModelSmoke.check(Self.row, "17.story-non-empty", !story.isEmpty, story)
         let broken = BasicExpansionStoryCheck.violations(in: story)
         ModelSmoke.check(Self.row, "17.story-is-clean-speakable-text", broken.isEmpty, "broken rules: \(broken); story: \(story)")
@@ -243,7 +268,7 @@ struct BasicExpansionSmokeTests {
         let seconds = Double(file.length) / file.processingFormat.sampleRate
         ModelSmoke.check(Self.row, "17.wav-20-to-90-s", (20...90).contains(seconds), String(format: "%.1f s", seconds))
         ModelSmoke.check(Self.row, "17.peak-rss-under-12-GB", r.peakMiB < 12 * 1024, String(format: "%.0f MiB", r.peakMiB))
-        _ = try? ModelSmoke.artifact("BX4-17", "story.wav", copying: wav, judge: "The story read aloud in a natural voice, no markup spoken.")
+        save("BX4-17", "story.wav", copying: wav, judge: "The story read aloud in a natural voice, no markup spoken.")
     }
 
     // MARK: 18 - Chart a Spreadsheet
@@ -258,7 +283,7 @@ struct BasicExpansionSmokeTests {
         ModelSmoke.check(Self.row, "18.mentions-Dec", text.contains("Dec"), text)
         ModelSmoke.check(Self.row, "18.mentions-Feb", text.contains("Feb"), text)
         print("RAW|BX4-18|summary|\(text)")
-        _ = try? ModelSmoke.artifact("BX4-18", "sales-chart.png", copying: r.dir.appendingPathComponent("sales-chart.png"), judge: "Twelve bars, rising through the year.")
-        _ = try? ModelSmoke.artifact("BX4-18", "sales-summary.txt", text: text, judge: "Two sentences: upward trend, December best, February worst.")
+        save("BX4-18", "sales-chart.png", copying: r.dir.appendingPathComponent("sales-chart.png"), judge: "Twelve bars, rising through the year.")
+        save("BX4-18", "sales-summary.txt", text: text, judge: "Two sentences: upward trend, December best, February worst.")
     }
 }
