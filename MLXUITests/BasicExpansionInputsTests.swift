@@ -20,10 +20,12 @@ struct BasicExpansionInputsTests {
         return (ws.directory(for: flowID), ws, root)
     }
 
+    // Owner ruling, Boo, 2026-11-14: the second sentence reads "There will be no water in Block C on Saturday, 14 November," (the
+    // first draft said the supply would be "switched off", which TranslateGemma rendered as "disahkan", confirmed). Rest unchanged.
     static let letterText = """
         Dear residents,
 
-        The water supply to Block C will be switched off on Saturday, 14 November,
+        There will be no water in Block C on Saturday, 14 November,
         from 9 in the morning until 1 in the afternoon, while the main pipe is repaired.
         Please store enough water for cooking and washing before then.
         The lifts will keep running as normal.

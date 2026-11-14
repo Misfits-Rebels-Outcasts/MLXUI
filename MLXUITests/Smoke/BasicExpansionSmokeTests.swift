@@ -209,6 +209,11 @@ struct BasicExpansionSmokeTests {
         ModelSmoke.check(Self.row, "14.non-empty", !text.isEmpty, text)
         ModelSmoke.check(Self.row, "14.not-the-input", text != BasicExpansionInputsTests.letterText.trimmingCharacters(in: .whitespacesAndNewlines), "output equals the English letter")
         ModelSmoke.check(Self.row, "14.has-14-November-or-Sabtu", text.contains("14 November") || text.contains("Sabtu"), text)
+        // Owner ruling, Boo, 2026-11-14: "Tighten the BX-4 check: the output must contain 'tiada' or 'tidak', and must not contain
+        // 'disahkan'." (The first real run translated "switched off" as "disahkan", confirmed.) If it still fails, stop and report.
+        let lower = text.lowercased()
+        ModelSmoke.check(Self.row, "14.says-there-is-no-water-tiada-or-tidak", lower.contains("tiada") || lower.contains("tidak"), text)
+        ModelSmoke.check(Self.row, "14.does-not-say-disahkan", !lower.contains("disahkan"), text)
         print("RAW|BX4-14|letter-malay|\(text)")
         save("BX4-14", "letter-malay.txt", text: text, judge: "Fluent Malay; keeps 14 November, 9 to 1, Block C, the phone number.")
     }
