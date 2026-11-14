@@ -1,0 +1,9 @@
+mlxflow 0.8
+1. Read CSV              sales.csv
+2. Chart                 kind=bar; x=month; y=sales
+3. Save Image            sales-chart.png
+
+4. Table to Text   (1)   format=markdown
+5. Summarize             Ministral 3B; "two sentences: the overall trend,
+                         then the best and the worst month"
+6. Save Text             sales-summary.txt

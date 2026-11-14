@@ -586,6 +586,46 @@
    "category": "Basic",
    "description": "Laya reads one email and decides: reply today, or later. The email is filed into the matching file — nothing is generated.",
    "tier": "basic"
+  },
+  {
+   "number": 83,
+   "title": "Translate a Letter",
+   "filename": "14-TranslateLetter.cat",
+   "category": "Basic",
+   "description": "Turn an English notice into Malay with TranslateGemma — change `to=` for any of its languages.",
+   "tier": "basic"
+  },
+  {
+   "number": 84,
+   "title": "See the Depth",
+   "filename": "15-DepthMap.cat",
+   "category": "Basic",
+   "description": "Make a depth map from a photo: near things light, far things dark — for edits, 3D effects and masks.",
+   "tier": "basic"
+  },
+  {
+   "number": 85,
+   "title": "Ask a Document",
+   "filename": "16-AskADocument.cat",
+   "category": "Basic",
+   "description": "Ask a question of a PDF and get an answer drawn only from it. Edit row 2 to ask your own.",
+   "tier": "basic"
+  },
+  {
+   "number": 86,
+   "title": "Story From a Photo",
+   "filename": "17-StoryFromPhoto.cat",
+   "category": "Basic",
+   "description": "Three AIs in a row: one looks at a photo, one writes a bedtime story about it, one reads it aloud.",
+   "tier": "basic"
+  },
+  {
+   "number": 87,
+   "title": "Chart a Spreadsheet",
+   "filename": "18-ChartSpreadsheet.cat",
+   "category": "Basic",
+   "description": "A CSV in, two files out: a bar chart of the numbers and two sentences on what they show.",
+   "tier": "basic"
   }
  ]
 }

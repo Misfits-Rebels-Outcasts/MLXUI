@@ -1,0 +1,48 @@
+{
+ "models": {
+  "Qwen3.5 9B": "mlx-community/Qwen3.5-9B-MLX-4bit"
+ },
+ "rows": [
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "leave-policy.pdf",
+   "task": "Read PDF"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "\"Answer using only the document below.\\n\\nDocument:\\n{1}\\n\\nQuestion: How many days of annual leave does a new employee get, and when can they start using it?\"",
+   "task": "Template"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": "Qwen3.5 9B",
+   "refs": [],
+   "settings": null,
+   "task": "Answer"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "answer.txt",
+   "task": "Save Text"
+  }
+ ],
+ "version": "0.8"
+}

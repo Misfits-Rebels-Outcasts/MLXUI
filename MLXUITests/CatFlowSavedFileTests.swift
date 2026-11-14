@@ -216,8 +216,9 @@ struct CatFlowSavedFileTests {
         // 87; CL-8-DROP reverted it) so a new gallery flow's Save rows are never silently
         // skipped by this corpus walk.
         // BS-1 (RSI/DelegateBasicShowcaseBacklog.md): flows 9–13 add six Save rows (86 -> 92).
-        #expect(checkedRows == 92, """
-            Corpus row count changed from 92 — if a new Save * row shipped, confirm it \
+        // BX-1 (RSI/DelegateBasicExpansionBacklog.md): flows 14–18 add six more Save rows (92 -> 98).
+        #expect(checkedRows == 98, """
+            Corpus row count changed from 98 — if a new Save * row shipped, confirm it \
             resolves correctly above, then bump this count; if a row disappeared, confirm \
             that was intentional.
             """)
