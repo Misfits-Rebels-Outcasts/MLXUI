@@ -34,6 +34,22 @@ nonisolated enum BasicExpansionRealLoad {
     }
 }
 
+/// Flow 17's story check, as a pure function so a non-model test can prove it (owner ruling, Boo, 2026-11-14: "Narrow flow 17's
+/// thinking check. Reject <|channel, <channel|>, <think, and a line consisting only of thought (case-insensitive) at the start of
+/// the output. Don't reject the word thought inside prose. Keep the check on # and *."). Returns the names of every rule broken.
+nonisolated enum BasicExpansionStoryCheck {
+    static func violations(in story: String) -> [String] {
+        var broken: [String] = []
+        for marker in ["#", "*", "<|channel", "<channel|>", "<think"] where story.lowercased().contains(marker) {
+            broken.append(marker)
+        }
+        // The first non-empty line being only "thought" is the start of a Gemma 4 thought channel with its tag stripped.
+        let firstLine = story.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty }
+        if firstLine?.lowercased() == "thought" { broken.append("leading line 'thought'") }
+        return broken
+    }
+}
+
 @Suite(.serialized)
 @MainActor
 struct BasicExpansionSmokeTests {
@@ -220,9 +236,8 @@ struct BasicExpansionSmokeTests {
         _ = try? ModelSmoke.artifact("BX4-17", "row2-description.raw.txt", text: description)
         _ = try? ModelSmoke.artifact("BX4-17", "row3-story.raw.txt", text: story, judge: "A gentle bedtime story, about 120 words, plain text.")
         ModelSmoke.check(Self.row, "17.story-non-empty", !story.isEmpty, story)
-        for forbidden in ["#", "*", "<think", "<|channel", "<channel|>", "thought"] {
-            ModelSmoke.check(Self.row, "17.story-has-no-\(forbidden)", !story.lowercased().contains(forbidden.lowercased()), story)
-        }
+        let broken = BasicExpansionStoryCheck.violations(in: story)
+        ModelSmoke.check(Self.row, "17.story-is-clean-speakable-text", broken.isEmpty, "broken rules: \(broken); story: \(story)")
         let wav = r.dir.appendingPathComponent("story.wav")
         let file = try AVAudioFile(forReading: wav)
         let seconds = Double(file.length) / file.processingFormat.sampleRate
