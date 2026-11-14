@@ -52,7 +52,7 @@
    "children": [],
    "model": "Ministral 3B",
    "refs": [],
-   "settings": "\"two sentences: the overall trend, then the best and the worst month\"",
+   "settings": "\"two plain sentences, no formatting: the overall trend, then the best month and its sales\"",
    "task": "Summarize"
   },
   {

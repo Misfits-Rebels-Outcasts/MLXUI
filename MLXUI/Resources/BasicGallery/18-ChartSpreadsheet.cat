@@ -4,6 +4,7 @@ mlxflow 0.8
 3. Save Image            sales-chart.png
 
 4. Table to Text   (1)   format=markdown
-5. Summarize             Ministral 3B; "two sentences: the overall trend,
-                         then the best and the worst month"
+5. Summarize             Ministral 3B; "two plain sentences, no
+                         formatting: the overall trend, then the best
+                         month and its sales"
 6. Save Text             sales-summary.txt

@@ -285,16 +285,19 @@ struct BasicExpansionSmokeTests {
     // MARK: 18 - Chart a Spreadsheet
 
     @Test(.enabled(if: BasicExpansionRealLoad.ready("18-ChartSpreadsheet"), "needs MLXUI_BASIC_EXPANSION_SMOKE=1 and Ministral 3B installed"))
-    func flow18_chartIs800By400AndTheSummaryNamesTheBestAndWorstMonth() async throws {
+    func flow18_chartIs800By400AndTheSummaryNamesTheBestMonthAndItsSales() async throws {
         let r = try await runFlow("18-ChartSpreadsheet", phase: "run"); defer { try? FileManager.default.removeItem(at: r.cleanup) }
         let png = try decoded(r.dir.appendingPathComponent("sales-chart.png"))
         ModelSmoke.check(Self.row, "18.png-800x400", png.width == 800 && png.height == 400, "\(png.width)x\(png.height)")
         let text = try String(contentsOf: r.dir.appendingPathComponent("sales-summary.txt"), encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        // Owner ruling, Boo, 2026-11-14: row 5 now asks for "the best month and its sales" in plain sentences; the check is
+        // "mentions Dec/December and 7200/7,200, and contains no * or #. Drop the Feb check."
         ModelSmoke.check(Self.row, "18.mentions-Dec", text.contains("Dec"), text)
-        ModelSmoke.check(Self.row, "18.mentions-Feb", text.contains("Feb"), text)
+        ModelSmoke.check(Self.row, "18.mentions-7200", text.contains("7200") || text.contains("7,200"), text)
+        ModelSmoke.check(Self.row, "18.no-star-or-hash", !text.contains("*") && !text.contains("#"), text)
         print("RAW|BX4-18|summary|\(text)")
         save("BX4-18", "sales-chart.png", copying: r.dir.appendingPathComponent("sales-chart.png"), judge: "Twelve bars, rising through the year.")
-        save("BX4-18", "sales-summary.txt", text: text, judge: "Two sentences: upward trend, December best, February worst.")
+        save("BX4-18", "sales-summary.txt", text: text, judge: "Two plain sentences: upward trend, December best with its sales (7,200).")
     }
 }
