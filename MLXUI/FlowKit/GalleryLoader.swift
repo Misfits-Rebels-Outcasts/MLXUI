@@ -310,6 +310,18 @@ nonisolated enum GalleryLoader {
             return [("12-InvoiceToSpreadsheet-invoice.pdf", "invoice.pdf")]
         case "13-SortAnEmail":
             return [("13-SortAnEmail-email.txt", "email.txt")]
+        // BX-2 (`RSI/DelegateBasicExpansionBacklog.md`, R4): sample inputs for the Basic expansion flows. 15 and 17 reuse
+        // flow 6's kitten photo byte-for-byte under their own flat names (the 10-DescribePhoto precedent).
+        case "14-TranslateLetter":
+            return [("14-TranslateLetter-letter.txt", "letter.txt")]
+        case "15-DepthMap":
+            return [("15-DepthMap-photo.jpg", "photo.jpg")]
+        case "16-AskADocument":
+            return [("16-AskADocument-leave-policy.pdf", "leave-policy.pdf")]
+        case "17-StoryFromPhoto":
+            return [("17-StoryFromPhoto-photo.jpg", "photo.jpg")]
+        case "18-ChartSpreadsheet":
+            return [("18-ChartSpreadsheet-sales.csv", "sales.csv")]
         default:
             return []
         }

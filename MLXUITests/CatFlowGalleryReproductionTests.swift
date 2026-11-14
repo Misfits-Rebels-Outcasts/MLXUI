@@ -288,9 +288,9 @@ struct CatFlowGalleryReproductionTests {
         }
 
         // BS-2 widened this from the first eight to the whole shelf once flows 9–13's sample inputs shipped.
-        // BX-1 (RSI/DelegateBasicExpansionBacklog.md): the shelf is now 18, but flows 14–18's sample inputs ship in BX-2, which must widen this back to the whole shelf (and the count to 18).
-        let basics = Array(GalleryLoader.loadMetadata().filter(\.isBasic).prefix(13))
-        #expect(basics.count == 13, "the first 13 Basic flows are checked until BX-2 ships 14–18's inputs")
+        // BX-2 (RSI/DelegateBasicExpansionBacklog.md) widened this from the first 13 to the whole shelf once flows 14–18's sample inputs shipped.
+        let basics = GalleryLoader.loadMetadata().filter(\.isBasic)
+        #expect(basics.count == 18, "the Basic shelf is 1…18 after BX-1")
 
         var checked = 0
         for flow in basics {
@@ -377,7 +377,9 @@ struct CatFlowGalleryReproductionTests {
     /// empty "Photoshop 3.0" IPTC/digest block, so a re-encode cannot satisfy it. The files ship
     /// with those segments removed from the container instead (journal `2026-467`).
     @Test func theSampleInputsCarryNoMetadata() throws {
-        for flat in ["6-CutOutSubject-photo.jpg", "7-UpscaleSmall-small-photo.jpg"] {
+        // BX-2: the two kitten copies for flows 15 and 17 (byte-identical to flow 6's).
+        for flat in ["6-CutOutSubject-photo.jpg", "7-UpscaleSmall-small-photo.jpg",
+                     "15-DepthMap-photo.jpg", "17-StoryFromPhoto-photo.jpg"] {
             let data = try Data(contentsOf: try fixtureURL(flat))
             let bytes = [UInt8](data)
             #expect(bytes.count > 4 && bytes[0] == 0xFF && bytes[1] == 0xD8, "\(flat) is not a JPEG")
