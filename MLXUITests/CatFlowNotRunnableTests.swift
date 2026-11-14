@@ -40,7 +40,10 @@ struct CatFlowNotRunnableTests {
                        "6-CutOutSubject", "7-UpscaleSmall",
                        // BS-1 (RSI/DelegateBasicShowcaseBacklog.md): the five showcase flows, shelf 9–13.
                        "9-ReadItAloud", "10-DescribePhoto", "11-PictureFromWords",
-                       "12-InvoiceToSpreadsheet", "13-SortAnEmail"] {
+                       "12-InvoiceToSpreadsheet", "13-SortAnEmail",
+                       // BX-1 (RSI/DelegateBasicExpansionBacklog.md): the five expansion flows, shelf 14–18.
+                       "14-TranslateLetter", "15-DepthMap", "16-AskADocument",
+                       "17-StoryFromPhoto", "18-ChartSpreadsheet"] {
             #expect(try refusal(flowID) == nil, "\(flowID) should be runnable")
         }
     }

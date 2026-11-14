@@ -1,0 +1,11 @@
+mlxflow 0.8
+1. Read PDF    leave-policy.pdf
+2. Template    "Answer using only the document
+               below.\n\nDocument:\n{1}\n\nQuestion: How many days of
+               annual leave does a new employee get, and when can they
+               start using it?"
+3. Answer      Qwen3.5 9B
+4. Save Text   answer.txt
+
+models:
+  Qwen3.5 9B = mlx-community/Qwen3.5-9B-MLX-4bit

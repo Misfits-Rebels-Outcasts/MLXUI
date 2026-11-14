@@ -1,0 +1,38 @@
+{
+ "models": {
+  "TranslateGemma 4B": "mlx-community/translategemma-4b-it-4bit"
+ },
+ "rows": [
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "letter.txt",
+   "task": "Read Text"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": "TranslateGemma 4B",
+   "refs": [],
+   "settings": "to=Malay",
+   "task": "Translate"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "letter-malay.txt",
+   "task": "Save Text"
+  }
+ ],
+ "version": "0.8"
+}

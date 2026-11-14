@@ -1,0 +1,59 @@
+{
+ "models": {
+  "Gemma 4 E4B": "mlx-community/gemma-4-e4b-it-4bit",
+  "Gemma 4 E4B Vision": "mlx-community/gemma-4-e4b-it-4bit"
+ },
+ "rows": [
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "photo.jpg",
+   "task": "Read Image"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": "Gemma 4 E4B Vision",
+   "refs": [],
+   "settings": "\"Describe this photo in three sentences: who or what is in it, and the setting.\"",
+   "task": "Describe Image"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": "Gemma 4 E4B",
+   "refs": [],
+   "settings": "\"a gentle bedtime story for a young child, about 120 words, set in this scene. Plain text only, no title.\"",
+   "task": "Draft"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": "Kokoro 82M",
+   "refs": [],
+   "settings": "af_heart; seed=7",
+   "task": "Speak"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "story.wav",
+   "task": "Save Audio"
+  }
+ ],
+ "version": "0.8"
+}

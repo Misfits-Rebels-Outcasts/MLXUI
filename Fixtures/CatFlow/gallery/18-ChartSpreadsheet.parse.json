@@ -1,0 +1,70 @@
+{
+ "rows": [
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "sales.csv",
+   "task": "Read CSV"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "kind=bar; x=month; y=sales",
+   "task": "Chart"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "sales-chart.png",
+   "task": "Save Image"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": true,
+   "children": [],
+   "model": null,
+   "refs": [
+    {
+     "kind": "row",
+     "number": 1
+    }
+   ],
+   "settings": "format=markdown",
+   "task": "Table to Text"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": "Ministral 3B",
+   "refs": [],
+   "settings": "\"two plain sentences, no formatting: the overall trend, then the best month and its sales\"",
+   "task": "Summarize"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "sales-summary.txt",
+   "task": "Save Text"
+  }
+ ],
+ "version": "0.8"
+}

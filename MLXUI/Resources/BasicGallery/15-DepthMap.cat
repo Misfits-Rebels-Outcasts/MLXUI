@@ -1,0 +1,7 @@
+mlxflow 0.8
+1. Read Image       photo.jpg
+2. Estimate Depth   Depth Anything V2 Small
+3. Save Image       photo-depth.png
+
+models:
+  Depth Anything V2 Small = depth-anything/Depth-Anything-V2-Small-hf

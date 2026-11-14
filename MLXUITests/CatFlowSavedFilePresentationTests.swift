@@ -178,8 +178,9 @@ struct CatFlowSavedFilePresentationTests {
         // CL-8-DROP reverted it) — see that test's failure message for what to do when this
         // fires.
         // BS-1 (RSI/DelegateBasicShowcaseBacklog.md): flows 9–13 add six Save rows (86 -> 92).
-        #expect(checkedRows == 92, """
-            Corpus row count changed from 92 — if a new Save * row shipped, confirm it \
+        // BX-1 (RSI/DelegateBasicExpansionBacklog.md): flows 14–18 add six more Save rows (92 -> 98).
+        #expect(checkedRows == 98, """
+            Corpus row count changed from 98 — if a new Save * row shipped, confirm it \
             classifies correctly above, then bump this count; if a row disappeared, \
             confirm that was intentional.
             """)
