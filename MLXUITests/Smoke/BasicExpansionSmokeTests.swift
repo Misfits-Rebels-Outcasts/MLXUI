@@ -90,6 +90,16 @@ struct BasicExpansionSmokeTests {
         func run(_ input: Media, progress: @Sendable @escaping (Double) -> Void) async throws -> Media {
             let out = try await inner.run(input, progress: progress)
             if case .text(let t) = out { log.add(t) }
+            // Which containers are resident after this stage, and MLX's own live-array figure: the evidence for whether the
+            // Vision engine's container (`ModelContainerPool.vlm`) and the LLM pool's (`.shared`) hold the same repo twice.
+            let gemma = ModelStore.shared.directory(forHFModelID: "mlx-community/gemma-4-e4b-it-4bit")
+            let llmBytes = await ModelContainerPool.shared.residentBytes(directory: gemma)
+            let vlmBytes = await ModelContainerPool.vlm.residentBytes(directory: gemma)
+            let counts = "containers: llm pool \(await ModelContainerPool.shared.count), vlm pool \(await ModelContainerPool.vlm.count)"
+            let parts = ["gemma-4-e4b in llm pool=\(llmBytes.map { "\($0 / 1_048_576) MiB" } ?? "not resident")",
+                         "gemma-4-e4b in vlm pool=\(vlmBytes.map { "\($0 / 1_048_576) MiB" } ?? "not resident")", counts]
+            let mlx = ModelSmoke.mlxMiB()
+            ModelSmoke.info("BX4", "resident-after-\(inner.name)", "mlx active \(mlx.active) MiB, cache \(mlx.cache) MiB; \(parts.joined(separator: "; "))")
             return out
         }
     }
@@ -267,7 +277,8 @@ struct BasicExpansionSmokeTests {
         let file = try AVAudioFile(forReading: wav)
         let seconds = Double(file.length) / file.processingFormat.sampleRate
         ModelSmoke.check(Self.row, "17.wav-20-to-90-s", (20...90).contains(seconds), String(format: "%.1f s", seconds))
-        ModelSmoke.check(Self.row, "17.peak-rss-under-12-GB", r.peakMiB < 12 * 1024, String(format: "%.0f MiB", r.peakMiB))
+        // Owner ruling, Boo, 2026-11-14: "Raise flow 17's peak limit to 13 GiB (13,312 MiB)". It was 12 GiB; the isolated run read 12,493 MiB.
+        ModelSmoke.check(Self.row, "17.peak-rss-under-13-GiB", r.peakMiB < 13 * 1024, String(format: "%.0f MiB of 13312", r.peakMiB))
         save("BX4-17", "story.wav", copying: wav, judge: "The story read aloud in a natural voice, no markup spoken.")
     }
 
