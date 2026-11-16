@@ -161,7 +161,7 @@ final class ChatController {
             }
         case .page:
             // Already bound and nothing happened elsewhere: the runner's own state is the truth, so no read.
-            if previous == .page, parked[.page] == nil { applyPendingAskInChat(); break }
+            if previous == .page, parked[.page] == nil { applyFreshPageChat(); applyPendingAskInChat(); break }
             if var set = parked.removeValue(forKey: .page) {
                 // The sheet may have saved or deleted chats while this set was parked: one read, merged under the
                 // live set (live entries win; a blank, memory-only chat is kept).
@@ -170,6 +170,7 @@ final class ChatController {
             } else {
                 runner.prepare(scope: .all, in: conversationDirectory, preloaded: loadedIndex())
             }
+            applyFreshPageChat()
             applyPendingAskInChat()
         }
         return .granted
@@ -298,6 +299,32 @@ final class ChatController {
     /// else the first installed. `nil` leaves the page on its empty state.
     func refreshPageModel(installedChatModels: [ModelEntry], catalog: [ModelEntry] = [], totalRAMGB: Double = 0,
                           isRunnable: (ModelEntry) -> Bool = { _ in true }) {
+        chooseModel(installedChatModels: installedChatModels, catalog: catalog, totalRAMGB: totalRAMGB, isRunnable: isRunnable)
+        // CD-FIX-2: the page went from "no chat model" to having one: it opens a new empty chat, not the latest conversation.
+        let hasModelNow = models[.page] != nil
+        if Self.shouldStartFreshChat(hadNoModel: lastRefreshHadNoModel, hasModelNow: hasModelNow) { startsFreshPageChat = true }
+        lastRefreshHadNoModel = !hasModelNow
+        if !hasModelNow { startsFreshPageChat = false }
+    }
+
+    /// CD-FIX-2 (owner, 2026-11-16): only the *transition* from the empty "no chat model" page to a page with a model starts a
+    /// fresh chat. A first refresh that finds a model (launch) and a model installed while chats exist (the page already had one)
+    /// leave the conversation choice alone.
+    nonisolated static func shouldStartFreshChat(hadNoModel: Bool, hasModelNow: Bool) -> Bool { hadNoModel && hasModelNow }
+
+    /// Whether the last `refreshPageModel` ended with no page model (the empty "no chat model" screen was showing).
+    @ObservationIgnored private var lastRefreshHadNoModel = false
+    /// Set on that transition; consumed by `acquire(.page)` once the runner is the page's, which starts the blank chat.
+    @ObservationIgnored private(set) var startsFreshPageChat = false
+
+    private func applyFreshPageChat() {
+        guard startsFreshPageChat else { return }
+        startsFreshPageChat = false
+        runner.newConversation(for: models[.page]?.id)
+    }
+
+    private func chooseModel(installedChatModels: [ModelEntry], catalog: [ModelEntry], totalRAMGB: Double,
+                             isRunnable: (ModelEntry) -> Bool) {
         pageCandidates = installedChatModels
         appleReadiness = readinessProvider()
         // Keep the current choice while it still works: an installed model, or Apple Intelligence while ready.

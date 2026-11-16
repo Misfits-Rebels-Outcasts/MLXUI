@@ -9,6 +9,28 @@
 
 import SwiftUI
 
+/// CD-FIX-2 — what the recommended model's Download control shows for the engine's install state. Pure. The engine sets
+/// `.resolving` synchronously on the click, so the control changes before the first byte.
+enum ChatNoModelDownload: Equatable {
+    case button(note: String?)
+    /// Queued or resolving: no bytes yet.
+    case starting
+    case progress(fraction: Double, detail: String)
+    case verifying
+
+    @MainActor static func presentation(for state: InstallState?) -> ChatNoModelDownload {
+        switch state {
+        case nil, .idle?, .installed?: return .button(note: nil)
+        case .resolving?: return .starting
+        case .downloading(let progress, let downloaded, let total)?:
+            return .progress(fraction: progress, detail: ModelInstallCard.progressText(downloaded: downloaded, total: total))
+        case .verifying?: return .verifying
+        case .error(let message, _)?: return .button(note: message)
+        case .needsAuth(let message)?: return .button(note: message)
+        }
+    }
+}
+
 struct ChatPageView: View {
     @Environment(AppState.self) private var appState
     /// CD-4: what the tools would be, shown read-only before a chat model exists (the same table as the CD-2 grid).
@@ -37,6 +59,40 @@ struct ChatPageView: View {
         }
     }
 
+    /// The recommended model's Download button, which becomes the install progress with a Cancel the moment it is clicked.
+    @ViewBuilder
+    private func downloadControl(_ pick: ModelEntry) -> some View {
+        switch ChatNoModelDownload.presentation(for: appState.installManager.modelStates[pick.id]) {
+        case .button(let note):
+            if let note { Text(note).font(.caption).foregroundStyle(.red) }
+            Button("Download \(pick.displayName)") { appState.installModel(pick) }
+                .buttonStyle(.bordered)
+        case .starting:
+            progressBlock(pick) {
+                ProgressView().controlSize(.small)
+                Text("Starting the download…").font(.caption).foregroundStyle(.secondary)
+            }
+        case .progress(let fraction, let detail):
+            progressBlock(pick) {
+                ProgressView(value: fraction)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+        case .verifying:
+            progressBlock(pick) {
+                ProgressView().controlSize(.small)
+                Text("Verifying…").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func progressBlock<Content: View>(_ pick: ModelEntry, @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(spacing: 6) {
+            content()
+            Button("Cancel") { appState.cancelInstall(pick) }.controlSize(.small)
+        }
+        .frame(maxWidth: 280)
+    }
+
     private var emptyContent: some View {
         VStack(spacing: 12) {
             Image(systemName: "bubble.left.and.text.bubble.right")
@@ -48,8 +104,7 @@ struct ChatPageView: View {
             if let pick = appState.chat.pageRecommendation {
                 Text("\(pick.displayName) can use tools and fits this Mac (about \(String(format: "%.1f", pick.downloadSizeGB)) GB to download).")
                     .font(.callout).foregroundStyle(.secondary)
-                Button("Download \(pick.displayName)") { appState.installModel(pick) }
-                    .buttonStyle(.bordered)
+                downloadControl(pick)
             }
             if let section = appState.visibleSections.first(where: { $0.id == "chat-text" }) ?? appState.visibleSections.first {
                 Button("Browse models") { appState.selectedSection = .browse(section.id) }
