@@ -11,6 +11,12 @@ nonisolated enum ChatCardDraft {
     }
 }
 
+/// CD-4 — copy for the "no chat model" screen, which explains the router before one is installed.
+nonisolated enum ChatNoModelText {
+    static let title = "Chat needs one language model"
+    static let body = "It understands your request, then downloads and runs OCR, speech and image models for you as needed."
+}
+
 /// CD-2 — the capability grid shown in the empty conversation on the Chat page (`RSI/DelegateChatDiscoveryBacklog.md`).
 /// Statuses come from the same `ModelToolRuntime.live` + `CapabilityResolver.status` pair the router uses (`ChatToolSet`).
 struct ChatCapabilityGridView: View {
@@ -22,6 +28,8 @@ struct ChatCapabilityGridView: View {
     let statuses: [String: ModelToolStatus]
     /// A card was clicked; the host fills the draft and opens the file panel.
     let onPick: (ChatCapabilityCard) -> Void
+    /// CD-4: no chat model yet. Just the cards and the "+N more" disclosure: no heading, no router note, nothing clickable.
+    var readOnly = false
 
     @AppStorage(ChatTextSize.messageKey) private var messageSizeRaw = ChatTextSize.standard.rawValue
     @State private var showsMore = false
@@ -31,6 +39,7 @@ struct ChatCapabilityGridView: View {
     var body: some View {
         let result = ChatCapabilityCards.cards(specs: ModelToolSpec.modelTools, statuses: statuses)
         VStack(spacing: 14) {
+            if !readOnly {
             VStack(spacing: 6) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 28))
@@ -44,7 +53,8 @@ struct ChatCapabilityGridView: View {
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if let note = ChatCapabilityCards.routerNote(modelName: modelName, canUseTools: canUseTools) {
+            }
+            if !readOnly, let note = ChatCapabilityCards.routerNote(modelName: modelName, canUseTools: canUseTools) {
                 Text(note)
                     .font(size.font(.message, standard: .callout))
                     .foregroundStyle(.orange)
@@ -62,7 +72,7 @@ struct ChatCapabilityGridView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 32)
+        .padding(.top, readOnly ? 0 : 32)
     }
 
     private func grid(_ cards: [ChatCapabilityCard]) -> some View {
@@ -72,7 +82,7 @@ struct ChatCapabilityGridView: View {
     }
 
     private func cardView(_ card: ChatCapabilityCard) -> some View {
-        let available = card.isAvailable && canUseTools
+        let available = card.isAvailable && canUseTools && !readOnly
         return Button { onPick(card) } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
@@ -95,7 +105,7 @@ struct ChatCapabilityGridView: View {
         }
         .buttonStyle(.plain)
         .disabled(!available)
-        .opacity(card.isAvailable ? (canUseTools ? 1 : 0.55) : 0.5)
+        .opacity(card.isAvailable ? (canUseTools && !readOnly ? 1 : 0.55) : 0.5)
         .help(card.isAvailable ? card.starterPrompt.trimmingCharacters(in: .whitespaces) : card.statusLine)
     }
 

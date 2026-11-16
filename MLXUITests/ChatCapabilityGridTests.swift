@@ -18,3 +18,11 @@ struct ChatCapabilityGridTests {
         #expect(ChatCardDraft.draft(afterPicking: "Draw ", current: "first ") == "first Draw ")
     }
 }
+
+/// CD-4 — the "no chat model" copy.
+struct ChatNoModelTextTests {
+    @Test func copyIsTheBacklogs() {
+        #expect(ChatNoModelText.title == "Chat needs one language model")
+        #expect(ChatNoModelText.body == "It understands your request, then downloads and runs OCR, speech and image models for you as needed.")
+    }
+}

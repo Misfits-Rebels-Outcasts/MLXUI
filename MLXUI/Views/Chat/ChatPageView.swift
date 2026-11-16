@@ -11,6 +11,8 @@ import SwiftUI
 
 struct ChatPageView: View {
     @Environment(AppState.self) private var appState
+    /// CD-4: what the tools would be, shown read-only before a chat model exists (the same table as the CD-2 grid).
+    @State private var capabilityStatuses: [String: ModelToolStatus] = [:]
 
     var body: some View {
         Group {
@@ -22,15 +24,25 @@ struct ChatPageView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { appState.refreshChatPage() }
+        .task(id: appState.flowReadyModelIDs) {
+            capabilityStatuses = ChatCapabilityStatuses.resolve(runtime: ModelToolRuntime.live(appState: appState))
+        }
         .onChange(of: appState.installedModelIDs) { _, _ in appState.refreshChatPage() }
     }
 
     private var emptyState: some View {
+        ScrollView {
+            emptyContent
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var emptyContent: some View {
         VStack(spacing: 12) {
             Image(systemName: "bubble.left.and.text.bubble.right")
                 .font(.system(size: 40)).foregroundStyle(.secondary)
-            Text("No chat model installed").font(.title3)
-            Text("Install a chat model to start a conversation here.")
+            Text(ChatNoModelText.title).font(.title3)
+            Text(ChatNoModelText.body)
                 .font(.callout).foregroundStyle(.secondary)
             // MT3-3: the smallest tool-capable chat model that fits this Mac (plain facts, no rating).
             if let pick = appState.chat.pageRecommendation {
@@ -43,6 +55,9 @@ struct ChatPageView: View {
                 Button("Browse models") { appState.selectedSection = .browse(section.id) }
                     .buttonStyle(.borderedProminent)
             }
+            ChatCapabilityGridView(modelName: "", canUseTools: false, statuses: capabilityStatuses,
+                                   onPick: { _ in }, readOnly: true)
+                .padding(.top, 12)
         }
         .padding()
     }
