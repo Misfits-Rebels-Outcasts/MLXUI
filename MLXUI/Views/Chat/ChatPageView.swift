@@ -18,11 +18,23 @@ enum ChatNoModelDownload: Equatable {
     case progress(fraction: Double, detail: String)
     case verifying
 
-    @MainActor static func presentation(for state: InstallState?) -> ChatNoModelDownload {
+    /// CD-FIX-3: the engine's `total` is not final at the start. The file list from HF carries no sizes, so the engine learns each
+    /// file's size as it starts (`InstallManager`: `total = done + this file + catalog sizes of the rest`, with an initial placeholder of
+    /// 1), and it exposes no "list complete" signal. Until the total could be the real one the control says "Starting the
+    /// download…": the total must be past the placeholder, and either near the catalog's expected size (`expectedBytes`, the
+    /// weights have begun) or the download is a quarter of the way through it. Without an expected size only the placeholder is skipped.
+    static let totalSettledFraction = 0.9
+    static let downloadedSettledFraction = 0.25
+
+    @MainActor static func presentation(for state: InstallState?, expectedBytes: Int64? = nil) -> ChatNoModelDownload {
         switch state {
         case nil, .idle?, .installed?: return .button(note: nil)
         case .resolving?: return .starting
         case .downloading(let progress, let downloaded, let total)?:
+            guard total > 1 else { return .starting }
+            if let expected = expectedBytes, expected > 0,
+               Double(total) < Double(expected) * totalSettledFraction,
+               Double(downloaded) < Double(expected) * downloadedSettledFraction { return .starting }
             return .progress(fraction: progress, detail: ModelInstallCard.progressText(downloaded: downloaded, total: total))
         case .verifying?: return .verifying
         case .error(let message, _)?: return .button(note: message)
@@ -62,7 +74,8 @@ struct ChatPageView: View {
     /// The recommended model's Download button, which becomes the install progress with a Cancel the moment it is clicked.
     @ViewBuilder
     private func downloadControl(_ pick: ModelEntry) -> some View {
-        switch ChatNoModelDownload.presentation(for: appState.installManager.modelStates[pick.id]) {
+        switch ChatNoModelDownload.presentation(for: appState.installManager.modelStates[pick.id],
+                                         expectedBytes: Int64(pick.downloadSizeGB * 1e9)) {
         case .button(let note):
             if let note { Text(note).font(.caption).foregroundStyle(.red) }
             Button("Download \(pick.displayName)") { appState.installModel(pick) }

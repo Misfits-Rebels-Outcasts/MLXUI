@@ -19,8 +19,6 @@ struct ChatFixTwoTests {
         #expect(ChatNoModelDownload.presentation(for: .idle) == .button(note: nil))
         #expect(ChatNoModelDownload.presentation(for: .resolving) == .starting)          // queued: no bytes yet
         #expect(ChatNoModelDownload.presentation(for: .verifying) == .verifying)
-        #expect(ChatNoModelDownload.presentation(for: .downloading(progress: 0, downloaded: 0, total: 0)) ==
-                .progress(fraction: 0, detail: ModelInstallCard.progressText(downloaded: 0, total: 0)))
         #expect(ChatNoModelDownload.presentation(for: .downloading(progress: 0.5, downloaded: 500_000_000, total: 1_000_000_000))
                 == .progress(fraction: 0.5, detail: "50% · 0.5 GB of 1.0 GB"))
         #expect(ChatNoModelDownload.presentation(for: .error("No disk", canRetry: true)) == .button(note: "No disk"))

@@ -1012,8 +1012,6 @@ struct ChatView: View {
                 Image(systemName: "cpu")
             }
             .lineLimit(1)
-            .truncationMode(.tail)
-            .frame(maxWidth: menuMax.map { CGFloat($0) } ?? .infinity, alignment: .leading)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
