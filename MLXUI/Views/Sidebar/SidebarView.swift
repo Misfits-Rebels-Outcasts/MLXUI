@@ -5,25 +5,19 @@ struct SidebarView: View {
 
     var body: some View {
         List(selection: Binding(
-            get: { ChatGate.resolved(appState.selectedSection) },
+            get: { appState.selectedSection },
             set: { new in
                 appState.selectedSection = new
                 appState.resetFilters()
-                if case .chat = new, ChatGate.isAvailable {
+                if new.isHome, ChatGate.isAvailable {
                     appState.chat.refreshPageModel(installedChatModels: appState.installedChatModels)
                 }
             }
         )) {
             Section {
-                ForEach(SidebarItem.primaryItems(chatAvailable: ChatGate.isAvailable), id: \.self) { item in
-                    switch item {
-                    case .chat:
-                        Label("Chat", systemImage: "bubble.left.and.bubble.right")
-                            .tag(SidebarItem.chat)
-                    default:
-                        Label("Home", systemImage: "house.fill")
-                            .tag(SidebarItem.home)
-                    }
+                ForEach(SidebarItem.primaryItems(chatAvailable: ChatGate.isAvailable), id: \.self) { _ in
+                    Label("Home", systemImage: "house.fill")
+                        .tag(SidebarItem.home)
                 }
             }
 

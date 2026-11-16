@@ -675,7 +675,7 @@ final class AppState {
     @discardableResult
     func openBenchInChat() -> Bool {
         guard chat.openBenchInChat(installedChatModels: installedChatModels) else { return false }
-        selectedSection = .chat
+        selectedSection = .home
         return true
     }
 
@@ -686,7 +686,7 @@ final class AppState {
     func askInChat(_ result: AskInChatResult) -> Bool {
         guard chat.canAskInChat, let file = try? result.writeTemporaryFile() else { return false }
         guard chat.askInChat(files: [file]) else { return false }
-        selectedSection = .chat
+        selectedSection = .home
         return true
     }
 
@@ -809,8 +809,6 @@ enum SidebarItem: Hashable {
     case browse(String)
     case overview
     case aiWorkflows
-    /// MT2-2: the Chat page; offered only while `ChatGate.isAvailable`.
-    case chat
     /// SC-4b: the Local Server screen; offered only while `LocalServerGate.isEnabled`.
     case server
     var isHome: Bool { if case .home = self { return true }; return false }

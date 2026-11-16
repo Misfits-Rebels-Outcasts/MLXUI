@@ -19,17 +19,24 @@ nonisolated enum ChatGate {
         overrideForTesting ?? !AppState.hideChat
     }
 
-    /// A selection that names a surface the gate has closed lands on Home.
-    static func resolved(_ item: SidebarItem, available: Bool = ChatGate.isAvailable) -> SidebarItem {
-        if case .chat = item, !available { return .home }
-        return item
+}
+
+/// HC-1 (ruling A): which screen the Home item shows. Pure.
+nonisolated enum HomeSurface: Equatable, Sendable {
+    case chat
+    case dashboard
+
+    /// The Chat page while the gate is open; today's `HomeView` while it is closed (ruling C).
+    static func resolve(chatAvailable: Bool) -> HomeSurface {
+        chatAvailable ? .chat : .dashboard
     }
 }
 
 extension SidebarItem {
-    /// The sidebar's first section: Home, then Chat (second, ruling J) only while the gate says so.
+    /// The sidebar's first section: Home only. HC-1 ruling A supersedes MT ruling J: Chat is no longer a second item,
+    /// Home shows the Chat page while the gate is open (`HomeSurface`).
     static func primaryItems(chatAvailable: Bool) -> [SidebarItem] {
-        chatAvailable ? [.home, .chat] : [.home]
+        [.home]
     }
 }
 

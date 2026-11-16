@@ -146,7 +146,7 @@ struct ChatOpenInChatTests {
         ChatGate.overrideForTesting = true; defer { ChatGate.overrideForTesting = nil }
         app.chat.acquire(.bench, model: modelA)
         #expect(app.openBenchInChat())
-        #expect(app.selectedSection == .chat)
+        #expect(app.selectedSection == .home)
         #expect(app.chat.holder == .page)
     }
 

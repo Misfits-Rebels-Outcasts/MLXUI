@@ -63,9 +63,11 @@ struct MLXUIApp: App {
                         NavigationStack(path: $appState.route) {
                             Group {
                                 if appState.selectedSection.isHome {
-                                    HomeView()
-                                } else if case .chat = appState.selectedSection, ChatGate.isAvailable {
-                                    ChatPageView()
+                                    // HC-1 (ruling A/C): Home is the Chat page while the gate is open.
+                                    switch HomeSurface.resolve(chatAvailable: ChatGate.isAvailable) {
+                                    case .chat: ChatPageView()
+                                    case .dashboard: HomeView()
+                                    }
                                 } else if case .overview = appState.selectedSection, !AppState.hideAutomate {
                                     OverviewView()
                                 } else if case .aiWorkflows = appState.selectedSection, !AppState.hideAutomate {

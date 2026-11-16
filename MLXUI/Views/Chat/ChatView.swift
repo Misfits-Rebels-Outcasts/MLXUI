@@ -73,7 +73,7 @@ struct ChatView: View {
                 Button("Stop it") { controller.stopCurrentGeneration() }
                 if surface == .bench, ChatGate.isAvailable {
                     Button("Open Chat") {
-                        appState.selectedSection = .chat
+                        appState.selectedSection = .home
                         onDone?()
                     }
                 }
