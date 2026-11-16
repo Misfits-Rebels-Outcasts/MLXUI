@@ -2858,7 +2858,8 @@
             }
           ],
           "descriptionSource": "mlx-community/Flux-1.lite-8B-MLX-Q4",
-          "summary": "Freepik's 8B FLUX.1-dev distillation as a 4-bit MLX text-to-image model — a text prompt generates an image on Apple Silicon (non-commercial license)."
+          "summary": "Freepik's 8B FLUX.1-dev distillation as a 4-bit MLX text-to-image model — a text prompt generates an image on Apple Silicon (non-commercial license).",
+          "notes": "Floor exempt — diffusion; text encoder and transformer are not resident together. RAM figure is not yet measured: replace it with a measured peak at the next real-load run."
         },
         {
           "id": "stabilityai--sdxl-turbo",
@@ -2958,7 +2959,8 @@
             }
           ],
           "descriptionSource": "mlx-community/FLUX.2-klein-4B-bf16",
-          "summary": "Black Forest Labs' 4B text-to-image model in bf16 MLX, distilled to 4 steps; runs one component at a time, about 6 GB peak at 1024 x 1024 with 8-bit quantize (Apache 2.0)."
+          "summary": "Black Forest Labs' 4B text-to-image model in bf16 MLX, distilled to 4 steps; runs one component at a time, about 6 GB peak at 1024 x 1024 with 8-bit quantize (Apache 2.0).",
+          "notes": "Floor exempt — measured ~6 GB peak, components loaded one at a time with 8-bit quantize at load (R16)."
         }
       ]
     },
