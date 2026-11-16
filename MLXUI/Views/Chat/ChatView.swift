@@ -535,7 +535,26 @@ struct ChatView: View {
         runner.isRunning && (runner.transcript.lastAssistantText?.isEmpty ?? true)
     }
 
+    /// Whether the selected chat model can call tools; unknown facts (not loaded yet) read as "can", so no note flashes.
+    private var selectedModelCanUseTools: Bool { controller.modelFacts[model.id]?.canUseTools ?? true }
+
+    /// CD-2: a card fills the composer (never sends) and, for a tool that takes a file, opens the Add files panel.
+    private func pickCapabilityCard(_ card: ChatCapabilityCard) {
+        prompt = ChatCardDraft.draft(afterPicking: card.starterPrompt, current: prompt)
+        if card.takesFile != nil { pickFiles() }
+    }
+
+    @ViewBuilder
     private var emptyState: some View {
+        if surface == .page, ChatGate.isAvailable {
+            ChatCapabilityGridView(modelName: model.displayName, canUseTools: selectedModelCanUseTools,
+                                   onPick: pickCapabilityCard)
+        } else {
+            benchEmptyState
+        }
+    }
+
+    private var benchEmptyState: some View {
         VStack(spacing: 8) {
             Image(systemName: "bubble.left.and.bubble.right")
                 .font(.system(size: 28))
