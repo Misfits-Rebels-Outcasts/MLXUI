@@ -670,12 +670,19 @@ final class AppState {
         return await chat.send(text, attachments: attachments, from: .bench)
     }
 
+    /// HC-FIX-1 (ruling I): land on Home from anywhere. Selecting Home when it is already selected changes nothing by
+    /// itself, so a pushed model/flow/workspace page would stay on top; this drops those too (`HomeRoutePolicy`).
+    func goHome() {
+        selectedSection = .home
+        route = HomeRoutePolicy.remaining(route)
+    }
+
     /// MT2-5: the chat sheet's "Open in Chat". The caller dismisses the sheet; this hands the conversation over and
     /// selects the Chat item. `false` (nothing changed) when the gate is closed or the sheet is waiting.
     @discardableResult
     func openBenchInChat() -> Bool {
         guard chat.openBenchInChat(installedChatModels: installedChatModels) else { return false }
-        selectedSection = .home
+        goHome()
         return true
     }
 
@@ -686,7 +693,7 @@ final class AppState {
     func askInChat(_ result: AskInChatResult) -> Bool {
         guard chat.canAskInChat, let file = try? result.writeTemporaryFile() else { return false }
         guard chat.askInChat(files: [file]) else { return false }
-        selectedSection = .home
+        goHome()
         return true
     }
 

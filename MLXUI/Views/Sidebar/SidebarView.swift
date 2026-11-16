@@ -4,10 +4,14 @@ struct SidebarView: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
-        List(selection: Binding(
-            get: { appState.selectedSection },
+        List(selection: Binding<SidebarItem?>(
+            // HC-FIX-1 ruling M: no row is highlighted while a page is pushed over Home, so clicking Home is a real
+            // selection change and the setter fires.
+            get: { SidebarHighlight.highlighted(selected: appState.selectedSection, routeIsEmpty: appState.route.isEmpty) },
             set: { new in
-                appState.selectedSection = new
+                // List may write nil back when a row is deselected (the unhighlight above); that is not a navigation.
+                guard let new else { return }
+                if new.isHome { appState.goHome() } else { appState.selectedSection = new }
                 appState.resetFilters()
                 if new.isHome, ChatGate.isAvailable {
                     appState.chat.refreshPageModel(installedChatModels: appState.installedChatModels)

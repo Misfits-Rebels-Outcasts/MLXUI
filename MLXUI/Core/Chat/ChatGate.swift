@@ -21,6 +21,23 @@ nonisolated enum ChatGate {
 
 }
 
+/// HC-FIX-1 (rulings I, J): which pushed pages "Home" drops. Model, flow and workspace pages go; a flow editor stays
+/// (known pre-existing gap: an open editor keeps covering Home, as before). Pure.
+nonisolated enum HomeRoutePolicy {
+    static func remaining(_ route: [FlowRoute]) -> [FlowRoute] {
+        route.filter { if case .editor = $0 { return true }; return false }
+    }
+}
+
+/// HC-FIX-1 ruling M: which sidebar row is highlighted. Home is unhighlighted while a page is pushed over it; every
+/// other section is unchanged. Pure.
+nonisolated enum SidebarHighlight {
+    static func highlighted(selected: SidebarItem, routeIsEmpty: Bool) -> SidebarItem? {
+        if selected.isHome, !routeIsEmpty { return nil }
+        return selected
+    }
+}
+
 /// HC-1 (ruling A): which screen the Home item shows. Pure.
 nonisolated enum HomeSurface: Equatable, Sendable {
     case chat

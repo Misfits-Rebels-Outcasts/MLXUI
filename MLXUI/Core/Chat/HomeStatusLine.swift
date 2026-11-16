@@ -21,7 +21,8 @@ nonisolated struct HomeStatusLine: Equatable, Sendable {
 
     init(chipName: String, formattedRAM: String, formattedDisk: String, macOSVersion: String) {
         chip = Item(icon: "cpu.fill", label: chipName)
-        ram = Item(icon: "memorychip.fill", label: formattedRAM)
+        // HC-FIX-1 ruling K: the memory figure says what it is.
+        ram = Item(icon: "memorychip.fill", label: "\(formattedRAM) memory")
         disk = Item(icon: "internaldrive.fill", label: "\(formattedDisk) free")
         macOS = Item(icon: "macbook", label: "macOS \(macOSVersion)")
     }
