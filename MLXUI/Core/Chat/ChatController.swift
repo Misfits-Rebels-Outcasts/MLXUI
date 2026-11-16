@@ -87,13 +87,38 @@ final class ChatController {
     init(runner: ModelRunner, conversationDirectory: URL = ConversationStore.defaultDirectory(),
          readAllConversations: @escaping (URL) -> [Conversation] = { ConversationStore.allConversations(in: $0) },
          factsLoader: @escaping (ModelEntry) -> ChatModelFacts = { ChatModelFacts.load(for: $0) },
-         readinessProvider: @escaping () -> Readiness? = { AppleFoundationAvailability.currentReadiness() }) {
+         readinessProvider: @escaping () -> Readiness? = { ChatController.defaultReadiness() }) {
         self.factsLoader = factsLoader
         self.readinessProvider = readinessProvider
         self.runner = runner
         self.conversationDirectory = conversationDirectory
         self.readAll = readAllConversations
     }
+
+    /// Apple Intelligence's readiness for the page. **CD-DEBUG-1 (owner, 2026-11-16): in a DEBUG build only**, the launch
+    /// argument `-ChatForceAppleUnavailable YES` reports it as unavailable, so the no-chat-model screen (CD-S4) can be run
+    /// on a Mac that has Apple Intelligence. The key and this branch are inside `#if DEBUG`: a release build contains neither.
+    nonisolated static func defaultReadiness(defaults: UserDefaults = .standard) -> Readiness? {
+        #if DEBUG
+        if defaults.bool(forKey: debugForceAppleUnavailableKey) {
+            return .unavailable(reason: "Apple Intelligence is turned off for this run (-ChatForceAppleUnavailable).")
+        }
+        #endif
+        return AppleFoundationAvailability.currentReadiness()
+    }
+
+    /// Whether this build can honour the override at all (tests assert it matches `DEBUG`).
+    nonisolated static var debugOverrideIsCompiledIn: Bool {
+        #if DEBUG
+        true
+        #else
+        false
+        #endif
+    }
+
+    #if DEBUG
+    nonisolated static let debugForceAppleUnavailableKey = "ChatForceAppleUnavailable"
+    #endif
 
     /// The cached every-model list; the first call (and the first after `invalidateIndex`) reads the directory.
     private func loadedIndex() -> [Conversation] {
