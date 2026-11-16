@@ -20,6 +20,7 @@ struct CatalogSizeTests {
         "mlx-community--embeddinggemma-300m-4bit": 0.21, "mlx-community--gemma-3-1b-it-qat-4bit": 0.77,
         "mlx-community--orpheus-3b-0.1-ft-bf16": 6.63, "mlx-community--Kokoro-82M-bf16": 0.36,
         "Wan-AI--Wan2.1-T2V-1.3B-Diffusers": 28.93, "mlx-community--SeedVR2-3B-mlx-int8": 4.72,
+        "mlx-community--Qwen3-TTS-12Hz-0.6B-Base-bf16": 2.52,   // CAT-SIZE-2
     ]
 
     @Test func correctedSizesAreInTheEntryAndItsVariant() throws {
@@ -40,5 +41,14 @@ struct CatalogSizeTests {
         // Ministral's RAM figure on its model page is at least its download size (CAT-S1).
         let ministral = try #require(entries.first { $0.id == "mlx-community--Ministral-3-3B-Instruct-2512-4bit" })
         #expect(ministral.ramGB >= 2.8)
+    }
+
+    @Test func seedVR2ProseQuotesItsCatalogRAMFigure() throws {
+        let entry = try #require(try catalog().first { $0.id == "mlx-community--SeedVR2-3B-mlx-int8" })
+        #expect(entry.ramGB == 5.66)
+        for text in [entry.description, entry.summary].compactMap({ $0 }) {
+            #expect(!text.contains("4.5 GB"))
+        }
+        #expect(entry.summary?.contains("~5.7 GB RAM") == true)
     }
 }

@@ -2171,8 +2171,8 @@
           "minMacOSVersion": "13.0",
           "hfRepo": "mlx-community",
           "hfModelId": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16",
-          "ramGB": 2.74,
-          "downloadSizeGB": 1.83,
+          "ramGB": 3.02,
+          "downloadSizeGB": 2.52,
           "contextWindow": null,
           "license": "apache-2.0",
           "licenseUrl": null,
@@ -2193,15 +2193,16 @@
             {
               "quantization": "bf16",
               "format": "mlx-bf16",
-              "ramGB": 2.74,
-              "downloadSizeGB": 1.83,
+              "ramGB": 3.02,
+              "downloadSizeGB": 2.52,
               "qualityPercent": 100,
               "hfModelId": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16",
               "recommended": true
             }
           ],
           "descriptionSource": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-          "summary": "Qwen3-TTS is a family of advanced multilingual, controllable, robust, and streaming text-to-speech models."
+          "summary": "Qwen3-TTS is a family of advanced multilingual, controllable, robust, and streaming text-to-speech models.",
+          "notes": "downloadSizeGB corrected to the real HF file sizes (2.52 GB: ModelFileSelector file set summed from /api/models/{id}?blobs=true); ramGB raised 2.74 -> 3.02 (download size x 1.2). Floor applied (CAT-SIZE-2, 2026-11-16)."
         },
         {
           "id": "mlx-community--chatterbox-fp16",
@@ -3105,7 +3106,7 @@
           "contextWindow": null,
           "license": "apache-2.0",
           "licenseUrl": "https://huggingface.co/ByteDance-Seed/SeedVR2-3B/blob/main/LICENSE",
-          "description": "# SeedVR2 3B (int8 MLX)\n\nSeedVR2 is ByteDance's one-step diffusion-based super-resolution model (ICLR 2026). Given a low-resolution image, it produces a high-resolution output in a single denoising step.\n\nThe model uses a Diffusion Transformer (RoPE + SwiGLU + adaptive windowed attention) with a 3D-causal-conv VAE encoder/decoder. Positional embeddings are stored separately as `pos_emb.safetensors` (shape [58, 5120]).\n\nThis int8 MLX variant runs on Apple Silicon with ~4.5 GB RAM. An fp16 variant (`mlx-community/SeedVR2-3B-mlx`, ~9 GB) is also available.\n\n**License:** Apache 2.0 (ByteDance Research).",
+          "description": "# SeedVR2 3B (int8 MLX)\n\nSeedVR2 is ByteDance's one-step diffusion-based super-resolution model (ICLR 2026). Given a low-resolution image, it produces a high-resolution output in a single denoising step.\n\nThe model uses a Diffusion Transformer (RoPE + SwiGLU + adaptive windowed attention) with a 3D-causal-conv VAE encoder/decoder. Positional embeddings are stored separately as `pos_emb.safetensors` (shape [58, 5120]).\n\nThis int8 MLX variant runs on Apple Silicon with ~5.7 GB RAM. An fp16 variant (`mlx-community/SeedVR2-3B-mlx`, ~9 GB) is also available.\n\n**License:** Apache 2.0 (ByteDance Research).",
           "architecture": "SeedVR2DiT",
           "languages": [
             "en"
@@ -3143,7 +3144,7 @@
             }
           ],
           "descriptionSource": "mlx-community/SeedVR2-3B-mlx-int8",
-          "summary": "ByteDance's one-step diffusion super-resolution model (ICLR 2026) — upscale any image in a single forward pass on Apple Silicon, int8 (~4.5 GB RAM, Apache 2.0).",
+          "summary": "ByteDance's one-step diffusion super-resolution model (ICLR 2026) — upscale any image in a single forward pass on Apple Silicon, int8 (~5.7 GB RAM, Apache 2.0).",
           "notes": "downloadSizeGB corrected to the real HF file sizes (4.72 GB). ramGB raised 4.5 -> 5.66 (download size x 1.2): the 4.5 was an authored estimate (journal 2026-159), not a measurement, so the floor applies; real peaks are higher (journal 2026-560). Floor applied (CAT-SIZE-1, 2026-11-16)."
         }
       ]
