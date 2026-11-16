@@ -17,6 +17,58 @@ nonisolated enum ChatNoModelText {
     static let body = "It understands your request, then downloads and runs OCR, speech and image models for you as needed."
 }
 
+/// CD-FIX-2 — the grid's column rule, pure: how many columns of at least `minimum` fit in `width`
+/// (the same count `LazyVGrid`'s adaptive item gives).
+nonisolated enum ChatGridColumns {
+    static func count(width: Double, minimum: Double = 200, spacing: Double = 10) -> Int {
+        guard width.isFinite, width > 0 else { return 1 }
+        return max(1, Int(((width + spacing) / (minimum + spacing)).rounded(.down)))
+    }
+}
+
+/// CD-FIX-2 — adaptive columns (at least 200 pt, wrapping at narrow widths) where every card in a row is as tall as the
+/// tallest in that row. `LazyVGrid` cannot equalise row heights, so this is a small `Layout`; the grid has at most ten cards.
+struct EqualRowGridLayout: Layout {
+    var minimum: Double = 200
+    var spacing: Double = 10
+
+    private func metrics(_ subviews: Subviews, width: CGFloat?) -> (columns: Int, cellWidth: CGFloat, rows: [CGFloat]) {
+        let available = Double(width ?? CGFloat(minimum))
+        let columns = ChatGridColumns.count(width: available, minimum: minimum, spacing: spacing)
+        let cellWidth = (CGFloat(available) - CGFloat(spacing) * CGFloat(columns - 1)) / CGFloat(columns)
+        var rows: [CGFloat] = []
+        var index = 0
+        while index < subviews.count {
+            let end = min(index + columns, subviews.count)
+            let tallest = subviews[index..<end].map { $0.sizeThatFits(ProposedViewSize(width: cellWidth, height: nil)).height }.max() ?? 0
+            rows.append(tallest)
+            index = end
+        }
+        return (columns, cellWidth, rows)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let m = metrics(subviews, width: proposal.width)
+        let height = m.rows.reduce(0, +) + CGFloat(spacing) * CGFloat(max(m.rows.count - 1, 0))
+        return CGSize(width: proposal.width ?? CGFloat(minimum), height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let m = metrics(subviews, width: bounds.width)
+        var y = bounds.minY
+        for (row, rowHeight) in m.rows.enumerated() {
+            for column in 0..<m.columns {
+                let i = row * m.columns + column
+                guard i < subviews.count else { break }
+                let x = bounds.minX + CGFloat(column) * (m.cellWidth + CGFloat(spacing))
+                subviews[i].place(at: CGPoint(x: x, y: y), anchor: .topLeading,
+                                  proposal: ProposedViewSize(width: m.cellWidth, height: rowHeight))
+            }
+            y += rowHeight + CGFloat(spacing)
+        }
+    }
+}
+
 /// CD-2 — the capability grid shown in the empty conversation on the Chat page (`RSI/DelegateChatDiscoveryBacklog.md`).
 /// Statuses come from the same `ModelToolRuntime.live` + `CapabilityResolver.status` pair the router uses (`ChatToolSet`).
 struct ChatCapabilityGridView: View {
@@ -80,7 +132,7 @@ struct ChatCapabilityGridView: View {
     }
 
     private func grid(_ cards: [ChatCapabilityCard]) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 10, alignment: .top)], spacing: 10) {
+        EqualRowGridLayout {
             ForEach(cards) { card in cardView(card) }
         }
     }
@@ -101,7 +153,7 @@ struct ChatCapabilityGridView: View {
                 }
                 statusRow(card)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(10)
             .background(RoundedRectangle(cornerRadius: 10).fill(.quaternary.opacity(0.5)))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
