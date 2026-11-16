@@ -44,7 +44,7 @@ nonisolated enum ChatCapabilityMenuText {
     static let chromeWidth = 34.0
     /// Everything in the composer row that is not the model menu: the + menu, the send button, spacings, padding and the
     /// text field's own minimum (about 20 characters).
-    static let composerReserved = 292.0
+    static let composerReserved = 122.0 + 170.0
     static let menuWidthRange = 80.0...360.0
 
     /// The widest the model menu may be given the composer's width; the text field keeps the rest. `nil` until measured.
@@ -53,12 +53,23 @@ nonisolated enum ChatCapabilityMenuText {
         return min(max(containerWidth - composerReserved, menuWidthRange.lowerBound), menuWidthRange.upperBound)
     }
 
-    /// What the menu label shows in `maxWidth`: "name · N tools", else the name alone; the name is truncated by the view
-    /// (`fitsWhole` false) when even that does not fit. No limit (`nil`) shows everything.
+    /// The text field's own minimum in the composer row: about 20 characters plus its padding.
+    static let fieldMinWidth = 170.0
+    /// The narrowest the Chat page's composer gets (CD-FIX-3 assumption): the window's 900 pt minimum
+    /// (`ContentView`), less the app sidebar (about 220 pt) and the conversations column (210 pt) and its divider,
+    /// with the inspector hidden.
+    static let minimumComposerWidth = 470.0
+
+    /// What the menu label shows in `maxWidth`: "name · N tools", else the name alone, else the name **cut with "…"** to the
+    /// characters that fit. The cut is made here, in the string, because a macOS `Menu` label does not honour a `.frame`
+    /// or `lineLimit` inside it (CD-FIX-3). No limit (`nil`) shows everything.
     static func fitLabel(name: String, summary: String?, maxWidth: Double?) -> (name: String, summary: String?, fitsWhole: Bool) {
         guard let maxWidth else { return (name, summary, true) }
         if let summary, chromeWidth + Double((name + " · " + summary).count) * charWidth <= maxWidth { return (name, summary, true) }
-        return (name, nil, chromeWidth + Double(name.count) * charWidth <= maxWidth)
+        if chromeWidth + Double(name.count) * charWidth <= maxWidth { return (name, nil, true) }
+        let room = Int(((maxWidth - chromeWidth) / charWidth).rounded(.down))
+        let keep = max(room - 1, 3)
+        return (String(name.prefix(keep)) + "…", nil, false)
     }
 }
 
