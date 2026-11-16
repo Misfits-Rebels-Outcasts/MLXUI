@@ -26,3 +26,30 @@ struct ChatNoModelTextTests {
         #expect(ChatNoModelText.body == "It understands your request, then downloads and runs OCR, speech and image models for you as needed.")
     }
 }
+
+/// CD-FIX-1 — one grid, and text that follows the message size.
+struct ChatGridLayoutTests {
+    private func card(_ id: String) -> ChatCapabilityCard {
+        ChatCapabilityCard(id: id, title: id, symbol: "x", starterPrompt: "", takesFile: nil, state: .cantRun(reason: ""))
+    }
+
+    @Test func visibleCardsAreOneListThatGrowsWhenExpanded() {
+        let primary = ["a", "b", "c"].map(card), more = ["d", "e"].map(card)
+        #expect(ChatGridLayout.visibleCards(primary: primary, more: more, expanded: false).map(\.id) == ["a", "b", "c"])
+        #expect(ChatGridLayout.visibleCards(primary: primary, more: more, expanded: true).map(\.id) == ["a", "b", "c", "d", "e"])
+        #expect(ChatGridLayout.visibleCards(primary: [], more: [], expanded: true).isEmpty)
+    }
+
+    @Test func everyGridSizeIsItsBasePlusTheMessageStep() {
+        for size in ChatTextSize.allCases {
+            let step = size.points(for: .message) - ChatTextSize.Role.message.standardPoints
+            #expect(step == size.delta)
+            for role in ChatGridText.Role.allCases {
+                #expect(ChatGridText.points(role, size: size) == ChatGridText.basePoints(role) + size.delta)
+            }
+            // the card title is exactly message text at every step
+            #expect(ChatGridText.points(.cardTitle, size: size) == size.points(for: .message))
+        }
+        #expect(ChatGridText.points(.status, size: .extraLarge) - ChatGridText.points(.status, size: .small) == 6)
+    }
+}

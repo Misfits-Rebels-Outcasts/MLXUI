@@ -51,4 +51,37 @@ struct ChatCapabilityMenuTextTests {
         #expect(Set(statuses.keys) == Set(ModelToolSpec.modelTools.map(\.name)))
         #expect(statuses.values.allSatisfy { $0 == .none })   // empty catalog: nothing to offer
     }
+
+    // MARK: CD-FIX-1
+
+    @Test func placeholderFollowsSurfaceAndTools() {
+        #expect(ChatCapabilityMenuText.placeholder(isPage: true, modelName: "Q", canUseTools: true) == "Ask, or drop a photo, PDF or recording…")
+        #expect(ChatCapabilityMenuText.placeholder(isPage: true, modelName: "Q", canUseTools: false) == "Message Q…")
+        #expect(ChatCapabilityMenuText.placeholder(isPage: false, modelName: "Q", canUseTools: true) == "Message Q…")
+        #expect(ChatCapabilityMenuText.placeholder(isPage: false, modelName: "Q", canUseTools: false) == "Message Q…")
+    }
+
+    @Test func menuWidthLeavesTheTextFieldItsShare() {
+        #expect(ChatCapabilityMenuText.menuMaxWidth(containerWidth: nil) == nil)
+        #expect(ChatCapabilityMenuText.menuMaxWidth(containerWidth: 0) == nil)
+        #expect(ChatCapabilityMenuText.menuMaxWidth(containerWidth: 400) == 108)       // 400 - 292
+        #expect(ChatCapabilityMenuText.menuMaxWidth(containerWidth: 300) == 80)        // floor
+        #expect(ChatCapabilityMenuText.menuMaxWidth(containerWidth: 2000) == 360)      // ceiling
+        // whatever the width, the menu plus everything else leaves the field at least its reserved minimum
+        for width in stride(from: 380.0, through: 1200.0, by: 20) {
+            let menu = ChatCapabilityMenuText.menuMaxWidth(containerWidth: width) ?? 0
+            #expect(width - menu - ChatCapabilityMenuText.composerReserved >= 0 || menu == 80)
+        }
+    }
+
+    @Test func labelFallsBackFromSummaryToNameToTruncatedName() {
+        let wide = ChatCapabilityMenuText.fitLabel(name: "Qwen3 4B", summary: "6 tools", maxWidth: 360)
+        #expect(wide.summary == "6 tools" && wide.fitsWhole)
+        let mid = ChatCapabilityMenuText.fitLabel(name: "Qwen3 4B", summary: "6 tools", maxWidth: 108)
+        #expect(mid.summary == nil && mid.fitsWhole)
+        let tight = ChatCapabilityMenuText.fitLabel(name: "Qwen3 4B Instruct 2507", summary: "6 tools", maxWidth: 108)
+        #expect(tight.summary == nil && !tight.fitsWhole)
+        let unlimited = ChatCapabilityMenuText.fitLabel(name: "Qwen3 4B", summary: "6 tools", maxWidth: nil)
+        #expect(unlimited.summary == "6 tools" && unlimited.fitsWhole)
+    }
 }
