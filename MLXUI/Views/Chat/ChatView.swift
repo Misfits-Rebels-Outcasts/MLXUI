@@ -73,7 +73,7 @@ struct ChatView: View {
                 Button("Stop it") { controller.stopCurrentGeneration() }
                 if surface == .bench, ChatGate.isAvailable {
                     Button("Open Chat") {
-                        appState.selectedSection = .chat
+                        appState.goHome()
                         onDone?()
                     }
                 }
@@ -558,8 +558,11 @@ struct ChatView: View {
     @ViewBuilder
     private var emptyState: some View {
         if surface == .page, ChatGate.isAvailable {
-            ChatCapabilityGridView(modelName: model.displayName, canUseTools: selectedModelCanUseTools,
-                                   statuses: capabilityStatuses, onPick: pickCapabilityCard)
+            VStack(spacing: 0) {
+                ChatCapabilityGridView(modelName: model.displayName, canUseTools: selectedModelCanUseTools,
+                                       statuses: capabilityStatuses, onPick: pickCapabilityCard)
+                HomeStatusFooter()   // HC-2 (ruling E): page surface only; `emptyState` shows only on an empty transcript
+            }
         } else {
             benchEmptyState
         }

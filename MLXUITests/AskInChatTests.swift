@@ -204,7 +204,7 @@ struct AskInChatTests {
         #expect(!app.askInChat(.text("   ", name: "x")))                                  // nothing to send
         #expect(app.selectedSection == .home)
         #expect(app.askInChat(.text("a transcript", name: "transcript")))
-        #expect(app.selectedSection == .chat)
+        #expect(app.selectedSection == .home)
         #expect(app.chat.holder == .page)
         #expect(app.chat.draft(for: .page).files.map(\.lastPathComponent) == ["transcript.txt"])
     }

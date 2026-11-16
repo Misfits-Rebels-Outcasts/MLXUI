@@ -65,8 +65,9 @@ struct ChatPageTests {
         for (available, expectRow) in [(true, true), (false, false)] {
             ChatGate.overrideForTesting = available
             #expect(ChatGate.isAvailable == available)
-            #expect(SidebarItem.primaryItems(chatAvailable: ChatGate.isAvailable).contains(.chat) == expectRow)
-            #expect((ChatGate.resolved(.chat) == .chat) == expectRow)
+            // HC-1 ruling A: the sidebar has no Chat row at any gate state; Home shows the chat page only while open.
+            #expect(SidebarItem.primaryItems(chatAvailable: ChatGate.isAvailable) == [.home])
+            #expect((HomeSurface.resolve(chatAvailable: ChatGate.isAvailable) == .chat) == expectRow)
             let controller = ChatController(runner: ModelRunner(), conversationDirectory: dir)
             let lease = controller.acquire(.page, model: modelA)
             #expect((lease == .granted) == available)
@@ -84,12 +85,12 @@ struct ChatPageTests {
         #expect(controller.acquire(.bench, model: modelA) == .granted)
     }
 
-    @Test func chatIsSecondAfterHomeOnlyWhenTheGateSaysSo() {
-        #expect(SidebarItem.primaryItems(chatAvailable: true) == [.home, .chat])
+    @Test func homeIsTheOnlyPrimaryItemAndShowsChatOnlyWhenTheGateSaysSo() {
+        // HC-1 ruling A (Boo, 2026-11-16) supersedes MT ruling J ("Chat second after Home").
+        #expect(SidebarItem.primaryItems(chatAvailable: true) == [.home])
         #expect(SidebarItem.primaryItems(chatAvailable: false) == [.home])
-        #expect(ChatGate.resolved(.chat, available: false) == .home)
-        #expect(ChatGate.resolved(.chat, available: true) == .chat)
-        #expect(ChatGate.resolved(.aiWorkflows, available: false) == .aiWorkflows)
+        #expect(HomeSurface.resolve(chatAvailable: true) == .chat)
+        #expect(HomeSurface.resolve(chatAvailable: false) == .dashboard)
     }
 
     // MARK: - the page's model

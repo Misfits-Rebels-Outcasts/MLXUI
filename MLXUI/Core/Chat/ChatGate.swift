@@ -19,17 +19,41 @@ nonisolated enum ChatGate {
         overrideForTesting ?? !AppState.hideChat
     }
 
-    /// A selection that names a surface the gate has closed lands on Home.
-    static func resolved(_ item: SidebarItem, available: Bool = ChatGate.isAvailable) -> SidebarItem {
-        if case .chat = item, !available { return .home }
-        return item
+}
+
+/// HC-FIX-1 (rulings I, J): which pushed pages "Home" drops. Model, flow and workspace pages go; a flow editor stays
+/// (known pre-existing gap: an open editor keeps covering Home, as before). Pure.
+nonisolated enum HomeRoutePolicy {
+    static func remaining(_ route: [FlowRoute]) -> [FlowRoute] {
+        route.filter { if case .editor = $0 { return true }; return false }
+    }
+}
+
+/// HC-FIX-1 ruling M: which sidebar row is highlighted. Home is unhighlighted while a page is pushed over it; every
+/// other section is unchanged. Pure.
+nonisolated enum SidebarHighlight {
+    static func highlighted(selected: SidebarItem, routeIsEmpty: Bool) -> SidebarItem? {
+        if selected.isHome, !routeIsEmpty { return nil }
+        return selected
+    }
+}
+
+/// HC-1 (ruling A): which screen the Home item shows. Pure.
+nonisolated enum HomeSurface: Equatable, Sendable {
+    case chat
+    case dashboard
+
+    /// The Chat page while the gate is open; today's `HomeView` while it is closed (ruling C).
+    static func resolve(chatAvailable: Bool) -> HomeSurface {
+        chatAvailable ? .chat : .dashboard
     }
 }
 
 extension SidebarItem {
-    /// The sidebar's first section: Home, then Chat (second, ruling J) only while the gate says so.
+    /// The sidebar's first section: Home only. HC-1 ruling A supersedes MT ruling J: Chat is no longer a second item,
+    /// Home shows the Chat page while the gate is open (`HomeSurface`).
     static func primaryItems(chatAvailable: Bool) -> [SidebarItem] {
-        chatAvailable ? [.home, .chat] : [.home]
+        [.home]
     }
 }
 

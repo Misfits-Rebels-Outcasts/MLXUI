@@ -4,26 +4,24 @@ struct SidebarView: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
-        List(selection: Binding(
-            get: { ChatGate.resolved(appState.selectedSection) },
+        List(selection: Binding<SidebarItem?>(
+            // HC-FIX-1 ruling M: no row is highlighted while a page is pushed over Home, so clicking Home is a real
+            // selection change and the setter fires.
+            get: { SidebarHighlight.highlighted(selected: appState.selectedSection, routeIsEmpty: appState.route.isEmpty) },
             set: { new in
-                appState.selectedSection = new
+                // List may write nil back when a row is deselected (the unhighlight above); that is not a navigation.
+                guard let new else { return }
+                if new.isHome { appState.goHome() } else { appState.selectedSection = new }
                 appState.resetFilters()
-                if case .chat = new, ChatGate.isAvailable {
+                if new.isHome, ChatGate.isAvailable {
                     appState.chat.refreshPageModel(installedChatModels: appState.installedChatModels)
                 }
             }
         )) {
             Section {
-                ForEach(SidebarItem.primaryItems(chatAvailable: ChatGate.isAvailable), id: \.self) { item in
-                    switch item {
-                    case .chat:
-                        Label("Chat", systemImage: "bubble.left.and.bubble.right")
-                            .tag(SidebarItem.chat)
-                    default:
-                        Label("Home", systemImage: "house.fill")
-                            .tag(SidebarItem.home)
-                    }
+                ForEach(SidebarItem.primaryItems(chatAvailable: ChatGate.isAvailable), id: \.self) { _ in
+                    Label("Home", systemImage: "house.fill")
+                        .tag(SidebarItem.home)
                 }
             }
 
