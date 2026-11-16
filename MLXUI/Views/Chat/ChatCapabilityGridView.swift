@@ -36,6 +36,11 @@ struct ChatCapabilityGridView: View {
 
     private var size: ChatTextSize { ChatTextSize(stored: messageSizeRaw) }
 
+    /// CD-FIX-1: every grid text follows the message size step (`ChatGridText`).
+    private func gridFont(_ role: ChatGridText.Role) -> Font {
+        .system(size: ChatGridText.points(role, size: size))
+    }
+
     var body: some View {
         let result = ChatCapabilityCards.cards(specs: ModelToolSpec.modelTools, statuses: statuses)
         VStack(spacing: 14) {
@@ -45,10 +50,10 @@ struct ChatCapabilityGridView: View {
                     .font(.system(size: 28))
                     .foregroundStyle(.secondary)
                 Text("Chat can run other AI models for you")
-                    .font(size.font(.message, standard: .title3).weight(.semibold))
+                    .font(gridFont(.heading).weight(.semibold))
                     .multilineTextAlignment(.center)
                 Text("Drop a file or pick one below. Chat downloads the model it needs once, then runs it on this Mac.")
-                    .font(size.font(.message, standard: .callout))
+                    .font(gridFont(.subheading))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -56,19 +61,18 @@ struct ChatCapabilityGridView: View {
             }
             if !readOnly, let note = ChatCapabilityCards.routerNote(modelName: modelName, canUseTools: canUseTools) {
                 Text(note)
-                    .font(size.font(.message, standard: .callout))
+                    .font(gridFont(.note))
                     .foregroundStyle(.orange)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            grid(result.primary)
+            grid(ChatGridLayout.visibleCards(primary: result.primary, more: result.more, expanded: showsMore))
             if !result.more.isEmpty {
-                if showsMore { grid(result.more) }
                 Button(showsMore ? "Show fewer" : "+\(result.more.count) more") {
                     withAnimation { showsMore.toggle() }
                 }
                 .buttonStyle(.link)
-                .font(size.font(.message, standard: .callout))
+                .font(gridFont(.link))
             }
         }
         .frame(maxWidth: .infinity)
@@ -91,7 +95,7 @@ struct ChatCapabilityGridView: View {
                         .foregroundStyle(Color.accentColor)
                         .frame(width: 22)
                     Text(card.title)
-                        .font(size.font(.message, standard: .body).weight(.medium))
+                        .font(gridFont(.cardTitle).weight(.medium))
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -121,7 +125,7 @@ struct ChatCapabilityGridView: View {
                 Image(systemName: "exclamationmark.circle").font(.caption).foregroundStyle(.secondary)
             }
             Text(card.statusLine)
-                .font(size.font(.toolResult, standard: .caption))
+                .font(gridFont(.status))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)

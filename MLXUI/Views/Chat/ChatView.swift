@@ -39,6 +39,8 @@ struct ChatView: View {
     /// CD-3: per-tool statuses for the page's grid and model menu, refreshed when the installed models change.
     @State private var capabilityStatuses: [String: ModelToolStatus] = [:]
     @State private var isDropTargeted = false
+    /// CD-FIX-1: the composer's width, so the model menu leaves the text field room.
+    @State private var composerWidth: Double?
     @State private var showAuditLog = false
     @State private var conversationToDelete: Conversation?
     /// CP-2: the "Delete All Conversations…" confirmation.
@@ -882,7 +884,8 @@ struct ChatView: View {
             HStack(spacing: 8) {
                 attachMenu
                 if surface == .page { modelMenu }
-                TextField(surface == .page ? ChatCapabilityMenuText.pagePlaceholder : "Message \(model.displayName)…", text: promptBinding, axis: .vertical)
+                TextField(ChatCapabilityMenuText.placeholder(isPage: surface == .page, modelName: model.displayName,
+                                                             canUseTools: selectedModelCanUseTools), text: promptBinding, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...4)
                     .padding(.horizontal, 10)
@@ -917,6 +920,7 @@ struct ChatView: View {
             #endif
         }
         .padding(12)
+        .onGeometryChange(for: Double.self, of: { Double($0.size.width) }) { composerWidth = $0 }
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
             // A folder attaches to the chat (CW-2); a file waits for the next message (CW-3).
             guard !runner.isRunning else { return false }
@@ -996,16 +1000,20 @@ struct ChatView: View {
         } label: {
             let label = ChatCapabilityMenuText.label(modelName: model.displayName, cards: capabilityCards,
                                                      canUseTools: selectedModelCanUseTools)
+            let menuMax = ChatCapabilityMenuText.menuMaxWidth(containerWidth: composerWidth)
+            let fit = ChatCapabilityMenuText.fitLabel(name: label.name, summary: label.summary, maxWidth: menuMax)
             Label {
-                if let summary = label.summary {
-                    Text(label.name) + Text(" · \(summary)").foregroundStyle(.secondary)
+                if let summary = fit.summary {
+                    Text(fit.name) + Text(" · \(summary)").foregroundStyle(.secondary)
                 } else {
-                    Text(label.name)
+                    Text(fit.name)
                 }
             } icon: {
                 Image(systemName: "cpu")
             }
             .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: menuMax.map { CGFloat($0) } ?? .infinity, alignment: .leading)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
