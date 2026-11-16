@@ -442,8 +442,8 @@
           "minMacOSVersion": "13.0",
           "hfRepo": "mlx-community",
           "hfModelId": "mlx-community/gemma-3-1b-it-qat-4bit",
-          "ramGB": 0.84,
-          "downloadSizeGB": 0.56,
+          "ramGB": 0.92,
+          "downloadSizeGB": 0.77,
           "contextWindow": null,
           "license": "gemma",
           "licenseUrl": null,
@@ -464,15 +464,16 @@
             {
               "quantization": "4-bit",
               "format": "mlx-4bit",
-              "ramGB": 0.84,
-              "downloadSizeGB": 0.56,
+              "ramGB": 0.92,
+              "downloadSizeGB": 0.77,
               "qualityPercent": 90,
               "hfModelId": "mlx-community/gemma-3-1b-it-qat-4bit",
               "recommended": true
             }
           ],
           "descriptionSource": "mlx-community/gemma-3-1b-it-qat-4bit",
-          "summary": "The Model mlx-community/gemma-3-1b-it-qat-4bit was converted to MLX format from google/gemma-3-1b-it-qat-q4_0"
+          "summary": "The Model mlx-community/gemma-3-1b-it-qat-4bit was converted to MLX format from google/gemma-3-1b-it-qat-q4_0",
+          "notes": "downloadSizeGB corrected to the real HF file sizes (0.77 GB); ramGB raised to download size x 1.2 where it was lower (CAT-SIZE-1, 2026-11-16)."
         },
         {
           "id": "mlx-community--Ministral-3-3B-Instruct-2512-4bit",
@@ -489,7 +490,7 @@
           "minMacOSVersion": "13.0",
           "hfRepo": "mlx-community",
           "hfModelId": "mlx-community/Ministral-3-3B-Instruct-2512-4bit",
-          "ramGB": 2.53,
+          "ramGB": 3.34,
           "downloadSizeGB": 2.78,
           "contextWindow": null,
           "license": "apache-2.0",
@@ -521,7 +522,7 @@
             {
               "quantization": "4-bit",
               "format": "mlx-4bit",
-              "ramGB": 2.53,
+              "ramGB": 3.34,
               "downloadSizeGB": 2.78,
               "qualityPercent": 90,
               "hfModelId": "mlx-community/Ministral-3-3B-Instruct-2512-4bit",
@@ -529,7 +530,8 @@
             }
           ],
           "descriptionSource": "mistralai/Ministral-3-3B-Instruct-2512",
-          "summary": "The smallest model in the Ministral 3 family, Ministral 3 3B is a powerful, efficient tiny language model with vision capabilities."
+          "summary": "The smallest model in the Ministral 3 family, Ministral 3 3B is a powerful, efficient tiny language model with vision capabilities.",
+          "notes": "downloadSizeGB corrected to the real HF file sizes (2.78 GB); ramGB raised to download size x 1.2 where it was lower (CAT-SIZE-1, 2026-11-16)."
         },
         {
           "id": "mlx-community--Qwen3-8B-4bit",
@@ -820,7 +822,8 @@
             }
           ],
           "descriptionSource": "mistralai/Devstral-Small-2-24B-Instruct-2512",
-          "summary": "Devstral is an agentic LLM for software engineering tasks."
+          "summary": "Devstral is an agentic LLM for software engineering tasks.",
+          "notes": "downloadSizeGB corrected to the real HF file sizes (15.14 GB); ramGB raised to download size x 1.2 where it was lower (CAT-SIZE-1, 2026-11-16)."
         },
         {
           "id": "mlx-community--translategemma-4b-it-4bit",
@@ -893,7 +896,7 @@
           "minMacOSVersion": "13.0",
           "hfRepo": "mlx-community",
           "hfModelId": "mlx-community/LFM2-VL-1.6B-4bit",
-          "ramGB": 0.49,
+          "ramGB": 1.76,
           "downloadSizeGB": 1.47,
           "contextWindow": null,
           "license": "other",
@@ -917,7 +920,7 @@
             {
               "quantization": "4-bit",
               "format": "mlx-4bit",
-              "ramGB": 0.49,
+              "ramGB": 1.76,
               "downloadSizeGB": 1.47,
               "qualityPercent": 90,
               "hfModelId": "mlx-community/LFM2-VL-1.6B-4bit",
@@ -925,7 +928,8 @@
             }
           ],
           "descriptionSource": "LiquidAI/LFM2-VL-1.6B",
-          "summary": "Try LFM • Docs • LEAP • Discord"
+          "summary": "Try LFM • Docs • LEAP • Discord",
+          "notes": "downloadSizeGB corrected to the real HF file sizes (1.47 GB); ramGB raised to download size x 1.2 where it was lower (CAT-SIZE-1, 2026-11-16)."
         },
         {
           "id": "mlx-community--Qwen3.5-9B-MLX-4bit-vision",
@@ -989,7 +993,7 @@
           "minMacOSVersion": "13.0",
           "hfRepo": "mlx-community",
           "hfModelId": "mlx-community/gemma-3-4b-it-4bit",
-          "ramGB": 3.38,
+          "ramGB": 4.13,
           "downloadSizeGB": 3.44,
           "contextWindow": null,
           "license": "gemma",
@@ -1011,7 +1015,7 @@
             {
               "quantization": "4-bit",
               "format": "mlx-4bit",
-              "ramGB": 3.38,
+              "ramGB": 4.13,
               "downloadSizeGB": 3.44,
               "qualityPercent": 90,
               "hfModelId": "mlx-community/gemma-3-4b-it-4bit",
@@ -1019,7 +1023,8 @@
             }
           ],
           "summary": "Google's Gemma 3 4B (instruction-tuned), a compact multimodal model handling text and images.",
-          "descriptionSource": "curated"
+          "descriptionSource": "curated",
+          "notes": "downloadSizeGB corrected to the real HF file sizes (3.44 GB); ramGB raised to download size x 1.2 where it was lower (CAT-SIZE-1, 2026-11-16)."
         },
         {
           "id": "mlx-community--Qwen3-VL-4B-Instruct-4bit",
@@ -1036,7 +1041,7 @@
           "minMacOSVersion": "13.0",
           "hfRepo": "mlx-community",
           "hfModelId": "mlx-community/Qwen3-VL-4B-Instruct-4bit",
-          "ramGB": 3.38,
+          "ramGB": 3.73,
           "downloadSizeGB": 3.11,
           "contextWindow": null,
           "license": "apache-2.0",
@@ -1058,7 +1063,7 @@
             {
               "quantization": "4-bit",
               "format": "mlx-4bit",
-              "ramGB": 3.38,
+              "ramGB": 3.73,
               "downloadSizeGB": 3.11,
               "qualityPercent": 90,
               "hfModelId": "mlx-community/Qwen3-VL-4B-Instruct-4bit",
@@ -1066,7 +1071,8 @@
             }
           ],
           "descriptionSource": "Qwen/Qwen3-VL-4B-Instruct",
-          "summary": "Meet Qwen3-VL — the most powerful vision-language model in the Qwen series to date."
+          "summary": "Meet Qwen3-VL — the most powerful vision-language model in the Qwen series to date.",
+          "notes": "downloadSizeGB corrected to the real HF file sizes (3.11 GB); ramGB raised to download size x 1.2 where it was lower (CAT-SIZE-1, 2026-11-16)."
         },
         {
           "id": "mlx-community--gemma-3-12b-it-4bit",
@@ -1113,7 +1119,8 @@
             }
           ],
           "summary": "Google's Gemma 3 12B (instruction-tuned), a mid-size multimodal open model for text and vision.",
-          "descriptionSource": "curated"
+          "descriptionSource": "curated",
+          "notes": "downloadSizeGB corrected to the real HF file sizes (8.07 GB); ramGB raised to download size x 1.2 where it was lower (CAT-SIZE-1, 2026-11-16)."
         },
         {
           "id": "mlx-community--gemma-4-e4b-it-4bit-vision",
@@ -1185,7 +1192,7 @@
           "minMacOSVersion": "13.0",
           "hfRepo": "mlx-community",
           "hfModelId": "mlx-community/PaddleOCR-VL-1.5-4bit",
-          "ramGB": 0.22,
+          "ramGB": 0.85,
           "downloadSizeGB": 0.71,
           "contextWindow": null,
           "license": "apache-2.0",
@@ -1211,7 +1218,7 @@
             {
               "quantization": "4-bit",
               "format": "mlx-4bit",
-              "ramGB": 0.22,
+              "ramGB": 0.85,
               "downloadSizeGB": 0.71,
               "qualityPercent": 90,
               "hfModelId": "mlx-community/PaddleOCR-VL-1.5-4bit",
@@ -1219,7 +1226,8 @@
             }
           ],
           "descriptionSource": "PaddlePaddle/PaddleOCR-VL-1.5",
-          "summary": "PaddleOCR-VL-1.5: Towards a Multi-Task 0.9B VLM for Robust In-the-Wild Document Parsing"
+          "summary": "PaddleOCR-VL-1.5: Towards a Multi-Task 0.9B VLM for Robust In-the-Wild Document Parsing",
+          "notes": "downloadSizeGB corrected to the real HF file sizes (0.71 GB); ramGB raised to download size x 1.2 where it was lower (CAT-SIZE-1, 2026-11-16)."
         },
         {
           "id": "mlx-community--DeepSeek-OCR-2-bf16",
@@ -1285,7 +1293,7 @@
           "minMacOSVersion": "13.0",
           "hfRepo": "mlx-community",
           "hfModelId": "mlx-community/dots.ocr-4bit",
-          "ramGB": 1.3,
+          "ramGB": 4.25,
           "downloadSizeGB": 3.54,
           "contextWindow": null,
           "license": "mit",
@@ -1311,7 +1319,7 @@
             {
               "quantization": "4-bit",
               "format": "mlx-4bit",
-              "ramGB": 1.3,
+              "ramGB": 4.25,
               "downloadSizeGB": 3.54,
               "qualityPercent": 90,
               "hfModelId": "mlx-community/dots.ocr-4bit",
@@ -1319,7 +1327,8 @@
             }
           ],
           "descriptionSource": "rednote-hilab/dots.ocr",
-          "summary": "dots.ocr: Multilingual Document Layout Parsing in a Single Vision-Language Model"
+          "summary": "dots.ocr: Multilingual Document Layout Parsing in a Single Vision-Language Model",
+          "notes": "downloadSizeGB corrected to the real HF file sizes (3.54 GB); ramGB raised to download size x 1.2 where it was lower (CAT-SIZE-1, 2026-11-16)."
         },
         {
           "id": "mlx-community--olmOCR-2-7B-1025-mlx-4bit",
@@ -1336,7 +1345,7 @@
           "minMacOSVersion": "13.0",
           "hfRepo": "mlx-community",
           "hfModelId": "mlx-community/olmOCR-2-7B-1025-mlx-4bit",
-          "ramGB": 5.91,
+          "ramGB": 6.78,
           "downloadSizeGB": 5.65,
           "contextWindow": null,
           "license": "apache-2.0",
@@ -1360,7 +1369,7 @@
             {
               "quantization": "4-bit",
               "format": "mlx-4bit",
-              "ramGB": 5.91,
+              "ramGB": 6.78,
               "downloadSizeGB": 5.65,
               "qualityPercent": 90,
               "hfModelId": "mlx-community/olmOCR-2-7B-1025-mlx-4bit",
@@ -1368,7 +1377,8 @@
             }
           ],
           "descriptionSource": "allenai/olmOCR-2-7B-1025",
-          "summary": "Full BF16 version of olmOCR-2-7B-1025-FP8."
+          "summary": "Full BF16 version of olmOCR-2-7B-1025-FP8.",
+          "notes": "downloadSizeGB corrected to the real HF file sizes (5.65 GB); ramGB raised to download size x 1.2 where it was lower (CAT-SIZE-1, 2026-11-16)."
         },
         {
           "id": "mlx-community--GLM-OCR-4bit",
@@ -1743,8 +1753,8 @@
           "minMacOSVersion": "13.0",
           "hfRepo": "mlx-community",
           "hfModelId": "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
-          "ramGB": 0.9,
-          "downloadSizeGB": 0.6,
+          "ramGB": 3.78,
+          "downloadSizeGB": 3.15,
           "contextWindow": null,
           "license": "apache-2.0",
           "licenseUrl": null,
@@ -1779,15 +1789,16 @@
             {
               "quantization": "4-bit",
               "format": "mlx-4bit",
-              "ramGB": 0.9,
-              "downloadSizeGB": 0.6,
+              "ramGB": 3.78,
+              "downloadSizeGB": 3.15,
               "qualityPercent": 90,
               "hfModelId": "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
               "recommended": true
             }
           ],
           "descriptionSource": "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
-          "summary": "This is a 4-bit quantized MLX conversion of mistralai/Voxtral-Mini-4B-Realtime-2602, Mistral AI's streaming speech-to-text model."
+          "summary": "This is a 4-bit quantized MLX conversion of mistralai/Voxtral-Mini-4B-Realtime-2602, Mistral AI's streaming speech-to-text model.",
+          "notes": "downloadSizeGB corrected to the real HF file sizes (3.15 GB); ramGB raised to download size x 1.2 where it was lower (CAT-SIZE-1, 2026-11-16)."
         },
         {
           "id": "mlx-community--whisper-large-v3-asr-fp16",
@@ -2110,8 +2121,8 @@
           "minMacOSVersion": "13.0",
           "hfRepo": "mlx-community",
           "hfModelId": "mlx-community/Kokoro-82M-bf16",
-          "ramGB": 0.25,
-          "downloadSizeGB": 0.16,
+          "ramGB": 0.43,
+          "downloadSizeGB": 0.36,
           "contextWindow": null,
           "license": "apache-2.0",
           "licenseUrl": null,
@@ -2134,15 +2145,16 @@
             {
               "quantization": "bf16",
               "format": "mlx-bf16",
-              "ramGB": 0.25,
-              "downloadSizeGB": 0.16,
+              "ramGB": 0.43,
+              "downloadSizeGB": 0.36,
               "qualityPercent": 100,
               "hfModelId": "mlx-community/Kokoro-82M-bf16",
               "recommended": true
             }
           ],
           "descriptionSource": "curated",
-          "summary": "Kokoro-82M: a lightweight 82M-parameter text-to-speech model with dozens of voices across several languages."
+          "summary": "Kokoro-82M: a lightweight 82M-parameter text-to-speech model with dozens of voices across several languages.",
+          "notes": "downloadSizeGB corrected to the real HF file sizes (0.36 GB); ramGB raised to download size x 1.2 where it was lower (CAT-SIZE-1, 2026-11-16)."
         },
         {
           "id": "mlx-community--Qwen3-TTS-12Hz-0.6B-Base-bf16",
@@ -2278,7 +2290,7 @@
           "hfRepo": "mlx-community",
           "hfModelId": "mlx-community/orpheus-3b-0.1-ft-bf16",
           "ramGB": 9.0,
-          "downloadSizeGB": 6.0,
+          "downloadSizeGB": 6.63,
           "contextWindow": null,
           "license": "apache-2.0",
           "licenseUrl": null,
@@ -2302,14 +2314,15 @@
               "quantization": "bf16",
               "format": "mlx-bf16",
               "ramGB": 9.0,
-              "downloadSizeGB": 6.0,
+              "downloadSizeGB": 6.63,
               "qualityPercent": 100,
               "hfModelId": "mlx-community/orpheus-3b-0.1-ft-bf16",
               "recommended": true
             }
           ],
           "descriptionSource": "mlx-community/orpheus-3b-0.1-ft-bf16",
-          "summary": "This model mlx-community/orpheus-3b-0.1-ft-bf16 was"
+          "summary": "This model mlx-community/orpheus-3b-0.1-ft-bf16 was",
+          "notes": "downloadSizeGB corrected to the real HF file sizes (6.63 GB); ramGB raised to download size x 1.2 where it was lower (CAT-SIZE-1, 2026-11-16)."
         }
       ]
     },
@@ -2441,8 +2454,8 @@
           "minMacOSVersion": "13.0",
           "hfRepo": "mlx-community",
           "hfModelId": "mlx-community/embeddinggemma-300m-4bit",
-          "ramGB": 0.04,
-          "downloadSizeGB": 0.03,
+          "ramGB": 0.25,
+          "downloadSizeGB": 0.21,
           "contextWindow": null,
           "license": "gemma",
           "licenseUrl": null,
@@ -2463,15 +2476,16 @@
             {
               "quantization": "4-bit",
               "format": "mlx-4bit",
-              "ramGB": 0.04,
-              "downloadSizeGB": 0.03,
+              "ramGB": 0.25,
+              "downloadSizeGB": 0.21,
               "qualityPercent": 90,
               "hfModelId": "mlx-community/embeddinggemma-300m-4bit",
               "recommended": true
             }
           ],
           "descriptionSource": "curated",
-          "summary": "Google's EmbeddingGemma 300M, a compact multilingual text-embedding model for search and RAG."
+          "summary": "Google's EmbeddingGemma 300M, a compact multilingual text-embedding model for search and RAG.",
+          "notes": "downloadSizeGB corrected to the real HF file sizes (0.21 GB); ramGB raised to download size x 1.2 where it was lower (CAT-SIZE-1, 2026-11-16)."
         },
         {
           "id": "mlx-community--nomicai-modernbert-embed-base-bf16",
@@ -3027,7 +3041,7 @@
           "hfRepo": "Wan-AI",
           "hfModelId": "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
           "ramGB": 10.0,
-          "downloadSizeGB": 11.0,
+          "downloadSizeGB": 28.93,
           "contextWindow": null,
           "license": "apache-2.0",
           "licenseUrl": "https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B-Diffusers/blob/main/LICENSE.txt",
@@ -3053,14 +3067,15 @@
               "quantization": "bfloat16",
               "format": "mlx-bf16",
               "ramGB": 10.0,
-              "downloadSizeGB": 11.0,
+              "downloadSizeGB": 28.93,
               "qualityPercent": 100,
               "hfModelId": "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
               "recommended": true
             }
           ],
           "descriptionSource": "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
-          "summary": "Alibaba's open-source text-to-video model (1.3B DiT) — enter a prompt and generate a short video clip on Apple Silicon. Peak RAM ~10 GB during text encoding, ~3 GB during denoising (Apache 2.0)."
+          "summary": "Alibaba's open-source text-to-video model (1.3B DiT) — enter a prompt and generate a short video clip on Apple Silicon. Peak RAM ~10 GB during text encoding, ~3 GB during denoising (Apache 2.0).",
+          "notes": "downloadSizeGB corrected to the real HF file sizes (28.93 GB, incl. the fp32 text encoder). ramGB 10.0 kept: it is the measured two-phase peak (journal 2026-90), so the weights x 1.2 floor does not apply to this diffusion model (CLAUDE.md, Formulas). Floor exempt (CAT-SIZE-1, 2026-11-16)."
         }
       ]
     },
@@ -3085,8 +3100,8 @@
           "minMacOSVersion": "14.0",
           "hfRepo": "mlx-community",
           "hfModelId": "mlx-community/SeedVR2-3B-mlx-int8",
-          "ramGB": 4.5,
-          "downloadSizeGB": 3.0,
+          "ramGB": 5.66,
+          "downloadSizeGB": 4.72,
           "contextWindow": null,
           "license": "apache-2.0",
           "licenseUrl": "https://huggingface.co/ByteDance-Seed/SeedVR2-3B/blob/main/LICENSE",
@@ -3111,8 +3126,8 @@
             {
               "quantization": "int8",
               "format": "mlx-int8",
-              "ramGB": 4.5,
-              "downloadSizeGB": 3.0,
+              "ramGB": 5.66,
+              "downloadSizeGB": 4.72,
               "qualityPercent": 95,
               "hfModelId": "mlx-community/SeedVR2-3B-mlx-int8",
               "recommended": true
@@ -3128,7 +3143,8 @@
             }
           ],
           "descriptionSource": "mlx-community/SeedVR2-3B-mlx-int8",
-          "summary": "ByteDance's one-step diffusion super-resolution model (ICLR 2026) — upscale any image in a single forward pass on Apple Silicon, int8 (~4.5 GB RAM, Apache 2.0)."
+          "summary": "ByteDance's one-step diffusion super-resolution model (ICLR 2026) — upscale any image in a single forward pass on Apple Silicon, int8 (~4.5 GB RAM, Apache 2.0).",
+          "notes": "downloadSizeGB corrected to the real HF file sizes (4.72 GB). ramGB raised 4.5 -> 5.66 (download size x 1.2): the 4.5 was an authored estimate (journal 2026-159), not a measurement, so the floor applies; real peaks are higher (journal 2026-560). Floor applied (CAT-SIZE-1, 2026-11-16)."
         }
       ]
     },
