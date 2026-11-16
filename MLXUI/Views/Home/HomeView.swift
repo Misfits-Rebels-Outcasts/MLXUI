@@ -29,6 +29,12 @@ struct HomeView: View {
         }
     }
 
+    /// HC-2: the same facts the Home chat page's footer shows, formatted in one place.
+    private var statusLine: HomeStatusLine {
+        HomeStatusLine(chipName: appState.systemInfo.chipName, formattedRAM: appState.systemInfo.formattedRAM,
+                       formattedDisk: appState.systemInfo.formattedDisk, macOSVersion: appState.systemInfo.macOSVersion)
+    }
+
     private var systemStatusSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -39,10 +45,9 @@ struct HomeView: View {
             }
 
             HStack(spacing: 24) {
-                statusBadge(icon: "cpu.fill", label: appState.systemInfo.chipName)
-                statusBadge(icon: "memorychip.fill", label: appState.systemInfo.formattedRAM)
-                statusBadge(icon: "internaldrive.fill", label: "\(appState.systemInfo.formattedDisk) free")
-                statusBadge(icon: "macbook", label: "macOS \(appState.systemInfo.macOSVersion)")
+                ForEach(statusLine.badges, id: \.icon) { item in
+                    statusBadge(icon: item.icon, label: item.label)
+                }
             }
         }
         .padding(20)

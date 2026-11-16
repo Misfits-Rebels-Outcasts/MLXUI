@@ -126,6 +126,7 @@ struct ChatPageView: View {
             ChatCapabilityGridView(modelName: "", canUseTools: false, statuses: capabilityStatuses,
                                    onPick: { _ in }, readOnly: true)
                 .padding(.top, 12)
+            HomeStatusFooter()   // HC-2 (ruling E)
         }
         .padding()
     }
