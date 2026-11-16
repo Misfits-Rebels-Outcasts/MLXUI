@@ -203,18 +203,21 @@ struct CatFlowCatalogBridgeTests {
 
     @Test func lfm2AndGemmaResolveForDescribeImage() throws {
         let catalog = try loadCatalog()
+        // CAT-SIZE-1 (owner ruling, Boo, 2026-11-16, option b): the assertion's intent is unchanged -- the bare
+        // Describe Image row defaults to the cheaper model, LFM2-VL -- but it is now stated relative to Gemma 3 4B
+        // instead of as an absolute `ramGB < 1.0` (the old 0.33 GB / 3.38 GB figures were stale catalog numbers).
+        var ram: [String: Double] = [:]
         for display in ["LFM2-VL 1.6B", "Gemma 3 4B"] {
             switch CatalogBridge.resolve(display, catalog: catalog) {
             case .runnable(let slot, _, _):
-                // The cheap one is the pool's first entry, so a bare Describe Image row
-                // defaults to LFM2-VL 1.6B (0.33 GB), not Gemma 3 4B (3.38 GB).
-                if display == "LFM2-VL 1.6B" {
-                    #expect((slot.modelEntry?.ramGB ?? .infinity) < 1.0)
-                }
+                ram[display] = slot.modelEntry?.ramGB
             case .notRunnable(let d, let reason, _):
                 Issue.record("\(d) should resolve: \(reason)")
             }
         }
+        let lfm = try #require(ram["LFM2-VL 1.6B"])
+        let gemma = try #require(ram["Gemma 3 4B"])
+        #expect(lfm < gemma)
     }
 
     // MARK: - CFM-R14-1: the three ASR gaps
