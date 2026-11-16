@@ -36,6 +36,9 @@ struct ChatView: View {
             controller.setDraft(draft, for: surface)
         }
     }
+    /// CD-3: per-tool statuses for the page's grid and model menu, refreshed when the installed models change.
+    @State private var capabilityStatuses: [String: ModelToolStatus] = [:]
+    @State private var isDropTargeted = false
     @State private var showAuditLog = false
     @State private var conversationToDelete: Conversation?
     /// CP-2: the "Delete All Conversations…" confirmation.
@@ -538,6 +541,12 @@ struct ChatView: View {
     /// Whether the selected chat model can call tools; unknown facts (not loaded yet) read as "can", so no note flashes.
     private var selectedModelCanUseTools: Bool { controller.modelFacts[model.id]?.canUseTools ?? true }
 
+    /// CD-3: the cards the grid and the model menu both show, from one status table.
+    private var capabilityCards: [ChatCapabilityCard] {
+        let result = ChatCapabilityCards.cards(specs: ModelToolSpec.modelTools, statuses: capabilityStatuses)
+        return result.primary + result.more
+    }
+
     /// CD-2: a card fills the composer (never sends) and, for a tool that takes a file, opens the Add files panel.
     private func pickCapabilityCard(_ card: ChatCapabilityCard) {
         prompt = ChatCardDraft.draft(afterPicking: card.starterPrompt, current: prompt)
@@ -548,7 +557,7 @@ struct ChatView: View {
     private var emptyState: some View {
         if surface == .page, ChatGate.isAvailable {
             ChatCapabilityGridView(modelName: model.displayName, canUseTools: selectedModelCanUseTools,
-                                   onPick: pickCapabilityCard)
+                                   statuses: capabilityStatuses, onPick: pickCapabilityCard)
         } else {
             benchEmptyState
         }
@@ -873,7 +882,7 @@ struct ChatView: View {
             HStack(spacing: 8) {
                 attachMenu
                 if surface == .page { modelMenu }
-                TextField("Message \(model.displayName)…", text: promptBinding, axis: .vertical)
+                TextField(surface == .page ? ChatCapabilityMenuText.pagePlaceholder : "Message \(model.displayName)…", text: promptBinding, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...4)
                     .padding(.horizontal, 10)
@@ -908,7 +917,7 @@ struct ChatView: View {
             #endif
         }
         .padding(12)
-        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+        .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
             // A folder attaches to the chat (CW-2); a file waits for the next message (CW-3).
             guard !runner.isRunning else { return false }
             for provider in providers {
@@ -924,6 +933,22 @@ struct ChatView: View {
                 }
             }
             return true
+        }
+        .overlay {
+            // CD-3: on the page, with tools available, a file over the composer says who will handle it.
+            if isDropTargeted, surface == .page, selectedModelCanUseTools {
+                Text(ChatCapabilityMenuText.dropCaption)
+                    .font(.callout.weight(.medium))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(.regularMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.accentColor))
+                    .allowsHitTesting(false)
+            }
+        }
+        .task(id: appState.flowReadyModelIDs) {
+            guard surface == .page else { return }
+            capabilityStatuses = ChatCapabilityStatuses.resolve(runtime: ModelToolRuntime.live(appState: appState))
         }
     }
 
@@ -955,18 +980,37 @@ struct ChatView: View {
                     }
                 }
             }
+            let toolRows = ChatCapabilityMenuText.toolRows(cards: capabilityCards, canUseTools: selectedModelCanUseTools)
+            if !toolRows.isEmpty {
+                Divider()
+                Section(ChatCapabilityMenuText.sectionTitle) {
+                    ForEach(Array(toolRows.enumerated()), id: \.offset) { _, row in
+                        Text(row)
+                    }
+                }
+            }
             Divider()
             if let target = ChatModelMenu.getMoreTarget(visibleSectionIDs: appState.visibleSections.map(\.id)) {
                 Button(ChatModelMenu.getMoreTitle) { appState.selectedSection = target }
             }
         } label: {
-            Label(model.displayName, systemImage: "cpu")
-                .lineLimit(1)
+            let label = ChatCapabilityMenuText.label(modelName: model.displayName, cards: capabilityCards,
+                                                     canUseTools: selectedModelCanUseTools)
+            Label {
+                if let summary = label.summary {
+                    Text(label.name) + Text(" · \(summary)").foregroundStyle(.secondary)
+                } else {
+                    Text(label.name)
+                }
+            } icon: {
+                Image(systemName: "cpu")
+            }
+            .lineLimit(1)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
         .disabled(runner.isRunning)
-        .help(runner.isRunning ? "The model can be changed when the reply is finished." : "Model for the next message")
+        .help(runner.isRunning ? "The model can be changed when the reply is finished." : ChatCapabilityMenuText.help)
         .task(id: installed.map(\.id)) {
             controller.loadModelFacts(for: installed + (apple?.isEnabled == true ? [AppleIntelligenceChat.entry] : []))
         }

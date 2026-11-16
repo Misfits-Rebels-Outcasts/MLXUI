@@ -18,12 +18,12 @@ struct ChatCapabilityGridView: View {
     let modelName: String
     /// Whether the selected chat model can call tools (ruling E). `false` shows the note and disables the cards.
     let canUseTools: Bool
+    /// Per-tool statuses, from the host (`ChatCapabilityStatuses`), shared with the model menu.
+    let statuses: [String: ModelToolStatus]
     /// A card was clicked; the host fills the draft and opens the file panel.
     let onPick: (ChatCapabilityCard) -> Void
 
-    @Environment(AppState.self) private var appState
     @AppStorage(ChatTextSize.messageKey) private var messageSizeRaw = ChatTextSize.standard.rawValue
-    @State private var statuses: [String: ModelToolStatus] = [:]
     @State private var showsMore = false
 
     private var size: ChatTextSize { ChatTextSize(stored: messageSizeRaw) }
@@ -63,7 +63,6 @@ struct ChatCapabilityGridView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 32)
-        .task(id: appState.flowReadyModelIDs) { refresh() }
     }
 
     private func grid(_ cards: [ChatCapabilityCard]) -> some View {
@@ -117,17 +116,5 @@ struct ChatCapabilityGridView: View {
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    /// The router's own call, so a card never disagrees with what a turn would do.
-    private func refresh() {
-        let runtime = ModelToolRuntime.live(appState: appState)
-        var next: [String: ModelToolStatus] = [:]
-        for spec in ModelToolSpec.modelTools {
-            next[spec.name] = CapabilityResolver.status(
-                for: spec, catalog: runtime.catalog, installedModelIDs: runtime.installedModelIDs,
-                claimableModelIDs: runtime.claimableModelIDs, totalRAMGB: runtime.totalRAMGB)
-        }
-        statuses = next
     }
 }
