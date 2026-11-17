@@ -127,6 +127,7 @@ nonisolated struct InstalledModelIndex: Sendable {
         case "interpolate":   return .interpolate
         case "separate":      return .separate
         case "depth":         return .depth
+        case "redact":        return .redact       // PF-1: PII detection + redaction (engine in Modules/PrivacyFilter)
         default:              return .unsupported  // video / unknown
         }
     }

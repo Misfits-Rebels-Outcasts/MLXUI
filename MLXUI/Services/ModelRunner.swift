@@ -1213,6 +1213,9 @@ final class ModelRunner {
         case .depth:
             // Unreachable in practice since MC3-6 registered DepthAnythingModule (same as .separate above).
             showUnsupported("Depth estimation", model)
+        case .redact:
+            // Unreachable in practice once PF-7 registers PrivacyFilterModule (same as .depth above).
+            showUnsupported("PII redaction", model)
         }
     }
 
