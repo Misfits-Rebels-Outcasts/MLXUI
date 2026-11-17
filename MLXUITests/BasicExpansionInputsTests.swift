@@ -21,7 +21,7 @@ struct BasicExpansionInputsTests {
     }
 
     // Owner ruling, Boo, 2026-11-14: the second sentence reads "There will be no water in Block C on Saturday, 14 November," (the
-    // first draft said the supply would be "switched off", which TranslateGemma rendered as "disahkan", confirmed). Rest unchanged.
+    // first draft said the supply would be "switched off", which TranslateGemma rendered as "disahkan" in Malay, confirmed). Rest unchanged.
     static let letterText = """
         Dear residents,
 

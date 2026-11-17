@@ -1,7 +1,7 @@
 mlxflow 0.8
 1. Read Text   letter.txt
-2. Translate   TranslateGemma 4B; to=Malay
-3. Save Text   letter-malay.txt
+2. Translate   TranslateGemma 4B; to=German
+3. Save Text   letter-german.txt
 
 models:
   TranslateGemma 4B = mlx-community/translategemma-4b-it-4bit

@@ -592,7 +592,7 @@
    "title": "Translate a Letter",
    "filename": "14-TranslateLetter.cat",
    "category": "Basic",
-   "description": "Turn an English notice into Malay with TranslateGemma — change `to=` for any of its languages.",
+   "description": "Turn an English notice into German with TranslateGemma — change `to=` for any of its languages.",
    "tier": "basic"
   },
   {

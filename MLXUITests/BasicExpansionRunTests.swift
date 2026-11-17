@@ -79,7 +79,7 @@ struct BasicExpansionRunTests {
 
     // MARK: 14
 
-    @Test @MainActor func flow14SavesLetterMalayTxtFromTheLetterWithTargetMs() async throws {
+    @Test @MainActor func flow14SavesLetterGermanTxtFromTheLetterWithTargetDe() async throws {
         let seen = Log<String>()
         let configs = Log<String>()
         let h = try harness("14-TranslateLetter") { entry, config in
@@ -87,15 +87,15 @@ struct BasicExpansionRunTests {
             configs.add("\(config.sourceLanguage ?? "nil")>\(config.targetLanguage ?? "nil")")
             return Stub(accepts: .text, produces: .text) { input in
                 if case .text(let t) = input { seen.add(t) }
-                return .text("Kepada penduduk, bekalan air ke Blok C akan dihentikan pada Sabtu, 14 November.")
+                return .text("Liebe Bewohner, am Samstag, dem 14. November, gibt es in Block C kein Wasser.")
             }
         }
         defer { try? FileManager.default.removeItem(at: h.cleanup) }
         try await run(h)
         #expect(seen.values.count == 1 && seen.values[0].contains("Dear residents"), "the Translate row gets the raw letter")
-        #expect(configs.values == ["en>ms"])
-        let saved = try String(contentsOf: h.dir.appendingPathComponent("letter-malay.txt"), encoding: .utf8)
-        #expect(saved.contains("14 November"))
+        #expect(configs.values == ["en>de"])
+        let saved = try String(contentsOf: h.dir.appendingPathComponent("letter-german.txt"), encoding: .utf8)
+        #expect(saved.contains("14. November"))
     }
 
     // MARK: 15

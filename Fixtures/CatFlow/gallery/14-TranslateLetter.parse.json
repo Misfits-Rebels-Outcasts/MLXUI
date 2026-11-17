@@ -20,7 +20,7 @@
    "children": [],
    "model": "TranslateGemma 4B",
    "refs": [],
-   "settings": "to=Malay",
+   "settings": "to=German",
    "task": "Translate"
   },
   {
@@ -30,7 +30,7 @@
    "children": [],
    "model": null,
    "refs": [],
-   "settings": "letter-malay.txt",
+   "settings": "letter-german.txt",
    "task": "Save Text"
   }
  ],

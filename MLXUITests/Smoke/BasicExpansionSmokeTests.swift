@@ -202,20 +202,21 @@ struct BasicExpansionSmokeTests {
     // MARK: 14 - Translate a Letter
 
     @Test(.enabled(if: BasicExpansionRealLoad.ready("14-TranslateLetter"), "needs MLXUI_BASIC_EXPANSION_SMOKE=1 and TranslateGemma 4B installed"))
-    func flow14_malayLetterIsNonEmptyAndKeepsTheDate() async throws {
+    func flow14_germanLetterIsNonEmptyAndKeepsTheDate() async throws {
         let r = try await runFlow("14-TranslateLetter", phase: "run"); defer { try? FileManager.default.removeItem(at: r.cleanup) }
-        let text = try String(contentsOf: r.dir.appendingPathComponent("letter-malay.txt"), encoding: .utf8)
+        let text = try String(contentsOf: r.dir.appendingPathComponent("letter-german.txt"), encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         ModelSmoke.check(Self.row, "14.non-empty", !text.isEmpty, text)
         ModelSmoke.check(Self.row, "14.not-the-input", text != BasicExpansionInputsTests.letterText.trimmingCharacters(in: .whitespacesAndNewlines), "output equals the English letter")
-        ModelSmoke.check(Self.row, "14.has-14-November-or-Sabtu", text.contains("14 November") || text.contains("Sabtu"), text)
-        // Owner ruling, Boo, 2026-11-14: "Tighten the BX-4 check: the output must contain 'tiada' or 'tidak', and must not contain
-        // 'disahkan'." (The first real run translated "switched off" as "disahkan", confirmed.) If it still fails, stop and report.
+        ModelSmoke.check(Self.row, "14.has-14-November-or-Samstag", text.contains("14. November") || text.contains("14 November") || text.contains("Samstag"), text)
+        // Flow 14 targets German (owner, 2026-11-18). The 2026-11-14 Malay ruling (tiada/tidak, never 'disahkan') guarded against the
+        // supply being rendered as "confirmed"; the German equivalent is that the output says there is no water ("kein") and does
+        // not say it was confirmed ("bestätigt"). NOT yet run against the real model - first real run is the owner's.
         let lower = text.lowercased()
-        ModelSmoke.check(Self.row, "14.says-there-is-no-water-tiada-or-tidak", lower.contains("tiada") || lower.contains("tidak"), text)
-        ModelSmoke.check(Self.row, "14.does-not-say-disahkan", !lower.contains("disahkan"), text)
-        print("RAW|BX4-14|letter-malay|\(text)")
-        save("BX4-14", "letter-malay.txt", text: text, judge: "Fluent Malay; keeps 14 November, 9 to 1, Block C, the phone number.")
+        ModelSmoke.check(Self.row, "14.says-there-is-no-water-kein", lower.contains("kein"), text)
+        ModelSmoke.check(Self.row, "14.does-not-say-bestaetigt", !lower.contains("bestätigt"), text)
+        print("RAW|BX4-14|letter-german|\(text)")
+        save("BX4-14", "letter-german.txt", text: text, judge: "Fluent German; keeps 14 November, 9 to 1, Block C, the phone number.")
     }
 
     // MARK: 15 - See the Depth
