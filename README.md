@@ -97,6 +97,41 @@ install in the catalog are the same models your workflows use — no separate se
 <!-- Items marked *(hidden in-app)* are built but switched off behind an in-app flag right
      now — pruning candidates if you don't want to announce them before they're switched on. -->
 
+### Chat is now Home — and chat can use your other models
+
+- **Chat is the front door.** Home opens on the Chat page: a capability grid shows what you can ask
+  for, the model menu says which tools each model brings, and the composer invites files. With no
+  chat model installed, a plain screen explains what to download and shows a **Your Mac** footer
+  (chip, RAM, free disk). Opening or asking in Chat from anywhere lands on Home.
+- **Model tools in Chat.** A chat model can call your installed specialist models as tools:
+  transcribe audio, OCR or describe an image, speak, translate, generate or upscale an image,
+  segment, estimate depth, generate music, and read attached files. Each call shows as a chip with
+  inline players and previews, and a tool that needs a model you haven't installed offers to
+  install it and then continues the same turn. Tools are offered only when the prompt calls for
+  them, and every tool path stays inside the chat's own folder scope.
+- **Apple Intelligence in Chat.** Apple's on-device model appears in the model menu and acts as the
+  default router where available. Oversized prompts surface as a clear "context exceeded", and
+  **Continue** only offers a model whose window fits the unanswered message.
+- **Save as workflow.** Turn what a chat just did into an unsaved AI Workflow in the editor, with
+  attachments copied in and a banner listing anything left out.
+- **Open in Chat / Ask in Chat** from the Run screens carries the conversation across.
+- **Chat polish.** A resizable conversations column and Run sheet, a text-size setting, **Delete all
+  conversations**, per-answer model names, and a chat reopens on the model it last used.
+
+### AI Workflows — five more Basic flows (18 in all)
+
+The Basic gallery grows from 13 to **18** ready-to-run flows, each with sample inputs:
+**Translate a Letter** (TranslateGemma), **Depth Map** (Depth Anything V2), **Ask a Document**
+(PDF + question → answer), **Story From a Photo** (describe → draft → Kokoro speech; needs about
+12.5 GiB at peak) and **Chart a Spreadsheet** (CSV → bar chart plus a two-sentence summary).
+
+### Catalog
+
+Download sizes and RAM floors were corrected across the catalog (including Qwen3-TTS, Ministral 3B
+and SeedVR2), and guard tests now fail if an entry's size or RAM figure drifts out of range, so
+"fits your Mac" in Browse stays honest. Long model names truncate, and a Download button with no
+model installed shows progress and opens a fresh chat on first install.
+
 ### Three new models — translation, sound isolation and depth
 
 - **TranslateGemma 4B** — Google's translation-only Gemma 3 fine-tune, with its own **Translate**
@@ -117,7 +152,7 @@ install in the catalog are the same models your workflows use — no separate se
 
 ### AI Workflows — five more Basic flows
 
-The Basic gallery grows from 8 to **13** ready-to-run flows, each with sample inputs:
+The Basic gallery grew from 8 to **13** ready-to-run flows, each with sample inputs:
 **Read It Aloud** (text → Kokoro speech), **Describe a Photo** (LFM2-VL), **Picture From Words**
 (FLUX.2 Klein 4B, with a prompt you can change before it runs), **Invoice to Spreadsheet** (PDF →
 structured fields → CSV) and **Sort an Email** (Laya decides "reply today" or "later" and
@@ -435,7 +470,7 @@ Prism ML's [Ternary-Bonsai-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2
 - **Comparison mode** — compare models side-by-side by RAM, speed, and quality
 - **Dedicated Run UIs** — each model type gets a purpose-built interface, not a generic
   wrapper:
-  - LLMs → chat
+  - LLMs → chat, with your other installed models available as tools
   - ASR (Whisper, Voxtral) → microphone + live transcript
   - TTS (Kokoro, MLXAudioTTS, Qwen3-TTS, Chatterbox, Orpheus) → voice picker + audio player
   - Vision (VLM) → image upload + Q&A
@@ -679,6 +714,9 @@ In short:
       Depth Anything V2 Small (Run screen + Estimate Depth row)
 - [x] Five more Basic gallery flows (13 in all); Kokoro fully offline; 1 GiB MLX buffer-cache cap
 - [x] Contributor guide for adding a model
+- [x] Chat as the Home screen, with model tools (transcribe, OCR, speak, translate, image, depth,
+      music), Apple Intelligence routing and Save as workflow
+- [x] Five more Basic gallery flows (18 in all); corrected catalog sizes with guard tests
 
 ### In progress
 - [ ] Local Server: MCP and served flows, then embeddings/audio endpoints and LAN access
