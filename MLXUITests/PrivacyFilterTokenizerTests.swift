@@ -139,6 +139,22 @@ enum PrivacyFilterDecodeTestSupport {
 
     /// Build the `Tokenization` the corpus records (ids + byte offsets), for span tests that run
     /// without a tokenizer.
+    /// Append one evidence line to the sandboxed test host's temporary directory (the repo's
+    /// DepthAnythingFixtures / parity-record precedent). Xcode does not relay Swift Testing
+    /// `print`s into `xcodebuild` output, so the parity numbers a PR must quote are recorded here;
+    /// the host's container temp dir is readable from the developer shell.
+    nonisolated static func record(_ line: String) {
+        guard let data = (line + "\n").data(using: .utf8) else { return }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("PF6-PARITY.txt")
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile()
+            handle.write(data)
+            try? handle.close()
+        } else {
+            try? data.write(to: url)
+        }
+    }
+
     nonisolated static func tokenization(for testCase: Golden.Case) -> PrivacyFilterTokenizer.Tokenization {
         PrivacyFilterTokenizer.Tokenization(
             tokenIDs: testCase.token_ids,
@@ -292,6 +308,7 @@ struct PrivacyFilterTokenizerTests {
                 checked += 1
             }
             print("PF4 tokenizer offsets: \(checked)/\(cases.count) corpus texts equal (ids + per-token UTF-8 bytes)")
+            PrivacyFilterDecodeTestSupport.record("PF4 tokenizer offsets: \(checked)/\(cases.count) corpus texts equal (ids + per-token UTF-8 bytes)")
         }
 
         @Test func tokenIdsMatchTheFixtureForTheProbeText() async throws {
