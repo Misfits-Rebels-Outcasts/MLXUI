@@ -127,6 +127,7 @@ nonisolated struct InstalledModelIndex: Sendable {
         case "interpolate":   return .interpolate
         case "separate":      return .separate
         case "depth":         return .depth
+        case "align":         return .align   // FA-1: Qwen3-ForcedAligner (see ModelEntry.runnerKind)
         default:              return .unsupported  // video / unknown
         }
     }

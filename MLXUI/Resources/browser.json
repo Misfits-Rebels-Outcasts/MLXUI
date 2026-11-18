@@ -51,7 +51,8 @@
         "diarization",
         "enhance",
         "voice",
-        "separate"
+        "separate",
+        "align"
       ]
     },
     {
@@ -136,6 +137,10 @@
     "depth": {
       "icon": "cube.transparent",
       "description": "Depth Estimation"
+    },
+    "align": {
+      "icon": "captions.bubble",
+      "description": "Forced Alignment"
     }
   },
   "domains": [
@@ -3491,6 +3496,74 @@
           ],
           "descriptionSource": "depth-anything/Depth-Anything-V2-Small-hf",
           "summary": "A Swift/MLX port of Depth Anything V2 Small. Give it one photo and it returns a grayscale map of relative depth — near is bright, far is dark. Not a measurement in metres."
+        }
+      ]
+    },
+    {
+      "id": "align",
+      "name": "Forced Alignment",
+      "sfSymbol": "captions.bubble",
+      "children": null,
+      "models": [
+        {
+          "id": "mlx-community--Qwen3-ForcedAligner-0.6B-8bit",
+          "family": "Qwen3-ForcedAligner",
+          "displayName": "Qwen3 Aligner 0.6B",
+          "paramSize": "0.6B",
+          "paramCountB": 0.6,
+          "modelType": "align",
+          "source": "mlx",
+          "format": "mlx-8bit",
+          "platforms": [
+            "macOS 14+"
+          ],
+          "minMacOSVersion": "14.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Qwen3-ForcedAligner-0.6B-8bit",
+          "ramGB": 1.91,
+          "downloadSizeGB": 1.28,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": "https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B",
+          "description": null,
+          "architecture": null,
+          "languages": [
+            "zh",
+            "en",
+            "yue",
+            "fr",
+            "de",
+            "it",
+            "ja",
+            "ko",
+            "pt",
+            "ru",
+            "es"
+          ],
+          "lastUpdated": "2026-01-29",
+          "taskTags": [
+            "speech-to-text",
+            "forced-alignment"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 4997,
+          "communityLikes": 4,
+          "variants": [
+            {
+              "quantization": "8-bit",
+              "format": "mlx-8bit",
+              "ramGB": 1.91,
+              "downloadSizeGB": 1.28,
+              "qualityPercent": 100,
+              "hfModelId": "mlx-community/Qwen3-ForcedAligner-0.6B-8bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": null,
+          "summary": null
         }
       ]
     }
