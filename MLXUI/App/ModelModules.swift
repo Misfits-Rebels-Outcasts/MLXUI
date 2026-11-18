@@ -61,5 +61,9 @@ let installedModules: [ModelModule.Type] = [
     // before `ChatModule` (Trap 5) so the Run-sheet/module table's order matches every other model module; Chat stays
     // last so its `.llm` claim can never move another entry's resolution.
     TranslateGemmaModule.self,
+    // FA-5 (issue #13): Qwen3-ForcedAligner 0.6B — the only `.align` module; claims the `Qwen3-ForcedAligner`
+    // family only, so the Qwen3-ASR SDK's `qwen3-asr` claim never takes it (and this one takes nothing else).
+    // Before `ChatModule`, which stays last.
+    ForcedAlignerModule.self,
     ChatModule.self,
 ]
