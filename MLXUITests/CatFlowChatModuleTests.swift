@@ -103,7 +103,10 @@ struct CatFlowChatModuleTests {
         //         58 → 59. Same convention.
         // PF-1: bundled catalog gained the openai/privacy-filter `.redact` entry (PII detection + redaction,
         //        owner decisions 2026-11-18), 59 → 60. Same convention: a bumped count, not an edited golden.
-        #expect(entries.count == 60, "bundled catalog drifted: \(entries.count) entries")
+        // FA-1: bundled catalog gained the mlx-community/Qwen3-ForcedAligner-0.6B-8bit `.align` entry
+        //        (forced alignment, owner decisions 2026-11-19, issue #13 decision 3), 60 → 61 after the rebase onto PF
+        //        (issue #13 trap 8: whichever merges second bumps the counts). Same convention.
+        #expect(entries.count == 61, "bundled catalog drifted: \(entries.count) entries")
 
         let withChat = registry(includingChat: true)
         let withoutChat = registry(includingChat: false)
@@ -135,7 +138,7 @@ struct CatFlowChatModuleTests {
             }
             checked += 1
         }
-        #expect(checked == 60)   // PF-1: 59 → 60 (the openai/privacy-filter `.redact` entry); before it: MC2-1 + MC3-1 + MC4-1 + MC5-3a: 55 → 59 (the TranslateGemma 4B `.translate`, Depth Anything V2 Small `.depth`, Qwen3-VL Embedding 2B `.embedding` and ACE-Step 1.5 `.music` entries)
+        #expect(checked == 61)   // FA-1: 60 → 61 (Qwen3-ForcedAligner 0.6B `.align`); PF-1: 59 → 60 (the openai/privacy-filter `.redact` entry); before it: MC2-1 + MC3-1 + MC4-1 + MC5-3a: 55 → 59 (the TranslateGemma 4B `.translate`, Depth Anything V2 Small `.depth`, Qwen3-VL Embedding 2B `.embedding` and ACE-Step 1.5 `.music` entries)
         #expect(llmChecked == 14)   // MP1-1: Gemma 4 E4B is the 14th .llm entry (MM1: MiMo V2.6 9B was the 13th)
         #expect(translateChecked == 1)   // MC2-1: TranslateGemma 4B is the first (and only) `.translate` entry
     }

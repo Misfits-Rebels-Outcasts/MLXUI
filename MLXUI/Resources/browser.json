@@ -51,7 +51,8 @@
         "diarization",
         "enhance",
         "voice",
-        "separate"
+        "separate",
+        "align"
       ]
     },
     {
@@ -141,6 +142,10 @@
     "redact": {
       "icon": "eye.slash",
       "description": "PII Redaction"
+    },
+    "align": {
+      "icon": "captions.bubble",
+      "description": "Forced Alignment"
     }
   },
   "domains": [
@@ -3656,6 +3661,74 @@
           ],
           "descriptionSource": "curated",
           "summary": "OpenAI's Privacy Filter, run locally in MLX: it finds personal data in text — people, emails, phones, URLs, addresses, dates, account numbers and secrets — and replaces each span with a placeholder. Primarily English; a redaction aid, not a guarantee."
+        }
+      ]
+    },
+    {
+      "id": "align",
+      "name": "Forced Alignment",
+      "sfSymbol": "captions.bubble",
+      "children": null,
+      "models": [
+        {
+          "id": "mlx-community--Qwen3-ForcedAligner-0.6B-8bit",
+          "family": "Qwen3-ForcedAligner",
+          "displayName": "Qwen3 Aligner 0.6B",
+          "paramSize": "0.6B",
+          "paramCountB": 0.6,
+          "modelType": "align",
+          "source": "mlx",
+          "format": "mlx-8bit",
+          "platforms": [
+            "macOS 14+"
+          ],
+          "minMacOSVersion": "14.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Qwen3-ForcedAligner-0.6B-8bit",
+          "ramGB": 1.91,
+          "downloadSizeGB": 1.28,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": "https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B",
+          "description": null,
+          "architecture": null,
+          "languages": [
+            "zh",
+            "en",
+            "yue",
+            "fr",
+            "de",
+            "it",
+            "ja",
+            "ko",
+            "pt",
+            "ru",
+            "es"
+          ],
+          "lastUpdated": "2026-01-29",
+          "taskTags": [
+            "speech-to-text",
+            "forced-alignment"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 4997,
+          "communityLikes": 4,
+          "variants": [
+            {
+              "quantization": "8-bit",
+              "format": "mlx-8bit",
+              "ramGB": 1.91,
+              "downloadSizeGB": 1.28,
+              "qualityPercent": 100,
+              "hfModelId": "mlx-community/Qwen3-ForcedAligner-0.6B-8bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": null,
+          "summary": null
         }
       ]
     }

@@ -1216,6 +1216,9 @@ final class ModelRunner {
         case .redact:
             // Unreachable in practice once PF-7 registers PrivacyFilterModule (same as .depth above).
             showUnsupported("PII redaction", model)
+        case .align:
+            // FA-1: unreachable in practice once FA-5 registers ForcedAlignerModule (same as .depth above).
+            showUnsupported("Forced alignment", model)
         }
     }
 
