@@ -11,9 +11,10 @@ struct CatFlowTaskCatalogTests {
     // MARK: - Counts
 
     @Test func catalogCounts() {
-        #expect(TaskCatalog.catalog.count == 106)
+        // PF-9 (SPEC-Q251, owner ruling 2026-11-18): the `Redact` text task joins CATALOG, 106 → 107 (`allTasks` 112 → 113).
+        #expect(TaskCatalog.catalog.count == 107)
         #expect(TaskCatalog.deciderTasks.count == 6)
-        #expect(TaskCatalog.allTasks().count == 112)
+        #expect(TaskCatalog.allTasks().count == 113)
     }
 
     @Test func noDuplicateTaskNames() {
@@ -26,8 +27,9 @@ struct CatFlowTaskCatalogTests {
     @Test func classHistogram() {
         let histogram = Dictionary(grouping: TaskCatalog.allTasks(), by: \.taskClass)
             .mapValues(\.count)
+        // PF-9: `Redact` is a `.model` task, 44 → 45.
         #expect(histogram == [
-            .instant: 55, .model: 44, .net: 5, .trigger: 3,
+            .instant: 55, .model: 45, .net: 5, .trigger: 3,
             .human: 2, .staged: 2, .agent: 1,
         ])
     }

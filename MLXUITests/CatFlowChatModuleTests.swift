@@ -97,7 +97,9 @@ struct CatFlowChatModuleTests {
         //        (monocular depth estimation, owner decisions 2026-11-06), 55 → 56. Same convention.
         // MC2-1: bundled catalog gained the mlx-community/translategemma-4b-it-4bit `.translate` entry
         //        (TranslateGemma 4B, MC2), 56 → 57 when MC3 merged on top (MC2 +1, MC3 +1). Same convention.
-        #expect(entries.count == 57, "bundled catalog drifted: \(entries.count) entries")
+        // PF-1: bundled catalog gained the openai/privacy-filter `.redact` entry (PII detection + redaction,
+        //        owner decisions 2026-11-18), 57 → 58. Same convention: a bumped count, not an edited golden.
+        #expect(entries.count == 58, "bundled catalog drifted: \(entries.count) entries")
 
         let withChat = registry(includingChat: true)
         let withoutChat = registry(includingChat: false)
@@ -129,7 +131,7 @@ struct CatFlowChatModuleTests {
             }
             checked += 1
         }
-        #expect(checked == 57)   // MC2-1 + MC3-1: 55 → 57 (the TranslateGemma 4B `.translate` and Depth Anything V2 Small `.depth` entries)
+        #expect(checked == 58)   // PF-1: 57 → 58 (the openai/privacy-filter `.redact` entry; MC2-1 + MC3-1 before it)
         #expect(llmChecked == 14)   // MP1-1: Gemma 4 E4B is the 14th .llm entry (MM1: MiMo V2.6 9B was the 13th)
         #expect(translateChecked == 1)   // MC2-1: TranslateGemma 4B is the first (and only) `.translate` entry
     }
