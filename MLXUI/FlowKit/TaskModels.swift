@@ -96,6 +96,9 @@ nonisolated enum TaskModels {
         // MC3-8 (issue #6, owner decision 7): `Estimate Depth` is served by the Depth Anything V2 Small port.
         // The declared task was honest-empty until MC3 gave it a runner kind, a stage and a catalog entry.
         "Estimate Depth": .depth,
+        // PF-9 (SPEC-Q251, owner ruling 2026-11-18): `Redact` is served by OpenAI Privacy Filter, the first `.redact`
+        // catalog entry. `RealExecutor.runModel`'s `.redact` branch runs the registry stage for it.
+        "Redact": .redact,
     ]
 
     /// Optional family constraints — filled only where a task genuinely needs one (a `.cat`
@@ -178,6 +181,9 @@ nonisolated enum TaskModels {
         // MC3-8 (owner decision 7): Depth Anything V2 Small is the first `.depth` model; the generic
         // image→image branch in `RealExecutor.runModel` hands the row to `DepthAnythingStage`.
         "engines.diffusion.estimate_depth",   // Estimate Depth (image → grayscale depth map) — MC3
+        // PF-9 (SPEC-Q251): the `Redact` row is served by `RealExecutor.runModel`'s `.redact` branch (the Privacy Filter
+        // stage), which is the only implementer of `engines.redact.redact` in this runtime.
+        "engines.redact.",                    // Redact (text → redacted text) — PF-9
     ]
 
     /// Whether `RealExecutor` genuinely serves `task` (CFM-R14-FIX-2). A **frame-backed** task
@@ -275,6 +281,9 @@ nonisolated enum TaskModels {
         "Encode Latent": ["Z-Image Turbo", "FLUX.2 Klein 4B", "FLUX.1 Kontext", "FLUX.1 Fill"],
         "Decode Latent": ["Z-Image Turbo", "FLUX.2 Klein 4B", "FLUX.1 Kontext", "FLUX.1 Fill"],
         "Denoise": ["Z-Image Turbo"],
+        // PF-9 (SPEC-Q251, owner ruling 2026-11-18): "Privacy Filter" is the one `.redact` model, so it is the seed for the
+        // new row. Appended last, same discipline as every other row added since MoC-2-4 — no existing pool moves.
+        "Redact": ["Privacy Filter"],
     ]
 
     // MoC-2-4 (RSI/DelegateMoCBacklog.md): "Qwen3.5 9B" appended last, per Decision D as ruled

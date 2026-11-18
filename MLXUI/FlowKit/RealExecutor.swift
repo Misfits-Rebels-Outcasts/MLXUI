@@ -528,6 +528,24 @@ nonisolated struct RealExecutor: FlowExecutor {
             return try persist(result, rowLabel: "\(path)")
         }
 
+        // SPEC-Q251 / PF-9 (owner ruling 2026-11-18): the `Redact` row. One text in, the redacted text out; the one
+        // setting is `only=`, a comma-separated subset of person, email, phone, url, address, date, account and secret
+        // (default all eight). Any other key, and any unknown category, is refused by name — never ignored. Branches
+        // before the frame path for the same reason `.translate` does: the Privacy Filter stage is a plain text→text
+        // stage, and the curated manifest is the settings authority.
+        if modelEntry.runnerKind == .redact {
+            let texts = DeciderFrame.flatTexts(inputs)
+            guard inputs.count == 1, texts.count == 1, let text = texts.first else {
+                throw FlowError.badInputCardinality(row: "\(path)", expected: "one text input",
+                                                   got: max(inputs.count, texts.count))
+            }
+            var config = StageConfig.default
+            config.redactOnly = try redactCategories(for: row, path: "\(path)")
+            let stage = try await makeModelStage(modelEntry, config)
+            let result = try await stage.run(.text(text), progress: { _ in })
+            return try persist(result, rowLabel: "\(path)")
+        }
+
         // Frame-backed: render the frame into a prompt, then run the LLM stage on it. The
         // full reference bundle feeds the renderer (B1) — `Rewrite (1,2)` sees both refs.
         // FV-2: goes through `FramePreview.render`, the same function the Properties-tab
@@ -1384,6 +1402,35 @@ nonisolated struct RealExecutor: FlowExecutor {
         var sanitized = config
         sanitized.prompt = nil
         return sanitized
+    }
+
+    /// SPEC-Q251 / PF-9 — resolve a `Redact` row's `only=` through the curated manifest (the settings authority) and
+    /// map the eight writable names to `PrivacyFilterCategory`. Returns `nil` for "all eight" (decision 7's default).
+    ///
+    /// Unknown **keys** are refused by `CuratedManifest.resolveEngineSettings` (which names the model and the keys it
+    /// takes); an unknown **category** is refused here by name. Never silently drops a value — a redaction that
+    /// quietly covers fewer categories than the row asked for is the CFM-R16-1 failure mode.
+    func redactCategories(for row: Row, path: String) throws -> Set<PrivacyFilterCategory>? {
+        let rowLabel = "Redact row \(path)"
+        guard let display = row.model, let bridge = CatalogBridge.entry(for: display),
+              let manifest = CuratedManifest.load(manifestFile: bridge.manifestFile) else {
+            throw FlowSettingRefusal(description:
+                "\(rowLabel)'s model has no settings manifest in the app bundle — reinstall this build.")
+        }
+        let resolved = try manifest.resolveEngineSettings(row.settings, rowLabel: rowLabel)
+        guard let raw = resolved["only"] else { return nil }
+        var categories: Set<PrivacyFilterCategory> = []
+        for token in raw.split(separator: ",", omittingEmptySubsequences: false) {
+            let name = token.trimmingCharacters(in: .whitespaces).lowercased()
+            guard let category = PrivacyFilterCategory(rawValue: name) else {
+                let readable = name.isEmpty ? "an empty value" : "\"\(name)\""
+                throw FlowSettingRefusal(description:
+                    "\(rowLabel) doesn't know the category \(readable) — use a comma-separated subset of "
+                        + "person, email, phone, url, address, date, account and secret.")
+            }
+            categories.insert(category)
+        }
+        return categories
     }
 
     private func persist(_ media: Media, rowLabel: String) throws -> Asset {
