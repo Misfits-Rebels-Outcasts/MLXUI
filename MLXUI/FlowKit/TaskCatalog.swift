@@ -265,6 +265,12 @@ nonisolated enum TaskCatalog {
         TaskDescriptor("Set Field", t(.table), t(.table), .instant, .tool, "tools.entity.set_field"),
         TaskDescriptor("Append Row", t(.table), t(.table), .instant, .tool, "tools.entity.append_row"),
         TaskDescriptor("Merge Record", .tupleOf([.table, .table]), t(.table), .instant, .tool, "tools.entity.merge_record"),
+
+        // -- FA-6 (GitHub issue #13 decision 8, SPEC-Q252; owner ruling 2026-11-19): audio + a known transcript in,
+        //    a time-coded table out. `engines.asr.` is already on `TaskModels.servedRefNamePrefixes`, so that opt-in
+        //    allow-list does not change; the family entry lives in `TaskFamilies` ("Audio, image, video"). The
+        //    Python reference's language entry and engine are filed in catflow-mlx, not here. --
+        TaskDescriptor("Align", .tupleOf([.audio, .text]), t(.table), .model, .engine, "engines.asr.align"),
     ]
 
     private static let _deciders: [TaskDescriptor] = [
@@ -301,7 +307,9 @@ nonisolated enum TaskFamilies {
                                 "Generate Image", "Edit Image", "Instruct Edit", "Inpaint",
                                 "Upscale", "Detect Edges", "Estimate Depth", "Detect Pose",
                                 "Segment", "Init Latent", "Encode Latent", "Decode Latent",
-                                "Denoise", "Generate Video", "Animate", "Generate Sound", "Mux"],
+                                "Denoise", "Generate Video", "Animate", "Generate Sound", "Mux",
+                                // FA-6 (issue #13 decision 8): the Align row.
+                                "Align"],
         "Search and retrieval": ["Embed", "Retrieve", "Rerank", "Keyword Search"],
         "Data": ["Read CSV", "Read JSON", "Query Table", "Table to Text",
                  "Text to Table", "Calculate", "Compare", "Range", "Chart"],

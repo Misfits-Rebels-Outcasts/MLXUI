@@ -12,9 +12,10 @@ struct CatFlowTaskCatalogTests {
 
     @Test func catalogCounts() {
         // PF-9 (SPEC-Q252, owner ruling 2026-11-18): the `Redact` text task joins CATALOG (+1, a `.model` task), 114 → 115 (`allTasks` 120 → 121, `.model` 46 → 47).
-        #expect(TaskCatalog.catalog.count == 115)  // ER-11: + Stage Print; ER-10: + Identify Speakers, Clean Audio; ER-7: + Save File, Replace; ER-8: + Make PDF; ER-9: + Read/Make Barcode
+        // FA-6 (issue #13 decision 8): the `Align` row joins the catalog (+1, a `.model` task), 115 → 116 (`allTasks` 121 → 122, `.model` 47 → 48), rebased onto PF (trap 8).
+        #expect(TaskCatalog.catalog.count == 116)  // ER-11: + Stage Print; ER-10: + Identify Speakers, Clean Audio; ER-7: + Save File, Replace; ER-8: + Make PDF; ER-9: + Read/Make Barcode
         #expect(TaskCatalog.deciderTasks.count == 6)
-        #expect(TaskCatalog.allTasks().count == 121)
+        #expect(TaskCatalog.allTasks().count == 122)
     }
 
     @Test func noDuplicateTaskNames() {
@@ -27,10 +28,10 @@ struct CatFlowTaskCatalogTests {
     @Test func classHistogram() {
         let histogram = Dictionary(grouping: TaskCatalog.allTasks(), by: \.taskClass)
             .mapValues(\.count)
-        // PF-9: `Redact` is a `.model` task, 46 → 47.
+        // PF-9: `Redact` is a `.model` task, 46 → 47. FA-6 (issue #13 decision 8): `Align` is a `.model` task, 47 → 48.
         #expect(histogram == [
             .instant: 60,  // ER-7: + Save File, Replace; ER-8: + Make PDF; ER-9: + 2 barcodes
-             .model: 47, .net: 5, .trigger: 3,
+             .model: 48, .net: 5, .trigger: 3,
             .human: 2, .staged: 3, .agent: 1,
         ])
     }
@@ -100,6 +101,19 @@ struct CatFlowTaskCatalogTests {
         #expect(d.taskClass == .model)
         #expect(d.refKind == .engine)
         #expect(d.refName == "engines.asr.transcribe")
+    }
+
+    /// FA-6 (issue #13 decision 8): audio + text in, a table out, served through the already-allowed `engines.asr.`
+    /// prefix.
+    @Test func spotCheckAlign() {
+        let d = try! #require(TaskCatalog.get("Align"))
+        #expect(d.accepts == .tupleOf([.audio, .text]))
+        #expect(d.gives == .single(.table))
+        #expect(d.taskClass == .model)
+        #expect(d.refKind == .engine)
+        #expect(d.refName == "engines.asr.align")
+        #expect(TaskModels.isServedByExecutor("Align"), "engines.asr. is already a served prefix")
+        #expect(TaskFamilies.family(of: "Align") == "Audio, image, video")
     }
 
     @Test func spotCheckSpeak() {

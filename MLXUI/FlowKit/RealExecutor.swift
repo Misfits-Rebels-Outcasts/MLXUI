@@ -547,6 +547,14 @@ nonisolated struct RealExecutor: FlowExecutor {
             return Asset(items: [try TableTool.tableItem(columns: IdentifySpeakersTable.columns, rows: rows, in: blobDirectory)])
         }
 
+        // FA-6 (GitHub issue #13 decision 8, SPEC-Q252; owner ruling 2026-11-19): the `Align` row — audio plus the known
+        // transcript in, a `text,start,end` time-coded table out. Its own branch, ahead of the generic tail: two inputs in
+        // the order the row lists them (`Align (1,2)` = audio, then text), `lang=` the only setting, and the `.table`
+        // output built here (a `.table` cannot travel through `Media`; the `Text to Table` / `Extract Structured` shape).
+        if desc.refName == "engines.asr.align" {
+            return try await runAlign(modelEntry, row: row, inputs: inputs, path: "\(path)")
+        }
+
         // SPEC-Q246: whether a translation specialist may replace the `Translate` frame with its own template, whether `to=` may
         // take a code, and whether `from=` should exist are open in catflow-mlx; the conservative reading is what follows.
         // MC2-6: TranslateGemma on a `Translate` row. The row is `.frame`-backed, but this model is not a chat model: its
@@ -683,6 +691,55 @@ nonisolated struct RealExecutor: FlowExecutor {
         let (gate, field) = Self.llmExtractionCalls(stage: stage, path: path)
         return try await TextToTableStage.toTable(
             inputs: inputs, settings: row.settings, model: (gate, field), in: blobDirectory)
+    }
+
+    // MARK: - Align (FA-6)
+
+    /// The `Align` row (issue #13 decision 8, SPEC-Q252): two inputs in the order the row lists them — an audio item
+    /// first, the transcript text second — one `lang=` setting, then the aligner's `text,start,end` table.
+    ///
+    /// The result is a file-backed `.table` item in `TableTools.tableItem`'s shape (so `Query Table`, `Table to Text`
+    /// and `Save Text`'s siblings read it like any table), and it also carries its CSV in `value`: `Save Text` only
+    /// writes inline text, so the row chain the issue names (`Read Audio` → `Read Text` → `Align (1,2)` → `Save Text`)
+    /// writes the CSV without an extra `Table to Text` row. Implementer's call, pending owner confirmation.
+    private func runAlign(_ modelEntry: ModelEntry, row: Row, inputs: [Asset], path: String) async throws -> Asset {
+        let expected = "two inputs: the audio first and the transcript second"
+        guard inputs.count == 2 else {
+            throw FlowError.badInputCardinality(row: path, expected: expected, got: inputs.count)
+        }
+        guard let audioItem = inputs[0].items.first, audioItem.kind == .audio, let audioPath = audioItem.path else {
+            throw FlowError.badInputCardinality(row: path, expected: "an audio input first", got: inputs[0].items.count)
+        }
+        guard let textItem = inputs[1].items.first, textItem.kind == .text else {
+            throw FlowError.badInputCardinality(row: path, expected: "a text input second (the transcript)",
+                                                got: inputs[1].items.count)
+        }
+        let transcript: String
+        if let value = textItem.value {
+            transcript = value
+        } else if let textPath = textItem.path, let data = try? Data(contentsOf: textPath) {
+            transcript = String(decoding: data, as: UTF8.self)
+        } else {
+            throw FlowError.badInputCardinality(row: path, expected: "a text input second (the transcript)", got: 1)
+        }
+        let language = try AlignRowRequest.languageCode(settings: row.settings, rowLabel: path)
+        let buffer = try AudioFileReader.read(audioPath)
+        let config = StageConfig(language: language, transcript: transcript)
+        let stage = try await makeModelStage(modelEntry, config)
+        let output = try await stage.run(.audio(buffer)) { _ in }
+        guard case let .text(csv) = output else {
+            throw StageError.kindMismatch(expected: .text, got: output.kind)
+        }
+        let units = try AlignmentExport.parseCSV(csv)
+        do {
+            let item = try TableTool.tableItem(columns: AlignmentExport.columns,
+                                               rows: AlignmentExport.tableRows(units),
+                                               in: blobDirectory)
+            return Asset(items: [Item(kind: .table, value: AlignmentExport.csv(units),
+                                      path: item.path, sourceText: nil)])
+        } catch {
+            throw FlowError.writeFailed(row: path, path: "the alignment table")
+        }
     }
 
     /// The one LLM stage both `Extract Structured` and a model-named `Text to Table` build:

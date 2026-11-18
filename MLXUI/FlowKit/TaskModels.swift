@@ -102,6 +102,11 @@ nonisolated enum TaskModels {
         // PF-9 (SPEC-Q252, owner ruling 2026-11-18): `Redact` is served by OpenAI Privacy Filter, the first `.redact`
         // catalog entry. `RealExecutor.runModel`'s `.redact` branch runs the registry stage for it.
         "Redact": .redact,
+        // FA-6 (issue #13 decision 8, SPEC-Q252; owner ruling 2026-11-19): the `Align` row is served by the `.align`
+        // kind. Its refName is `engines.asr.align`, and `engines.asr.` is already on `servedRefNamePrefixes` — so that
+        // opt-in allow-list does not change, and `isServedByExecutor("Align")` is true. The language entry and the
+        // Python reference runtime's engine live in catflow-mlx, not in this PR.
+        "Align": .align,
     ]
 
     /// Optional family constraints — filled only where a task genuinely needs one (a `.cat`
@@ -250,6 +255,9 @@ nonisolated enum TaskModels {
         // ER-10: the one runnable model for each task; nothing else is appended behind it.
         "Identify Speakers": ["Sortformer 4spk v2.1"],
         "Clean Audio": ["DeepFilterNet 3"],
+        // FA-6 (issue #13 decision 8): the `Align` row's only model, so it is the default. Nothing else is appended
+        // behind it (the aligner is in no other pool, and no other model serves `Align`).
+        "Align": ["Qwen3 Aligner 0.6B"],
         "Text to Table": llmModels,
         // LY-8 (RSI/DelegateLayaBacklog.md, 2026-09-27 gate D amendment, superseding LY-0's own
         // gate D "never the default"): Classify/Gate/Score had no pool entry before this —
