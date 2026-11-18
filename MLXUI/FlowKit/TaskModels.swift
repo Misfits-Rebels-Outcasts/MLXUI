@@ -96,6 +96,11 @@ nonisolated enum TaskModels {
         // MC3-8 (issue #6, owner decision 7): `Estimate Depth` is served by the Depth Anything V2 Small port.
         // The declared task was honest-empty until MC3 gave it a runner kind, a stage and a catalog entry.
         "Estimate Depth": .depth,
+        // FA-6 (issue #13 decision 8, SPEC-Q252; owner ruling 2026-11-19): the `Align` row is served by the `.align`
+        // kind. Its refName is `engines.asr.align`, and `engines.asr.` is already on `servedRefNamePrefixes` — so that
+        // opt-in allow-list does not change, and `isServedByExecutor("Align")` is true. The language entry and the
+        // Python reference runtime's engine live in catflow-mlx, not in this PR.
+        "Align": .align,
     ]
 
     /// Optional family constraints — filled only where a task genuinely needs one (a `.cat`
@@ -232,6 +237,9 @@ nonisolated enum TaskModels {
         "Rerank": ["BGE Reranker", "Qwen3 Reranker 0.6B"],
         // MC3-8: the one runnable model for the task; nothing else is appended behind it.
         "Estimate Depth": ["Depth Anything V2 Small"],
+        // FA-6 (issue #13 decision 8): the `Align` row's only model, so it is the default. Nothing else is appended
+        // behind it (the aligner is in no other pool, and no other model serves `Align`).
+        "Align": ["Qwen3 Aligner 0.6B"],
         "Text to Table": llmModels,
         // LY-8 (RSI/DelegateLayaBacklog.md, 2026-09-27 gate D amendment, superseding LY-0's own
         // gate D "never the default"): Classify/Gate/Score had no pool entry before this —

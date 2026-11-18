@@ -255,6 +255,9 @@ struct CatFlowTaskAvailabilityTests {
             // MC3-8: `Estimate Depth` left this set — Depth Anything V2 Small gave it a
             // `.depth` `taskKinds` entry, the served prefix and a catalog model.
             "Estimate Depth": .available,
+            // FA-6 (issue #13 decision 8, SPEC-Q252): `Align` is served — `taskKinds["Align"] = .align`, its
+            // `engines.asr.` refName prefix was already allowed, and the Qwen3 Aligner 0.6B entry is claimable.
+            "Align": .available,
             "Load Checkpoint": .needsNewerSupport, "Blend": .needsNewerSupport,
             "Bake LoRA": .needsNewerSupport, "Pin Model": .needsNewerSupport,
         ]

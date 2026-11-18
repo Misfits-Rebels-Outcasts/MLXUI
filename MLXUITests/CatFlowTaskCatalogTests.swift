@@ -11,9 +11,10 @@ struct CatFlowTaskCatalogTests {
     // MARK: - Counts
 
     @Test func catalogCounts() {
-        #expect(TaskCatalog.catalog.count == 106)
+        // FA-6 (issue #13 decision 8): the `Align` row joins the catalog, 106 -> 107 and 112 -> 113.
+        #expect(TaskCatalog.catalog.count == 107)
         #expect(TaskCatalog.deciderTasks.count == 6)
-        #expect(TaskCatalog.allTasks().count == 112)
+        #expect(TaskCatalog.allTasks().count == 113)
     }
 
     @Test func noDuplicateTaskNames() {
@@ -26,8 +27,9 @@ struct CatFlowTaskCatalogTests {
     @Test func classHistogram() {
         let histogram = Dictionary(grouping: TaskCatalog.allTasks(), by: \.taskClass)
             .mapValues(\.count)
+        // FA-6 (issue #13 decision 8): `Align` is a `.model` task, so .model 44 -> 45.
         #expect(histogram == [
-            .instant: 55, .model: 44, .net: 5, .trigger: 3,
+            .instant: 55, .model: 45, .net: 5, .trigger: 3,
             .human: 2, .staged: 2, .agent: 1,
         ])
     }
@@ -97,6 +99,19 @@ struct CatFlowTaskCatalogTests {
         #expect(d.taskClass == .model)
         #expect(d.refKind == .engine)
         #expect(d.refName == "engines.asr.transcribe")
+    }
+
+    /// FA-6 (issue #13 decision 8): audio + text in, a table out, served through the already-allowed `engines.asr.`
+    /// prefix.
+    @Test func spotCheckAlign() {
+        let d = try! #require(TaskCatalog.get("Align"))
+        #expect(d.accepts == .tupleOf([.audio, .text]))
+        #expect(d.gives == .single(.table))
+        #expect(d.taskClass == .model)
+        #expect(d.refKind == .engine)
+        #expect(d.refName == "engines.asr.align")
+        #expect(TaskModels.isServedByExecutor("Align"), "engines.asr. is already a served prefix")
+        #expect(TaskFamilies.family(of: "Align") == "Audio, image, video")
     }
 
     @Test func spotCheckSpeak() {

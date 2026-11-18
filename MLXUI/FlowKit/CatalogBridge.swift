@@ -450,6 +450,16 @@ nonisolated enum CatalogBridge {
             equivalence: .same,
             manifestFile: "translategemma-4b-it-4bit.json",
             modelType: .llm),
+        // FA-6 (GitHub issue #13 decision 8, SPEC-Q252; owner ruling 2026-11-19) -- Qwen3 Aligner 0.6B, the `Align` row's
+        // only model. `.same`: the card's repo is the pinned repo (trap 7). No catflow-mlx manifest exists for it, so
+        // `qwen3-forcedaligner-0.6b-8bit.json` is MLXUI-authored (see its "notes"). Appended **last**, and it is the
+        // pool's only name, so it is the `Align` default; the model is in no other pool.
+        BridgeEntry(
+            display: "Qwen3 Aligner 0.6B",
+            pinnedID: "mlx-community/Qwen3-ForcedAligner-0.6B-8bit",
+            candidates: ["mlx-community/Qwen3-ForcedAligner-0.6B-8bit"],
+            equivalence: .same,
+            manifestFile: "qwen3-forcedaligner-0.6b-8bit.json"),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {
