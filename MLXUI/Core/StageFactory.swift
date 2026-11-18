@@ -37,6 +37,10 @@ nonisolated struct StageConfig: Sendable, Hashable {
     /// ignores them. Per-run settings, not weight settings, so `weightsOnly` drops them.
     var sourceLanguage: String?   // translate — source language code
     var targetLanguage: String?   // translate — target language code
+    /// FA-5 (issue #13): the transcript an `Align` row times — audio plus the known text in, word timestamps out. Data
+    /// from the row's second input, not a weight setting: `weightsOnly` drops it so a new transcript books no second
+    /// engine. Only `ForcedAlignerStage`/`ForcedAlignerSDK` read it; every other SDK ignores it.
+    var transcript: String?
     /// BS-6 (R7): the Speak row's `trim_silence=` (Kokoro's manifest declares it, bool). `nil` = not set (the engine does not trim);
     /// `true` trims leading/trailing near-silence; `false` is the explicit no-trim. Set only by `RealExecutor.stageConfig` for a Speak row.
     var trimSilence: Bool?
@@ -68,7 +72,8 @@ nonisolated struct StageConfig: Sendable, Hashable {
         trimSilence: Bool? = nil,
         sourceLanguage: String? = nil,
         targetLanguage: String? = nil,
-        redactOnly: Set<PrivacyFilterCategory>? = nil
+        redactOnly: Set<PrivacyFilterCategory>? = nil,
+        transcript: String? = nil
     ) {
         self.voice = voice
         self.speed = speed
@@ -90,6 +95,7 @@ nonisolated struct StageConfig: Sendable, Hashable {
         self.sourceLanguage = sourceLanguage
         self.targetLanguage = targetLanguage
         self.redactOnly = redactOnly
+        self.transcript = transcript
     }
 
     static let `default` = StageConfig()
@@ -101,6 +107,7 @@ nonisolated struct StageConfig: Sendable, Hashable {
         c.voice = nil; c.speed = 1.0; c.prompt = nil
         c.seed = nil; c.width = nil; c.height = nil; c.steps = nil; c.trimSilence = nil
         c.sourceLanguage = nil; c.targetLanguage = nil; c.redactOnly = nil
+        c.transcript = nil
         return c
     }
 }
