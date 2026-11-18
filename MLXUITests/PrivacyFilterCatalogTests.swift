@@ -250,6 +250,23 @@ struct PrivacyFilterCatalogTests {
         #expect(standard == ["config.json", "model.safetensors"])
     }
 
+    /// PF-8: the `.redact` row books `files x 1.10 + 4.60 GB`, so the shared-budget reservation is never under the
+    /// highest measured peak — the 128,000-token phase, 7.582 GB (`PrivacyFilterFootprintTests`, 2026-11-18; phases 1/2
+    /// peaked at 5.081 / 7.414 GB, an earlier run recorded 5.063 / 6.707 / 7.418 GB). `measured` is true: this is a
+    /// measurement, not the conservative default.
+    @Test func theRedactRowBooksFilesPlusTheMeasuredWorkingSet() {
+        let redact = ModelLoadProfile.entry(for: .redact)
+        #expect(redact.measured)
+        #expect(redact.factor == ModelWeightCharge.loadFactor)
+        #expect(redact.workingSetBytes == 4_600_000_000, "PF-8's measured per-call working set")
+        // 2,798,989,498 B of safetensors x 1.10 + 4.60 GB, against the 7.582 GB worst-case peak.
+        let booked = ModelWeightCharge.charge(onDiskBytes: 2_798_989_498) + redact.workingSetBytes
+        #expect(booked >= 7_582_000_000, "booked \(booked) must cover the measured peak")
+        // Decision 8 / PF-8: the catalog ramGB stays the provisional figure the maintainers will replace.
+        let entries = try? catalog().domains.flatMap { $0.allModels }
+        #expect(entries?.first { $0.hfModelId == Self.hfID }?.ramGB == 4.2)
+    }
+
     /// The StageFactory's legacy kind switch refuses `.redact` by kind (the module's own SDK is what runs it — PF-7).
     @Test func stageFactoryRefusesTheKindExplicitly() throws {
         let e = try entry()
