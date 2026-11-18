@@ -1,0 +1,18 @@
+{
+  "repository": "mlx-community/Qwen3-ForcedAligner-0.6B-8bit",
+  "revision": "0e1a68e91d815300c7c9754b2a7639378b23db15",
+  "fetchedAt": "2026-11-19",
+  "files": [
+    { "path": ".gitattributes", "size": 1519 },
+    { "path": "README.md", "size": 1068 },
+    { "path": "chat_template.json", "size": 1161 },
+    { "path": "config.json", "size": 6940 },
+    { "path": "generation_config.json", "size": 115 },
+    { "path": "merges.txt", "size": 1671853 },
+    { "path": "model.safetensors", "size": 1271924386 },
+    { "path": "model.safetensors.index.json", "size": 79108 },
+    { "path": "preprocessor_config.json", "size": 330 },
+    { "path": "tokenizer_config.json", "size": 12666 },
+    { "path": "vocab.json", "size": 2776833 }
+  ]
+}

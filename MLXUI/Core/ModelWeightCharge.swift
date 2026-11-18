@@ -131,6 +131,17 @@ nonisolated enum ModelLoadProfile {
         // so it is a per-call working set (the .enhance row's form): files x 1.10 + 2.0 GB = 2.22 GB x 1.10 + 2.0 = ~4.4 GB, at or
         // over the measured peak. Shorter inputs are over-booked, never under. Implementer's call, pending owner confirmation.
         case .translate: return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 2_000_000_000, measured: true)
+        // FA-7 (GitHub issue #13): Qwen3 Aligner 0.6B, whole-process `phys_footprint` peak through the Run path's align
+        // (16 kHz decode/resample, model load, the mel + text attention over audio+transcript tokens, the units) at the
+        // worst case decision 5 allows, a 297.1 s clip with its 990-unit full transcript: **6,103 MiB = 6.400 GB**,
+        // 2026-11-19 (`ForcedAlignerFootprintTests`, AM-T, 20 ms sampler, test-host baseline included). The smaller phases:
+        // load + 5.4 s 2.937 GB, 59.4 s 4.727 GB. The growth over the 1.272 GB of weights is the text model's attention
+        // over the audio+transcript sequence (MLX's own peak is 2.812 GB; the head's [tokens x 5,000] logits are the rest),
+        // not the weights, so it is a per-call working set (the `.enhance` row's form): files x 1.10 (1.399 GB) + 5.25 GB
+        // = 6.649 GB. 5.25 GB is 6.400 GB less the files' charge (5.001 GB) rounded up to the next 0.05, plus the ~1/50
+        // the quadratic attention still gains going from the measured 297.1 s to the 300 s ceiling. Never under the highest
+        // peak. Implementer's call, pending owner confirmation.
+        case .align:    return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 5_250_000_000, measured: true)
         default:        return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 0, measured: false)
         }
     }

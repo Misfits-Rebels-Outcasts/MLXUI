@@ -183,7 +183,8 @@ struct CatFlowCatalogBridgeTests {
         // MP7-W-f added the exact display "Z-Image Turbo (4-bit)" as a `.substitute` onto Klein, 33 -> 34 (owner ruling, Boo, 2026-11-01; same convention).
         // MC3-8 added "Depth Anything V2 Small" (`.same`) and "Depth Pro" (`.substitute` onto it), (owner decision 8; same convention). Counted with MC2-W below: 34 -> 37.
         // MC2-W added "TranslateGemma 4B", 34 -> 35 (same convention); the MC3-8 rows follow it, 35 -> 37 (MC2 +1, MC3 +2).
-        #expect(CatalogBridge.entries.count == 37)
+        // FA-6 (issue #13 decision 8) added "Qwen3 Aligner 0.6B" (`.same`, the `Align` row's only model), 37 -> 38 (same convention).
+        #expect(CatalogBridge.entries.count == 38)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
@@ -426,7 +427,8 @@ struct CatFlowCatalogBridgeTests {
         // MP7-W-f added the exact display "Z-Image Turbo (4-bit)" as a `.substitute` onto Klein, 33 -> 34 (owner ruling, Boo, 2026-11-01; same convention).
         // MC3-8 added "Depth Anything V2 Small" (`.same`) and "Depth Pro" (`.substitute` onto it), (owner decision 8; same convention). Counted with MC2-W below: 34 -> 37.
         // MC2-W added "TranslateGemma 4B", 34 -> 35 (same convention); the MC3-8 rows follow it, 35 -> 37 (MC2 +1, MC3 +2).
-        #expect(CatalogBridge.entries.count == 37)
+        // FA-6 (issue #13 decision 8) added "Qwen3 Aligner 0.6B" (`.same`, the `Align` row's only model), 37 -> 38 (same convention).
+        #expect(CatalogBridge.entries.count == 38)
     }
 
     // MARK: - MoC-4-4: Qwen3 Reranker 0.6B joins the bridge, the model on MoC-3's seam

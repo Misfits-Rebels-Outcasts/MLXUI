@@ -1,0 +1,192 @@
+{
+  "hfRepoId": "mlx-community/Qwen3-ForcedAligner-0.6B-8bit",
+  "hfRevision": "0e1a68e91d815300c7c9754b2a7639378b23db15",
+  "units": "reference splitter units in transcript order: whitespace word for space-separated languages, one CJK character for Chinese, space-split words for Japanese (mirrors mlx-audio-swift 5c4c12b)",
+  "mlxAudioVersion": "0.4.4",
+  "mlxAudioTag": "v0.4.4",
+  "mlxAudioCommit": "a7ef98604cfd752e9e5c9011bcee8ec8c67228be",
+  "mlxAudioCommitNote": "upstream tag v0.4.4 (PyPI wheel 0.4.4, installed by pip). The wheel ships no VCS metadata; this commit was established by sha256-comparing the installed reference sources against the files at tag v0.4.4 in github.com/Blaizzy/mlx-audio (all six match). The hashes below are what actually produced the goldens.",
+  "mlxAudioFileSha256": {
+    "stt/models/qwen3_asr/qwen3_forced_aligner.py": "0656ef055e14526cd67673db2246c2579bdffe80da7a1c0b139133858ff05b22",
+    "stt/models/qwen3_asr/qwen3_asr.py": "f2f40046812692b2eaf0beeb5bee2277090199637fd1a0e095e88a6db06e5e05",
+    "stt/models/qwen3_asr/config.py": "3140f69885ecc9ee2682c8aa3c815d479299ee42bfcce241955d678c1ca9015c",
+    "stt/utils.py": "b88b35bf8a63f71c711ba59bac22f330cb0d4fddfba13f54f076551edf391f7a",
+    "utils.py": "6e398bccc43fb74954b05916c064135598ced14f391f2f3130b4c4240613abef",
+    "version.py": "e86fe0897e9472ec1ea3bc393a27eda1799b34ba2a894feca1726853c6a22e66"
+  },
+  "modelCardConversionVersion": "0.3.1",
+  "pythonVersion": "3.13.3",
+  "mlxVersion": "0.31.2",
+  "transformersVersion": "5.12.0",
+  "numpyVersion": "2.2.6",
+  "platform": "Darwin arm64",
+  "clips": [
+    {
+      "file": "align-en.wav",
+      "language": "en",
+      "referenceLanguage": "English",
+      "voice": "Samantha",
+      "sayRate": 180,
+      "text": "The quick brown fox jumps over the lazy dog.",
+      "sampleRate": 16000,
+      "channels": 1,
+      "duration": 2.671,
+      "fileSha256": "bbb13747162346e3ade7740f9f45e2f02bf7d1375924c1e71feee26d32a5ddcf",
+      "items": [
+        {
+          "text": "The",
+          "start": 0.0,
+          "end": 0.08
+        },
+        {
+          "text": "quick",
+          "start": 0.08,
+          "end": 0.32
+        },
+        {
+          "text": "brown",
+          "start": 0.4,
+          "end": 0.64
+        },
+        {
+          "text": "fox",
+          "start": 0.64,
+          "end": 1.04
+        },
+        {
+          "text": "jumps",
+          "start": 1.04,
+          "end": 1.36
+        },
+        {
+          "text": "over",
+          "start": 1.36,
+          "end": 1.6
+        },
+        {
+          "text": "the",
+          "start": 1.6,
+          "end": 1.76
+        },
+        {
+          "text": "lazy",
+          "start": 1.76,
+          "end": 2.08
+        },
+        {
+          "text": "dog",
+          "start": 2.08,
+          "end": 2.4
+        }
+      ]
+    },
+    {
+      "file": "align-zh.wav",
+      "language": "zh",
+      "referenceLanguage": "Chinese",
+      "voice": "Tingting",
+      "sayRate": 180,
+      "text": "今天天气很好，我们去公园散步。",
+      "sampleRate": 16000,
+      "channels": 1,
+      "duration": 3.488,
+      "fileSha256": "9bdc9616df348cdbbba650051a83219449f3a8b657edab3d9bbbca2ce7b61869",
+      "items": [
+        {
+          "text": "今",
+          "start": 0.0,
+          "end": 0.24
+        },
+        {
+          "text": "天",
+          "start": 0.24,
+          "end": 0.48
+        },
+        {
+          "text": "天",
+          "start": 0.48,
+          "end": 0.8
+        },
+        {
+          "text": "气",
+          "start": 0.8,
+          "end": 1.04
+        },
+        {
+          "text": "很",
+          "start": 1.04,
+          "end": 1.28
+        },
+        {
+          "text": "好",
+          "start": 1.28,
+          "end": 1.68
+        },
+        {
+          "text": "我",
+          "start": 1.84,
+          "end": 2.0
+        },
+        {
+          "text": "们",
+          "start": 2.0,
+          "end": 2.16
+        },
+        {
+          "text": "去",
+          "start": 2.16,
+          "end": 2.4
+        },
+        {
+          "text": "公",
+          "start": 2.4,
+          "end": 2.56
+        },
+        {
+          "text": "园",
+          "start": 2.56,
+          "end": 2.88
+        },
+        {
+          "text": "散",
+          "start": 2.88,
+          "end": 3.12
+        },
+        {
+          "text": "步",
+          "start": 3.12,
+          "end": 3.36
+        }
+      ]
+    },
+    {
+      "file": "align-ja.wav",
+      "language": "ja",
+      "referenceLanguage": "ja",
+      "voice": "Kyoko",
+      "sayRate": 180,
+      "text": "こんにちは、世界。",
+      "sampleRate": 16000,
+      "channels": 1,
+      "duration": 1.621,
+      "fileSha256": "b0fc507f6e30c77d00f051e8c0be988d05f144504c9e507472ae98d6854b6f55",
+      "items": [
+        {
+          "text": "こんにちは",
+          "start": 0.08,
+          "end": 0.8
+        },
+        {
+          "text": "世",
+          "start": 0.96,
+          "end": 1.12
+        },
+        {
+          "text": "界",
+          "start": 1.12,
+          "end": 1.44
+        }
+      ]
+    }
+  ]
+}

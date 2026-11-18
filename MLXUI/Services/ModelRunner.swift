@@ -1213,6 +1213,9 @@ final class ModelRunner {
         case .depth:
             // Unreachable in practice since MC3-6 registered DepthAnythingModule (same as .separate above).
             showUnsupported("Depth estimation", model)
+        case .align:
+            // FA-1: unreachable in practice once FA-5 registers ForcedAlignerModule (same as .depth above).
+            showUnsupported("Forced alignment", model)
         }
     }
 

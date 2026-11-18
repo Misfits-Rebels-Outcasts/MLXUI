@@ -51,7 +51,8 @@
         "diarization",
         "enhance",
         "voice",
-        "separate"
+        "separate",
+        "align"
       ]
     },
     {
@@ -136,6 +137,10 @@
     "depth": {
       "icon": "cube.transparent",
       "description": "Depth Estimation"
+    },
+    "align": {
+      "icon": "captions.bubble",
+      "description": "Forced Alignment"
     }
   },
   "domains": [
@@ -3491,6 +3496,74 @@
           ],
           "descriptionSource": "depth-anything/Depth-Anything-V2-Small-hf",
           "summary": "A Swift/MLX port of Depth Anything V2 Small. Give it one photo and it returns a grayscale map of relative depth — near is bright, far is dark. Not a measurement in metres."
+        }
+      ]
+    },
+    {
+      "id": "align",
+      "name": "Forced Alignment",
+      "sfSymbol": "captions.bubble",
+      "children": null,
+      "models": [
+        {
+          "id": "mlx-community--Qwen3-ForcedAligner-0.6B-8bit",
+          "family": "Qwen3-ForcedAligner",
+          "displayName": "Qwen3 Aligner 0.6B",
+          "paramSize": "0.6B",
+          "paramCountB": 0.6,
+          "modelType": "align",
+          "source": "mlx",
+          "format": "mlx-8bit",
+          "platforms": [
+            "macOS 14+"
+          ],
+          "minMacOSVersion": "14.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Qwen3-ForcedAligner-0.6B-8bit",
+          "ramGB": 1.91,
+          "downloadSizeGB": 1.28,
+          "contextWindow": null,
+          "license": "apache-2.0",
+          "licenseUrl": "https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B",
+          "description": "# Qwen3 Aligner 0.6B\n\nAn [MLX](https://github.com/ml-explore/mlx) conversion of [Qwen/Qwen3-ForcedAligner-0.6B](https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B), a forced-alignment model, quantized to 8-bit. Give it a recording and the text of what was said, and it returns when each word starts and ends — the times captions, subtitles and a “jump to where they said it” need.\n\n## What it does\n\nForced alignment is not transcription: it does not work out *what* was said, it times the transcript you already have. **The transcript must match the audio.** A wrong word, a missing sentence or a different recording gives times that drift from the speech.\n\n- 11 languages: Chinese, English, Cantonese, French, German, Italian, Japanese, Korean, Portuguese, Russian and Spanish.\n- Up to about 5 minutes of speech per call; a longer recording is refused.\n- Timestamps come in 80 ms steps.\n- One row per aligned unit, in transcript order: `text`, `start`, `end` in seconds. A unit is a word in space-separated languages and a character in Chinese.\n- A leading intro or silence can pull the first word towards 0 s.\n\n## Good to know\n\n- Give it an audio file and the transcript; it returns a table. Nothing is transcribed for you.\n- The Run screen plays the audio from a clicked row, and exports the table as CSV, SRT or VTT.\n- Runs on the installed folder only. Nothing is downloaded at run time.\n\n## Key Details\n\n| | |\n|---|---|\n| **Parameters** | 0.6B |\n| **Weights** | 8-bit (affine, group size 64) |\n| **Base model** | [Qwen/Qwen3-ForcedAligner-0.6B](https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B) |\n| **Input** | 16 kHz mono audio + the transcript |\n| **Output** | one row per unit: text, start and end in seconds |\n| **Limit** | about 5 minutes per call |\n| **Timestamp step** | 80 ms |\n| **License** | Apache-2.0 |\n\n## Attribution\n\nOriginal model by the Qwen team, licensed under [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0). The MLX conversion is by mlx-community. The weights were converted to the MLX format and quantized to 8-bit.\n\nRAM figure is a provisional estimate: download × 1.5 (1.91 GB), not yet measured through the Run path; the maintainers set the measured figure after their own run.",
+          "architecture": null,
+          "languages": [
+            "zh",
+            "en",
+            "yue",
+            "fr",
+            "de",
+            "it",
+            "ja",
+            "ko",
+            "pt",
+            "ru",
+            "es"
+          ],
+          "lastUpdated": "2026-01-29",
+          "taskTags": [
+            "speech-to-text",
+            "forced-alignment"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 4997,
+          "communityLikes": 4,
+          "variants": [
+            {
+              "quantization": "8-bit",
+              "format": "mlx-8bit",
+              "ramGB": 1.91,
+              "downloadSizeGB": 1.28,
+              "qualityPercent": 100,
+              "hfModelId": "mlx-community/Qwen3-ForcedAligner-0.6B-8bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/Qwen3-ForcedAligner-0.6B-8bit",
+          "summary": "Qwen3-ForcedAligner 0.6B, converted to MLX (8-bit). Times the words of a transcript you already have: audio plus text in, word start and end times out. 11 languages, up to about five minutes at a time."
         }
       ]
     }

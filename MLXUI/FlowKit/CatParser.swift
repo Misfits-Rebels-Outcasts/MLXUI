@@ -55,6 +55,8 @@ nonisolated enum CatParser {
         "Classify", "Gate", "Grade", "Score", "Judge", "Think",
         "Chart",
         "Improvise",
+        // FA-6 (issue #13 decision 8): the Align row's task name (single word).
+        "Align",
     ]
 
     static let taskNamesByLen: [String] = taskNames.sorted { $0.count > $1.count }
