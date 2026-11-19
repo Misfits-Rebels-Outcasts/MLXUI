@@ -182,6 +182,8 @@ final class InstallManager {
         }
         let modelDir = store.directory(forHFModelID: model.hfModelId)
         try? FileManager.default.removeItem(at: modelDir)
+        // A loaded Qwen3-VL embedding session for this directory must not outlive its files.
+        Task { await Qwen3VLEmbeddingSessions.shared.evict(modelDir) }
     }
 
     func isError(_ modelId: String) -> Bool {

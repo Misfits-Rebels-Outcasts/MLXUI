@@ -1,9 +1,12 @@
 import SwiftUI
 
-/// Run surface for MLX text embedding. Enter one or two texts → Embed → see the vector
-/// dimensionality and (for two texts) their cosine similarity. Vectors are L2-normalized, so
-/// cosine similarity is the dot product. Calls `EmbeddingEngine` directly (one model load for
-/// both texts), mirroring how `ASRRunView` reads its input directly. `plan-nonchat-aiui.md` EM2.
+/// Run surface for MLX embedders. Enter one or two texts → Embed → see the vector dimensionality
+/// and (for two texts) their cosine similarity. Vectors are L2-normalized, so cosine similarity is
+/// the dot product. Calls `EmbeddingEngine` directly (one model load for both texts), mirroring how
+/// `ASRRunView` reads its input directly. `plan-nonchat-aiui.md` EM2.
+///
+/// MC4-6: the multimodal family (`qwen3-vl-embedding`) also gets an **Images** tab — pull up to 200
+/// images, type a query, see them ranked — while every other embedder keeps the text-only screen.
 struct EmbeddingRunView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -13,10 +16,15 @@ struct EmbeddingRunView: View {
     let family: String
 
     @State private var model = EmbeddingRunModel()
+    @State private var imagesModel: EmbeddingImagesRunModel?
+    @State private var tab: EmbeddingTab = .text
     @State private var textA = "A cat sits on the mat."
     @State private var textB = "A feline rests on the rug."
     /// Prepend the model's query/document task prefixes (asymmetric models only).
     @State private var asQueryDocument = true
+
+    /// The Images tab exists only for the multimodal embedder (decision 6).
+    private var isMultimodal: Bool { family == "qwen3-vl-embedding" }
 
     /// The `(query, document)` prefixes for this model, or nil if it's symmetric.
     private var prefixes: (query: String, document: String)? {
@@ -27,17 +35,17 @@ struct EmbeddingRunView: View {
         VStack(alignment: .leading, spacing: 14) {
             header
             Divider()
-            inputs
-            Text(license ?? "License: see model page")
-                .font(.caption).foregroundStyle(.secondary)
-            if model.isRunning { runningRow }
-            if model.didEmbed { resultView }
-            if let error = model.errorText { errorBar(error) }
+            if isMultimodal { tabPicker }
+            if isMultimodal && tab == .images {
+                imagesContent
+            } else {
+                textContent
+            }
             Spacer(minLength: 0)
             footer
         }
         .padding(18)
-        .frame(width: 560, height: 560)
+        .frame(width: 600, height: isMultimodal && tab == .images ? 700 : 620)
     }
 
     // MARK: - Sections
@@ -48,10 +56,42 @@ struct EmbeddingRunView: View {
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 1) {
                 Text(modelDisplayName).font(.headline)
-                Text("Text → embedding vector").font(.caption).foregroundStyle(.secondary)
+                Text(isMultimodal ? "Text or images → one embedding space" : "Text → embedding vector")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
         }
+    }
+
+    private var tabPicker: some View {
+        Picker("", selection: $tab) {
+            Text("Text").tag(EmbeddingTab.text)
+            Text("Images").tag(EmbeddingTab.images)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+    }
+
+    @ViewBuilder
+    private var textContent: some View {
+        inputs
+        Text(license ?? "License: see model page")
+            .font(.caption).foregroundStyle(.secondary)
+        if model.isRunning { runningRow }
+        if model.didEmbed { resultView }
+        if let error = model.errorText { errorBar(error) }
+    }
+
+    @ViewBuilder
+    private var imagesContent: some View {
+        if let imagesModel {
+            EmbeddingImagesView(model: imagesModel)
+        } else {
+            ProgressView().frame(maxWidth: .infinity, minHeight: 200)
+                .onAppear { imagesModel = EmbeddingImagesRunModel(modelID: modelID) }
+        }
+        Text(license ?? "License: see model page")
+            .font(.caption).foregroundStyle(.secondary)
     }
 
     private var inputs: some View {
@@ -129,9 +169,12 @@ struct EmbeddingRunView: View {
         HStack {
             Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             Spacer()
-            Button(model.isRunning ? "Embedding…" : "Embed") { run() }
-                .keyboardShortcut(.defaultAction)
-                .disabled(textA.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isRunning)
+            // The Images tab carries its own Rank/Stop controls.
+            if !(isMultimodal && tab == .images) {
+                Button(model.isRunning ? "Embedding…" : "Embed") { run() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(textA.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isRunning)
+            }
         }
     }
 
@@ -146,6 +189,12 @@ struct EmbeddingRunView: View {
         }
         model.embed(textA: a, textB: b.isEmpty ? nil : b, modelID: modelID)
     }
+}
+
+/// The Run screen's two surfaces: every embedder has Text; only the multimodal family has Images.
+private enum EmbeddingTab: Hashable {
+    case text
+    case images
 }
 
 /// View-model driving one embedding run: embeds one or two texts off-actor and folds the

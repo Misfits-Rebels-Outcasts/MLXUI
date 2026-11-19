@@ -14,17 +14,18 @@ enum EmbeddingEngine {
         guard FileManager.default.fileExists(atPath: modelDirectory.path) else {
             throw StageError.modelNotInstalled(id: modelDirectory.lastPathComponent)
         }
-        // Architectures MLXEmbedders can't load run through their own standalone runner
-        // (SUP-4: ModernBERT — its EmbeddingModelOutput init is internal, so it can't go through
-        // the factory/registry). Route by the installed config's model_type.
-        if configModelType(modelDirectory) == "modernbert" {
+        // Architectures `MLXEmbedders` cannot load run through their own standalone runner, routed
+        // by the installed `config.json`'s model_type — the one place that dispatch decision is
+        // made (see `standaloneEmbedder(forModelType:)`, pure so every entry's route is testable).
+        switch standaloneEmbedder(forModelType: configModelType(modelDirectory)) {
+        case "qwen3-vl-embedding":
+            return try await Qwen3VLEmbedder.embedTexts(texts, modelDirectory: modelDirectory)
+        case "modernbert":
             return try await ModernBERTEmbedder.embed(texts, modelDirectory: modelDirectory)
-        }
-        // EmbeddingGemma (gemma3_text / gemma3): MLXEmbedders' port crashes on load — it reassigns
-        // its `@ModuleInfo dense` after init (the "please use Model.update(modules:)…" fatalError) —
-        // and applies causal rather than bidirectional attention. Use our own standalone runner.
-        if let type = configModelType(modelDirectory), type == "gemma3_text" || type == "gemma3" {
+        case "embeddinggemma":
             return try await EmbeddingGemmaEmbedder.embed(texts, modelDirectory: modelDirectory)
+        default:
+            break
         }
         do {
             let loader = HFTokenizerLoader()
@@ -59,6 +60,27 @@ enum EmbeddingEngine {
             return nil
         }
         return obj["model_type"] as? String
+    }
+
+    /// The in-app standalone runner for an installed `model_type`, or nil when `MLXEmbedders` can
+    /// load it. Pure, so the dispatch of every `.embedding` entry is unit-testable without weights
+    /// (MC4-4, issue Trap 1). This is the *only* place that decides it: the Qwen3-VL 4B chat card
+    /// shares `model_type` `qwen3_vl` and is a `.vision` entry, which never reaches this engine.
+    nonisolated static func standaloneEmbedder(forModelType type: String?) -> String? {
+        switch type {
+        // Qwen3-VL Embedding 2B (MC4): the package keeps its vision/language internals internal,
+        // `MLXEmbedders` has no qwen3_vl, and `MLXVLM` returns logits — the app carries a trimmed
+        // final-norm forward pass under `Modules/Embedding/Qwen3VLEmbed/`.
+        case "qwen3_vl": return "qwen3-vl-embedding"
+        // SUP-4: `EmbeddingModelOutput`'s init is internal, so ModernBERT can't go through the
+        // factory/registry.
+        case "modernbert": return "modernbert"
+        // EmbeddingGemma: `MLXEmbedders`' port reassigns its `@ModuleInfo dense` after init (the
+        // "please use Model.update(modules:)…" fatalError) and applies causal rather than
+        // bidirectional attention, so it has its own runner.
+        case "gemma3_text", "gemma3": return "embeddinggemma"
+        default: return nil
+        }
     }
 
     /// The installed-model directory for a catalog id, mirroring `InstallManager`'s layout
