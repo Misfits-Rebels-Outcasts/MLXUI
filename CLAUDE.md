@@ -168,7 +168,7 @@ SegmentAnything, WanVideo, SeedVR2, Tools, Demo. Each registers itself in `App/M
 | `Models/BrowserData.swift` · `DomainNode.swift` · `SidebarSection.swift` | Catalog root Codable, recursive domain tree (models at leaves), section → domainIds. |
 | `Models/SystemInfo.swift` | `detect()` reads `hw.model` via sysctl → chip name → bandwidth table; RAM/disk. |
 | `Normalization/DataNormalizer.swift` | Pure display-string mappers for license/architecture/task tags. |
-| `Resources/browser.json` | The bundled catalog (**v6.0-mvp, 35 entries**). |
+| `Resources/browser.json` | The bundled catalog (**v6.0-mvp, 58 entries**). |
 
 ## CAT Flow (`MLXUI/FlowKit/`)
 
@@ -389,7 +389,7 @@ Trust the code over `pipedesign5/6.md` on these:
 - **`DataNormalizer` runs lazily at display time** inside `ModelDetailView` /
   `ComparisonTableView`, *not* once at load in `loadBrowserData()`.
 - `ModelEntry.scaledSpeed` takes `bandwidthGBps: Double`, not a `SystemInfo`.
-- **The catalog is ~35 entries, not 435**, and it is generated in-repo by `scripts/`, not by a
+- **The catalog is ~58 entries, not 435**, and it is generated in-repo by `scripts/`, not by a
   sibling `brainstorm/` directory.
 
 Known inconsistencies in the tree itself — fix or rule on them, don't propagate them:
