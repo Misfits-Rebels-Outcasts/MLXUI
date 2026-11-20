@@ -12,32 +12,6 @@ struct AceStepCatalogTests {
 
     private static let hfID = "ACE-Step/Ace-Step1.5"
 
-    /// The pinned sibling list (path → bytes), from `tree.json` @ 19671f4.
-    private static let siblings: [(String, Int)] = [
-        (".gitattributes", 1_740),
-        ("Qwen3-Embedding-0.6B/added_tokens.json", 707),
-        ("Qwen3-Embedding-0.6B/chat_template.jinja", 4_116),
-        ("Qwen3-Embedding-0.6B/config.json", 1_359),
-        ("Qwen3-Embedding-0.6B/merges.txt", 1_671_853),
-        ("Qwen3-Embedding-0.6B/model.safetensors", 1_191_586_416),
-        ("Qwen3-Embedding-0.6B/special_tokens_map.json", 613),
-        ("Qwen3-Embedding-0.6B/tokenizer.json", 11_423_705),
-        ("Qwen3-Embedding-0.6B/tokenizer_config.json", 5_404),
-        ("Qwen3-Embedding-0.6B/vocab.json", 2_776_833),
-        ("README.md", 5_496),
-        ("acestep-v15-turbo/config.json", 1_968),
-        ("acestep-v15-turbo/configuration_acestep_v15.py", 13_130),
-        ("acestep-v15-turbo/model.safetensors", 4_787_825_604),
-        ("acestep-v15-turbo/modeling_acestep_v15_turbo.py", 96_036),
-        ("acestep-v15-turbo/silence_latent.pt", 3_841_215),
-        ("config.json", 1_968),
-        ("vae/config.json", 425),
-        ("vae/diffusion_pytorch_model.safetensors", 337_431_388),
-    ]
-
-    /// Files under the planner-LM folder, left out of the install (R7). Sizes are from the same tree.
-    private static let lmFolderBytes = 3_755_412_617
-
     private func catalog() throws -> BrowserData {
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()   // MLXUITests
@@ -77,18 +51,15 @@ struct AceStepCatalogTests {
         #expect(e.variants?.first?.downloadSizeGB == e.downloadSizeGB)
     }
 
-    /// R7: the install is every sibling except `acestep-5Hz-lm-1.7B/`. The list above holds no LM folder files
-    /// (those are the excluded 3.76 GB), so its sum is the catalog download figure. The real selector also skips
-    /// `.py` / `.md` / `.pt` files, which MC5-3b's selector test pins against this same list.
-    @Test func downloadSizeIsTheR7SiblingSum() throws {
-        let kept = Self.siblings.reduce(0) { $0 + $1.1 }
-        #expect(kept == 6_336_689_976)
-        #expect(Self.siblings.allSatisfy { !$0.0.hasPrefix("acestep-5Hz-lm-1.7B/") })
-        // Kept files plus the LM folder are the whole repo tree: 10.09 GB (MC5-0 facts).
-        #expect(kept + Self.lmFolderBytes == 10_092_102_593)
+    /// The download figure is the bytes `ModelFileSelector` selects from the pinned sibling list (MC5-3b corrected the
+    /// MC5-3a figure 6.34, the unfiltered sibling sum). The selection itself is pinned in `AceStepInstallTests`.
+    @Test func downloadSizeIsTheSelectedBytes() throws {
+        let selected = AceStepInstallTests.selectedBytes()
+        #expect(selected == 6_332_732_359)
         let e = try entry()
-        #expect(e.downloadSizeGB == 6.34)
-        #expect((Double(kept) / 1e9 * 100).rounded() / 100 == e.downloadSizeGB)
+        #expect(e.downloadSizeGB == 6.33)
+        #expect((Double(selected) / 1e9 * 100).rounded() / 100 == e.downloadSizeGB)
+        #expect(try catalogNotes().contains("6,332,732,359"))
     }
 
     /// AM1: provisional `ramGB` = max(weights x 1.5, download x 1.2). Resident bf16 weights 5.897 GB (T16: the FSQ
@@ -105,7 +76,7 @@ struct AceStepCatalogTests {
         #expect(e.description?.contains("measured peak") == true, "says it will be replaced by a measured peak")
         let notes = try catalogNotes()
         #expect(notes.contains("PROVISIONAL"))
-        #expect(notes.contains("6,336,689,976"))
+        #expect(notes.contains("PROVISIONAL (AM1 rule"))
     }
 
     @Test func fieldsThatDoNotApplyAreNil() throws {
