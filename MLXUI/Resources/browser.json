@@ -2382,6 +2382,55 @@
           ],
           "descriptionSource": "jasonvassallo/mlx-musicgen-small",
           "summary": "Meta's smallest MusicGen text-to-music model as MLX float32 — a prompt generates a short WAV of music on Apple Silicon (CC-BY-NC-4.0, non-commercial). The 32 kHz EnCodec codec ships bundled in the install."
+        },
+        {
+          "id": "ACE-Step--Ace-Step1.5",
+          "family": "ace-step",
+          "displayName": "ACE-Step 1.5",
+          "paramSize": "2B",
+          "paramCountB": null,
+          "modelType": "music",
+          "source": "mlx",
+          "format": "mlx-bf16",
+          "platforms": [
+            "macOS 14+"
+          ],
+          "minMacOSVersion": "14.0",
+          "hfRepo": "ACE-Step",
+          "hfModelId": "ACE-Step/Ace-Step1.5",
+          "ramGB": 8.9,
+          "downloadSizeGB": 6.34,
+          "contextWindow": null,
+          "license": "mit",
+          "licenseUrl": "https://huggingface.co/ACE-Step/Ace-Step1.5/blob/main/README.md",
+          "description": "# ACE-Step 1.5\n\nACE-Step 1.5 is an open music-generation model from ACE Studio and StepFun. In this app you describe the music you want in a text or style prompt, optionally add lyrics, and it generates a stereo 48 kHz song on your Mac using MLX. This catalog entry is the turbo build, which denoises in 8 steps.\n\nThe install holds the turbo diffusion transformer with its condition encoder (bf16), the audio VAE, and the bundled Qwen3-Embedding-0.6B text encoder. The official `ACE-Step/Ace-Step1.5` weights are read directly and converted as they load; nothing is quantized.\n\n**License:** MIT for ACE-Step 1.5. The bundled Qwen3-Embedding-0.6B text encoder is Apache-2.0 (Copyright Alibaba Cloud / Qwen Team).\n\n**Sizes:** the download is about 6.34 GB (the sum of the install's files in the pinned repo listing, revision 19671f4, which leaves out the repo's separate 1.7B language-model folder). The RAM figure (8.9 GB) is a provisional estimate, not a measurement: the resident weights (5.9 GB) x 1.5. It will be replaced with a measured peak.",
+          "architecture": "AceStepConditionGenerationModel",
+          "languages": null,
+          "lastUpdated": "2026-02-03",
+          "taskTags": [
+            "text-to-music",
+            "music-generation"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 93349,
+          "communityLikes": 937,
+          "variants": [
+            {
+              "quantization": "bf16",
+              "format": "mlx-bf16",
+              "ramGB": 8.9,
+              "downloadSizeGB": 6.34,
+              "qualityPercent": 100,
+              "hfModelId": "ACE-Step/Ace-Step1.5",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "ACE-Step/Ace-Step1.5",
+          "summary": "Open text-to-music model (ACE-Step 1.5 turbo): a style prompt and optional lyrics generate a stereo 48 kHz song in 8 steps on Apple Silicon via MLX (MIT).",
+          "notes": "downloadSizeGB 6.34 = sum of the pinned ACE-Step/Ace-Step1.5 @ 19671f4 sibling list (6,336,689,976 B) minus the acestep-5Hz-lm-1.7B/ folder (3,755,412,617 B), MC5-0b R7; computed from RSI/notes/modelcandidates/hf/ACE-Step_Ace-Step1.5/tree.json. ramGB 8.9 is PROVISIONAL (AM1 rule max(weights x 1.5, download x 1.2)): resident bf16 weights 5.897 GB (turbo DiT 3.151 + encoder 1.217 + Qwen trunk 0.881 + lyric embedding table 0.311 + VAE 0.337; FSQ tokenizer/detokenizer not loaded, T16) x 1.5 = 8.846, rounded up to 8.9; download x 1.2 = 7.6. The spike's projected peak at 240 s is about 8.4 to 8.7 GB; MC5-T replaces this with a measured figure. Not the LLM weights heuristic: speed and benchmarks are null on purpose (CLAUDE.md, Formulas)."
         }
       ]
     },

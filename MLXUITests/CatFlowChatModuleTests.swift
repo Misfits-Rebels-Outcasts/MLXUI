@@ -99,7 +99,9 @@ struct CatFlowChatModuleTests {
         //        (TranslateGemma 4B, MC2), 56 → 57 when MC3 merged on top (MC2 +1, MC3 +1). Same convention.
         // MC4-1: bundled catalog gained the mlx-community/Qwen3-VL-Embedding-2B-4bit `.embedding`
         //        entry (multimodal embedder), 57 → 58. Same convention.
-        #expect(entries.count == 58, "bundled catalog drifted: \(entries.count) entries")
+        // MC5-3a: bundled catalog gained the ACE-Step/Ace-Step1.5 `.music` entry (ACE-Step 1.5 turbo),
+        //         58 → 59. Same convention.
+        #expect(entries.count == 59, "bundled catalog drifted: \(entries.count) entries")
 
         let withChat = registry(includingChat: true)
         let withoutChat = registry(includingChat: false)
@@ -131,7 +133,7 @@ struct CatFlowChatModuleTests {
             }
             checked += 1
         }
-        #expect(checked == 58)   // MC2-1 + MC3-1 + MC4-1: 55 → 58 (the TranslateGemma 4B `.translate`, Depth Anything V2 Small `.depth` and Qwen3-VL Embedding 2B `.embedding` entries)
+        #expect(checked == 59)   // MC2-1 + MC3-1 + MC4-1 + MC5-3a: 55 → 59 (the TranslateGemma 4B `.translate`, Depth Anything V2 Small `.depth`, Qwen3-VL Embedding 2B `.embedding` and ACE-Step 1.5 `.music` entries)
         #expect(llmChecked == 14)   // MP1-1: Gemma 4 E4B is the 14th .llm entry (MM1: MiMo V2.6 9B was the 13th)
         #expect(translateChecked == 1)   // MC2-1: TranslateGemma 4B is the first (and only) `.translate` entry
     }
