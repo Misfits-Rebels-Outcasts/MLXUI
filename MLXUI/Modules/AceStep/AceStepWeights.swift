@@ -23,6 +23,8 @@ nonisolated struct SafetensorsEntry: Sendable, Equatable {
 nonisolated struct SafetensorsIndex: Sendable {
     let url: URL
     let entries: [String: SafetensorsEntry]
+    /// The header's `__metadata__` strings (empty when absent).
+    let metadata: [String: String]
 
     var names: [String] { entries.keys.sorted() }
 
@@ -67,6 +69,7 @@ nonisolated struct SafetensorsIndex: Sendable {
         }
         self.url = url
         self.entries = parsed
+        self.metadata = (object["__metadata__"] as? [String: String]) ?? [:]
     }
 
     static func dtype(named name: String) -> DType? {
