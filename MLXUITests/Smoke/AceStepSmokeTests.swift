@@ -344,7 +344,7 @@ nonisolated enum AceStepSmoke {
         let model = AceStepRunModel(modelID: hfID, generator: { request, onPhase in
             try await inner(request) { phase in tracker.enter(phase); onPhase(phase) }
         })
-        model.caption = caption; model.lyrics = lyrics; model.language = language; model.seedText = String(seed); model.duration = seconds
+        model.caption = caption; model.vocalsEnabled = !lyrics.isEmpty; model.lyrics = lyrics; model.language = language; model.seedText = String(seed); model.duration = seconds
         let base = ModelSmoke.physMiB()
         tracker.note(base)
         let limitMiB = stopLineGB * 1e9 / 1_048_576

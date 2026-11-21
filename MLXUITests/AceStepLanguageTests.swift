@@ -17,6 +17,7 @@ struct AceStepLanguageTests {
         final class Box: @unchecked Sendable { var request: AceStepRequest? }
         let box = Box()
         let model = AceStepRunModel(generator: { request, _ in box.request = request; return AceStepAudio(samples: [0, 0]) })
+        model.vocalsEnabled = true        // the Vocals (experimental) section is open: lyrics and the picker count
         model.lyrics = "la la"
         model.language = code
         model.generate()

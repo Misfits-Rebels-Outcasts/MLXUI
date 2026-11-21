@@ -102,13 +102,28 @@ struct AceStepCatalogTests {
                        "commercial", "50+", "vocal-to", "chain-of-thought", "10 minute", "10-minute"] {
             #expect(!text.contains(banned), "About text must not mention '\(banned)'")
         }
-        #expect(text.contains("lyrics"))
         #expect(text.contains("qwen3-embedding-0.6b"))
         #expect(text.contains("apache-2.0"))
         #expect(!text.contains("vae licen"))
         #expect(!text.contains("stable audio"))
         #expect(!text.contains("stability"))
         #expect(text.contains("mit"))
+    }
+
+    /// MC5-T-vocalsui (owner, 2026-11-21): vocals ship as EXPERIMENTAL, so nothing user-visible about the model may claim or imply voice. The user-visible text is the entry's description, summary, display
+    /// name, task tags and variant labels, and the module's About notes (`AceStepModule.descriptor`); the entry's `notes` is a maintainer record that is not decoded into `ModelEntry` and not shown. The
+    /// word list is whole words: vocal(s), lyric(s), sing(s) / singing / singer(s), song(s), voice(s), choir. (The `ModelEntry` decode check below is the same text the Browse card renders.)
+    @Test func userVisibleTextMakesNoVocalClaim() throws {
+        let e = try entry()
+        let visible = ([e.description, e.summary, e.displayName, AceStepModule.descriptor.displayName, AceStepModule.descriptor.notes]
+                       + (e.taskTags ?? []).map(Optional.some) + (e.variants ?? []).map { $0.quantization }.map(Optional.some)).compactMap { $0 }.joined(separator: "\n").lowercased()
+        #expect(!visible.isEmpty)
+        // Whole words only ("using" contains "sing").
+        for banned in ["vocal", "vocals", "lyric", "lyrics", "sing", "sings", "singing", "singer", "singers", "song", "songs", "voice", "voices", "choir"] {
+            let hit = visible.range(of: "\\b\(banned)\\b", options: .regularExpression) != nil
+            #expect(!hit, "user-visible ACE-Step text must not contain '\(banned)'")
+        }
+        #expect(visible.contains("instrumental"), "the claim is instrumental music")
     }
 
     @Test func liveInTheMusicLeafAppendedLast() throws {

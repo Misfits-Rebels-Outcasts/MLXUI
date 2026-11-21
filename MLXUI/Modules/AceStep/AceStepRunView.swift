@@ -31,6 +31,9 @@ final class AceStepRunModel: NSObject, AVAudioPlayerDelegate {
     // Inputs. The seed is text so a half-typed number is not rewritten under the cursor; empty = a random one each run.
     var caption = "warm lofi piano with soft drums, relaxed and dreamy"
     var lyrics = ""
+    /// MC5-T-vocalsui (owner, 2026-11-21): vocals ship as EXPERIMENTAL, so the Run screen is instrumental by default. This is the open state of the "Vocals (experimental)" section, which holds the lyrics
+    /// and the language. Closed (the default), a run is instrumental whatever text sits in the lyrics field: the lyrics are ignored and the language is `unknown`, exactly the path AM-T passed.
+    var vocalsEnabled = false
     var language = "en"
     var seedText = ""
     var duration = AceStepRunModel.defaultDuration {
@@ -118,9 +121,10 @@ final class AceStepRunModel: NSObject, AVAudioPlayerDelegate {
         wavData = nil
         let seed = UInt64(seedText.trimmingCharacters(in: .whitespaces)) ?? UInt64.random(in: 0 ..< (1 << 32))
         usedSeed = seed
-        // Empty lyrics make an instrumental (the engine sends upstream's `[Instrumental]`); the language only matters when there are lyrics.
+        // Instrumental unless the Vocals section is open AND has lyrics (the engine then sends upstream's `[Instrumental]` / `unknown`); the language only matters for a vocal run.
+        let typedLyrics = vocalsEnabled ? lyrics.trimmingCharacters(in: .whitespacesAndNewlines) : ""
         let request = AceStepRequest(caption: caption.trimmingCharacters(in: .whitespacesAndNewlines),
-                                     lyrics: lyrics.trimmingCharacters(in: .whitespacesAndNewlines), language: language,
+                                     lyrics: typedLyrics, language: typedLyrics.isEmpty ? "unknown" : language,
                                      duration: Self.clamp(duration), seed: seed)
         self.request = request
         generation += 1
@@ -246,7 +250,7 @@ final class AceStepRunModel: NSObject, AVAudioPlayerDelegate {
     }
 }
 
-/// The run surface for ACE-Step: a style description, optional lyrics, length, seed, Generate / Cancel, live progress, then play and save.
+/// The run surface for ACE-Step: a style description, length, seed, Generate / Cancel, live progress, then play and save.
 /// Laid out like MusicGen's. The sheet that opens it has already checked the install and the Mac's memory.
 struct AceStepRunView: View {
     @Environment(\.dismiss) private var dismiss
@@ -284,7 +288,7 @@ struct AceStepRunView: View {
             Image(systemName: "music.quarternote.3").foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 1) {
                 Text(modelDisplayName).font(.headline)
-                Text("Describe a song and make it on your Mac").font(.caption).foregroundStyle(.secondary)
+                Text("Describe the music and make it on your Mac").font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
         }
@@ -303,8 +307,10 @@ struct AceStepRunView: View {
     }
 
     private var lyricsField: some View {
-        DisclosureGroup("Lyrics (optional)") {
+        DisclosureGroup("Vocals (experimental)", isExpanded: $model.vocalsEnabled) {
             VStack(alignment: .leading, spacing: 6) {
+                Text("Without the planner model, singing is partial and varies by seed. Try a few seeds.")
+                    .font(.caption).foregroundStyle(.secondary)
                 TextEditor(text: $model.lyrics)
                     .font(.body)
                     .frame(minHeight: 110)
@@ -319,7 +325,6 @@ struct AceStepRunView: View {
                     .labelsHidden().frame(maxWidth: 140).disabled(model.isRunning)
                     Spacer()
                 }
-                Text("Leave this empty to make music without singing.").font(.caption).foregroundStyle(.secondary)
             }
             .padding(.top, 6)
         }
@@ -337,7 +342,7 @@ struct AceStepRunView: View {
                 Text("Seed").frame(width: 60, alignment: .leading)
                 TextField("Random", text: $model.seedText).frame(width: 140).disabled(model.isRunning)
                 if let used = model.usedSeed, !model.isRunning {
-                    Text("Last song used seed \(used)").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    Text("Last run used seed \(used)").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                 }
                 Spacer()
             }

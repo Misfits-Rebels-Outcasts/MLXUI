@@ -129,21 +129,41 @@ struct AceStepRunModelTests {
         #expect(AceStepRunModel.format(90) == "1 min 30 s" && AceStepRunModel.format(60) == "1 min" && AceStepRunModel.format(45) == "45 s")
     }
 
-    @Test func emptyLyricsMakeAnInstrumentalAndLyricsAreKept() async {
+    // MC5-T-vocalsui: instrumental by default; the "Vocals (experimental)" section is closed, and a closed section means an instrumental request whatever sits in the lyrics field.
+    @Test func closedVocalsSectionMakesAnInstrumentalRequestEvenWithLyricsTyped() async {
         let seen = Seen()
         let model = AceStepRunModel(generator: Self.stub(seen))
-        model.lyrics = "  \n "
+        #expect(model.vocalsEnabled == false, "closed by default")
+        model.lyrics = "[Verse]\nla la"
+        model.language = "fr"
         model.generate()
         await model.finished()
-        #expect(seen.all.last?.isInstrumental == true)
-        // The engine turns that into upstream's `[Instrumental]` / `unknown` (3d).
         let r = seen.all[0]
+        #expect(r.isInstrumental == true && r.lyrics.isEmpty && r.language == "unknown", "lyrics ignored: \(r)")
+        // The engine turns that into upstream's `[Instrumental]` / `unknown` (3d).
         #expect(AceStepPrompt.lyricString(lyrics: r.lyrics, language: r.language, instrumental: r.isInstrumental).contains("[Instrumental]"))
+    }
+
+    @Test func openVocalsSectionWithLyricsMakesAVocalRequestWithThePickersCode() async {
+        let seen = Seen()
+        let model = AceStepRunModel(generator: Self.stub(seen))
+        model.vocalsEnabled = true
         model.lyrics = "[Verse]\nla la"
         model.language = "zh"
         model.generate()
         await model.finished()
         #expect(seen.all.last?.isInstrumental == false && seen.all.last?.language == "zh" && seen.all.last?.lyrics == "[Verse]\nla la")
+    }
+
+    @Test func openVocalsSectionWithEmptyLyricsIsStillInstrumental() async {
+        let seen = Seen()
+        let model = AceStepRunModel(generator: Self.stub(seen))
+        model.vocalsEnabled = true
+        model.lyrics = "  \n "
+        model.language = "de"
+        model.generate()
+        await model.finished()
+        #expect(seen.all.last?.isInstrumental == true && seen.all.last?.language == "unknown")
     }
 
     @Test func theSeedIsShownAfterARunTypedOrRandom() async {

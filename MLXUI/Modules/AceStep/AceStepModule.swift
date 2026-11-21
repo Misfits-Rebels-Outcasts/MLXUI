@@ -14,7 +14,7 @@ enum AceStepModule: ModelModule {
         maintainers: ["ACE Studio", "StepFun"],
         notes: """
         Text to stereo 48 kHz music with ACE-Step 1.5 turbo (8 denoising steps) on the no-language-model path: Qwen3-Embedding text encoder, condition encoder, \
-        diffusion transformer with wavelet correction, and the Oobleck audio VAE. The components load one at a time. Songs of 10 to 240 seconds. Claims only \
+        diffusion transformer with wavelet correction, and the Oobleck audio VAE. The components load one at a time. Music of 10 to 240 seconds, instrumental. Claims only \
         entries of the ace-step family; the MusicGen module never sees them.
         """
     )
