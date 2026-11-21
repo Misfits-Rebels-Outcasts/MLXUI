@@ -27,7 +27,7 @@
   },
   "resources": {
     "disk_gb": 6.33,
-    "ram_gb": 8.9,
+    "ram_gb": 10.9,
     "bits": 16
   },
   "source": "https://huggingface.co/ACE-Step/Ace-Step1.5",
@@ -35,5 +35,5 @@
   "license": "MIT",
   "manifest_version": 1,
   "pinned": false,
-  "notes": "MC5-W (SPEC-Q251): MLXUI-authored. catflow-mlx has no curated ACE-Step manifest; this one is pending SPEC-Q251(b) and holds only what a flow row can set today: seed and steps (turbo default 8; the sampler takes 1 to 20). A flow row makes a fixed 30 s instrumental clip; duration and lyrics are refused by name until SPEC-Q251 rules. ram_gb is the provisional catalog figure, to be replaced by the MC5-T measurement."
+  "notes": "MC5-W (SPEC-Q251): MLXUI-authored. catflow-mlx has no curated ACE-Step manifest; this one is pending SPEC-Q251(b) and holds only what a flow row can set today: seed and steps (turbo default 8; the sampler takes 1 to 20). A flow row makes a fixed 30 s instrumental clip; duration and lyrics are refused by name until SPEC-Q251 rules. ram_gb is the catalog's measured figure (MC5-T run 1: 10,378 MiB peak at 240 s, rounded up to 0.1 GB)."
 }

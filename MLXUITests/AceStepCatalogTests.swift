@@ -62,21 +62,20 @@ struct AceStepCatalogTests {
         #expect(try catalogNotes().contains("6,332,732,359"))
     }
 
-    /// AM1: provisional `ramGB` = max(weights x 1.5, download x 1.2). Resident bf16 weights 5.897 GB (T16: the FSQ
-    /// tokenizer and detokenizer are not loaded) x 1.5 = 8.846 (rounded up to 0.1 GB), and download x 1.2 = 7.6, so 8.9. AM-T replaces it.
-    @Test func ramGBIsTheProvisionalAM1Figure() throws {
+    /// AM-T (MC5-T run 1, 2026-11-21): `ramGB` is the measured whole-process peak at 240 s, 10,378 MiB = 10.88 GB, rounded up to 0.1 GB. It replaced the AM1 provisional 8.9
+    /// (weights 5.897 GB x 1.5). Entry and variant carry the same figure.
+    @Test func ramGBIsTheMeasuredPeakRoundedUp() throws {
         let e = try entry()
-        let weights = 5.897
-        let provisional = max(weights * 1.5, e.downloadSizeGB * 1.2)
-        #expect((provisional * 10).rounded(.up) / 10 == 8.9)
-        #expect(e.ramGB == 8.9)
-        #expect(e.ramGB >= e.downloadSizeGB, "CatalogGuardTests floor")
-        #expect(e.description?.contains("provisional estimate, not a measurement") == true)
-        #expect(e.description?.contains("RAM figure is measured") == false)
-        #expect(e.description?.contains("measured peak") == true, "says it will be replaced by a measured peak")
+        let peakGB = 10_378.0 * 1_048_576 / 1e9
+        #expect((peakGB * 10).rounded(.up) / 10 == 10.9)
+        #expect(e.ramGB == 10.9)
+        #expect((e.variants ?? []).allSatisfy { $0.ramGB == 10.9 }, "the variant agrees with the entry")
+        #expect(e.ramGB >= peakGB && e.ramGB >= e.downloadSizeGB, "never under the measured peak or the download (CatalogGuardTests floor)")
+        #expect(e.description?.contains("provisional estimate") == false)
+        #expect(e.description?.contains("RAM figure (10.9 GB) is measured") == true)
         let notes = try catalogNotes()
-        #expect(notes.contains("PROVISIONAL"))
-        #expect(notes.contains("PROVISIONAL (AM1 rule"))
+        #expect(!notes.contains("PROVISIONAL"))
+        #expect(notes.contains("ramGB 10.9 is MEASURED (MC5-T run 1") && notes.contains("10,378 MiB"))
     }
 
     @Test func fieldsThatDoNotApplyAreNil() throws {
