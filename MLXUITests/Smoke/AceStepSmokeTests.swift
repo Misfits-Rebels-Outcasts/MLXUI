@@ -149,6 +149,23 @@ struct AceStepSmokeTests {
         }
     }
 
+    // MARK: E5. the French vocal clip at other seeds (REVIEW-only; `MLXUI_SMOKE_ONLY=frseeds`)
+
+    /// The French clip exactly as `e3` (caption, French lyrics, language fr, 30 s, default 8 steps, DCW on; `run` opens the Vocals section because lyrics are given) at seeds 1, 2 and 3, the same
+    /// settings as the English seeds set.
+    @Test(.enabled(if: AceStepSmoke.only == "frseeds"))
+    func g_frenchVocalSeeds() async throws {
+        let dir = try await ModelSmoke.checkpoint(for: AceStepSmoke.hfID)
+        for seed in [UInt64(1), 2, 3] {
+            let run = try await AceStepSmoke.run(dir: dir, label: "30 s French vocal seed \(seed)", seconds: 30, seed: seed, caption: AceStepSmoke.vocalCaption,
+                                                 lyrics: AceStepSmoke.frenchLyrics, language: "fr")
+            AceStepSmoke.oracle("french-seed\(seed)", run.wav, requested: 30, channels: 2)
+            ModelSmoke.check(AceStepSmoke.auto, "french-seed\(seed).request-was-a-french-vocal", run.request?.isInstrumental == false && run.request?.language == "fr", "language \(run.request?.language ?? "nil")")
+            try ModelSmoke.artifact(AceStepSmoke.review, "ace-step-vocal-french-seed\(seed)-30s.wav", data: run.wav,
+                                    judge: "French vocal, no LM, seed \(seed): is there a sung voice, and from when?")
+        }
+    }
+
     // MARK: F. a one-row flow through RealExecutor
 
     @Test(.enabled(if: AceStepSmoke.selected("f")))
