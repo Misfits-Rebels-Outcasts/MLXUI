@@ -49,7 +49,7 @@ struct AceStepRealWeightsTests {
         tracker.note(FootprintTracker.phys())
         sampler.cancel()
         let snap = Memory.snapshot()
-        print(String(format: "ACESTEP-LOAD component=%@ bytes=%d mlxActiveMB=%.0f physFootprintMB=%.0f peakPhysMB=%.0f mlxPeakMB=%.0f",
+        print(String(format: "ACESTEP-LOAD component=%@ bytes=%ld mlxActiveMB=%.0f physFootprintMB=%.0f peakPhysMB=%.0f mlxPeakMB=%.0f",
                      component, bytes(result), Double(snap.activeMemory) / Self.mib,
                      Double(FootprintTracker.phys()) / Self.mib, Double(tracker.runPeak) / Self.mib,
                      Double(snap.peakMemory) / Self.mib))
@@ -128,10 +128,18 @@ struct AceStepRealWeightsTests {
     @Test func readingOneGroupDoesNotPullTheWholeFile() throws {
         let dir = try #require(AceStepRealLoad.directory)
         Memory.clearCache()
-        let before = FootprintTracker.phys()
+        let activeBefore = Memory.snapshot().activeMemory
+        let physBefore = FootprintTracker.phys()
         let enc = try AceStepWeights.loadConditionEncoder(directory: dir)
-        let grown = Double(FootprintTracker.phys() - before) / 1e9
-        #expect(grown < 1.217 + 0.6, "condition encoder (1.22 GB) loaded without the 4.79 GB file: grew \(grown) GB")
+        eval(Array(enc.values))
+        // Measure after the buffer cache is cleared: transient buffers freed by the load are not retained growth. The real guard is
+        // MLX-active growth == the group's file bytes (a 1.217 GB group read, not the 4.79 GB file; lead's run: 1160 MiB active);
+        // process phys is the noisier secondary check.
+        Memory.clearCache()
+        let activeGrown = Double(Memory.snapshot().activeMemory - activeBefore) / 1e9
+        let physGrown = Double(FootprintTracker.phys() - physBefore) / 1e9
+        #expect(abs(activeGrown - 1.217) < 0.05, "MLX active grew \(activeGrown) GB, expected the group's 1.217 GB")
+        #expect(physGrown < 1.217 + 0.6, "condition encoder (1.22 GB) loaded without the 4.79 GB file: phys grew \(physGrown) GB")
         #expect(enc.count == 140)
     }
 }
