@@ -53,14 +53,8 @@ final class AceStepRunModel: NSObject, AVAudioPlayerDelegate {
     private var player: AVAudioPlayer?
 
     /// Production: the installed model folder through the engine. Tests pass their own `generator`.
-    init(modelID: String = "", generator: Generator? = nil) {
-        self.generator = generator ?? { request, onPhase in
-            let directory = ModelStore.shared.directory(forModelID: modelID)
-            guard FileManager.default.fileExists(atPath: directory.path) else { throw StageError.modelNotInstalled(id: modelID) }
-            var engine = AceStepEngine(directory: directory)
-            engine.observer = { event in if case .phase(let p) = event { onPhase(p) } }
-            return try await engine.generate(request).audio
-        }
+    init(modelID: String = "", directory: URL? = nil, generator: Generator? = nil) {
+        self.generator = generator ?? AceStepEngine.generator(modelID: modelID, directory: directory)
         super.init()
     }
 

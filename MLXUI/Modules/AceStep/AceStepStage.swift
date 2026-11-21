@@ -47,11 +47,20 @@ nonisolated struct AceStepStage: PipelineStage {
 
 extension AceStepStage {
     /// Stage for an installed model id (the A2 pattern: only files `InstallManager` already downloaded; nothing is fetched).
-    init(modelID: String, settings: AceStepRunSettings = AceStepRunSettings()) {
-        self.init(id: "acestep.\(modelID)", name: "ACE-Step 1.5 (\(modelID))", settings: settings) { request, onPhase in
-            let directory = ModelStore.shared.directory(forModelID: modelID)
-            guard FileManager.default.fileExists(atPath: directory.path) else { throw StageError.modelNotInstalled(id: modelID) }
-            var engine = AceStepEngine(directory: directory)
+    init(modelID: String, settings: AceStepRunSettings = AceStepRunSettings(), directory: URL? = nil) {
+        self.init(id: "acestep.\(modelID)", name: "ACE-Step 1.5 (\(modelID))", settings: settings, generate: AceStepEngine.generator(modelID: modelID, directory: directory))
+    }
+}
+
+extension AceStepEngine {
+    /// The one place a run's engine is built from an installed model folder (the Run screen and the flow stage both use it). `directory` nil = the app's store
+    /// (`ModelStore.shared`); the AM-T smoke suite passes the checkpoint folder it was given, so it runs this same code on those weights.
+    static func generator(modelID: String, directory: URL? = nil)
+        -> @Sendable (AceStepRequest, @Sendable @escaping (AceStepPhase) -> Void) async throws -> AceStepAudio {
+        { request, onPhase in
+            let folder = directory ?? ModelStore.shared.directory(forModelID: modelID)
+            guard FileManager.default.fileExists(atPath: folder.path) else { throw StageError.modelNotInstalled(id: modelID) }
+            var engine = AceStepEngine(directory: folder)
             engine.observer = { event in if case .phase(let p) = event { onPhase(p) } }
             return try await engine.generate(request).audio
         }

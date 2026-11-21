@@ -168,3 +168,15 @@ extension AceStepWorkflowWiringTests {
         #expect(found.map(\.code) == ["E104"], "\(found)")
     }
 }
+
+extension AceStepWorkflowWiringTests {
+    /// The exact row text the AM-T flow check writes: the model is "ACE-Step 1.5" (a dotted name) and the quoted caption is the prompt, with `steps` / `seed` as settings.
+    @Test func theSmokeFlowRowParsesAsModelSettingsAndPrompt() throws {
+        let doc = try CatParser.parse("mlxflow 0.8\n1. Generate Sound   ACE-Step 1.5; steps=8; seed=7 \"warm lo-fi hip hop\"\n\nmodels:\n  ACE-Step 1.5 = ACE-Step/Ace-Step1.5\n")
+        let row = try #require(doc.rows.first)
+        #expect(row.model == "ACE-Step 1.5")
+        let settings = FlowSettings(row.settings)
+        #expect(settings.value(for: "steps") == "8" && settings.value(for: "seed") == "7")
+        #expect(settings.firstBare() == "warm lo-fi hip hop")
+    }
+}
