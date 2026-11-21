@@ -84,12 +84,13 @@ struct AceStepSmokeTests {
         let dir = try await ModelSmoke.checkpoint(for: AceStepSmoke.hfID)
         let run = try await AceStepSmoke.run(dir: dir, label: "240 s", seconds: 240, seed: 7)
         AceStepSmoke.oracle("240s", run.wav, requested: 240, channels: 2)
+        AceStepSmoke.chunkJoins("240s", run.wav, seconds: 240)
         let peakGB = AceStepSmoke.gb(run.peakMiB)
         ModelSmoke.check(AceStepSmoke.auto, "memory.240s-peak-at-most-12.0-GB", peakGB <= AceStepSmoke.ramGateGB && !run.hitStopLine,
                          String(format: "whole-process peak %.2f GB (R5 gate %.1f GB, stop line %.0f GB), base %.2f GB", peakGB, AceStepSmoke.ramGateGB, AceStepSmoke.stopLineGB, AceStepSmoke.gb(run.baseMiB)))
         // The 240 s WAV is large (about 46 MB); it is judged by the oracle only, and kept in the out folder for the owner to open if wanted.
         try ModelSmoke.artifact(AceStepSmoke.review, "ace-step-240s-seed7.wav", data: run.wav,
-                                judge: "The longest length (4 min). Open only if curious: does it hold together to the end with no long silences, loops or noise bursts?")
+                                judge: "The longest length (4 min). Does it hold together to the end with no long silences, loops or noise bursts? LISTEN AROUND THE CHUNK JOINS: the VAE decodes in tiles and joins them without a crossfade, a join every 128 latent frames = every 5.12 s (5.12, 10.24, 15.36 ... s). Seek to a few of them (for example 5.1 s, 10.2 s, 15.4 s, 61.4 s, 122.9 s, 230.4 s) and listen for a click, a pop, a step in level or a change of tone right at the join. The automated check (smoke line 240s.chunk-joins-no-discontinuity) looks within +-5 ms of every join for a sample-to-sample jump over 3x the file's own 99th-percentile step; a pass does not replace listening.")
     }
 
     // MARK: E. one vocal sample (English), 30 s
@@ -101,6 +102,28 @@ struct AceStepSmokeTests {
         ModelSmoke.check(AceStepSmoke.auto, "vocal.request-carried-the-lyrics", run.request?.isInstrumental == false && run.request?.language == "en", "language \(run.request?.language ?? "nil")")
         try ModelSmoke.artifact(AceStepSmoke.review, "ace-step-vocal-30s-seed7.wav", data: run.wav,
                                 judge: "English lyrics (verse then chorus: 'The city lights are fading slow ... Calling out your name into the blue'). Is there a sung voice? How much of the lyric is intelligible? Does the style match a warm acoustic ballad?")
+    }
+
+    // MARK: E2. Mandarin and Malay vocal samples, 30 s (REVIEW-only)
+
+    @Test func e2_mandarinVocalThirtySeconds() async throws {
+        let dir = try await ModelSmoke.checkpoint(for: AceStepSmoke.hfID)
+        let run = try await AceStepSmoke.run(dir: dir, label: "30 s Mandarin vocal", seconds: 30, seed: 7, caption: AceStepSmoke.mandarinCaption,
+                                             lyrics: AceStepSmoke.mandarinLyrics, language: "zh")
+        AceStepSmoke.oracle("mandarin30s", run.wav, requested: 30, channels: 2)
+        ModelSmoke.check(AceStepSmoke.auto, "mandarin.request-carried-the-lyrics", run.request?.isInstrumental == false && run.request?.language == "zh", "language \(run.request?.language ?? "nil")")
+        try ModelSmoke.artifact(AceStepSmoke.review, "ace-step-vocal-mandarin-30s-seed7.wav", data: run.wav,
+                                judge: "Mandarin lyrics (the Run screen's Chinese setting; verse then chorus: '窗外的雨还在下 ... 你的名字还在心上'). Is there a sung voice, and is it Mandarin? How much is intelligible? Does it sound like a gentle female pop ballad with piano and strings?")
+    }
+
+    @Test func e3_malayVocalThirtySeconds() async throws {
+        let dir = try await ModelSmoke.checkpoint(for: AceStepSmoke.hfID)
+        let run = try await AceStepSmoke.run(dir: dir, label: "30 s Malay vocal", seconds: 30, seed: 7, caption: AceStepSmoke.malayCaption,
+                                             lyrics: AceStepSmoke.malayLyrics, language: "unknown")
+        AceStepSmoke.oracle("malay30s", run.wav, requested: 30, channels: 2)
+        ModelSmoke.check(AceStepSmoke.auto, "malay.request-carried-the-lyrics", run.request?.isInstrumental == false && run.request?.language == "unknown", "language \(run.request?.language ?? "nil")")
+        try ModelSmoke.artifact(AceStepSmoke.review, "ace-step-vocal-malay-30s-seed7.wav", data: run.wav,
+                                judge: "Malay lyrics (verse then chorus: 'Hujan turun di tepi jendela ... Namamu masih di dalam hati'). Run with the language set to Other (\"unknown\"), because the Run screen has no Malay choice (upstream's own list has \"ms\"). Is there a sung voice? Does the pronunciation sound like Malay? How much is intelligible?")
     }
 
     // MARK: F. a one-row flow through RealExecutor
@@ -218,6 +241,13 @@ nonisolated enum AceStepSmoke {
     static let review = "156"
     static let caption = "warm lo-fi hip hop, mellow piano, vinyl crackle, 85 bpm"
     // The oracle's english_vocal prompt (RSI/notes/modelcandidates/mc5/oracle/english_vocal/tokens_only.json).
+    /// MC5-T review items (owner, 2026-11-21): two more vocal samples, REVIEW-only (the oracle checks still run on them). Mandarin is the oracle's own `chinese_vocal` prompt (caption and
+    /// lyrics from `oracle/chinese_vocal/tokens_only.json`), language "zh" = the Run picker's "Chinese". Malay: upstream's `VALID_LANGUAGES` has "ms", but the Run picker offers only
+    /// English / Chinese / Other, and Other sends "unknown": so the Malay sample is driven with "unknown", exactly what a user gets today (the picker is not expanded here).
+    static let mandarinCaption = "gentle Mandarin pop ballad, female vocal, piano and strings, emotional, 72 BPM"
+    static let mandarinLyrics = "[Verse 1]\n窗外的雨还在下\n回忆在房间慢慢发芽\n那些没说完的话\n\n[Chorus]\n我还站在原地等你回答\n夜色把街灯都点亮\n你的名字还在心上"
+    static let malayCaption = "gentle Malay pop ballad, female vocal, acoustic guitar and soft strings, heartfelt, 76 BPM"
+    static let malayLyrics = "[Verse 1]\nHujan turun di tepi jendela\nKenangan lama datang semula\nKata yang belum sempat terucap\n\n[Chorus]\nAku masih menunggu di sini\nMalam menyalakan lampu jalan\nNamamu masih di dalam hati"
     static let vocalCaption = "warm acoustic singer-songwriter ballad, intimate male vocal, fingerpicked guitar, soft strings, 84 BPM"
     static let vocalLyrics = "[Verse 1]\nThe city lights are fading slow\nI trace the roads we used to know\nEvery window holds a ghost of you\n\n[Chorus]\nBut I keep walking through the rain\nHolding on to what remains\nCalling out your name into the blue"
     /// R5: whole-process peak at 240 s, decimal GB. The stop line aborts the run (the Klein sampler's rule).
@@ -279,14 +309,14 @@ nonisolated enum AceStepSmoke {
 
     /// One Generate press: the run model on the checkpoint folder, the whole process sampled every 20 ms, FOOTPRINT lines per phase and for the run. Aborts at the stop line.
     @MainActor
-    static func run(dir: URL, label: String, seconds: Double, seed: UInt64, caption: String = AceStepSmoke.caption, lyrics: String = "") async throws -> RunResult {
+    static func run(dir: URL, label: String, seconds: Double, seed: UInt64, caption: String = AceStepSmoke.caption, lyrics: String = "", language: String = "en") async throws -> RunResult {
         MLX.Memory.clearCache()
         let tracker = PhaseTracker()
         let inner = AceStepEngine.generator(modelID: hfID, directory: dir)
         let model = AceStepRunModel(modelID: hfID, generator: { request, onPhase in
             try await inner(request) { phase in tracker.enter(phase); onPhase(phase) }
         })
-        model.caption = caption; model.lyrics = lyrics; model.language = "en"; model.seedText = String(seed); model.duration = seconds
+        model.caption = caption; model.lyrics = lyrics; model.language = language; model.seedText = String(seed); model.duration = seconds
         let base = ModelSmoke.physMiB()
         tracker.note(base)
         let limitMiB = stopLineGB * 1e9 / 1_048_576
@@ -313,6 +343,61 @@ nonisolated enum AceStepSmoke {
         try #require(model.errorText == nil, "\(label): the run failed: \(model.errorText ?? "")")
         let wav = try #require(model.wavData, "\(label): no WAV")
         return RunResult(wav: wav, usedSeed: model.usedSeed, request: model.request, baseMiB: base, peakMiB: peak, hitStopLine: tracker.hitStopLine)
+    }
+
+    // MARK: Chunk-join check (MC5-T review item)
+
+    /// The VAE's tiling (`AceStepVAE.plan`, chunk 256, overlap 64 each side) keeps each window's core and joins the cores with no crossfade, so the joins are at the end of every core but the last:
+    /// every 128 latent frames, x 1920 samples per frame = 245,760 samples = 5.12 s at 48 kHz. Derived from the plan itself, never hard-coded.
+    static func joinSamples(seconds: Double) -> [Int] {
+        let frames = Int((seconds * 25).rounded())
+        return AceStepVAE.plan(frames: frames).dropLast().map { $0.coreEnd * 1920 }
+    }
+
+    static let joinHalfWindow = 240        // 5 ms at 48 kHz
+    static let joinFactor = 3.0
+
+    /// Threshold, derived from the signal's own step size: for each channel, the largest sample-to-sample step within +-5 ms of a join must be at most `factor` x the 99th percentile of the
+    /// same statistic (largest step in a 10 ms window) taken over every window of the file that is NOT near a join. Returns the worst ratio and where it was.
+    static func chunkJoinRatio(_ d: Decoded, joins: [Int]) -> (ratio: Double, join: Int, p99: Double) {
+        var worst = (ratio: 0.0, join: 0, p99: 0.0)
+        let window = 2 * joinHalfWindow
+        for channel in d.samples {
+            let n = channel.count
+            guard n > window + 1 else { continue }
+            func maxStep(_ lo: Int, _ hi: Int) -> Double {
+                var m = 0.0
+                var i = max(lo, 0)
+                while i < min(hi, n - 1) { m = max(m, Double(abs(channel[i + 1] - channel[i]))); i += 1 }
+                return m
+            }
+            var others: [Double] = []
+            var start = 0
+            while start + window <= n {
+                if !joins.contains(where: { abs($0 - (start + joinHalfWindow)) < window }) { others.append(maxStep(start, start + window)) }
+                start += window
+            }
+            guard !others.isEmpty else { continue }
+            others.sort()
+            let p99 = max(others[min(others.count - 1, Int(Double(others.count) * 0.99))], 1e-4)
+            for j in joins {
+                let ratio = maxStep(j - joinHalfWindow, j + joinHalfWindow) / p99
+                if ratio > worst.ratio { worst = (ratio, j, p99) }
+            }
+        }
+        return worst
+    }
+
+    @discardableResult
+    static func chunkJoins(_ name: String, _ wav: Data, seconds: Double) -> Bool {
+        guard let decoded = decode(wav) else { ModelSmoke.check(auto, "\(name).chunk-joins-no-discontinuity", false, "WAV did not decode"); return false }
+        let joins = joinSamples(seconds: seconds)
+        let r = chunkJoinRatio(decoded, joins: joins)
+        let ok = !joins.isEmpty && r.ratio <= joinFactor
+        ModelSmoke.check(auto, "\(name).chunk-joins-no-discontinuity", ok,
+                         String(format: "%d joins every %.2f s; worst step near a join is %.2fx the file's 99th-percentile step (limit %.1fx), at %.3f s", joins.count,
+                                Double(joins.first ?? 0) / 48_000, r.ratio, joinFactor, Double(r.join) / 48_000))
+        return ok
     }
 
     // MARK: The T23 oracle
@@ -401,6 +486,28 @@ struct AceStepSmokeOracleTests {
             samples[2 * i] = v; samples[2 * i + 1] = v
         }
         return AceStepAudio(samples: samples).wavData()
+    }
+
+    @Test func theJoinPositionsComeFromTheTilingPlan() {
+        let joins = AceStepSmoke.joinSamples(seconds: 240)
+        #expect(joins.first == 128 * 1920 && joins.count == 6000 / 128, "\(joins.count) joins, first \(joins.first ?? -1)")
+        #expect(AceStepSmoke.joinSamples(seconds: 10).isEmpty, "250 frames fit one chunk: no joins")
+    }
+
+    @Test func aStepAtAJoinIsCaughtAndACleanSignalOrALoudTransientElsewhereIsNot() throws {
+        let rate = 48_000.0, seconds = 30.0
+        let joins = AceStepSmoke.joinSamples(seconds: seconds)
+        func decoded(_ tweak: (inout [Float]) -> Void) throws -> AceStepSmoke.Decoded {
+            var x = (0 ..< Int(seconds * rate)).map { Float(sin(2 * Double.pi * 220 * Double($0) / rate)) * 0.3 + Float(sin(2 * Double.pi * 3_100 * Double($0) / rate)) * 0.05 }
+            tweak(&x)
+            return try #require(AceStepSmoke.decode(AceStepAudio(samples: x.flatMap { [$0, $0] }).wavData()))
+        }
+        let clean = try decoded { _ in }
+        #expect(AceStepSmoke.chunkJoinRatio(clean, joins: joins).ratio <= AceStepSmoke.joinFactor)
+        let clicked = try decoded { x in for i in joins[1]...(joins[1] + 40) { x[i] += 0.5 } }
+        #expect(AceStepSmoke.chunkJoinRatio(clicked, joins: joins).ratio > AceStepSmoke.joinFactor, "a 0.5 jump at a join")
+        let elsewhere = try decoded { x in for i in (joins[1] + 40_000)...(joins[1] + 40_040) { x[i] += 0.5 } }
+        #expect(AceStepSmoke.chunkJoinRatio(elsewhere, joins: joins).ratio <= AceStepSmoke.joinFactor, "the same jump away from a join is not the join check's business")
     }
 
     private func failing(_ results: [(name: String, ok: Bool, detail: String)]) -> [String] { results.filter { !$0.ok }.map(\.name) }
