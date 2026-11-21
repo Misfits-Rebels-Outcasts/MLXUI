@@ -183,4 +183,77 @@ struct AceStepRunModelTests {
         let wav = try #require(model.wavData)
         #expect(wav.count == 44 + 480_000 * 2 * 2 && model.resultSeconds == 10)
     }
+
+    // MARK: MC5-T-fix: two generations never overlap
+
+    /// Records every execution's start/end so overlap and ordering are visible. A cancelled run takes a while to unwind (`unwind`), like a real engine finishing its
+    /// current step, releasing its components and clearing the cache.
+    final class Exec: @unchecked Sendable {
+        private let lock = NSLock()
+        private(set) var log: [String] = []
+        private var live = 0
+        private(set) var maxLive = 0
+        func begin(_ n: Int) { lock.withLock { live += 1; maxLive = max(maxLive, live); log.append("start\(n)") } }
+        func end(_ n: Int, _ how: String) { lock.withLock { live -= 1; log.append("\(how)\(n)") } }
+        var snapshot: [String] { lock.withLock { log } }
+        var peak: Int { lock.withLock { maxLive } }
+    }
+
+    static func slowUnwinding(_ exec: Exec, unwind: Duration = .milliseconds(300)) -> AceStepRunModel.Generator {
+        let counter = Seen()
+        return { request, onPhase in
+            counter.add(request)
+            let n = counter.all.count
+            exec.begin(n)
+            onPhase(.denoise(step: 1, of: 8))
+            do {
+                for _ in 0 ..< 400 { try Task.checkCancellation(); try await Task.sleep(for: .milliseconds(5)) }
+            } catch {
+                await Task.detached { try? await Task.sleep(for: unwind) }.value      // teardown after the cancel is noticed (a cancelled task's own sleep would return at once)
+                exec.end(n, "cancelled")
+                throw error
+            }
+            exec.end(n, "done")
+            return audio
+        }
+    }
+
+    @Test func cancelThenGenerateRightAwayDoesNotStartASecondEngineUntilTheFirstHasFullyUnwound() async {
+        let exec = Exec()
+        let model = AceStepRunModel(generator: Self.slowUnwinding(exec))
+        model.generate()
+        for _ in 0 ..< 200 where !model.phaseLabel.hasPrefix("Making the music") { try? await Task.sleep(for: .milliseconds(5)) }
+        model.cancel()
+        #expect(model.isRunning && model.isCancelling && model.phaseLabel == "Stopping…", "not idle while the engine is still unwinding")
+        #expect(!model.canGenerate)
+        model.generate()                       // refused: the first run has not released its memory yet
+        model.cancel()                         // a second Cancel is harmless
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(model.isRunning && exec.snapshot == ["start1"], "\(exec.snapshot)")
+        await model.finished()
+        #expect(!model.isRunning && !model.isCancelling && model.wavData == nil && model.errorText == nil)
+        #expect(exec.snapshot == ["start1", "cancelled1"] && exec.peak == 1, "\(exec.snapshot)")
+        model.generate()                       // only now does a second engine run, strictly after the first one's teardown
+        await model.finished()
+        #expect(exec.snapshot == ["start1", "cancelled1", "start2", "cancelled2"] || exec.snapshot == ["start1", "cancelled1", "start2", "done2"], "\(exec.snapshot)")
+        #expect(exec.peak == 1, "never two engines at once")
+    }
+
+    @Test func aSecondGenerateWhileRunningIsRefusedAndOnlyOneEngineEverRuns() async {
+        let exec = Exec()
+        let model = AceStepRunModel(generator: Self.slowUnwinding(exec))
+        model.generate(); model.generate(); model.generate()
+        try? await Task.sleep(for: .milliseconds(50))
+        model.cancel()
+        await model.finished()
+        #expect(exec.snapshot == ["start1", "cancelled1"] && exec.peak == 1, "\(exec.snapshot)")
+    }
+
+    @Test func aRunThatFinishesNormallyClearsTheStoppingState() async {
+        let model = AceStepRunModel(generator: Self.stub())
+        model.generate()
+        model.cancel()                         // too late to matter or in time: either way the model ends idle and not "stopping"
+        await model.finished()
+        #expect(!model.isRunning && !model.isCancelling)
+    }
 }

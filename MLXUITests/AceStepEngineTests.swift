@@ -211,3 +211,79 @@ struct AceStepEngineTests {
         #expect(abs(hot[0] - 0.891_25) < 1e-5, "too-loud audio is scaled down too")
     }
 }
+
+// MARK: - MC5-T-fix: a cancelled run releases everything, in every phase
+
+extension AceStepEngineTests {
+    final class TaskBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var task: Task<AceStepResult, Error>?
+        func set(_ t: Task<AceStepResult, Error>) { lock.withLock { task = t } }
+        func cancel() { lock.withLock { task }?.cancel() }
+    }
+
+    /// Cancels the run when `trigger` is first observed, waits for it to unwind, clears the cache, and returns MLX's (active, cache) bytes.
+    static func cancelled(at trigger: @escaping @Sendable (AceStepEvent) -> Bool) async throws -> (before: Int, active: Int, cache: Int, error: Error?) {
+        let dir = try makeFolder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        Memory.clearCache()
+        let before = Memory.snapshot().activeMemory
+        let box = TaskBox()
+        let fired = LimitCell(0)
+        let engine = Self.engine(dir, observer: { event in
+            if fired.read() == 0, trigger(event) { fired.write(1); box.cancel() }
+        })
+        let task = Task { try await engine.generate(AceStepRequest(caption: "calm piano", duration: 2, seed: 7)) }
+        box.set(task)
+        var error: Error?
+        do { _ = try await task.value } catch let e { error = e }
+        Memory.clearCache()
+        let s = Memory.snapshot()
+        return (before, s.activeMemory, s.cacheMemory, error)
+    }
+
+    @Test(arguments: ["text", "condition", "denoise", "decode"])
+    func cancellingInAnyPhaseThrowsCancellationAndReleasesAllMLXMemory(phase: String) async throws {
+        let trigger: @Sendable (AceStepEvent) -> Bool = { event in
+            switch (phase, event) {
+            case ("text", .phase(.text)): return true
+            case ("condition", .loaded(.condition)): return true
+            case ("denoise", .phase(.denoise(let step, _))): return step == 1
+            case ("decode", .loaded(.vae)): return true
+            default: return false
+            }
+        }
+        let r = try await Self.cancelled(at: trigger)
+        #expect(r.error is CancellationError, "\(phase): \(String(describing: r.error))")
+        #expect(r.active == r.before, "\(phase): MLX active memory \(r.active) after the cancelled run, \(r.before) before")
+        #expect(r.cache == 0, "\(phase): MLX cache \(r.cache) after clearCache")
+    }
+
+    // The teardown (GPU synchronize + cache clear) runs exactly once on every way out of `generate`, and the cache limit is restored on every one.
+    final class Counter: @unchecked Sendable { private let l = NSLock(); private var n = 0; func bump() { l.withLock { n += 1 } }; var value: Int { l.withLock { n } } }
+
+    @Test(arguments: ["done", "text", "condition", "denoise", "decode", "failed-text-source"])
+    func teardownRunsOnceOnEveryExitAndTheCacheLimitIsRestored(how: String) async throws {
+        let dir = try Self.makeFolder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let counter = Counter()
+        let cell = LimitCell(7 << 30)
+        let box = TaskBox()
+        let fired = LimitCell(0)
+        var engine = Self.engine(dir, text: TinyText(fail: how == "failed-text-source"), observer: { event in
+            let hit: Bool
+            switch (how, event) {
+            case ("text", .phase(.text)), ("condition", .loaded(.condition)), ("decode", .loaded(.vae)): hit = true
+            case ("denoise", .phase(.denoise(let step, _))): hit = step == 1
+            default: hit = false
+            }
+            if hit, fired.read() == 0 { fired.write(1); box.cancel() }
+        }, read: { cell.read() }, write: { cell.write($0) })
+        engine.teardown = { counter.bump() }
+        let task = Task { try await engine.generate(AceStepRequest(caption: "calm piano", duration: 2, seed: 7)) }
+        box.set(task)
+        do { _ = try await task.value } catch { }
+        #expect(counter.value == 1, "\(how): teardown ran \(counter.value) times")
+        #expect(cell.read() == 7 << 30, "\(how): cache limit \(cell.read()) not restored")
+    }
+}

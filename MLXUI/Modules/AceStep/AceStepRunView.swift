@@ -36,6 +36,9 @@ final class AceStepRunModel: NSObject, AVAudioPlayerDelegate {
 
     // Run state.
     private(set) var isRunning = false
+    /// MC5-T-fix: Cancel was pressed and the engine has not finished unwinding. The model stays "running" (Generate is refused) until the engine task has returned and released its
+    /// memory, so two generations can never overlap (a second engine on a 19 GB Mac would not fit).
+    private(set) var isCancelling = false
     private(set) var progress = 0.0
     private(set) var phaseLabel = ""
     private(set) var errorText: String?
@@ -106,7 +109,9 @@ final class AceStepRunModel: NSObject, AVAudioPlayerDelegate {
     }
 
     func cancel() {
-        guard isRunning else { return }
+        guard isRunning, !isCancelling else { return }
+        isCancelling = true
+        phaseLabel = "Stopping…"
         task?.cancel()
     }
 
@@ -116,7 +121,7 @@ final class AceStepRunModel: NSObject, AVAudioPlayerDelegate {
     // MARK: Run transitions (stale generations are ignored)
 
     private func report(_ phase: AceStepPhase, generation g: Int) {
-        guard g == generation, isRunning else { return }
+        guard g == generation, isRunning, !isCancelling else { return }
         progress = phase.fraction
         phaseLabel = Self.label(for: phase)
     }
@@ -127,12 +132,14 @@ final class AceStepRunModel: NSObject, AVAudioPlayerDelegate {
         resultSeconds = audio.seconds
         progress = 1
         isRunning = false
+        isCancelling = false
         task = nil
     }
 
     private func cancelled(generation g: Int) {
         guard g == generation else { return }
         isRunning = false
+        isCancelling = false
         progress = 0
         phaseLabel = ""
         task = nil
@@ -142,6 +149,7 @@ final class AceStepRunModel: NSObject, AVAudioPlayerDelegate {
         guard g == generation else { return }
         errorText = Self.message(for: error)
         isRunning = false
+        isCancelling = false
         task = nil
     }
 
@@ -336,7 +344,7 @@ struct AceStepRunView: View {
             Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             Spacer()
             if model.isRunning {
-                Button("Cancel") { model.cancel() }
+                Button(model.isCancelling ? "Stopping…" : "Cancel") { model.cancel() }.disabled(model.isCancelling)
             }
             Button(model.isRunning ? "Making music…" : "Generate") { model.generate() }
                 .keyboardShortcut(.defaultAction)

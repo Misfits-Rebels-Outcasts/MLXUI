@@ -178,11 +178,21 @@ struct AceStepSmokeTests {
         let toIdle = Date().timeIntervalSince(cancelAt)
         ModelSmoke.check(AceStepSmoke.auto, "cancel.back-to-idle-without-result", !model.isRunning && model.wavData == nil && model.errorText == nil && !model.didGenerate,
                          "running \(model.isRunning), wav \(model.wavData != nil), error \(model.errorText ?? "none"), \(String(format: "%.1f", toIdle)) s to idle")
+        // MC5-T-fix: idle now means the engine has unwound AND run its teardown (GPU synchronize + cache clear), so memory must come back promptly. The kernel hands pages back
+        // a moment after the free, so poll for up to 10 s; the limit is unchanged (base + 1500 MiB) and the time it took is reported.
+        let right = ModelSmoke.physMiB()
+        let limitBefore = MLX.Memory.cacheLimit
         MLX.Memory.clearCache()
-        let after = ModelSmoke.physMiB()
+        var after = ModelSmoke.physMiB()
+        let settleStart = Date()
+        while after >= base + AceStepSmoke.cancelSlackMiB, Date().timeIntervalSince(settleStart) < 10 {
+            try await Task.sleep(for: .milliseconds(100))
+            after = ModelSmoke.physMiB()
+        }
+        ModelSmoke.info(AceStepSmoke.auto, "cancel.footprint-timeline", String(format: "idle %.0f MiB, after clearCache+settle %.0f MiB (%.1f s), cacheLimit %d MiB", right, after, Date().timeIntervalSince(settleStart), limitBefore >> 20))
         ModelSmoke.check(AceStepSmoke.auto, "cancel.memory-returns-near-base", after < base + AceStepSmoke.cancelSlackMiB,
                          String(format: "base %.0f MiB, after %.0f MiB, slack %.0f MiB", base, after, AceStepSmoke.cancelSlackMiB))
-        print("FOOTPRINT|cancel after first denoise step|\(Int(base))|\(Int(after))|\(Int(after))|60 s run cancelled, MLX cache cleared")
+        print("FOOTPRINT|cancel after first denoise step|\(Int(base))|\(Int(after))|\(Int(after))|60 s run cancelled, idle = engine torn down, then settled")
         let next = try await AceStepSmoke.run(dir: dir, label: "10 s after cancel", seconds: 10, seed: 7)
         AceStepSmoke.oracle("after-cancel-10s", next.wav, requested: 10, channels: 2)
     }

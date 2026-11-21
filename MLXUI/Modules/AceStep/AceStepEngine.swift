@@ -145,6 +145,10 @@ nonisolated struct AceStepEngine: Sendable {
     var readCacheLimit: @Sendable () -> Int = { Memory.cacheLimit }
     var writeCacheLimit: @Sendable (Int) -> Void = { Memory.cacheLimit = $0 }
     var observer: (@Sendable (AceStepEvent) -> Void)?
+    /// MC5-T-fix: runs on EVERY exit of `generate` (done, failed or cancelled), after the run's arrays are gone: waits for the GPU stream to finish and then drops MLX's buffer cache.
+    /// Without the synchronize, a run that ends by throwing (a cancel) leaves its last command buffers holding their buffers, and the process keeps the DiT's gigabytes until some
+    /// later GPU work flushes them (measured: a synthetic 5 GB probe stays at 5.3 GB after `clearCache()` alone and drops to 0.15 GB with `synchronize()` first).
+    var teardown: @Sendable () -> Void = { Stream.gpu.synchronize(); Memory.clearCache() }
 
     static let turboConfig = "acestep-v15-turbo/config.json"
     static let vaeConfig = "vae/config.json"
@@ -174,6 +178,18 @@ nonisolated struct AceStepEngine: Sendable {
     /// Runs off the main actor (`@concurrent`): the MLX work would otherwise beachball the UI.
     @concurrent
     nonisolated func generate(_ request: AceStepRequest, noise injectedNoise: MLXArray? = nil) async throws -> AceStepResult {
+        // `perform` owns every component array, so they are all released when it returns or throws; only then does the teardown run.
+        do {
+            let result = try await perform(request, noise: injectedNoise)
+            teardown()
+            return result
+        } catch {
+            teardown()
+            throw error
+        }
+    }
+
+    private nonisolated func perform(_ request: AceStepRequest, noise injectedNoise: MLXArray?) async throws -> AceStepResult {
         try validate(request)
         try Task.checkCancellation()
         let limits = Flux2KleinCacheLimitGuard(read: readCacheLimit, write: writeCacheLimit)
