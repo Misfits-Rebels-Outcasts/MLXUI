@@ -286,4 +286,21 @@ extension AceStepEngineTests {
         #expect(counter.value == 1, "\(how): teardown ran \(counter.value) times")
         #expect(cell.read() == 7 << 30, "\(how): cache limit \(cell.read()) not restored")
     }
+
+    // MC5-T-mem: syncing the GPU stream at the stage boundaries changes memory only, never a value.
+    @Test func syncingAtStageBoundariesGivesIdenticalAudioToNotSyncing() async throws {
+        let dir = try Self.makeFolder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let request = AceStepRequest(caption: "calm piano", lyrics: "la la", duration: 2, seed: 7)
+        var off = Self.engine(dir); off.configuration.syncAtStageBoundaries = false
+        var on = Self.engine(dir); on.configuration.syncAtStageBoundaries = true
+        #expect(AceStepEngine.Configuration.standard.syncAtStageBoundaries, "on by default")
+        let a = try await off.generate(request), b = try await on.generate(request)
+        #expect(a.audio == b.audio, "same samples")
+        #expect(a.latents.shape == b.latents.shape && Self.maxAbsDiff(a.latents, b.latents) == 0, "same latents")
+    }
+
+    static func maxAbsDiff(_ a: MLXArray, _ b: MLXArray) -> Float {
+        (try? MLXErrorGuard.item(abs(a - b).max(), as: Float.self)) ?? .infinity
+    }
 }

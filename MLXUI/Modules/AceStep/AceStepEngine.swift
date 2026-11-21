@@ -133,6 +133,10 @@ nonisolated struct AceStepEngine: Sendable {
         var cacheLimitBytes = 1 << 30
         var vaeDType: DType = .float16
         var vaeChunk = AceStepVAE.defaultChunk
+        /// MC5-T-mem: wait for the GPU stream before dropping MLX's buffer cache at each stage boundary. Buffers freed by the finished stage are still held by the stream's
+        /// last command buffers until it is synchronised, so without this the process carries the text encoder's and the condition encoder's gigabytes (and later the DiT's) into the next
+        /// stage's load: the load-phase peak sits 5 GB or more above MLX's own peak counter. No effect on any value computed (`AceStepEngineTests` pins identical audio).
+        var syncAtStageBoundaries = true
         static let standard = Configuration()
     }
 
@@ -189,6 +193,12 @@ nonisolated struct AceStepEngine: Sendable {
         }
     }
 
+    /// A stage boundary: everything the finished stage owned has been dropped by now; return its memory before the next stage loads.
+    private nonisolated func releaseStageMemory() {
+        if configuration.syncAtStageBoundaries { Stream.gpu.synchronize() }
+        Memory.clearCache()
+    }
+
     private nonisolated func perform(_ request: AceStepRequest, noise injectedNoise: MLXArray?) async throws -> AceStepResult {
         try validate(request)
         try Task.checkCancellation()
@@ -205,7 +215,7 @@ nonisolated struct AceStepEngine: Sendable {
         var text: AceStepTextInputs? = try await (textSource ?? AceStepInstalledTextSource(directory: directory)).inputs(for: request)
         emit(.loaded(.text))
         try Task.checkCancellation()
-        Memory.clearCache()
+        releaseStageMemory()
 
         // 2. Condition: encoder_hidden_states and context_latents are all that leave this stage.
         emit(.phase(.condition))
@@ -225,7 +235,7 @@ nonisolated struct AceStepEngine: Sendable {
         }
         text = nil
         emit(.released(.text)); emit(.released(.condition))
-        Memory.clearCache()
+        releaseStageMemory()
         try Task.checkCancellation()
 
         // 3. Denoise.
@@ -246,7 +256,7 @@ nonisolated struct AceStepEngine: Sendable {
         }
         emit(.released(.dit))
         encoderHidden = MLXArray(0); context = MLXArray(0)
-        Memory.clearCache()
+        releaseStageMemory()
         try Task.checkCancellation()
 
         // 4. Decode.
@@ -259,7 +269,7 @@ nonisolated struct AceStepEngine: Sendable {
                                                 progress: { c, n in emit(.phase(.decode(chunk: c, of: n))) })   // [1, 2, S] f32
         }
         emit(.released(.vae))
-        Memory.clearCache()
+        releaseStageMemory()
         try Task.checkCancellation()
 
         return AceStepResult(audio: AceStepAudio(samples: try Self.finish(audio)), latents: latents)
