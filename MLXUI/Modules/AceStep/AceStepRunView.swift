@@ -8,7 +8,7 @@ struct AceStepUI: ModelUI {
     func claim(_ model: ModelEntry) -> ClaimScore { AceStepSDK().claim(model) }
 
     @MainActor func makeRunView(for model: ModelEntry, stage: any PipelineStage) -> AnyView {
-        AnyView(AceStepRunView(modelDisplayName: model.displayName, license: model.license, modelID: model.id))
+        AnyView(AceStepRunView(modelDisplayName: model.displayName, license: model.license, modelID: model.id, handedStage: stage))
     }
 }
 
@@ -56,9 +56,37 @@ final class AceStepRunModel: NSObject, AVAudioPlayerDelegate {
     private var player: AVAudioPlayer?
 
     /// Production: the installed model folder through the engine. Tests pass their own `generator`.
-    init(modelID: String = "", directory: URL? = nil, generator: Generator? = nil) {
-        self.generator = generator ?? AceStepEngine.generator(modelID: modelID, directory: directory)
+    /// `handedStage` is the Run sheet's `LeasingStage` (`RunSheetHost`): the production generator runs THROUGH it, so each run leases its memory from the shared `MemoryBudget` (MC5-T-book).
+    init(modelID: String = "", directory: URL? = nil, handedStage: (any PipelineStage)? = nil, generator: Generator? = nil) {
+        self.generator = generator ?? Self.leasedGenerator(modelID: modelID, base: AceStepEngine.generator(modelID: modelID, directory: directory), handedStage: handedStage)
         super.init()
+    }
+
+    /// The production generator: `base` (the engine), run through `LeasingStage.perRun(handedStage, ...)` the way the sibling Run views do. The probe stage runs this run's own request and keeps the
+    /// STEREO result (a stage's contract is mono). The lease is taken before the engine starts and returned in `LeasingStage.run`'s `defer`, i.e. after `AceStepEngine.generate` has returned,
+    /// and so after its teardown, on success, throw and cancel alike. What it books is `EngineCache.footprint(of:)`: the same figure a flow row books for this model. With no handed stage
+    /// (a test, a non-sheet caller) it is just `base`.
+    nonisolated static func leasedGenerator(modelID: String, base: @escaping Generator, handedStage: (any PipelineStage)?) -> Generator {
+        guard let handedStage else { return base }
+        return { request, onPhase in
+            let box = ResultBox()
+            let probe = AceStepStage(id: "acestep.\(modelID)", name: "ACE-Step 1.5") { _, _ in
+                let audio = try await base(request, onPhase)
+                box.set(audio)
+                return audio
+            }
+            let stage = LeasingStage.perRun(handedStage, config: StageConfig(seed: request.seed)) { _ in probe }
+            _ = try await stage.run(.text(request.caption)) { _ in }
+            guard let audio = box.value else { throw CancellationError() }
+            return audio
+        }
+    }
+
+    private final class ResultBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var audio: AceStepAudio?
+        func set(_ a: AceStepAudio) { lock.withLock { audio = a } }
+        var value: AceStepAudio? { lock.withLock { audio } }
     }
 
     nonisolated static func clamp(_ seconds: Double) -> Double { min(max(seconds, durationRange.lowerBound), durationRange.upperBound) }
@@ -221,10 +249,10 @@ struct AceStepRunView: View {
     let license: String?
     @State private var model: AceStepRunModel
 
-    init(modelDisplayName: String, license: String?, modelID: String) {
+    init(modelDisplayName: String, license: String?, modelID: String, handedStage: (any PipelineStage)? = nil) {
         self.modelDisplayName = modelDisplayName
         self.license = license
-        _model = State(initialValue: AceStepRunModel(modelID: modelID))
+        _model = State(initialValue: AceStepRunModel(modelID: modelID, handedStage: handedStage))
     }
 
     var body: some View {
