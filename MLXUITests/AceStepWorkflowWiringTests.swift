@@ -73,16 +73,18 @@ struct AceStepWorkflowWiringTests {
     // MARK: - the pool
 
     @MainActor
-    @Test func aceStepIsLastInTheGenerateSoundPoolAndMusicGenStaysTheDefault() throws {
+    // DECISION-FORCED (owner ruling, Boo, 2026-11-21, MC5-D): this test used to assert that ACE-Step is LAST in the pool and MusicGen the default; the ruling makes ACE-Step 1.5 the default.
+    @Test func aceStepIsFirstInTheGenerateSoundPoolAndTheDefaultAndMusicGenStays() throws {
         let catalog = try loadCatalog()
         let claimable = claimableIDs(catalog)
-        #expect(TaskModels.seededModels(forTask: "Generate Sound") == ["MusicGen", Self.display])
+        #expect(TaskModels.seededModels(forTask: "Generate Sound") == [Self.display, "MusicGen"])
         #expect(TaskModels.isServedByExecutor("Generate Sound"))
         #expect(TaskModels.runnerKind(forTask: "Generate Sound") == .music)
-        #expect(TaskModels.defaultModel(forTask: "Generate Sound", catalog: catalog, claimableModelIDs: claimable) == "MusicGen")
+        #expect(TaskModels.defaultModel(forTask: "Generate Sound", catalog: catalog, claimableModelIDs: claimable) == Self.display)
         let derived = TaskModels.derivedModels(for: "Generate Sound", catalog: catalog, claimableModelIDs: claimable).map(\.displayName)
         #expect(derived.contains(Self.display), "the Generate Sound menu offers ACE-Step 1.5")
-        #expect(derived.first == "MusicGen")
+        // The Model menu lists the derived pool in CATALOG order (MusicGen's leaf entry first), which this ruling does not touch; only the default (the pool's first runnable name) moved.
+        #expect(derived == ["MusicGen", Self.display], "MusicGen is still offered: \(derived)")
     }
 
     // MARK: - a one-row flow

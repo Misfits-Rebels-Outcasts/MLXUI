@@ -272,8 +272,9 @@ nonisolated enum TaskModels {
         "Upscale": ["SeedVR2 3B"],
         "Generate Video": ["Wan2.1 1.3B"],
         "Animate": ["Wan2.1 14B"],
-        // MC5-W (SPEC-Q251): ACE-Step 1.5 appended **last**, so the seed (MusicGen) does not move.
-        "Generate Sound": ["MusicGen", "ACE-Step 1.5"],
+        // MC5-D (owner ruling, Boo, 2026-11-21): ACE-Step 1.5 is the DEFAULT for `Generate Sound` (first here: `defaultModel(forTask:)` returns the first pool entry that is runnable).
+        // MusicGen stays in the pool and in the Model menu (it is cc-by-nc-4.0, non-commercial; its Run screen says so). Rows that name a model are unaffected.
+        "Generate Sound": ["ACE-Step 1.5", "MusicGen"],
         "Segment": ["SAM Base"],
         "Init Latent": ["Z-Image Turbo", "FLUX.2 Klein 4B", "FLUX.1 Kontext", "FLUX.1 Fill"],
         "Encode Latent": ["Z-Image Turbo", "FLUX.2 Klein 4B", "FLUX.1 Kontext", "FLUX.1 Fill"],
