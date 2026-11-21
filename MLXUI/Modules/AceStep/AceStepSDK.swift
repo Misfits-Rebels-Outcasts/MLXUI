@@ -1,5 +1,4 @@
 import Foundation
-import SwiftUI
 
 /// `ModelSDK` for ACE-Step 1.5 text -> music (MC5-3i). Claims `.music` + `.mlx` + the `ace-step` family at `.exact`. The MusicGen SDK claims only ids
 /// containing "musicgen", so the two are disjoint whichever registers first (`AceStepModuleTests`).
@@ -22,14 +21,5 @@ nonisolated struct AceStepSDK: ModelSDK {
         if config.quantize != nil { throw StageError.unsupportedSetting(setting: "quantize") }
         if config.scale != nil { throw StageError.unsupportedSetting(setting: "scale") }
         return AceStepStage(modelID: model.id, settings: AceStepRunSettings(seed: config.seed))
-    }
-}
-
-/// `ModelUI` placeholder: the real Run UI is MC5-3j. Claims the same entries as the SDK.
-struct AceStepUI: ModelUI {
-    func claim(_ model: ModelEntry) -> ClaimScore { AceStepSDK().claim(model) }
-
-    @MainActor func makeRunView(for model: ModelEntry, stage: any PipelineStage) -> AnyView {
-        AnyView(Text("ACE-Step 1.5 can be run from AI Workflows. Its own Run screen is coming.").padding())
     }
 }
