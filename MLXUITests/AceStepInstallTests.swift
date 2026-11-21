@@ -112,22 +112,19 @@ struct AceStepInstallTests {
         return try #require(all.first { $0.hfModelId == Self.hfID })
     }
 
-    /// Flagged "no runner yet" until MC5-3i removes the gap; MusicGen is unaffected.
-    @Test func flaggedAsHavingNoRunnerYet() throws {
+    /// MC5-3i removed the "no runner yet" gap: the entry is no longer flagged, and neither is anything else in the catalog.
+    @Test func noLongerFlaggedAsHavingNoRunner() throws {
         let e = try entry()
-        let reason = try #require(ModelSupport.unsupportedReason(for: e))
-        #expect(reason.contains("ACE-Step 1.5 has no runner in this build yet"))
-        #expect(ModelSupport.unsupportedReason(for: e, ignoringGaps: ["ace-step"]) == nil, "the gap is the only blocker")
+        #expect(ModelSupport.unsupportedReason(for: e) == nil)
         let all = try #require(try? JSONDecoder().decode(BrowserData.self, from: Data(contentsOf:
             URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
                 .appendingPathComponent("MLXUI/Resources/browser.json")))).domains.flatMap { $0.allModels }
         let flagged = all.filter { ModelSupport.unsupportedReason(for: $0) != nil }.map(\.hfModelId)
-        #expect(flagged == [Self.hfID], "only ACE-Step is flagged")
+        #expect(flagged.isEmpty, "nothing is flagged: \(flagged)")
     }
 
-    /// Nothing captures the entry today: the MusicGen module's claim needs "musicgen" in the ids, and no other module
-    /// resolves a `.music` entry. (MC5-3i adds the ACE-Step module and its family claim.)
-    @Test func noModuleCapturesItAndMusicGenStillOwnsItsOwn() throws {
+    /// Only the ACE-Step module captures the entry (MC5-3i); MusicGen's claim still needs "musicgen" in the ids.
+    @Test func onlyTheAceStepModuleCapturesItAndMusicGenStillOwnsItsOwn() throws {
         let e = try entry()
         #expect(MusicGenSDK().claim(e) == .no)
         #expect(MusicGenUI().claim(e) == .no)
@@ -137,7 +134,7 @@ struct AceStepInstallTests {
             module.register(into: one)
             if one.bestModule(for: e) != nil { claimers.append(module.descriptor.id) }
         }
-        #expect(claimers.isEmpty, "no registered module may claim the ACE-Step entry yet: \(claimers)")
+        #expect(claimers == ["acestep"], "exactly the ACE-Step module claims the entry: \(claimers)")
         // And MusicGen's own entry still resolves to it.
         let repoRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         let data = try Data(contentsOf: repoRoot.appendingPathComponent("MLXUI/Resources/browser.json"))

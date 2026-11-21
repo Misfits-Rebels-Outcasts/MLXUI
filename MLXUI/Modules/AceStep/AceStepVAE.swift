@@ -175,7 +175,12 @@ nonisolated final class AceStepVAE: @unchecked Sendable {
     func decodeTiled(_ latents: MLXArray, chunk: Int = AceStepVAE.defaultChunk, progress: ((Int, Int) -> Void)? = nil) throws -> MLXArray {
         let frames = latents.dim(1)
         let windows = Self.plan(frames: frames, chunk: chunk)
-        if windows.isEmpty { return decode(latents) }
+        if windows.isEmpty {
+            let out = decode(latents)
+            eval(out)
+            progress?(1, 1)
+            return out
+        }
         var parts: [MLXArray] = []
         var upsample: Double?
         for (idx, w) in windows.enumerated() {

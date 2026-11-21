@@ -37,6 +37,7 @@ let installedModules: [ModelModule.Type] = [
     KokoroModule.self,
     MLXAudioTTSModule.self,
     MusicGenModule.self,
+    AceStepModule.self,   // MC5-3i: claims ace-step-family `.music` entries only; MusicGenSDK claims `musicgen` ids only
     VLMModule.self,
     PaddleOCRModule.self,
     DotsOCRModule.self,

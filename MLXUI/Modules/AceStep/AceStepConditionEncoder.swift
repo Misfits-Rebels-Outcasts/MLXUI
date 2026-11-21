@@ -400,9 +400,11 @@ nonisolated final class AceStepConditionEncoder: @unchecked Sendable {
     static func latentFrames(duration: Double) -> Int { max(128, Int(duration * 48_000) / 1920) }
 
     /// `[1, T, 128]` = `concat([silence_latent[:T] (64 ch), ones (64 ch chunk mask)], axis: -1)` for text2music.
-    func contextLatents(duration: Double) throws -> MLXArray {
+    func contextLatents(duration: Double) throws -> MLXArray { try contextLatents(frames: Self.latentFrames(duration: duration)) }
+
+    /// The same for an explicit frame count `T` (the engine passes the noise's own length, so the two always agree).
+    func contextLatents(frames T: Int) throws -> MLXArray {
         guard let silenceLatent else { throw AceStepWeightsError.missingFile("silence_latent_f32.bin") }
-        let T = Self.latentFrames(duration: duration)
         let src = AceStepSilenceLatent.slice(silenceLatent, length: T)
         let chunk = MLXArray.ones([T, src.dim(1)], dtype: src.dtype)
         return concatenated([src, chunk], axis: -1).expandedDimensions(axis: 0)
