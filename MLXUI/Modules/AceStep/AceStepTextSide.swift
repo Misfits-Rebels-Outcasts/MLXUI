@@ -127,13 +127,18 @@ nonisolated final class AceStepTextEncoder: @unchecked Sendable {
         }
         let configData = try Data(contentsOf: configURL)
         let model = try await EmbedderTypeRegistry.shared.createModel(configuration: configData, modelType: "qwen3")
-        // Every tensor of the file, once (embed_tokens.weight included); bf16 kept.
-        let raw = try AceStepWeights.readQwen(directory: directory, prefixes: [""])
-        guard let table = raw[AceStepWeights.qwenEmbedTokensName] else {
-            throw AceStepWeightsError.missingTensor(AceStepWeights.qwenEmbedTokensName)
+        // Every tensor of the file, once (embed_tokens.weight included); bf16 kept. The raw dictionary and the sanitised one are scoped so neither outlives the model update
+        // (MC5-T-mem2: nothing holds both across the build, and neither is alive when the caller returns).
+        let table: MLXArray
+        do {
+            let raw = try AceStepWeights.readQwen(directory: directory, prefixes: [""])
+            guard let t = raw[AceStepWeights.qwenEmbedTokensName] else {
+                throw AceStepWeightsError.missingTensor(AceStepWeights.qwenEmbedTokensName)
+            }
+            table = t
+            let weights = model.sanitize(weights: raw)
+            try model.update(parameters: ModuleParameters.unflattened(weights), verify: [.all])
         }
-        let weights = model.sanitize(weights: raw)
-        try model.update(parameters: ModuleParameters.unflattened(weights), verify: [.all])
         eval(model)
         return AceStepTextEncoder(model: model, embedTable: table)
     }

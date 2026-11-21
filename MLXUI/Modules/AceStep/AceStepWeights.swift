@@ -194,9 +194,12 @@ nonisolated enum AceStepWeights {
 
     /// The DiT: `decoder.*` converted to MLX names and layouts, dtype kept (bf16), evaluated.
     static func loadDecoder(directory: URL) throws -> [String: MLXArray] {
-        let raw = try readTurbo(directory: directory, prefixes: ["decoder."])
-        let converted = try convertDecoder(raw)
-        eval(Array(converted.values))
+        let converted: [String: MLXArray]
+        do {   // MC5-T-mem2: the raw dictionary is out of scope as soon as the conversion has been evaluated
+            let raw = try readTurbo(directory: directory, prefixes: ["decoder."])
+            converted = try convertDecoder(raw)
+            eval(Array(converted.values))
+        }
         return converted
     }
 
@@ -217,9 +220,12 @@ nonisolated enum AceStepWeights {
     /// Returns float32 (see `convertVAE`), evaluated.
     static func loadVAEDecoder(directory: URL) throws -> [String: MLXArray] {
         let index = try SafetensorsIndex(url: url(vaePath, in: directory))
-        let raw = try index.read(index.names(withPrefixes: vaeReadPrefixes))
-        let converted = try convertVAE(raw)
-        eval(Array(converted.values))
+        let converted: [String: MLXArray]
+        do {
+            let raw = try index.read(index.names(withPrefixes: vaeReadPrefixes))
+            converted = try convertVAE(raw)
+            eval(Array(converted.values))
+        }
         return converted
     }
 

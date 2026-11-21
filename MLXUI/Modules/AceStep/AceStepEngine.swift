@@ -1,5 +1,6 @@
 import Foundation
 import MLX
+import Darwin
 import MLXNN
 
 // MC5-3i: the ACE-Step 1.5 turbo engine on the no-LM text2music path: text -> condition encoder -> 8-step Euler/DCW sampler over the DiT -> Oobleck VAE
@@ -137,6 +138,10 @@ nonisolated struct AceStepEngine: Sendable {
         /// last command buffers until it is synchronised, so without this the process carries the text encoder's and the condition encoder's gigabytes (and later the DiT's) into the next
         /// stage's load: the load-phase peak sits 5 GB or more above MLX's own peak counter. No effect on any value computed (`AceStepEngineTests` pins identical audio).
         var syncAtStageBoundaries = true
+        /// MC5-T-mem2: ask the host malloc to hand free pages back to the OS right after each component load and each stage release (`HostMemory.relief()`). The load phase reads the
+        /// checkpoint into host buffers and builds raw/sanitised dictionaries; the allocator keeps those pages (about 2.8 GB measured, neither MLX active nor MLX cache) until it is told
+        /// otherwise. No effect on any value computed.
+        var hostReliefAfterLoads = true
         static let standard = Configuration()
     }
 
@@ -197,6 +202,12 @@ nonisolated struct AceStepEngine: Sendable {
     private nonisolated func releaseStageMemory() {
         if configuration.syncAtStageBoundaries { Stream.gpu.synchronize() }
         Memory.clearCache()
+        relieveHost()
+    }
+
+    /// Right after a component's load has completed (its host-side file buffers and raw dictionaries are out of scope by then).
+    private nonisolated func relieveHost() {
+        if configuration.hostReliefAfterLoads { HostMemory.relief() }
     }
 
     private nonisolated func perform(_ request: AceStepRequest, noise injectedNoise: MLXArray?) async throws -> AceStepResult {
@@ -214,6 +225,7 @@ nonisolated struct AceStepEngine: Sendable {
         emit(.phase(.text))
         var text: AceStepTextInputs? = try await (textSource ?? AceStepInstalledTextSource(directory: directory)).inputs(for: request)
         emit(.loaded(.text))
+        relieveHost()
         try Task.checkCancellation()
         releaseStageMemory()
 
@@ -226,6 +238,7 @@ nonisolated struct AceStepEngine: Sendable {
             let weights = try AceStepWeights.loadConditionEncoder(directory: directory)
             let encoder = try AceStepConditionEncoder(config: AceStepConditionConfig(json: turboConfigData), weights: weights, silenceLatent: silence)
             emit(.loaded(.condition))
+            relieveHost()
             guard let inputs = text else { throw AceStepWeightsError.missingTensor("text inputs") }
             let packed = try encoder.encode(inputs)
             // The DiT runs on f32 activations (the oracle's stage-b dtype note); the weights stay bf16.
@@ -245,6 +258,7 @@ nonisolated struct AceStepEngine: Sendable {
             let ditConfig = try AceStepDiTConfig(json: turboConfigData)
             let net = try AceStepDiT.load(config: ditConfig, weights: AceStepWeights.loadDecoder(directory: directory))
             emit(.loaded(.dit))
+            relieveHost()
             var samplerConfig = AceStepSamplerConfig()
             samplerConfig.steps = request.steps
             let total = samplerConfig.steps
@@ -265,6 +279,7 @@ nonisolated struct AceStepEngine: Sendable {
             let vaeConfig = try AceStepVAEConfig(json: Data(contentsOf: directory.appendingPathComponent(Self.vaeConfig)))
             let vae = try AceStepVAE(config: vaeConfig, weights: AceStepWeights.loadVAEDecoder(directory: directory), dtype: configuration.vaeDType)
             emit(.loaded(.vae))
+            relieveHost()
             audio = try vae.decodeChannelsFirst(latents.transposed(0, 2, 1), chunk: configuration.vaeChunk,
                                                 progress: { c, n in emit(.phase(.decode(chunk: c, of: n))) })   // [1, 2, S] f32
         }
@@ -291,4 +306,11 @@ nonisolated struct AceStepEngine: Sendable {
     }
 
     private func emit(_ event: AceStepEvent) { observer?(event) }
+}
+
+/// MC5-T-mem2: the host allocator, not MLX's.
+nonisolated enum HostMemory {
+    /// `malloc_zone_pressure_relief(nil, 0)`: every malloc zone returns what pages it can to the OS. Returns the bytes released (informational).
+    @discardableResult
+    static func relief() -> Int { malloc_zone_pressure_relief(nil, 0) }
 }

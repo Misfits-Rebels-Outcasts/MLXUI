@@ -300,6 +300,19 @@ extension AceStepEngineTests {
         #expect(a.latents.shape == b.latents.shape && Self.maxAbsDiff(a.latents, b.latents) == 0, "same latents")
     }
 
+    // MC5-T-mem2: returning host pages to the OS after each load changes memory only, never a value.
+    @Test func hostReliefAfterLoadsGivesIdenticalAudioToNoRelief() async throws {
+        let dir = try Self.makeFolder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let request = AceStepRequest(caption: "calm piano", lyrics: "la la", duration: 2, seed: 7)
+        var off = Self.engine(dir); off.configuration.hostReliefAfterLoads = false
+        var on = Self.engine(dir); on.configuration.hostReliefAfterLoads = true
+        #expect(AceStepEngine.Configuration.standard.hostReliefAfterLoads, "on by default")
+        let a = try await off.generate(request), b = try await on.generate(request)
+        #expect(a.audio == b.audio, "same samples")
+        #expect(Self.maxAbsDiff(a.latents, b.latents) == 0, "same latents")
+    }
+
     static func maxAbsDiff(_ a: MLXArray, _ b: MLXArray) -> Float {
         (try? MLXErrorGuard.item(abs(a - b).max(), as: Float.self)) ?? .infinity
     }

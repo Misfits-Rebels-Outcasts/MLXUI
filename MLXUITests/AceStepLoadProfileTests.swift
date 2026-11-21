@@ -4,8 +4,7 @@ import Testing
 @testable import MLXUI
 
 /// MC5-T-mem: where the process footprint sits above MLX's own counters while ACE-Step loads. OPT-IN, real weights, run by the lead (never in the normal suite: it needs
-/// `MLXUI_TEST_ACESTEP_DIR`, which is unset there, so it skips). It runs the engine twice on a 10 s instrumental song, once with `syncAtStageBoundaries = false` (the MC5-T-run-1
-/// behaviour) and once with `true` (the fix), and prints one `LOADPROFILE` line per engine event and one per mode:
+/// `MLXUI_TEST_ACESTEP_DIR`, which is unset there, so it skips). It runs the engine three times on a 10 s instrumental song: `clearCache-only` (the MC5-T run-1 behaviour), `sync-at-boundaries` (MC5-T-mem) and `relief-and-sync` (MC5-T-mem2: plus `malloc_zone_pressure_relief` after each load and release), and prints one `LOADPROFILE` line per engine event and one per mode:
 ///
 ///     LOADPROFILE|<mode>|<event>|<phys_footprint MiB>|<peak since the previous line, MiB>|MLX active MiB|MLX cache MiB|MLX peak MiB
 ///
@@ -20,14 +19,14 @@ struct AceStepLoadProfileTests {
 
     @Test func footprintAtEveryEngineEventWithAndWithoutTheStageBoundarySync() async throws {
         let dir = try #require(AceStepLoadProfile.directory)
-        for sync in [false, true] {
-            let mode = sync ? "sync-at-boundaries" : "clearCache-only"
+        for (mode, sync, relief) in [("clearCache-only", false, false), ("sync-at-boundaries", true, false), ("relief-and-sync", true, true)] {
             try await Task.sleep(for: .seconds(3))
             Stream.gpu.synchronize(); Memory.clearCache()
             try await Task.sleep(for: .seconds(2))
             let log = AceStepLoadProfile.Log(mode: mode)
             var engine = AceStepEngine(directory: dir)
             engine.configuration.syncAtStageBoundaries = sync
+            engine.configuration.hostReliefAfterLoads = relief
             engine.observer = { log.note("\($0)") }
             log.start()
             _ = try await engine.generate(AceStepRequest(caption: "warm lo-fi hip hop, mellow piano, vinyl crackle, 85 bpm", duration: 10, seed: 7))
