@@ -24,6 +24,8 @@ nonisolated struct AceStepRequest: Sendable, Equatable {
     /// Seconds; the engine accepts `AceStepEngine.Configuration.minDuration ... maxDuration` (10 ... 240). Latent frames = `Int(duration * 25)`.
     var duration: Double = 60
     var seed: UInt64 = 0
+    /// Denoise steps (MC5-W, SPEC-Q251): the turbo default is 8; the sampler's `1 - i/steps` schedule takes any count, and a flow row may ask for 1...20.
+    var steps: Int = AceStepSamplerConfig().steps
 
     var isInstrumental: Bool { lyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 }
@@ -159,6 +161,7 @@ nonisolated struct AceStepEngine: Sendable {
     /// Everything the engine would refuse, before a byte of weights is read.
     func validate(_ request: AceStepRequest) throws {
         if request.caption.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw AceStepEngineError.emptyPrompt }
+        guard AceStepRunSettings.stepsRange.contains(request.steps) else { throw StageError.unsupportedSetting(setting: "steps") }
         guard request.duration >= configuration.minDuration, request.duration <= configuration.maxDuration else {
             throw AceStepEngineError.durationOutOfRange(request.duration, min: configuration.minDuration, max: configuration.maxDuration)
         }
@@ -216,8 +219,10 @@ nonisolated struct AceStepEngine: Sendable {
             let ditConfig = try AceStepDiTConfig(json: turboConfigData)
             let net = try AceStepDiT.load(config: ditConfig, weights: AceStepWeights.loadDecoder(directory: directory))
             emit(.loaded(.dit))
-            let total = AceStepSamplerConfig().steps
-            latents = try AceStepSampler.run(noise: noise.asType(.float32), config: AceStepSamplerConfig(), velocity: { x, t in
+            var samplerConfig = AceStepSamplerConfig()
+            samplerConfig.steps = request.steps
+            let total = samplerConfig.steps
+            latents = try AceStepSampler.run(noise: noise.asType(.float32), config: samplerConfig, velocity: { x, t in
                 let ts = MLXArray([t])
                 return net(hidden: x, context: context, encoder: encoderHidden, timestep: ts, timestepR: ts)
             }, progress: { done, _ in emit(.phase(.denoise(step: done, of: total))) })

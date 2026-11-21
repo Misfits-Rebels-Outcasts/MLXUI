@@ -6,6 +6,9 @@ nonisolated struct AceStepRunSettings: Sendable, Hashable {
     static let flowDefaultDuration = 30.0
     var duration: Double = AceStepRunSettings.flowDefaultDuration
     var seed: UInt64?
+    /// SPEC-Q251 (MC5-W): the flow row's `steps=`, 1...20 per the MLXUI-authored manifest; nil = the turbo default 8.
+    var steps: Int?
+    static let stepsRange = 1 ... 20
 }
 
 /// `text -> audio` stage for ACE-Step 1.5 turbo (text2music, instrumental unless a lyrics-taking caller uses the engine directly). The generator is
@@ -32,7 +35,9 @@ nonisolated struct AceStepStage: PipelineStage {
         try require(input, .text)
         guard case let .text(prompt) = input else { throw StageError.kindMismatch(expected: .text, got: input.kind) }
         let seed = settings.seed ?? UInt64.random(in: 0 ..< (1 << 32))
-        let request = AceStepRequest(caption: prompt, duration: settings.duration, seed: seed)
+        let base = AceStepRequest(caption: prompt, duration: settings.duration, seed: seed)
+        var request = base
+        if let steps = settings.steps { request.steps = steps }
         progress(0)
         let audio = try await generate(request) { progress($0.fraction) }
         progress(1)

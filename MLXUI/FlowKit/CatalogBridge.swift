@@ -138,6 +138,14 @@ nonisolated enum CatalogBridge {
             candidates: ["jasonvassallo/mlx-musicgen-small"],
             equivalence: .substitute,
             manifestFile: "musicgen-small.json"),
+        // MC5-W (AM-W, SPEC-Q251): ACE-Step 1.5 turbo. `display` is `browser.json`'s `displayName`, so the `.cat` writes the catalog name.
+        // No upstream curated manifest exists: `ace-step-1.5.json` is MLXUI-authored pending SPEC-Q251(b). Appended last in `taskModels["Generate Sound"]`.
+        BridgeEntry(
+            display: "ACE-Step 1.5",
+            pinnedID: "ACE-Step/Ace-Step1.5",
+            candidates: ["ACE-Step/Ace-Step1.5"],
+            equivalence: .same,
+            manifestFile: "ace-step-1.5.json"),
         BridgeEntry(
             display: "Llama 3.1 8B",
             pinnedID: "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit",

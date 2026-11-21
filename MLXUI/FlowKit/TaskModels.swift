@@ -272,7 +272,8 @@ nonisolated enum TaskModels {
         "Upscale": ["SeedVR2 3B"],
         "Generate Video": ["Wan2.1 1.3B"],
         "Animate": ["Wan2.1 14B"],
-        "Generate Sound": ["MusicGen"],
+        // MC5-W (SPEC-Q251): ACE-Step 1.5 appended **last**, so the seed (MusicGen) does not move.
+        "Generate Sound": ["MusicGen", "ACE-Step 1.5"],
         "Segment": ["SAM Base"],
         "Init Latent": ["Z-Image Turbo", "FLUX.2 Klein 4B", "FLUX.1 Kontext", "FLUX.1 Fill"],
         "Encode Latent": ["Z-Image Turbo", "FLUX.2 Klein 4B", "FLUX.1 Kontext", "FLUX.1 Fill"],

@@ -36,7 +36,7 @@ struct AceStepModuleTests {
     @Test func settingsThatCannotBeHonouredAreRefusedByName() throws {
         let e = try entries()
         let sdk = AceStepSDK()
-        for (setting, config) in [("steps", StageConfig(steps: 20)), ("width", StageConfig(width: 512)), ("height", StageConfig(height: 512)),
+        for (setting, config) in [("steps", StageConfig(steps: 21)), ("width", StageConfig(width: 512)), ("height", StageConfig(height: 512)),
                                   ("quantize", StageConfig(quantize: 4)), ("scale", StageConfig(scale: 2))] {
             do { _ = try sdk.makeStage(for: e.ace, config: config); Issue.record("\(setting) should be refused") }
             catch StageError.unsupportedSetting(let name) { #expect(name == setting) }

@@ -12,14 +12,14 @@ nonisolated struct AceStepSDK: ModelSDK {
         return model.family == "ace-step" || (model.id + " " + model.hfModelId).lowercased().contains("ace-step")
     }
 
-    /// Steps, size and quantize are not settings of this model (turbo is fixed at 8 steps; the output is audio): a run that names one is refused by name,
-    /// never run without it (CLAUDE.md, the CFM-R16-1 lesson).
+    /// SPEC-Q251 (MC5-W): a flow row may set `seed` and `steps` (1...20, default 8). Size, quantize and scale are not settings of this model (the output is audio),
+    /// and `duration` / `lyrics` are not honoured on a flow row yet: a run that names one is refused by name, never run without it (CLAUDE.md, the CFM-R16-1 lesson).
     func makeStage(for model: ModelEntry, config: StageConfig) throws -> any PipelineStage {
-        if config.steps != nil { throw StageError.unsupportedSetting(setting: "steps") }
+        if let steps = config.steps, !AceStepRunSettings.stepsRange.contains(steps) { throw StageError.unsupportedSetting(setting: "steps") }
         if config.width != nil { throw StageError.unsupportedSetting(setting: "width") }
         if config.height != nil { throw StageError.unsupportedSetting(setting: "height") }
         if config.quantize != nil { throw StageError.unsupportedSetting(setting: "quantize") }
         if config.scale != nil { throw StageError.unsupportedSetting(setting: "scale") }
-        return AceStepStage(modelID: model.id, settings: AceStepRunSettings(seed: config.seed))
+        return AceStepStage(modelID: model.id, settings: AceStepRunSettings(seed: config.seed, steps: config.steps))
     }
 }
