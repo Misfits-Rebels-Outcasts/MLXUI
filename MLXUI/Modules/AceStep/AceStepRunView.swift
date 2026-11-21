@@ -19,6 +19,12 @@ struct AceStepUI: ModelUI {
 final class AceStepRunModel: NSObject, AVAudioPlayerDelegate {
     typealias Generator = @Sendable (AceStepRequest, @escaping @Sendable (AceStepPhase) -> Void) async throws -> AceStepAudio
 
+    /// The lyric-language picker: a name and the code upstream's `VALID_LANGUAGES` uses (`vocal_language`, sent verbatim in the prompt's `# Languages` line). Owner ruling 2026-11-21: German and
+    /// French are the non-English choices beside Chinese; nothing else is added.
+    nonisolated static let languages: [(name: String, code: String)] = [
+        ("English", "en"), ("Chinese", "zh"), ("German", "de"), ("French", "fr"), ("Other", "unknown"),
+    ]
+
     static let durationRange = 10.0 ... 240.0
     static let defaultDuration = 60.0
 
@@ -308,9 +314,7 @@ struct AceStepRunView: View {
                 HStack {
                     Text("Language of the lyrics").font(.caption)
                     Picker("", selection: $model.language) {
-                        Text("English").tag("en")
-                        Text("Chinese").tag("zh")
-                        Text("Other").tag("unknown")
+                        ForEach(AceStepRunModel.languages, id: \.code) { Text($0.name).tag($0.code) }
                     }
                     .labelsHidden().frame(maxWidth: 140).disabled(model.isRunning)
                     Spacer()

@@ -23,7 +23,8 @@ struct AceStepSmokeTests {
 
     // MARK: A. install layout (read only)
 
-    @Test func a_installLayoutIsTheSelectorsFourteenFilesWithExactSizes() async throws {
+    @Test(.enabled(if: AceStepSmoke.selected("a")))
+    func a_installLayoutIsTheSelectorsFourteenFilesWithExactSizes() async throws {
         let dir = try await ModelSmoke.checkpoint(for: AceStepSmoke.hfID)
         let fm = FileManager.default
         let wanted = AceStepInstallTests.selected()
@@ -51,7 +52,8 @@ struct AceStepSmokeTests {
 
     // MARK: B. 10 s: the oracle, determinism, the module is registered
 
-    @Test func b_tenSecondsPassesTheOracleAndIsDeterministic() async throws {
+    @Test(.enabled(if: AceStepSmoke.selected("b")))
+    func b_tenSecondsPassesTheOracleAndIsDeterministic() async throws {
         let dir = try await ModelSmoke.checkpoint(for: AceStepSmoke.hfID)
         let first = try await AceStepSmoke.run(dir: dir, label: "10 s", seconds: 10, seed: 7)
         AceStepSmoke.oracle("10s", first.wav, requested: 10, channels: 2)
@@ -72,7 +74,8 @@ struct AceStepSmokeTests {
 
     // MARK: C / D. 60 s and 240 s: the oracle and the memory phases
 
-    @Test func c_sixtySecondsPassesTheOracle() async throws {
+    @Test(.enabled(if: AceStepSmoke.selected("c")))
+    func c_sixtySecondsPassesTheOracle() async throws {
         let dir = try await ModelSmoke.checkpoint(for: AceStepSmoke.hfID)
         let run = try await AceStepSmoke.run(dir: dir, label: "60 s", seconds: 60, seed: 7)
         AceStepSmoke.oracle("60s", run.wav, requested: 60, channels: 2)
@@ -80,7 +83,8 @@ struct AceStepSmokeTests {
                                 judge: "Same caption at the default length (60 s). Does the piece develop over a minute (not one bar repeated)? Any artifacts at the chunk joins, drift in tempo or pitch, or a thin or washed-out tail?")
     }
 
-    @Test func d_twoHundredFortySecondsPassesTheOracleAndTheMemoryGate() async throws {
+    @Test(.enabled(if: AceStepSmoke.selected("d")))
+    func d_twoHundredFortySecondsPassesTheOracleAndTheMemoryGate() async throws {
         let dir = try await ModelSmoke.checkpoint(for: AceStepSmoke.hfID)
         let run = try await AceStepSmoke.run(dir: dir, label: "240 s", seconds: 240, seed: 7)
         AceStepSmoke.oracle("240s", run.wav, requested: 240, channels: 2)
@@ -95,7 +99,8 @@ struct AceStepSmokeTests {
 
     // MARK: E. one vocal sample (English), 30 s
 
-    @Test func e_englishVocalThirtySeconds() async throws {
+    @Test(.enabled(if: AceStepSmoke.selected("e")))
+    func e_englishVocalThirtySeconds() async throws {
         let dir = try await ModelSmoke.checkpoint(for: AceStepSmoke.hfID)
         let run = try await AceStepSmoke.run(dir: dir, label: "30 s vocal", seconds: 30, seed: 7, caption: AceStepSmoke.vocalCaption, lyrics: AceStepSmoke.vocalLyrics)
         AceStepSmoke.oracle("vocal30s", run.wav, requested: 30, channels: 2)
@@ -104,9 +109,10 @@ struct AceStepSmokeTests {
                                 judge: "English lyrics (verse then chorus: 'The city lights are fading slow ... Calling out your name into the blue'). Is there a sung voice? How much of the lyric is intelligible? Does the style match a warm acoustic ballad?")
     }
 
-    // MARK: E2. Mandarin and Malay vocal samples, 30 s (REVIEW-only)
+    // MARK: E2. Mandarin and French vocal samples, 30 s (REVIEW-only)
 
-    @Test func e2_mandarinVocalThirtySeconds() async throws {
+    @Test(.enabled(if: AceStepSmoke.selected("e")))
+    func e2_mandarinVocalThirtySeconds() async throws {
         let dir = try await ModelSmoke.checkpoint(for: AceStepSmoke.hfID)
         let run = try await AceStepSmoke.run(dir: dir, label: "30 s Mandarin vocal", seconds: 30, seed: 7, caption: AceStepSmoke.mandarinCaption,
                                              lyrics: AceStepSmoke.mandarinLyrics, language: "zh")
@@ -116,19 +122,22 @@ struct AceStepSmokeTests {
                                 judge: "Mandarin lyrics (the Run screen's Chinese setting; verse then chorus: '窗外的雨还在下 ... 你的名字还在心上'). Is there a sung voice, and is it Mandarin? How much is intelligible? Does it sound like a gentle female pop ballad with piano and strings?")
     }
 
-    @Test func e3_malayVocalThirtySeconds() async throws {
+    @Test(.enabled(if: AceStepSmoke.selected("french")))
+    func e3_frenchVocalThirtySeconds() async throws {
         let dir = try await ModelSmoke.checkpoint(for: AceStepSmoke.hfID)
-        let run = try await AceStepSmoke.run(dir: dir, label: "30 s Malay vocal", seconds: 30, seed: 7, caption: AceStepSmoke.malayCaption,
-                                             lyrics: AceStepSmoke.malayLyrics, language: "unknown")
-        AceStepSmoke.oracle("malay30s", run.wav, requested: 30, channels: 2)
-        ModelSmoke.check(AceStepSmoke.auto, "malay.request-carried-the-lyrics", run.request?.isInstrumental == false && run.request?.language == "unknown", "language \(run.request?.language ?? "nil")")
-        try ModelSmoke.artifact(AceStepSmoke.review, "ace-step-vocal-malay-30s-seed7.wav", data: run.wav,
-                                judge: "Malay lyrics (verse then chorus: 'Hujan turun di tepi jendela ... Namamu masih di dalam hati'). Run with the language set to Other (\"unknown\"), because the Run screen has no Malay choice (upstream's own list has \"ms\"). Is there a sung voice? Does the pronunciation sound like Malay? How much is intelligible?")
+        // Same seed, caption style, length and steps as the English clip (e), so the two can be compared; the language is the picker's French ("fr"), not Other.
+        let run = try await AceStepSmoke.run(dir: dir, label: "30 s French vocal", seconds: 30, seed: 7, caption: AceStepSmoke.vocalCaption,
+                                             lyrics: AceStepSmoke.frenchLyrics, language: "fr")
+        AceStepSmoke.oracle("french30s", run.wav, requested: 30, channels: 2)
+        ModelSmoke.check(AceStepSmoke.auto, "french.request-carried-the-lyrics", run.request?.isInstrumental == false && run.request?.language == "fr", "language \(run.request?.language ?? "nil")")
+        try ModelSmoke.artifact(AceStepSmoke.review, "ace-step-vocal-french-30s-seed7.wav", data: run.wav,
+                                judge: "French vocal: is it sung in French and understandable? Same settings as the English clip for comparison.")
     }
 
     // MARK: F. a one-row flow through RealExecutor
 
-    @Test func f_flowRowThroughRealExecutorIsCachedAndPassesTheOracle() async throws {
+    @Test(.enabled(if: AceStepSmoke.selected("f")))
+    func f_flowRowThroughRealExecutorIsCachedAndPassesTheOracle() async throws {
         let dir = try await ModelSmoke.checkpoint(for: AceStepSmoke.hfID)
         let out = try #require(ModelSmoke.out)
         let blobs = out.appendingPathComponent("flow-blobs", isDirectory: true)
@@ -181,7 +190,8 @@ struct AceStepSmokeTests {
 
     // MARK: G. cancel
 
-    @Test func g_cancelAfterTheFirstDenoiseStepReturnsToIdleAndTheNextRunWorks() async throws {
+    @Test(.enabled(if: AceStepSmoke.selected("g")))
+    func g_cancelAfterTheFirstDenoiseStepReturnsToIdleAndTheNextRunWorks() async throws {
         let dir = try await ModelSmoke.checkpoint(for: AceStepSmoke.hfID)
         MLX.Memory.clearCache()
         let base = ModelSmoke.physMiB()
@@ -222,7 +232,8 @@ struct AceStepSmokeTests {
 
     // MARK: H. both editions carry the module (compile-time reference + registration)
 
-    @Test func h_theModuleIsRegisteredAndCompiledIntoThisScheme() throws {
+    @Test(.enabled(if: AceStepSmoke.selected("h")))
+    func h_theModuleIsRegisteredAndCompiledIntoThisScheme() throws {
         // `AceStepModule`, `AceStepSDK` and `AceStepRunView` are referenced here, so this scheme's target must compile them. The Direct scheme is the same synchronized
         // folder (no per-target membership, no `#if`): it is proven by building both schemes, which every MC5 task does.
         _ = AceStepModule.self; _ = AceStepSDK.self; _ = AceStepRunView.self
@@ -241,13 +252,15 @@ nonisolated enum AceStepSmoke {
     static let review = "156"
     static let caption = "warm lo-fi hip hop, mellow piano, vinyl crackle, 85 bpm"
     // The oracle's english_vocal prompt (RSI/notes/modelcandidates/mc5/oracle/english_vocal/tokens_only.json).
-    /// MC5-T review items (owner, 2026-11-21): two more vocal samples, REVIEW-only (the oracle checks still run on them). Mandarin is the oracle's own `chinese_vocal` prompt (caption and
-    /// lyrics from `oracle/chinese_vocal/tokens_only.json`), language "zh" = the Run picker's "Chinese". Malay: upstream's `VALID_LANGUAGES` has "ms", but the Run picker offers only
-    /// English / Chinese / Other, and Other sends "unknown": so the Malay sample is driven with "unknown", exactly what a user gets today (the picker is not expanded here).
+    /// MC5-T review items (owner, 2026-11-21): more vocal samples, REVIEW-only (the oracle checks still run on them). Mandarin is the oracle's own `chinese_vocal` prompt (caption and
+    /// lyrics from `oracle/chinese_vocal/tokens_only.json`), language "zh" = the Run picker's "Chinese". French (owner ruling 2026-11-21: German and French are the non-English languages): the
+    /// picker's "fr", the English clip's caption, seed and length.
     static let mandarinCaption = "gentle Mandarin pop ballad, female vocal, piano and strings, emotional, 72 BPM"
     static let mandarinLyrics = "[Verse 1]\n窗外的雨还在下\n回忆在房间慢慢发芽\n那些没说完的话\n\n[Chorus]\n我还站在原地等你回答\n夜色把街灯都点亮\n你的名字还在心上"
-    static let malayCaption = "gentle Malay pop ballad, female vocal, acoustic guitar and soft strings, heartfelt, 76 BPM"
-    static let malayLyrics = "[Verse 1]\nHujan turun di tepi jendela\nKenangan lama datang semula\nKata yang belum sempat terucap\n\n[Chorus]\nAku masih menunggu di sini\nMalam menyalakan lampu jalan\nNamamu masih di dalam hati"
+    static let frenchLyrics = "[Verse 1]\nLe soleil se lève sur la mer\nLes vagues chantent doucement\nUn petit bateau part au vent\n\n[Chorus]\nEmporte-moi vers le matin\nLa mer m'appelle, le jour revient\nChante avec moi jusqu'au matin"
+    /// `MLXUI_SMOKE_ONLY=french` (as `TEST_RUNNER_MLXUI_SMOKE_ONLY` through `xcodebuild`, which `model-smoke.sh` inherits) runs only the named clip's test; every other test of this suite skips.
+    static let only: String? = { let v = ProcessInfo.processInfo.environment["MLXUI_SMOKE_ONLY"]; return (v?.isEmpty ?? true) ? nil : v }()
+    static func selected(_ name: String) -> Bool { only == nil || only == name }
     static let vocalCaption = "warm acoustic singer-songwriter ballad, intimate male vocal, fingerpicked guitar, soft strings, 84 BPM"
     static let vocalLyrics = "[Verse 1]\nThe city lights are fading slow\nI trace the roads we used to know\nEvery window holds a ghost of you\n\n[Chorus]\nBut I keep walking through the rain\nHolding on to what remains\nCalling out your name into the blue"
     /// R5: whole-process peak at 240 s, decimal GB. The stop line aborts the run (the Klein sampler's rule).
