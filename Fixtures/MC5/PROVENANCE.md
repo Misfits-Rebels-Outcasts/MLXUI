@@ -25,3 +25,7 @@ Reference data for the condition encoder (`MLXUI/Modules/AceStep/AceStepConditio
 # mc5_dit_tiny.safetensors (sha256 51453b143849942c9727ccc13bc6d0e150943dce4f0b3f241e855ee834f7162f)
 
 Reference data for the DiT (`MLXUI/Modules/AceStep/AceStepDiT.swift`, tests in `MLXUITests/AceStepDiTTests.swift`). Copied unchanged from the lead's `mc5/fixtures/`; made by `mc5/scripts/dump_dit_tiny.py` (tiny `AceStepDiTModel`, 4 layers, hidden 32, 4/2 heads, head_dim 8, sliding window 4, seed 4321, torch weights `w.*` in the checkpoint's layout; config JSON in the metadata). `fwd.out.vt_torch` is upstream torch, `fwd.out.vt_mlx` upstream's native MLX decoder; they differ from each other by 3.7e-5 (upstream's own script asserts < 1e-4). The `sampler.*` tensors are not used by 3f.
+
+# mc5_vae_tiny.safetensors (sha256 15aa5b3ca1bda634b1489607d4e6ddedc783116f99a85e8a20caf88b06e7c3df)
+
+Reference data for the VAE decoder (`MLXUI/Modules/AceStep/AceStepVAE.swift`, tests in `MLXUITests/AceStepVAETests.swift`). Copied unchanged from the lead's `mc5/fixtures/`; made by `mc5/scripts/dump_vae_tiny.py`: diffusers `AutoencoderOobleck` at tiny width (decoder_channels 4) with the REAL strides `[2,4,4,6,10]` (hop 1920), seed 2468, torch weight-norm layout under `w.decoder.*`. `short` = 16 latent frames `[1,16,64]` with f32, f16 (upstream FP16 path) and torch outputs; `tiled` = 200 frames through upstream's `_mlx_decode_single` at chunk 192 / overlap 64, storing windows around the seams and both ends plus total samples and a checksum.
