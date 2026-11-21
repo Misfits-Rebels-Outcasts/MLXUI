@@ -7,7 +7,11 @@ import Testing
 @MainActor
 struct AceStepLanguageTests {
 
+    /// v1 ships exactly five entries (owner ruling, 2026-11-21; do not add or remove any in MC5). The first four send upstream's own `vocal_language` codes (`VALID_LANGUAGES`). "Other" sends
+    /// `unknown`, which is also in upstream's list ("used when language cannot be determined automatically"): the prompt's `# Languages` line then says `unknown` and the model is left to infer
+    /// the language from the lyrics themselves, so "Other" covers every other language upstream supports, with less guidance than a named one.
     @Test func thePickerOffersExactlyTheseFiveWithTheseCodes() {
+        #expect(AceStepRunModel.languages.count == 5)
         let options = AceStepRunModel.languages.map { "\($0.name)=\($0.code)" }
         #expect(options == ["English=en", "Chinese=zh", "German=de", "French=fr", "Other=unknown"], "\(options)")
     }
