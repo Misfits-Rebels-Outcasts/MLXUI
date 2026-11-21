@@ -84,7 +84,7 @@ final class ModelInstallCoordinator {
         } else {
             var card = ModelInstallCard(
                 conversationID: conversationID, toolName: need.toolName,
-                target: ModelInstallOption(id: need.modelID, displayName: need.modelDisplayName, downloadGB: need.downloadGB),
+                target: ModelInstallOption(id: need.modelID, displayName: need.modelDisplayName, downloadGB: need.downloadGB, license: need.license),
                 alternatives: need.alternatives.filter { diskFits($0, installer) }, phase: .offering)
             if let reason = diskRefusal(gb: need.downloadGB, installer) { card.phase = .wontFit(reason) }
             cardID = card.id
@@ -99,7 +99,7 @@ final class ModelInstallCoordinator {
                     card.alternatives.removeAll { $0.id == activeID }
                     if diskFits(previous, installer) { card.alternatives.append(previous) }
                     card.target = known ?? ModelInstallOption(id: activeID, displayName: activeEntry.displayName,
-                                                              downloadGB: activeEntry.downloadSizeGB)
+                                                              downloadGB: activeEntry.downloadSizeGB, license: activeEntry.license)
                 }
                 card.startedDownload = false
                 card.phase = .downloading
@@ -283,8 +283,25 @@ extension ModelInstallCard {
 
     var headline: String { "\(Self.action(forTool: toolName)) needs \(target.displayName)" }
 
-    /// "0.6 GB download · runs on this Mac only".
-    var detail: String { "\(Self.sizeText(target.downloadGB)) download · runs on this Mac only" }
+    /// "0.6 GB download · runs on this Mac only"; with a known licence: "6.3 GB download · MIT · runs on this Mac only".
+    var detail: String {
+        let license = Self.licenseLabel(target.license).map { " · \($0)" } ?? ""
+        return "\(Self.sizeText(target.downloadGB)) download\(license) · runs on this Mac only"
+    }
+
+    /// MC5-T-chat: the licence as one short plain word for an offer. A non-commercial licence (`cc-by-nc-4.0`) reads "non-commercial"; the rest go through the catalog's own mapping ("mit" -> "MIT").
+    /// Taken from the catalog entry's licence string, never hard-coded per model. nil when the entry has none.
+    static func licenseLabel(_ raw: String?) -> String? {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
+        let lower = raw.lowercased()
+        if lower.contains("-nc") || lower.contains("non-commercial") || lower.contains("noncommercial") { return "non-commercial" }
+        return DataNormalizer.normalizeLicense(raw)
+    }
+
+    /// One offered model as a line: "ACE-Step 1.5 · 6.3 GB · MIT", "MusicGen · 2.5 GB · non-commercial" (no licence part when the entry has none).
+    static func offerText(_ option: ModelInstallOption) -> String {
+        ([option.displayName, sizeText(option.downloadGB)] + [licenseLabel(option.license)].compactMap { $0 }).joined(separator: " · ")
+    }
 
     static func sizeText(_ gb: Double) -> String {
         gb < 10 ? String(format: "%.1f GB", max(gb, 0.1)) : String(format: "%.0f GB", gb)

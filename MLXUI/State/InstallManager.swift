@@ -493,7 +493,7 @@ final class InstallManager {
             }
             selected = only
         } else {
-            selected = ModelFileSelector.filesToDownload(siblings: info.siblings.map(\.rfilename))
+            selected = ModelFileSelector.filesToDownload(siblings: info.siblings.map(\.rfilename), forModel: modelId)
         }
         var files = selected.map { HFRemoteFile(filename: $0, size: sizeByName[$0] ?? 0) }
 

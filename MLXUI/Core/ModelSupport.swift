@@ -31,6 +31,7 @@ nonisolated enum ModelSupport {
         // LFM2.5-Audio (voice) → LFMAudioEngine in MP6-3a; the MP6-1 "no runner yet" gap is gone.
         // RIFE 4.25 (interpolate) → RIFEEngine + RIFERunView in RIFE-3/4; the RIFE-1 "no runner yet" gap is gone.
         // FLUX.2 Klein 4B (image) → Flux2KleinModule in MP7-4 (engine MP7-3a…3h); the MP7-2 "no runner yet" gap is gone.
+        // ACE-Step 1.5 (music) → AceStepModule in MC5-3i (engine MC5-3c…3h); the MC5-3b "no runner yet" gap is gone.
     ]
 
     /// WW2-3-7 (owner ruling 2026-10-23; the WW6 "show it, don't fail it" rule): the OS a model's runner needs, shown

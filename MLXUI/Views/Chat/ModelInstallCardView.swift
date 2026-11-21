@@ -53,7 +53,7 @@ struct ModelInstallCardView: View {
                     Button {
                         coordinator.choose(card.id, option: option.id)
                     } label: {
-                        Text("\(option.displayName) · \(ModelInstallCard.sizeText(option.downloadGB))")
+                        Text(ModelInstallCard.offerText(option))
                     }
                 }
                 HStack(spacing: 8) {

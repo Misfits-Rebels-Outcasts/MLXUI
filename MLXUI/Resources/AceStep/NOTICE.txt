@@ -1,0 +1,11 @@
+ACE-Step 1.5 (text to music) — third-party notices
+
+This Stability AI Model is licensed under the Stability AI Community License, Copyright © Stability AI Ltd. All Rights Reserved.
+This notice applies to the VAE component of ACE-Step 1.5 (the audio autoencoder, vae/).
+The licence text is bundled in this app as StabilityAICommunityLicense.txt (Stability AI Community License Agreement, last updated July 5, 2024; from stabilityai/stable-audio-open-1.0 LICENSE.md, repo revision f21265c1e2710b3bd2386596943f0007f55f802e, sha256 d6f6b1a4dce5c852bd6d7d9482d002baf0ccdb71e662250b73be9eec8764ee8d).
+Powered by Stability AI.
+Commercial use by organisations with annual revenue over US $1M may require a Stability AI Enterprise licence for this component.
+
+Qwen3-Embedding-0.6B (the text encoder bundled with ACE-Step 1.5) is licensed under the Apache License, Version 2.0 (Apache-2.0). Copyright Alibaba Cloud / Qwen Team.
+
+ACE-Step 1.5 itself is released by ACE Studio and StepFun under the MIT licence.

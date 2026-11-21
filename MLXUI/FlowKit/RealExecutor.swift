@@ -1277,6 +1277,17 @@ nonisolated struct RealExecutor: FlowExecutor {
                 scale = Int(value)
             }
             // MP7-W: no row label in the sentence; the interpreter wraps a thrown row error as "Row N failed: ...".
+            // MC5-W (SPEC-Q251): an ACE-Step row honours `seed` and `steps` (1...20) only. Everything else the registry stage could be handed is refused by name here,
+            // including `duration` and `lyrics`, which no `StageConfig` field carries (a flow row is a fixed 30 s, instrumental).
+            if let model, AceStepSDK.claimsAceStep(model) {
+                if let setting = ["duration", "lyrics", "width", "height", "scale", "quantize"].first(where: { number($0) != nil }) {
+                    throw FlowSettingRefusal(description:
+                        "ACE-Step 1.5 can't use a \(setting)= setting on a flow row yet; remove it — a flow row makes a fixed 30 s instrumental, and only seed= and steps= (1 to 20) apply.")
+                }
+                if let raw = number("steps"), Int(raw).map({ AceStepRunSettings.stepsRange.contains($0) }) != true {
+                    throw FlowError.invalidSettings(row: path, setting: "steps", detail: "must be a whole number from 1 to 20 — e.g. steps=8")
+                }
+            }
             var quantize: Int?
             if let model, Flux2KleinBooking.isKlein(model) {
                 if let sentence = Flux2KleinSDK.refusal(forRowSetting: { number($0) }, rowLabel: "") {
