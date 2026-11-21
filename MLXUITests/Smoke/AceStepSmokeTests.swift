@@ -134,6 +134,21 @@ struct AceStepSmokeTests {
                                 judge: "French vocal: is it sung in French and understandable? Same settings as the English clip for comparison.")
     }
 
+    // MARK: E4. the English vocal clip at other seeds (REVIEW-only; `MLXUI_SMOKE_ONLY=seeds`)
+
+    /// Does the engine ever sing without the planner LM? The English clip exactly as (e) (caption, lyrics, language en, 30 s, default 8 steps, DCW on) at four more seeds.
+    @Test(.enabled(if: AceStepSmoke.only == "seeds"))
+    func f_englishVocalSeeds() async throws {
+        let dir = try await ModelSmoke.checkpoint(for: AceStepSmoke.hfID)
+        for seed in [UInt64(1), 2, 3, 20_251_106] {
+            let run = try await AceStepSmoke.run(dir: dir, label: "30 s English vocal seed \(seed)", seconds: 30, seed: seed, caption: AceStepSmoke.vocalCaption,
+                                                 lyrics: AceStepSmoke.vocalLyrics, language: "en")
+            AceStepSmoke.oracle("english-seed\(seed)", run.wav, requested: 30, channels: 2)
+            try ModelSmoke.artifact(AceStepSmoke.review, "ace-step-vocal-english-seed\(seed)-30s.wav", data: run.wav,
+                                    judge: "English vocal, no LM, seed \(seed): is there a sung voice, and from when?")
+        }
+    }
+
     // MARK: F. a one-row flow through RealExecutor
 
     @Test(.enabled(if: AceStepSmoke.selected("f")))
