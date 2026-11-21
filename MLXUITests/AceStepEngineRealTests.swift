@@ -50,6 +50,62 @@ struct AceStepEngineRealTests {
         #expect(cosA >= 0.99, "audio cosine \(cosA)")
     }
 
+    /// MC5-T-vocal: the engine golden for BOTH oracle prompts that have stage-a/b/c dumps, in two variants, each with the oracle's injected noise (seed 12345, 10 s, 8 steps):
+    /// V1 injects the oracle's text tensors (as `goldenWithInjectedInputs` does); V2 injects NOTHING of the text side: the engine's own tokenizer + Qwen + text_projector run on the
+    /// request's caption / lyrics / language. Prints `ACESTEP-VOCAL prompt=.. variant=V1|V2 latentsCos=.. audioCos=.. audioMaxAbs=..`. For english_vocal V2 it also prints the request and the
+    /// prompt strings the Qwen sees, and asserts them (strings and token ids) against `Fixtures/MC5/mc5_tokens.json`.
+    @Test(arguments: ["instrumental", "english_vocal"])
+    func engineGoldenBothTextVariants(id: String) async throws {
+        let dir = try #require(AceStepRealLoad.directory)
+        let p = try #require(AceStepTextFixtures.prompts[id])
+        let a = try read(AceStepOracle.dump(id), ["noise", "text.hidden", "text.lyric_embed"])
+        let b = try read(AceStepDiTReal.dump(id), ["sampler.latents_dcw_on"])
+        let c = try read(AceStepVAEReal.dump(id), ["audio.final_peak_normalised"])
+        let noise = try #require(a["noise"])
+        let wantLatents = try #require(b["sampler.latents_dcw_on"])
+        let want = try #require(c["audio.final_peak_normalised"])
+        // Exactly what the Run screen builds for these inputs: lyrics as typed (empty = instrumental), the picker's language code.
+        let request = AceStepRequest(caption: p.caption, lyrics: p.instrumental ? "" : p.lyrics, language: p.language, duration: 10, seed: 12345)
+
+        if id == "english_vocal" {
+            let e = try AceStepTextFixtures.entry(id)
+            let textStr = AceStepPrompt.textString(caption: request.caption, duration: request.duration)
+            let lyricStr = AceStepPrompt.lyricString(lyrics: request.lyrics, language: request.language, instrumental: request.isInstrumental)
+            func esc(_ s: String) -> String { s.replacingOccurrences(of: "\n", with: "\\n") }
+            print("ACESTEP-VOCAL request caption=\(esc(request.caption)) | language=\(request.language) | isInstrumental=\(request.isInstrumental) | duration=\(request.duration) | seed=\(request.seed) | steps=\(request.steps)")
+            print("ACESTEP-VOCAL request lyrics=\(esc(request.lyrics))")
+            print("ACESTEP-VOCAL prompt text_str=\(esc(textStr))")
+            print("ACESTEP-VOCAL prompt lyric_str=\(esc(lyricStr))")
+            #expect(textStr == (e["text_str"] as? String), "text prompt string differs from the oracle's")
+            #expect(lyricStr == (e["lyric_str"] as? String), "lyric prompt string differs from the oracle's")
+            let tokenizer = try await AceStepTokenizer(directory: dir)
+            let textIds = tokenizer.encodeText(caption: request.caption, duration: request.duration)
+            let lyricIds = tokenizer.encodeLyrics(lyrics: request.lyrics, language: request.language, instrumental: request.isInstrumental)
+            print("ACESTEP-VOCAL tokens text=\(textIds.count) lyric=\(lyricIds.count) (oracle \(AceStepTextFixtures.ints(e["text_ids"]).count) / \(AceStepTextFixtures.ints(e["lyric_ids"]).count))")
+            #expect(textIds == AceStepTextFixtures.ints(e["text_ids"]), "text token ids differ from mc5_tokens.json")
+            #expect(lyricIds == AceStepTextFixtures.ints(e["lyric_ids"]), "lyric token ids differ from mc5_tokens.json")
+        }
+
+        for variant in ["V1", "V2"] {
+            let engine: AceStepEngine
+            if variant == "V1" {
+                let hidden = try #require(a["text.hidden"]).asType(.bfloat16), lyric = try #require(a["text.lyric_embed"]).asType(.bfloat16)
+                engine = AceStepEngine(directory: dir, textSource: OracleText(hidden: hidden, lyric: lyric))
+            } else {
+                engine = AceStepEngine(directory: dir)           // the engine's own text side
+            }
+            let result = try await engine.generate(request, noise: noise)
+            let cosL = Self.cosine(result.latents, wantLatents)
+            let got = MLXArray(result.audio.samples, [want.dim(1), 2]).transposed()
+            let cosA = Self.cosine(got, want)
+            let maxAbs = abs(got - want).max().item(Float.self)
+            print(String(format: "ACESTEP-VOCAL prompt=%@ variant=%@ latentsCos=%.5f audioCos=%.5f audioMaxAbs=%.5f", id, variant, cosL, cosA, maxAbs))
+            #expect(result.latents.shape == wantLatents.shape && got.shape == want.shape)
+            #expect(cosL >= 0.99, "\(id) \(variant) final latents cosine \(cosL)")
+            #expect(cosA >= 0.99, "\(id) \(variant) audio cosine \(cosA)")
+        }
+    }
+
     @Test func freeNoiseRunReportsTheFootprint() async throws {
         let dir = try #require(AceStepRealLoad.directory)
         Memory.clearCache()
