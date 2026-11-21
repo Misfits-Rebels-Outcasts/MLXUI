@@ -265,7 +265,8 @@ nonisolated struct ModelToolRunner: Sendable {
                 let ask = ModelInstallNeed(
                     toolName: spec.name, modelDisplayName: shown, modelID: need.id, downloadGB: preflight.totalDownloadGB,
                     alternatives: Self.alternatives(for: spec, excluding: need.id, runtime: runtime),
-                    candidates: Self.candidates(for: spec, excluding: need.id, runtime: runtime))
+                    candidates: Self.candidates(for: spec, excluding: need.id, runtime: runtime),
+                    license: need.license)
                 guard await host.installRequest(ask) else {
                     let sentence = ModelToolHost.declineSentence(for: shown)
                     host.turn.markDeclined(tool: spec.name, sentence: sentence)
@@ -338,7 +339,7 @@ nonisolated struct ModelToolRunner: Sendable {
             .filter { $0.id != modelID && !runtime.installedModelIDs.contains($0.id)
                 && CapabilityResolver.fits($0, totalRAMGB: runtime.totalRAMGB) }
             .prefix(limit)
-            .map { ModelInstallOption(id: $0.id, displayName: TaskModels.displayName(for: $0), downloadGB: $0.downloadSizeGB) }
+            .map { ModelInstallOption(id: $0.id, displayName: TaskModels.displayName(for: $0), downloadGB: $0.downloadSizeGB, license: $0.license) }
     }
 
     /// MT4-7-FIX-4 (D): every not-installed candidate of the tool, any size, in preference order.
@@ -347,7 +348,7 @@ nonisolated struct ModelToolRunner: Sendable {
         return CapabilityResolver.orderedCandidates(task: task, kinds: spec.kinds, catalog: runtime.catalog,
                                                     claimableModelIDs: runtime.claimableModelIDs)
             .filter { $0.id != modelID && !runtime.installedModelIDs.contains($0.id) }
-            .map { ModelInstallOption(id: $0.id, displayName: TaskModels.displayName(for: $0), downloadGB: $0.downloadSizeGB) }
+            .map { ModelInstallOption(id: $0.id, displayName: TaskModels.displayName(for: $0), downloadGB: $0.downloadSizeGB, license: $0.license) }
     }
 
     // MARK: - Result

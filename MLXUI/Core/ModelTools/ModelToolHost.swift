@@ -20,6 +20,8 @@ nonisolated struct ModelInstallNeed: Sendable, Equatable {
     /// MT4-7-FIX-4 (D): every not-installed candidate for the same tool, fitting or not, in preference order. The card looks here
     /// for a model that is already downloading (from Browse) and joins it instead of proposing another.
     var candidates: [ModelInstallOption] = []
+    /// MC5-T-chat: the model's licence string as the catalog entry carries it (`ModelEntry.license`); shown on the card as `ModelInstallCard.licenseLabel`. nil = not shown.
+    var license: String? = nil
 }
 
 /// One model the install card can offer (the need's own, or an alternative).
@@ -28,6 +30,8 @@ nonisolated struct ModelInstallOption: Sendable, Equatable, Identifiable {
     let id: String
     let displayName: String
     let downloadGB: Double
+    /// MC5-T-chat: the catalog entry's licence string (nil = not shown), so an offer says what the user is agreeing to: "MIT", "non-commercial".
+    var license: String? = nil
 }
 
 /// MT4-3: what one turn remembers about the installs it was refused (plan §3.8: "the policy then drops that tool for the
