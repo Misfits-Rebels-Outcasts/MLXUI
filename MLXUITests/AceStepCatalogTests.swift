@@ -1,3 +1,4 @@
+import CryptoKit
 import Testing
 import Foundation
 @testable import MLXUI
@@ -99,15 +100,78 @@ struct AceStepCatalogTests {
         let text = ((e.description ?? "") + "\n" + (e.summary ?? "")).lowercased()
         #expect(!text.isEmpty)
         for banned in ["language model", " lm ", "lm-", "planner", "cover", "edit", "repaint", "extract", "lego",
-                       "commercial", "50+", "vocal-to", "chain-of-thought", "10 minute", "10-minute"] {
+                       "50+", "vocal-to", "chain-of-thought", "10 minute", "10-minute"] {
             #expect(!text.contains(banned), "About text must not mention '\(banned)'")
         }
         #expect(text.contains("qwen3-embedding-0.6b"))
         #expect(text.contains("apache-2.0"))
         #expect(!text.contains("vae licen"))
         #expect(!text.contains("stable audio"))
-        #expect(!text.contains("stability"))
+        // MC5-L (owner, 2026-11-21) forces two changes here: "stability" and "commercial" were banned before the VAE
+        // was ruled to ship under the Stability AI Community License. They are now REQUIRED (see the notice test below),
+        // and only the exact notice sentences may use them.
+        let withoutNotice = text.replacingOccurrences(of: Self.enterpriseNote.lowercased(), with: "")
+        #expect(!withoutNotice.contains("commercial"), "commercial appears only inside the enterprise note")
         #expect(text.contains("mit"))
+    }
+
+    static let stabilityLine = "This Stability AI Model is licensed under the Stability AI Community License, Copyright © Stability AI Ltd. All Rights Reserved."
+    static let enterpriseNote = "Commercial use by organisations with annual revenue over US $1M may require a Stability AI Enterprise licence for this component."
+
+    private func bundledResource(_ name: String) throws -> Data {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        return try Data(contentsOf: root.appendingPathComponent("MLXUI/Resources/AceStep/\(name)"))
+    }
+
+    /// MC5-L: the catalog licence stays mit; the notice, About text and byte-pinned licence text carry the Stability terms.
+    @Test func stabilityNoticeAndLicenseTextAreShipped() throws {
+        let e = try entry()
+        #expect(e.license == "mit")
+        let notice = try #require(String(data: bundledResource("NOTICE.txt"), encoding: .utf8))
+        #expect(notice.contains(Self.stabilityLine))
+        #expect(notice.contains("applies to the VAE component of ACE-Step 1.5"))
+        #expect(notice.contains("Apache License, Version 2.0 (Apache-2.0). Copyright Alibaba Cloud / Qwen Team."))
+        #expect(notice.contains("Qwen3-Embedding-0.6B"))
+        let license = try bundledResource("StabilityAICommunityLicense.txt")
+        #expect(license.count == 11852)
+        #expect(SHA256.hash(data: license).map { String(format: "%02x", $0) }.joined()
+                == "d6f6b1a4dce5c852bd6d7d9482d002baf0ccdb71e662250b73be9eec8764ee8d", "byte-for-byte pin")
+        #expect(notice.contains("f21265c1e2710b3bd2386596943f0007f55f802e") && notice.contains("d6f6b1a4dce5c852"), "provenance recorded")
+        for text in [e.description ?? "", AceStepModule.descriptor.notes] {
+            #expect(text.contains("Powered by Stability AI"))
+            #expect(text.contains(Self.enterpriseNote))
+        }
+        #expect(AceStepModule.descriptor.notes.contains("Powered by Stability AI"))
+    }
+
+    /// The bundle (both targets) carries the same files when the test host has them.
+    @Test func noticeResourcesAreInTheAppBundle() {
+        for name in ["NOTICE", "StabilityAICommunityLicense"] {
+            #expect(Bundle.main.url(forResource: name, withExtension: "txt") != nil
+                    || Bundle(for: BundleToken.self).url(forResource: name, withExtension: "txt") != nil, "\(name).txt must be bundled")
+        }
+    }
+    private final class BundleToken {}
+
+    /// MC5-T-notice item 3: the model-page disclosure shows the BUNDLED files verbatim, collapsed by default, on ACE-Step only.
+    @Test func licenceNoticesDisclosureShowsTheBundledFiles() throws {
+        let bundle = Bundle(for: BundleToken.self)
+        let host = Bundle.main
+        let b = host.url(forResource: "NOTICE", withExtension: "txt") != nil ? host : bundle
+        let sections = AceStepLicenceNotices.sections(bundle: b)
+        #expect(sections.map(\.title) == ["Notice", "Stability AI Community License"])
+        let noticeBytes = try bundledResource("NOTICE.txt")
+        let licenseBytes = try bundledResource("StabilityAICommunityLicense.txt")
+        #expect(sections[0].text == String(data: noticeBytes, encoding: .utf8))
+        #expect(sections[1].text == String(data: licenseBytes, encoding: .utf8))
+        #expect(SHA256.hash(data: Data(sections[1].text.utf8)).map { String(format: "%02x", $0) }.joined()
+                == "d6f6b1a4dce5c852bd6d7d9482d002baf0ccdb71e662250b73be9eec8764ee8d")
+        #expect(sections[0].text.contains(Self.stabilityLine))
+        #expect(sections[0].text.contains("Apache License, Version 2.0 (Apache-2.0)"), "the Qwen Apache-2.0 notice is visibly present")
+        #expect(AceStepLicenceNotices.expandedByDefault == false)
+        #expect(AceStepLicenceNotices.applies(toModelID: Self.hfID))
+        #expect(!AceStepLicenceNotices.applies(toModelID: "jasonvassallo/mlx-musicgen-small"))
+        #expect(AceStepLicenceNotices.load("no-such-file", bundle: b) == nil)
     }
 
     /// MC5-T-vocalsui (owner, 2026-11-21): vocals ship as EXPERIMENTAL, so nothing user-visible about the model may claim or imply voice. The user-visible text is the entry's description, summary, display
