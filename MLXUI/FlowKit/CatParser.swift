@@ -30,7 +30,7 @@ nonisolated enum CatParser {
         "Store Query", "Store Read", "Store Write",
         "Set Field", "Append Row", "Merge Record",
         "Extract Structured", "Extract Frame", "Extract Audio",
-        "Describe Image", "Overlay Text",
+        "Describe Image", "Overlay Text", "Read Barcode", "Make Barcode",
         "Generate Image",
         "Edit Image", "Instruct Edit",
         "Inpaint", "Upscale",

@@ -11,9 +11,9 @@ struct CatFlowTaskCatalogTests {
     // MARK: - Counts
 
     @Test func catalogCounts() {
-        #expect(TaskCatalog.catalog.count == 109)  // ER-7: + Save File, Replace; ER-8: + Make PDF
+        #expect(TaskCatalog.catalog.count == 111)  // ER-7: + Save File, Replace; ER-8: + Make PDF; ER-9: + Read/Make Barcode
         #expect(TaskCatalog.deciderTasks.count == 6)
-        #expect(TaskCatalog.allTasks().count == 115)
+        #expect(TaskCatalog.allTasks().count == 117)
     }
 
     @Test func noDuplicateTaskNames() {
@@ -27,7 +27,7 @@ struct CatFlowTaskCatalogTests {
         let histogram = Dictionary(grouping: TaskCatalog.allTasks(), by: \.taskClass)
             .mapValues(\.count)
         #expect(histogram == [
-            .instant: 58,  // ER-7: + Save File, Replace; ER-8: + Make PDF
+            .instant: 60,  // ER-7: + Save File, Replace; ER-8: + Make PDF; ER-9: + 2 barcodes
              .model: 44, .net: 5, .trigger: 3,
             .human: 2, .staged: 2, .agent: 1,
         ])

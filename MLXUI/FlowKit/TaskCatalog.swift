@@ -207,6 +207,8 @@ nonisolated enum TaskCatalog {
         TaskDescriptor("Convert", t(.image), t(.image), .instant, .tool, "tools.media.convert"),
         TaskDescriptor("Watermark", t(.image), t(.image), .instant, .tool, "tools.media.watermark"),
         TaskDescriptor("Overlay Text", t(.image), t(.image), .instant, .tool, "tools.media.overlay_text"),
+        TaskDescriptor("Read Barcode", t(.image), t(.text), .instant, .tool, "tools.barcode.read_barcode"),  // SPEC-Q256
+        TaskDescriptor("Make Barcode", t(.text), t(.image), .instant, .tool, "tools.barcode.make_barcode"),  // SPEC-Q257
         TaskDescriptor("Contact Sheet", .tupleOf([.image, .text]), t(.image), .instant, .tool, "tools.media.contact_sheet"),
 
         // -- §5 Search and retrieval (local) --
@@ -283,7 +285,7 @@ nonisolated enum TaskFamilies {
                             "Score", "Judge", "Think", "Improvise"],
         "Audio, image, video": ["Transcribe", "Speak", "Describe Image", "OCR", "Extract Frame",
                                 "Extract Audio", "Trim", "Join Video", "Resize", "Crop",
-                                "Convert", "Watermark", "Overlay Text", "Contact Sheet",
+                                "Convert", "Watermark", "Overlay Text", "Read Barcode", "Make Barcode", "Contact Sheet",
                                 "Generate Image", "Edit Image", "Instruct Edit", "Inpaint",
                                 "Upscale", "Detect Edges", "Estimate Depth", "Detect Pose",
                                 "Segment", "Init Latent", "Encode Latent", "Decode Latent",

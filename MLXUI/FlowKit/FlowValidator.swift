@@ -1187,6 +1187,16 @@ extension FlowValidator {
                 issues.append(FlowIssue(row: path, code: "E718", message: (try? ErrorCatalog.fill(
                     code: "E718", values: ["n": path, "detail": e.detail], isV08: true)) ?? ""))
             } catch {}
+        case "Read Barcode":  // SPEC-Q256
+            do { _ = try BarcodeSettings.parseRead(row.settings) } catch let e as ReadBarcodeSettingsError {
+                issues.append(FlowIssue(row: path, code: "E720", message: (try? ErrorCatalog.fill(
+                    code: "E720", values: ["n": path, "detail": e.detail], isV08: true)) ?? ""))
+            } catch {}
+        case "Make Barcode":  // SPEC-Q257
+            do { _ = try BarcodeSettings.parseMake(row.settings) } catch let e as MakeBarcodeSettingsError {
+                issues.append(FlowIssue(row: path, code: "E721", message: (try? ErrorCatalog.fill(
+                    code: "E721", values: ["n": path, "detail": e.detail], isV08: true)) ?? ""))
+            } catch {}
         case "Make PDF":  // SPEC-Q255
             do { _ = try MakePdfSettings.parse(row.settings) } catch let e as MakePdfSettingsError {
                 issues.append(FlowIssue(row: path, code: "E719", message: (try? ErrorCatalog.fill(

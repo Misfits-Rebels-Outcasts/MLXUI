@@ -34,7 +34,7 @@ nonisolated enum TaskAvailability {
         "Save Audio", "Save Text", "Save Image", "Save Images", "Save Video", "Save File", "Make PDF", "Save Context",  // SPEC-Q253
         "Store Index", "Retrieve", "Keyword Search",
         "Count Context", "Calculate", "Compare", "Range", "Chart",
-        "Resize", "Crop", "Convert", "Watermark", "Overlay Text", "Contact Sheet",
+        "Resize", "Crop", "Convert", "Watermark", "Overlay Text", "Read Barcode", "Make Barcode", "Contact Sheet",
         "Extract Frame", "Extract Audio", "Trim", "Mux", "Detect Edges", "Detect Pose",
         "Join Video",
         "Split", "Filter", "Dedupe", "Sort", "Extract", "Replace", "Count", "Join Text",  // SPEC-Q254
