@@ -384,6 +384,25 @@ A 3B-parameter upscaling model, added as a new Browse entry.
 - **Faster, cheaper installs** — if two catalog entries share the same underlying model
   files, installing one no longer re-downloads it for the other
 
+### ACE-Step 1.5 and Qwen3-VL Embedding 2B
+
+**ACE-Step 1.5** is now the default for Generate Sound. Describe the music you want and it makes
+48 kHz stereo audio on your Mac with MLX, instrumental by default (vocals are an experimental
+option; lyrics can be German, French and a few other languages). It is a 6.3 GB download and needs
+about 11 GB of RAM while generating. MIT licence, with the audio VAE under the Stability AI
+Community License (the model page shows the notice). Ask for it in Chat ("make a sound of guitar in
+rain", "rain sounds", "ambient audio for studying") or run it from AI Workflows. A chat or flow
+makes a fixed ~30 second clip for now, and Chat says so when you ask for a different length.
+MusicGen-small stays in the catalog, labelled non-commercial.
+
+**Qwen3-VL Embedding 2B** turns text, an image, or an image plus text into one 2048-dimension
+vector in a shared space, so a sentence can find a photo or a page screenshot without OCR first.
+4-bit, 1.8 GB download, Apache-2.0. Its vectors don't mix with other embedders, so an index built
+with it has to be rebuilt when you switch away and back.
+
+Also fixed: a Metal API Validation assertion at the last step of music generation, and the same
+single-index pattern in several image, OCR and audio models.
+
 ### MusicGen — type a description, get music back
 
 MusicGen-small is now in the catalog. Type a musical description (e.g. "happy rock with drums"),
@@ -504,16 +523,16 @@ Every model listed here is downloadable and has a working Run UI.
 | **OCR** (4) | PaddleOCR-VL, DeepSeek-OCR-2, dots.ocr, olmOCR 2 | 255M – 7B |
 | **Speech-to-Text** | Whisper tiny/small/large-v3, Voxtral-Mini, **Parakeet TDT 0.6B v3**, **Qwen3-ASR 1.7B** | 37M – 1.7B |
 | **Text-to-Speech** (4) | Kokoro, Qwen3-TTS, Chatterbox, Orpheus | 82M – 3B |
-| **Embeddings** (4) | all-MiniLM-L6, embeddinggemma, ModernBERT-embed, bge-m3 | 18M – 568M |
+| **Embeddings** (5) | all-MiniLM-L6, embeddinggemma, ModernBERT-embed, bge-m3, **Qwen3-VL Embedding 2B** (text + images) | 18M – 2B |
 | **Image Generation** | FLUX.1-Lite-8B, SDXL-Turbo, **FLUX.2 Klein 4B** | 3.5B – 8B |
 | **Audio** | **LFM2.5-Audio 1.5B** (voice), **DeepFilterNet 3** (cleanup), **Sortformer 4spk v2.1** (diarization), **SAM-Audio Base** (sound isolation) | — |
 | **Translation** (1) | **TranslateGemma 4B** | 4B |
 | **Depth** (1) | **Depth Anything V2 Small** | small |
 | **Video** | **RIFE 4.25** (frame interpolation) | small |
-| **Music Generation** (1) | **MusicGen-small** | 615M (float32, ~2.5 GB) |
+| **Music Generation** (2) | **ACE-Step 1.5** (default, 48 kHz stereo), MusicGen-small (non-commercial) | 6.3 GB / ~2.5 GB download |
 | **Decision** (3) | **Laya 0.4B**, **CLM 8B**, **Clef Flash** | 0.4B – 9B |
 
-The bundled `browser.json` catalog currently lists **57 models**. New models
+The bundled `browser.json` catalog currently lists **59 models**. New models
 and Run UIs are added with every release.
 
 ### Engine coverage
@@ -529,9 +548,11 @@ and Run UIs are added with every release.
 | Vision | VLM (Gemma, Qwen VL, LFM2-VL) | ✅ | ✅ | ✅ | MLXVLM |
 | Vision | OCR (PaddleOCR, DeepSeek-OCR, dots.ocr, olmOCR) | ✅ | ✅ | ✅ | MLXVLM + native |
 | Embeddings | Text embeddings | ✅ | ✅ | ✅ | MLX + ModernBERT |
+| Embeddings | Multimodal (Qwen3-VL Embedding 2B: text, image, or both) | ✅ | ✅ | ✅ | Native MLX |
 | Image | Diffusion (Flux) | ✅ | ✅ | ✅ | Flux (native MLX) |
 | Image | Diffusion (SDXL-Turbo) | ✅ | ✅ | ✅ | SDXL-Turbo (native MLX) |
 | Audio | Music generation (MusicGen) | ✅ | ✅ | ✅ | MusicGen (native MLX) |
+| Audio | Music generation (ACE-Step 1.5) | ✅ | ✅ | ✅ | Native MLX (DiT + VAE) |
 | Speech | ASR — Parakeet, Qwen3-ASR | ✅ | ✅ | ✅ | Native MLX |
 | Speech | Voice chat / STT / TTS — LFM2.5-Audio | ✅ | ✅ | ✅ | Native MLX |
 | Audio | Cleanup (DeepFilterNet 3) · diarization (Sortformer) | ✅ | ✅ | ✅ | mlx-audio-swift |
@@ -601,7 +622,7 @@ Select your preferred scheme, pick **My Mac**, and press ⌘R.
 
 ### First run
 
-1. The app opens with a catalog of 57 models organized by category
+1. The app opens with a catalog of 59 models organized by category
 2. Browse or search with ⌘K
 3. Click **Install** on any model — it downloads from Hugging Face
 4. Once installed, click **Run** to open the model's dedicated interface
@@ -641,8 +662,8 @@ In short:
 
 - **Image generation Run UI** (SD 2.1, etc.) — Flux and SDXL-Turbo are now done; other
   diffusion architectures still need a prompt → image Run view
-- **More music generation models** — MusicGen-small is done; medium and large variants need
-  catalog entries and engine config updates
+- **More music generation models** — ACE-Step 1.5 and MusicGen-small are done; a duration setting
+  for ACE-Step waits on a spec ruling (SPEC-Q251)
 - **Pipeline stages** — wire up existing modules into longer chains (e.g. OCR →
   summarize)
 - **Model architecture ports** — PaddleOCR, DeepSeek-OCR, dots.ocr (see
@@ -666,7 +687,7 @@ In short:
 ## Roadmap
 
 ### Done
-- [x] Browse, filter, and compare 57 models
+- [x] Browse, filter, and compare 59 models
 - [x] Hardware-aware RAM/bandwidth filtering
 - [x] One-click install from Hugging Face with progress tracking
 - [x] Gated-repo auth flow (Hugging Face token via Keychain)
@@ -717,6 +738,7 @@ In short:
 - [x] Chat as the Home screen, with model tools (transcribe, OCR, speak, translate, image, depth,
       music), Apple Intelligence routing and Save as workflow
 - [x] Five more Basic gallery flows (18 in all); corrected catalog sizes with guard tests
+- [x] ACE-Step 1.5 (default music generation) and Qwen3-VL Embedding 2B (text + image embeddings)
 
 ### In progress
 - [ ] Local Server: MCP and served flows, then embeddings/audio endpoints and LAN access
@@ -725,7 +747,7 @@ In short:
 
 ### Up for grabs
 - [ ] Image generation Run UI (SD 2.1, etc.)
-- [ ] Additional music generation models (MusicGen-medium, MusicGen-large)
+- [ ] ACE-Step clip length setting (waits on SPEC-Q251); MusicGen-medium and large
 - [ ] Model comparison benchmark runner
 - [ ] Export pipeline as standalone app
 - [ ] Architecture ports (PaddleOCR, DeepSeek-OCR, dots.ocr — flagged in
