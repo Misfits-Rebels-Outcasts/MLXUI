@@ -245,6 +245,8 @@ nonisolated enum TaskCatalog {
         TaskDescriptor("Read Context", t(.file), t(.context), .instant, .tool, "tools.context.read_context"),
         TaskDescriptor("Count Context", t(.context), t(.text), .instant, .tool, "tools.context.count_context"),
         TaskDescriptor("Stage Send", t(.text), t(.status), .staged, .tool, "tools.outbox.stage_send"),
+        // SPEC-Q258 (ER-11, owner ruling R8): the first staged effect that is not a message; Python's catalog order (Send, Print, Post).
+        TaskDescriptor("Stage Print", .unionOf([.file, .image]), t(.status), .staged, .tool, "tools.outbox.stage_print"),
         TaskDescriptor("Stage Post", t(.text), t(.status), .staged, .tool, "tools.outbox.stage_post"),
 
         // -- §12 v0.7 additions: triggers --
@@ -300,7 +302,7 @@ nonisolated enum TaskFamilies {
         "Networked tools": ["Web Search", "Web Fetch", "Fetch Feed", "Download File", "HTTP Get"],
         "Humans": ["Ask Human", "Human Input"],
         "Context": ["Save Context", "Read Context", "Count Context"],
-        "Staged effects": ["Stage Send", "Stage Post"],
+        "Staged effects": ["Stage Send", "Stage Post", "Stage Print"],  // SPEC-Q258
         "Triggers": ["On File", "On Schedule", "On Flow"],
         "Stores": ["Store Query", "Store Read", "Store Write", "Set Field", "Append Row", "Merge Record"],
         "Model space": ["Load Checkpoint", "Blend", "Bake LoRA", "Pin Model"],

@@ -439,6 +439,9 @@ struct FlowListView: View {
     /// Whether the user confirmed they want to delete this flow (user flows only).
     @State private var flowPendingRemoval = false
 
+    /// Bumped after a print approval so `outboxDisclosure` lists the entries again (SPEC-Q258).
+    @State private var outboxRevision = 0
+
     private func selectedRowTitle(_ doc: FlowDocument) -> String {
         guard let id = session.selectedRowID,
               let row = doc.rows.first(where: { $0.id == id }) else { return "" }
@@ -448,10 +451,11 @@ struct FlowListView: View {
     /// CFM-R12-8: the flow's pending staged effects. Nothing sends — the whole point is that
     /// a person reads each entry before it goes anywhere (which in this version is nowhere).
     private var outboxDisclosure: some View {
+        _ = outboxRevision  // re-read the entries after a print approval changes them
         let entries = OutboxStore.entries(workspace: flowWorkspace, flowID: locationID)
         return DisclosureGroup {
             if entries.isEmpty {
-                Text("No pending entries — a Stage Send / Stage Post row queues one here.")
+                Text("No pending entries — a Stage Send / Stage Post / Stage Print row queues one here.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -472,6 +476,23 @@ struct FlowListView: View {
                         Text("staged \(entry.stagedAt)")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                        // SPEC-Q258 (ER-11, owner ruling R8): approving a print entry opens the standard macOS print panel. The entry
+                        // is marked committed only if the person completes the print; Cancel leaves it pending.
+                        if entry.kind == "print" {
+                            if let error = entry.lastError {
+                                Text("Last attempt failed: \(error)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.red)
+                            }
+                            Button("Print…", systemImage: "printer") {
+                                let outbox = OutboxStore.directory(workspace: flowWorkspace, flowID: locationID)
+                                Task {
+                                    _ = await PrintOutbox.approve(id: entry.id, outbox: outbox, presenter: SystemPrintPresenter())
+                                    outboxRevision += 1
+                                }
+                            }
+                            .controlSize(.small)
+                        }
                     }
                     .padding(.vertical, 4)
                 }

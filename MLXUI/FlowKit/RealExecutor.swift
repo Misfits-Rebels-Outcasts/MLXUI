@@ -289,6 +289,14 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// CFM-R12-8: stage a Send/Post row into the flow's outbox (the only staged tasks). The
     /// interpreter reads `lastStaged` for the `effect_staged` event.
     private func runStaged(row: Row, inputs: [Asset], path: String) async throws -> Asset {
+        // SPEC-Q258 (ER-11): a print entry carries its own stored copy of one PDF or image; nothing prints here (approval is the
+        // outbox's print panel). The id is the content's, so the same file staged twice is one pending entry.
+        if row.task == "Stage Print" {
+            let result = try StagePrintTool.stage(settings: row.settings, inputs: inputs, path: path,
+                                                  workspace: workspace, flowID: flowID)
+            stagedBox.staged = (result.id, "print", result.summary)
+            return Asset(items: [Item(kind: .status, value: result.status, path: nil, sourceText: nil)])
+        }
         let kind: String
         switch row.task {
         case "Stage Send": kind = "send"

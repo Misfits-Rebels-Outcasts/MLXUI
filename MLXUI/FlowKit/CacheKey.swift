@@ -25,6 +25,7 @@ nonisolated enum CacheKey {
         "Save File",  // SPEC-Q253: a fixed-destination write, same reasoning as the rest of this set.
         "Save Context", "Store Write", "Ask Human", "Human Input",
         "Stage Send", "Stage Post", "Download File", "Improvise",
+        "Stage Print",  // SPEC-Q258: a print entry is queued on every activation, too.
     ]
 
     // MARK: - Canonical settings (whitespace-insensitive)

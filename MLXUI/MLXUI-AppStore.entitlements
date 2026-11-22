@@ -8,6 +8,9 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- Stage Print approval opens the standard macOS print panel (SPEC-Q258, ER-11). Owner ruling R10, 2026-11-22: the only entitlement change. -->
+	<key>com.apple.security.print</key>
+	<true/>
 	<!-- LFM2.5-Audio hold-to-talk (MP6-3b). Owner ruling (Boo, 2026-10-27). The prompt is asked on the first hold, never at launch. -->
 	<key>com.apple.security.device.audio-input</key>
 	<true/>

@@ -1193,6 +1193,11 @@ extension FlowValidator {
                 issues.append(FlowIssue(row: path, code: code, message: (try? ErrorCatalog.fill(
                     code: code, values: ["n": path, "detail": e.detail], isV08: true)) ?? ""))
             } catch {}
+        case "Stage Print":  // SPEC-Q258
+            do { try StagePrintTool.parseSettings(row.settings) } catch let e as StagePrintSettingsError {
+                issues.append(FlowIssue(row: path, code: "E722", message: (try? ErrorCatalog.fill(
+                    code: "E722", values: ["n": path, "detail": e.detail], isV08: true)) ?? ""))
+            } catch {}
         case "Read Barcode":  // SPEC-Q256
             do { _ = try BarcodeSettings.parseRead(row.settings) } catch let e as ReadBarcodeSettingsError {
                 issues.append(FlowIssue(row: path, code: "E720", message: (try? ErrorCatalog.fill(
@@ -1996,6 +2001,7 @@ extension FlowValidator {
         "On Flow": "a pipeline is invoked, never armed — a trigger row is row 1 of a flow",
         "Stage Send": "committing an outbound effect is a human decision at flow level",
         "Stage Post": "committing an outbound effect is a human decision at flow level",
+        "Stage Print": "committing an outbound effect is a human decision at flow level",  // SPEC-Q258
     ]
 
     static func shapeTouchesModel(_ shapes: [Shape]) -> Bool {

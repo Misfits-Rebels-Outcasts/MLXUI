@@ -123,7 +123,7 @@ struct CatFlowCacheKeyTests {
         #expect(CacheKey.neverCache == [
             "Ask Human", "Download File", "Human Input", "Improvise",
             "Save Audio", "Save Context", "Save File", "Save Image", "Save Images", "Save Text", "Save Video",
-            "Stage Post", "Stage Send", "Store Index", "Store Write",
+            "Stage Post", "Stage Print", "Stage Send", "Store Index", "Store Write",  // ER-11: Stage Print (SPEC-Q258)
         ])
     }
 

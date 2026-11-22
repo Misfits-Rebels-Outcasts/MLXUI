@@ -44,7 +44,7 @@ nonisolated enum CatParser {
         "Denoise",
         "Split Sigmas", "KSamplerSelect", "Denoise Step", "Run Shell",
         "Ask Human", "Human Input", "Save Context", "Read Context", "Count Context",
-        "Stage Send", "Stage Post", "On File", "On Schedule", "On Flow",
+        "Stage Send", "Stage Post", "Stage Print", "On File", "On Schedule", "On Flow",
         // single-word tasks
         "Transcribe", "Translate", "Summarize", "Rewrite", "Answer", "Ask",
         "Title", "Critique", "Verify", "Revise", "Merge", "Draft",
