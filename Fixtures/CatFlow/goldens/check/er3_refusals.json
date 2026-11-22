@@ -1,0 +1,136 @@
+{
+  "cases": [
+    {
+      "name": "read_barcode_type_maxicode",
+      "flow": "mlxflow 0.8\n1. Read Image  label.png\n2. Read Barcode  type=maxicode\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E720",
+          "message": "Row 2's `Read Barcode` has `type=maxicode` -- the types are any, qr, code128, ean13, ean8, upca, pdf417, datamatrix, aztec; use one of them."
+        }
+      ]
+    },
+    {
+      "name": "read_barcode_unknown_setting",
+      "flow": "mlxflow 0.8\n1. Read Image  label.png\n2. Read Barcode  type=qr; rotate=yes\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E720",
+          "message": "Row 2's `Read Barcode` doesn't know `rotate=` -- its settings are `type=` (any, qr, code128, ean13, ean8, upca, pdf417, datamatrix, aztec); remove `rotate=`."
+        }
+      ]
+    },
+    {
+      "name": "read_barcode_bare_value",
+      "flow": "mlxflow 0.8\n1. Read Image  label.png\n2. Read Barcode  qr\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E720",
+          "message": "Row 2's `Read Barcode` doesn't take the bare value `qr` -- its settings are `type=` (any, qr, code128, ean13, ean8, upca, pdf417, datamatrix, aztec)."
+        }
+      ]
+    },
+    {
+      "name": "read_barcode_empty_type",
+      "flow": "mlxflow 0.8\n1. Read Image  label.png\n2. Read Barcode  type=\"\"\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E720",
+          "message": "Row 2's `Read Barcode` has `type=` -- the types are any, qr, code128, ean13, ean8, upca, pdf417, datamatrix, aztec; use one of them."
+        }
+      ]
+    },
+    {
+      "name": "make_barcode_type_ean13",
+      "flow": "mlxflow 0.8\n1. Read Text  code.txt\n2. Make Barcode  type=ean13\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E721",
+          "message": "Row 2's `Make Barcode` has `type=ean13` -- EAN and UPC can be read but not made in v1; use `qr` or `code128`."
+        }
+      ]
+    },
+    {
+      "name": "make_barcode_type_pdf417",
+      "flow": "mlxflow 0.8\n1. Read Text  code.txt\n2. Make Barcode  type=pdf417\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E721",
+          "message": "Row 2's `Make Barcode` has `type=pdf417` -- the types are qr and code128; use one of them."
+        }
+      ]
+    },
+    {
+      "name": "make_barcode_scale_zero",
+      "flow": "mlxflow 0.8\n1. Read Text  code.txt\n2. Make Barcode  scale=0\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E721",
+          "message": "Row 2's `Make Barcode` has `scale=0` -- scale is a whole number of pixels per module from 1 to 64."
+        }
+      ]
+    },
+    {
+      "name": "make_barcode_scale_65",
+      "flow": "mlxflow 0.8\n1. Read Text  code.txt\n2. Make Barcode  scale=65\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E721",
+          "message": "Row 2's `Make Barcode` has `scale=65` -- scale is a whole number of pixels per module from 1 to 64."
+        }
+      ]
+    },
+    {
+      "name": "make_barcode_scale_text",
+      "flow": "mlxflow 0.8\n1. Read Text  code.txt\n2. Make Barcode  scale=big\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E721",
+          "message": "Row 2's `Make Barcode` has `scale=big` -- scale is a whole number of pixels per module from 1 to 64."
+        }
+      ]
+    },
+    {
+      "name": "make_barcode_scale_negative",
+      "flow": "mlxflow 0.8\n1. Read Text  code.txt\n2. Make Barcode  scale=-4\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E721",
+          "message": "Row 2's `Make Barcode` has `scale=-4` -- scale is a whole number of pixels per module from 1 to 64."
+        }
+      ]
+    },
+    {
+      "name": "make_barcode_unknown_setting",
+      "flow": "mlxflow 0.8\n1. Read Text  code.txt\n2. Make Barcode  type=qr; ec=H\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E721",
+          "message": "Row 2's `Make Barcode` doesn't know `ec=` -- its settings are `type=qr|code128` and `scale=1-64`; remove `ec=`."
+        }
+      ]
+    },
+    {
+      "name": "make_barcode_bare_value",
+      "flow": "mlxflow 0.8\n1. Read Text  code.txt\n2. Make Barcode  qr\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E721",
+          "message": "Row 2's `Make Barcode` doesn't take the bare value `qr` -- its settings are `type=qr|code128` and `scale=1-64`."
+        }
+      ]
+    }
+  ]
+}

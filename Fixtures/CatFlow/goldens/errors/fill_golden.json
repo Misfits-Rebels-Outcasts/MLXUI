@@ -1346,6 +1346,78 @@
   "expected": "`presets:` is pipeline-only — a named settings bundle lives inside a `.catpipeline`, never in a `.cat` or a `.transform`."
  },
  {
+  "code": "E717",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "detail": "‹detail›"
+  },
+  "expected": "Row ‹n›'s `Save File` ‹detail›."
+ },
+ {
+  "code": "E718",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "detail": "‹detail›"
+  },
+  "expected": "Row ‹n›'s `Replace` ‹detail›."
+ },
+ {
+  "code": "E719",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "detail": "‹detail›"
+  },
+  "expected": "Row ‹n›'s `Make PDF` ‹detail›."
+ },
+ {
+  "code": "E720",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "detail": "‹detail›"
+  },
+  "expected": "Row ‹n›'s `Read Barcode` ‹detail›."
+ },
+ {
+  "code": "E721",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "detail": "‹detail›"
+  },
+  "expected": "Row ‹n›'s `Make Barcode` ‹detail›."
+ },
+ {
+  "code": "E722",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "detail": "‹detail›"
+  },
+  "expected": "Row ‹n›'s `Stage Print` ‹detail›."
+ },
+ {
+  "code": "E723",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "detail": "‹detail›"
+  },
+  "expected": "Row ‹n›'s `Identify Speakers` ‹detail›."
+ },
+ {
+  "code": "E724",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "detail": "‹detail›"
+  },
+  "expected": "Row ‹n›'s `Clean Audio` ‹detail›."
+ },
+ {
   "code": "E801",
   "catalog": "v08",
   "values": {

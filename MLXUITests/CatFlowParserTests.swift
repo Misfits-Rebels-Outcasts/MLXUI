@@ -27,14 +27,14 @@ struct CatFlowParserTests {
 
     private struct TestError: Error { let message: String; init(_ m: String) { self.message = m } }
 
-    // MARK: - All 41 conformance flows reproduce their golden parse trees
+    // MARK: - All 62 conformance flows reproduce their golden parse trees
 
     @Test func allConformanceFlowsMatchGoldenTrees() throws {
         let conformanceDir = fixturesDir.appendingPathComponent("conformance")
         let cats = try FileManager.default.contentsOfDirectory(atPath: conformanceDir.path)
             .filter { $0.hasSuffix(".cat") }
             .sorted()
-        #expect(cats.count == 41)
+        #expect(cats.count == 62)
 
         var checked = 0
         for cat in cats {
@@ -58,7 +58,7 @@ struct CatFlowParserTests {
             }
             checked += 1
         }
-        #expect(checked == 41)
+        #expect(checked == 62)
     }
 
     // MARK: - Golden parse trees also match (tests/goldens/parse/*.json)

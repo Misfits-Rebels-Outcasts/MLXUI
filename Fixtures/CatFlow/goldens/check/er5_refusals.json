@@ -1,0 +1,40 @@
+{
+  "cases": [
+    {
+      "name": "identify_speakers_max_speakers",
+      "task": "Identify Speakers",
+      "flow": "mlxflow 0.8\n1. Read Audio  a.wav\n2. Identify Speakers  Sortformer 4spk v2.1; max_speakers=2\n\nmodels:\n  Sortformer 4spk v2.1 = nvidia/diar_streaming_sortformer_4spk-v2.1\n  DeepFilterNet 3 = mlx-community/DeepFilterNet-mlx\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E723",
+          "message": "Row 2's `Identify Speakers` doesn't take settings -- the model is named on the row and v1 has nothing else to set; remove `max_speakers=`."
+        }
+      ]
+    },
+    {
+      "name": "identify_speakers_threshold",
+      "task": "Identify Speakers",
+      "flow": "mlxflow 0.8\n1. Read Audio  a.wav\n2. Identify Speakers  Sortformer 4spk v2.1; threshold=0.5\n\nmodels:\n  Sortformer 4spk v2.1 = nvidia/diar_streaming_sortformer_4spk-v2.1\n  DeepFilterNet 3 = mlx-community/DeepFilterNet-mlx\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E723",
+          "message": "Row 2's `Identify Speakers` doesn't take settings -- the model is named on the row and v1 has nothing else to set; remove `threshold=`."
+        }
+      ]
+    },
+    {
+      "name": "clean_audio_strength",
+      "task": "Clean Audio",
+      "flow": "mlxflow 0.8\n1. Read Audio  a.wav\n2. Clean Audio  DeepFilterNet 3; strength=0.5\n\nmodels:\n  Sortformer 4spk v2.1 = nvidia/diar_streaming_sortformer_4spk-v2.1\n  DeepFilterNet 3 = mlx-community/DeepFilterNet-mlx\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E724",
+          "message": "Row 2's `Clean Audio` doesn't take settings -- the model is named on the row and v1 has nothing else to set; remove `strength=`."
+        }
+      ]
+    }
+  ]
+}

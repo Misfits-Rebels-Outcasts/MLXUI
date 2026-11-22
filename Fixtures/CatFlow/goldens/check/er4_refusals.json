@@ -1,0 +1,37 @@
+{
+  "cases": [
+    {
+      "name": "stage_print_printer_setting",
+      "flow": "mlxflow 0.8\n1. Read Text  label.txt\n2. Make PDF  page=a4\n3. Stage Print  printer=office\n",
+      "issues": [
+        {
+          "row": "3",
+          "code": "E722",
+          "message": "Row 3's `Stage Print` doesn't take settings -- the file goes to the system's default printer, and v1 has no printer or option settings; remove `printer=`."
+        }
+      ]
+    },
+    {
+      "name": "stage_print_copies_setting",
+      "flow": "mlxflow 0.8\n1. Read Text  label.txt\n2. Make PDF  page=a4\n3. Stage Print  copies=2\n",
+      "issues": [
+        {
+          "row": "3",
+          "code": "E722",
+          "message": "Row 3's `Stage Print` doesn't take settings -- the file goes to the system's default printer, and v1 has no printer or option settings; remove `copies=`."
+        }
+      ]
+    },
+    {
+      "name": "stage_print_bare_value",
+      "flow": "mlxflow 0.8\n1. Read Text  label.txt\n2. Make PDF  page=a4\n3. Stage Print  \"Office\"\n",
+      "issues": [
+        {
+          "row": "3",
+          "code": "E722",
+          "message": "Row 3's `Stage Print` doesn't take settings -- the file goes to the system's default printer, and v1 has no printer or option settings; remove `Office`."
+        }
+      ]
+    }
+  ]
+}

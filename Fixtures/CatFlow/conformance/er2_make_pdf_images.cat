@@ -1,0 +1,4 @@
+mlxflow 0.8
+1. Read Images  photos/
+2. Make PDF    title="Photos"
+3. Save File   to="out/photos.pdf"

@@ -1,0 +1,42 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "address.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Replace",
+        "model": null,
+        "settings": "find=\"Straße\"; with=\"Str.\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Save Text",
+        "model": null,
+        "settings": "address-short.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  }
+}

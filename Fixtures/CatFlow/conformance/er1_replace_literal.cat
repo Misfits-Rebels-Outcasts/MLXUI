@@ -1,0 +1,4 @@
+mlxflow 0.8
+1. Read Text   address.txt
+2. Replace     find="Straße"; with="Str."
+3. Save Text   address-short.txt

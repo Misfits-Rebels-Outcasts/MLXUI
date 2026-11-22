@@ -1,0 +1,4 @@
+mlxflow 0.8
+1. Read Text     code.txt
+2. Make Barcode  type=code128; scale=4
+3. Save Image    code128.png
