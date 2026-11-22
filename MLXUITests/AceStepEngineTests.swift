@@ -210,6 +210,28 @@ struct AceStepEngineTests {
         let hot = try AceStepEngine.finish(MLXArray([Float(2), 0, 0, 0]).reshaped(1, 2, 2))
         #expect(abs(hot[0] - 0.891_25) < 1e-5, "too-loud audio is scaled down too")
     }
+
+    /// MC5-FIX-finish-gather: `finish` of a small [1, C, T] array, against the values the old `out[0]` path produced (captured
+    /// from the numpy reference of that path: gain 10^(-1/20) / 0.8, then channels-first -> L R L R). The old path's scalar index
+    /// was a Gather with a 0-dim index, which Metal API Validation rejects (`setBytes: bytes argument cannot be nil`).
+    @Test func finishMatchesTheOldPathOnASmallClip() throws {
+        let audio = MLXArray([Float(0.2), -0.4, 0.1, 0.05, 0.3, -0.8]).reshaped(1, 2, 3)
+        let out = try AceStepEngine.finish(audio)
+        let expected: [Float] = [0.2228127270936966, 0.05570318177342415, -0.4456254541873932,
+                                 0.3342190980911255, 0.1114063635468483, -0.8912509083747864]
+        #expect(out.count == expected.count)
+        for (got, want) in zip(out, expected) { #expect(abs(got - want) < 1e-6, "\(out)") }
+    }
+
+    @Test func finishRefusesAudioThatIsNotOneStereoBatchByName() {
+        #expect(throws: AceStepEngineError.badAudioShape([2, 2, 3])) { try AceStepEngine.finish(MLXArray.zeros([2, 2, 3])) }
+        #expect(throws: AceStepEngineError.badAudioShape([2, 3])) { try AceStepEngine.finish(MLXArray.zeros([2, 3])) }
+    }
+
+    @Test func rowIsAViewOfTheSameValuesAsTheIntegerIndex() {
+        let x = MLXArray(Array(0 ..< 12).map { Float($0) }).reshaped(3, 4)
+        #expect(x.row(1).shape == [4] && x.row(1).asArray(Float.self) == [4, 5, 6, 7])
+    }
 }
 
 // MARK: - MC5-T-fix: a cancelled run releases everything, in every phase

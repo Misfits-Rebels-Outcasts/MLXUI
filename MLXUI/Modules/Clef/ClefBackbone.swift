@@ -157,7 +157,7 @@ nonisolated final class ClefBackbone: @unchecked Sendable {
             guard let model = context.model as? Qwen35Model else {
                 throw ClefBackboneError.notAQwen35Model(String(describing: type(of: context.model)))
             }
-            let states = model(tokens.expandedDimensions(axis: 0), cache: nil)[0]
+            let states = model(tokens.expandedDimensions(axis: 0), cache: nil).row(0)
             return try body(states, rows)
         }
     }

@@ -60,12 +60,17 @@ nonisolated enum AceStepEvent: Sendable, Equatable {
 nonisolated enum AceStepEngineError: Error, Equatable, CustomStringConvertible, LocalizedError {
     case durationOutOfRange(Double, min: Double, max: Double)
     case emptyPrompt
+    /// MC5-FIX-finish-gather: a zero-size gather is refused by name rather than handed to MLX.
+    case emptyTokens(String)
+    case badAudioShape([Int])
 
     var description: String {
         switch self {
         case .durationOutOfRange(let d, let lo, let hi):
             return "ACE-Step makes songs between \(Int(lo)) and \(Int(hi)) seconds long; \(d) seconds is outside that."
         case .emptyPrompt: return "ACE-Step needs a description of the music to make."
+        case .emptyTokens(let what): return "ACE-Step has no \(what) to work from."
+        case .badAudioShape(let shape): return "ACE-Step produced audio of an unexpected shape \(shape)."
         }
     }
     var errorDescription: String? { description }
@@ -302,7 +307,10 @@ nonisolated struct AceStepEngine: Sendable {
         let peak = try MLXErrorGuard.item(abs(audio).max(), as: Float.self)
         var out = audio
         if peak >= 1e-6 { out = audio * Float(pow(10.0, -1.0 / 20.0) / Double(peak)) }
-        return try MLXErrorGuard.read(out[0].transposed().reshaped(-1), as: Float.self)
+        // MC5-FIX-finish-gather: `out[0]` is a scalar-index Gather, and Gather::eval_gpu hands Metal a nil `setBytes` for its 0-dim
+        // index (Metal API Validation asserts). `row(0)` is a slice + squeeze: no Gather, same values.
+        guard out.ndim == 3, out.dim(0) == 1 else { throw AceStepEngineError.badAudioShape(out.shape) }
+        return try MLXErrorGuard.read(out.row(0).transposed().reshaped(-1), as: Float.self)
     }
 
     private func emit(_ event: AceStepEvent) { observer?(event) }

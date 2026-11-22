@@ -244,4 +244,12 @@ struct AceStepConditionEncoderTests {
         #expect(throws: AceStepWeightsError.missingFile("silence_latent_f32.bin")) { _ = try enc.silenceTimbre() }
         #expect(throws: AceStepWeightsError.missingFile("silence_latent_f32.bin")) { _ = try enc.contextLatents(duration: 10) }
     }
+
+    /// MC5-FIX-finish-gather: an empty sequence is refused by name, not handed to MLX as a zero-size gather.
+    @Test func packSequencesRefusesEmptyInputByName() {
+        let empty = MLXArray.zeros([1, 0, 4]), mask = MLXArray.zeros([1, 0], dtype: .int32)
+        #expect(throws: AceStepEngineError.emptyTokens("tokens to pack")) {
+            try AceStepConditionEncoder.packSequences(empty, empty, mask1: mask, mask2: mask)
+        }
+    }
 }

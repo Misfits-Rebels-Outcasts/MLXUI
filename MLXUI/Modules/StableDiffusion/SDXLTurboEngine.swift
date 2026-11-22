@@ -118,7 +118,7 @@ enum SDXLTurboEngine {
         let clipSeq = clip(clipIds)            // [1, 77, 768]
         let openSeq = openClip(openIds)        // [1, 77, 1280]
         let encoderStates = concatenated([clipSeq, openSeq], axis: 2)   // [1, 77, 2048]
-        let pooled = openClip.pooled(openIds)  // [1, 1280] — text_time added conditioning
+        let pooled = try openClip.pooled(openIds)  // [1, 1280] — text_time added conditioning
         try MLXErrorGuard.evaluate(clipSeq, openSeq, encoderStates, pooled)
         progress(0.55)
 

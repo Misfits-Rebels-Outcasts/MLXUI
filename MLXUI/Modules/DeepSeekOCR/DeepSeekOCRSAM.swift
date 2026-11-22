@@ -146,7 +146,7 @@ nonisolated final class SAMAttention: Module {
         let (b, h, w) = (x.dim(0), x.dim(1), x.dim(2))
         let qkvFlat = qkv(x).reshaped(b, h * w, 3, numHeads, -1).transposed(2, 0, 3, 1, 4)
         let qkvR = qkvFlat.reshaped(3, b * numHeads, h * w, -1)
-        let q = qkvR[0], k = qkvR[1], v = qkvR[2]   // (B*heads, HW, hd)
+        let q = qkvR.row(0), k = qkvR.row(1), v = qkvR.row(2)   // (B*heads, HW, hd)
 
         var maskMode: MLXFast.ScaledDotProductAttentionMaskMode = .none
         if useRelPos {

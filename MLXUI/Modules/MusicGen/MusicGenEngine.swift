@@ -117,7 +117,7 @@ nonisolated enum MusicGenEngine {
             let cond = last[0 ..< 1]
             let uncondLogits = last[1 ..< 2]
             let guided = uncondLogits + (cond - uncondLogits) * guidanceScale   // [1, vocab, codebooks]
-            let sample = guided[0]                                  // [vocab, codebooks]
+            let sample = guided.row(0)                                 // [vocab, codebooks]
             let tokens = Self.topKSampling(sample, topK: topK, temperature: temperature)   // [codebooks]
 
             // Delay pattern: codebook k is BOS before step k and after step maxSteps-1+k.

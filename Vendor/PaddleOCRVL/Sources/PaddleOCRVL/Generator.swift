@@ -231,8 +231,9 @@ public class PaddleOCRVLGenerator {
                 cumulativeProbs .> (1 - topP), sortedProbs, zeros(like: sortedProbs))
 
             let sortedToken = categorical(log(topProbs + 1e-10))
-            let token = sortedIndices.squeezed(axis: 0)[sortedToken]
-            return token.item(Int.self)
+            // Read the sampled position first: indexing with a 0-dim array is a Gather Metal API Validation rejects.
+            let position = sortedToken.item(Int.self)
+            return sortedIndices.squeezed(axis: 0)[position ..< position + 1].item(Int.self)
         } else {
             let sample = categorical(scaledLogits)
             return sample.item(Int.self)

@@ -211,7 +211,7 @@ nonisolated enum Flux2KleinRoPE {
 
     /// `cos`, `sin` for the joint sequence the blocks see: text rows first, then image rows (`torch.cat([text, image])`).
     static func jointCosSin(textIDs: MLXArray, imageIDs: MLXArray, axesDims: [Int], theta: Float) -> (cos: MLXArray, sin: MLXArray) {
-        let ids = concatenated([textIDs.ndim == 3 ? textIDs[0] : textIDs, imageIDs.ndim == 3 ? imageIDs[0] : imageIDs], axis: 0)
+        let ids = concatenated([textIDs.ndim == 3 ? textIDs.row(0) : textIDs, imageIDs.ndim == 3 ? imageIDs.row(0) : imageIDs], axis: 0)
         return cosSin(ids: ids, axesDims: axesDims, theta: theta)
     }
 

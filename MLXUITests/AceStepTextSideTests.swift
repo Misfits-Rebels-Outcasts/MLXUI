@@ -217,8 +217,9 @@ struct AceStepTextEncoderTinyTests {
         #expect(early < 1e-5)
         #expect(late > 1e-4)
 
-        let lyric = encoder.lyricEmbeddings(ids: [4, 4, 11])
+        let lyric = try encoder.lyricEmbeddings(ids: [4, 4, 11])
         #expect(lyric.shape == [1, 3, 8])
+        #expect(throws: AceStepEngineError.emptyTokens("lyric tokens")) { try encoder.lyricEmbeddings(ids: []) }
         let table = encoder.embedTable
         #expect(abs(lyric[0, 0] - table[4]).max().item(Float.self) == 0)
         #expect(abs(lyric[0, 2] - table[11]).max().item(Float.self) == 0)

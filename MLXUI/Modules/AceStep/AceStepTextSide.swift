@@ -152,14 +152,15 @@ nonisolated final class AceStepTextEncoder: @unchecked Sendable {
     }
 
     /// `embed_tokens.weight[ids]` as `[1, L, 1024]`: a gather over the table, exact (no compute).
-    func lyricEmbeddings(ids: [Int]) -> MLXArray {
+    func lyricEmbeddings(ids: [Int]) throws -> MLXArray {
+        guard !ids.isEmpty else { throw AceStepEngineError.emptyTokens("lyric tokens") }
         let rows = take(embedTable, MLXArray(ids.map { Int32($0) }), axis: 0)
         return rows.expandedDimensions(axis: 0)
     }
 
     func inputs(textIds: [Int], lyricIds: [Int]) throws -> AceStepTextInputs {
         let hidden = try hiddenStates(ids: textIds)
-        let lyric = lyricEmbeddings(ids: lyricIds)
+        let lyric = try lyricEmbeddings(ids: lyricIds)
         let out = AceStepTextInputs(
             textIds: textIds, textMask: MLXArray.ones([1, textIds.count], dtype: .int32),
             lyricIds: lyricIds, lyricMask: MLXArray.ones([1, lyricIds.count], dtype: .int32),

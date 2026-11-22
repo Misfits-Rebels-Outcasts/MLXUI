@@ -361,6 +361,7 @@ nonisolated final class AceStepConditionEncoder: @unchecked Sendable {
         let hidden = concatenated([h1, h2], axis: 1)                                          // [B, L, D]
         let mask = concatenated([mask1.asType(.int32), mask2.asType(.int32)], axis: 1)        // [B, L]
         let (B, L, D) = (hidden.dim(0), hidden.dim(1), hidden.dim(2))
+        guard B > 0, L > 0, D > 0 else { throw AceStepEngineError.emptyTokens("tokens to pack") }
         let flat = try MLXErrorGuard.read(mask, as: Int32.self)
         var order: [Int32] = [], lengths: [Int32] = []
         for b in 0 ..< B {
