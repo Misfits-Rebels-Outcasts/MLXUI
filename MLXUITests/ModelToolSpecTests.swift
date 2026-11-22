@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import MLXLMCommon
 @testable import MLXUI
 
 /// MT1-1 — drift tests for `ModelToolSpec` (`RSI/DelegateModelToolsBacklog.md`).
@@ -146,5 +147,24 @@ struct ModelToolSpecTests {
             if spec.name == "translate" { #expect(spec.param(named: "from") == nil) }
             #expect(!spec.description.lowercased().contains("video"), "\(spec.name)")
         }
+    }
+
+    // HT-FIX-music-cue (R2): the clip is about 30 s, and a request for another length is answered, never dropped.
+    @Test func generateMusicSaysItMakesAboutThirtySeconds() {
+        #expect(ModelToolSpec.spec(named: "generate_music")?.description == "Make a short (about 30-second) instrumental clip from a text prompt.")
+        #expect(ModelToolSpec.spec(named: "generate_music")?.params.isEmpty == true)
+    }
+
+    @Test func aRequestedLengthGetsTheThirtySecondLine() throws {
+        let spec = try #require(ModelToolSpec.spec(named: "generate_music"))
+        for text in ["guitar in rain for 15 seconds", "a 2 min lofi loop", "rain 45s", "10 secs of piano"] {
+            #expect(ModelToolRunner.lengthNote(for: spec, arguments: ["text": .string(text)])
+                    == "ACE-Step makes a 30-second clip; the requested length isn't supported yet.", "\(text)")
+        }
+        for text in ["guitar in rain", "a 4/4 drum loop", "top 10 songs"] {
+            #expect(ModelToolRunner.lengthNote(for: spec, arguments: ["text": .string(text)]) == nil, "\(text)")
+        }
+        let speak = try #require(ModelToolSpec.spec(named: "speak"))
+        #expect(ModelToolRunner.lengthNote(for: speak, arguments: ["text": .string("for 15 seconds")]) == nil)
     }
 }

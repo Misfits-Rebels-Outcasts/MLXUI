@@ -132,7 +132,7 @@ nonisolated struct ModelToolSpec: Sendable, Equatable {
             description: "Make a grayscale depth map of an image: near is bright, far is dark."),
         ModelToolSpec(
             name: "generate_music", task: "Generate Sound", input: .text, output: .audio, params: [], kinds: nil,
-            description: "Make a short piece of music from a text prompt."),
+            description: "Make a short (about 30-second) instrumental clip from a text prompt."),
         ModelToolSpec(
             name: "list_capabilities", task: nil, input: nil, output: .text, params: [], kinds: nil,
             description: "List what you can do with the user's models, and whether each is ready."),

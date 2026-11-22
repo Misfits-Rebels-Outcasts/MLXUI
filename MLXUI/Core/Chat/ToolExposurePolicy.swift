@@ -280,10 +280,15 @@ nonisolated enum ToolExposurePolicy {
         case "speak": return matches(text, #"\b(speak|say (it|this|that) aloud|read (it|this|that|aloud)|out loud|aloud|text.to.speech|narrat\w*|voice)\b"#)
         case "translate": return matches(text, #"\b(translat\w*)\b"#)
         case "generate_image": return matches(text, #"\b(draw|paint|sketch|illustrat\w*|render|(generate|create|make)\b.{0,20}\b(image|picture|photo|illustration)|(image|picture|photo) of)\b"#)
-        case "generate_music": return matches(text, #"\b(music|song|melody|soundtrack|sound effect|jingle|beat)\b"#)
+        case "generate_music": return matches(text, musicCue)
         default: return false
         }
     }
+
+    /// HT-FIX-music-cue: music and sound/ambience requests (en/de/fr nouns). Ordinary "sound" stays out: "sounds good", "sound like",
+    /// "sound too formal", "sound check" never match; only "sound(s)/noise/audio of|for", a named ambience, a loop of something
+    /// musical, or a generator verb followed by sounds/audio/track/tune/piece. A bare instrument or "loop" is not a cue ("tune a guitar", "for loop").
+    static let musicCue = #"\b(music|musique|musik|song|melody|soundtrack|sound effects?|jingle|beat|lo-?fi|ambient|ambience|(sounds?|noise|audio)\s+(of|for)|(nature|rain|ocean|forest|white noise|ambient)\s+sounds?|(drum|bass|beat|audio|music|sound|synth|guitar|piano)\s+loops?|(make|create|generate|compose|produce|play)\b.{0,30}\b(sounds|audio|track|tune|piece))\b"#
 
     private static let urlCue = #"(https?://|www\.|\b[a-z0-9-]+\.(com|org|net|io|dev|app|ai|edu|gov|co|uk|de|fr|jp|info|me)\b|\b(website|web page|webpage|url|link|web site)\b)"#
     private static let writeClipboardCue = #"\b(copy|put|place|save|write|set|send|add)\b.{0,80}\bclipboard\b|\bcopy (this|that|it)\b"#

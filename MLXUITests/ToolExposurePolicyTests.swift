@@ -72,6 +72,34 @@ struct ToolExposurePolicyTests {
         #expect(ToolExposurePolicy.select(input(prompt: "Write me a short song", statuses: all)).tools == ["list_capabilities", "generate_music"])
     }
 
+    // HT-FIX-music-cue
+    @Test(arguments: [
+        "Make a sound of guitar in rain for 15 seconds.", "Generate rain sounds", "Create some ambient audio for studying",
+        "Play me a piano piece", "make a drum loop", "lo-fi background track",
+        "Erzeuge Musik mit Gitarre", "Fais une musique de pluie",
+    ])
+    func soundAndAmbiencePromptsOfferGenerateMusic(prompt: String) {
+        let all = Dictionary(uniqueKeysWithValues: ToolExposurePolicy.generatorTools.map { ($0, ready) })
+        let out = ToolExposurePolicy.select(input(.appleIntelligence, prompt: prompt, statuses: all, gate: true))
+        #expect(out.tools == ["list_capabilities", "generate_music"])
+    }
+
+    @Test func theMLXRouterWithTheGateOffOffersGenerateMusicForTheRepro() {
+        let all = Dictionary(uniqueKeysWithValues: ToolExposurePolicy.generatorTools.map { ($0, ready) })
+        let out = ToolExposurePolicy.select(input(prompt: "Make a sound of guitar in rain for 15 seconds.", statuses: all))
+        #expect(out.tools == ["list_capabilities", "generate_music"])
+    }
+
+    @Test(arguments: [
+        "That sounds good, thanks", "Does this email sound too formal?", "It sounds like the bug is in the parser",
+        "Sound check: are you there?", "Write a for loop in Swift", "Make this email sound more formal", "How do I tune a guitar?",
+    ])
+    func ordinaryUsesOfSoundDoNotOfferGenerateMusic(prompt: String) {
+        let all = Dictionary(uniqueKeysWithValues: ToolExposurePolicy.generatorTools.map { ($0, ready) })
+        let out = ToolExposurePolicy.select(input(.appleIntelligence, prompt: prompt, statuses: all, gate: true))
+        #expect(!out.tools.contains("generate_music"))
+    }
+
     @Test func kindsAlreadyInTheConversationKeepTheirToolsAfterTheTurnsOwn() {
         let statuses = ["transcribe_audio": ready, "ocr_image": ready, "describe_image": ready]
         let out = ToolExposurePolicy.select(input(conversation: [.audio, .image], turn: [.audio], statuses: statuses))
