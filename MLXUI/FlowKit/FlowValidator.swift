@@ -1187,6 +1187,11 @@ extension FlowValidator {
                 issues.append(FlowIssue(row: path, code: "E718", message: (try? ErrorCatalog.fill(
                     code: "E718", values: ["n": path, "detail": e.detail], isV08: true)) ?? ""))
             } catch {}
+        case "Make PDF":  // SPEC-Q255
+            do { _ = try MakePdfSettings.parse(row.settings) } catch let e as MakePdfSettingsError {
+                issues.append(FlowIssue(row: path, code: "E719", message: (try? ErrorCatalog.fill(
+                    code: "E719", values: ["n": path, "detail": e.detail], isV08: true)) ?? ""))
+            } catch {}
         default:
             break
         }

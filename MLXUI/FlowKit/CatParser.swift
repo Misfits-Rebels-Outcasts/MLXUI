@@ -24,7 +24,7 @@ nonisolated enum CatParser {
         // multi-word tasks (before single-word for greedy match)
         "Read Audio", "Read Text", "Read Image", "Read Video",
         "Read Index", "Read Files", "Read Images", "Read PDF", "Read CSV", "Read JSON",
-        "Save Audio", "Save Text", "Save Image", "Save Video", "Save Images", "Save File",  // SPEC-Q253
+        "Save Audio", "Save Text", "Save Image", "Save Video", "Save Images", "Save File", "Make PDF",  // SPEC-Q253
         "Store Index", "Keyword Search", "Join Video", "Join Text",
         "Query Table", "Table to Text", "Text to Table",
         "Store Query", "Store Read", "Store Write",

@@ -345,6 +345,9 @@ nonisolated struct RealExecutor: FlowExecutor {
         case "Save File":  // SPEC-Q253
             return try await SaveFileTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
                 .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Make PDF":  // SPEC-Q255
+            return try MakePDFTool.make(inputs: inputs, settings: row.settings,
+                                        outDirectory: workspace.directory(for: flowID).appendingPathComponent(".blobs"))
         case "Save Images":
             return try await SaveImagesTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
                 .run(inputs.first ?? Asset(items: [])) { _ in }

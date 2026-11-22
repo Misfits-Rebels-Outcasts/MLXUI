@@ -140,6 +140,7 @@ nonisolated enum TaskCatalog {
         TaskDescriptor("Save Image", .anyKind, t(.status), .instant, .tool, "tools.files.save_image"),
         TaskDescriptor("Save Video", .anyKind, t(.status), .instant, .tool, "tools.files.save_video"),
         TaskDescriptor("Save File", t(.file), t(.status), .instant, .tool, "tools.files.save_file"),  // SPEC-Q253
+        TaskDescriptor("Make PDF", .anyKind, t(.file), .instant, .tool, "tools.pdf.make_pdf"),  // SPEC-Q255
         TaskDescriptor("Save Images", .listOf(.image), t(.status), .instant, .tool, "tools.files.save_images"),
         TaskDescriptor("Store Index", .tupleOf([.text, .vector]), t(.index), .instant, .tool, "tools.index_store.store_index"),
 
@@ -273,7 +274,7 @@ nonisolated enum TaskFamilies {
     static let families: [String: [String]] = [
         "Files": ["Read Text", "Read Audio", "Read Image", "Read Video", "Read Images",
                   "Read Files", "Read PDF", "Read Index", "Save Text", "Save Audio",
-                  "Save Image", "Save Video", "Save File", "Save Images", "Store Index"],  // SPEC-Q253
+                  "Save Image", "Save Video", "Save File", "Make PDF", "Save Images", "Store Index"],  // SPEC-Q253
         "Text": ["Split", "Template", "Join Text", "Filter", "Sort", "Dedupe",
                  "Extract", "Replace", "Count", "Diff"],  // SPEC-Q254
         "Language models": ["Generate", "Decide", "Summarize", "Translate", "Answer",

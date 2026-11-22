@@ -31,7 +31,7 @@ nonisolated enum TaskAvailability {
     static let supportedInstantTools: Set<String> = [
         "Read Audio", "Read Text", "Read Image", "Read Images", "Read Files", "Read PDF",
         "Read Index", "Read Context", "Read Video",
-        "Save Audio", "Save Text", "Save Image", "Save Images", "Save Video", "Save File", "Save Context",  // SPEC-Q253
+        "Save Audio", "Save Text", "Save Image", "Save Images", "Save Video", "Save File", "Make PDF", "Save Context",  // SPEC-Q253
         "Store Index", "Retrieve", "Keyword Search",
         "Count Context", "Calculate", "Compare", "Range", "Chart",
         "Resize", "Crop", "Convert", "Watermark", "Overlay Text", "Contact Sheet",
