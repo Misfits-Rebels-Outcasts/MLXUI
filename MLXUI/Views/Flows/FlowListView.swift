@@ -459,6 +459,10 @@ struct FlowListView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
+                // ER-FIX-1: a definite, capped height inside a scroll view — an unbounded list was squeezed by the rows above until the
+                // "Print…" button was ~2 pt tall and unreachable by mouse. See `OutboxLayout`.
+                ScrollView {
+                  VStack(alignment: .leading, spacing: 0) {
                 ForEach(entries) { entry in
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
@@ -496,6 +500,9 @@ struct FlowListView: View {
                     }
                     .padding(.vertical, 4)
                 }
+                  }
+                }
+                .frame(height: OutboxLayout.listHeight(for: entries.map { ($0.kind, $0.lastError != nil) }))
             }
         } label: {
             Label("Outbox (\(entries.count))", systemImage: "tray.full")
@@ -503,6 +510,8 @@ struct FlowListView: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
+        // The rows and inspector above ask for all the height they can get; the outbox's own (bounded) height comes first.
+        .layoutPriority(1)
     }
 
     /// The file a selected `Save *` row wrote, resolved against the flow's folder — lets the
