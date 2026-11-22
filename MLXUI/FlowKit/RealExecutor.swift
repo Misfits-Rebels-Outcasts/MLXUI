@@ -342,6 +342,9 @@ nonisolated struct RealExecutor: FlowExecutor {
         case "Save Image":
             return try await SaveImageTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
                 .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Save File":  // SPEC-Q253
+            return try await SaveFileTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
         case "Save Images":
             return try await SaveImagesTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
                 .run(inputs.first ?? Asset(items: [])) { _ in }
@@ -365,6 +368,9 @@ nonisolated struct RealExecutor: FlowExecutor {
                 .run(bundle(inputs)) { _ in }
         case "Extract":
             return try await ExtractTool(settings: row.settings ?? "")
+                .run(bundle(inputs)) { _ in }
+        case "Replace":  // SPEC-Q254
+            return try await ReplaceTool(settings: row.settings ?? "")
                 .run(bundle(inputs)) { _ in }
         case "Count":
             return try await CountTool(settings: row.settings ?? "")

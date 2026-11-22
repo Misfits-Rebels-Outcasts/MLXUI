@@ -341,7 +341,8 @@ nonisolated struct ExtractTool: AssetStage {
     var accepts: Shape { .single(.text) }
     var produces: Shape { .listOf(.text) }
 
-    private static let presets: [String: String] = [
+    /// Internal (not private): `ReplaceTool` (SPEC-Q254) reads this very table, never a copy.
+    static let presets: [String: String] = [
         "emails": #"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"#,
         "urls": #"https?://[^\s)>\]]+"#,
         "dates": #"\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}/\d{2,4}\b"#,

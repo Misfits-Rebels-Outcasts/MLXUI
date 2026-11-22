@@ -24,7 +24,7 @@ nonisolated enum CatParser {
         // multi-word tasks (before single-word for greedy match)
         "Read Audio", "Read Text", "Read Image", "Read Video",
         "Read Index", "Read Files", "Read Images", "Read PDF", "Read CSV", "Read JSON",
-        "Save Audio", "Save Text", "Save Image", "Save Video", "Save Images",
+        "Save Audio", "Save Text", "Save Image", "Save Video", "Save Images", "Save File",  // SPEC-Q253
         "Store Index", "Keyword Search", "Join Video", "Join Text",
         "Query Table", "Table to Text", "Text to Table",
         "Store Query", "Store Read", "Store Write",
@@ -49,7 +49,7 @@ nonisolated enum CatParser {
         "Title", "Critique", "Verify", "Revise", "Merge", "Draft",
         "Speak", "OCR", "Watermark", "Resize", "Crop", "Convert", "Trim",
         "Split", "Template", "Filter", "Sort", "Dedupe",
-        "Extract", "Count", "Diff",
+        "Extract", "Count", "Diff", "Replace",  // SPEC-Q254
         "Embed", "Retrieve", "Rerank", "Calculate",
         "Generate", "Decide",
         "Classify", "Gate", "Grade", "Score", "Judge", "Think",

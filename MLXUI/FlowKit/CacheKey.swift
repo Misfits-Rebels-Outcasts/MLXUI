@@ -22,6 +22,7 @@ nonisolated enum CacheKey {
     /// cached — a cache hit would silently skip the real write on a second run.
     static let neverCache: Set<String> = [
         "Save Text", "Save Audio", "Save Image", "Save Video", "Save Images", "Store Index",
+        "Save File",  // SPEC-Q253: a fixed-destination write, same reasoning as the rest of this set.
         "Save Context", "Store Write", "Ask Human", "Human Input",
         "Stage Send", "Stage Post", "Download File", "Improvise",
     ]

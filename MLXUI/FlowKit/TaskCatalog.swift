@@ -139,6 +139,7 @@ nonisolated enum TaskCatalog {
         TaskDescriptor("Save Audio", .anyKind, t(.status), .instant, .tool, "tools.files.save_audio"),
         TaskDescriptor("Save Image", .anyKind, t(.status), .instant, .tool, "tools.files.save_image"),
         TaskDescriptor("Save Video", .anyKind, t(.status), .instant, .tool, "tools.files.save_video"),
+        TaskDescriptor("Save File", t(.file), t(.status), .instant, .tool, "tools.files.save_file"),  // SPEC-Q253
         TaskDescriptor("Save Images", .listOf(.image), t(.status), .instant, .tool, "tools.files.save_images"),
         TaskDescriptor("Store Index", .tupleOf([.text, .vector]), t(.index), .instant, .tool, "tools.index_store.store_index"),
 
@@ -151,6 +152,7 @@ nonisolated enum TaskCatalog {
         TaskDescriptor("Dedupe", .listOf(.text), .listOf(.text), .instant, .tool, "tools.text.dedupe"),
         TaskDescriptor("Extract", t(.text), .listOf(.text), .instant, .tool, "tools.text.extract"),
         TaskDescriptor("Count", .listOf(.text), t(.text), .instant, .tool, "tools.text.count"),
+        TaskDescriptor("Replace", t(.text), t(.text), .instant, .tool, "tools.text.replace"),  // SPEC-Q254
         TaskDescriptor("Diff", .tupleOf([.text, .text]), t(.text), .instant, .tool, "tools.text.diff"),
 
         // -- §3 Language models, Phase-1 subset (primitives + non-decider framed) --
@@ -271,9 +273,9 @@ nonisolated enum TaskFamilies {
     static let families: [String: [String]] = [
         "Files": ["Read Text", "Read Audio", "Read Image", "Read Video", "Read Images",
                   "Read Files", "Read PDF", "Read Index", "Save Text", "Save Audio",
-                  "Save Image", "Save Video", "Save Images", "Store Index"],
+                  "Save Image", "Save Video", "Save File", "Save Images", "Store Index"],  // SPEC-Q253
         "Text": ["Split", "Template", "Join Text", "Filter", "Sort", "Dedupe",
-                 "Extract", "Count", "Diff"],
+                 "Extract", "Replace", "Count", "Diff"],  // SPEC-Q254
         "Language models": ["Generate", "Decide", "Summarize", "Translate", "Answer",
                             "Rewrite", "Draft", "Ask", "Title", "Critique", "Verify",
                             "Revise", "Merge", "Extract Structured", "Classify", "Gate",
