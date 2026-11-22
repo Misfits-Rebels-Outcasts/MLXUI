@@ -96,12 +96,17 @@ struct DeepFilterNetCatalogTests {
         }
     }
 
-    @Test func noWorkflowPoolOffersIt() throws {
+    // ER-10 (SPEC-Q239, owner rulings R1 and R11, 2026-11-22): this used to pin "no workflow pool offers it" (AM-W skipped, MP-0 D).
+    // The ruling gave `Clean Audio` this model, so exactly that one task offers it, and only while it is claimable.
+    @Test func onlyCleanAudioOffersItAndOnlyWhenClaimable() throws {
         let e = try deepFilterNet()
         for task in TaskCatalog.allTasks().map(\.name) {
-            #expect(TaskModels.runnerKind(forTask: task) != .enhance, "\(task) names the enhance kind")
+            let named = TaskModels.runnerKind(forTask: task) == .enhance
+            #expect(named == (task == "Clean Audio"), "\(task) names the enhance kind: \(named)")
             let pool = TaskModels.derivedModels(for: task, catalog: [e], claimableModelIDs: [e.id])
-            #expect(!pool.contains { $0.id == e.id }, "\(task) offers DeepFilterNet")
+            #expect(pool.contains { $0.id == e.id } == (task == "Clean Audio"), "\(task) offers DeepFilterNet: \(pool.map(\.displayName))")
+            let unclaimed = TaskModels.derivedModels(for: task, catalog: [e], claimableModelIDs: [])
+            #expect(!unclaimed.contains { $0.id == e.id }, "\(task) offers an unclaimable DeepFilterNet")
         }
     }
 

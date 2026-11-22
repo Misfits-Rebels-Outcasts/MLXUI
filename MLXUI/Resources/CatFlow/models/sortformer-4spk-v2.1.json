@@ -1,0 +1,20 @@
+{
+  "id": "mlx-community/diar_streaming_sortformer_4spk-v2.1-fp16",
+  "display": "Sortformer 4spk v2.1",
+  "kind": "local",
+  "engine": "mlx-diarization",
+  "tasks": [
+    "Identify Speakers"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 0.24,
+    "ram_gb": 1.8
+  },
+  "source": "https://huggingface.co/mlx-community/diar_streaming_sortformer_4spk-v2.1-fp16",
+  "license": "CC-BY-4.0",
+  "manifest_version": 1,
+  "pinned": true,
+  "notes": "ER-10 (SPEC-Q238): MLXUI-authored; catflow-mlx has no curated manifest for this model (BACKLOG ER-PY-audio). MLX conversion of nvidia/diar_streaming_sortformer_4spk-v2.1 (NVIDIA, CC-BY-4.0): up to 4 speakers, 16 kHz mono in. The Identify Speakers row takes no settings in v1 (owner ruling R1): any setting is refused by name (E723 statically, RealExecutor.stageConfig at run time). ram_gb is the catalog's measured figure."
+}

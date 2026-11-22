@@ -1187,6 +1187,12 @@ extension FlowValidator {
                 issues.append(FlowIssue(row: path, code: "E718", message: (try? ErrorCatalog.fill(
                     code: "E718", values: ["n": path, "detail": e.detail], isV08: true)) ?? ""))
             } catch {}
+        case "Identify Speakers", "Clean Audio":  // SPEC-Q238 / SPEC-Q239
+            do { try AudioRowSettings.parseNone(row.settings) } catch let e as AudioRowSettingsError {
+                let code = row.task == "Identify Speakers" ? "E723" : "E724"
+                issues.append(FlowIssue(row: path, code: code, message: (try? ErrorCatalog.fill(
+                    code: code, values: ["n": path, "detail": e.detail], isV08: true)) ?? ""))
+            } catch {}
         case "Read Barcode":  // SPEC-Q256
             do { _ = try BarcodeSettings.parseRead(row.settings) } catch let e as ReadBarcodeSettingsError {
                 issues.append(FlowIssue(row: path, code: "E720", message: (try? ErrorCatalog.fill(

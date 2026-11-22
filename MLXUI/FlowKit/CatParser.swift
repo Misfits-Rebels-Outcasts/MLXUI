@@ -31,6 +31,7 @@ nonisolated enum CatParser {
         "Set Field", "Append Row", "Merge Record",
         "Extract Structured", "Extract Frame", "Extract Audio",
         "Describe Image", "Overlay Text", "Read Barcode", "Make Barcode",
+        "Identify Speakers", "Clean Audio",  // SPEC-Q238, SPEC-Q239
         "Generate Image",
         "Edit Image", "Instruct Edit",
         "Inpaint", "Upscale",

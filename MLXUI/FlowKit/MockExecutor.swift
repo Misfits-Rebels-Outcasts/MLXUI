@@ -117,6 +117,23 @@ final class MockExecutor: FlowExecutor, @unchecked Sendable {
             lock.withLock { _lastStaged = (id, kind, "to \(destination): \(preview)") }
             return output
         }
+        // Identify Speakers / Clean Audio (SPEC-Q238 / SPEC-Q239, ER-10), as the Python mock does: a fixed two-speaker table (a real
+        // table file, so `Query Table` / `Table to Text` compose under `--mock`), and the input audio passed through. Settings are
+        // refused by name in the mock too.
+        if row.task == "Identify Speakers" || row.task == "Clean Audio" {
+            let name = row.task ?? "?"
+            if let given = AudioRowSettings.firstGiven(row.settings) {
+                throw FlowError.stageFailure(row: name, message: "\(name) doesn't take settings -- remove \(given)")
+            }
+            if name == "Identify Speakers" {
+                return Asset(items: [try TableTool.tableItem(columns: IdentifySpeakersTable.columns,
+                                                             rows: IdentifySpeakersTable.mockRows, in: blobDirectory)])
+            }
+            guard inputs.count == 1, inputs[0].items.count == 1, inputs[0].items[0].kind == .audio else {
+                throw FlowError.stageFailure(row: name, message: "Clean Audio needs one audio input")
+            }
+            return Asset(items: [inputs[0].items[0]])
+        }
         guard let desc = TaskCatalog.get(row.task ?? "") else {
             throw FlowError.unknownTask(row: row.task ?? "?")
         }

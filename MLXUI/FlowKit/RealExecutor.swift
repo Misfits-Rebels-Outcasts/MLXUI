@@ -518,6 +518,27 @@ nonisolated struct RealExecutor: FlowExecutor {
                 in: blobDirectory)
         }
 
+        // Identify Speakers (SPEC-Q238, ER-10): the Sortformer stage is audio -> CSV text (`speaker,start,end`); this row's output is
+        // a `table`, so the CSV is read back and written in the on-disk table format. Settings are refused by name first.
+        if desc.refName == "engines.diarize.identify_speakers" {
+            guard let input = inputs.first else {
+                throw FlowError.badInputCardinality(row: "\(path)", expected: "an audio input", got: 0)
+            }
+            let config = try stageConfig(for: desc, row: row, path: "\(path)", model: modelEntry)
+            let stage = try await makeModelStage(modelEntry, config)
+            let adapter = SingleMediaStage(id: modelEntry.id, name: display(row), inner: stage,
+                                           rowLabel: "\(path)", blobDirectory: blobDirectory)
+            let result = try await adapter.run(input) { _ in }
+            guard let csv = result.items.first?.value else {
+                throw FlowError.stageFailure(row: "\(path)", message: "Identify Speakers got no speaker list back")
+            }
+            let rows: [TableTool.Row]
+            do { rows = try IdentifySpeakersTable.rows(fromCSV: csv) } catch {
+                throw FlowError.stageFailure(row: "\(path)", message: "Identify Speakers got a speaker list it couldn't read")
+            }
+            return Asset(items: [try TableTool.tableItem(columns: IdentifySpeakersTable.columns, rows: rows, in: blobDirectory)])
+        }
+
         // SPEC-Q246: whether a translation specialist may replace the `Translate` frame with its own template, whether `to=` may
         // take a code, and whether `from=` should exist are open in catflow-mlx; the conservative reading is what follows.
         // MC2-6: TranslateGemma on a `Translate` row. The row is `.frame`-backed, but this model is not a chat model: its
@@ -1249,6 +1270,15 @@ nonisolated struct RealExecutor: FlowExecutor {
         if desc.refName == "engines.asr.transcribe" {
             let language = settings.value(for: "lang") ?? "en"
             return StageConfig(language: language, flowTask: "Transcribe")
+        }
+        if desc.refName == "engines.diarize.identify_speakers" || desc.refName == "engines.audio_clean.clean_audio" {
+            // SPEC-Q238 / SPEC-Q239 (owner ruling R1): neither row takes a setting in v1; the model is named on the row. Any setting is
+            // refused by name (the CFM-R16-1 lesson), never ignored. The validator's E723 / E724 says the same statically.
+            if let given = AudioRowSettings.firstGiven(row.settings) {
+                throw FlowSettingRefusal(description:
+                    "\(desc.name) doesn't take settings -- the model is named on the row and v1 has nothing else to set; remove \(given).")
+            }
+            return .default
         }
         if desc.refName == "engines.diffusion.estimate_depth" {
             // MC3-8 (issue #6, owner decision 7): the Estimate Depth row takes no settings. A `seed=`,

@@ -88,13 +88,18 @@ struct SortformerCatalogTests {
         }
     }
 
-    @Test func noWorkflowPoolOffersIt() throws {
+    // ER-10 (SPEC-Q238, owner rulings R1 and R11, 2026-11-22): this used to pin "no workflow pool offers it" (AM-W skipped, MP-0 D).
+    // The ruling gave `Identify Speakers` this model, so exactly that one task offers it, and only while it is claimable.
+    @Test func onlyIdentifySpeakersOffersItAndOnlyWhenClaimable() throws {
         let e = try sortformer()
         for task in TaskCatalog.allTasks().map(\.name) {
-            #expect(TaskModels.runnerKind(forTask: task) != .diarization, "\(task) names the diarization kind")
+            let named = TaskModels.runnerKind(forTask: task) == .diarization
+            #expect(named == (task == "Identify Speakers"), "\(task) names the diarization kind: \(named)")
             let pool = TaskModels.derivedModels(for: task, catalog: [e], claimableModelIDs: [e.id])
             // Provider / system slots (remote or on-device models) are not catalog entries; only the catalog matters here.
-            #expect(!pool.contains { $0.id == e.id }, "\(task) offers Sortformer")
+            #expect(pool.contains { $0.id == e.id } == (task == "Identify Speakers"), "\(task) offers Sortformer: \(pool.map(\.displayName))")
+            let unclaimed = TaskModels.derivedModels(for: task, catalog: [e], claimableModelIDs: [])
+            #expect(!unclaimed.contains { $0.id == e.id }, "\(task) offers an unclaimable Sortformer")
         }
     }
 }

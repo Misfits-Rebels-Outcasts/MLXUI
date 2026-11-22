@@ -206,6 +206,9 @@ nonisolated enum TaskCatalog {
         TaskDescriptor("Crop", t(.image), t(.image), .instant, .tool, "tools.media.crop"),
         TaskDescriptor("Convert", t(.image), t(.image), .instant, .tool, "tools.media.convert"),
         TaskDescriptor("Watermark", t(.image), t(.image), .instant, .tool, "tools.media.watermark"),
+        // SPEC-Q238 / SPEC-Q239 (ER-10, owner rulings R1 and R11): the Swift-first audio rows.
+        TaskDescriptor("Identify Speakers", t(.audio), t(.table), .model, .engine, "engines.diarize.identify_speakers"),
+        TaskDescriptor("Clean Audio", t(.audio), t(.audio), .model, .engine, "engines.audio_clean.clean_audio"),
         TaskDescriptor("Overlay Text", t(.image), t(.image), .instant, .tool, "tools.media.overlay_text"),
         TaskDescriptor("Read Barcode", t(.image), t(.text), .instant, .tool, "tools.barcode.read_barcode"),  // SPEC-Q256
         TaskDescriptor("Make Barcode", t(.text), t(.image), .instant, .tool, "tools.barcode.make_barcode"),  // SPEC-Q257
@@ -285,7 +288,8 @@ nonisolated enum TaskFamilies {
                             "Score", "Judge", "Think", "Improvise"],
         "Audio, image, video": ["Transcribe", "Speak", "Describe Image", "OCR", "Extract Frame",
                                 "Extract Audio", "Trim", "Join Video", "Resize", "Crop",
-                                "Convert", "Watermark", "Overlay Text", "Read Barcode", "Make Barcode", "Contact Sheet",
+                                "Convert", "Watermark", "Overlay Text", "Read Barcode", "Make Barcode",
+                                "Identify Speakers", "Clean Audio", "Contact Sheet",
                                 "Generate Image", "Edit Image", "Instruct Edit", "Inpaint",
                                 "Upscale", "Detect Edges", "Estimate Depth", "Detect Pose",
                                 "Segment", "Init Latent", "Encode Latent", "Decode Latent",
