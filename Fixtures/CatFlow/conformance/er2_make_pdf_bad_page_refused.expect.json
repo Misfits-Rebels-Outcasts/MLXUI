@@ -1,0 +1,38 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "notes.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Make PDF",
+        "model": null,
+        "settings": "page=a3",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "check": {
+    "valid": false,
+    "issues": [
+      {
+        "row": "2",
+        "code": "E719",
+        "message": "Row 2's `Make PDF` has `page=a3` -- the page sizes are `a4` and `letter`; use one of them."
+      }
+    ]
+  }
+}

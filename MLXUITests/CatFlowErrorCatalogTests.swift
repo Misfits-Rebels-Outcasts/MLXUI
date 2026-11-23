@@ -31,7 +31,7 @@ struct CatFlowErrorCatalogTests {
         let url = fixturesDir.appendingPathComponent("goldens/errors/fill_golden.json")
         let data = try Data(contentsOf: url)
         let cases = try JSONDecoder().decode([FillCase].self, from: data)
-        #expect(cases.count == 161, "expected 61 v07 + 2 E701 + 98 v08 = 161 cases")
+        #expect(cases.count == 169, "expected 61 v07 + 2 E701 + 106 v08 = 169 cases")
 
         for c in cases {
             let isV08 = c.catalog == "v08"
@@ -49,7 +49,7 @@ struct CatFlowErrorCatalogTests {
         // equivalent, see `ErrorCatalog.swift`'s comment beside it), so 62/99 here is
         // "61 ported + 1 Swift-only", not a drift from parity.
         #expect(ErrorCatalog.catalogV07.count == 62)
-        #expect(ErrorCatalog.catalogV08.count == 99)
+        #expect(ErrorCatalog.catalogV08.count == 107)
         // E108 exists only at v0.8; E707/E801/R901-R905/F001-F007 are shared.
         #expect(ErrorCatalog.catalogV07["E108"] == nil)
         #expect(ErrorCatalog.catalogV08["E108"] != nil)

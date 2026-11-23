@@ -1,0 +1,42 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Audio",
+        "model": null,
+        "settings": "meeting.wav",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Identify Speakers",
+        "model": "Sortformer 4spk v2.1",
+        "settings": "max_speakers=2",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ],
+    "models": {
+      "Sortformer 4spk v2.1": "nvidia/diar_streaming_sortformer_4spk-v2.1",
+      "DeepFilterNet 3": "mlx-community/DeepFilterNet-mlx"
+    }
+  },
+  "check": {
+    "valid": false,
+    "issues": [
+      {
+        "row": "2",
+        "code": "E723",
+        "message": "Row 2's `Identify Speakers` doesn't take settings -- the model is named on the row and v1 has nothing else to set; remove `max_speakers=`."
+      }
+    ]
+  }
+}

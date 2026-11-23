@@ -97,6 +97,9 @@ struct MusicGenRunView: View {
                 .disabled(model.isRunning)
                 Spacer()
             }
+            if (license ?? "").lowercased().contains("-nc") {
+                Text("Non-commercial use only (CC BY-NC 4.0)").font(.caption.bold()).foregroundStyle(.secondary)
+            }
             Text(license ?? "License: see model page")
                 .font(.caption).foregroundStyle(.secondary)
         }

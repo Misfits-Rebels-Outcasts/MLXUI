@@ -182,6 +182,8 @@ final class InstallManager {
         }
         let modelDir = store.directory(forHFModelID: model.hfModelId)
         try? FileManager.default.removeItem(at: modelDir)
+        // A loaded Qwen3-VL embedding session for this directory must not outlive its files.
+        Task { await Qwen3VLEmbeddingSessions.shared.evict(modelDir) }
     }
 
     func isError(_ modelId: String) -> Bool {
@@ -491,7 +493,7 @@ final class InstallManager {
             }
             selected = only
         } else {
-            selected = ModelFileSelector.filesToDownload(siblings: info.siblings.map(\.rfilename))
+            selected = ModelFileSelector.filesToDownload(siblings: info.siblings.map(\.rfilename), forModel: modelId)
         }
         var files = selected.map { HFRemoteFile(filename: $0, size: sizeByName[$0] ?? 0) }
 

@@ -197,7 +197,7 @@ nonisolated final class WanDiT: Module {
             print("[DIT-DBG] block0 temb (timeProj mods): mean=\(String(format:"%.4f",mn(b0temb))) std=\(String(format:"%.4f",std(b0temb))) min=\(String(format:"%.4f",b0temb.min().safeItem())) max=\(String(format:"%.4f",b0temb.max().safeItem()))")
 
             let st0rows = blocks[0].shiftTable.asType(.float32).reshaped([-1, c.dim])  // [6, dim]
-            let gateBias = st0rows[2]
+            let gateBias = st0rows.row(2)
             print("[DIT-DBG] block0 shiftTable gateBias: mean=\(String(format:"%.4f",mn(gateBias))) std=\(String(format:"%.4f",std(gateBias)))")
 
             let tembGate = mods[0, 2]
@@ -230,7 +230,7 @@ nonisolated final class WanDiT: Module {
 
             // Block 0 scaleMSA — should be near 0 at σ=1 if weights are correct
             let st0b = blocks[0].shiftTable.asType(.float32).reshaped([-1, c.dim])
-            let scaleMSA = (st0b[1] + mods[0, 1]).asType(.float32); eval(scaleMSA)
+            let scaleMSA = (st0b.row(1) + mods[0, 1]).asType(.float32); eval(scaleMSA)
             print("[DIT-DBG] block0 scaleMSA (full): mean=\(fmtMn(scaleMSA)) std=\(fmtStd(scaleMSA))")
 
             // outNorm then scale/shift (+ timeVec per P8.4)

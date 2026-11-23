@@ -240,7 +240,7 @@ nonisolated enum SegmentAnythingEngine {
 
     /// The highest-IoU mask of a `decodeMasks` result, as raw logits (float, un-thresholded).
     private static func topMaskLogits(masks: MLXArray, iouScores: MLXArray) throws -> (logits: [Float], w: Int, h: Int) {
-        let scores = try MLXErrorGuard.read(iouScores[0], as: Float.self)      // WW2-3-8
+        let scores = try MLXErrorGuard.read(iouScores.row(0), as: Float.self)      // WW2-3-8
         let bestIdx = scores.enumerated().max(by: { $0.element < $1.element })?.offset ?? 0
         let (h, w) = (masks.dim(1), masks.dim(2))
         let logits = masks[0, 0..., 0..., bestIdx]

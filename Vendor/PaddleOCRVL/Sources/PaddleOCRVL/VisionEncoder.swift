@@ -54,9 +54,10 @@ public class VisionAttention: Module {
         qkvOut = qkvOut.reshaped(batchSize, seqLen, 3, numHeads, headDim)
         qkvOut = qkvOut.transposed(2, 0, 3, 1, 4)  // [3, B, heads, seq, headDim]
 
-        var q = qkvOut[0]
-        var k = qkvOut[1]
-        let v = qkvOut[2]
+        // MC5-FIX-finish-gather: slice + squeeze, not `qkvOut[i]` (a 0-dim-index Gather, which Metal API Validation rejects).
+        var q = qkvOut[0 ..< 1].squeezed(axis: 0)
+        var k = qkvOut[1 ..< 2].squeezed(axis: 0)
+        let v = qkvOut[2 ..< 3].squeezed(axis: 0)
 
         if let cos, let sin {
             // Broadcast [seq, headDim] → [1, 1, seq, headDim].

@@ -1,0 +1,45 @@
+{
+  "_note": "SPEC-Q259: input and expected are ISO-8859-1 text (one char per byte). The Stage Print id digest is sha256 of the expected bytes.",
+  "cases": [
+    {
+      "name": "quartz style: both dates and a trailer ID",
+      "input": "%PDF-1.3\n1 0 obj\n<< /Producer (macOS Quartz PDFContext) /CreationDate (D:20261122101500Z00'00') /ModDate (D:20261122101500Z00'00') >>\nendobj\ntrailer\n<< /Size 3 /Root 2 0 R /Info 1 0 R /ID [ <aabbccddeeff00112233445566778899> <aabbccddeeff00112233445566778899> ] >>\n%%EOF\n",
+      "expected": "%PDF-1.3\n1 0 obj\n<< /Producer (macOS Quartz PDFContext) /CreationDate() /ModDate() >>\nendobj\ntrailer\n<< /Size 3 /Root 2 0 R /Info 1 0 R /ID[] >>\n%%EOF\n"
+    },
+    {
+      "name": "reportlab style: no spaces, ID array tight",
+      "input": "%PDF-1.4\n<</Author (anonymous)/CreationDate (D:20261122101500+08'00')/Creator (ReportLab)/ModDate (D:20261122101500+08'00')>>\ntrailer\n<</ID[<0123456789abcdef><0123456789abcdef>]/Root 1 0 R>>\n",
+      "expected": "%PDF-1.4\n<</Author (anonymous)/CreationDate()/Creator (ReportLab)/ModDate()>>\ntrailer\n<</ID[]/Root 1 0 R>>\n"
+    },
+    {
+      "name": "an escaped parenthesis and a backslash inside the date string",
+      "input": "%PDF-1.4\n/CreationDate (D:2026\\) end\\\\) /Title (kept)\n",
+      "expected": "%PDF-1.4\n/CreationDate() /Title (kept)\n"
+    },
+    {
+      "name": "a hex-string date",
+      "input": "%PDF-1.4\n/ModDate <443a32303236>\n/CreationDate\r\n<44 3a 32>\n",
+      "expected": "%PDF-1.4\n/ModDate()\n/CreationDate()\n"
+    },
+    {
+      "name": "an ID array across lines",
+      "input": "%PDF-1.4\ntrailer << /ID [\n<aa>\n<bb>\n] /Root 1 0 R >>\n",
+      "expected": "%PDF-1.4\ntrailer << /ID[] /Root 1 0 R >>\n"
+    },
+    {
+      "name": "names that merely start like the keys are untouched",
+      "input": "%PDF-1.4\n/IDTree [1 2 3]\n/Identity /Name\n/Title (ID) /CreationDateless (x)\n",
+      "expected": "%PDF-1.4\n/IDTree [1 2 3]\n/Identity /Name\n/Title (ID) /CreationDateless (x)\n"
+    },
+    {
+      "name": "no date or id at all",
+      "input": "%PDF-1.4\n1 0 obj<<>>endobj\n%%EOF\n",
+      "expected": "%PDF-1.4\n1 0 obj<<>>endobj\n%%EOF\n"
+    },
+    {
+      "name": "not a PDF: left exactly alone",
+      "input": "hello /CreationDate (D:2026) /ID [<aa>]\n",
+      "expected": "hello /CreationDate (D:2026) /ID [<aa>]\n"
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "cases": [
+    {
+      "name": "make_pdf_page_a3",
+      "flow": "mlxflow 0.8\n1. Read Text  notes.txt\n2. Make PDF  page=a3\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E719",
+          "message": "Row 2's `Make PDF` has `page=a3` -- the page sizes are `a4` and `letter`; use one of them."
+        }
+      ]
+    },
+    {
+      "name": "make_pdf_unknown_setting",
+      "flow": "mlxflow 0.8\n1. Read Text  notes.txt\n2. Make PDF  page=a4; margin=10\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E719",
+          "message": "Row 2's `Make PDF` doesn't know `margin=` -- its settings are `page=a4|letter` and `title=`; remove `margin=`."
+        }
+      ]
+    },
+    {
+      "name": "make_pdf_bare_value",
+      "flow": "mlxflow 0.8\n1. Read Text  notes.txt\n2. Make PDF  \"letter\"\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E719",
+          "message": "Row 2's `Make PDF` doesn't take the bare value `letter` -- its settings are `page=a4|letter` and `title=`."
+        }
+      ]
+    },
+    {
+      "name": "make_pdf_empty_page",
+      "flow": "mlxflow 0.8\n1. Read Text  notes.txt\n2. Make PDF  page=\"\"\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E719",
+          "message": "Row 2's `Make PDF` has `page=` -- the page sizes are `a4` and `letter`; use one of them."
+        }
+      ]
+    },
+    {
+      "name": "make_pdf_markdown_setting",
+      "flow": "mlxflow 0.8\n1. Read Text  notes.txt\n2. Make PDF  format=markdown\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E719",
+          "message": "Row 2's `Make PDF` doesn't know `format=` -- its settings are `page=a4|letter` and `title=`; remove `format=`."
+        }
+      ]
+    }
+  ]
+}

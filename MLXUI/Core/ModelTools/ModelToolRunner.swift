@@ -197,8 +197,18 @@ nonisolated struct ModelToolRunner: Sendable {
         case .declined(let sentence): return sentence
         case .output(let item, let model, let rowText, let handles, let ms):
             return await finish(item: item, display: model, rowText: rowText, inputHandles: handles,
-                                milliseconds: ms, host: host)
+                                milliseconds: ms, host: host, lengthNote: Self.lengthNote(for: spec, arguments: arguments))
         }
+    }
+
+    /// HT-FIX-music-cue (SPEC-Q251): `generate_music` takes no duration; a flow row makes a fixed 30 s clip. When the prompt asks
+    /// for a length, the result says so plainly, so the router can tell the user instead of the request being dropped silently.
+    static let fixedClipLengthSentence = "ACE-Step makes a 30-second clip; the requested length isn't supported yet."
+
+    static func lengthNote(for spec: ModelToolSpec, arguments: [String: JSONValue]) -> String? {
+        guard spec.name == "generate_music", case .string(let text)? = arguments["text"] else { return nil }
+        let asksForLength = text.lowercased().range(of: #"\b\d+\s*(s|secs?|seconds?|mins?|minutes?)\b"#, options: .regularExpression) != nil
+        return asksForLength ? fixedClipLengthSentence : nil
     }
 
     /// CW-3's entry point (attachment OCR): the text of a local `file`, or `nil` when no model is *installed* for the tool
@@ -265,7 +275,8 @@ nonisolated struct ModelToolRunner: Sendable {
                 let ask = ModelInstallNeed(
                     toolName: spec.name, modelDisplayName: shown, modelID: need.id, downloadGB: preflight.totalDownloadGB,
                     alternatives: Self.alternatives(for: spec, excluding: need.id, runtime: runtime),
-                    candidates: Self.candidates(for: spec, excluding: need.id, runtime: runtime))
+                    candidates: Self.candidates(for: spec, excluding: need.id, runtime: runtime),
+                    license: need.license)
                 guard await host.installRequest(ask) else {
                     let sentence = ModelToolHost.declineSentence(for: shown)
                     host.turn.markDeclined(tool: spec.name, sentence: sentence)
@@ -338,7 +349,7 @@ nonisolated struct ModelToolRunner: Sendable {
             .filter { $0.id != modelID && !runtime.installedModelIDs.contains($0.id)
                 && CapabilityResolver.fits($0, totalRAMGB: runtime.totalRAMGB) }
             .prefix(limit)
-            .map { ModelInstallOption(id: $0.id, displayName: TaskModels.displayName(for: $0), downloadGB: $0.downloadSizeGB) }
+            .map { ModelInstallOption(id: $0.id, displayName: TaskModels.displayName(for: $0), downloadGB: $0.downloadSizeGB, license: $0.license) }
     }
 
     /// MT4-7-FIX-4 (D): every not-installed candidate of the tool, any size, in preference order.
@@ -347,13 +358,13 @@ nonisolated struct ModelToolRunner: Sendable {
         return CapabilityResolver.orderedCandidates(task: task, kinds: spec.kinds, catalog: runtime.catalog,
                                                     claimableModelIDs: runtime.claimableModelIDs)
             .filter { $0.id != modelID && !runtime.installedModelIDs.contains($0.id) }
-            .map { ModelInstallOption(id: $0.id, displayName: TaskModels.displayName(for: $0), downloadGB: $0.downloadSizeGB) }
+            .map { ModelInstallOption(id: $0.id, displayName: TaskModels.displayName(for: $0), downloadGB: $0.downloadSizeGB, license: $0.license) }
     }
 
     // MARK: - Result
 
     private func finish(item: Item, display: String, rowText: String, inputHandles: [String],
-                        milliseconds: Int, host: ModelToolHost?) async -> String {
+                        milliseconds: Int, host: ModelToolHost?, lengthNote: String? = nil) async -> String {
         guard let host else {
             // No host: exactly the plain text the tools returned before Model Tools.
             guard item.kind == .text, let value = item.value else {
@@ -372,7 +383,8 @@ nonisolated struct ModelToolRunner: Sendable {
             guard let path = item.path else { return ToolFailure("\(spec.name) produced no file.").text }
             let record = try host.assets.adopt(file: path, kind: item.kind.rawValue, name: "\(spec.name) result",
                                                provenance: provenance)
-            return Self.mediaResultJSON(record: record, model: display, pixelSize: item.kind == .image ? Self.pixelSize(of: host.assets.url(for: record)) : nil)
+            return Self.mediaResultJSON(record: record, model: display, pixelSize: item.kind == .image ? Self.pixelSize(of: host.assets.url(for: record)) : nil,
+                                       lengthNote: lengthNote)
         } catch {
             return ToolFailure("couldn't keep the result of \(spec.name).").text
         }
@@ -394,10 +406,12 @@ nonisolated struct ModelToolRunner: Sendable {
     }
 
     /// A media result is a handle, plus the produced size for an image (read from the file's header, no pixels decoded).
-    static func mediaResultJSON(record: ChatAssetRecord, model: String, pixelSize: (width: Int, height: Int)? = nil) -> String {
+    static func mediaResultJSON(record: ChatAssetRecord, model: String, pixelSize: (width: Int, height: Int)? = nil,
+                                lengthNote: String? = nil) -> String {
         var parts = ["\"asset\":\(json(record.handle))", "\"kind\":\(json(record.kind))", "\"model\":\(json(model))"]
         if let pixelSize { parts += ["\"width\":\(pixelSize.width)", "\"height\":\(pixelSize.height)"] }
-        parts.append("\"note\":\(json("Pass \"\(record.handle)\" to another tool. The user can see it in the chat."))")
+        let handoff = "Pass \"\(record.handle)\" to another tool. The user can see it in the chat."
+        parts.append("\"note\":\(json(lengthNote.map { "\($0) \(handoff)" } ?? handoff))")
         return "{" + parts.joined(separator: ",") + "}"
     }
 

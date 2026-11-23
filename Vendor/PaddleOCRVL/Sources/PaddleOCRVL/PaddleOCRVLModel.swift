@@ -58,7 +58,7 @@ public class PaddleOCRVLModel: Module {
 
         let maskInt = mask.asType(.int32)
         let firstTrueIdxArray = argMax(maskInt, axis: 1)
-        let firstTrueIdx = firstTrueIdxArray[0].item(Int.self)
+        let firstTrueIdx = firstTrueIdxArray[0 ..< 1].item(Int.self)   // a slice, not a 0-dim-index Gather
 
         let prePad = firstTrueIdx
         let postPad = seqLen - firstTrueIdx - numImageTokens

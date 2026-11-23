@@ -1,0 +1,38 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Image",
+        "model": null,
+        "settings": "label.png",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Read Barcode",
+        "model": null,
+        "settings": "type=maxicode",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "check": {
+    "valid": false,
+    "issues": [
+      {
+        "row": "2",
+        "code": "E720",
+        "message": "Row 2's `Read Barcode` has `type=maxicode` -- the types are any, qr, code128, ean13, ean8, upca, pdf417, datamatrix, aztec; use one of them."
+      }
+    ]
+  }
+}

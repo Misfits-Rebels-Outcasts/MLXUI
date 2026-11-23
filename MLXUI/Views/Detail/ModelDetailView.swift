@@ -112,6 +112,9 @@ struct ModelDetailView: View {
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
                         }
+                        if AceStepLicenceNotices.applies(toModelID: model.hfModelId) {
+                            AceStepLicenceNoticesView()
+                        }
                     }
                 }
 

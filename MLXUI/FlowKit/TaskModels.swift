@@ -96,6 +96,9 @@ nonisolated enum TaskModels {
         // MC3-8 (issue #6, owner decision 7): `Estimate Depth` is served by the Depth Anything V2 Small port.
         // The declared task was honest-empty until MC3 gave it a runner kind, a stage and a catalog entry.
         "Estimate Depth": .depth,
+        // ER-10 (SPEC-Q238 / SPEC-Q239): Sortformer and DeepFilterNet are the only models of their kinds, and each has a stage.
+        "Identify Speakers": .diarization,
+        "Clean Audio": .enhance,
         // PF-9 (SPEC-Q251, owner ruling 2026-11-18): `Redact` is served by OpenAI Privacy Filter, the first `.redact`
         // catalog entry. `RealExecutor.runModel`'s `.redact` branch runs the registry stage for it.
         "Redact": .redact,
@@ -181,6 +184,9 @@ nonisolated enum TaskModels {
         // MC3-8 (owner decision 7): Depth Anything V2 Small is the first `.depth` model; the generic
         // image→image branch in `RealExecutor.runModel` hands the row to `DepthAnythingStage`.
         "engines.diffusion.estimate_depth",   // Estimate Depth (image → grayscale depth map) — MC3
+        // ER-10: `RealExecutor.runModel` has a branch for the first (stage CSV → table); the generic audio → audio tail serves the second.
+        "engines.diarize.identify_speakers",  // Identify Speakers (audio → table) — SPEC-Q238
+        "engines.audio_clean.clean_audio",    // Clean Audio (audio → 48 kHz audio) — SPEC-Q239
         // PF-9 (SPEC-Q251): the `Redact` row is served by `RealExecutor.runModel`'s `.redact` branch (the Privacy Filter
         // stage), which is the only implementer of `engines.redact.redact` in this runtime.
         "engines.redact.",                    // Redact (text → redacted text) — PF-9
@@ -218,7 +224,10 @@ nonisolated enum TaskModels {
         // MP3-W: "Qwen3-ASR 1.7B" appended **last** after Parakeet -- the seed does not move, never the default.
         "Transcribe": ["Whisper Tiny", "Whisper Small", "Whisper Large v3", "Voxtral Mini 4B Realtime",
                        "Parakeet TDT 0.6B v3", "Qwen3-ASR 1.7B", "LFM2.5-Audio 1.5B"],
-        "Embed": ["BGE-M3"],
+        // MC4-8 (issue #8, decision 7): "Qwen3-VL Embedding 2B" appended **last** to the `Embed` pool.
+        // "BGE-M3" stays the seed and the default, and the pool stays text-only: image `Embed` needs a
+        // language change (`list(text)` -> `list(text) | list(image)`) that is out of scope here.
+        "Embed": ["BGE-M3", "Qwen3-VL Embedding 2B"],
         "Generate": llmModels,
         "Summarize": llmModels,
         // MC2-6 (owner decision 10): "TranslateGemma 4B" appended **last** — the seed ("Ministral 3B") does not move.
@@ -238,6 +247,9 @@ nonisolated enum TaskModels {
         "Rerank": ["BGE Reranker", "Qwen3 Reranker 0.6B"],
         // MC3-8: the one runnable model for the task; nothing else is appended behind it.
         "Estimate Depth": ["Depth Anything V2 Small"],
+        // ER-10: the one runnable model for each task; nothing else is appended behind it.
+        "Identify Speakers": ["Sortformer 4spk v2.1"],
+        "Clean Audio": ["DeepFilterNet 3"],
         "Text to Table": llmModels,
         // LY-8 (RSI/DelegateLayaBacklog.md, 2026-09-27 gate D amendment, superseding LY-0's own
         // gate D "never the default"): Classify/Gate/Score had no pool entry before this —
@@ -275,7 +287,9 @@ nonisolated enum TaskModels {
         "Upscale": ["SeedVR2 3B"],
         "Generate Video": ["Wan2.1 1.3B"],
         "Animate": ["Wan2.1 14B"],
-        "Generate Sound": ["MusicGen"],
+        // MC5-D (owner ruling, Boo, 2026-11-21): ACE-Step 1.5 is the DEFAULT for `Generate Sound` (first here: `defaultModel(forTask:)` returns the first pool entry that is runnable).
+        // MusicGen stays in the pool and in the Model menu (it is cc-by-nc-4.0, non-commercial; its Run screen says so). Rows that name a model are unaffected.
+        "Generate Sound": ["ACE-Step 1.5", "MusicGen"],
         "Segment": ["SAM Base"],
         "Init Latent": ["Z-Image Turbo", "FLUX.2 Klein 4B", "FLUX.1 Kontext", "FLUX.1 Fill"],
         "Encode Latent": ["Z-Image Turbo", "FLUX.2 Klein 4B", "FLUX.1 Kontext", "FLUX.1 Fill"],

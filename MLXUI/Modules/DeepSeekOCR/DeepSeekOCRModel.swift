@@ -50,7 +50,7 @@ nonisolated final class DeepSeekOCR: Module, VLMModel, KVCacheDimensionProvider 
             offset += count
             let sam = samModel(tile)                 // (1, h/64, w/64, 896)
             let encoded = visionModel(sam)           // (1, numQueries, 896)
-            features.append(projector(encoded)[0])   // (numQueries, nEmbed)
+            features.append(projector(encoded).row(0))   // (numQueries, nEmbed)
         }
         features.append(viewSeparator.expandedDimensions(axis: 0))   // (1, nEmbed)
         return concatenated(features, axis: 0)                        // (total, nEmbed)

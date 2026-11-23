@@ -133,6 +133,28 @@ enum ModelFileSelector {
         return lower.contains(base + ".fp16.safetensors")
     }
 
+    /// MC5-3b (R7): repo folders left out of one catalog entry's install, keyed by `hfModelId`. ACE-Step 1.5's repo carries
+    /// the optional 1.7B planner LM under `acestep-5Hz-lm-1.7B/` (3.76 GB, not used in v1), which would otherwise download
+    /// because it is a weight-bearing component folder. Every other repo returns `[]`, so nothing else changes.
+    static func excludedFolders(for hfModelId: String) -> [String] {
+        switch hfModelId {
+        case "ACE-Step/Ace-Step1.5":
+            return ["acestep-5Hz-lm-1.7B/"]
+        default:
+            return []
+        }
+    }
+
+    /// The per-model entry point: drops the model's excluded folders, then selects as `filesToDownload(siblings:)` does.
+    static func filesToDownload(siblings: [String], forModel hfModelId: String) -> [String] {
+        let excluded = excludedFolders(for: hfModelId).map { $0.lowercased() }
+        guard !excluded.isEmpty else { return filesToDownload(siblings: siblings) }
+        return filesToDownload(siblings: siblings.filter { name in
+            let l = name.lowercased()
+            return !excluded.contains { l.hasPrefix($0) }
+        })
+    }
+
     /// Returns the subset of `siblings` (repo-relative filenames) to download.
     static func filesToDownload(siblings: [String]) -> [String] {
         let lower = Set(siblings.map { $0.lowercased() })

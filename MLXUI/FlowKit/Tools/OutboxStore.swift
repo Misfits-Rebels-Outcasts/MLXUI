@@ -16,6 +16,21 @@ nonisolated enum OutboxStore {
         let destination: String
         let text: String
         let stagedAt: String
+        /// SPEC-Q258 (ER-11): a `print` entry's file name, MIME type and stored copy (a bare name under `outbox/files/`), and
+        /// the last failed approval's message. `nil` on a send / post entry.
+        var fileName: String?
+        var mime: String?
+        var storedFile: String?
+        var lastError: String?
+    }
+
+    /// The Python's `datetime.isoformat(timespec="milliseconds")` with a `Z`: what `staged_at` holds. SPEC-Q258 shares it with `PrintOutbox`.
+    static func timestamp(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        var stamp = formatter.string(from: date)
+        if stamp.hasSuffix("+00:00") { stamp = String(stamp.dropLast(6)) + "Z" }
+        return stamp
     }
 
     /// The per-flow outbox directory: `flows/<flow-id>/outbox/`.
@@ -66,7 +81,9 @@ nonisolated enum OutboxStore {
                 guard let id = json["id"] as? String, let kind = json["kind"] as? String,
                       let destination = json["destination"] as? String,
                       let text = json["text"] as? String, let at = json["staged_at"] as? String else { return nil }
-                return Entry(id: id, kind: kind, destination: destination, text: text, stagedAt: at)
+                return Entry(id: id, kind: kind, destination: destination, text: text, stagedAt: at,
+                             fileName: json["file_name"] as? String, mime: json["mime"] as? String,
+                             storedFile: json["stored_file"] as? String, lastError: json["last_error"] as? String)
             }
     }
 

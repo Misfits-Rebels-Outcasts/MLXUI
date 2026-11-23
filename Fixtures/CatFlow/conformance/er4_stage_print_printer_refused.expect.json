@@ -1,0 +1,48 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "label.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Make PDF",
+        "model": null,
+        "settings": "page=a4",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Stage Print",
+        "model": null,
+        "settings": "printer=office",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "check": {
+    "valid": false,
+    "issues": [
+      {
+        "row": "3",
+        "code": "E722",
+        "message": "Row 3's `Stage Print` doesn't take settings -- the file goes to the system's default printer, and v1 has no printer or option settings; remove `printer=`."
+      }
+    ]
+  }
+}

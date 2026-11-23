@@ -138,6 +138,28 @@ nonisolated enum CatalogBridge {
             candidates: ["jasonvassallo/mlx-musicgen-small"],
             equivalence: .substitute,
             manifestFile: "musicgen-small.json"),
+        // MC5-W (AM-W, SPEC-Q251): ACE-Step 1.5 turbo. `display` is `browser.json`'s `displayName`, so the `.cat` writes the catalog name.
+        // No upstream curated manifest exists: `ace-step-1.5.json` is MLXUI-authored pending SPEC-Q251(b). Appended last in `taskModels["Generate Sound"]`.
+        BridgeEntry(
+            display: "ACE-Step 1.5",
+            pinnedID: "ACE-Step/Ace-Step1.5",
+            candidates: ["ACE-Step/Ace-Step1.5"],
+            equivalence: .same,
+            manifestFile: "ace-step-1.5.json"),
+        // ER-10 (AM-W, SPEC-Q238 / SPEC-Q239): `display` is `browser.json`'s `displayName`, so the `.cat` writes the catalog name.
+        // No upstream curated manifest exists for either model: both are MLXUI-authored (no settings) pending BACKLOG ER-PY-audio.
+        BridgeEntry(
+            display: "Sortformer 4spk v2.1",
+            pinnedID: "mlx-community/diar_streaming_sortformer_4spk-v2.1-fp16",
+            candidates: ["mlx-community/diar_streaming_sortformer_4spk-v2.1-fp16"],
+            equivalence: .same,
+            manifestFile: "sortformer-4spk-v2.1.json"),
+        BridgeEntry(
+            display: "DeepFilterNet 3",
+            pinnedID: "mlx-community/DeepFilterNet-mlx",
+            candidates: ["mlx-community/DeepFilterNet-mlx"],
+            equivalence: .same,
+            manifestFile: "deepfilternet-3.json"),
         BridgeEntry(
             display: "Llama 3.1 8B",
             pinnedID: "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit",
@@ -450,6 +472,18 @@ nonisolated enum CatalogBridge {
             equivalence: .same,
             manifestFile: "translategemma-4b-it-4bit.json",
             modelType: .llm),
+        // MC4-8 (issue #8, decision 7): the multimodel embedder joins the `Embed` pool **last**. The
+        // `.embedding` modelType is explicit: unlike the other rows it exists so `derivedModels(for:
+        // "Embed")` names the card by this display, and `.same` because the catalog id is the pinned
+        // id. `qwen3-vl-embedding-2b.json` is MLXUI-authored (see its own notes). Its vectors are
+        // 2048-d, so an index written by it does not mix with BGE-M3's 1024-d one (decision 8).
+        BridgeEntry(
+            display: "Qwen3-VL Embedding 2B",
+            pinnedID: "mlx-community/Qwen3-VL-Embedding-2B-4bit",
+            candidates: ["mlx-community/Qwen3-VL-Embedding-2B-4bit"],
+            equivalence: .same,
+            manifestFile: "qwen3-vl-embedding-2b.json",
+            modelType: .embedding),
         // PF-9 (SPEC-Q251, owner ruling 2026-11-18) -- Privacy Filter, the `Redact` row's only model. `.same`: the card's repo
         // is the pinned repo (and `hfModelId` is exactly `openai/privacy-filter`, Trap 8). No catflow-mlx manifest exists for
         // it, so `openai-privacy-filter.json` is MLXUI-authored (see its "notes", which names the pinned revision). Appended

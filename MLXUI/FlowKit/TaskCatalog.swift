@@ -139,6 +139,8 @@ nonisolated enum TaskCatalog {
         TaskDescriptor("Save Audio", .anyKind, t(.status), .instant, .tool, "tools.files.save_audio"),
         TaskDescriptor("Save Image", .anyKind, t(.status), .instant, .tool, "tools.files.save_image"),
         TaskDescriptor("Save Video", .anyKind, t(.status), .instant, .tool, "tools.files.save_video"),
+        TaskDescriptor("Save File", t(.file), t(.status), .instant, .tool, "tools.files.save_file"),  // SPEC-Q253
+        TaskDescriptor("Make PDF", .anyKind, t(.file), .instant, .tool, "tools.pdf.make_pdf"),  // SPEC-Q255
         TaskDescriptor("Save Images", .listOf(.image), t(.status), .instant, .tool, "tools.files.save_images"),
         TaskDescriptor("Store Index", .tupleOf([.text, .vector]), t(.index), .instant, .tool, "tools.index_store.store_index"),
 
@@ -151,6 +153,7 @@ nonisolated enum TaskCatalog {
         TaskDescriptor("Dedupe", .listOf(.text), .listOf(.text), .instant, .tool, "tools.text.dedupe"),
         TaskDescriptor("Extract", t(.text), .listOf(.text), .instant, .tool, "tools.text.extract"),
         TaskDescriptor("Count", .listOf(.text), t(.text), .instant, .tool, "tools.text.count"),
+        TaskDescriptor("Replace", t(.text), t(.text), .instant, .tool, "tools.text.replace"),  // SPEC-Q254
         TaskDescriptor("Diff", .tupleOf([.text, .text]), t(.text), .instant, .tool, "tools.text.diff"),
 
         // -- §3 Language models, Phase-1 subset (primitives + non-decider framed) --
@@ -207,7 +210,12 @@ nonisolated enum TaskCatalog {
         TaskDescriptor("Crop", t(.image), t(.image), .instant, .tool, "tools.media.crop"),
         TaskDescriptor("Convert", t(.image), t(.image), .instant, .tool, "tools.media.convert"),
         TaskDescriptor("Watermark", t(.image), t(.image), .instant, .tool, "tools.media.watermark"),
+        // SPEC-Q238 / SPEC-Q239 (ER-10, owner rulings R1 and R11): the Swift-first audio rows.
+        TaskDescriptor("Identify Speakers", t(.audio), t(.table), .model, .engine, "engines.diarize.identify_speakers"),
+        TaskDescriptor("Clean Audio", t(.audio), t(.audio), .model, .engine, "engines.audio_clean.clean_audio"),
         TaskDescriptor("Overlay Text", t(.image), t(.image), .instant, .tool, "tools.media.overlay_text"),
+        TaskDescriptor("Read Barcode", t(.image), t(.text), .instant, .tool, "tools.barcode.read_barcode"),  // SPEC-Q256
+        TaskDescriptor("Make Barcode", t(.text), t(.image), .instant, .tool, "tools.barcode.make_barcode"),  // SPEC-Q257
         TaskDescriptor("Contact Sheet", .tupleOf([.image, .text]), t(.image), .instant, .tool, "tools.media.contact_sheet"),
 
         // -- §5 Search and retrieval (local) --
@@ -241,6 +249,8 @@ nonisolated enum TaskCatalog {
         TaskDescriptor("Read Context", t(.file), t(.context), .instant, .tool, "tools.context.read_context"),
         TaskDescriptor("Count Context", t(.context), t(.text), .instant, .tool, "tools.context.count_context"),
         TaskDescriptor("Stage Send", t(.text), t(.status), .staged, .tool, "tools.outbox.stage_send"),
+        // SPEC-Q258 (ER-11, owner ruling R8): the first staged effect that is not a message; Python's catalog order (Send, Print, Post).
+        TaskDescriptor("Stage Print", .unionOf([.file, .image]), t(.status), .staged, .tool, "tools.outbox.stage_print"),
         TaskDescriptor("Stage Post", t(.text), t(.status), .staged, .tool, "tools.outbox.stage_post"),
 
         // -- §12 v0.7 additions: triggers --
@@ -275,9 +285,9 @@ nonisolated enum TaskFamilies {
     static let families: [String: [String]] = [
         "Files": ["Read Text", "Read Audio", "Read Image", "Read Video", "Read Images",
                   "Read Files", "Read PDF", "Read Index", "Save Text", "Save Audio",
-                  "Save Image", "Save Video", "Save Images", "Store Index"],
+                  "Save Image", "Save Video", "Save File", "Make PDF", "Save Images", "Store Index"],  // SPEC-Q253
         "Text": ["Split", "Template", "Join Text", "Filter", "Sort", "Dedupe",
-                 "Extract", "Count", "Diff"],
+                 "Extract", "Replace", "Count", "Diff"],  // SPEC-Q254
         "Language models": ["Generate", "Decide", "Summarize", "Translate", "Answer",
                             "Rewrite", "Draft", "Ask", "Title", "Critique", "Verify",
                             "Revise", "Merge", "Extract Structured", "Classify", "Gate",
@@ -286,7 +296,8 @@ nonisolated enum TaskFamilies {
                             "Redact"],
         "Audio, image, video": ["Transcribe", "Speak", "Describe Image", "OCR", "Extract Frame",
                                 "Extract Audio", "Trim", "Join Video", "Resize", "Crop",
-                                "Convert", "Watermark", "Overlay Text", "Contact Sheet",
+                                "Convert", "Watermark", "Overlay Text", "Read Barcode", "Make Barcode",
+                                "Identify Speakers", "Clean Audio", "Contact Sheet",
                                 "Generate Image", "Edit Image", "Instruct Edit", "Inpaint",
                                 "Upscale", "Detect Edges", "Estimate Depth", "Detect Pose",
                                 "Segment", "Init Latent", "Encode Latent", "Decode Latent",
@@ -297,7 +308,7 @@ nonisolated enum TaskFamilies {
         "Networked tools": ["Web Search", "Web Fetch", "Fetch Feed", "Download File", "HTTP Get"],
         "Humans": ["Ask Human", "Human Input"],
         "Context": ["Save Context", "Read Context", "Count Context"],
-        "Staged effects": ["Stage Send", "Stage Post"],
+        "Staged effects": ["Stage Send", "Stage Post", "Stage Print"],  // SPEC-Q258
         "Triggers": ["On File", "On Schedule", "On Flow"],
         "Stores": ["Store Query", "Store Read", "Store Write", "Set Field", "Append Row", "Merge Record"],
         "Model space": ["Load Checkpoint", "Blend", "Bake LoRA", "Pin Model"],

@@ -37,7 +37,7 @@ struct SDXLTurboEncoderTests {
         // (EOS last-hidden state through `text_projection`) → [1, 1280].
         let encoder = SDOpenCLIPEncoder()
         let ids = MLXArray.arange(77).expandedDimensions(axis: 0)
-        let pooled = encoder.pooled(ids)
+        let pooled = try encoder.pooled(ids)
         eval(pooled)
         #expect(pooled.shape == [1, 1280])
     }

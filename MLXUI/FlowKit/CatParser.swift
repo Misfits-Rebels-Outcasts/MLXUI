@@ -24,13 +24,14 @@ nonisolated enum CatParser {
         // multi-word tasks (before single-word for greedy match)
         "Read Audio", "Read Text", "Read Image", "Read Video",
         "Read Index", "Read Files", "Read Images", "Read PDF", "Read CSV", "Read JSON",
-        "Save Audio", "Save Text", "Save Image", "Save Video", "Save Images",
+        "Save Audio", "Save Text", "Save Image", "Save Video", "Save Images", "Save File", "Make PDF",  // SPEC-Q253
         "Store Index", "Keyword Search", "Join Video", "Join Text",
         "Query Table", "Table to Text", "Text to Table",
         "Store Query", "Store Read", "Store Write",
         "Set Field", "Append Row", "Merge Record",
         "Extract Structured", "Extract Frame", "Extract Audio",
-        "Describe Image", "Overlay Text",
+        "Describe Image", "Overlay Text", "Read Barcode", "Make Barcode",
+        "Identify Speakers", "Clean Audio",  // SPEC-Q238, SPEC-Q239
         "Generate Image",
         "Edit Image", "Instruct Edit",
         "Inpaint", "Upscale",
@@ -43,13 +44,13 @@ nonisolated enum CatParser {
         "Denoise",
         "Split Sigmas", "KSamplerSelect", "Denoise Step", "Run Shell",
         "Ask Human", "Human Input", "Save Context", "Read Context", "Count Context",
-        "Stage Send", "Stage Post", "On File", "On Schedule", "On Flow",
+        "Stage Send", "Stage Post", "Stage Print", "On File", "On Schedule", "On Flow",
         // single-word tasks
         "Transcribe", "Translate", "Summarize", "Rewrite", "Answer", "Ask",
         "Title", "Critique", "Verify", "Revise", "Merge", "Draft",
         "Speak", "OCR", "Watermark", "Resize", "Crop", "Convert", "Trim",
         "Split", "Template", "Filter", "Sort", "Dedupe",
-        "Extract", "Count", "Diff",
+        "Extract", "Count", "Diff", "Replace",  // SPEC-Q254
         "Embed", "Retrieve", "Rerank", "Calculate",
         "Generate", "Decide",
         "Classify", "Gate", "Grade", "Score", "Judge", "Think",

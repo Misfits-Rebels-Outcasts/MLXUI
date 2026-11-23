@@ -2387,6 +2387,55 @@
           ],
           "descriptionSource": "jasonvassallo/mlx-musicgen-small",
           "summary": "Meta's smallest MusicGen text-to-music model as MLX float32 — a prompt generates a short WAV of music on Apple Silicon (CC-BY-NC-4.0, non-commercial). The 32 kHz EnCodec codec ships bundled in the install."
+        },
+        {
+          "id": "ACE-Step--Ace-Step1.5",
+          "family": "ace-step",
+          "displayName": "ACE-Step 1.5",
+          "paramSize": "2B",
+          "paramCountB": null,
+          "modelType": "music",
+          "source": "mlx",
+          "format": "mlx-bf16",
+          "platforms": [
+            "macOS 14+"
+          ],
+          "minMacOSVersion": "14.0",
+          "hfRepo": "ACE-Step",
+          "hfModelId": "ACE-Step/Ace-Step1.5",
+          "ramGB": 10.9,
+          "downloadSizeGB": 6.33,
+          "contextWindow": null,
+          "license": "mit",
+          "licenseUrl": "https://huggingface.co/ACE-Step/Ace-Step1.5/blob/main/README.md",
+          "description": "# ACE-Step 1.5\n\nACE-Step 1.5 is an open music-generation model from ACE Studio and StepFun. In this app you describe the music you want in a text or style prompt, and it generates stereo 48 kHz instrumental music on your Mac using MLX. This catalog entry is the turbo build, which denoises in 8 steps.\n\nThe install holds the turbo diffusion transformer with its condition encoder (bf16), the audio VAE, and the bundled Qwen3-Embedding-0.6B text encoder. The official `ACE-Step/Ace-Step1.5` weights are read directly and converted as they load; nothing is quantized.\n\n**License:** MIT for ACE-Step 1.5. The bundled Qwen3-Embedding-0.6B text encoder is Apache-2.0 (Copyright Alibaba Cloud / Qwen Team).\n\n**Powered by Stability AI** (for the audio VAE component, under the Stability AI Community License). Commercial use by organisations with annual revenue over US $1M may require a Stability AI Enterprise licence for this component.\n\n**Sizes:** the download is 6.33 GB (the files the installer selects from the pinned repo listing, revision 19671f4; the repo's separate 1.7B language-model folder is not downloaded). The RAM figure (10.9 GB) is measured: the whole-process peak while making 4 minutes of music (10.88 GB, reached while the models load), rounded up to 0.1 GB.",
+          "architecture": "AceStepConditionGenerationModel",
+          "languages": null,
+          "lastUpdated": "2026-02-03",
+          "taskTags": [
+            "text-to-music",
+            "music-generation"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 93349,
+          "communityLikes": 937,
+          "variants": [
+            {
+              "quantization": "bf16",
+              "format": "mlx-bf16",
+              "ramGB": 10.9,
+              "downloadSizeGB": 6.33,
+              "qualityPercent": 100,
+              "hfModelId": "ACE-Step/Ace-Step1.5",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "ACE-Step/Ace-Step1.5",
+          "summary": "Open text-to-music model (ACE-Step 1.5 turbo): a style prompt generates stereo 48 kHz instrumental music in 8 steps on Apple Silicon via MLX (MIT).",
+          "notes": "downloadSizeGB 6.33 = 6,332,732,359 B, the files ModelFileSelector selects from the pinned ACE-Step/Ace-Step1.5 @ 19671f4 sibling list (tree.json) after excluding acestep-5Hz-lm-1.7B/ (3,755,412,617 B); .py, .md, .pt and .gitattributes are skipped (silence_latent ships bundled, R6). MC5-3b corrected the MC5-3a figure 6.34, which was the unfiltered sibling sum 6,336,689,976 B. ramGB 10.9 is MEASURED (MC5-T run 1, 2026-11-21, AM-T `AceStepSmokeTests`, 20 ms sampler, test-host baseline included): whole-process phys_footprint peak 10,378 MiB = 10.88 GB at 240 s, rounded up to 0.1 GB; load-phase dominated (9.6 to 10.4 GB at every length from 10 s to 240 s; MLX's own peak counter reads about 4.3 GB). It replaces the provisional 8.9 (AM1 rule: resident bf16 weights 5.897 GB x 1.5; turbo DiT 3.151 + encoder 1.217 + Qwen trunk 0.881 + lyric embedding table 0.311 + VAE 0.337; FSQ tokenizer/detokenizer not loaded, T16). Not the LLM weights heuristic: speed and benchmarks are null on purpose (CLAUDE.md, Formulas)."
         }
       ]
     },
@@ -2600,6 +2649,58 @@
           ],
           "descriptionSource": "mlx-community/bge-m3-mlx-fp16",
           "summary": "BGE-M3 is a versatile embedding model capable of:"
+        },
+        {
+          "id": "mlx-community--Qwen3-VL-Embedding-2B-4bit",
+          "family": "qwen3-vl-embedding",
+          "displayName": "Qwen3-VL Embedding 2B",
+          "paramSize": "2B",
+          "paramCountB": 2.0,
+          "modelType": "embedding",
+          "source": "mlx",
+          "format": "mlx-4bit",
+          "platforms": [
+            "macOS 13+"
+          ],
+          "minMacOSVersion": "13.0",
+          "hfRepo": "mlx-community",
+          "hfModelId": "mlx-community/Qwen3-VL-Embedding-2B-4bit",
+          "ramGB": 5.5,
+          "downloadSizeGB": 1.8,
+          "contextWindow": 8192,
+          "license": "apache-2.0",
+          "licenseUrl": "https://huggingface.co/Qwen/Qwen3-VL-Embedding-2B",
+          "description": "# Qwen3-VL Embedding 2B\n\nQwen's multimodal embedding model. Every input — text, one image, or an image plus text — becomes a single 2048-dimension vector in the same space, so a sentence can find a photo, a page screenshot or a receipt without OCR first. This is the mlx-community 4-bit MLX build the app runs; the official bf16 checkpoint is only the parity reference.\n\n**Input limits.** Text up to 8,192 tokens after rendering (the model itself supports 32K); one image per input, sized by the model's own processor (4,096 to 1,310,720 pixels, at most 1,280 vision tokens); no video.\n\n**Vectors don't mix with other embedders.** These are 2048-dimensional and live in Qwen3-VL's own space: a query against an index built with another embedder is refused by the dimension check, and an index built with this model has to be rebuilt when switching away and back.\n\nLicense: Apache-2.0 (the Qwen3-VL-Embedding-2B model page carries the notice). The MLX conversion is by mlx-community.\n\nRAM figure (5.5 GB) is measured: the peak was about 5.25 GB on the largest image (4096×4096), App Store build, 2026-11-20.",
+          "architecture": "Qwen3VLForConditionalGeneration",
+          "languages": [
+            "multilingual"
+          ],
+          "lastUpdated": "2026-03-13",
+          "taskTags": [
+            "feature-extraction",
+            "image-text-retrieval",
+            "multimodal-embedding"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 367,
+          "communityLikes": 2,
+          "variants": [
+            {
+              "quantization": "4-bit",
+              "format": "mlx-4bit",
+              "ramGB": 5.5,
+              "downloadSizeGB": 1.8,
+              "qualityPercent": 90,
+              "hfModelId": "mlx-community/Qwen3-VL-Embedding-2B-4bit",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "mlx-community/Qwen3-VL-Embedding-2B-4bit",
+          "summary": "Qwen's multimodal embedder: text, images, or both become one 2048-dimensional vector in a shared space. 4-bit MLX build.",
+          "notes": "peak ~5.25 GB measured on the largest image (4096×4096), App Store build, 2026-11-20"
         }
       ]
     },

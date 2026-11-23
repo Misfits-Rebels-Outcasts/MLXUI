@@ -32,9 +32,10 @@ nonisolated final class SDOpenCLIPEncoder: Module {
 
     /// `CLIPTextModelWithProjection` pooled output: the last hidden state at the EOS (argmax)
     /// token, passed through `text_projection` → `[1, 1280]`. Used for the UNet's `text_embeds`.
-    func pooled(_ tokens: MLXArray) -> MLXArray {
+    func pooled(_ tokens: MLXArray) throws -> MLXArray {
         let hidden = textModel(tokens)
-        let eosIndex = argMax(tokens, axis: -1)[0]       // scalar — EOS position
+        // EOS position. Read to an Int so neither the pick nor the slice below is a 0-dim-index Gather (Metal API Validation).
+        let eosIndex = try MLXErrorGuard.item(argMax(tokens, axis: -1).row(0), as: Int.self)
         let vec = hidden[0 ..< 1, eosIndex]              // [1, 1280] (keep the batch axis)
         return textProjection(vec)
     }

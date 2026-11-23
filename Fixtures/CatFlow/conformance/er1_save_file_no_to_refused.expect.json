@@ -1,0 +1,49 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Files",
+        "model": null,
+        "settings": "reports/",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": null,
+        "model": null,
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": "each",
+        "block_name": "report",
+        "children": [
+          {
+            "task": "Save File",
+            "model": null,
+            "settings": null,
+            "refs": [],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "check": {
+    "valid": false,
+    "issues": [
+      {
+        "row": "2.1",
+        "code": "E717",
+        "message": "Row 2.1's `Save File` has no `to=` -- say where the file goes, e.g. `to=\"out/report.pdf\"`."
+      }
+    ]
+  }
+}

@@ -1,0 +1,324 @@
+import Foundation
+import MLX
+import Darwin
+import MLXNN
+
+// MC5-3i: the ACE-Step 1.5 turbo engine on the no-LM text2music path: text -> condition encoder -> 8-step Euler/DCW sampler over the DiT -> Oobleck VAE
+// -> peak-normalised 48 kHz stereo. It only composes 3c (weights), 3d (text), 3e (conditioning), 3f (DiT), 3g (sampler), 3h (VAE).
+//
+// STAGED RESIDENCY (one component at a time, each released, with Memory.clearCache(), before the next loads):
+//   text (Qwen3-Embedding 0.88 GB + lyric table 0.31 GB) -> condition encoder (1.2 GB) -> DiT (3.15 GB) -> VAE (0.34 GB read as f32, f16 resident).
+// What survives a stage is small: the text inputs, then `encoder_hidden_states` [1, L, 2048] and `context_latents` [1, T, 128], then the latents [1, T, 64].
+// The DiT is released before the VAE loads (nothing of it is needed after the last step), so the busiest moment is the DiT stage.
+//
+// Memory.cacheLimit is process-global: it is set on entry and put back on EVERY exit (success, throw, cancel) by `Flux2KleinCacheLimitGuard`, the same
+// guard the Klein engine uses (it is generic; only its name says Klein).
+//
+// No download path: every file is checked first and a missing one throws `AceStepWeightsError.missingFile(<relative path>)`.
+
+nonisolated struct AceStepRequest: Sendable, Equatable {
+    var caption: String
+    /// Empty (after trimming) = instrumental (upstream's `[Instrumental]` / `unknown`, T18).
+    var lyrics: String = ""
+    /// The lyric language code upstream's `_format_lyrics` takes when there are lyrics ("en", "zh", ...).
+    var language: String = "en"
+    /// Seconds; the engine accepts `AceStepEngine.Configuration.minDuration ... maxDuration` (10 ... 240). Latent frames = `Int(duration * 25)`.
+    var duration: Double = 60
+    var seed: UInt64 = 0
+    /// Denoise steps (MC5-W, SPEC-Q251): the turbo default is 8; the sampler's `1 - i/steps` schedule takes any count, and a flow row may ask for 1...20.
+    var steps: Int = AceStepSamplerConfig().steps
+
+    var isInstrumental: Bool { lyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+}
+
+nonisolated enum AceStepPhase: Sendable, Equatable {
+    case text
+    case condition
+    case denoise(step: Int, of: Int)
+    case decode(chunk: Int, of: Int)
+
+    /// 0...1 overall progress: text 0-5%, condition 5-10%, denoise 10-85%, decode 85-98%.
+    var fraction: Double {
+        switch self {
+        case .text: return 0.0
+        case .condition: return 0.05
+        case .denoise(let s, let n): return 0.10 + 0.75 * Double(s) / Double(max(n, 1))
+        case .decode(let c, let n): return 0.85 + 0.13 * Double(c) / Double(max(n, 1))
+        }
+    }
+}
+
+nonisolated enum AceStepComponent: String, Sendable { case text, condition, dit, vae }
+
+nonisolated enum AceStepEvent: Sendable, Equatable {
+    case cacheLimitApplied(bytes: Int)
+    case loaded(AceStepComponent)
+    case released(AceStepComponent)
+    case phase(AceStepPhase)
+}
+
+nonisolated enum AceStepEngineError: Error, Equatable, CustomStringConvertible, LocalizedError {
+    case durationOutOfRange(Double, min: Double, max: Double)
+    case emptyPrompt
+    /// MC5-FIX-finish-gather: a zero-size gather is refused by name rather than handed to MLX.
+    case emptyTokens(String)
+    case badAudioShape([Int])
+
+    var description: String {
+        switch self {
+        case .durationOutOfRange(let d, let lo, let hi):
+            return "ACE-Step makes songs between \(Int(lo)) and \(Int(hi)) seconds long; \(d) seconds is outside that."
+        case .emptyPrompt: return "ACE-Step needs a description of the music to make."
+        case .emptyTokens(let what): return "ACE-Step has no \(what) to work from."
+        case .badAudioShape(let shape): return "ACE-Step produced audio of an unexpected shape \(shape)."
+        }
+    }
+    var errorDescription: String? { description }
+}
+
+/// Interleaved 48 kHz stereo (L R L R ...), peak-normalised.
+nonisolated struct AceStepAudio: Sendable, Equatable {
+    static let sampleRate = 48_000
+    static let channels = 2
+    var samples: [Float]
+
+    var frameCount: Int { samples.count / Self.channels }
+    var seconds: Double { Double(frameCount) / Double(Self.sampleRate) }
+
+    /// 44-byte header + 16-bit little-endian PCM, 2 channels, 48 kHz (the repo's `AudioWriter` is mono).
+    func wavData() -> Data {
+        let dataBytes = UInt32(samples.count * 2)
+        var data = Data(capacity: 44 + Int(dataBytes))
+        func put<T: FixedWidthInteger>(_ v: T) { var le = v.littleEndian; withUnsafeBytes(of: &le) { data.append(contentsOf: $0) } }
+        data.append(contentsOf: Array("RIFF".utf8)); put(UInt32(36) + dataBytes)
+        data.append(contentsOf: Array("WAVE".utf8)); data.append(contentsOf: Array("fmt ".utf8))
+        put(UInt32(16)); put(UInt16(1)); put(UInt16(Self.channels)); put(UInt32(Self.sampleRate))
+        put(UInt32(Self.sampleRate * Self.channels * 2)); put(UInt16(Self.channels * 2)); put(UInt16(16))
+        data.append(contentsOf: Array("data".utf8)); put(dataBytes)
+        for s in samples { put(Int16((max(-1, min(1, s)) * Float(Int16.max)).rounded())) }
+        return data
+    }
+
+    /// The flow-facing mono mixdown (`AudioBuffer` is mono): the mean of the two channels.
+    var monoMixdown: AudioBuffer {
+        var mono = [Float](repeating: 0, count: frameCount)
+        for i in 0 ..< frameCount { mono[i] = 0.5 * (samples[2 * i] + samples[2 * i + 1]) }
+        return AudioBuffer(samples: mono, sampleRate: Self.sampleRate)
+    }
+}
+
+nonisolated struct AceStepResult: @unchecked Sendable {
+    var audio: AceStepAudio
+    /// The sampler's final latents `[1, T, 64]` (f32), before the VAE.
+    var latents: MLXArray
+}
+
+/// Where the text inputs come from. Production loads the installed Qwen3-Embedding folder per call and lets it go; a test injects tensors.
+nonisolated protocol AceStepTextSource: Sendable {
+    func inputs(for request: AceStepRequest) async throws -> AceStepTextInputs
+}
+
+/// The installed `Qwen3-Embedding-0.6B/` folder (tokenizer + trunk + embedding table). Everything it loads dies when `inputs` returns.
+nonisolated struct AceStepInstalledTextSource: AceStepTextSource {
+    let directory: URL
+
+    func inputs(for request: AceStepRequest) async throws -> AceStepTextInputs {
+        let tokenizer = try await AceStepTokenizer(directory: directory)
+        let textIds = tokenizer.encodeText(caption: request.caption, duration: request.duration)
+        let lyricIds = tokenizer.encodeLyrics(lyrics: request.lyrics, language: request.language, instrumental: request.isInstrumental)
+        let encoder = try await AceStepTextEncoder.load(directory: directory)
+        return try encoder.inputs(textIds: textIds, lyricIds: lyricIds)
+    }
+}
+
+nonisolated struct AceStepEngine: Sendable {
+    nonisolated struct Configuration: Sendable {
+        var minDuration = 10.0
+        var maxDuration = 240.0
+        /// `Memory.cacheLimit` cap while a run holds it (never raises a lower limit someone set).
+        var cacheLimitBytes = 1 << 30
+        var vaeDType: DType = .float16
+        var vaeChunk = AceStepVAE.defaultChunk
+        /// MC5-T-mem: wait for the GPU stream before dropping MLX's buffer cache at each stage boundary. Buffers freed by the finished stage are still held by the stream's
+        /// last command buffers until it is synchronised, so without this the process carries the text encoder's and the condition encoder's gigabytes (and later the DiT's) into the next
+        /// stage's load: the load-phase peak sits 5 GB or more above MLX's own peak counter. No effect on any value computed (`AceStepEngineTests` pins identical audio).
+        var syncAtStageBoundaries = true
+        /// MC5-T-mem2: ask the host malloc to hand free pages back to the OS right after each component load and each stage release (`HostMemory.relief()`). The load phase reads the
+        /// checkpoint into host buffers and builds raw/sanitised dictionaries; the allocator keeps those pages (about 2.8 GB measured, neither MLX active nor MLX cache) until it is told
+        /// otherwise. No effect on any value computed.
+        var hostReliefAfterLoads = true
+        static let standard = Configuration()
+    }
+
+    /// The model folder: `acestep-v15-turbo/`, `Qwen3-Embedding-0.6B/`, `vae/` (the `InstallManager` layout).
+    let directory: URL
+    var configuration = Configuration.standard
+    /// nil = the installed Qwen3 folder.
+    var textSource: (any AceStepTextSource)?
+    var silenceLatent: @Sendable () throws -> MLXArray = { try AceStepSilenceLatent.load() }
+    var readCacheLimit: @Sendable () -> Int = { Memory.cacheLimit }
+    var writeCacheLimit: @Sendable (Int) -> Void = { Memory.cacheLimit = $0 }
+    var observer: (@Sendable (AceStepEvent) -> Void)?
+    /// MC5-T-fix: runs on EVERY exit of `generate` (done, failed or cancelled), after the run's arrays are gone: waits for the GPU stream to finish and then drops MLX's buffer cache.
+    /// Without the synchronize, a run that ends by throwing (a cancel) leaves its last command buffers holding their buffers, and the process keeps the DiT's gigabytes until some
+    /// later GPU work flushes them (measured: a synthetic 5 GB probe stays at 5.3 GB after `clearCache()` alone and drops to 0.15 GB with `synchronize()` first).
+    var teardown: @Sendable () -> Void = { Stream.gpu.synchronize(); Memory.clearCache() }
+
+    static let turboConfig = "acestep-v15-turbo/config.json"
+    static let vaeConfig = "vae/config.json"
+
+    /// Files a run needs, relative to the model folder (the Qwen3 ones only when the engine loads its own text side).
+    func requiredFiles() -> [String] {
+        var files = [Self.turboConfig, AceStepWeights.turboPath, Self.vaeConfig, AceStepWeights.vaePath]
+        if textSource == nil {
+            files += ["\(AceStepTokenizer.folderName)/tokenizer.json", "\(AceStepTokenizer.folderName)/config.json", AceStepWeights.qwenPath]
+        }
+        return files
+    }
+
+    /// Everything the engine would refuse, before a byte of weights is read.
+    func validate(_ request: AceStepRequest) throws {
+        if request.caption.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw AceStepEngineError.emptyPrompt }
+        guard AceStepRunSettings.stepsRange.contains(request.steps) else { throw StageError.unsupportedSetting(setting: "steps") }
+        guard request.duration >= configuration.minDuration, request.duration <= configuration.maxDuration else {
+            throw AceStepEngineError.durationOutOfRange(request.duration, min: configuration.minDuration, max: configuration.maxDuration)
+        }
+        for file in requiredFiles() where !FileManager.default.fileExists(atPath: directory.appendingPathComponent(file).path) {
+            throw AceStepWeightsError.missingFile(file)
+        }
+    }
+
+    /// `noise` (`[1, T, 64]`) is the injection point for tests and goldens; production draws `normal([1, T, 64], key(seed))`.
+    /// Runs off the main actor (`@concurrent`): the MLX work would otherwise beachball the UI.
+    @concurrent
+    nonisolated func generate(_ request: AceStepRequest, noise injectedNoise: MLXArray? = nil) async throws -> AceStepResult {
+        // `perform` owns every component array, so they are all released when it returns or throws; only then does the teardown run.
+        do {
+            let result = try await perform(request, noise: injectedNoise)
+            teardown()
+            return result
+        } catch {
+            teardown()
+            throw error
+        }
+    }
+
+    /// A stage boundary: everything the finished stage owned has been dropped by now; return its memory before the next stage loads.
+    private nonisolated func releaseStageMemory() {
+        if configuration.syncAtStageBoundaries { Stream.gpu.synchronize() }
+        Memory.clearCache()
+        relieveHost()
+    }
+
+    /// Right after a component's load has completed (its host-side file buffers and raw dictionaries are out of scope by then).
+    private nonisolated func relieveHost() {
+        if configuration.hostReliefAfterLoads { HostMemory.relief() }
+    }
+
+    private nonisolated func perform(_ request: AceStepRequest, noise injectedNoise: MLXArray?) async throws -> AceStepResult {
+        try validate(request)
+        try Task.checkCancellation()
+        let limits = Flux2KleinCacheLimitGuard(read: readCacheLimit, write: writeCacheLimit)
+        defer { limits.restore() }
+        let applied = limits.apply(cap: configuration.cacheLimitBytes)
+        emit(.cacheLimitApplied(bytes: applied))
+
+        let frames = Int(request.duration * 25)
+        let turboConfigData = try Data(contentsOf: directory.appendingPathComponent(Self.turboConfig))
+
+        // 1. Text.
+        emit(.phase(.text))
+        var text: AceStepTextInputs? = try await (textSource ?? AceStepInstalledTextSource(directory: directory)).inputs(for: request)
+        emit(.loaded(.text))
+        relieveHost()
+        try Task.checkCancellation()
+        releaseStageMemory()
+
+        // 2. Condition: encoder_hidden_states and context_latents are all that leave this stage.
+        emit(.phase(.condition))
+        var encoderHidden: MLXArray
+        var context: MLXArray
+        do {
+            let silence = try silenceLatent()
+            let weights = try AceStepWeights.loadConditionEncoder(directory: directory)
+            let encoder = try AceStepConditionEncoder(config: AceStepConditionConfig(json: turboConfigData), weights: weights, silenceLatent: silence)
+            emit(.loaded(.condition))
+            relieveHost()
+            guard let inputs = text else { throw AceStepWeightsError.missingTensor("text inputs") }
+            let packed = try encoder.encode(inputs)
+            // The DiT runs on f32 activations (the oracle's stage-b dtype note); the weights stay bf16.
+            encoderHidden = packed.hidden.asType(.float32)
+            context = try encoder.contextLatents(frames: frames).asType(.float32)
+            eval(encoderHidden, context)
+        }
+        text = nil
+        emit(.released(.text)); emit(.released(.condition))
+        releaseStageMemory()
+        try Task.checkCancellation()
+
+        // 3. Denoise.
+        let noise = try injectedNoise ?? Self.noise(frames: frames, seed: request.seed)
+        let latents: MLXArray
+        do {
+            let ditConfig = try AceStepDiTConfig(json: turboConfigData)
+            let net = try AceStepDiT.load(config: ditConfig, weights: AceStepWeights.loadDecoder(directory: directory))
+            emit(.loaded(.dit))
+            relieveHost()
+            var samplerConfig = AceStepSamplerConfig()
+            samplerConfig.steps = request.steps
+            let total = samplerConfig.steps
+            latents = try AceStepSampler.run(noise: noise.asType(.float32), config: samplerConfig, velocity: { x, t in
+                let ts = MLXArray([t])
+                return net(hidden: x, context: context, encoder: encoderHidden, timestep: ts, timestepR: ts)
+            }, progress: { done, _ in emit(.phase(.denoise(step: done, of: total))) })
+            eval(latents)
+        }
+        emit(.released(.dit))
+        encoderHidden = MLXArray(0); context = MLXArray(0)
+        releaseStageMemory()
+        try Task.checkCancellation()
+
+        // 4. Decode.
+        let audio: MLXArray
+        do {
+            let vaeConfig = try AceStepVAEConfig(json: Data(contentsOf: directory.appendingPathComponent(Self.vaeConfig)))
+            let vae = try AceStepVAE(config: vaeConfig, weights: AceStepWeights.loadVAEDecoder(directory: directory), dtype: configuration.vaeDType)
+            emit(.loaded(.vae))
+            relieveHost()
+            audio = try vae.decodeChannelsFirst(latents.transposed(0, 2, 1), chunk: configuration.vaeChunk,
+                                                progress: { c, n in emit(.phase(.decode(chunk: c, of: n))) })   // [1, 2, S] f32
+        }
+        emit(.released(.vae))
+        releaseStageMemory()
+        try Task.checkCancellation()
+
+        return AceStepResult(audio: AceStepAudio(samples: try Self.finish(audio)), latents: latents)
+    }
+
+    // MARK: Pieces
+
+    static func noise(frames: Int, seed: UInt64) throws -> MLXArray {
+        MLXRandom.normal([1, frames, 64], key: MLXRandom.key(seed))
+    }
+
+    /// Upstream's `normalize_audio(target_db = -1)` (`inference.py`, enable_normalization on by default): `gain = 10^(-1/20) / peak`, applied up or down;
+    /// a near-silent signal (peak < 1e-6) is left alone. Then interleave `[1, 2, S]` -> L R L R.
+    static func finish(_ audio: MLXArray) throws -> [Float] {
+        let peak = try MLXErrorGuard.item(abs(audio).max(), as: Float.self)
+        var out = audio
+        if peak >= 1e-6 { out = audio * Float(pow(10.0, -1.0 / 20.0) / Double(peak)) }
+        // MC5-FIX-finish-gather: `out[0]` is a scalar-index Gather, and Gather::eval_gpu hands Metal a nil `setBytes` for its 0-dim
+        // index (Metal API Validation asserts). `row(0)` is a slice + squeeze: no Gather, same values.
+        guard out.ndim == 3, out.dim(0) == 1 else { throw AceStepEngineError.badAudioShape(out.shape) }
+        return try MLXErrorGuard.read(out.row(0).transposed().reshaped(-1), as: Float.self)
+    }
+
+    private func emit(_ event: AceStepEvent) { observer?(event) }
+}
+
+/// MC5-T-mem2: the host allocator, not MLX's.
+nonisolated enum HostMemory {
+    /// `malloc_zone_pressure_relief(nil, 0)`: every malloc zone returns what pages it can to the OS. Returns the bytes released (informational).
+    @discardableResult
+    static func relief() -> Int { malloc_zone_pressure_relief(nil, 0) }
+}
