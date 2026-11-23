@@ -34,7 +34,7 @@ struct CatFlowParserTests {
         let cats = try FileManager.default.contentsOfDirectory(atPath: conformanceDir.path)
             .filter { $0.hasSuffix(".cat") }
             .sorted()
-        #expect(cats.count == 62)
+        #expect(cats.count == 63)
 
         var checked = 0
         for cat in cats {
@@ -58,7 +58,7 @@ struct CatFlowParserTests {
             }
             checked += 1
         }
-        #expect(checked == 62)
+        #expect(checked == 63)
     }
 
     // MARK: - Golden parse trees also match (tests/goldens/parse/*.json)

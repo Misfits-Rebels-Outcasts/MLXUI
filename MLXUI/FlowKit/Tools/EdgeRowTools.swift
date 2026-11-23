@@ -30,14 +30,28 @@ nonisolated enum SaveFileSettings {  // SPEC-Q253
         if to.isEmpty {
             throw SaveFileSettingsError(detail: "has an empty `to=` -- give it the destination path, e.g. `to=\"out/report.pdf\"`")
         }
+        if let problem = staticPathProblem(to) { throw SaveFileSettingsError(detail: problem) }  // SPEC-Q253, ruling of 2026-11-22
         return to
+    }
+
+    /// The check-time half of Save confinement (Python: `static_save_path_problem`, same strings): a literal `to=` that starts
+    /// with `/` or `~`, or has a `..` component (even one that would stay inside), can never be accepted. A `{name}` placeholder
+    /// or any other non-literal part is left to run time, where `FlowWorkspace.resolve` confines.
+    static func staticPathProblem(_ raw: String) -> String? {
+        if raw.hasPrefix("/") || raw.hasPrefix("~") {
+            return "writes to the absolute path `to=\"\(raw)\"` -- use a path inside the folder the flow runs in, e.g. `to=\"out/report.pdf\"`"
+        }
+        if raw.replacingOccurrences(of: "\\", with: "/").split(separator: "/", omittingEmptySubsequences: false).contains("..") {
+            return "writes outside the folder the flow runs in (`to=\"\(raw)\"` climbs out with `..`) -- use a path inside it, e.g. `to=\"out/report.pdf\"`"
+        }
+        return nil
     }
 }
 
 /// `Save File` (file → status): the input file's bytes to `to=`, through `SaveCopy` — the
-/// very write `Save Image` uses. **Known divergence (Q253 note):** Python's `Save Image`
-/// has no workdir confinement; Swift's does, so a `..` or absolute `to=` is refused here
-/// by row name rather than written.
+/// very write `Save Image` uses. Confined to the flow's folder (`FlowWorkspace.resolve`); since
+/// ER-FIX-5 (owner ruling F2, 2026-11-22) the Python's Save rows confine the same way, so the
+/// Q253 divergence note is resolved, and a literal escaping `to=` is also a check error (E717).
 nonisolated struct SaveFileTool: AssetStage {  // SPEC-Q253
     let workspace: FlowWorkspace
     let flowID: String
@@ -56,8 +70,9 @@ nonisolated struct SaveFileTool: AssetStage {  // SPEC-Q253
         }
         do {
             _ = try workspace.resolve(to, flowID: flowID)
-        } catch let e as FlowWorkspaceError {
-            throw FlowError.stageFailure(row: "Save File", message: "Save File refused `to=\(to)` -- \(e.description)")
+        } catch is FlowWorkspaceError {
+            // ER-FIX-5: one sentence naming the row and the fix; the runner adds "Row N failed:" once
+            throw FlowError.stageFailure(row: "Save File", message: "Save File can't write to `\(to)` -- it is outside the flow's folder; use a path inside it, e.g. `out/report.pdf`")
         }
         return try SaveCopy.copy(src: src, rawPath: to, row: "Save File",
                                  workspace: workspace, flowID: flowID, progress: progress)

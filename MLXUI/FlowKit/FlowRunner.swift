@@ -449,6 +449,16 @@ nonisolated struct FlowRunner {
         return map[base]
     }
 
+    /// ER-FIX-5: the interpreter's failure text is already a sentence — `FlowError.stageFailure(row: "<task>", …)` renders as
+    /// "Row <task> failed: …" — and the session's display adds "Row N failed:" again, so a tool refusal read "Row 3 failed: Row
+    /// Save File failed: …". Drop the inner prefix when its subject is a task name (letters), never a row path (digits and dots).
+    static func unprefixed(_ message: String?) -> String? {
+        guard let message, message.hasPrefix("Row "), let end = message.range(of: " failed: ") else { return message }
+        let subject = message[message.index(message.startIndex, offsetBy: 4)..<end.lowerBound]
+        guard subject.contains(where: { $0.isLetter }) else { return message }
+        return String(message[end.upperBound...])
+    }
+
     /// One interpreter event → the UUID `FlowEvent` the session consumes (nil = no UI
     /// equivalent: per-item/journal/transcript/budget events don't map).
     private static func map(_ event: FlowInterpreter.PathEvent,
@@ -462,7 +472,7 @@ nonisolated struct FlowRunner {
             return rowID(for: event.path, in: pathToID).map { .cacheHit(rowID: $0) }
         case .rowFailed:
             return rowID(for: event.path, in: pathToID).map {
-                .failed(rowID: $0, FlowError.stageFailure(row: event.path, message: event.error ?? "row failed"))
+                .failed(rowID: $0, FlowError.stageFailure(row: event.path, message: unprefixed(event.error) ?? "row failed"))
             }
         case .flagRaised:
             return rowID(for: event.path, in: pathToID).map { .flagRaised(rowID: $0, message: event.message ?? "") }
