@@ -193,6 +193,8 @@
     "registry/bge-m3.json": "b02442b0e306f727821305a1e0058ae68325e45c4aefa0b354ed9ffde0ee3611",
     "registry/bge-reranker-v2.json": "dda487196abaad8981dbed99ad7bd4b1d24d53cca8e29a5c2692c2298e7429fb",
     "registry/claude-sonnet-4.json": "4b9cad10407c74b37531fea268a72c2f5f7ed6bb6ce5b6d1a6528d457c9dce9e",
+    "registry/clef-flash-4bit.json": "a7b145e75e23fb562a1ef2b7a5029853c8a271de82ca7ff472789babbe4c63f3",
+    "registry/clm-v0.1-8b-8bit.json": "f08251a7277b291aaf7b66dfe2da6d8ebf3e3deb559675fd66daaa05272a8ac3",
     "registry/cohere-rerank-multilingual-v3.0.json": "e6fda0f1387a102dab75f40670b087f9e474c584fd46e2018783467199a5de04",
     "registry/deepseek-v4-flash.json": "21115a75de60ca219bbbed879fb51a7eb97f4802ac99155473f02e9a7b55f72c",
     "registry/depth-pro.json": "591b12017f499a41f11408711c8a93d75a5ade1b23b32016524499f46215319b",
@@ -206,6 +208,7 @@
     "registry/groq-llama-3.3-70b-versatile.json": "3b6375bbbd479a8ba1aefa8d3308621fa811a2e7903d123509fa60dc85ffdd7e",
     "registry/groq-whisper-large-v3.json": "b1869086df954e552d0abc68842262d00f1568e371730e0441a44416a4c49595",
     "registry/kokoro-82m-4bit.json": "1d96ce633ca2aa5bb6305ff746bff6f8368eb1ff8fc0d5fb9563d3be631cef95",
+    "registry/laya-0.4b.json": "6cdd713470d99ff51b71ecbb6bf2aa587fb94f04b8035894e7eb9548c1274f4a",
     "registry/lfm2-vl-1.6b-8bit.json": "677f6368cc6179470b7fd403f02e5c9ea88698ce9a4e0fcdc49101bd58c06661",
     "registry/llama-3.1-8b-4bit.json": "6304439dd1ae1d57de6778a15f7c78d5a1cc49c507762063c5811af0976bb00d",
     "registry/macstudio-qwen3-32b.json": "ccf0080e62c7cdcc2fb1591fc8e48d31654127a01839f9b4ef477f2e455626b0",
@@ -235,5 +238,5 @@
     "registry/z-image-turbo.json": "55b8360285e65b689b68027c65bd397db34b60599912463a22fdbe7caba95172"
   },
   "source_repo": "catflow-mlx",
-  "source_sha": "adfce247805d9be81c83f9b8d9a7665ff76e3f9c"
+  "source_sha": "12a51841edf0ec35ac3c403b5e4b8cb836fbc038"
 }

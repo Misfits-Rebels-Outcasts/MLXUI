@@ -19,7 +19,7 @@ struct CatFlowFixtureSyncTests {
 
     /// The catflow-mlx commit the fixtures were synced from. Bump only after reviewing
     /// a re-synced corpus. Source: `git -C catflow-mlx rev-parse HEAD` at sync time.
-    private static let pinnedSourceSHA = "adfce247805d9be81c83f9b8d9a7665ff76e3f9c"
+    private static let pinnedSourceSHA = "12a51841edf0ec35ac3c403b5e4b8cb836fbc038"
 
     // MARK: - Fixtures dir (repo-relative, mirroring the other CatFlow tests)
 

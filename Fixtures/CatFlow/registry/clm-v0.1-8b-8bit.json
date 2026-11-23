@@ -1,0 +1,15 @@
+{
+  "id": "RealityCat/CLM-v0.1-8B-MLX-8bit",
+  "display": "CLM 8B",
+  "kind": "local",
+  "engine": "clm-mlx",
+  "tasks": ["Classify", "Gate", "Score"],
+  "settings": {},
+  "capabilities": { "constrained_decoding": true },
+  "resources": { "disk_gb": 8.12, "ram_gb": 9.1 },
+  "source": "https://huggingface.co/RealityCat/CLM-v0.1-8B-MLX-8bit",
+  "checksum": "sha256:293646f3dca1900ac4038a1afcdee769ce64687c1636b7b311774b0663539523",
+  "license": "Apache-2.0",
+  "manifest_version": 1,
+  "pinned": true
+}
