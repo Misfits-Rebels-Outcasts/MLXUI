@@ -38,7 +38,11 @@ nonisolated struct SaveImageTool: AssetStage {
 nonisolated enum SaveCopy {
     static func copy(src: URL, rawPath: String, row: String, workspace: FlowWorkspace, flowID: String,
                      progress: @Sendable (Double) -> Void) throws -> Asset {
-        let dest = try workspace.resolve(rawPath, flowID: flowID)
+        // ER-CLOSE-2: the ONE confinement refusal for both rows (one error type, the row's name first); the runner adds "Row N failed:" once.
+        let dest: URL
+        do { dest = try workspace.resolve(rawPath, flowID: flowID) } catch is FlowWorkspaceError {
+            throw FlowError.stageFailure(row: row, message: "\(row) can't write to `\(rawPath)` -- it is outside the flow's folder; use a path inside it, e.g. `out/report.pdf`")
+        }
         let fm = FileManager.default
         guard fm.fileExists(atPath: src.path) else {
             throw FlowError.fileReadFailed(row: row, path: src.lastPathComponent)

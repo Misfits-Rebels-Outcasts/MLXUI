@@ -81,4 +81,18 @@ struct CatFlowStagePrintCachedNameTests {
         #expect(blob.name.hasSuffix(".pdf") && !blob.name.hasSuffix(".bin"))
         #expect(named.id == blob.id && blob.id == carried.id)
     }
+
+    /// A recorded file name is provenance only: the row's cache key is the same with and without it.
+    @Test func theCacheKeyIgnoresARecordedFileName() throws {
+        let dir = try scratch()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("3.0.file.0123456789abcdef.bin")
+        try Data("%PDF-1.7\n%%EOF\n".utf8).write(to: url)
+        let bare = Asset(items: [Item(kind: .file, value: nil, path: url, sourceText: nil)])
+        let named = Asset(items: [Item(kind: .file, value: nil, path: url, sourceText: nil, originalName: "makepdf-1234.pdf")])
+        let a = try CacheKey.cacheKey(task: "Stage Print", model: nil, settings: nil, inputs: [bare], realism: "real")
+        let b = try CacheKey.cacheKey(task: "Stage Print", model: nil, settings: nil, inputs: [named], realism: "real")
+        #expect(a == b)
+        #expect(try bare.contentHash() == named.contentHash())
+    }
 }
