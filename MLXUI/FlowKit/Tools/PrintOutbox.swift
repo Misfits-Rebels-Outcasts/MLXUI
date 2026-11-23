@@ -113,7 +113,10 @@ nonisolated enum StagePrintTool {
         // Q259: the id's digest is over the date/ID-normalised bytes; `digest` (the entry's `sha256`) stays the stored bytes' own hash.
         let idDigest = SHA256.hash(data: pdfDigestBytes(data)).map { String(format: "%02x", $0) }.joined()
         let id = String(SHA256.hash(data: Data("Stage Print|\(idDigest)".utf8)).map { String(format: "%02x", $0) }.joined().prefix(10))
-        return Prepared(data: data, name: name, mime: mime, ext: ext, digest: digest, id: id)
+        // ER-FIX-7: the label is the file's real name, never a cache blob's; `id` above never reads it.
+        var label = item.originalName ?? name
+        if label.hasSuffix(".bin") { label = "\(digest.prefix(12))\(ext)" }
+        return Prepared(data: data, name: label, mime: mime, ext: ext, digest: digest, id: id)
     }
 
     /// Queue one `print` entry (nothing prints). The same bytes staged again, while still pending, change nothing.
