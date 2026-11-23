@@ -1,0 +1,48 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "notes.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Make PDF",
+        "model": null,
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Save File",
+        "model": null,
+        "settings": "to=\"../x.pdf\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "check": {
+    "valid": false,
+    "issues": [
+      {
+        "row": "3",
+        "code": "E717",
+        "message": "Row 3's `Save File` writes outside the folder the flow runs in (`to=\"../x.pdf\"` climbs out with `..`) -- use a path inside it, e.g. `to=\"out/report.pdf\"`."
+      }
+    ]
+  }
+}

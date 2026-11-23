@@ -1,0 +1,8 @@
+mlxflow 0.8
+1. Read Audio    meeting.wav
+2. Identify Speakers   Sortformer 4spk v2.1
+3. Table to Text
+
+models:
+  Sortformer 4spk v2.1 = nvidia/diar_streaming_sortformer_4spk-v2.1
+  DeepFilterNet 3 = mlx-community/DeepFilterNet-mlx

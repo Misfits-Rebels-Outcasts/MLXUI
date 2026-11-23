@@ -1,0 +1,9 @@
+mlxflow 0.8
+1. Read Audio    noisy.wav
+2. Clean Audio   DeepFilterNet 3
+3. Transcribe   Whisper Tiny
+
+models:
+  Sortformer 4spk v2.1 = nvidia/diar_streaming_sortformer_4spk-v2.1
+  DeepFilterNet 3 = mlx-community/DeepFilterNet-mlx
+  Whisper Tiny = mlx-community/whisper-tiny

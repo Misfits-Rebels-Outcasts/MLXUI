@@ -77,11 +77,14 @@ struct SortformerModuleTests {
         #expect(stage.id == "sortformer.mlx-community--diar_streaming_sortformer_4spk-v2.1-fp16")
     }
 
-    @Test func descriptorIsDiarizationOnlyAndDeclaresNoTaskFamily() {
+    // ER-10 (SPEC-Q238, R1 / R11, 2026-11-22): the module is still diarization-only; the one flow task naming that kind is now `Identify Speakers`.
+    @Test func descriptorIsDiarizationOnlyAndServesOnlyIdentifySpeakers() {
         #expect(SortformerModule.descriptor.modelTypes == [.diarization])
         #expect(SortformerModule.descriptor.id == "sortformer")
         #expect(TaskModels.runnerKind(forTask: "Transcribe") == .asr)
-        for task in TaskCatalog.allTasks().map(\.name) { #expect(TaskModels.runnerKind(forTask: task) != .diarization) }
+        for task in TaskCatalog.allTasks().map(\.name) {
+            #expect((TaskModels.runnerKind(forTask: task) == .diarization) == (task == "Identify Speakers"), "\(task)")
+        }
     }
 
     // MARK: stage

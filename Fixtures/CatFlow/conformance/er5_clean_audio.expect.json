@@ -1,0 +1,47 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Audio",
+        "model": null,
+        "settings": "noisy.wav",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Clean Audio",
+        "model": "DeepFilterNet 3",
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Transcribe",
+        "model": "Whisper Tiny",
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ],
+    "models": {
+      "Sortformer 4spk v2.1": "nvidia/diar_streaming_sortformer_4spk-v2.1",
+      "DeepFilterNet 3": "mlx-community/DeepFilterNet-mlx",
+      "Whisper Tiny": "mlx-community/whisper-tiny"
+    }
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  }
+}

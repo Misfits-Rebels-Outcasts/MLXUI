@@ -626,6 +626,14 @@
    "category": "Basic",
    "description": "A CSV in, two files out: a bar chart of the numbers and two sentences on what they show.",
    "tier": "basic"
+  },
+  {
+   "number": 88,
+   "title": "Shipping Label",
+   "filename": "19-ShippingLabel.cat",
+   "category": "Basic",
+   "description": "Turn an order number into a QR code on a one-page PDF label and queue it to print. Edit the order number in row 1; nothing prints until you approve it in the outbox.",
+   "tier": "basic"
   }
  ]
 }

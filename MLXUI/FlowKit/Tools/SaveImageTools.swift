@@ -26,10 +26,22 @@ nonisolated struct SaveImageTool: AssetStage {
         guard let rawPath = FlowSettings(settings).pathValue() else {
             throw FlowError.missingInlineValue(row: "Save Image", kind: .file)
         }
+        return try SaveCopy.copy(src: src, rawPath: rawPath, row: "Save Image",
+                                 workspace: workspace, flowID: flowID, progress: progress)
+    }
+}
+
+/// The one copy-to-workspace write `Save Image` and `Save File` (SPEC-Q253) share: path
+/// resolution through `FlowWorkspace.resolve` (the CFM-R1-4 confinement), copy-to-temp-then-
+/// replace, and the overwrite-through-the-trash policy. Extracted from `SaveImageTool` so
+/// `Save File` calls the same code rather than copying it.
+nonisolated enum SaveCopy {
+    static func copy(src: URL, rawPath: String, row: String, workspace: FlowWorkspace, flowID: String,
+                     progress: @Sendable (Double) -> Void) throws -> Asset {
         let dest = try workspace.resolve(rawPath, flowID: flowID)
         let fm = FileManager.default
         guard fm.fileExists(atPath: src.path) else {
-            throw FlowError.fileReadFailed(row: "Save Image", path: src.lastPathComponent)
+            throw FlowError.fileReadFailed(row: row, path: src.lastPathComponent)
         }
         try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
         let tmp = dest.deletingLastPathComponent()

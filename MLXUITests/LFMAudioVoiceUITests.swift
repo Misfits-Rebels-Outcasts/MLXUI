@@ -33,10 +33,12 @@ struct LFMMicConfigurationTests {
         let direct = try entitlements("MLXUI/MLXUI-Direct.entitlements")
         #expect(appStore["com.apple.security.device.audio-input"] as? Bool == true)
         #expect(direct["com.apple.security.device.audio-input"] as? Bool == true)
-        // the rest is exactly what it was before MP6-3b
+        // the rest is exactly what it was before MP6-3b, plus `com.apple.security.print` (ER-11, SPEC-Q258, owner ruling R10, 2026-11-22:
+        // the Stage Print approval opens the system print panel, which the sandbox blocks without it)
         #expect(Set(appStore.keys) == ["com.apple.security.app-sandbox", "com.apple.security.files.user-selected.read-write",
                                        "com.apple.security.network.client", "com.apple.security.network.server",
-                                       "keychain-access-groups", "com.apple.security.device.audio-input"])
+                                       "keychain-access-groups", "com.apple.security.device.audio-input",
+                                       "com.apple.security.print"])
         #expect(Set(direct.keys) == ["keychain-access-groups", "com.apple.security.device.audio-input"],
                 "the Direct edition is Hardened Runtime only: the microphone key is the only addition")
     }

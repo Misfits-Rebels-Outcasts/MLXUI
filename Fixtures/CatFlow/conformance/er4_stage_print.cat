@@ -1,0 +1,4 @@
+mlxflow 0.8
+1. Read Text    label.txt
+2. Make PDF     page=a4
+3. Stage Print

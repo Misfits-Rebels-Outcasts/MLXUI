@@ -143,7 +143,7 @@ struct CatFlowWorkspaceTests {
     @Test func galleryLoaderFindsAllFlows() throws {
         let metadata = GalleryLoader.loadMetadata()
         // The full gallery ships: 87 entries (84 .cat + 3 .catpipeline). BS-1 added five; BX-1 (RSI/DelegateBasicExpansionBacklog.md) five more.
-        #expect(metadata.count == 87)
+        #expect(metadata.count == 88)  // ER-12 (R12): + Shipping Label (88)
         let spoken = try #require(metadata.first { $0.flowID == "01-SpokenSummary" })
         #expect(spoken.title == "Spoken Summary")
         #expect(spoken.number == 1)

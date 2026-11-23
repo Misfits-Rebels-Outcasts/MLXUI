@@ -96,6 +96,9 @@ nonisolated enum TaskModels {
         // MC3-8 (issue #6, owner decision 7): `Estimate Depth` is served by the Depth Anything V2 Small port.
         // The declared task was honest-empty until MC3 gave it a runner kind, a stage and a catalog entry.
         "Estimate Depth": .depth,
+        // ER-10 (SPEC-Q238 / SPEC-Q239): Sortformer and DeepFilterNet are the only models of their kinds, and each has a stage.
+        "Identify Speakers": .diarization,
+        "Clean Audio": .enhance,
     ]
 
     /// Optional family constraints — filled only where a task genuinely needs one (a `.cat`
@@ -178,6 +181,9 @@ nonisolated enum TaskModels {
         // MC3-8 (owner decision 7): Depth Anything V2 Small is the first `.depth` model; the generic
         // image→image branch in `RealExecutor.runModel` hands the row to `DepthAnythingStage`.
         "engines.diffusion.estimate_depth",   // Estimate Depth (image → grayscale depth map) — MC3
+        // ER-10: `RealExecutor.runModel` has a branch for the first (stage CSV → table); the generic audio → audio tail serves the second.
+        "engines.diarize.identify_speakers",  // Identify Speakers (audio → table) — SPEC-Q238
+        "engines.audio_clean.clean_audio",    // Clean Audio (audio → 48 kHz audio) — SPEC-Q239
     ]
 
     /// Whether `RealExecutor` genuinely serves `task` (CFM-R14-FIX-2). A **frame-backed** task
@@ -235,6 +241,9 @@ nonisolated enum TaskModels {
         "Rerank": ["BGE Reranker", "Qwen3 Reranker 0.6B"],
         // MC3-8: the one runnable model for the task; nothing else is appended behind it.
         "Estimate Depth": ["Depth Anything V2 Small"],
+        // ER-10: the one runnable model for each task; nothing else is appended behind it.
+        "Identify Speakers": ["Sortformer 4spk v2.1"],
+        "Clean Audio": ["DeepFilterNet 3"],
         "Text to Table": llmModels,
         // LY-8 (RSI/DelegateLayaBacklog.md, 2026-09-27 gate D amendment, superseding LY-0's own
         // gate D "never the default"): Classify/Gate/Score had no pool entry before this —

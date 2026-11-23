@@ -1,0 +1,20 @@
+{
+  "id": "mlx-community/DeepFilterNet-mlx",
+  "display": "DeepFilterNet 3",
+  "kind": "local",
+  "engine": "mlx-enhance",
+  "tasks": [
+    "Clean Audio"
+  ],
+  "settings": {},
+  "capabilities": {},
+  "resources": {
+    "disk_gb": 0.03,
+    "ram_gb": 2.35
+  },
+  "source": "https://huggingface.co/mlx-community/DeepFilterNet-mlx",
+  "license": "MIT",
+  "manifest_version": 1,
+  "pinned": true,
+  "notes": "ER-10 (SPEC-Q239): MLXUI-authored; catflow-mlx has no curated manifest for this model (BACKLOG ER-PY-audio). DeepFilterNet 3 speech enhancement, 48 kHz mono in and out. The Clean Audio row takes no settings in v1 (owner ruling R1): any setting is refused by name (E724 statically, RealExecutor.stageConfig at run time); no strength or attenuation setting. Output is at the model's native 48 kHz, not the input's rate. ram_gb is the catalog's figure."
+}

@@ -296,7 +296,28 @@ struct FlowInspectorPane<Properties: View>: View {
         case .image:
             imageContent(item)
         default:
-            placeholder("This \(item.kind.rawValue) output has no viewer in this version.")
+            switch InspectorViewer.choose(for: item) {
+            case .quickLook(let url):
+                QuickLookPreview(url: url)
+                    .frame(maxWidth: .infinity, minHeight: 280, maxHeight: .infinity)
+                    .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+            case .tableText:
+                if let text = InspectorViewer.tableText(for: item) {
+                    ScrollView([.vertical, .horizontal]) {
+                        Text(text)
+                            .font(.system(.callout, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+                } else {
+                    placeholder("Couldn't read the table.")
+                }
+            default:
+                placeholder("This \(item.kind.rawValue) output has no viewer in this version.")
+            }
         }
     }
 

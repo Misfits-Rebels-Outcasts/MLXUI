@@ -1,0 +1,158 @@
+{
+  "cases": [
+    {
+      "name": "replace_both",
+      "flow": "mlxflow 0.8\n1. Read Text  notes.txt\n2. Replace  find=\"x\"; pattern=\"y\"; with=\"z\"\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E718",
+          "message": "Row 2's `Replace` has both `find=` and `pattern=` -- keep exactly one of them."
+        }
+      ]
+    },
+    {
+      "name": "replace_neither",
+      "flow": "mlxflow 0.8\n1. Read Text  notes.txt\n2. Replace  with=\"z\"\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E718",
+          "message": "Row 2's `Replace` needs exactly one of `find=` (literal text) or `pattern=` (a regex, or `emails`, `dates`, `urls`) -- add one."
+        }
+      ]
+    },
+    {
+      "name": "replace_no_settings",
+      "flow": "mlxflow 0.8\n1. Read Text  notes.txt\n2. Replace\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E718",
+          "message": "Row 2's `Replace` needs exactly one of `find=` (literal text) or `pattern=` (a regex, or `emails`, `dates`, `urls`) -- add one."
+        }
+      ]
+    },
+    {
+      "name": "replace_find_without_with",
+      "flow": "mlxflow 0.8\n1. Read Text  notes.txt\n2. Replace  find=\"x\"\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E718",
+          "message": "Row 2's `Replace` has `find=` but no `with=` -- add `with=\"...\"` (an empty `with=\"\"` deletes the match)."
+        }
+      ]
+    },
+    {
+      "name": "replace_regex_without_with",
+      "flow": "mlxflow 0.8\n1. Read Text  notes.txt\n2. Replace  pattern=\"\\d+\"\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E718",
+          "message": "Row 2's `Replace` has a regex `pattern=` but no `with=` -- add `with=\"...\"` (an empty `with=\"\"` deletes the match)."
+        }
+      ]
+    },
+    {
+      "name": "replace_empty_find",
+      "flow": "mlxflow 0.8\n1. Read Text  notes.txt\n2. Replace  find=\"\"; with=\"z\"\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E718",
+          "message": "Row 2's `Replace` has an empty `find=` -- there is nothing to look for; give it the text to replace."
+        }
+      ]
+    },
+    {
+      "name": "replace_bad_regex",
+      "flow": "mlxflow 0.8\n1. Read Text  notes.txt\n2. Replace  pattern=\"(\"; with=\"z\"\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E718",
+          "message": "Row 2's `Replace` has a `pattern=` that isn't a valid regex -- fix the expression, or use `find=` for literal text."
+        }
+      ]
+    },
+    {
+      "name": "replace_unknown_setting",
+      "flow": "mlxflow 0.8\n1. Read Text  notes.txt\n2. Replace  pattern=emails; case=no\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E718",
+          "message": "Row 2's `Replace` doesn't know `case=` -- its settings are `find=`, `pattern=` and `with=`; remove `case=`."
+        }
+      ]
+    },
+    {
+      "name": "replace_bare_value",
+      "flow": "mlxflow 0.8\n1. Read Text  notes.txt\n2. Replace  \"x\"\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E718",
+          "message": "Row 2's `Replace` doesn't take the bare value `x` -- name it `find=` (literal text) or `pattern=` (a regex)."
+        }
+      ]
+    },
+    {
+      "name": "save_file_no_to",
+      "flow": "mlxflow 0.8\n1. Read Files  docs/\n2. <each f>\n     1. Save File\n",
+      "issues": [
+        {
+          "row": "2.1",
+          "code": "E717",
+          "message": "Row 2.1's `Save File` has no `to=` -- say where the file goes, e.g. `to=\"out/report.pdf\"`."
+        }
+      ]
+    },
+    {
+      "name": "save_file_empty_to",
+      "flow": "mlxflow 0.8\n1. Read Files  docs/\n2. <each f>\n     1. Save File  to=\"\"\n",
+      "issues": [
+        {
+          "row": "2.1",
+          "code": "E717",
+          "message": "Row 2.1's `Save File` has an empty `to=` -- give it the destination path, e.g. `to=\"out/report.pdf\"`."
+        }
+      ]
+    },
+    {
+      "name": "save_file_bare_path",
+      "flow": "mlxflow 0.8\n1. Read Files  docs/\n2. <each f>\n     1. Save File  out.pdf\n",
+      "issues": [
+        {
+          "row": "2.1",
+          "code": "E717",
+          "message": "Row 2.1's `Save File` doesn't take the bare value `out.pdf` -- name the destination: `to=\"out.pdf\"`."
+        }
+      ]
+    },
+    {
+      "name": "save_file_path_key",
+      "flow": "mlxflow 0.8\n1. Read Files  docs/\n2. <each f>\n     1. Save File  path=\"out.pdf\"\n",
+      "issues": [
+        {
+          "row": "2.1",
+          "code": "E717",
+          "message": "Row 2.1's `Save File` doesn't know `path=` -- its only setting is `to=`; remove `path=`."
+        }
+      ]
+    },
+    {
+      "name": "save_file_unknown_setting",
+      "flow": "mlxflow 0.8\n1. Read Files  docs/\n2. <each f>\n     1. Save File  to=\"out.pdf\"; overwrite=yes\n",
+      "issues": [
+        {
+          "row": "2.1",
+          "code": "E717",
+          "message": "Row 2.1's `Save File` doesn't know `overwrite=` -- its only setting is `to=`; remove `overwrite=`."
+        }
+      ]
+    }
+  ]
+}

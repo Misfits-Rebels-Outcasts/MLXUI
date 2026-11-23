@@ -1,0 +1,4 @@
+mlxflow 0.8
+1. Read Text   notes.txt
+2. Replace     pattern=emails
+3. Save Text   notes-redacted.txt
