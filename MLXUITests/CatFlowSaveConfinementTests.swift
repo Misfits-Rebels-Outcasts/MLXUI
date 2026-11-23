@@ -106,4 +106,23 @@ struct CatFlowSaveConfinementTests {
         #expect(image?.1.hasPrefix("Save Image can't write to `link/i.bin`") == true, "\(String(describing: image))")
         #expect((try FileManager.default.contentsOfDirectory(atPath: outside.path)).isEmpty)
     }
+
+    /// ER close-out (owner, Boo, 2026-11-23): the run-time refusal says exactly what Python's `confine_save_path` says
+    /// (`test_confinement_refusal_wording_is_the_one_both_runtimes_use` in catflow-mlx).
+    @Test func confinementRefusalWordingMatchesPython() async throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("catflow-erwording-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let ws = FlowWorkspace(root: base.appendingPathComponent("flows"))
+        let dir = ws.directory(for: "f")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let src = dir.appendingPathComponent("b.bin")
+        try Data([1]).write(to: src)
+        let input = Asset(items: [Item(kind: .image, value: nil, path: src, sourceText: nil)])
+        let stage = SaveImageTool(workspace: ws, flowID: "f", settings: "path=\"../i.bin\"")
+        var message: String?
+        do { _ = try await stage.run(input) { _ in } } catch let e as FlowError {
+            if case .stageFailure(_, let m) = e { message = m }
+        }
+        #expect(message == "Save Image can't write to `../i.bin` -- it is outside the folder the flow runs in; use a path inside that folder, e.g. `out/report.pdf`", "\(String(describing: message))")
+    }
 }

@@ -41,7 +41,7 @@ nonisolated enum SaveCopy {
         // ER-CLOSE-2: the ONE confinement refusal for both rows (one error type, the row's name first); the runner adds "Row N failed:" once.
         let dest: URL
         do { dest = try workspace.resolve(rawPath, flowID: flowID) } catch is FlowWorkspaceError {
-            throw FlowError.stageFailure(row: row, message: "\(row) can't write to `\(rawPath)` -- it is outside the flow's folder; use a path inside it, e.g. `out/report.pdf`")
+            throw FlowError.stageFailure(row: row, message: "\(row) can't write to `\(rawPath)` -- it is outside the folder the flow runs in; use a path inside that folder, e.g. `out/report.pdf`")
         }
         let fm = FileManager.default
         guard fm.fileExists(atPath: src.path) else {
