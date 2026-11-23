@@ -30,7 +30,7 @@ nonisolated enum StagePrintTool {
         let mime: String
         let ext: String
         let digest: String
-        /// `sha256("Stage Print|" + digest)[:10]`: the content alone decides it, so the same bytes staged twice are one pending entry.
+        /// `sha256("Stage Print|" + sha256(normalised bytes))[:10]` (Q259): the content alone decides it, so the same bytes staged twice are one pending entry.
         let id: String
         var summary: String { "to \(StagePrintTool.destination): \(name)" }
         var status: String { "staged for print (\(id))" }
@@ -40,6 +40,26 @@ nonisolated enum StagePrintTool {
         "public.png": ("image/png", ".png"), "public.jpeg": ("image/jpeg", ".jpg"), "com.compuserve.gif": ("image/gif", ".gif"),
         "public.tiff": ("image/tiff", ".tiff"), "com.microsoft.bmp": ("image/bmp", ".bmp"),
     ]
+
+    // SPEC-Q259 (owner ruling, Boo, 2026-11-22): the id of a staged PDF ignores /CreationDate, /ModDate and the trailer /ID, so a regenerated
+    // identical document is the same entry. The byte rule is the Python's (`tools/outbox.py::pdf_digest_bytes`), pinned by the synced golden
+    // `goldens/check/q259_pdf_digest.json`: over the bytes read as ISO-8859-1, `/CreationDate|/ModDate` + PDF whitespace + a literal `(...)` (backslash
+    // escapes honoured) or hex `<...>` string becomes `/<key>()`, and `/ID` + whitespace + `[...]` becomes `/ID[]`. Only the digest is normalised.
+    private static let pdfWhitespace = "[\\x00\\t\\n\\f\\r ]*"
+    private static let pdfDateExpression = try? NSRegularExpression(
+        pattern: "/(CreationDate|ModDate)" + pdfWhitespace + "(?:\\((?:\\\\(?s:.)|[^\\\\)])*\\)|<[0-9A-Fa-f\\x00\\t\\n\\f\\r ]*>)")
+    private static let pdfIDExpression = try? NSRegularExpression(pattern: "/ID" + pdfWhitespace + "\\[[^\\]]*\\]")
+
+    /// The bytes a PDF is hashed over for its Stage Print id. Anything that does not start with `%PDF-` is returned unchanged.
+    static func pdfDigestBytes(_ data: Data) -> Data {
+        guard data.starts(with: Data("%PDF-".utf8)),
+              let text = String(data: data, encoding: .isoLatin1),
+              let dates = pdfDateExpression, let ids = pdfIDExpression else { return data }
+        var result = text
+        result = dates.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "/$1()")
+        result = ids.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "/ID[]")
+        return result.data(using: .isoLatin1) ?? data
+    }
 
     /// Python's `_minimal_pdf`: what a file the *mock* fabricated stands in as.
     static func minimalPDF(seed: Data) -> Data {
@@ -90,7 +110,9 @@ nonisolated enum StagePrintTool {
             (mime, ext) = known
         }
         let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        let id = String(SHA256.hash(data: Data("Stage Print|\(digest)".utf8)).map { String(format: "%02x", $0) }.joined().prefix(10))
+        // Q259: the id's digest is over the date/ID-normalised bytes; `digest` (the entry's `sha256`) stays the stored bytes' own hash.
+        let idDigest = SHA256.hash(data: pdfDigestBytes(data)).map { String(format: "%02x", $0) }.joined()
+        let id = String(SHA256.hash(data: Data("Stage Print|\(idDigest)".utf8)).map { String(format: "%02x", $0) }.joined().prefix(10))
         return Prepared(data: data, name: name, mime: mime, ext: ext, digest: digest, id: id)
     }
 

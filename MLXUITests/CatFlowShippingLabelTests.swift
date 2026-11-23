@@ -72,10 +72,12 @@ struct CatFlowShippingLabelTests {
         let pdf = try #require(PDFDocument(url: stored))
         #expect(pdf.pageCount == 1, "a one-page label")
 
-        // Deliberately NOT asserted: that running the flow a second time reuses this entry. `Stage Print`'s id is the content digest, and
-        // `Make PDF` output is not byte-stable across runs in either runtime (a creation date and an /ID are embedded; measured in
-        // Python's reportlab output and in Core Graphics'), so a re-run queues a second pending entry. Reported with ER-12 as a
-        // Q258 follow-up; the person approves each entry, so nothing prints twice by itself.
+        // Q259 (owner ruling F1, 2026-11-22): the id ignores the PDF's /CreationDate, /ModDate and /ID, so running the flow again
+        // (a second later, so Core Graphics writes a different creation date) regenerates the same label and is the same pending entry.
+        try await Task.sleep(nanoseconds: 1_200_000_000)
+        let again = try await FlowInterpreter.run(try GalleryLoader.loadDocument(flowID: Self.flowID), executor: real)
+        #expect(again.filter { $0.kind == .rowFailed }.isEmpty)
+        #expect(OutboxStore.entries(workspace: ws, flowID: Self.flowID).map(\.id) == [entry.id], "a re-run of the same order is one pending entry")
 
         // Approval (a fake panel: no real one opens) commits it.
         #expect(await PrintOutbox.approve(id: entry.id, outbox: box, presenter: Fake()) == .committed)

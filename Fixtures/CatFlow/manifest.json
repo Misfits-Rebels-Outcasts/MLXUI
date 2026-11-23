@@ -134,6 +134,7 @@
     "goldens/check/erfix5_refusals.json": "62c686857fa4f33fabd46cc157d8e97445a2ca43746a7e2d77f00a82f92ffc99",
     "goldens/check/fixtures.json": "20dcabf236cfb5899c97b896881af4e32bb8fc6c7c5a57158fb8e03afebe6375",
     "goldens/check/lint_fixtures.json": "9b87f56370529015a2e855166a9b8872dc547fe4d8fe4f7801d31db218b7eef2",
+    "goldens/check/q259_pdf_digest.json": "49a30050d1eb79feb3524993ec8ed392af25b16bfde44e994ebc6916a0538e42",
     "goldens/errors/adversarial_v08.json": "e6bf599036b60df61a5e443272e44f52849b245cf4fe887c84ea3f98927363e2",
     "goldens/errors/error_messages.json": "d6bce6f0217ea12fe57f650f399c7df58e94face628d1242e80ef8d1d0968dea",
     "goldens/errors/fill_golden.json": "f16ed5b1ed7af23f4fe4199a8b86a406ee54bcceb36982e2f4c6d85cadfb75fe",
