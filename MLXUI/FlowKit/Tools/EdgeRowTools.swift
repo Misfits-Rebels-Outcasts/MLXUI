@@ -68,12 +68,6 @@ nonisolated struct SaveFileTool: AssetStage {  // SPEC-Q253
         guard let src = input.items.first?.path else {
             throw FlowError.missingInlineValue(row: "Save File", kind: .file)
         }
-        do {
-            _ = try workspace.resolve(to, flowID: flowID)
-        } catch is FlowWorkspaceError {
-            // ER-FIX-5: one sentence naming the row and the fix; the runner adds "Row N failed:" once
-            throw FlowError.stageFailure(row: "Save File", message: "Save File can't write to `\(to)` -- it is outside the flow's folder; use a path inside it, e.g. `out/report.pdf`")
-        }
         return try SaveCopy.copy(src: src, rawPath: to, row: "Save File",
                                  workspace: workspace, flowID: flowID, progress: progress)
     }

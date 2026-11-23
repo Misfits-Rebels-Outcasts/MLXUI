@@ -78,4 +78,32 @@ struct CatFlowSaveConfinementTests {
         }
         #expect(!FileManager.default.fileExists(atPath: outside.appendingPathComponent("out.bin").path))
     }
+
+    /// ER-CLOSE-2: Save Image and Save File refuse an escaping destination through the ONE `SaveCopy` check: the same error type,
+    /// each message naming its own row first, nothing written.
+    @Test func saveImageAndSaveFileShareOneConfinementRefusal() async throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("catflow-erclose2-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let ws = FlowWorkspace(root: base.appendingPathComponent("flows"))
+        let dir = ws.directory(for: "f")
+        let outside = base.appendingPathComponent("outside")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: dir.appendingPathComponent("link"), withDestinationURL: outside)
+        let src = dir.appendingPathComponent("b.bin")
+        try Data([1]).write(to: src)
+        func refusal(_ stage: any AssetStage, kind: Kind) async -> (String, String)? {
+            let input = Asset(items: [Item(kind: kind, value: nil, path: src, sourceText: nil)])
+            do { _ = try await stage.run(input) { _ in } } catch let e as FlowError {
+                if case .stageFailure(let row, let message) = e { return (row, message) }
+            } catch {}
+            return nil
+        }
+        let file = await refusal(SaveFileTool(workspace: ws, flowID: "f", settings: "to=\"link/f.bin\""), kind: .file)
+        let image = await refusal(SaveImageTool(workspace: ws, flowID: "f", settings: "path=\"link/i.bin\""), kind: .image)
+        #expect(file?.0 == "Save File" && image?.0 == "Save Image")
+        #expect(file?.1.hasPrefix("Save File can't write to `link/f.bin`") == true, "\(String(describing: file))")
+        #expect(image?.1.hasPrefix("Save Image can't write to `link/i.bin`") == true, "\(String(describing: image))")
+        #expect((try FileManager.default.contentsOfDirectory(atPath: outside.path)).isEmpty)
+    }
 }

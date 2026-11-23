@@ -66,7 +66,7 @@ nonisolated struct FlowCacheStore: Sendable {
             if !FileManager.default.fileExists(atPath: dest.path) {
                 try FileManager.default.copyItem(at: src, to: dest)
             }
-            items.append(Item(kind: entry.kindValue, value: nil, path: dest, sourceText: nil))
+            items.append(Item(kind: entry.kindValue, value: nil, path: dest, sourceText: nil, originalName: entry.name))
         }
         touch(key: key)
         return Asset(items: items)
@@ -95,7 +95,10 @@ nonisolated struct FlowCacheStore: Sendable {
                                                         withIntermediateDirectories: true)
                 try FileManager.default.copyItem(at: path, to: blob)
             }
-            entries.append(ManifestItem(kind: item.kind, value: nil, blob: hash))
+            // ER-FIX-7: keep the file's own name so a cache hit can still label it. A cache-materialised `.bin` name is never worth
+            // keeping; the key is omitted then, so every other manifest is byte-for-byte what it was.
+            let display = item.originalName ?? path.lastPathComponent
+            entries.append(ManifestItem(kind: item.kind, value: nil, blob: hash, name: display.hasSuffix(".bin") ? nil : display))
         }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -219,11 +222,14 @@ nonisolated extension FlowCacheStore {
         var kind: String
         var value: String?
         var blob: String?
+        /// ER-FIX-7: the file item's own display name (absent for inline items and for cache-style `.bin` names).
+        var name: String?
 
-        init(kind: Kind, value: String?, blob: String?) {
+        init(kind: Kind, value: String?, blob: String?, name: String? = nil) {
             self.kind = kind.rawValue
             self.value = value
             self.blob = blob
+            self.name = name
         }
 
         var kindValue: Kind { Kind(rawValue: kind) ?? .file }
