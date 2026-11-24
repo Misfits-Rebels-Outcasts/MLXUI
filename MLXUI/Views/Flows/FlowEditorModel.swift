@@ -985,7 +985,10 @@ final class FlowEditorModel {
     /// the data.
     @discardableResult
     func setRowText(_ text: String, for rowID: UUID) -> String? {
-        guard let originalSettings = row(withID: rowID)?.settings else { return nil }
+        // R3 (2026-11-24): the row must exist, but its settings may well be nil — `guard let … ?.settings` here treated a row with
+        // *no* settings as "no such row" and silently dropped the edit (the Redact-row repro: type `only="ssn"`, nothing happens).
+        guard let existing = row(withID: rowID) else { return nil }
+        let originalSettings = existing.settings
         let newSettings = text.isEmpty ? nil : text
         guard newSettings != originalSettings else { return nil }
 
@@ -1011,6 +1014,37 @@ final class FlowEditorModel {
             }
         }
         return refusal
+    }
+
+    // MARK: - The Raw settings draft (R3, owner ruling Boo, 2026-11-24)
+
+    /// What the "Raw settings" box is showing while the user is mid-edit, and **which row it belongs to**. It lives here, not in the
+    /// view's `@State`, because the box used to commit only when its text editor lost focus — and pressing Run, pressing Save,
+    /// clicking another row or switching tabs does not blur a macOS text editor, so the typed text never reached the row or the
+    /// `.cat` (repro: a duplicated flow's `Redact` row, type `only="person"`, press Run: the row had no settings). Owning the
+    /// row id also fixes the old "blur fires after the selection moved" hazard without discarding the edit.
+    var rawSettingsDraft: (rowID: UUID, text: String)?
+    /// The refusal sentence of the last refused commit of the draft, shown under the box ("left dirty": the draft stays).
+    var rawSettingsRefusal: (rowID: UUID, message: String)?
+
+    /// Commit the pending draft onto **its own** row. Returns the refusal sentence when the backstop refuses (the draft stays on
+    /// screen, the row is unchanged), `nil` when there was nothing pending or the edit was accepted (the draft is then cleared).
+    @discardableResult
+    func commitRawSettingsDraft() -> String? {
+        guard let draft = rawSettingsDraft else { return nil }
+        if let refusal = setRowText(draft.text, for: draft.rowID) {
+            rawSettingsRefusal = (draft.rowID, refusal)
+            return refusal
+        }
+        rawSettingsRefusal = nil
+        rawSettingsDraft = nil
+        return nil
+    }
+
+    /// Forget the draft and its refusal (the user moved on from an edit the backstop refused).
+    func discardRawSettingsDraft() {
+        rawSettingsDraft = nil
+        rawSettingsRefusal = nil
     }
 
     /// Set a decider's declared tags — keeping the decide clause's edge tags in sync (FIX-4:

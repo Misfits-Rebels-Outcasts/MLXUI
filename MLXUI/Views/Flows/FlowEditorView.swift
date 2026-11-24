@@ -912,11 +912,17 @@ struct FlowEditorView: View {
     // MARK: - Save (CFM-R8-5)
 
     private func save() {
+        // R3 (2026-11-24): a Raw settings edit still in the box is committed first — Save is not a blur. A refused one is
+        // not saved (the row is unchanged) and the person is told why, still on screen under the box.
+        let refusal = model.commitRawSettingsDraft()
         do {
             try model.save()
             model.saveError = nil
         } catch {
             model.saveError = (error as CustomStringConvertible).description
+        }
+        if let refusal, model.saveError == nil {
+            model.saveError = "Saved without your Raw settings edit: that change wouldn't check: \(refusal)"
         }
         prepareInstall()
     }
@@ -929,6 +935,12 @@ struct FlowEditorView: View {
     // MARK: - Run (reuses the gallery's session + preflight machinery)
 
     private func run() {
+        // R3 (2026-11-24): Run is not a blur either — commit a pending Raw settings edit first, and never run on a row whose edit the
+        // backstop refused (the document would silently differ from what is typed on screen).
+        if let refusal = model.commitRawSettingsDraft() {
+            model.saveError = "That Raw settings change wouldn't check: \(refusal). The row's text is unchanged until it does."
+            return
+        }
         // FIX-4: never run a document the save gate refuses (the button is disabled, this
         // is defense in depth).
         guard model.canSave else {

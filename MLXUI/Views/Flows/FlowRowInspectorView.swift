@@ -71,9 +71,19 @@ struct FlowRowInspectorView: View {
     /// decoupled from `row.settings` while the user is mid-edit (and left showing the rejected
     /// text — "dirty" — after a refusal). `nil` means "not being edited right now; show the
     /// committed value."
-    @State private var rowTextDraft: String?
-    @State private var rowTextRefusal: String?
+    /// R3 (2026-11-24): the draft and its refusal now live on `FlowEditorModel` (`rawSettingsDraft`), keyed by the row they belong
+    /// to, so Run / Save / a row change / leaving the tab can commit it; only the focus flag stays view state.
     @FocusState private var rowTextFocused: Bool
+
+    /// The draft for *this* row, if the box is mid-edit on it.
+    private var rowTextDraft: String? {
+        guard let draft = model.rawSettingsDraft, draft.rowID == rowID else { return nil }
+        return draft.text
+    }
+    private var rowTextRefusal: String? {
+        guard let refusal = model.rawSettingsRefusal, refusal.rowID == rowID else { return nil }
+        return refusal.message
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -208,10 +218,13 @@ struct FlowRowInspectorView: View {
         // deliberate here, not incidental: switching rows away from an uncommitted raw-text
         // edit abandons it, the same way navigating away from an unsaved form field would.
         .onChange(of: rowID) { _, _ in
-            rowTextDraft = nil
-            rowTextRefusal = nil
+            // R3: an accepted edit is kept (the draft carries its own row id, so it lands on the row it was typed in, never on the
+            // newly selected one); one the backstop refuses is abandoned, as before.
+            if model.commitRawSettingsDraft() != nil { model.discardRawSettingsDraft() }
             pendingExtraInputSlots = 0
         }
+        // R3: leaving the tab / closing the pane is not a blur either.
+        .onDisappear { model.commitRawSettingsDraft() }
     }
 
     // MARK: - Header
@@ -1306,7 +1319,7 @@ struct FlowRowInspectorView: View {
             VStack(alignment: .leading, spacing: 4) {
                 TextEditor(text: Binding(
                     get: { rowTextDraft ?? row.settings ?? "" },
-                    set: { rowTextDraft = $0 }
+                    set: { model.rawSettingsDraft = (rowID, $0) }
                 ))
                 .font(.caption.monospaced())
                 .frame(minHeight: 60, maxHeight: 160)
@@ -1336,13 +1349,7 @@ struct FlowRowInspectorView: View {
     /// dropped back to the last-committed value); acceptance clears it, so the box falls back
     /// to reading `row.settings` (now equal to the draft) directly.
     private func commitRowText(_ row: Row) {
-        guard let draft = rowTextDraft else { return }
-        if let refusal = model.setRowText(draft, for: rowID) {
-            rowTextRefusal = refusal
-        } else {
-            rowTextRefusal = nil
-            rowTextDraft = nil
-        }
+        model.commitRawSettingsDraft()
     }
 
     // MARK: - R9-5 decisions & budget

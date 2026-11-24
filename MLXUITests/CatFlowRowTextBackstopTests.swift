@@ -130,4 +130,51 @@ struct CatFlowRowTextBackstopTests {
         #expect(refusal == nil)
         #expect(model.row(withID: other.id)?.settings == "output.md")
     }
+
+    // MARK: - R3 (Boo, 2026-11-24): the draft reaches the row without a blur
+
+    /// Repro: a duplicated flow's `Redact` row, type `only="ssn"` / `only="person"` into Raw settings, press Run or Save — the box
+    /// only committed when its text editor lost focus, which Run and Save do not cause, so the row kept no settings.
+    @Test func aPendingDraftIsCommittedOntoItsRowByRunOrSave() throws {
+        let r = row("Redact", model: "Privacy Filter")
+        let model = try editor([r])
+        model.rawSettingsDraft = (r.id, "only=\"person\"")
+        #expect(model.row(withID: r.id)?.settings == nil)         // typing alone changes nothing (mid-edit)
+
+        #expect(model.commitRawSettingsDraft() == nil)            // what Run and Save now call first
+        #expect(model.row(withID: r.id)?.settings == "only=\"person\"")
+        #expect(model.rawSettingsDraft == nil)
+        #expect(CatSerializer.serialize(model.document).contains("only=\"person\""))   // and it reaches the .cat text
+    }
+
+    @Test func aDraftIsCommittedOntoTheRowItWasTypedIn_notTheOneSelectedNow() throws {
+        let a = row("Redact", model: "Privacy Filter")
+        let b = row("Save Text", settings: "out.txt")
+        let model = try editor([a, b])
+        model.rawSettingsDraft = (a.id, "only=\"email\"")
+        model.selectedRowID = b.id                                // the selection moved away first
+        model.commitRawSettingsDraft()
+        #expect(model.row(withID: a.id)?.settings == "only=\"email\"")
+        #expect(model.row(withID: b.id)?.settings == "out.txt")
+    }
+
+    @Test func aRefusedDraftIsLeftDirtyAndReportedAndTheRowIsUnchanged() throws {
+        let r = row("Redact", model: "Privacy Filter")
+        let model = try editor([r])
+        model.rawSettingsDraft = (r.id, "only=\"ssn\"")
+        let refusal = model.commitRawSettingsDraft()
+        #expect(refusal?.contains("ssn") == true)
+        #expect(model.row(withID: r.id)?.settings == nil)
+        #expect(model.rawSettingsDraft?.text == "only=\"ssn\"")   // left dirty, never silently dropped
+        #expect(model.rawSettingsRefusal?.rowID == r.id)
+        model.discardRawSettingsDraft()
+        #expect(model.rawSettingsDraft == nil && model.rawSettingsRefusal == nil)
+    }
+
+    @Test func committingWithNoDraftIsANoOp() throws {
+        let r = row("Redact", model: "Privacy Filter", settings: "only=\"url\"")
+        let model = try editor([r])
+        #expect(model.commitRawSettingsDraft() == nil)
+        #expect(model.row(withID: r.id)?.settings == "only=\"url\"")
+    }
 }
