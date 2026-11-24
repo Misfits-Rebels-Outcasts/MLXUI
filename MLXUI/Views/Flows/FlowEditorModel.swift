@@ -1050,6 +1050,40 @@ final class FlowEditorModel {
         didSet { if (rawSettingsBanner == nil) != (oldValue == nil) { EditorLog.step("red banner (raw settings) set", rawSettingsBanner != nil) } }
     }
 
+    // MARK: R13 (owner ruling, Boo, 2026-11-24) — no pending state for text that checks
+
+    /// The advisor's R11 re-run (19:03–19:05) showed the window dropping the *first* click of any kind — Run, Save, another row —
+    /// while the Raw settings text view was first responder with a draft pending (the "lands on" lines showed only SwiftUI hosting
+    /// containers, no culprit). Clicks with nothing pending always arrived. So there is no longer a pending draft for text that
+    /// checks: each keystroke whose text checks is written straight to the row; text that doesn't check stays in the box with the
+    /// inline refusal and the row keeps its last good text.
+    ///
+    /// Edit session: all the accepted keystrokes of one stretch of typing are **one undo step** (`rawEditSession` remembers where the
+    /// stretch began on the undo stack and folds later writes into it).
+    @ObservationIgnored private var rawEditSession: (rowID: UUID, undoDepth: Int)?
+    func endRawEditSession() { rawEditSession = nil }
+
+    /// One keystroke (or paste, or deletion) in the Raw settings box. Returns the refusal sentence when the text doesn't check.
+    @discardableResult
+    func typeRawSettings(_ typed: String, for rowID: UUID) -> String? {
+        let text = TypographicQuotes.straightened(typed)
+        let depthBefore = undoStack.count
+        if let refusal = setRowText(text, for: rowID) {
+            rawSettingsDraft = (rowID, text)               // stays in the box; the row keeps its last good text
+            scheduleRawSettingsCommit()                    // the inline sentence appears once typing pauses (a pause is fine for *showing*)
+            return refusal
+        }
+        rawSettingsDraft = nil                             // it checks (or changed nothing): the row *is* the text now
+        if undoStack.count > depthBefore {                 // this keystroke changed the document and pushed an undo step
+            if let session = rawEditSession, session.rowID == rowID, session.undoDepth < depthBefore {
+                undoStack.removeSubrange((session.undoDepth + 1)..<undoStack.count)    // fold into the session's first step
+            } else {
+                rawEditSession = (rowID, depthBefore)
+            }
+        }
+        return nil
+    }
+
     /// R11 (2026-11-24): the document a Run click produced by committing a pending draft — the one change the document-change handler
     /// must *not* answer with `session.clearRun`, because the run that click is starting is already built on it.
     @ObservationIgnored private var documentOwnedByRunClick: FlowDocument?

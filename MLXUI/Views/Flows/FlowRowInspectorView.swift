@@ -220,6 +220,7 @@ struct FlowRowInspectorView: View {
         .onChange(of: rowID) { _, _ in
             // R3: an accepted edit is kept (the draft carries its own row id, so it lands on the row it was typed in, never on the
             // newly selected one); one the backstop refuses is abandoned, as before.
+            model.endRawEditSession()
             if model.commitRawSettingsDraft() != nil { model.discardRawSettingsDraft() }
             pendingExtraInputSlots = 0
         }
@@ -1331,7 +1332,7 @@ struct FlowRowInspectorView: View {
             VStack(alignment: .leading, spacing: 4) {
                 TextEditor(text: Binding(
                     get: { rowTextDraft ?? row.settings ?? "" },
-                    set: { model.rawSettingsDraft = (rowID, TypographicQuotes.straightened($0)); model.scheduleRawSettingsCommit() }   // R8, R9
+                    set: { model.typeRawSettings($0, for: rowID) }   // R8 straighten, R13 write what checks straight to the row
                 ))
                 .font(.caption.monospaced())
                 .plainCatTextInput()   // R3-FIX-1: no smart quotes/dashes in .cat text
@@ -1340,7 +1341,7 @@ struct FlowRowInspectorView: View {
                 .focused($rowTextFocused)
                 .onChange(of: rowTextFocused) { _, isFocused in
                     EditorLog.step("Raw settings focus changed; focused", isFocused)
-                    if !isFocused { commitRowTextAfterMouseUp() }
+                    if !isFocused { model.endRawEditSession(); commitRowTextAfterMouseUp() }
                 }
                 // §7 copy, verbatim.
                 Text("The row's settings text, exactly as the file stores it — quote marks included.")

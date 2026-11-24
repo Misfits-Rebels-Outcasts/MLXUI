@@ -347,4 +347,54 @@ struct CatFlowRowTextBackstopTests {
         session.clearRun(doc: model.document)
         #expect(!session.isRunning)
     }
+
+    // MARK: - R13: each keystroke whose text checks lands on the row; one that doesn't, doesn't
+
+    @Test func everyValidKeystrokeLandsOnTheRow_andARefusedOneKeepsTheLastGoodText() throws {
+        let r = row("Redact", model: "Privacy Filter")
+        let model = try editor([r])
+        // typing only="person" one character at a time
+        var accepted: [String] = []
+        for text in ["o", "on", "onl", "only", "only=", "only=p", "only=pe", "only=per", "only=pers", "only=perso", "only=person"] {
+            if model.typeRawSettings(text, for: r.id) == nil { accepted.append(text) }
+        }
+        // `only=` (empty value) already checks under E725 — it means "no subset" — so it lands too; every partial category name does not
+        #expect(accepted == ["only=", "only=person"])                 // the intermediate states don't check ...
+        #expect(model.row(withID: r.id)?.settings == "only=person")   // ... the one that does is on the row, with no click needed
+        #expect(model.rawSettingsDraft == nil)                        // nothing pending for a click to meet
+
+        // continuing to type something that doesn't check: the row keeps its last good text, the box keeps what was typed
+        #expect(model.typeRawSettings("only=person,x", for: r.id) != nil)
+        #expect(model.row(withID: r.id)?.settings == "only=person")
+        #expect(model.rawSettingsDraft?.text == "only=person,x")
+
+        // and back to something valid
+        #expect(model.typeRawSettings("only=person,email", for: r.id) == nil)
+        #expect(model.row(withID: r.id)?.settings == "only=person,email")
+        #expect(model.rawSettingsDraft == nil)
+    }
+
+    @Test func aWholeStretchOfTypingIsOneUndoStep() throws {
+        let r = row("Redact", model: "Privacy Filter")
+        let model = try editor([r])
+        let before = model.undoStack.count
+        for text in ["only=person", "only=person,email", "only=person,email,url"] {
+            #expect(model.typeRawSettings(text, for: r.id) == nil)
+        }
+        #expect(model.undoStack.count == before + 1)                  // coalesced: three accepted writes, one step
+        model.endRawEditSession()
+        #expect(model.typeRawSettings("only=url", for: r.id) == nil)  // a new stretch is a new step
+        #expect(model.undoStack.count == before + 2)
+        model.undo()
+        #expect(model.row(withID: r.id)?.settings == "only=person,email,url")
+        model.undo()
+        #expect(model.row(withID: r.id)?.settings == nil)
+    }
+
+    @Test func aCurlyQuoteTypedIsStoredStraightAndAccepted() throws {
+        let r = row("Redact", model: "Privacy Filter")
+        let model = try editor([r])
+        #expect(model.typeRawSettings("only=\u{201C}url\u{201D}", for: r.id) == nil)
+        #expect(model.row(withID: r.id)?.settings == "only=\"url\"")
+    }
 }
