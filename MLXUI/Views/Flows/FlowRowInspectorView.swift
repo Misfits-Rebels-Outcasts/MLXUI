@@ -1331,7 +1331,7 @@ struct FlowRowInspectorView: View {
             VStack(alignment: .leading, spacing: 4) {
                 TextEditor(text: Binding(
                     get: { rowTextDraft ?? row.settings ?? "" },
-                    set: { model.rawSettingsDraft = (rowID, TypographicQuotes.straightened($0)) }   // R8
+                    set: { model.rawSettingsDraft = (rowID, TypographicQuotes.straightened($0)); model.scheduleRawSettingsCommit() }   // R8, R9
                 ))
                 .font(.caption.monospaced())
                 .plainCatTextInput()   // R3-FIX-1: no smart quotes/dashes in .cat text

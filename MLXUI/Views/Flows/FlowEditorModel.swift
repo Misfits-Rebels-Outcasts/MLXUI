@@ -1050,6 +1050,20 @@ final class FlowEditorModel {
         didSet { if (rawSettingsBanner == nil) != (oldValue == nil) { EditorLog.step("red banner (raw settings) set", rawSettingsBanner != nil) } }
     }
 
+    /// R9 (2026-11-24): commit the draft shortly after the user stops typing, so it is already on the row by the time they reach for
+    /// Run / Save / another row — the click then only has to *act*. A refused draft shows the same inline sentence as any commit.
+    @ObservationIgnored private var rawSettingsDebounce: Task<Void, Never>?
+    func scheduleRawSettingsCommit(after delay: Duration = .milliseconds(450)) {
+        rawSettingsDebounce?.cancel()
+        let pending = rawSettingsDraft?.text
+        rawSettingsDebounce = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self, self.rawSettingsDraft?.text == pending, pending != nil else { return }
+            EditorLog.step("debounced commit fires")
+            self.commitRawSettingsDraft()
+        }
+    }
+
     /// Commit the pending draft onto **its own** row. Returns the refusal sentence when the backstop refuses (the draft stays on
     /// screen, the row is unchanged), `nil` when there was nothing pending or the edit was accepted (the draft is then cleared).
     @discardableResult

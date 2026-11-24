@@ -261,6 +261,29 @@ struct CatFlowRowTextBackstopTests {
         #expect(model.row(withID: r.id)?.settings == "only=\"person,email\"")
     }
 
+    // MARK: - R9: the draft is already on the row by the time a click arrives
+
+    @MainActor @Test func theDraftIsCommittedShortlyAfterTypingStops() async throws {
+        let r = row("Redact", model: "Privacy Filter")
+        let model = try editor([r])
+        model.rawSettingsDraft = (r.id, "only=\"person\"")
+        model.scheduleRawSettingsCommit(after: .milliseconds(30))
+        #expect(model.row(withID: r.id)?.settings == nil)         // not yet
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(model.row(withID: r.id)?.settings == "only=\"person\"")
+        #expect(model.rawSettingsDraft == nil)
+    }
+
+    @MainActor @Test func aNewKeystrokeRestartsTheWait_andARefusedDraftIsReportedNotApplied() async throws {
+        let r = row("Redact", model: "Privacy Filter")
+        let model = try editor([r])
+        model.rawSettingsDraft = (r.id, "only=\"ssn\"")
+        model.scheduleRawSettingsCommit(after: .milliseconds(30))
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(model.row(withID: r.id)?.settings == nil)         // refused: the row is untouched
+        #expect(model.rawSettingsRefusal?.rowID == r.id)          // and the inline sentence is up
+    }
+
     // MARK: - R10: the red top banner follows the inline warning's rule
 
     @Test func theRedBannerGoesTheMomentTheInlineRefusalDoes() throws {
