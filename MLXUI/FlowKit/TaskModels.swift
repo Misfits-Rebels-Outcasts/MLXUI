@@ -99,6 +99,9 @@ nonisolated enum TaskModels {
         // ER-10 (SPEC-Q238 / SPEC-Q239): Sortformer and DeepFilterNet are the only models of their kinds, and each has a stage.
         "Identify Speakers": .diarization,
         "Clean Audio": .enhance,
+        // PF-9 (SPEC-Q251, owner ruling 2026-11-18): `Redact` is served by OpenAI Privacy Filter, the first `.redact`
+        // catalog entry. `RealExecutor.runModel`'s `.redact` branch runs the registry stage for it.
+        "Redact": .redact,
     ]
 
     /// Optional family constraints — filled only where a task genuinely needs one (a `.cat`
@@ -184,6 +187,9 @@ nonisolated enum TaskModels {
         // ER-10: `RealExecutor.runModel` has a branch for the first (stage CSV → table); the generic audio → audio tail serves the second.
         "engines.diarize.identify_speakers",  // Identify Speakers (audio → table) — SPEC-Q238
         "engines.audio_clean.clean_audio",    // Clean Audio (audio → 48 kHz audio) — SPEC-Q239
+        // PF-9 (SPEC-Q251): the `Redact` row is served by `RealExecutor.runModel`'s `.redact` branch (the Privacy Filter
+        // stage), which is the only implementer of `engines.redact.redact` in this runtime.
+        "engines.redact.",                    // Redact (text → redacted text) — PF-9
     ]
 
     /// Whether `RealExecutor` genuinely serves `task` (CFM-R14-FIX-2). A **frame-backed** task
@@ -289,6 +295,9 @@ nonisolated enum TaskModels {
         "Encode Latent": ["Z-Image Turbo", "FLUX.2 Klein 4B", "FLUX.1 Kontext", "FLUX.1 Fill"],
         "Decode Latent": ["Z-Image Turbo", "FLUX.2 Klein 4B", "FLUX.1 Kontext", "FLUX.1 Fill"],
         "Denoise": ["Z-Image Turbo"],
+        // PF-9 (SPEC-Q251, owner ruling 2026-11-18): "Privacy Filter" is the one `.redact` model, so it is the seed for the
+        // new row. Appended last, same discipline as every other row added since MoC-2-4 — no existing pool moves.
+        "Redact": ["Privacy Filter"],
     ]
 
     // MoC-2-4 (RSI/DelegateMoCBacklog.md): "Qwen3.5 9B" appended last, per Decision D as ruled

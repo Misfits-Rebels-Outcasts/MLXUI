@@ -170,6 +170,10 @@ nonisolated enum TaskCatalog {
         TaskDescriptor("Revise", .listOf(.text), t(.text), .model, .frame, "frames/Revise.frame.txt"),
         TaskDescriptor("Merge", .listOf(.text), t(.text), .model, .frame, "frames/Merge.frame.txt"),
         TaskDescriptor("Extract Structured", t(.text), t(.table), .model, .engine, "engines.llm.extract_structured"),
+        // SPEC-Q251 (owner ruling 2026-11-18; PF-9): a new text -> text model task, `Redact`. The maintainers file the
+        // language entry and the Python reference runtime's `engines/redact.py` in `catflow-mlx`; neither is part of this
+        // change. The Swift port serves it from `RealExecutor.runModel`'s `.redact` branch via the Privacy Filter stage.
+        TaskDescriptor("Redact", t(.text), t(.text), .model, .engine, "engines.redact.redact"),
         TaskDescriptor("Improvise", t(.text), t(.text), .agent, .engine, "engines.agent.improvise"),
 
         // -- §4 Audio, image, video --
@@ -287,7 +291,9 @@ nonisolated enum TaskFamilies {
         "Language models": ["Generate", "Decide", "Summarize", "Translate", "Answer",
                             "Rewrite", "Draft", "Ask", "Title", "Critique", "Verify",
                             "Revise", "Merge", "Extract Structured", "Classify", "Gate",
-                            "Score", "Judge", "Think", "Improvise"],
+                            "Score", "Judge", "Think", "Improvise",
+                            // SPEC-Q251 (PF-9): appended last; the family table is the step picker's grouping only.
+                            "Redact"],
         "Audio, image, video": ["Transcribe", "Speak", "Describe Image", "OCR", "Extract Frame",
                                 "Extract Audio", "Trim", "Join Video", "Resize", "Crop",
                                 "Convert", "Watermark", "Overlay Text", "Read Barcode", "Make Barcode",

@@ -186,7 +186,8 @@ struct CatFlowCatalogBridgeTests {
         // MC4-8 added "Qwen3-VL Embedding 2B" (`.same`, `.embedding`), 37 -> 38 (issue #8; same convention).
         // MC5-W added "ACE-Step 1.5" (`.same`), 38 -> 39 (SPEC-Q251; same convention).
         // ER-10 added "Sortformer 4spk v2.1" and "DeepFilterNet 3" (`.same`), 39 -> 41 (SPEC-Q238 / SPEC-Q239; same convention).
-        #expect(CatalogBridge.entries.count == 41)
+        // PF-9 added "Privacy Filter" (`.same` onto openai/privacy-filter), 41 -> 42 (owner decision 7; the same convention).
+        #expect(CatalogBridge.entries.count == 42)
     }
 
     // MARK: - CFM-R13-9/12: the OCR + Describe Image rows
@@ -432,7 +433,8 @@ struct CatFlowCatalogBridgeTests {
         // MC4-8 added "Qwen3-VL Embedding 2B" (`.same`, `.embedding`), 37 -> 38 (issue #8; same convention).
         // MC5-W added "ACE-Step 1.5" (`.same`), 38 -> 39 (SPEC-Q251; same convention).
         // ER-10 added "Sortformer 4spk v2.1" and "DeepFilterNet 3" (`.same`), 39 -> 41 (SPEC-Q238 / SPEC-Q239; same convention).
-        #expect(CatalogBridge.entries.count == 41)
+        // PF-9 added "Privacy Filter" (`.same` onto openai/privacy-filter), 41 -> 42 (owner decision 7; the same convention).
+        #expect(CatalogBridge.entries.count == 42)
     }
 
     // MARK: - MoC-4-4: Qwen3 Reranker 0.6B joins the bridge, the model on MoC-3's seam

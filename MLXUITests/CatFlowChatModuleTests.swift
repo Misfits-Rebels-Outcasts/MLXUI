@@ -101,7 +101,9 @@ struct CatFlowChatModuleTests {
         //        entry (multimodal embedder), 57 → 58. Same convention.
         // MC5-3a: bundled catalog gained the ACE-Step/Ace-Step1.5 `.music` entry (ACE-Step 1.5 turbo),
         //         58 → 59. Same convention.
-        #expect(entries.count == 59, "bundled catalog drifted: \(entries.count) entries")
+        // PF-1: bundled catalog gained the openai/privacy-filter `.redact` entry (PII detection + redaction,
+        //        owner decisions 2026-11-18), 59 → 60. Same convention: a bumped count, not an edited golden.
+        #expect(entries.count == 60, "bundled catalog drifted: \(entries.count) entries")
 
         let withChat = registry(includingChat: true)
         let withoutChat = registry(includingChat: false)
@@ -133,7 +135,7 @@ struct CatFlowChatModuleTests {
             }
             checked += 1
         }
-        #expect(checked == 59)   // MC2-1 + MC3-1 + MC4-1 + MC5-3a: 55 → 59 (the TranslateGemma 4B `.translate`, Depth Anything V2 Small `.depth`, Qwen3-VL Embedding 2B `.embedding` and ACE-Step 1.5 `.music` entries)
+        #expect(checked == 60)   // PF-1: 59 → 60 (the openai/privacy-filter `.redact` entry); before it: MC2-1 + MC3-1 + MC4-1 + MC5-3a: 55 → 59 (the TranslateGemma 4B `.translate`, Depth Anything V2 Small `.depth`, Qwen3-VL Embedding 2B `.embedding` and ACE-Step 1.5 `.music` entries)
         #expect(llmChecked == 14)   // MP1-1: Gemma 4 E4B is the 14th .llm entry (MM1: MiMo V2.6 9B was the 13th)
         #expect(translateChecked == 1)   // MC2-1: TranslateGemma 4B is the first (and only) `.translate` entry
     }

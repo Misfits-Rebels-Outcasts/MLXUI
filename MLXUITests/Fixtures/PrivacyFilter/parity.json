@@ -1,0 +1,201 @@
+{
+  "attnImplementation": "eager",
+  "blocksArePreFinalNorm": true,
+  "case": "mixed_all_categories",
+  "finalNormIsLastHiddenState": true,
+  "layerCount": 8,
+  "loadedDtype": "bfloat16",
+  "method": "transformers 5.12.0 OpenAIPrivacyFilterForTokenClassification, model loaded bf16 (torch.bfloat16), device=cpu, eval(), attn_implementation=eager, input_ids=tokenIds (batch 1, no padding); embedding = outputs.hidden_states[0] == model.model.embed_tokens(ids); blocks[k] = forward-hook output of model.model.layers[k] (post-MLP residual, PRE final norm) for k=0..7; finalNorm = model.model(ids).last_hidden_state == model.model.norm(blocks[7]) (asserted bitwise); logits = model(ids).logits; every saved tensor = tensor.float().numpy().astype('<f4') little-endian row-major with the batch dimension squeezed",
+  "reference": {
+    "blocks": [
+      {
+        "file": "parity-block-0.f32",
+        "shape": [
+          86,
+          640
+        ]
+      },
+      {
+        "file": "parity-block-1.f32",
+        "shape": [
+          86,
+          640
+        ]
+      },
+      {
+        "file": "parity-block-2.f32",
+        "shape": [
+          86,
+          640
+        ]
+      },
+      {
+        "file": "parity-block-3.f32",
+        "shape": [
+          86,
+          640
+        ]
+      },
+      {
+        "file": "parity-block-4.f32",
+        "shape": [
+          86,
+          640
+        ]
+      },
+      {
+        "file": "parity-block-5.f32",
+        "shape": [
+          86,
+          640
+        ]
+      },
+      {
+        "file": "parity-block-6.f32",
+        "shape": [
+          86,
+          640
+        ]
+      },
+      {
+        "file": "parity-block-7.f32",
+        "shape": [
+          86,
+          640
+        ]
+      }
+    ],
+    "embedding": {
+      "file": "parity-embedding.f32",
+      "shape": [
+        86,
+        640
+      ]
+    },
+    "finalNorm": {
+      "file": "parity-final-norm.f32",
+      "shape": [
+        86,
+        640
+      ]
+    },
+    "logits": {
+      "file": "parity-logits.f32",
+      "shape": [
+        86,
+        33
+      ]
+    }
+  },
+  "shortText": "Jordan Samplewood (jordan.sample@example.com, 555-0188) asked that the renewal dated 11/02/2024 be sent to https://example.com/renewals/1 and shipped to 221B Sample Street, Springfield, ZZ 12345, charged to account ACCT-0000-1234-9876 with token sk-test-0123456789abcdef0123456789abcdef.",
+  "sinks": {
+    "layer0RawValues": [
+      3.642158269882202,
+      1.8767058849334717,
+      1.862194299697876,
+      -0.27211421728134155,
+      2.47572922706604,
+      1.8426884412765503,
+      -1.1357771158218384,
+      -1.5006661415100098,
+      1.5275309085845947,
+      0.3811246454715729,
+      -1.8686163425445557,
+      -0.021769126877188683,
+      0.7986248135566711,
+      0.6694579124450684
+    ],
+    "note": "transformers adds the checkpoint sinks RAW as one extra attention-logit column (eager_attention_forward: torch.cat([attn_weights, module.sinks.reshape(...)], -1), fp32 softmax, column dropped); no log(2) scaling. opf's original code uses block.N.attn.sinks * ln(2), and the HF checkpoint's model.layers.N.self_attn.sinks equal the opf values times ln(2) (verified), so the two implementations agree: use the HF sinks raw.",
+    "scaledByLog2": false
+  },
+  "tensorLayout": "little-endian float32, row-major [T, C], batch dimension squeezed; T = len(tokenIds)",
+  "tokenIds": [
+    131849,
+    31073,
+    8172,
+    350,
+    73,
+    17619,
+    47480,
+    81309,
+    1136,
+    11,
+    220,
+    22275,
+    12,
+    25749,
+    23,
+    8,
+    7747,
+    484,
+    290,
+    65741,
+    46026,
+    220,
+    994,
+    14,
+    3286,
+    14,
+    1323,
+    19,
+    413,
+    3860,
+    316,
+    5918,
+    1684,
+    18582,
+    1136,
+    14,
+    130154,
+    1288,
+    14,
+    16,
+    326,
+    29853,
+    316,
+    220,
+    22687,
+    33,
+    31073,
+    9903,
+    11,
+    84524,
+    11,
+    168652,
+    220,
+    7633,
+    2548,
+    11,
+    19577,
+    316,
+    3527,
+    18577,
+    1895,
+    12,
+    1302,
+    15,
+    12,
+    7633,
+    19,
+    12,
+    42391,
+    21,
+    483,
+    6602,
+    1705,
+    31542,
+    12,
+    19267,
+    22901,
+    30833,
+    24,
+    91109,
+    19267,
+    22901,
+    30833,
+    24,
+    91109,
+    13
+  ],
+  "torchDevice": "cpu"
+}

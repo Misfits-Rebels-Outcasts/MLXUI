@@ -131,6 +131,25 @@ nonisolated enum ModelLoadProfile {
         // so it is a per-call working set (the .enhance row's form): files x 1.10 + 2.0 GB = 2.22 GB x 1.10 + 2.0 = ~4.4 GB, at or
         // over the measured peak. Shorter inputs are over-booked, never under. Implementer's call, pending owner confirmation.
         case .translate: return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 2_000_000_000, measured: true)
+        // PF-8: OpenAI Privacy Filter (.redact). Measured 2026-11-18 by `MLXUITests/PrivacyFilterFootprintTests.footprint(phase:)`,
+        // whole-process `phys_footprint` (`task_info(TASK_VM_INFO)`) sampled every 20 ms through the whole Run path
+        // (`PrivacyFilterEngine.redact` → inference cache lease → tokenize → log-probs → Viterbi → spans/redaction), test-host
+        // baseline included, on the installed copy at /private/tmp/pf-model (revision 7ffa9a04…, 2.798 GB of safetensors).
+        // Two consecutive runs on the final tree, the higher of each phase kept (the second run's host was busier):
+        //   phase 1 load + one synthetic sentence: 5.081 GB peak (baseline 93 MiB, MLX peak 4.505 GB, 7.3 s, 24 tokens);
+        //   phase 2 a 6,000-token synthetic document: 7.414 GB (baseline 5,877 MiB, MLX 4.668 GB, 19.6 s, 6,000 tokens;
+        //           the earlier run recorded 6.707 GB — run-to-run spread of ~0.7 GB from MLX's buffer cache);
+        //   phase 3 the worst case decision 5 allows, 128,000 tokens: 7.582 GB (baseline 3,178 MiB, MLX 5.005 GB, 315.5 s,
+        //           128,000 tokens; the earlier run recorded 7.418 GB).
+        // The growth over the 2.799 GB of weights is the windowed attention/MoE activations and MLX's buffer cache (the MLX peak
+        // alone is 5.01 GB; the rest is host rows for 128k x 33 log-probs and span math), so it is a per-call working set (the
+        // `.depth`/`.translate` row's form): files x 1.10 (3.079 GB) + 4.60 GB = 7.679 GB, over the highest measured peak
+        // (7.582 GB) with ~97 MB for run-to-run noise; 4.55 GB would be the exact 0.05 GB rounding of 7.582 GB, and 4.60 is the
+        // implementer's call, pending owner confirmation, as is the 1.10 load factor. Phase 3's ~315 s is the measured wall for a
+        // 128,000-token input (63 windowed forwards). `ramGB` in browser.json is deliberately unchanged (4.2, PF-1's provisional
+        // 1.5x figure): PF-8 says the maintainers set it from their own smoke run — note the measured worst-case peak is above
+        // that provisional ramGB, so the catalog figure under-states this kind until the owner's own run replaces it.
+        case .redact:   return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 4_600_000_000, measured: true)
         default:        return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 0, measured: false)
         }
     }

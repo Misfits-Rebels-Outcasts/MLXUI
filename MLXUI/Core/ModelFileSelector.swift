@@ -66,6 +66,10 @@ enum ModelFileSelector {
         // backbone's weights — so without this entry the install would fetch neither the head nor
         // its dimensions and `ClefHead` could not be built (CF-4, readme T1, CF-A0 #5).
         "joint_head_config.json",
+        // OpenAI Privacy Filter's default operating point (PF-2 / Trap 9): the Viterbi decoder's
+        // calibration biases, a small JSON file at the repo root next to config.json. The loader
+        // fails with a plain sentence without it, so the install must fetch it.
+        "viterbi_calibration.json",
     ]
 
     /// A second HF repo whose files must be bundled into an install, keyed by the catalog
@@ -164,6 +168,14 @@ enum ModelFileSelector {
         // `model_index.json` (e.g. Kokoro's `kokoro-v1_0.safetensors`) keep the fallback.
         let hasDiffusersLayout = lower.contains("model_index.json")
 
+        // Trap 9 (PF-2): a subfolder holding an upstream project's **alternate packaging** is not a
+        // component. `openai/privacy-filter` ships `original/model.safetensors` (the `opf` repo's own
+        // layout) beside the transformers `model.safetensors`; the app loads only the top-level weights,
+        // so the 2.8 GB duplicate must not download. Only when the repo has its own standard top-level
+        // weights — a repo whose only weights live under `original/` keeps the component behaviour
+        // below, unchanged.
+        let alternatePackagingDirs: Set<String> = hasStandardWeights ? ["original/"] : []
+
         // Subfolders that ship model weights (e.g. `speech_tokenizer/`, `voices/`) OR tokenizer
         // assets (`tokenizer/`, `tokenizer_2/`). A component whose weights don't download fails
         // when the model loads it, so we pull every `*.safetensors` under such a folder plus the
@@ -196,10 +208,15 @@ enum ModelFileSelector {
             if metadataNames.contains(l) { return true }
 
             // Files inside a weight-bearing subfolder: its `*.safetensors`, plus the metadata
-            // it needs to load (matched by basename, e.g. `speech_tokenizer/config.json`).
-            if let slash = l.lastIndex(of: "/"), componentDirs.contains(String(l[...slash])) {
-                if l.hasSuffix(".safetensors") { return true }
-                if metadataNames.contains(String(l[l.index(after: slash)...])) { return true }
+            // it needs to load (matched by basename, e.g. `speech_tokenizer/config.json`). An
+            // alternate-packaging folder (`original/`, Trap 9) is never one of them.
+            if let slash = l.lastIndex(of: "/") {
+                let dir = String(l[...slash])
+                if alternatePackagingDirs.contains(dir) { return false }
+                if componentDirs.contains(dir) {
+                    if l.hasSuffix(".safetensors") { return true }
+                    if metadataNames.contains(String(l[l.index(after: slash)...])) { return true }
+                }
             }
 
             // Standard single / sharded weights.

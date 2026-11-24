@@ -40,6 +40,10 @@ nonisolated struct StageConfig: Sendable, Hashable {
     /// BS-6 (R7): the Speak row's `trim_silence=` (Kokoro's manifest declares it, bool). `nil` = not set (the engine does not trim);
     /// `true` trims leading/trailing near-silence; `false` is the explicit no-trim. Set only by `RealExecutor.stageConfig` for a Speak row.
     var trimSilence: Bool?
+    /// PF-9 (SPEC-Q251): the `Redact` row's `only=` subset, resolved from the curated manifest by `RealExecutor` (or the Run
+    /// screen's eight checkboxes). `nil` = all eight categories. Every other SDK ignores it; the Privacy Filter stage reads it.
+    /// A per-run setting, not a weight setting, so `weightsOnly` drops it (the engine-cache key does not change with it).
+    var redactOnly: Set<PrivacyFilterCategory>?
 
     init(
         voice: String? = nil,
@@ -63,7 +67,8 @@ nonisolated struct StageConfig: Sendable, Hashable {
         quantize: Int? = nil,
         trimSilence: Bool? = nil,
         sourceLanguage: String? = nil,
-        targetLanguage: String? = nil
+        targetLanguage: String? = nil,
+        redactOnly: Set<PrivacyFilterCategory>? = nil
     ) {
         self.voice = voice
         self.speed = speed
@@ -84,6 +89,7 @@ nonisolated struct StageConfig: Sendable, Hashable {
         self.trimSilence = trimSilence
         self.sourceLanguage = sourceLanguage
         self.targetLanguage = targetLanguage
+        self.redactOnly = redactOnly
     }
 
     static let `default` = StageConfig()
@@ -94,7 +100,7 @@ nonisolated struct StageConfig: Sendable, Hashable {
         var c = self
         c.voice = nil; c.speed = 1.0; c.prompt = nil
         c.seed = nil; c.width = nil; c.height = nil; c.steps = nil; c.trimSilence = nil
-        c.sourceLanguage = nil; c.targetLanguage = nil
+        c.sourceLanguage = nil; c.targetLanguage = nil; c.redactOnly = nil
         return c
     }
 }
@@ -121,7 +127,7 @@ enum StageFactory {
         }
 
         switch model.runnerKind {
-        case .llm, .asr, .tts, .embedding, .vision, .ocr, .image, .music, .segmentation, .video, .upscale, .rerank, .decision, .diarization, .enhance, .voice, .interpolate, .separate, .translate, .depth, .unsupported:
+        case .llm, .asr, .tts, .embedding, .vision, .ocr, .image, .music, .segmentation, .video, .upscale, .rerank, .decision, .diarization, .enhance, .voice, .interpolate, .separate, .translate, .depth, .redact, .unsupported:
             throw StageError.unsupportedModel(id: model.id, kind: model.runnerKind)
         }
     }

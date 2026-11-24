@@ -56,6 +56,8 @@ nonisolated enum CatParser {
         "Classify", "Gate", "Grade", "Score", "Judge", "Think",
         "Chart",
         "Improvise",
+        // SPEC-Q251 (PF-9, owner ruling 2026-11-18): the new `Redact` text task.
+        "Redact",
     ]
 
     static let taskNamesByLen: [String] = taskNames.sorted { $0.count > $1.count }
