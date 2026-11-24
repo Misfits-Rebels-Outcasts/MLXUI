@@ -306,4 +306,45 @@ struct CatFlowRowTextBackstopTests {
         #expect(model.commitRawSettingsDraft() == nil)           // Run/Save with nothing pending
         #expect(model.rawSettingsBanner == nil)
     }
+
+    // MARK: - R11: a Run click that commits a pending draft owns the document change, so the handler's clearRun skips it
+
+    @Test func aRunClickThatCommitsADraftOwnsExactlyThatDocumentChange() throws {
+        let r = row("Redact", model: "Privacy Filter")
+        let model = try editor([r])
+        model.rawSettingsDraft = (r.id, "only=\"email\"")
+        let before = model.document
+        #expect(model.commitRawSettingsDraft() == nil)           // Run's synchronous commit
+        #expect(model.document != before)
+        model.markDocumentOwnedByRunClick()                      // Run marks it, then starts the session
+        #expect(model.takeRunClickOwnership(of: model.document)) // the handler: this change is the click's own -> leave the run alone
+        #expect(!model.takeRunClickOwnership(of: model.document))// once only: the next edit is an ordinary one (clearRun applies)
+    }
+
+    @Test func anOrdinaryEditAfterTheClickIsNotOwned() throws {
+        let r = row("Redact", model: "Privacy Filter")
+        let model = try editor([r])
+        model.rawSettingsDraft = (r.id, "only=\"email\"")
+        _ = model.commitRawSettingsDraft()
+        model.markDocumentOwnedByRunClick()
+        model.setRowText("only=\"url\"", for: r.id)              // the user edits again before the handler runs
+        #expect(!model.takeRunClickOwnership(of: model.document))
+    }
+
+    /// The whole ordering with a real session: commit, start, then the handler's decision — the started run survives.
+    @MainActor @Test func pendingDraftPlusImmediateRunEndsWithAStartedSession() throws {
+        let r = row("Redact", model: "Privacy Filter")
+        let model = try editor([r])
+        let session = FlowRunSession()
+        model.rawSettingsDraft = (r.id, "only=\"email\"")
+        #expect(model.commitRawSettingsDraft() == nil)
+        model.markDocumentOwnedByRunClick()
+        session.isRunning = true                                 // what a started run looks like; `start` sets it first thing
+        if !model.takeRunClickOwnership(of: model.document) { session.clearRun(doc: model.document) }   // the view's handler
+        #expect(session.isRunning)                               // not cancelled by its own click's document change
+
+        // control: an *ordinary* document change does cancel the run, so the assertion above is not true by construction
+        session.clearRun(doc: model.document)
+        #expect(!session.isRunning)
+    }
 }

@@ -1050,6 +1050,16 @@ final class FlowEditorModel {
         didSet { if (rawSettingsBanner == nil) != (oldValue == nil) { EditorLog.step("red banner (raw settings) set", rawSettingsBanner != nil) } }
     }
 
+    /// R11 (2026-11-24): the document a Run click produced by committing a pending draft — the one change the document-change handler
+    /// must *not* answer with `session.clearRun`, because the run that click is starting is already built on it.
+    @ObservationIgnored private var documentOwnedByRunClick: FlowDocument?
+    func markDocumentOwnedByRunClick() { documentOwnedByRunClick = document }
+    /// True exactly once, for the change the Run click itself made; any later (or different) change is an ordinary edit.
+    func takeRunClickOwnership(of changed: FlowDocument) -> Bool {
+        defer { documentOwnedByRunClick = nil }
+        return documentOwnedByRunClick == changed
+    }
+
     /// R9 (2026-11-24): commit the draft shortly after the user stops typing, so it is already on the row by the time they reach for
     /// Run / Save / another row — the click then only has to *act*. A refused draft shows the same inline sentence as any commit.
     @ObservationIgnored private var rawSettingsDebounce: Task<Void, Never>?

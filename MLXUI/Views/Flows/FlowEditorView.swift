@@ -21,10 +21,6 @@ struct FlowEditorView: View {
     @State private var showPicker = false
     @State private var showFullCatalog = false
     @State private var showInstallSheet = false
-    /// R9 (2026-11-24): a Run click that committed a pending Raw settings edit changed the document, and the document-change handler
-    /// (`session.clearRun`) runs *after* the action returns — it cancelled the run the same click had just started. So that click
-    /// commits and waits; the handler starts the run once it has cleared.
-    @State private var runAfterDocumentSettles = false
     @State private var session = FlowRunSession()
     /// FH-7: owned here (not `FlowInspectorPane`'s local state) so a run's completion can force
     /// it to `.output` from `run()`'s completion handler below.
@@ -221,14 +217,13 @@ struct FlowEditorView: View {
         // Editing invalidates run results; preflight follows the document.
         .onAppear { EditorLog.installMouseTrail() }
         .onChange(of: model.document) { _, _ in
+            if model.takeRunClickOwnership(of: model.document) {
+                EditorLog.step("document changed by the Run click's own commit -> the run is left alone")
+                return
+            }
             EditorLog.step("document changed -> session.clearRun; isRunning", session.isRunning)
             session.clearRun(doc: model.document)
             prepareInstall()
-            if runAfterDocumentSettles {
-                runAfterDocumentSettles = false
-                EditorLog.step("Run: continuing after the document settled")
-                run()
-            }
         }
         // FH-7: a run that reaches the end un-cancelled, un-parked, and without a hard failure
         // — select the last row and show its Output tab (the convenience of "go look at what
@@ -956,13 +951,11 @@ struct FlowEditorView: View {
             return
         }
         if model.document != documentBeforeCommit {
-            EditorLog.step("Run: the commit changed the document; run waits for the change handler")
-            runAfterDocumentSettles = true
-            Task { @MainActor in          // never leave the click without an action if the handler somehow does not fire
-                try? await Task.sleep(for: .milliseconds(600))
-                if runAfterDocumentSettles { runAfterDocumentSettles = false; EditorLog.step("Run: fallback start"); run() }
-            }
-            return
+            // R11 (2026-11-24): this click's own commit changed the document, and the document-change handler runs *after* this
+            // action returns. Mark the new document as owned by the run this click is about to start, so that handler leaves the
+            // session alone instead of `clearRun`-cancelling it. No timer: the run starts now, synchronously.
+            model.markDocumentOwnedByRunClick()
+            EditorLog.step("Run: the commit changed the document; the run starts now and owns that change")
         }
         // FIX-4: never run a document the save gate refuses (the button is disabled, this
         // is defense in depth).

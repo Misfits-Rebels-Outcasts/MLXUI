@@ -24,6 +24,13 @@ nonisolated enum EditorLog {
         guard mouseMonitor == nil else { return }
         mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { event in
             let typing = event.window?.firstResponder is NSTextView
+            if event.type == .leftMouseDown, let content = event.window?.contentView {
+                // What the click actually lands on (class names only) — for a Run click whose action never arrives.
+                let hit = content.hitTest(content.convert(event.locationInWindow, from: nil))
+                var chain: [String] = []; var v = hit
+                while let x = v, chain.count < 6 { chain.append(String(describing: type(of: x))); v = x.superview }
+                logger.notice("mouse down lands on \(chain.joined(separator: " < "), privacy: .public)")
+            }
             logger.notice("mouse \(event.type == .leftMouseDown ? "down" : "up", privacy: .public); a text view is first responder \(typing, privacy: .public)")
             return event
         }
