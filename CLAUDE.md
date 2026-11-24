@@ -404,7 +404,7 @@ Known inconsistencies in the tree itself — fix or rule on them, don't propagat
   row resolves through the `.substitute` bridge row onto Depth Anything V2 Small. `GalleryHiddenFlowsTests`
   pins the set to "the bundled 6x flows refused at the live gate", so a newly runnable flow is a
   deliberate change. **But `AppState.hideAdvanceGallery = true` still hides every non-basic bundled
-  flow**, so in the app today AI Workflows shows only the 18 Basic flows (shelf numbers 1–18, gallery 63–65, 70–76 and 78–87 by `_metadata.json` number) and none of 60/62/66/69 is
+  flow**, so in the app today AI Workflows shows only the 20 Basic flows (shelf numbers 1–20, gallery 63–65, 70–76 and 78–89 by `_metadata.json` number) and none of 60/62/66/69 is
   visible (owner, 2026-11-01: keep it as is; out of MP7's scope). `hiddenFlowNumbers` takes effect
   when the Advance Gallery returns.
 - **Flow 17 (Story From a Photo) holds two resident copies of Gemma 4 E4B at once** (`VLMEngine`'s `ModelContainerPool.vlm` and `ModelContainerPool.shared`, separate pools keyed by directory): ~4 GiB extra, so it needs ~12.5 GiB peak (smoke limit 13 GiB). Follow-up item in `RSI/backlog.md`.
