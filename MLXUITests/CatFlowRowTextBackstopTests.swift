@@ -179,6 +179,36 @@ struct CatFlowRowTextBackstopTests {
         #expect(model.row(withID: r.id)?.settings == "only=\"url\"")
     }
 
+    // MARK: - R3-FIX-3: the refusal banner never outlives the edit it describes
+
+    @Test func theRefusalClearsWhenTheDraftChangesAndWhenAValidDraftIsAccepted() throws {
+        let r = row("Redact", model: "Privacy Filter")
+        let model = try editor([r])
+        model.rawSettingsDraft = (r.id, "only=\"ssn\"")
+        #expect(model.commitRawSettingsDraft() != nil)
+        #expect(model.rawSettingsRefusal?.rowID == r.id)
+
+        model.rawSettingsDraft = (r.id, "only=\"person\"")        // typing again: a new attempt
+        #expect(model.rawSettingsRefusal == nil)
+        #expect(model.commitRawSettingsDraft() == nil)           // checks -> accepted
+        #expect(model.rawSettingsRefusal == nil)
+        #expect(model.row(withID: r.id)?.settings == "only=\"person\"")
+    }
+
+    @Test func theRefusalClearsWhenNothingIsPendingAnymore() throws {
+        let r = row("Redact", model: "Privacy Filter")
+        let model = try editor([r])
+        model.rawSettingsDraft = (r.id, "only=\"ssn\"")
+        _ = model.commitRawSettingsDraft()
+        #expect(model.rawSettingsRefusal != nil)
+        model.discardRawSettingsDraft()
+        #expect(model.rawSettingsRefusal == nil)
+
+        model.rawSettingsRefusal = (r.id, "stale")
+        #expect(model.commitRawSettingsDraft() == nil)           // Run/Save with no draft pending
+        #expect(model.rawSettingsRefusal == nil)
+    }
+
     @Test func commitIsIdempotent_soTheDeferredBlurCommitAfterAClickedActionIsHarmless() throws {
         let r = row("Redact", model: "Privacy Filter")
         let model = try editor([r])
@@ -189,4 +219,28 @@ struct CatFlowRowTextBackstopTests {
         #expect(model.undoStack.count == undo)                   // no second edit, no second undo step
     }
 
+    // MARK: - R3-FIX-1: smart quotes off in .cat text controls
+
+    @MainActor @Test func plainCatTextTurnsOffEverySubstitutionSoAStraightQuoteSurvives() {
+        let textView = NSTextView(frame: .zero)
+        textView.isAutomaticQuoteSubstitutionEnabled = true
+        textView.isAutomaticDashSubstitutionEnabled = true
+        textView.isAutomaticTextReplacementEnabled = true
+        textView.isAutomaticSpellingCorrectionEnabled = true
+        PlainCatText.configure(textView)
+        #expect(!textView.isAutomaticQuoteSubstitutionEnabled)
+        #expect(!textView.isAutomaticDashSubstitutionEnabled)
+        #expect(!textView.isAutomaticTextReplacementEnabled)
+        #expect(!textView.isAutomaticSpellingCorrectionEnabled)
+        textView.insertText("only=\"person\"", replacementRange: NSRange(location: 0, length: 0))
+        #expect(textView.string == "only=\"person\"")             // straight " stored as typed
+
+        // and the walker finds a TextEditor-style text view buried in a scroll view
+        let scroll = NSScrollView(frame: .zero)
+        let inner = NSTextView(frame: .zero)
+        scroll.documentView = inner
+        let root = NSView(frame: .zero)
+        root.addSubview(scroll)
+        #expect(PlainCatText.textViews(in: root).contains { $0 === inner })
+    }
 }

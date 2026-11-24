@@ -1023,15 +1023,25 @@ final class FlowEditorModel {
     /// clicking another row or switching tabs does not blur a macOS text editor, so the typed text never reached the row or the
     /// `.cat` (repro: a duplicated flow's `Redact` row, type `only="person"`, press Run: the row had no settings). Owning the
     /// row id also fixes the old "blur fires after the selection moved" hazard without discarding the edit.
-    var rawSettingsDraft: (rowID: UUID, text: String)?
+    var rawSettingsDraft: (rowID: UUID, text: String)? {
+        didSet {
+            // R3-FIX-3: typing is a new attempt — the sentence about the previous one no longer describes what is in the box.
+            if rawSettingsDraft?.text != oldValue?.text || rawSettingsDraft?.rowID != oldValue?.rowID { rawSettingsRefusal = nil }
+        }
+    }
     /// The refusal sentence of the last refused commit of the draft, shown under the box ("left dirty": the draft stays).
+    /// Cleared (R3-FIX-3) as soon as the draft changes, is accepted or discarded, the row changes, or the document is changed
+    /// by anything else — it must never outlive the edit it describes.
     var rawSettingsRefusal: (rowID: UUID, message: String)?
 
     /// Commit the pending draft onto **its own** row. Returns the refusal sentence when the backstop refuses (the draft stays on
     /// screen, the row is unchanged), `nil` when there was nothing pending or the edit was accepted (the draft is then cleared).
     @discardableResult
     func commitRawSettingsDraft() -> String? {
-        guard let draft = rawSettingsDraft else { return nil }
+        guard let draft = rawSettingsDraft else {
+            rawSettingsRefusal = nil          // nothing is dirty, so nothing is refused
+            return nil
+        }
         if let refusal = setRowText(draft.text, for: draft.rowID) {
             rawSettingsRefusal = (draft.rowID, refusal)
             return refusal
