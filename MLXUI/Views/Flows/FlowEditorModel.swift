@@ -1443,8 +1443,14 @@ final class FlowEditorModel {
             // for all five networked tools (Web Fetch/Search/Fetch Feed/Download File/HTTP
             // Get), and `FlowRunner.rowClassRefusal` already lets `.net` run — this check
             // wasn't told either, so every net row showed the same false warning.
+            //
+            // ER-FIX-2 (SM-ER-6): the same drift hit `.staged` — `RealExecutor.runStaged` serves `Stage Send` / `Stage Post` / `Stage Print`
+            // (queue an outbox entry; approval is a person's), and `FlowRunner.rowClassRefusal` lets the class run, but Duplicate & Edit
+            // still read "Row 4 is a staged row, which this version of Flows can't complete." So a staged row follows the runner's own
+            // rule here instead of another hand list: it is marked only if the runner would refuse it.
+            let staged = desc.taskClass == .staged && FlowRunner.rowClassRefusal(r.task ?? "") == nil
             if desc.taskClass != .instant, desc.taskClass != .model, desc.taskClass != .human,
-               desc.taskClass != .net {
+               desc.taskClass != .net, !staged {
                 return ("Row \(path) is a \(desc.taskClass.rawValue) row, which this version of Flows can't complete.", false)
             }
             // ES-UI-1: `Extract Structured`'s settings string *is* its column list. An empty or

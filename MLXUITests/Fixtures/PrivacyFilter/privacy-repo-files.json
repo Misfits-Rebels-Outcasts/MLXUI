@@ -1,0 +1,108 @@
+{
+  "fetched": "2026-11-18",
+  "files": [
+    {
+      "path": ".gitattributes",
+      "size": 2061
+    },
+    {
+      "path": "README.md",
+      "size": 11057
+    },
+    {
+      "path": "config.json",
+      "size": 3039
+    },
+    {
+      "path": "model.safetensors",
+      "size": 2798989498
+    },
+    {
+      "path": "model.sig",
+      "size": 8685
+    },
+    {
+      "path": "onnx/model.onnx",
+      "size": 137674
+    },
+    {
+      "path": "onnx/model.onnx_data",
+      "size": 1822721024
+    },
+    {
+      "path": "onnx/model.onnx_data_1",
+      "size": 1907131392
+    },
+    {
+      "path": "onnx/model.onnx_data_2",
+      "size": 1901636608
+    },
+    {
+      "path": "onnx/model_fp16.onnx",
+      "size": 142860
+    },
+    {
+      "path": "onnx/model_fp16.onnx_data",
+      "size": 2075624448
+    },
+    {
+      "path": "onnx/model_fp16.onnx_data_1",
+      "size": 741430784
+    },
+    {
+      "path": "onnx/model_q4.onnx",
+      "size": 160219
+    },
+    {
+      "path": "onnx/model_q4.onnx_data",
+      "size": 917120144
+    },
+    {
+      "path": "onnx/model_q4f16.onnx",
+      "size": 165744
+    },
+    {
+      "path": "onnx/model_q4f16.onnx_data",
+      "size": 809061992
+    },
+    {
+      "path": "onnx/model_quantized.onnx",
+      "size": 162239
+    },
+    {
+      "path": "onnx/model_quantized.onnx_data",
+      "size": 1618042064
+    },
+    {
+      "path": "original/config.json",
+      "size": 707
+    },
+    {
+      "path": "original/dtypes.json",
+      "size": 4108
+    },
+    {
+      "path": "original/model.safetensors",
+      "size": 2798984088
+    },
+    {
+      "path": "original/viterbi_calibration.json",
+      "size": 372
+    },
+    {
+      "path": "tokenizer.json",
+      "size": 27868174
+    },
+    {
+      "path": "tokenizer_config.json",
+      "size": 234
+    },
+    {
+      "path": "viterbi_calibration.json",
+      "size": 372
+    }
+  ],
+  "repository": "openai/privacy-filter",
+  "revision": "7ffa9a043d54d1be65afb281eddf0ffbe629385b",
+  "source": "GET https://huggingface.co/api/models/openai/privacy-filter/tree/7ffa9a043d54d1be65afb281eddf0ffbe629385b?recursive=true&expand=true"
+}

@@ -1162,8 +1162,60 @@ extension FlowValidator {
                 checkBudgetPairing(row: row, path: path, issues: &issues, isV08: isV08)
                 FlowRangeBounds.checkRangeBounds(row: row, path: path, issues: &issues, isV08: isV08)
             }
+
+            // ER-1 check 25 (SPEC-Q253 / SPEC-Q254): unconditional on version, like the Python.
+            checkEdgeRowSettings(row: row, path: path, issues: &issues)
         }
         return resolved
+    }
+
+    // MARK: - Check 25 — edge-row settings (ER-1 …, SPEC-Q253 / SPEC-Q254)
+
+    /// `core/validator.py::_check_edge_row_settings`: `Save File` needs `to=` (E717) and
+    /// `Replace` needs exactly one of `find=` / `pattern=` (E718); any other setting is
+    /// refused by name. The rows' settings are literal text, so a bad row is refused before
+    /// it runs. Branches for the later edge rows (E719 …) join as their phases land.
+    static func checkEdgeRowSettings(row: ParsedRow, path: String, issues: inout [FlowIssue]) {
+        switch row.task {
+        case "Save File":  // SPEC-Q253
+            do { _ = try SaveFileSettings.parseTo(row.settings) } catch let e as SaveFileSettingsError {
+                issues.append(FlowIssue(row: path, code: "E717", message: (try? ErrorCatalog.fill(
+                    code: "E717", values: ["n": path, "detail": e.detail], isV08: true)) ?? ""))
+            } catch {}
+        case "Replace":  // SPEC-Q254
+            do { _ = try ReplaceSettings.parse(row.settings) } catch let e as ReplaceSettingsError {
+                issues.append(FlowIssue(row: path, code: "E718", message: (try? ErrorCatalog.fill(
+                    code: "E718", values: ["n": path, "detail": e.detail], isV08: true)) ?? ""))
+            } catch {}
+        case "Identify Speakers", "Clean Audio":  // SPEC-Q238 / SPEC-Q239
+            do { try AudioRowSettings.parseNone(row.settings) } catch let e as AudioRowSettingsError {
+                let code = row.task == "Identify Speakers" ? "E723" : "E724"
+                issues.append(FlowIssue(row: path, code: code, message: (try? ErrorCatalog.fill(
+                    code: code, values: ["n": path, "detail": e.detail], isV08: true)) ?? ""))
+            } catch {}
+        case "Stage Print":  // SPEC-Q258
+            do { try StagePrintTool.parseSettings(row.settings) } catch let e as StagePrintSettingsError {
+                issues.append(FlowIssue(row: path, code: "E722", message: (try? ErrorCatalog.fill(
+                    code: "E722", values: ["n": path, "detail": e.detail], isV08: true)) ?? ""))
+            } catch {}
+        case "Read Barcode":  // SPEC-Q256
+            do { _ = try BarcodeSettings.parseRead(row.settings) } catch let e as ReadBarcodeSettingsError {
+                issues.append(FlowIssue(row: path, code: "E720", message: (try? ErrorCatalog.fill(
+                    code: "E720", values: ["n": path, "detail": e.detail], isV08: true)) ?? ""))
+            } catch {}
+        case "Make Barcode":  // SPEC-Q257
+            do { _ = try BarcodeSettings.parseMake(row.settings) } catch let e as MakeBarcodeSettingsError {
+                issues.append(FlowIssue(row: path, code: "E721", message: (try? ErrorCatalog.fill(
+                    code: "E721", values: ["n": path, "detail": e.detail], isV08: true)) ?? ""))
+            } catch {}
+        case "Make PDF":  // SPEC-Q255
+            do { _ = try MakePdfSettings.parse(row.settings) } catch let e as MakePdfSettingsError {
+                issues.append(FlowIssue(row: path, code: "E719", message: (try? ErrorCatalog.fill(
+                    code: "E719", values: ["n": path, "detail": e.detail], isV08: true)) ?? ""))
+            } catch {}
+        default:
+            break
+        }
     }
 
     // MARK: - _resolve_refs
@@ -1949,6 +2001,7 @@ extension FlowValidator {
         "On Flow": "a pipeline is invoked, never armed — a trigger row is row 1 of a flow",
         "Stage Send": "committing an outbound effect is a human decision at flow level",
         "Stage Post": "committing an outbound effect is a human decision at flow level",
+        "Stage Print": "committing an outbound effect is a human decision at flow level",  // SPEC-Q258
     ]
 
     static func shapeTouchesModel(_ shapes: [Shape]) -> Bool {

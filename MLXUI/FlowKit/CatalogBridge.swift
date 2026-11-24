@@ -146,6 +146,20 @@ nonisolated enum CatalogBridge {
             candidates: ["ACE-Step/Ace-Step1.5"],
             equivalence: .same,
             manifestFile: "ace-step-1.5.json"),
+        // ER-10 (AM-W, SPEC-Q238 / SPEC-Q239): `display` is `browser.json`'s `displayName`, so the `.cat` writes the catalog name.
+        // No upstream curated manifest exists for either model: both are MLXUI-authored (no settings) pending BACKLOG ER-PY-audio.
+        BridgeEntry(
+            display: "Sortformer 4spk v2.1",
+            pinnedID: "mlx-community/diar_streaming_sortformer_4spk-v2.1-fp16",
+            candidates: ["mlx-community/diar_streaming_sortformer_4spk-v2.1-fp16"],
+            equivalence: .same,
+            manifestFile: "sortformer-4spk-v2.1.json"),
+        BridgeEntry(
+            display: "DeepFilterNet 3",
+            pinnedID: "mlx-community/DeepFilterNet-mlx",
+            candidates: ["mlx-community/DeepFilterNet-mlx"],
+            equivalence: .same,
+            manifestFile: "deepfilternet-3.json"),
         BridgeEntry(
             display: "Llama 3.1 8B",
             pinnedID: "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit",
@@ -470,6 +484,17 @@ nonisolated enum CatalogBridge {
             equivalence: .same,
             manifestFile: "qwen3-vl-embedding-2b.json",
             modelType: .embedding),
+        // PF-9 (SPEC-Q251, owner ruling 2026-11-18) -- Privacy Filter, the `Redact` row's only model. `.same`: the card's repo
+        // is the pinned repo (and `hfModelId` is exactly `openai/privacy-filter`, Trap 8). No catflow-mlx manifest exists for
+        // it, so `openai-privacy-filter.json` is MLXUI-authored (see its "notes", which names the pinned revision). Appended
+        // **last**; it is the first row of the new `Redact` pool, so no existing seed moves. `modelType` stays nil (the card
+        // is the only `.redact` entry, so hfModelId matching is unambiguous).
+        BridgeEntry(
+            display: "Privacy Filter",
+            pinnedID: "openai/privacy-filter",
+            candidates: ["openai/privacy-filter"],
+            equivalence: .same,
+            manifestFile: "openai-privacy-filter.json"),
     ]
 
     static func entry(for display: String) -> BridgeEntry? {

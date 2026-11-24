@@ -1,0 +1,46 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Audio",
+        "model": null,
+        "settings": "meeting.wav",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Identify Speakers",
+        "model": "Sortformer 4spk v2.1",
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Table to Text",
+        "model": null,
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ],
+    "models": {
+      "Sortformer 4spk v2.1": "nvidia/diar_streaming_sortformer_4spk-v2.1",
+      "DeepFilterNet 3": "mlx-community/DeepFilterNet-mlx"
+    }
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  }
+}

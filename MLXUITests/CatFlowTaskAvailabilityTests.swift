@@ -242,6 +242,10 @@ struct CatFlowTaskAvailabilityTests {
             "Upscale": .available,          // .upscale — engines.diffusion.upscale (BG-2)
             "Rerank": .available,           // .rerank — MoC-4
             "Extract Structured": .available,   // .llm — engines.llm.extract_structured, ported DA-3a, offered DA-3b
+            // PF-9 (SPEC-Q251, owner ruling 2026-11-18): `Redact` is a new `.model` task served by
+            // `RealExecutor.runModel`'s `.redact` branch; Privacy Filter (the first `.redact` catalog entry) derives.
+            // Expected by decision 7's acceptance list: "any test that loops over every task and needs an entry".
+            "Redact": .available,           // .redact — engines.redact.redact (PF-9)
 
             // `.image` model exists, but `engines.diffusion.edit_image` / `.inpaint` are not on
             // the served allow-list — no stage accepts the tuple these rows hand the executor.
@@ -255,6 +259,9 @@ struct CatFlowTaskAvailabilityTests {
             // MC3-8: `Estimate Depth` left this set — Depth Anything V2 Small gave it a
             // `.depth` `taskKinds` entry, the served prefix and a catalog model.
             "Estimate Depth": .available,
+            // ER-10 (SPEC-Q238 / SPEC-Q239, owner rulings R1 and R11, 2026-11-22): the two audio rows are served by the
+            // Sortformer (`.diarization`) and DeepFilterNet (`.enhance`) stages, so each has a claimable model.
+            "Identify Speakers": .available, "Clean Audio": .available,
             "Load Checkpoint": .needsNewerSupport, "Blend": .needsNewerSupport,
             "Bake LoRA": .needsNewerSupport, "Pin Model": .needsNewerSupport,
         ]

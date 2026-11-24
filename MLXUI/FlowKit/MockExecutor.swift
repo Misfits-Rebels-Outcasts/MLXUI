@@ -117,6 +117,31 @@ final class MockExecutor: FlowExecutor, @unchecked Sendable {
             lock.withLock { _lastStaged = (id, kind, "to \(destination): \(preview)") }
             return output
         }
+        // Stage Print (SPEC-Q258, ER-11): the mock has no outbox directory, so (like Stage Send above) it writes no entry, but it runs the
+        // same validation and content-digest id, so a real `.txt` still refuses under the mock. A file the mock itself fabricated under
+        // its blob directory (a hex-digest `.bin`) stands in as a minimal PDF.
+        if row.task == "Stage Print" {
+            let prepared = try StagePrintTool.prepare(settings: row.settings, inputs: inputs, path: path, mockBlobDirectory: blobDirectory)
+            lock.withLock { _lastStaged = (prepared.id, "print", prepared.summary) }
+            return Asset(items: [Item(kind: .status, value: prepared.status, path: nil, sourceText: nil)])
+        }
+        // Identify Speakers / Clean Audio (SPEC-Q238 / SPEC-Q239, ER-10), as the Python mock does: a fixed two-speaker table (a real
+        // table file, so `Query Table` / `Table to Text` compose under `--mock`), and the input audio passed through. Settings are
+        // refused by name in the mock too.
+        if row.task == "Identify Speakers" || row.task == "Clean Audio" {
+            let name = row.task ?? "?"
+            if let given = AudioRowSettings.firstGiven(row.settings) {
+                throw FlowError.stageFailure(row: name, message: "\(name) doesn't take settings -- remove \(given)")
+            }
+            if name == "Identify Speakers" {
+                return Asset(items: [try TableTool.tableItem(columns: IdentifySpeakersTable.columns,
+                                                             rows: IdentifySpeakersTable.mockRows, in: blobDirectory)])
+            }
+            guard inputs.count == 1, inputs[0].items.count == 1, inputs[0].items[0].kind == .audio else {
+                throw FlowError.stageFailure(row: name, message: "Clean Audio needs one audio input")
+            }
+            return Asset(items: [inputs[0].items[0]])
+        }
         guard let desc = TaskCatalog.get(row.task ?? "") else {
             throw FlowError.unknownTask(row: row.task ?? "?")
         }

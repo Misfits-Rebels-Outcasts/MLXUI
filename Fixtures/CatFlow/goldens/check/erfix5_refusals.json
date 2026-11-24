@@ -1,0 +1,53 @@
+{
+  "cases": [
+    {
+      "name": "escape_dotdot",
+      "flow": "mlxflow 0.8\n1. Read Text  notes.txt\n2. Make PDF\n3. Save File  to=\"../x.pdf\"\n",
+      "issues": [
+        {
+          "row": "3",
+          "code": "E717",
+          "message": "Row 3's `Save File` writes outside the folder the flow runs in (`to=\"../x.pdf\"` climbs out with `..`) -- use a path inside it, e.g. `to=\"out/report.pdf\"`."
+        }
+      ]
+    },
+    {
+      "name": "absolute",
+      "flow": "mlxflow 0.8\n1. Read Text  notes.txt\n2. Make PDF\n3. Save File  to=\"/tmp/x.pdf\"\n",
+      "issues": [
+        {
+          "row": "3",
+          "code": "E717",
+          "message": "Row 3's `Save File` writes to the absolute path `to=\"/tmp/x.pdf\"` -- use a path inside the folder the flow runs in, e.g. `to=\"out/report.pdf\"`."
+        }
+      ]
+    },
+    {
+      "name": "tilde",
+      "flow": "mlxflow 0.8\n1. Read Text  notes.txt\n2. Make PDF\n3. Save File  to=\"~/x.pdf\"\n",
+      "issues": [
+        {
+          "row": "3",
+          "code": "E717",
+          "message": "Row 3's `Save File` writes to the absolute path `to=\"~/x.pdf\"` -- use a path inside the folder the flow runs in, e.g. `to=\"out/report.pdf\"`."
+        }
+      ]
+    },
+    {
+      "name": "dotdot_midpath",
+      "flow": "mlxflow 0.8\n1. Read Text  notes.txt\n2. Make PDF\n3. Save File  to=\"out/../../x.pdf\"\n",
+      "issues": [
+        {
+          "row": "3",
+          "code": "E717",
+          "message": "Row 3's `Save File` writes outside the folder the flow runs in (`to=\"out/../../x.pdf\"` climbs out with `..`) -- use a path inside it, e.g. `to=\"out/report.pdf\"`."
+        }
+      ]
+    },
+    {
+      "name": "placeholder_is_left_to_run_time",
+      "flow": "mlxflow 0.8\n1. Read Files  reports/\n2. <each r>\n     1. Save File   to=\"out/{name}.pdf\"\n",
+      "issues": []
+    }
+  ]
+}

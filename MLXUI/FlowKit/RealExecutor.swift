@@ -289,6 +289,14 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// CFM-R12-8: stage a Send/Post row into the flow's outbox (the only staged tasks). The
     /// interpreter reads `lastStaged` for the `effect_staged` event.
     private func runStaged(row: Row, inputs: [Asset], path: String) async throws -> Asset {
+        // SPEC-Q258 (ER-11): a print entry carries its own stored copy of one PDF or image; nothing prints here (approval is the
+        // outbox's print panel). The id is the content's, so the same file staged twice is one pending entry.
+        if row.task == "Stage Print" {
+            let result = try StagePrintTool.stage(settings: row.settings, inputs: inputs, path: path,
+                                                  workspace: workspace, flowID: flowID)
+            stagedBox.staged = (result.id, "print", result.summary)
+            return Asset(items: [Item(kind: .status, value: result.status, path: nil, sourceText: nil)])
+        }
         let kind: String
         switch row.task {
         case "Stage Send": kind = "send"
@@ -342,6 +350,17 @@ nonisolated struct RealExecutor: FlowExecutor {
         case "Save Image":
             return try await SaveImageTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
                 .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Save File":  // SPEC-Q253
+            return try await SaveFileTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
+                .run(inputs.first ?? Asset(items: [])) { _ in }
+        case "Read Barcode":  // SPEC-Q256
+            return try ReadBarcodeTool.run(inputs: inputs, settings: row.settings)
+        case "Make Barcode":  // SPEC-Q257
+            return try MakeBarcodeTool.make(inputs: inputs, settings: row.settings,
+                                            outDirectory: workspace.directory(for: flowID).appendingPathComponent(".blobs"))
+        case "Make PDF":  // SPEC-Q255
+            return try MakePDFTool.make(inputs: inputs, settings: row.settings,
+                                        outDirectory: workspace.directory(for: flowID).appendingPathComponent(".blobs"))
         case "Save Images":
             return try await SaveImagesTool(workspace: workspace, flowID: flowID, settings: row.settings ?? "")
                 .run(inputs.first ?? Asset(items: [])) { _ in }
@@ -365,6 +384,9 @@ nonisolated struct RealExecutor: FlowExecutor {
                 .run(bundle(inputs)) { _ in }
         case "Extract":
             return try await ExtractTool(settings: row.settings ?? "")
+                .run(bundle(inputs)) { _ in }
+        case "Replace":  // SPEC-Q254
+            return try await ReplaceTool(settings: row.settings ?? "")
                 .run(bundle(inputs)) { _ in }
         case "Count":
             return try await CountTool(settings: row.settings ?? "")
@@ -504,6 +526,27 @@ nonisolated struct RealExecutor: FlowExecutor {
                 in: blobDirectory)
         }
 
+        // Identify Speakers (SPEC-Q238, ER-10): the Sortformer stage is audio -> CSV text (`speaker,start,end`); this row's output is
+        // a `table`, so the CSV is read back and written in the on-disk table format. Settings are refused by name first.
+        if desc.refName == "engines.diarize.identify_speakers" {
+            guard let input = inputs.first else {
+                throw FlowError.badInputCardinality(row: "\(path)", expected: "an audio input", got: 0)
+            }
+            let config = try stageConfig(for: desc, row: row, path: "\(path)", model: modelEntry)
+            let stage = try await makeModelStage(modelEntry, config)
+            let adapter = SingleMediaStage(id: modelEntry.id, name: display(row), inner: stage,
+                                           rowLabel: "\(path)", blobDirectory: blobDirectory)
+            let result = try await adapter.run(input) { _ in }
+            guard let csv = result.items.first?.value else {
+                throw FlowError.stageFailure(row: "\(path)", message: "Identify Speakers got no speaker list back")
+            }
+            let rows: [TableTool.Row]
+            do { rows = try IdentifySpeakersTable.rows(fromCSV: csv) } catch {
+                throw FlowError.stageFailure(row: "\(path)", message: "Identify Speakers got a speaker list it couldn't read")
+            }
+            return Asset(items: [try TableTool.tableItem(columns: IdentifySpeakersTable.columns, rows: rows, in: blobDirectory)])
+        }
+
         // SPEC-Q246: whether a translation specialist may replace the `Translate` frame with its own template, whether `to=` may
         // take a code, and whether `from=` should exist are open in catflow-mlx; the conservative reading is what follows.
         // MC2-6: TranslateGemma on a `Translate` row. The row is `.frame`-backed, but this model is not a chat model: its
@@ -523,6 +566,24 @@ nonisolated struct RealExecutor: FlowExecutor {
                                           rowSettings: TranslateRowRequest.engineSettings(row.settings), path: "\(path)")
             config.sourceLanguage = resolved.sourceCode
             config.targetLanguage = resolved.targetCode
+            let stage = try await makeModelStage(modelEntry, config)
+            let result = try await stage.run(.text(text), progress: { _ in })
+            return try persist(result, rowLabel: "\(path)")
+        }
+
+        // SPEC-Q251 / PF-9 (owner ruling 2026-11-18): the `Redact` row. One text in, the redacted text out; the one
+        // setting is `only=`, a comma-separated subset of person, email, phone, url, address, date, account and secret
+        // (default all eight). Any other key, and any unknown category, is refused by name — never ignored. Branches
+        // before the frame path for the same reason `.translate` does: the Privacy Filter stage is a plain text→text
+        // stage, and the curated manifest is the settings authority.
+        if modelEntry.runnerKind == .redact {
+            let texts = DeciderFrame.flatTexts(inputs)
+            guard inputs.count == 1, texts.count == 1, let text = texts.first else {
+                throw FlowError.badInputCardinality(row: "\(path)", expected: "one text input",
+                                                   got: max(inputs.count, texts.count))
+            }
+            var config = StageConfig.default
+            config.redactOnly = try redactCategories(for: row, path: "\(path)")
             let stage = try await makeModelStage(modelEntry, config)
             let result = try await stage.run(.text(text), progress: { _ in })
             return try persist(result, rowLabel: "\(path)")
@@ -1236,6 +1297,15 @@ nonisolated struct RealExecutor: FlowExecutor {
             let language = settings.value(for: "lang") ?? "en"
             return StageConfig(language: language, flowTask: "Transcribe")
         }
+        if desc.refName == "engines.diarize.identify_speakers" || desc.refName == "engines.audio_clean.clean_audio" {
+            // SPEC-Q238 / SPEC-Q239 (owner ruling R1): neither row takes a setting in v1; the model is named on the row. Any setting is
+            // refused by name (the CFM-R16-1 lesson), never ignored. The validator's E723 / E724 says the same statically.
+            if let given = AudioRowSettings.firstGiven(row.settings) {
+                throw FlowSettingRefusal(description:
+                    "\(desc.name) doesn't take settings -- the model is named on the row and v1 has nothing else to set; remove \(given).")
+            }
+            return .default
+        }
         if desc.refName == "engines.diffusion.estimate_depth" {
             // MC3-8 (issue #6, owner decision 7): the Estimate Depth row takes no settings. A `seed=`,
             // `steps=`, `width=`, `height=`, `scale=` or `quantize=` on it is refused **by name**, never
@@ -1395,6 +1465,35 @@ nonisolated struct RealExecutor: FlowExecutor {
         var sanitized = config
         sanitized.prompt = nil
         return sanitized
+    }
+
+    /// SPEC-Q251 / PF-9 — resolve a `Redact` row's `only=` through the curated manifest (the settings authority) and
+    /// map the eight writable names to `PrivacyFilterCategory`. Returns `nil` for "all eight" (decision 7's default).
+    ///
+    /// Unknown **keys** are refused by `CuratedManifest.resolveEngineSettings` (which names the model and the keys it
+    /// takes); an unknown **category** is refused here by name. Never silently drops a value — a redaction that
+    /// quietly covers fewer categories than the row asked for is the CFM-R16-1 failure mode.
+    func redactCategories(for row: Row, path: String) throws -> Set<PrivacyFilterCategory>? {
+        let rowLabel = "Redact row \(path)"
+        guard let display = row.model, let bridge = CatalogBridge.entry(for: display),
+              let manifest = CuratedManifest.load(manifestFile: bridge.manifestFile) else {
+            throw FlowSettingRefusal(description:
+                "\(rowLabel)'s model has no settings manifest in the app bundle — reinstall this build.")
+        }
+        let resolved = try manifest.resolveEngineSettings(row.settings, rowLabel: rowLabel)
+        guard let raw = resolved["only"] else { return nil }
+        var categories: Set<PrivacyFilterCategory> = []
+        for token in raw.split(separator: ",", omittingEmptySubsequences: false) {
+            let name = token.trimmingCharacters(in: .whitespaces).lowercased()
+            guard let category = PrivacyFilterCategory(rawValue: name) else {
+                let readable = name.isEmpty ? "an empty value" : "\"\(name)\""
+                throw FlowSettingRefusal(description:
+                    "\(rowLabel) doesn't know the category \(readable) — use a comma-separated subset of "
+                        + "person, email, phone, url, address, date, account and secret.")
+            }
+            categories.insert(category)
+        }
+        return categories
     }
 
     private func persist(_ media: Media, rowLabel: String) throws -> Asset {

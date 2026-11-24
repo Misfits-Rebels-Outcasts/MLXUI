@@ -1,0 +1,4 @@
+mlxflow 0.8
+1. Read Image    label.png
+2. Read Barcode  type=any
+3. Save Text     codes.txt

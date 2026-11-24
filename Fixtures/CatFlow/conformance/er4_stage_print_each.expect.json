@@ -1,0 +1,43 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Images",
+        "model": null,
+        "settings": "photos/",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": null,
+        "model": null,
+        "settings": null,
+        "refs": [],
+        "chain_break": false,
+        "block_kind": "each",
+        "block_name": "photo",
+        "children": [
+          {
+            "task": "Stage Print",
+            "model": null,
+            "settings": null,
+            "refs": [],
+            "chain_break": false,
+            "block_kind": null,
+            "block_name": null,
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  }
+}

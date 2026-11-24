@@ -236,7 +236,7 @@ nonisolated enum FlowInterpreter {
 
     /// `_NAME_PLACEHOLDER_TASKS` — the Save-family rows eligible for `{name}` substitution.
     static let namePlaceholderTasks: Set<String> = [
-        "Save Text", "Save Audio", "Save Image", "Save Video", "Save Context",
+        "Save Text", "Save Audio", "Save Image", "Save Video", "Save File", "Save Context",  // SPEC-Q253
     ]
 
     static let triggerTasks: Set<String> = ["On File", "On Schedule", "On Flow"]

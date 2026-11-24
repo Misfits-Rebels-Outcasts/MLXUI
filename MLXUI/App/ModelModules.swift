@@ -62,5 +62,8 @@ let installedModules: [ModelModule.Type] = [
     // before `ChatModule` (Trap 5) so the Run-sheet/module table's order matches every other model module; Chat stays
     // last so its `.llm` claim can never move another entry's resolution.
     TranslateGemmaModule.self,
+    // PF-7: OpenAI Privacy Filter — the only `.redact` module; claims `privacy-filter`-family entries only. Before
+    // `ChatModule` like every other model module (Chat stays last so its `.llm` claim never moves a resolution).
+    PrivacyFilterModule.self,
     ChatModule.self,
 ]

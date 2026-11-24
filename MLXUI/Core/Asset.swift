@@ -11,6 +11,9 @@ nonisolated struct Item: Sendable {
     var value: String?
     var path: URL?
     var sourceText: String?
+    /// ER-FIX-7: the file's own display name when the file on disk is a cache-materialised copy (`<row>.<i>.<kind>.<hash>.bin`).
+    /// Provenance only, like `sourceText`: never hashed, set solely by `FlowCacheStore.get`, read by `Stage Print`'s label.
+    var originalName: String? = nil
 
     /// Stable content hash — the right half of the cache key (CFM-R3-1). Inline items hash
     /// their bytes; file-backed items hash the file's contents. SHA-256, hex-encoded.

@@ -1,0 +1,38 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "code.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Make Barcode",
+        "model": null,
+        "settings": "type=ean13",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ]
+  },
+  "check": {
+    "valid": false,
+    "issues": [
+      {
+        "row": "2",
+        "code": "E721",
+        "message": "Row 2's `Make Barcode` has `type=ean13` -- EAN and UPC can be read but not made in v1; use `qr` or `code128`."
+      }
+    ]
+  }
+}

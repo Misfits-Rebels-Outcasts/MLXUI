@@ -60,7 +60,8 @@
       "sfSymbol": "gearshape.2.fill",
       "domainIds": [
         "embedding",
-        "rerank"
+        "rerank",
+        "redact"
       ]
     }
   ],
@@ -136,6 +137,10 @@
     "depth": {
       "icon": "cube.transparent",
       "description": "Depth Estimation"
+    },
+    "redact": {
+      "icon": "eye.slash",
+      "description": "PII Redaction"
     }
   },
   "domains": [
@@ -3592,6 +3597,65 @@
           ],
           "descriptionSource": "depth-anything/Depth-Anything-V2-Small-hf",
           "summary": "A Swift/MLX port of Depth Anything V2 Small. Give it one photo and it returns a grayscale map of relative depth — near is bright, far is dark. Not a measurement in metres."
+        }
+      ]
+    },
+    {
+      "id": "redact",
+      "name": "PII Redaction",
+      "sfSymbol": "eye.slash",
+      "children": null,
+      "models": [
+        {
+          "id": "openai--privacy-filter",
+          "family": "privacy-filter",
+          "displayName": "Privacy Filter",
+          "paramSize": "1.5B",
+          "paramCountB": 1.5,
+          "modelType": "redact",
+          "source": "mlx",
+          "format": "mlx-bf16",
+          "platforms": [
+            "macOS 14+"
+          ],
+          "minMacOSVersion": "14.0",
+          "hfRepo": "openai",
+          "hfModelId": "openai/privacy-filter",
+          "ramGB": 4.2,
+          "downloadSizeGB": 2.83,
+          "contextWindow": 131072,
+          "license": "Apache-2.0",
+          "licenseUrl": "https://huggingface.co/openai/privacy-filter",
+          "description": "# Privacy Filter\n\nA PII detector and redactor: give it text and it finds spans of personal data, then returns the same text with every span replaced by its category's placeholder. `Ben Morgan lives at 12 3rd St.` becomes `<PRIVATE_PERSON> lives at <PRIVATE_ADDRESS>.`\n\nThis is a Swift/MLX port of the official [openai/privacy-filter](https://huggingface.co/openai/privacy-filter) checkpoint (1.5 B parameters, bf16 as published), written for MLXUI. The loader reads the published safetensors directly and converts the PyTorch layouts in memory, so the model runs on Apple Silicon through MLX with no Python at run time.\n\n## What it does\n\nIt labels every token of the input with one of 33 BIOES classes: background, or one of **eight categories** of personal data — `private_person`, `private_email`, `private_phone`, `private_url`, `private_address`, `private_date`, `account_number` and `secret`. A constrained Viterbi decoder turns those token labels into coherent spans, and the redacted text replaces each span with its category upper-cased in angle brackets: `<PRIVATE_PERSON>`, `<PRIVATE_EMAIL>`, `<PRIVATE_PHONE>`, `<PRIVATE_URL>`, `<PRIVATE_ADDRESS>`, `<PRIVATE_DATE>`, `<ACCOUNT_NUMBER>`, `<SECRET>`. Every byte outside a span is unchanged.\n\nThe Run screen shows the original text with each span highlighted by category, next to the redacted text. Its eight category checkboxes change only which spans are replaced.\n\nIn AI Workflows, the **Redact** row takes one text input and gives back the redacted text. Its one setting, `only=` (a comma-separated subset of `person, email, phone, url, address, date, account, secret`), restricts the categories; the default is all eight.\n\n## Good to know\n\n- **Primarily English.** The model card lists English as the primary language; selected multilingual robustness was evaluated, and performance may drop on non-English text and non-Latin scripts.\n- **It can miss personal data**, and it can over-redact text that is not personal (public names, organisations, common nouns, benign high-entropy strings). Review its output before you share the text. It is a redaction and data-minimisation aid, **not an anonymisation, compliance or safety guarantee**.\n- **Text only**, at least one non-whitespace character, and at most **128,000 tokens** (the model's context). A longer input is refused before any model work starts.\n- **Memory grows linearly with input length**; long inputs are processed in windows.\n- The category checkboxes re-render the redacted text without running the model again.\n- Needs about 2.8 GB of disk; runs on the installed folder only. Nothing is downloaded at run time.\n\n## Key Details\n\n| | |\n|---|---|\n| **Architecture** | `OpenAIPrivacyFilterForTokenClassification` — 8 bidirectional blocks, banded attention (band 128), 14 query / 2 KV heads, a 128-expert mixture of experts with top-4 routing, and a 33-class BIOES head |\n| **Weights** | bfloat16 (as published), about 2.8 GB |\n| **Input** | text, at least one non-whitespace character, at most 128,000 tokens |\n| **Output** | the same text with every detected span replaced by its placeholder; spans carry a category and offsets (characters for the UI, UTF-8 bytes in exported JSON) |\n| **Base model** | [openai/privacy-filter](https://huggingface.co/openai/privacy-filter) |\n| **License** | Apache-2.0 |\n\n## License\n\nThe weights are governed by the [Apache-2.0 licence](https://huggingface.co/openai/privacy-filter). The app does not redistribute the weights — the installer downloads them from Hugging Face.\n\nRAM figure is provisional: the catalog's 1.5× weights estimate (about 4.2 GB), not yet measured. The app separately books a measured figure for the shared memory ledger (the `.redact` row in `ModelLoadProfile`).",
+          "architecture": "OpenAIPrivacyFilterForTokenClassification",
+          "languages": [
+            "English"
+          ],
+          "lastUpdated": "2026-04-22",
+          "taskTags": [
+            "pii-detection",
+            "redaction",
+            "token-classification"
+          ],
+          "benchmarks": null,
+          "speedTokensPerSec": null,
+          "speedHardware": null,
+          "speedEstimated": null,
+          "communityDownloads": 104109,
+          "communityLikes": 1839,
+          "variants": [
+            {
+              "quantization": "bf16",
+              "format": "mlx-bf16",
+              "ramGB": 4.2,
+              "downloadSizeGB": 2.83,
+              "qualityPercent": 100,
+              "hfModelId": "openai/privacy-filter",
+              "recommended": true
+            }
+          ],
+          "descriptionSource": "curated",
+          "summary": "OpenAI's Privacy Filter, run locally in MLX: it finds personal data in text — people, emails, phones, URLs, addresses, dates, account numbers and secrets — and replaces each span with a placeholder. Primarily English; a redaction aid, not a guarantee."
         }
       ]
     }
