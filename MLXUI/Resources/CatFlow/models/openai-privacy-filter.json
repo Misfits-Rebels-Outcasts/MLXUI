@@ -16,11 +16,11 @@
   "capabilities": {},
   "resources": {
     "disk_gb": 2.83,
-    "ram_gb": 4.2
+    "ram_gb": 7.7
   },
   "source": "https://huggingface.co/openai/privacy-filter",
   "license": "Apache-2.0",
   "manifest_version": 1,
   "pinned": true,
-  "notes": "MLXUI-authored (PF-9, SPEC-Q251, owner ruling 2026-11-18) -- catflow-mlx has no manifest for this model yet, so this was written from translategemma-4b-it-4bit.json's shape. tasks is [\"Redact\"] only: the model is the first .redact catalog entry and RealExecutor's .redact branch serves that row alone. The one setting, only=, is a comma-separated subset of person, email, phone, url, address, date, account, secret; the default is all eight (decision 7), and RealExecutor refuses any other key and any unknown category by name, never silently ignoring one. resources.disk_gb is browser.json's downloadSizeGB (2.83, the five files the loader reads: model.safetensors 2798989498 B + tokenizer.json 27868174 B + config.json + tokenizer_config.json + viterbi_calibration.json) and resources.ram_gb is its provisional ramGB 4.2 (the catalog's 1.5x weights estimate; the measured booking lives in ModelLoadProfile's .redact row, PF-8). Pinned to openai/privacy-filter revision 7ffa9a043d54d1be65afb281eddf0ffbe629385b (HF, 2026-11-18); bf16 weights as published, not an mlx-community conversion (owner decision 1)."
+  "notes": "MLXUI-authored (PF-9, SPEC-Q251, owner ruling 2026-11-18) -- catflow-mlx has no manifest for this model yet, so this was written from translategemma-4b-it-4bit.json's shape. tasks is [\"Redact\"] only: the model is the first .redact catalog entry and RealExecutor's .redact branch serves that row alone. The one setting, only=, is a comma-separated subset of person, email, phone, url, address, date, account, secret; the default is all eight (decision 7), and RealExecutor refuses any other key and any unknown category by name, never silently ignoring one. resources.disk_gb is browser.json's downloadSizeGB (2.83, the five files the loader reads: model.safetensors 2798989498 B + tokenizer.json 27868174 B + config.json + tokenizer_config.json + viterbi_calibration.json) and resources.ram_gb is its ramGB 7.7 (measured peak 7.50 GB at 128k tokens and 5.09 GB for load plus a sentence, PrivacyFilterFootprintTests, 2026-11-24; the ledger books 7.679 GB in ModelLoadProfile's .redact row, PF-8). Pinned to openai/privacy-filter revision 7ffa9a043d54d1be65afb281eddf0ffbe629385b (HF, 2026-11-18); bf16 weights as published, not an mlx-community conversion (owner decision 1)."
 }

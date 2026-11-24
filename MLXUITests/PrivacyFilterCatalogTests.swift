@@ -129,17 +129,16 @@ struct PrivacyFilterCatalogTests {
         #expect(!rerank.allModels.contains { $0.hfModelId == Self.hfID })
     }
 
-    /// PF-1's provisional figure: 1.5 × the 2.799 GB of weights, rounded to 2.79 × 1.5 = 4.19 → 4.2. PF-8 books the
-    /// measured figure in `ModelLoadProfile`; PF-8's own ruling is that this catalog figure does not change.
-    @Test func ramGBIsTheProvisionalWeightsEstimate() throws {
+    /// Owner ruling R1 (Boo, 2026-11-24): ramGB is the measured figure — 7.50 GB peak at the 128k-token worst case,
+    /// 5.09 GB for load plus a sentence — rounded to 7.7. `ModelLoadProfile`'s `.redact` row books 7.679 GB.
+    @Test func ramGBIsTheMeasuredPeak() throws {
         let e = try entry()
-        #expect(e.ramGB == 4.2)
-        let weightsGB = 2_798_989_498.0 / 1_000_000_000.0
-        #expect((weightsGB * 1.5 * 10).rounded() / 10 == e.ramGB, "the 1.5x heuristic")
+        #expect(e.ramGB == 7.7)
+        #expect(e.variants?.first?.ramGB == 7.7)
         let d = try #require(e.description)
-        #expect(d.localizedCaseInsensitiveContains("provisional"))
-        #expect(d.contains("1.5"))
-        #expect(d.contains("4.2 GB"))
+        #expect(!d.localizedCaseInsensitiveContains("provisional"))
+        #expect(d.contains("7.50 GB"))
+        #expect(d.contains("7.679 GB"))
     }
 
     /// Decision 9's About text: what it does, the eight categories, primarily English, can miss personal data, a
@@ -262,9 +261,9 @@ struct PrivacyFilterCatalogTests {
         // 2,798,989,498 B of safetensors x 1.10 + 4.60 GB, against the 7.582 GB worst-case peak.
         let booked = ModelWeightCharge.charge(onDiskBytes: 2_798_989_498) + redact.workingSetBytes
         #expect(booked >= 7_582_000_000, "booked \(booked) must cover the measured peak")
-        // Decision 8 / PF-8: the catalog ramGB stays the provisional figure the maintainers will replace.
+        // R1 (Boo, 2026-11-24): the catalog ramGB is the measured 7.7.
         let entries = try? catalog().domains.flatMap { $0.allModels }
-        #expect(entries?.first { $0.hfModelId == Self.hfID }?.ramGB == 4.2)
+        #expect(entries?.first { $0.hfModelId == Self.hfID }?.ramGB == 7.7)
     }
 
     /// The StageFactory's legacy kind switch refuses `.redact` by kind (the module's own SDK is what runs it — PF-7).
