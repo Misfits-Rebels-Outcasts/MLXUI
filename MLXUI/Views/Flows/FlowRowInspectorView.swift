@@ -392,6 +392,7 @@ struct FlowRowInspectorView: View {
             .foregroundStyle(fedBy == nil ? .primary : .secondary)
             // RP-5: "Use my prompt" is derived from the file (ticked = nothing feeds the row);
             // unticking picks a text source and keeps the typed prompt.
+            .plainCatTextInput()   // R3-FIX-1: no smart quotes/dashes in .cat text
             if let own = model.usesOwnPrompt(for: rowID) {
                 let canUntick = model.canUseUpstreamPrompt(for: rowID)
                 Toggle("Use my prompt", isOn: Binding(
@@ -483,6 +484,7 @@ struct FlowRowInspectorView: View {
             .textFieldStyle(.roundedBorder)
             Text("Placeholders pull in this row's inputs. {1} is the first input, {2} the second, {input} all of them.")
                 .font(.caption2)
+            .plainCatTextInput()   // R3-FIX-1: no smart quotes/dashes in .cat text
                 .foregroundStyle(.secondary)
             placeholderChips(row: row)
             Button("Edit…") { showPatternSheet = true }
@@ -510,6 +512,7 @@ struct FlowRowInspectorView: View {
             // E207 (fact 13) reaches this sheet the same way it reaches the header banner
             // underneath it — both read `model.warning(for:)`, which recomputes whenever
             // `setPattern` mutates the document. The sheet occludes that banner, so it's
+            .plainCatTextInput()   // R3-FIX-1: no smart quotes/dashes in .cat text
             // repeated here rather than left invisible until the sheet closes.
             if let warning = model.warning(for: rowID) {
                 Label(warning, systemImage: "exclamationmark.triangle.fill")
@@ -585,6 +588,7 @@ struct FlowRowInspectorView: View {
             Text("Comma-separated — one name per field. A column name can't contain a comma.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            .plainCatTextInput()   // R3-FIX-1: no smart quotes/dashes in .cat text
         }
     }
 
@@ -751,6 +755,7 @@ struct FlowRowInspectorView: View {
                     .font(.caption)
                 } else {
                     TextField("value", text: Binding(
+                    .plainCatTextInput()   // R3-FIX-1: no smart quotes/dashes in .cat text
                         get: { settings.value(for: key) ?? "" },
                         set: { model.setSetting(key: key, value: $0, for: rowID) }
                     ))
@@ -759,6 +764,7 @@ struct FlowRowInspectorView: View {
                 }
             }
         }
+                    .plainCatTextInput()   // R3-FIX-1: no smart quotes/dashes in .cat text
     }
 
     /// RT-4 (§3 rule 4) — a string value, not a mode or number: `query`/`contains`/`expected`/
@@ -789,6 +795,7 @@ struct FlowRowInspectorView: View {
             }
             Text("Shown escaped — \\n is a newline, \\t is a tab.")
                 .font(.caption2)
+                .plainCatTextInput()   // R3-FIX-1: no smart quotes/dashes in .cat text
                 .foregroundStyle(.secondary)
                 .padding(.leading, 96)
         }
@@ -1327,6 +1334,7 @@ struct FlowRowInspectorView: View {
                 .focused($rowTextFocused)
                 .onChange(of: rowTextFocused) { _, isFocused in
                     if !isFocused { commitRowText(row) }
+                .plainCatTextInput()   // R3-FIX-1: no smart quotes/dashes in .cat text
                 }
                 // §7 copy, verbatim.
                 Text("The row's settings text, exactly as the file stores it — quote marks included.")
