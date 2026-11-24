@@ -222,6 +222,10 @@ struct FlowEditorView: View {
         // FH-7: a run that reaches the end un-cancelled, un-parked, and without a hard failure
         // — select the last row and show its Output tab (the convenience of "go look at what
         // just ran" without a manual click).
+        // R4 (2026-11-24): same as the flow list — a run seeds the sample file, so the "isn't in the flow's folder yet" banner is stale once it stops.
+        .onChange(of: session.isRunning) { _, running in
+            if !running { inputAdvisory = FlowInputAdvisory.advisory(for: model.document, scope: makeScope()) }
+        }
         .onChange(of: session.completedRunToken) { _, _ in
             if let last = model.document.rows.last {
                 model.selectedRowID = last.id

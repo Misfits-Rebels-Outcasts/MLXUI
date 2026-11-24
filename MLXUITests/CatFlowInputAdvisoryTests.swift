@@ -112,4 +112,19 @@ struct CatFlowInputAdvisoryTests {
         let advisory = FlowInputAdvisory.advisory(for: doc, scope: scope)
         #expect(advisory?.task == "Read Text")
     }
+
+    /// R4 (Boo, 2026-11-24): the banner is a function of what is on disk *now*. A run seeds the sample, so recomputing after the run
+    /// (which both flow views now do when `session.isRunning` goes false) clears it — for every Basic flow, not one.
+    @Test func theBannerClearsOnceARunHasSeededTheFile() throws {
+        let base = tempRoot()
+        defer { try? FileManager.default.removeItem(at: base) }
+        let scope = makeScope(root: base)
+        let dir = scope.workspace.directory(for: "flow-1")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let doc = FlowDocument(version: "0.8", headerKeyword: "mlxflow", rows: [row("Read Text", settings: "document.txt")])
+
+        #expect(FlowInputAdvisory.advisory(for: doc, scope: scope)?.reason.contains("document.txt") == true)   // before the run
+        try "seeded".write(to: dir.appendingPathComponent("document.txt"), atomically: true, encoding: .utf8)  // the run seeds it
+        #expect(FlowInputAdvisory.advisory(for: doc, scope: scope) == nil)                                    // after: gone
+    }
 }

@@ -419,6 +419,11 @@ struct FlowListView: View {
         // already moved that reassessment onto the outer `Group` in `body` and folded
         // `refreshPreflight()` into `reassess()` (which no longer exists as a standalone
         // function on this inner view) — keeping both would double-fire and no longer compile.
+        // R4 (2026-11-24): the "needs 'x', which isn't in the flow's folder yet" banner was computed once at load, but a run seeds the
+        // sample file — so it stayed up after a run that had read it. Recompute whenever a run stops, for every flow.
+        .onChange(of: session.isRunning) { _, running in
+            if !running { inputAdvisory = FlowInputAdvisory.advisory(for: doc, scope: makeScope()) }
+        }
         .onChange(of: session.completedRunToken) { _, _ in
             if let last = doc.rows.last {
                 session.selectedRowID = last.id
