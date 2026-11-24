@@ -1038,7 +1038,16 @@ final class FlowEditorModel {
     /// Cleared (R3-FIX-3) as soon as the draft changes, is accepted or discarded, the row changes, or the document is changed
     /// by anything else — it must never outlive the edit it describes.
     var rawSettingsRefusal: (rowID: UUID, message: String)? {
-        didSet { if (rawSettingsRefusal == nil) != (oldValue == nil) { EditorLog.step("inline refusal set", rawSettingsRefusal != nil) } }
+        didSet {
+            if (rawSettingsRefusal == nil) != (oldValue == nil) { EditorLog.step("inline refusal set", rawSettingsRefusal != nil) }
+            // R10: the red top banner follows the inline warning's rule exactly — it goes the moment the inline refusal does.
+            if rawSettingsRefusal == nil { rawSettingsBanner = nil }
+        }
+    }
+    /// The red top-of-editor banner for a refused Raw settings edit (set by Run / Save). Not `saveError`, which only a successful Save
+    /// ever cleared — this one is cleared by `rawSettingsRefusal` becoming nil, so the two can never disagree.
+    var rawSettingsBanner: String? {
+        didSet { if (rawSettingsBanner == nil) != (oldValue == nil) { EditorLog.step("red banner (raw settings) set", rawSettingsBanner != nil) } }
     }
 
     /// Commit the pending draft onto **its own** row. Returns the refusal sentence when the backstop refuses (the draft stays on

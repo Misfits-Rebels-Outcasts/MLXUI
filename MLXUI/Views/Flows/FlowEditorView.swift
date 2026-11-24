@@ -80,7 +80,7 @@ struct FlowEditorView: View {
             // (where it was the only unbounded child) into a banner here — same shape as the
             // input advisory just below, red instead of blue. Shown first when both are
             // present, since a save-blocking error outranks a non-blocking setup note.
-            if let notice = model.saveError ?? model.seedError {
+            if let notice = model.saveError ?? model.rawSettingsBanner ?? model.seedError {
                 HStack(alignment: .top, spacing: 8) {
                     Label(notice, systemImage: "exclamationmark.circle")
                         .font(.callout)
@@ -925,7 +925,7 @@ struct FlowEditorView: View {
             model.saveError = (error as CustomStringConvertible).description
         }
         if let refusal, model.saveError == nil {
-            model.saveError = "Saved without your Raw settings edit: that change wouldn't check: \(refusal)"
+            model.rawSettingsBanner = "Saved without your Raw settings edit: that change wouldn't check: \(refusal)"
         }
         prepareInstall()
     }
@@ -942,7 +942,7 @@ struct FlowEditorView: View {
         // R3 (2026-11-24): Run is not a blur either — commit a pending Raw settings edit first, and never run on a row whose edit the
         // backstop refused (the document would silently differ from what is typed on screen).
         if let refusal = model.commitRawSettingsDraft() {
-            model.saveError = "That Raw settings change wouldn't check: \(refusal). The row's text is unchanged until it does."
+            model.rawSettingsBanner = "That Raw settings change wouldn't check: \(refusal). The row's text is unchanged until it does."
             return
         }
         // FIX-4: never run a document the save gate refuses (the button is disabled, this

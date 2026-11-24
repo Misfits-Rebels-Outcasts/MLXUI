@@ -260,4 +260,27 @@ struct CatFlowRowTextBackstopTests {
         #expect(model.commitRawSettingsDraft() == nil)                         // no longer refused
         #expect(model.row(withID: r.id)?.settings == "only=\"person,email\"")
     }
+
+    // MARK: - R10: the red top banner follows the inline warning's rule
+
+    @Test func theRedBannerGoesTheMomentTheInlineRefusalDoes() throws {
+        let r = row("Redact", model: "Privacy Filter")
+        let model = try editor([r])
+        model.rawSettingsDraft = (r.id, "only=\"ssn\"")
+        let refusal = model.commitRawSettingsDraft()
+        model.rawSettingsBanner = "That Raw settings change wouldn't check: \(refusal ?? "")"   // what Run does
+        #expect(model.rawSettingsBanner != nil)
+
+        model.rawSettingsDraft = (r.id, "only=\"email\"")         // a later edit: the inline warning clears …
+        #expect(model.rawSettingsRefusal == nil)
+        #expect(model.rawSettingsBanner == nil)                  // … and the banner with it, before any commit or run
+    }
+
+    @Test func theRedBannerAlsoGoesWhenAValidDraftIsCommittedOrNothingIsPending() throws {
+        let r = row("Redact", model: "Privacy Filter")
+        let model = try editor([r])
+        model.rawSettingsRefusal = (r.id, "stale"); model.rawSettingsBanner = "stale"
+        #expect(model.commitRawSettingsDraft() == nil)           // Run/Save with nothing pending
+        #expect(model.rawSettingsBanner == nil)
+    }
 }
