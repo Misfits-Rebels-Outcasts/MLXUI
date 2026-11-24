@@ -189,6 +189,7 @@ final class FlowRunSession {
                resume: Bool = false,
                answers: [String: FlowInterpreter.HumanAnswer] = [:],
                occurrence: FlowInterpreter.Occurrence? = nil) {
+        EditorLog.step("session.start; already running", isRunning)
         guard !isRunning else { return }
         isRunning = true
         errorSentence = nil
@@ -318,6 +319,7 @@ final class FlowRunSession {
     /// Clear Run: reset every row's dot to gray and drop the inspector outputs. The cache
     /// store is untouched (Clear Cache is separate).
     func clearRun(doc: FlowDocument) {
+        EditorLog.step("session.clearRun (cancels any run); isRunning", isRunning)
         cancel()
         rowStates = Dictionary(Self.flattenedRows(doc.rows).map { ($0.id, RowState()) },
                              uniquingKeysWith: { a, _ in a })

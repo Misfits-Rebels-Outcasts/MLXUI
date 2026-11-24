@@ -216,6 +216,7 @@ struct FlowEditorView: View {
         }
         // Editing invalidates run results; preflight follows the document.
         .onChange(of: model.document) { _, _ in
+            EditorLog.step("document changed -> session.clearRun; isRunning", session.isRunning)
             session.clearRun(doc: model.document)
             prepareInstall()
         }
@@ -912,6 +913,7 @@ struct FlowEditorView: View {
     // MARK: - Save (CFM-R8-5)
 
     private func save() {
+        EditorLog.step("Save action entered")
         // R3 (2026-11-24): a Raw settings edit still in the box is committed first — Save is not a blur. A refused one is
         // not saved (the row is unchanged) and the person is told why, still on screen under the box.
         let refusal = model.commitRawSettingsDraft()
@@ -935,6 +937,7 @@ struct FlowEditorView: View {
     // MARK: - Run (reuses the gallery's session + preflight machinery)
 
     private func run() {
+        EditorLog.step("Run action entered; canSave", model.canSave)
         // R3 (2026-11-24): Run is not a blur either — commit a pending Raw settings edit first, and never run on a row whose edit the
         // backstop refused (the document would silently differ from what is typed on screen).
         if let refusal = model.commitRawSettingsDraft() {
@@ -961,6 +964,7 @@ struct FlowEditorView: View {
     }
 
     private func startRun() {
+        EditorLog.step("startRun")
         let context = AppFlowExecutorFactory.cachingContext(scope: makeScope(), appState: appState, transforms: model.document.transforms)
         session.start(doc: model.document, runner: FlowRunner(), context: context,
                       resume: session.hasRunResults)

@@ -53,9 +53,15 @@ private struct PlainCatTextAnchor: NSViewRepresentable {
             observer = NotificationCenter.default.addObserver(
                 forName: NSText.didBeginEditingNotification, object: nil, queue: .main
             ) { [weak self] note in
-                guard let self, let textView = note.object as? NSTextView,
-                      let scope = self.superview, textView.isDescendant(of: scope) else { return }
-                MainActor.assumeIsolated { PlainCatText.configure(textView) }
+                guard let self, let textView = note.object as? NSTextView else { return }
+                guard let scope = self.superview, textView.isDescendant(of: scope) else {
+                    EditorLog.step("didBeginEditing: a text view began editing but is NOT under the anchor's superview")
+                    return
+                }
+                MainActor.assumeIsolated {
+                    EditorLog.step("didBeginEditing reached an anchored text view; quote substitution was", textView.isAutomaticQuoteSubstitutionEnabled)
+                    PlainCatText.configure(textView)
+                }
             }
         }
 
@@ -63,8 +69,10 @@ private struct PlainCatTextAnchor: NSViewRepresentable {
         /// finished attaching the control to the hierarchy.
         func applyNow() {
             DispatchQueue.main.async { [weak self] in
-                guard let scope = self?.superview else { return }
-                PlainCatText.textViews(in: scope).forEach(PlainCatText.configure)
+                guard let scope = self?.superview else { EditorLog.step("anchor has no superview"); return }
+                let found = PlainCatText.textViews(in: scope)
+                EditorLog.step("anchor applyNow; text views found beside it", count: found.count)
+                found.forEach(PlainCatText.configure)
             }
         }
 

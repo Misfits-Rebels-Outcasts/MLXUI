@@ -1339,6 +1339,7 @@ struct FlowRowInspectorView: View {
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
                 .focused($rowTextFocused)
                 .onChange(of: rowTextFocused) { _, isFocused in
+                    EditorLog.step("Raw settings focus changed; focused", isFocused)
                     if !isFocused { commitRowTextAfterMouseUp() }
                 }
                 // §7 copy, verbatim.
@@ -1378,6 +1379,7 @@ struct FlowRowInspectorView: View {
                 waited += 1
             }
             try? await Task.sleep(for: .milliseconds(60))            // let the click's action fire first
+            EditorLog.step("blur commit fires after mouse-up; pending", model.rawSettingsDraft != nil)
             model.commitRawSettingsDraft()
         }
     }

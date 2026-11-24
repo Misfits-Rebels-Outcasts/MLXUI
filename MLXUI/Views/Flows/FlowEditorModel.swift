@@ -66,7 +66,9 @@ final class FlowEditorModel {
     private(set) var isSharedWorkspaceFolder: Bool
     /// The text last written to disk — the dirty check compares the current document to it.
     private(set) var savedText: String?
-    var saveError: String?
+    var saveError: String? {
+        didSet { if (saveError == nil) != (oldValue == nil) { EditorLog.step("red banner (saveError) set", saveError != nil) } }
+    }
     /// A failed sample-seed copy (CFM-R11-0b) — the row is still added, honestly unseeded.
     private(set) var seedError: String?
     /// CFM-R14-2 — the flat catalog + the registry's claim table, so `add()` seeds a row's
@@ -1027,25 +1029,34 @@ final class FlowEditorModel {
         didSet {
             // R3-FIX-3: typing is a new attempt — the sentence about the previous one no longer describes what is in the box.
             if rawSettingsDraft?.text != oldValue?.text || rawSettingsDraft?.rowID != oldValue?.rowID { rawSettingsRefusal = nil }
+            // Typographic quotes in the draft (the smart-quote symptom) — a flag, never the text.
+            let curly = rawSettingsDraft?.text.contains(where: { "\u{201C}\u{201D}\u{201E}\u{201F}\u{2018}\u{2019}".contains($0) }) ?? false
+            if rawSettingsDraft?.text != oldValue?.text { EditorLog.step("raw draft changed; has typographic quote", curly) }
         }
     }
     /// The refusal sentence of the last refused commit of the draft, shown under the box ("left dirty": the draft stays).
     /// Cleared (R3-FIX-3) as soon as the draft changes, is accepted or discarded, the row changes, or the document is changed
     /// by anything else — it must never outlive the edit it describes.
-    var rawSettingsRefusal: (rowID: UUID, message: String)?
+    var rawSettingsRefusal: (rowID: UUID, message: String)? {
+        didSet { if (rawSettingsRefusal == nil) != (oldValue == nil) { EditorLog.step("inline refusal set", rawSettingsRefusal != nil) } }
+    }
 
     /// Commit the pending draft onto **its own** row. Returns the refusal sentence when the backstop refuses (the draft stays on
     /// screen, the row is unchanged), `nil` when there was nothing pending or the edit was accepted (the draft is then cleared).
     @discardableResult
     func commitRawSettingsDraft() -> String? {
+        EditorLog.step("commitRawSettingsDraft entered; draft pending", rawSettingsDraft != nil)
         guard let draft = rawSettingsDraft else {
             rawSettingsRefusal = nil          // nothing is dirty, so nothing is refused
             return nil
         }
+        let before = document
         if let refusal = setRowText(draft.text, for: draft.rowID) {
+            EditorLog.step("commitRawSettingsDraft refused")
             rawSettingsRefusal = (draft.rowID, refusal)
             return refusal
         }
+        EditorLog.step("commitRawSettingsDraft accepted; document changed", document != before)
         rawSettingsRefusal = nil
         rawSettingsDraft = nil
         return nil
