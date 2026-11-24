@@ -43,7 +43,9 @@ struct CatFlowNotRunnableTests {
                        "12-InvoiceToSpreadsheet", "13-SortAnEmail",
                        // BX-1 (RSI/DelegateBasicExpansionBacklog.md): the five expansion flows, shelf 14–18.
                        "14-TranslateLetter", "15-DepthMap", "16-AskADocument",
-                       "17-StoryFromPhoto", "18-ChartSpreadsheet"] {
+                       "17-StoryFromPhoto", "18-ChartSpreadsheet",
+                       // PF (owner R2b, 2026-11-24): the Redact a Document flow, shelf slot 20.
+                       "20-RedactDocument"] {
             #expect(try refusal(flowID) == nil, "\(flowID) should be runnable")
         }
     }

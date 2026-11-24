@@ -19,8 +19,9 @@ struct CatFlowShippingLabelTests {
         let entries = GalleryLoader.loadMetadata()
         let entry = try #require(entries.first { $0.flowID == Self.flowID })
         #expect(entry.number == 88 && entry.title == "Shipping Label" && entry.isBasic)
-        #expect(entries.filter(\.isBasic).map(\.flowID).last == Self.flowID)
-        #expect(entries.filter(\.isBasic).count == 19)
+        // PF (owner R2b, 2026-11-24) appended shelf slot 20 (Redact a Document), so this flow is no longer last: it is the 19th.
+        #expect(entries.filter(\.isBasic).map(\.flowID).dropLast().last == Self.flowID)
+        #expect(entries.filter(\.isBasic).count == 20)
         #expect(entries.count == Set(entries.map(\.number)).count, "gallery numbers stay unique")
     }
 

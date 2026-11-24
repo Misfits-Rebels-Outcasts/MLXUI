@@ -634,6 +634,14 @@
    "category": "Basic",
    "description": "Turn an order number into a QR code on a one-page PDF label and queue it to print. Edit the order number in row 1; nothing prints until you approve it in the outbox.",
    "tier": "basic"
+  },
+  {
+   "number": 89,
+   "title": "Redact a Document",
+   "filename": "20-RedactDocument.cat",
+   "category": "Basic",
+   "description": "Find names, emails, phone numbers, addresses, dates and account numbers in a text file and save a copy with each one replaced by a placeholder. Edit row 1 to point at your own file.",
+   "tier": "basic"
   }
  ]
 }

@@ -179,8 +179,9 @@ struct CatFlowSavedFilePresentationTests {
         // fires.
         // BS-1 (RSI/DelegateBasicShowcaseBacklog.md): flows 9–13 add six Save rows (86 -> 92).
         // BX-1 (RSI/DelegateBasicExpansionBacklog.md): flows 14–18 add six more Save rows (92 -> 98).
-        #expect(checkedRows == 98, """
-            Corpus row count changed from 98 — if a new Save * row shipped, confirm it \
+        // PF (owner R2b, 2026-11-24): flow 20 (Redact a Document) adds one Save Text row (98 -> 99).
+        #expect(checkedRows == 99, """
+            Corpus row count changed from 99 — if a new Save * row shipped, confirm it \
             classifies correctly above, then bump this count; if a row disappeared, \
             confirm that was intentional.
             """)

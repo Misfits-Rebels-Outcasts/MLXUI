@@ -1,0 +1,38 @@
+{
+ "models": {
+  "Privacy Filter": "openai/privacy-filter"
+ },
+ "rows": [
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "document.txt",
+   "task": "Read Text"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": "Privacy Filter",
+   "refs": [],
+   "settings": null,
+   "task": "Redact"
+  },
+  {
+   "block_kind": null,
+   "block_name": null,
+   "chain_break": false,
+   "children": [],
+   "model": null,
+   "refs": [],
+   "settings": "document-redacted.txt",
+   "task": "Save Text"
+  }
+ ],
+ "version": "0.8"
+}

@@ -1,0 +1,7 @@
+mlxflow 0.8
+1. Read Text   document.txt
+2. Redact      Privacy Filter
+3. Save Text   document-redacted.txt
+
+models:
+  Privacy Filter = openai/privacy-filter

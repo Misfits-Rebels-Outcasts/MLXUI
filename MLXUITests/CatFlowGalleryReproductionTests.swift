@@ -63,7 +63,7 @@ struct CatFlowGalleryReproductionTests {
 
     @Test func everyGalleryFlowParses() throws {
         let files = try allGalleryFiles()
-        #expect(files.count == 88, "the gallery drifted — expected 88 flows (ER-12, R12: + 19-ShippingLabel), found \(files.count)")
+        #expect(files.count == 89, "the gallery drifted — expected 89 flows (PF: + 20-RedactDocument; ER-12, R12: + 19-ShippingLabel), found \(files.count)")
 
         var checked = 0
         for f in files {
@@ -104,7 +104,7 @@ struct CatFlowGalleryReproductionTests {
     /// in `Fixtures/CatFlow/gallery/`, byte-for-byte on the canonical JSON.
     @Test func everyGalleryFlowMatchesPythonParseTree() throws {
         let files = try allGalleryFiles()
-        #expect(files.count == 88)  // ER-12 (R12): + 19-ShippingLabel
+        #expect(files.count == 89)  // PF (owner R2b, 2026-11-24): + 20-RedactDocument; ER-12 (R12): + 19-ShippingLabel
 
         var checked = 0
         for f in files {
@@ -171,7 +171,7 @@ struct CatFlowGalleryReproductionTests {
     @Test func theBasicShelfIsEightSourcedPositionsWhileKeepingGlobalNumbers() throws {
         let entries = GalleryLoader.loadMetadata()
         // BS-1 (`RSI/DelegateBasicShowcaseBacklog.md`, R2/R3): five flows were added (78–82); BX-1 (`RSI/DelegateBasicExpansionBacklog.md`, R2/R3) added five more (83–87), so the gallery is now 87. BG-3 itself was "a move, never an add" (77); that arrangement is still pinned below.
-        #expect(entries.count == 88, "ER-12 (R12) added Shipping Label (88); BS-1 added five Basic flows (78–82) and BX-1 five more (83–87): the gallery is 87")
+        #expect(entries.count == 89, "PF added Redact a Document (89); ER-12 (R12) added Shipping Label (88); BS-1 added five Basic flows (78–82) and BX-1 five more (83–87): the gallery is 87")
         #expect(entries.count == Set(entries.map(\.number)).count, "gallery numbers must stay unique")
 
         // BS-1: the shelf grew to 13; this test still pins the first eight (BG-3's arrangement) and `basicShelfShowsThirteenInOrder` pins all thirteen.
@@ -291,7 +291,7 @@ struct CatFlowGalleryReproductionTests {
         // BS-2 widened this from the first eight to the whole shelf once flows 9–13's sample inputs shipped.
         // BX-2 (RSI/DelegateBasicExpansionBacklog.md) widened this from the first 13 to the whole shelf once flows 14–18's sample inputs shipped.
         let basics = GalleryLoader.loadMetadata().filter(\.isBasic)
-        #expect(basics.count == 19, "the Basic shelf is 1…19 after ER-12 (R12: + Shipping Label)")
+        #expect(basics.count == 20, "the Basic shelf is 1…20 after PF (+ Redact a Document); 1…19 after ER-12 (R12: + Shipping Label)")
 
         var checked = 0
         for flow in basics {

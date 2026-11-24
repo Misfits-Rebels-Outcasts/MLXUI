@@ -322,6 +322,9 @@ nonisolated enum GalleryLoader {
             return [("17-StoryFromPhoto-photo.jpg", "photo.jpg")]
         case "18-ChartSpreadsheet":
             return [("18-ChartSpreadsheet-sales.csv", "sales.csv")]
+        // PF (owner R2b, 2026-11-24): the Redact a Document sample, a made-up support email (synthetic personal data only).
+        case "20-RedactDocument":
+            return [("20-RedactDocument-document.txt", "document.txt")]
         default:
             return []
         }
