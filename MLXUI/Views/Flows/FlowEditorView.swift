@@ -215,6 +215,7 @@ struct FlowEditorView: View {
             ServedLoadConfirmSheet(message: session.servedLoadSentence ?? "") { session.answerServedLoad(loadAnyway: $0) }
         }
         // Editing invalidates run results; preflight follows the document.
+        .onAppear { EditorLog.installMouseTrail() }
         .onChange(of: model.document) { _, _ in
             EditorLog.step("document changed -> session.clearRun; isRunning", session.isRunning)
             session.clearRun(doc: model.document)
