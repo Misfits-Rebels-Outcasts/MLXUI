@@ -484,7 +484,7 @@ nonisolated enum CatalogBridge {
             equivalence: .same,
             manifestFile: "qwen3-vl-embedding-2b.json",
             modelType: .embedding),
-        // PF-9 (SPEC-Q251, owner ruling 2026-11-18) -- Privacy Filter, the `Redact` row's only model. `.same`: the card's repo
+        // PF-9 (SPEC-Q252, owner ruling 2026-11-18) --Privacy Filter, the `Redact` row's only model. `.same`: the card's repo
         // is the pinned repo (and `hfModelId` is exactly `openai/privacy-filter`, Trap 8). No catflow-mlx manifest exists for
         // it, so `openai-privacy-filter.json` is MLXUI-authored (see its "notes", which names the pinned revision). Appended
         // **last**; it is the first row of the new `Redact` pool, so no existing seed moves. `modelType` stays nil (the card

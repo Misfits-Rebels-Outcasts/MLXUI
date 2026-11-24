@@ -40,7 +40,7 @@ nonisolated struct StageConfig: Sendable, Hashable {
     /// BS-6 (R7): the Speak row's `trim_silence=` (Kokoro's manifest declares it, bool). `nil` = not set (the engine does not trim);
     /// `true` trims leading/trailing near-silence; `false` is the explicit no-trim. Set only by `RealExecutor.stageConfig` for a Speak row.
     var trimSilence: Bool?
-    /// PF-9 (SPEC-Q251): the `Redact` row's `only=` subset, resolved from the curated manifest by `RealExecutor` (or the Run
+    /// PF-9 (SPEC-Q252): the `Redact` row's `only=` subset, resolved from the curated manifest by `RealExecutor` (or the Run
     /// screen's eight checkboxes). `nil` = all eight categories. Every other SDK ignores it; the Privacy Filter stage reads it.
     /// A per-run setting, not a weight setting, so `weightsOnly` drops it (the engine-cache key does not change with it).
     var redactOnly: Set<PrivacyFilterCategory>?

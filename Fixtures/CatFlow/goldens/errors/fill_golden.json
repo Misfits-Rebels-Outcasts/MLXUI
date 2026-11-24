@@ -1418,6 +1418,15 @@
   "expected": "Row ‹n›'s `Clean Audio` ‹detail›."
  },
  {
+  "code": "E725",
+  "catalog": "v08",
+  "values": {
+   "n": "‹n›",
+   "detail": "‹detail›"
+  },
+  "expected": "Row ‹n›'s `Redact` ‹detail›."
+ },
+ {
   "code": "E801",
   "catalog": "v08",
   "values": {

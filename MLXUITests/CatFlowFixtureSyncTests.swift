@@ -19,7 +19,7 @@ struct CatFlowFixtureSyncTests {
 
     /// The catflow-mlx commit the fixtures were synced from. Bump only after reviewing
     /// a re-synced corpus. Source: `git -C catflow-mlx rev-parse HEAD` at sync time.
-    private static let pinnedSourceSHA = "12a51841edf0ec35ac3c403b5e4b8cb836fbc038"
+    private static let pinnedSourceSHA = "2d76fd69d4d6df90257aeca6769163b6743744db"   // PF (SPEC-Q252): catflow-mlx 2d76fd6, + Redact (E725, conformance pf_redact*)
 
     // MARK: - Fixtures dir (repo-relative, mirroring the other CatFlow tests)
 
@@ -128,7 +128,7 @@ struct CatFlowFixtureSyncTests {
         let conformanceDir = fixturesDir.appendingPathComponent("conformance")
         let cats = try FileManager.default.contentsOfDirectory(atPath: conformanceDir.path)
             .filter { $0.hasSuffix(".cat") }
-        #expect(cats.count == 63, "expected the 63 conformance flows, found \(cats.count)")
+        #expect(cats.count == 67, "expected the 67 conformance flows (PF: + 4 pf_redact*), found \(cats.count)")
         for cat in cats {
             let expectName = String(cat.dropLast(".cat".count)) + ".expect.json"
             #expect(FileManager.default.fileExists(atPath: conformanceDir.appendingPathComponent(expectName).path),

@@ -7,7 +7,7 @@ import Foundation
 ///
 /// Claims only `.redact` privacy-filter-family entries (Trap 10: by family, never by architecture). The Run screen is
 /// Redact (paste/open, side-by-side highlight, checkbox re-render, copy/save/export); the AI Workflows row is `Redact`
-/// (SPEC-Q251).
+/// (SPEC-Q252).
 enum PrivacyFilterModule: ModelModule {
     static let descriptor = ModelModuleDescriptor(
         id: "privacy-filter",

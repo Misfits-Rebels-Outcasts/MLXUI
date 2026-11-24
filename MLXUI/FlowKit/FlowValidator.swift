@@ -1193,6 +1193,11 @@ extension FlowValidator {
                 issues.append(FlowIssue(row: path, code: code, message: (try? ErrorCatalog.fill(
                     code: code, values: ["n": path, "detail": e.detail], isV08: true)) ?? ""))
             } catch {}
+        case "Redact":  // SPEC-Q252
+            do { _ = try RedactRowSettings.parse(row.settings) } catch let e as RedactSettingsError {
+                issues.append(FlowIssue(row: path, code: "E725", message: (try? ErrorCatalog.fill(
+                    code: "E725", values: ["n": path, "detail": e.detail], isV08: true)) ?? ""))
+            } catch {}
         case "Stage Print":  // SPEC-Q258
             do { try StagePrintTool.parseSettings(row.settings) } catch let e as StagePrintSettingsError {
                 issues.append(FlowIssue(row: path, code: "E722", message: (try? ErrorCatalog.fill(

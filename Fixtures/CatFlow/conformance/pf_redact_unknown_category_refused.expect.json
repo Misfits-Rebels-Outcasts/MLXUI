@@ -1,0 +1,51 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "letter.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Redact",
+        "model": "Privacy Filter",
+        "settings": "only=\"person,ssn\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Save Text",
+        "model": null,
+        "settings": "redacted.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ],
+    "models": {
+      "Privacy Filter": "openai/privacy-filter"
+    }
+  },
+  "check": {
+    "valid": false,
+    "issues": [
+      {
+        "row": "2",
+        "code": "E725",
+        "message": "Row 2's `Redact` doesn't know the category \"ssn\" -- use a comma-separated subset of person, email, phone, url, address, date, account and secret."
+      }
+    ]
+  }
+}

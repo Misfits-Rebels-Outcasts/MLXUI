@@ -1,0 +1,45 @@
+{
+  "kind": "parse",
+  "tree": {
+    "version": "0.8",
+    "rows": [
+      {
+        "task": "Read Text",
+        "model": null,
+        "settings": "letter.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Redact",
+        "model": "Privacy Filter",
+        "settings": "only=\"person,email\"",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      },
+      {
+        "task": "Save Text",
+        "model": null,
+        "settings": "redacted.txt",
+        "refs": [],
+        "chain_break": false,
+        "block_kind": null,
+        "block_name": null,
+        "children": []
+      }
+    ],
+    "models": {
+      "Privacy Filter": "openai/privacy-filter"
+    }
+  },
+  "check": {
+    "valid": true,
+    "issues": []
+  }
+}

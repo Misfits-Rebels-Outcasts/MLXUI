@@ -571,7 +571,7 @@ nonisolated struct RealExecutor: FlowExecutor {
             return try persist(result, rowLabel: "\(path)")
         }
 
-        // SPEC-Q251 / PF-9 (owner ruling 2026-11-18): the `Redact` row. One text in, the redacted text out; the one
+        // SPEC-Q252 / PF-9 (owner ruling 2026-11-18): the `Redact` row. One text in, the redacted text out; the one
         // setting is `only=`, a comma-separated subset of person, email, phone, url, address, date, account and secret
         // (default all eight). Any other key, and any unknown category, is refused by name — never ignored. Branches
         // before the frame path for the same reason `.translate` does: the Privacy Filter stage is a plain text→text
@@ -1467,7 +1467,7 @@ nonisolated struct RealExecutor: FlowExecutor {
         return sanitized
     }
 
-    /// SPEC-Q251 / PF-9 — resolve a `Redact` row's `only=` through the curated manifest (the settings authority) and
+    /// SPEC-Q252 / PF-9 — resolve a `Redact` row's `only=` through the curated manifest (the settings authority) and
     /// map the eight writable names to `PrivacyFilterCategory`. Returns `nil` for "all eight" (decision 7's default).
     ///
     /// Unknown **keys** are refused by `CuratedManifest.resolveEngineSettings` (which names the model and the keys it

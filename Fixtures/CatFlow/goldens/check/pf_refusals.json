@@ -1,0 +1,64 @@
+{
+  "cases": [
+    {
+      "name": "unknown_setting",
+      "task": "Redact",
+      "flow": "mlxflow 0.8\n1. Read Text  a.txt\n2. Redact  Privacy Filter; threshold=0.5\n\nmodels:\n  Privacy Filter = openai/privacy-filter\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E725",
+          "message": "Row 2's `Redact` takes only `only=` (a comma-separated subset of person, email, phone, url, address, date, account and secret); remove `threshold=`."
+        }
+      ]
+    },
+    {
+      "name": "unknown_category",
+      "task": "Redact",
+      "flow": "mlxflow 0.8\n1. Read Text  a.txt\n2. Redact  Privacy Filter; only=\"person,ssn\"\n\nmodels:\n  Privacy Filter = openai/privacy-filter\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E725",
+          "message": "Row 2's `Redact` doesn't know the category \"ssn\" -- use a comma-separated subset of person, email, phone, url, address, date, account and secret."
+        }
+      ]
+    },
+    {
+      "name": "empty_value",
+      "task": "Redact",
+      "flow": "mlxflow 0.8\n1. Read Text  a.txt\n2. Redact  Privacy Filter; only=\"\"\n\nmodels:\n  Privacy Filter = openai/privacy-filter\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E725",
+          "message": "Row 2's `Redact` has an empty category in `only=` -- use a comma-separated subset of person, email, phone, url, address, date, account and secret."
+        }
+      ]
+    },
+    {
+      "name": "trailing_comma",
+      "task": "Redact",
+      "flow": "mlxflow 0.8\n1. Read Text  a.txt\n2. Redact  Privacy Filter; only=\"person,\"\n\nmodels:\n  Privacy Filter = openai/privacy-filter\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E725",
+          "message": "Row 2's `Redact` has an empty category in `only=` -- use a comma-separated subset of person, email, phone, url, address, date, account and secret."
+        }
+      ]
+    },
+    {
+      "name": "bare_word",
+      "task": "Redact",
+      "flow": "mlxflow 0.8\n1. Read Text  a.txt\n2. Redact  Privacy Filter; strict\n\nmodels:\n  Privacy Filter = openai/privacy-filter\n",
+      "issues": [
+        {
+          "row": "2",
+          "code": "E725",
+          "message": "Row 2's `Redact` takes only `only=` (a comma-separated subset of person, email, phone, url, address, date, account and secret); remove `strict`."
+        }
+      ]
+    }
+  ]
+}

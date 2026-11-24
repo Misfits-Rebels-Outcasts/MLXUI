@@ -1,0 +1,7 @@
+mlxflow 0.8
+1. Read Text    letter.txt
+2. Redact       Privacy Filter; threshold=0.5
+3. Save Text    redacted.txt
+
+models:
+  Privacy Filter = openai/privacy-filter

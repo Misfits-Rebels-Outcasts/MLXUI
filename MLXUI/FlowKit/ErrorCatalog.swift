@@ -169,6 +169,7 @@ nonisolated enum ErrorCatalog {
         "E722": CatErrorSpec(code: "E722", name: "`Stage Print` settings invalid", citation: "check 25; SPEC-Q258", template: "Row {n}'s `Stage Print` {detail}."),
         "E723": CatErrorSpec(code: "E723", name: "`Identify Speakers` settings invalid", citation: "check 25; SPEC-Q238", template: "Row {n}'s `Identify Speakers` {detail}."),
         "E724": CatErrorSpec(code: "E724", name: "`Clean Audio` settings invalid", citation: "check 25; SPEC-Q239", template: "Row {n}'s `Clean Audio` {detail}."),
+        "E725": CatErrorSpec(code: "E725", name: "`Redact` settings invalid", citation: "check 25; SPEC-Q252", template: "Row {n}'s `Redact` {detail}."),
         "E704": CatErrorSpec(code: "E704", name: "model not installed", citation: nil, template: "This flow pins {id}, which isn't installed. Download ({size}, {license})? Until then this row is held."),
         "E705": CatErrorSpec(code: "E705", name: "pinned id unavailable", citation: nil, template: "{id} isn't in the registry and isn't downloadable from a curated source. The flow won't substitute a same-named model — install the id, or pick a model on the row (which re-pins)."),
         "E706": CatErrorSpec(code: "E706", name: "display-name collision", citation: "registry load, not a row", template: "Two models claim the name \"{display}\" ({id-a}, {id-b}). Registry not loaded — rename one manifest's display."),

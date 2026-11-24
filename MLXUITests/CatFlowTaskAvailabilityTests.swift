@@ -242,7 +242,7 @@ struct CatFlowTaskAvailabilityTests {
             "Upscale": .available,          // .upscale — engines.diffusion.upscale (BG-2)
             "Rerank": .available,           // .rerank — MoC-4
             "Extract Structured": .available,   // .llm — engines.llm.extract_structured, ported DA-3a, offered DA-3b
-            // PF-9 (SPEC-Q251, owner ruling 2026-11-18): `Redact` is a new `.model` task served by
+            // PF-9 (SPEC-Q252, owner ruling 2026-11-18): `Redact` is a new `.model` task served by
             // `RealExecutor.runModel`'s `.redact` branch; Privacy Filter (the first `.redact` catalog entry) derives.
             // Expected by decision 7's acceptance list: "any test that loops over every task and needs an entry".
             "Redact": .available,           // .redact — engines.redact.redact (PF-9)

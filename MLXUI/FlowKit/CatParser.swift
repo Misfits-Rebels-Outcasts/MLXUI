@@ -56,7 +56,7 @@ nonisolated enum CatParser {
         "Classify", "Gate", "Grade", "Score", "Judge", "Think",
         "Chart",
         "Improvise",
-        // SPEC-Q251 (PF-9, owner ruling 2026-11-18): the new `Redact` text task.
+        // SPEC-Q252 (PF-9, owner ruling 2026-11-18): the new `Redact` text task.
         "Redact",
     ]
 

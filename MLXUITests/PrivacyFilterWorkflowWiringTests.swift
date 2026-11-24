@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import MLXUI
 
-/// PF-9 (SPEC-Q251, owner ruling 2026-11-18) — the `Redact` row in AI Workflows: the four tables, the curated manifest,
+/// PF-9 (SPEC-Q252, owner ruling 2026-11-18) — the `Redact` row in AI Workflows: the four tables, the curated manifest,
 /// and `RealExecutor.runModel`'s `.redact` branch with its `only=` subset and its refusals. No weights are loaded; the
 /// stage is a stub, and every text here is synthetic (decision 10).
 @MainActor
@@ -180,7 +180,7 @@ struct PrivacyFilterWorkflowWiringTests {
                              encoding: .utf8)
         #expect(raw.contains("\"license\": \"Apache-2.0\""))
         #expect(raw.contains("7ffa9a043d54d1be65afb281eddf0ffbe629385b"), "the manifest names the pinned revision")
-        #expect(raw.contains("SPEC-Q251"))
+        #expect(raw.contains("SPEC-Q252"))
     }
 
     @Test func manifestResourcesMatchTheCatalogEntry() throws {

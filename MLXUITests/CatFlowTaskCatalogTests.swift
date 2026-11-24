@@ -11,7 +11,7 @@ struct CatFlowTaskCatalogTests {
     // MARK: - Counts
 
     @Test func catalogCounts() {
-        // PF-9 (SPEC-Q251, owner ruling 2026-11-18): the `Redact` text task joins CATALOG (+1, a `.model` task), 114 → 115 (`allTasks` 120 → 121, `.model` 46 → 47).
+        // PF-9 (SPEC-Q252, owner ruling 2026-11-18): the `Redact` text task joins CATALOG (+1, a `.model` task), 114 → 115 (`allTasks` 120 → 121, `.model` 46 → 47).
         #expect(TaskCatalog.catalog.count == 115)  // ER-11: + Stage Print; ER-10: + Identify Speakers, Clean Audio; ER-7: + Save File, Replace; ER-8: + Make PDF; ER-9: + Read/Make Barcode
         #expect(TaskCatalog.deciderTasks.count == 6)
         #expect(TaskCatalog.allTasks().count == 121)
