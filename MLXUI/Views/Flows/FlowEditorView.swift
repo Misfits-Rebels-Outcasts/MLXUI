@@ -215,7 +215,6 @@ struct FlowEditorView: View {
             ServedLoadConfirmSheet(message: session.servedLoadSentence ?? "") { session.answerServedLoad(loadAnyway: $0) }
         }
         // Editing invalidates run results; preflight follows the document.
-        .onAppear { EditorLog.installMouseTrail() }
         .onChange(of: model.document) { _, _ in
             if model.takeRunClickOwnership(of: model.document) {
                 EditorLog.step("document changed by the Run click's own commit -> the run is left alone")
