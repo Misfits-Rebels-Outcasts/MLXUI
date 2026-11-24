@@ -88,7 +88,7 @@ struct PrivacyFilterWorkflowWiringTests {
         #expect(desc.refName == "engines.redact.redact")
         #expect(TaskFamilies.family(of: "Redact") == "Language models")
         #expect(CatParser.taskNames.contains("Redact"), "the parser's single-word list must know it")
-        #expect(TaskCatalog.allTasks().count == 113)
+        #expect(TaskCatalog.allTasks().count == 121)   // main added 120 before Redact (ER-7..ER-11); +1
     }
 
     @Test func table1_theRedactTaskIsAvailableAndDefaultsToThisModel() throws {
