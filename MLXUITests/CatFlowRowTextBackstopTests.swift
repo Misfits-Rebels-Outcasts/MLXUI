@@ -243,4 +243,21 @@ struct CatFlowRowTextBackstopTests {
         root.addSubview(scroll)
         #expect(PlainCatText.textViews(in: root).contains { $0 === inner })
     }
+
+    // MARK: - R8: typographic quotes are straightened in the commit path (Raw settings and setting values only)
+
+    @Test func typographicQuotesAreStraightenedAndOnlyThose() {
+        #expect(TypographicQuotes.straightened("only=\u{201C}person\u{201D}") == "only=\"person\"")
+        #expect(TypographicQuotes.straightened("a=\u{201E}x\u{201F} b=\u{2018}y\u{2019}") == "a=\"x\" b='y'")
+        #expect(TypographicQuotes.straightened("already=\"straight\" 'ok'") == "already=\"straight\" 'ok'")
+        #expect(TypographicQuotes.straightened("café — naïve") == "café — naïve")   // nothing else is touched
+    }
+
+    @Test func aCurlyDraftIsCommittedAsStraightText() throws {
+        let r = row("Redact", model: "Privacy Filter")
+        let model = try editor([r])
+        model.rawSettingsDraft = (r.id, "only=\u{201C}person,email\u{201D}")   // what the text view stored before R8
+        #expect(model.commitRawSettingsDraft() == nil)                         // no longer refused
+        #expect(model.row(withID: r.id)?.settings == "only=\"person,email\"")
+    }
 }

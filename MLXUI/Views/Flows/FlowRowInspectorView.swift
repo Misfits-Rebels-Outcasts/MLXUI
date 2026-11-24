@@ -753,7 +753,7 @@ struct FlowRowInspectorView: View {
                         // the key, so select-all-and-retype would make the field vanish
                         // mid-edit.
                         get: { settings.value(for: key) ?? "" },
-                        set: { model.setSetting(key: key, value: $0, for: rowID) }
+                        set: { model.setSetting(key: key, value: TypographicQuotes.straightened($0), for: rowID) }   // R8
                     ), axis: .vertical)
                     .plainCatTextInput()   // R3-FIX-1: no smart quotes/dashes in .cat text
                     .lineLimit(1...4)
@@ -762,7 +762,7 @@ struct FlowRowInspectorView: View {
                 } else {
                     TextField("value", text: Binding(
                         get: { settings.value(for: key) ?? "" },
-                        set: { model.setSetting(key: key, value: $0, for: rowID) }
+                        set: { model.setSetting(key: key, value: TypographicQuotes.straightened($0), for: rowID) }   // R8
                     ))
                     .plainCatTextInput()   // R3-FIX-1: no smart quotes/dashes in .cat text
                     .textFieldStyle(.roundedBorder)
@@ -1331,7 +1331,7 @@ struct FlowRowInspectorView: View {
             VStack(alignment: .leading, spacing: 4) {
                 TextEditor(text: Binding(
                     get: { rowTextDraft ?? row.settings ?? "" },
-                    set: { model.rawSettingsDraft = (rowID, $0) }
+                    set: { model.rawSettingsDraft = (rowID, TypographicQuotes.straightened($0)) }   // R8
                 ))
                 .font(.caption.monospaced())
                 .plainCatTextInput()   // R3-FIX-1: no smart quotes/dashes in .cat text

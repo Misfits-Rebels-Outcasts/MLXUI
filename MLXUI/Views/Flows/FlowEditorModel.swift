@@ -1051,7 +1051,7 @@ final class FlowEditorModel {
             return nil
         }
         let before = document
-        if let refusal = setRowText(draft.text, for: draft.rowID) {
+        if let refusal = setRowText(TypographicQuotes.straightened(draft.text), for: draft.rowID) {   // R8: whatever got past the text view
             EditorLog.step("commitRawSettingsDraft refused")
             rawSettingsRefusal = (draft.rowID, refusal)
             return refusal
