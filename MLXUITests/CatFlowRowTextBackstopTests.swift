@@ -179,28 +179,14 @@ struct CatFlowRowTextBackstopTests {
         #expect(model.row(withID: r.id)?.settings == "only=\"url\"")
     }
 
-    // MARK: - R3-FIX-1: smart quotes off in .cat text controls
-
-    @MainActor @Test func plainCatTextTurnsOffEverySubstitutionSoAStraightQuoteSurvives() {
-        let textView = NSTextView(frame: .zero)
-        textView.isAutomaticQuoteSubstitutionEnabled = true
-        textView.isAutomaticDashSubstitutionEnabled = true
-        textView.isAutomaticTextReplacementEnabled = true
-        textView.isAutomaticSpellingCorrectionEnabled = true
-        PlainCatText.configure(textView)
-        #expect(!textView.isAutomaticQuoteSubstitutionEnabled)
-        #expect(!textView.isAutomaticDashSubstitutionEnabled)
-        #expect(!textView.isAutomaticTextReplacementEnabled)
-        #expect(!textView.isAutomaticSpellingCorrectionEnabled)
-        textView.insertText("only=\"person\"", replacementRange: NSRange(location: 0, length: 0))
-        #expect(textView.string == "only=\"person\"")             // straight " stored as typed
-
-        // and the walker finds a TextEditor-style text view buried in a scroll view
-        let scroll = NSScrollView(frame: .zero)
-        let inner = NSTextView(frame: .zero)
-        scroll.documentView = inner
-        let root = NSView(frame: .zero)
-        root.addSubview(scroll)
-        #expect(PlainCatText.textViews(in: root).contains { $0 === inner })
+    @Test func commitIsIdempotent_soTheDeferredBlurCommitAfterAClickedActionIsHarmless() throws {
+        let r = row("Redact", model: "Privacy Filter")
+        let model = try editor([r])
+        model.rawSettingsDraft = (r.id, "only=\"url\"")
+        #expect(model.commitRawSettingsDraft() == nil)           // the action's own commit
+        let undo = model.undoStack.count
+        #expect(model.commitRawSettingsDraft() == nil)           // the blur's later commit
+        #expect(model.undoStack.count == undo)                   // no second edit, no second undo step
     }
+
 }

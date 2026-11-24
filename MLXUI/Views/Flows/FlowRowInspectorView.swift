@@ -1333,7 +1333,7 @@ struct FlowRowInspectorView: View {
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
                 .focused($rowTextFocused)
                 .onChange(of: rowTextFocused) { _, isFocused in
-                    if !isFocused { commitRowText(row) }
+                    if !isFocused { commitRowTextAfterMouseUp() }
                 .plainCatTextInput()   // R3-FIX-1: no smart quotes/dashes in .cat text
                 }
                 // §7 copy, verbatim.
@@ -1365,6 +1365,23 @@ struct FlowRowInspectorView: View {
     @ViewBuilder
     private func decisionsSection(_ row: Row) -> some View {
         let edges = model.deciderEdges(for: rowID)
+    /// R3-FIX-2 (2026-11-24): losing focus is caused by the very click that landed on Run / Save / another row. Committing the draft
+    /// *during* that click changes the document, which re-evaluates the toolbar (Run ↔ Install, enabled ↔ disabled) between
+    /// mouse-down and mouse-up, so the first click only committed and the action needed a second. The blur commit therefore waits
+    /// for the mouse button to come up — by then the click's own action has run (Run, Save and a row change each commit the draft
+    /// themselves first, so this later commit finds nothing left to do).
+    private func commitRowTextAfterMouseUp() {
+        Task { @MainActor in
+            var waited = 0
+            while NSEvent.pressedMouseButtons != 0, waited < 100 {   // ≤ 5 s, in case a button is held
+                try? await Task.sleep(for: .milliseconds(50))
+                waited += 1
+            }
+            try? await Task.sleep(for: .milliseconds(60))            // let the click's action fire first
+            model.commitRawSettingsDraft()
+        }
+    }
+
         if !edges.isEmpty || isDecider(row) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Decisions")
