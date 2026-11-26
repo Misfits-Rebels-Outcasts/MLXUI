@@ -30,7 +30,7 @@ Reference output of the **Python** `mlx-audio` forced aligner for the three clip
 | Reference commit | [`a7ef98604cfd752e9e5c9011bcee8ec8c67228be`](https://github.com/Blaizzy/mlx-audio/commit/a7ef98604cfd752e9e5c9011bcee8ec8c67228be) (upstream tag `v0.4.4`). The PyPI wheel ships no VCS metadata (`direct_url.json` absent, `INSTALLER` is `pip`), so the commit was established by sha256-matching every installed reference file against that tag; `golden-ForcedAligner.json` also pins those hashes. |
 | Reference sources sha256 | `mlx_audio/stt/models/qwen3_asr/qwen3_forced_aligner.py` = `0656ef055e14526cd67673db2246c2579bdffe80da7a1c0b139133858ff05b22` |
 | Checkpoint's own README | says the weights were converted with mlx-audio **0.3.1** from `Qwen/Qwen3-ForcedAligner-0.6B` |
-| Environment | Python 3.13.3, MLX 0.31.2, transformers 5.12.0, numpy 2.2.6, Darwin arm64 |
+| Environment | Python 3.13.3, MLX 0.32.5, transformers 5.24.1, numpy 2.5.5, Darwin arm64 |
 
 ## Clips
 
