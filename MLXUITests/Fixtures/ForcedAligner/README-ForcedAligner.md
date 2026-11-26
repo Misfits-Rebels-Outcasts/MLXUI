@@ -30,7 +30,7 @@ Reference output of the **Python** `mlx-audio` forced aligner for the three clip
 | Reference commit | [`a7ef98604cfd752e9e5c9011bcee8ec8c67228be`](https://github.com/Blaizzy/mlx-audio/commit/a7ef98604cfd752e9e5c9011bcee8ec8c67228be) (upstream tag `v0.4.4`). The PyPI wheel ships no VCS metadata (`direct_url.json` absent, `INSTALLER` is `pip`), so the commit was established by sha256-matching every installed reference file against that tag; `golden-ForcedAligner.json` also pins those hashes. |
 | Reference sources sha256 | `mlx_audio/stt/models/qwen3_asr/qwen3_forced_aligner.py` = `0656ef055e14526cd67673db2246c2579bdffe80da7a1c0b139133858ff05b22` |
 | Checkpoint's own README | says the weights were converted with mlx-audio **0.3.1** from `Qwen/Qwen3-ForcedAligner-0.6B` |
-| Environment | Python 3.13.3, MLX 0.32.5, transformers 5.24.1, numpy 2.5.5, Darwin arm64 |
+| Environment | Python 3.13.3, MLX 0.32.5, transformers 5.24.1, numpy 2.5.5, nagisa 0.3.2, Darwin arm64 |
 
 ## Clips
 
@@ -38,7 +38,7 @@ Reference output of the **Python** `mlx-audio` forced aligner for the three clip
 |---|---|---|---|---|
 | `align-en.wav` | `en` | Samantha | The quick brown fox jumps over the lazy dog. | 9 |
 | `align-zh.wav` | `zh` | Tingting | 今天天气很好，我们去公园散步。 | 13 |
-| `align-ja.wav` | `ja` | Kyoko | こんにちは、世界。 | 3 |
+| `align-ja.wav` | `ja` | Kyoko | こんにちは、世界。 | 2 |
 
 The WAVs are committed because the folder stays under 2 MB; the goldens are therefore tied to the committed bytes (`fileSha256` in `golden-ForcedAligner.json`). The exact `say` commands are:
 
@@ -60,6 +60,8 @@ Add `--force-audio` to overwrite the committed WAVs with fresh `say` output (thi
 
 - Times are **seconds**, in transcript order, rounded to three decimals by the reference itself. The reference does not clip times to the audio duration; the engine's contract (issue decision 4) does.
 - One unit is one word for space-separated languages and one CJK character for Chinese, in both the Python and Swift splitter. Punctuation is dropped by the splitter, so `items` never contains it. Japanese differs -- see the next bullet.
-- **Japanese is aligned with `language="ja"`, not `"Japanese"`.** The pinned Swift runner has no Japanese tokenizer and falls back to whitespace splitting (`Qwen3ForcedAligner.swift` @ `5c4c12b`, `encodeTimestamp`), so `こんにちは、世界。` becomes `["こんにちは", "世", "界"]`. Python's `"Japanese"` path uses nagisa and would give `["こんにちは", "世界"]`, which the parity test could not match. Python's `"Japanese"` branch is only entered for that exact spelling, so `"ja"` reproduces the Swift units.
+- **Japanese is aligned with `language="Japanese"`, the name the Swift engine passes, and the two runners split it differently.** Python takes its nagisa path and times `こんにちは、世界。` as `["こんにちは", "世界"]`. The pinned Swift runner has no Japanese tokenizer (`Qwen3ForcedAligner.swift` @ `5c4c12b`, `encodeTimestamp`: every language but Chinese goes to `tokenizeSpaceLang`) and gives `["こんにちは", "世", "界"]`. In the parity test only, for Japanese only, consecutive Swift units whose text exactly makes one reference unit are joined before the ±80 ms comparison; a join that does not line up fails. The engine and the app keep the library's split (issue #13 decision 4), and `ForcedAlignerEngineTests` pins it. The difference belongs in the same upstream mlx-audio-swift report as the Chinese drift (owner ruling 2).
+  - Owner ruling 1 (Boo, 2026-11-27): "Accept it only if it matches the language name the Swift engine passes. Regenerate the Japanese golden with the library's full name for Japanese. If the units and times are identical, keep it and note that in the fixture README. If they differ, the golden uses the same name Swift passes."
+  - Owner ruling 8 (Boo, 2026-11-27): "Option A. Use the 'Japanese' golden. In the parity test only, for Japanese only, join consecutive Swift units whose concatenated text exactly equals one reference unit, then apply ±80 ms to the joined span. If the join doesn't line up exactly, the test fails. The engine and the app's output stay as the library splits them (issue #13 decision 4: don't re-split). Add a test that pins Swift's current Japanese units (こんにちは, 世, 界), so a future upstream splitter shows up as a deliberate change. Note the difference in the fixture README, and add it to the same upstream mlx-audio-swift report as the Chinese drift (ruling 2). Chinese stays as ruling 2: exact units, ±160 ms."
 - Audio is read with the stdlib `wave` module and passed as a float32 array. `python3 -I` hides the user site-packages, so the package's miniaudio/cffi WAV loader raises `ModuleNotFoundError: _cffi_backend` if used; passing samples avoids it.
 - The checkpoint's model card example (both CLI and Python) omits the transcript; for the aligner the transcript is mandatory, so that example fails. Always pass `--text` / `text=`.

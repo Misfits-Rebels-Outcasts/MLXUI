@@ -1,7 +1,7 @@
 {
   "hfRepoId": "mlx-community/Qwen3-ForcedAligner-0.6B-8bit",
   "hfRevision": "0e1a68e91d815300c7c9754b2a7639378b23db15",
-  "units": "reference splitter units in transcript order: whitespace word for space-separated languages, one CJK character for Chinese, space-split words for Japanese (mirrors mlx-audio-swift 5c4c12b)",
+  "units": "reference splitter units in transcript order: whitespace word for space-separated languages, one CJK character for Chinese, nagisa words for Japanese (the Swift runner, mlx-audio-swift 5c4c12b, splits kana runs and single kanji; the parity test joins Swift units for Japanese only, owner ruling 8, 2026-11-27)",
   "mlxAudioVersion": "0.4.4",
   "mlxAudioTag": "v0.4.4",
   "mlxAudioCommit": "a7ef98604cfd752e9e5c9011bcee8ec8c67228be",
@@ -19,6 +19,7 @@
   "mlxVersion": "0.32.5",
   "transformersVersion": "5.24.1",
   "numpyVersion": "2.5.5",
+  "nagisaVersion": "0.3.2",
   "platform": "Darwin arm64",
   "clips": [
     {
@@ -162,7 +163,7 @@
     {
       "file": "align-ja.wav",
       "language": "ja",
-      "referenceLanguage": "ja",
+      "referenceLanguage": "Japanese",
       "voice": "Kyoko",
       "sayRate": 180,
       "text": "こんにちは、世界。",
@@ -177,13 +178,8 @@
           "end": 0.8
         },
         {
-          "text": "世",
+          "text": "世界",
           "start": 0.96,
-          "end": 1.12
-        },
-        {
-          "text": "界",
-          "start": 1.12,
           "end": 1.44
         }
       ]

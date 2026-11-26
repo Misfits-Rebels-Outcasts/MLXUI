@@ -14,7 +14,8 @@ import MLXAudioSTT
 /// - the checkpoint loads through `ForcedAlignerEngine`'s own path and aligns the committed English clip;
 /// - the install side effect (trap 1): the library writes `tokenizer.json` into the folder on first load;
 /// - FA-4 parity: the same units in the same order as the Python `mlx-audio` reference, every start and end within
-///   **±80 ms** (one class) of it, on the three committed `say` clips (English, Chinese, Japanese);
+///   **±80 ms** (one class) of it, on the three committed `say` clips (English, Chinese at ±160 ms, Japanese with the
+///   Swift units joined to the reference's words first, owner ruling 8);
 /// - decision 4 on every clip: times clipped to the duration and monotonic;
 /// - determinism (two runs, identical result) and the main-actor probe (trap 4).
 nonisolated enum ForcedAlignerRealLoad {
@@ -127,6 +128,11 @@ struct ForcedAlignerRealLoadTests {
 
     /// FA-4: the same units in the same order, and every start and end within ±80 ms (one 80 ms class) of the Python
     /// `mlx-audio` reference. Prints the per-clip maximum difference for the PR.
+    ///
+    /// Japanese differs in its units (Python: nagisa words; Swift: kana runs and single kanji). Owner ruling 8 (Boo,
+    /// 2026-11-27): "In the parity test only, for Japanese only, join consecutive Swift units whose concatenated text
+    /// exactly equals one reference unit, then apply ±80 ms to the joined span. If the join doesn't line up exactly, the
+    /// test fails." The whole ruling is on `ForcedAlignerUnitJoin`.
     @Test(.enabled(if: ForcedAlignerRealLoad.enabled))
     func parityWithThePythonReference() async throws {
         let copy = try ForcedAlignerRealLoad.workingCopy()
@@ -146,17 +152,28 @@ struct ForcedAlignerRealLoadTests {
             let samples = try ForcedAlignerRealLoad.samples(for: clip)
             let units = try await ForcedAlignerEngine.align(samples, transcript: clip.text, language: clip.language,
                                                             modelDirectory: copy.url)
-            #expect(units.map(\.text) == clip.items.map(\.text),
-                    "\(clip.file): units \(units.map(\.text)) vs reference \(clip.items.map(\.text))")
-            guard units.count == clip.items.count else { continue }
+            // What is compared with the reference. Only Japanese is joined; the engine's own units are not changed.
+            var compared = units
+            if clip.language == "ja" {
+                #expect(units.map(\.text) == ["こんにちは", "世", "界"], "\(clip.file): the library's Japanese split changed")
+                do {
+                    compared = try ForcedAlignerUnitJoin.join(units, toMatch: clip.items.map(\.text))
+                } catch {
+                    Issue.record("\(clip.file): \(error)")
+                    continue
+                }
+            }
+            #expect(compared.map(\.text) == clip.items.map(\.text),
+                    "\(clip.file): units \(compared.map(\.text)) vs reference \(clip.items.map(\.text))")
+            guard compared.count == clip.items.count else { continue }
             var maxStartDiff = 0.0
             var maxEndDiff = 0.0
-            for (unit, reference) in zip(units, clip.items) {
+            for (unit, reference) in zip(compared, clip.items) {
                 maxStartDiff = max(maxStartDiff, abs(unit.start - reference.start))
                 maxEndDiff = max(maxEndDiff, abs(unit.end - reference.end))
             }
             print(String(format: "FAPARITY clip=%@ units=%d maxStartDiff=%.3f maxEndDiff=%.3f tolerance=%.3f",
-                         clip.file, units.count, maxStartDiff, maxEndDiff, clipTolerance))
+                         clip.file, compared.count, maxStartDiff, maxEndDiff, clipTolerance))
             #expect(maxStartDiff <= clipTolerance, "\(clip.file): start differs by \(maxStartDiff) s")
             #expect(maxEndDiff <= clipTolerance, "\(clip.file): end differs by \(maxEndDiff) s")
             // Decision 4 on the real clip: clipped to the recording, monotonic, end >= start.

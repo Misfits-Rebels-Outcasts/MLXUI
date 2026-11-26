@@ -166,6 +166,15 @@ struct ForcedAlignerEngineTests {
         #expect(japanese.0 == ["こんにちは", "世", "界"])
     }
 
+    /// The committed Japanese clip's units as the pinned library splits them today. Owner ruling 8 (Boo, 2026-11-27):
+    /// "The engine and the app's output stay as the library splits them (issue #13 decision 4: don't re-split). Add a test
+    /// that pins Swift's current Japanese units (こんにちは, 世, 界), so a future upstream splitter shows up as a deliberate
+    /// change." A failure here is an upstream splitter change: revisit the parity test's Japanese join with it.
+    @Test func theLibrarySplitsTheJapaneseClipIntoThreeUnits() {
+        let japanese = ForceAlignProcessor().encodeTimestamp(text: "こんにちは、世界。", language: "Japanese")
+        #expect(japanese.0 == ["こんにちは", "世", "界"])
+    }
+
     @Test func theLibraryLanguageNameSelectsTheChineseSplitter() {
         let processor = ForceAlignProcessor()
         let asChinese = processor.encodeTimestamp(text: "你好", language: ForcedAlignerEngine.libraryLanguageName(for: "zh") ?? "")

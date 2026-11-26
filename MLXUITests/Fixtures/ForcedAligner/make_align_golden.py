@@ -41,21 +41,33 @@ UNITS
   (`:23-34`), so punctuation never appears in `items`, and `result.text` joins
   units with spaces.
 
-JAPANESE -- WHY language="ja" AND NOT language="Japanese"
-  The pinned Swift runner (mlx-audio-swift @ 5c4c12b,
-  Sources/MLXAudioSTT/Models/Qwen3ASR/Qwen3ForcedAligner.swift:292-305) has no
-  Japanese tokenizer ("JP and Ko require external tokenizers not available in
-  Swift") and falls back to whitespace splitting, so こんにちは、世界。 becomes
-  ["こんにちは", "世", "界"]. Python's language="Japanese" path uses nagisa and
-  would produce ["こんにちは", "世界"] -- different units, so the FA-4 parity
-  test ("same units in the same order") could not pass. Python only takes the
-  nagisa path when `language.lower() == "japanese"`; any other spelling falls
-  through to the space-separated branch (`:256-266`). Passing "ja" therefore
-  makes the Python reference produce exactly the Swift units while still
-  carrying the right language through golden-ForcedAligner.json. This is deliberate and is
-  recorded in the fixture README. If the Swift runner ever grows a Japanese
-  tokenizer, regenerate with `--native-japanese` (not implemented here) and fix
-  the parity expectation at the same time.
+JAPANESE -- language="Japanese", THE NAME THE SWIFT ENGINE PASSES
+  Owner ruling 1 (Boo, 2026-11-27): "Accept it only if it matches the language
+  name the Swift engine passes. Regenerate the Japanese golden with the
+  library's full name for Japanese. If the units and times are identical, keep
+  it and note that in the fixture README. If they differ, the golden uses the
+  same name Swift passes."
+
+  `ForcedAlignerEngine.languageNames["ja"]` is "Japanese", and the two spellings
+  give different units, so the golden uses "Japanese". Python then takes its
+  nagisa path (`:256-266`, nagisa must be installed) and times こんにちは、世界。
+  as nagisa words: ["こんにちは", "世界"]. The pinned Swift runner
+  (mlx-audio-swift @ 5c4c12b,
+  Sources/MLXAudioSTT/Models/Qwen3ASR/Qwen3ForcedAligner.swift,
+  `encodeTimestamp`) has no Japanese tokenizer: every language but "chinese"
+  goes to `tokenizeSpaceLang`, which keeps a kana run whole and makes each kanji
+  its own unit: ["こんにちは", "世", "界"].
+
+  Owner ruling 8 (Boo, 2026-11-27): "Option A. Use the 'Japanese' golden. In the
+  parity test only, for Japanese only, join consecutive Swift units whose
+  concatenated text exactly equals one reference unit, then apply ±80 ms to the
+  joined span. If the join doesn't line up exactly, the test fails. The engine
+  and the app's output stay as the library splits them (issue #13 decision 4:
+  don't re-split). Add a test that pins Swift's current Japanese units
+  (こんにちは, 世, 界), so a future upstream splitter shows up as a deliberate
+  change. Note the difference in the fixture README, and add it to the same
+  upstream mlx-audio-swift report as the Chinese drift (ruling 2). Chinese stays
+  as ruling 2: exact units, ±160 ms."
 
 PROVENANCE
   `mlx-audio` 0.4.4 is installed from a wheel and ships no VCS metadata (no
@@ -143,9 +155,9 @@ CLIPS = [
     {
         "file": "align-ja.wav",
         "language": "ja",
-        # "ja", not "Japanese": see JAPANESE in the module docstring. Mirrors
-        # the pinned Swift runner's splitter for parity.
-        "referenceLanguage": "ja",
+        # The name the Swift engine passes (owner ruling 1); see JAPANESE in the
+        # module docstring.
+        "referenceLanguage": "Japanese",
         "voice": "Kyoko",
         "rate": 180,
         "text": "こんにちは、世界。",
@@ -263,6 +275,7 @@ def reference_provenance() -> dict:
         "mlxVersion": package_version("mlx"),
         "transformersVersion": package_version("transformers"),
         "numpyVersion": package_version("numpy"),
+        "nagisaVersion": package_version("nagisa"),  # the Japanese word splitter
         "platform": f"{platform.system()} {platform.machine()}",
     }
 
@@ -466,7 +479,8 @@ def write_readme(out_dir: Path, golden: dict) -> None:
     add(
         f"| Environment | Python {golden['pythonVersion']}, MLX "
         f"{golden['mlxVersion']}, transformers {golden['transformersVersion']}, "
-        f"numpy {golden['numpyVersion']}, {golden['platform']} |"
+        f"numpy {golden['numpyVersion']}, nagisa {golden['nagisaVersion']}, "
+        f"{golden['platform']} |"
     )
     add("")
     add("## Clips")
@@ -508,14 +522,35 @@ def write_readme(out_dir: Path, golden: dict) -> None:
         "character for Chinese, in both the Python and Swift splitter. "
         "Punctuation is dropped by the splitter, so `items` never contains it. "
         "Japanese differs -- see the next bullet.")
-    add("- **Japanese is aligned with `language=\"ja\"`, not `\"Japanese\"`.** "
-        "The pinned Swift runner has no Japanese tokenizer and falls back to "
-        "whitespace splitting (`Qwen3ForcedAligner.swift` @ `5c4c12b`, "
-        "`encodeTimestamp`), so `こんにちは、世界。` becomes "
-        "`[\"こんにちは\", \"世\", \"界\"]`. Python's `\"Japanese\"` path uses "
-        "nagisa and would give `[\"こんにちは\", \"世界\"]`, which the parity "
-        "test could not match. Python's `\"Japanese\"` branch is only entered "
-        "for that exact spelling, so `\"ja\"` reproduces the Swift units.")
+    add("- **Japanese is aligned with `language=\"Japanese\"`, the name the Swift "
+        "engine passes, and the two runners split it differently.** Python takes "
+        "its nagisa path and times `こんにちは、世界。` as "
+        "`[\"こんにちは\", \"世界\"]`. The pinned Swift runner has no Japanese "
+        "tokenizer (`Qwen3ForcedAligner.swift` @ `5c4c12b`, `encodeTimestamp`: "
+        "every language but Chinese goes to `tokenizeSpaceLang`) and gives "
+        "`[\"こんにちは\", \"世\", \"界\"]`. In the parity test only, for "
+        "Japanese only, consecutive Swift units whose text exactly makes one "
+        "reference unit are joined before the ±80 ms comparison; a join that does "
+        "not line up fails. The engine and the app keep the library's split (issue "
+        "#13 decision 4), and `ForcedAlignerEngineTests` pins it. The difference "
+        "belongs in the same upstream mlx-audio-swift report as the Chinese drift "
+        "(owner ruling 2).")
+    add("  - Owner ruling 1 (Boo, 2026-11-27): \"Accept it only if it matches the "
+        "language name the Swift engine passes. Regenerate the Japanese golden with "
+        "the library's full name for Japanese. If the units and times are "
+        "identical, keep it and note that in the fixture README. If they differ, "
+        "the golden uses the same name Swift passes.\"")
+    add("  - Owner ruling 8 (Boo, 2026-11-27): \"Option A. Use the 'Japanese' "
+        "golden. In the parity test only, for Japanese only, join consecutive Swift "
+        "units whose concatenated text exactly equals one reference unit, then "
+        "apply ±80 ms to the joined span. If the join doesn't line up exactly, the "
+        "test fails. The engine and the app's output stay as the library splits "
+        "them (issue #13 decision 4: don't re-split). Add a test that pins Swift's "
+        "current Japanese units (こんにちは, 世, 界), so a future upstream splitter "
+        "shows up as a deliberate change. Note the difference in the fixture "
+        "README, and add it to the same upstream mlx-audio-swift report as the "
+        "Chinese drift (ruling 2). Chinese stays as ruling 2: exact units, "
+        "±160 ms.\"")
     add("- Audio is read with the stdlib `wave` module and passed as a float32 "
         "array. `python3 -I` hides the user site-packages, so the package's "
         "miniaudio/cffi WAV loader raises `ModuleNotFoundError: _cffi_backend` "
@@ -580,8 +615,10 @@ def main(argv: list[str] | None = None) -> int:
         "hfRevision": HF_REVISION,
         "units": (
             "reference splitter units in transcript order: whitespace word for "
-            "space-separated languages, one CJK character for Chinese, "
-            "space-split words for Japanese (mirrors mlx-audio-swift 5c4c12b)"
+            "space-separated languages, one CJK character for Chinese, nagisa "
+            "words for Japanese (the Swift runner, mlx-audio-swift 5c4c12b, "
+            "splits kana runs and single kanji; the parity test joins Swift units "
+            "for Japanese only, owner ruling 8, 2026-11-27)"
         ),
         **reference_provenance(),
         "clips": clips,
