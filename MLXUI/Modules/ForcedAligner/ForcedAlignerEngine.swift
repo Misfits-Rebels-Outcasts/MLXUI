@@ -141,10 +141,16 @@ enum ForcedAlignerEngine {
     /// The transcript as the library should receive it: no case, punctuation or number normalisation (trap 6), and only
     /// its whitespace **layout** normalised — surrounding whitespace trimmed and internal runs collapsed to one space.
     ///
-    /// The collapse is what trap 6's "apart from trimming surrounding whitespace" does not cover, and it is deliberate
-    /// (implementer's call, pending owner confirmation): the pinned library splits on the ASCII space alone
-    /// (`ForceAlignProcessor.tokenizeSpaceLang`), so a pasted `Hello\nworld` would otherwise reach it as one word and
-    /// merge two units. Collapsing keeps every word and character exactly as given.
+    /// The collapse goes beyond trap 6's "apart from trimming surrounding whitespace". Owner ruling 3 (Boo, 2026-11-27):
+    /// "Keep it only if a test shows the library's units are identical with and without it, for the English, Chinese and
+    /// Japanese clips. Otherwise remove it and pass the transcript as given, trimmed only (Trap 6)." They are identical
+    /// (`ForcedAlignerEngineTests.theWhitespaceCollapseLeavesTheClipUnitsUnchanged`), so it stays.
+    ///
+    /// What it is for: the pinned library splits on the ASCII space alone (`ForceAlignProcessor.tokenizeSpaceLang`),
+    /// while the Python reference splits on any whitespace (`text.split()`, `qwen3_forced_aligner.py:141`, mlx-audio
+    /// 0.4.4). Without the collapse a pasted `Hello\nworld` would reach the library as one word and merge two units.
+    /// Collapsing keeps every word and character exactly as given. The newline split is reported upstream:
+    /// https://github.com/Neywa-Labs/mlx-audio-swift/issues/422
     nonisolated static func libraryTranscript(_ transcript: String) -> String {
         transcript
             .trimmingCharacters(in: .whitespacesAndNewlines)

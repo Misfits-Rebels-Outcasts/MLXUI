@@ -137,9 +137,9 @@ struct ForcedAlignerEngineTests {
 
     // MARK: - The transcript (trap 6)
 
-    /// Trap 6: words, case, punctuation and numbers are never normalised. Only the whitespace layout is (implementer's
-    /// call, pending owner confirmation): the library splits on the ASCII space alone, so a pasted newline would merge
-    /// two words into one unit.
+    /// Trap 6: words, case, punctuation and numbers are never normalised. Only the whitespace layout is (owner ruling 3,
+    /// 2026-11-27, quoted on the next test): the library splits on the ASCII space alone, so a pasted newline would
+    /// merge two words into one unit.
     @Test func theTranscriptIsTrimmedAndItsWhitespaceLayoutNormalised() {
         #expect(ForcedAlignerEngine.libraryTranscript("  Hello,  World!  ") == "Hello, World!")
         #expect(ForcedAlignerEngine.libraryTranscript("\n\tThe quick brown fox.\n") == "The quick brown fox.")
@@ -148,6 +148,26 @@ struct ForcedAlignerEngineTests {
         #expect(ForcedAlignerEngine.libraryTranscript("Hello, WORLD! 42") == "Hello, WORLD! 42")
         // A whitespace-only transcript is empty after the trim — refused by the empty-transcript sentence.
         #expect(ForcedAlignerEngine.libraryTranscript("   \n\t  ").isEmpty)
+    }
+
+    /// Owner ruling 3 (Boo, 2026-11-27): "Keep it only if a test shows the library's units are identical with and without
+    /// it, for the English, Chinese and Japanese clips. Otherwise remove it and pass the transcript as given, trimmed only
+    /// (Trap 6)." Each committed clip's transcript goes through the pinned library's splitter as written and after
+    /// `libraryTranscript`; both give the Swift-side units (the golden's items, except Japanese, which the library splits
+    /// finer than the Python reference: owner ruling 8).
+    @Test func theWhitespaceCollapseLeavesTheClipUnitsUnchanged() throws {
+        let clips = try ForcedAlignerRealLoad.golden().clips
+        #expect(clips.map(\.language) == ["en", "zh", "ja"])
+        let processor = ForceAlignProcessor()
+        for clip in clips {
+            let name = try #require(ForcedAlignerEngine.libraryLanguageName(for: clip.language))
+            let asGiven = processor.encodeTimestamp(text: clip.text, language: name).0
+            let collapsed = processor.encodeTimestamp(text: ForcedAlignerEngine.libraryTranscript(clip.text),
+                                                      language: name).0
+            let expected = clip.language == "ja" ? ["こんにちは", "世", "界"] : clip.items.map(\.text)
+            #expect(asGiven == collapsed, "\(clip.file)")
+            #expect(collapsed == expected, "\(clip.file)")
+        }
     }
 
     /// The pinned library's own splitter (public `ForceAlignProcessor.encodeTimestamp` at 5c4c12b): words in
