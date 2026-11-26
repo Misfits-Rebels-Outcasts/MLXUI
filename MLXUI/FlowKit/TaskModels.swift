@@ -102,7 +102,7 @@ nonisolated enum TaskModels {
         // PF-9 (SPEC-Q252, owner ruling 2026-11-18): `Redact` is served by OpenAI Privacy Filter, the first `.redact`
         // catalog entry. `RealExecutor.runModel`'s `.redact` branch runs the registry stage for it.
         "Redact": .redact,
-        // FA-6 (issue #13 decision 8, SPEC-Q252; owner ruling 2026-11-19): the `Align` row is served by the `.align`
+        // FA-6 (issue #13 decision 8, SPEC-Q261; owner ruling 2026-11-19): the `Align` row is served by the `.align`
         // kind. Its refName is `engines.asr.align`, and `engines.asr.` is already on `servedRefNamePrefixes` — so that
         // opt-in allow-list does not change, and `isServedByExecutor("Align")` is true. The language entry and the
         // Python reference runtime's engine live in catflow-mlx, not in this PR.

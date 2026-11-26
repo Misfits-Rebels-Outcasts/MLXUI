@@ -547,11 +547,11 @@ nonisolated struct RealExecutor: FlowExecutor {
             return Asset(items: [try TableTool.tableItem(columns: IdentifySpeakersTable.columns, rows: rows, in: blobDirectory)])
         }
 
-        // FA-6 (GitHub issue #13 decision 8, SPEC-Q252; owner ruling 2026-11-19): the `Align` row — audio plus the known
+        // FA-6 (GitHub issue #13 decision 8, SPEC-Q261; owner ruling 2026-11-19): the `Align` row — audio plus the known
         // transcript in, a `text,start,end` time-coded table out. Its own branch, ahead of the generic tail: two inputs in
         // the order the row lists them (`Align (1,2)` = audio, then text), `lang=` the only setting, and the `.table`
         // output built here (a `.table` cannot travel through `Media`; the `Text to Table` / `Extract Structured` shape).
-        if desc.refName == "engines.asr.align" {
+        if desc.refName == "engines.asr.align" {  // SPEC-Q261
             return try await runAlign(modelEntry, row: row, inputs: inputs, path: "\(path)")
         }
 
@@ -695,7 +695,7 @@ nonisolated struct RealExecutor: FlowExecutor {
 
     // MARK: - Align (FA-6)
 
-    /// The `Align` row (issue #13 decision 8, SPEC-Q252): two inputs in the order the row lists them — an audio item
+    /// The `Align` row (issue #13 decision 8, SPEC-Q261): two inputs in the order the row lists them — an audio item
     /// first, the transcript text second — one `lang=` setting, then the aligner's `text,start,end` table.
     ///
     /// The result is a file-backed `.table` item in `TableTools.tableItem`'s shape (so `Query Table`, `Table to Text`

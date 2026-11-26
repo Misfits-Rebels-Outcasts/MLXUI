@@ -495,7 +495,7 @@ nonisolated enum CatalogBridge {
             candidates: ["openai/privacy-filter"],
             equivalence: .same,
             manifestFile: "openai-privacy-filter.json"),
-        // FA-6 (GitHub issue #13 decision 8, SPEC-Q252; owner ruling 2026-11-19) -- Qwen3 Aligner 0.6B, the `Align` row's
+        // FA-6 (GitHub issue #13 decision 8, SPEC-Q261; owner ruling 2026-11-19) -- Qwen3 Aligner 0.6B, the `Align` row's
         // only model. `.same`: the card's repo is the pinned repo (trap 7). No catflow-mlx manifest exists for it, so
         // `qwen3-forcedaligner-0.6b-8bit.json` is MLXUI-authored (see its "notes"). Appended **last**, and it is the
         // pool's only name, so it is the `Align` default; the model is in no other pool.

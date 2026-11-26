@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import MLXUI
 
-/// FA-6 for issue #13 (decision 8, SPEC-Q252): `Align` in AI Workflows — the four tables (catalog entry, kinds + served
+/// FA-6 for issue #13 (decision 8, SPEC-Q261): `Align` in AI Workflows — the four tables (catalog entry, kinds + served
 /// prefix, the derived pool, the bridge), the MLXUI-authored curated manifest, the row grammar `(1,2)`, the `lang=`
 /// setting (refused by name when wrong), the two-input contract, and the `text,start,end` table the executor writes.
 /// No weights: `makeModelStage` is injected (the `TranslateGemmaWorkflowWiringTests` shape).

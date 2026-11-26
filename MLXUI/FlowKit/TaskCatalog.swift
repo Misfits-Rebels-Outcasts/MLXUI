@@ -266,11 +266,12 @@ nonisolated enum TaskCatalog {
         TaskDescriptor("Append Row", t(.table), t(.table), .instant, .tool, "tools.entity.append_row"),
         TaskDescriptor("Merge Record", .tupleOf([.table, .table]), t(.table), .instant, .tool, "tools.entity.merge_record"),
 
-        // -- FA-6 (GitHub issue #13 decision 8, SPEC-Q252; owner ruling 2026-11-19): audio + a known transcript in,
+        // -- FA-6 (GitHub issue #13 decision 8, SPEC-Q261; owner ruling 2026-11-19): audio + a known transcript in,
         //    a time-coded table out. `engines.asr.` is already on `TaskModels.servedRefNamePrefixes`, so that opt-in
         //    allow-list does not change; the family entry lives in `TaskFamilies` ("Audio, image, video"). The
-        //    Python reference's language entry and engine are filed in catflow-mlx, not here. --
-        TaskDescriptor("Align", .tupleOf([.audio, .text]), t(.table), .model, .engine, "engines.asr.align"),
+        //    Python reference's language entry and engine are filed in catflow-mlx, not here. The spec question's number
+        //    is owner ruling 9 (Boo, 2026-11-27): "Use SPEC-Q261 for Align." --
+        TaskDescriptor("Align", .tupleOf([.audio, .text]), t(.table), .model, .engine, "engines.asr.align"),  // SPEC-Q261
     ]
 
     private static let _deciders: [TaskDescriptor] = [

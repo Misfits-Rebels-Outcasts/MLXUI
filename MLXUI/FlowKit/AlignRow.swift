@@ -1,6 +1,6 @@
 import Foundation
 
-/// FA-6 (GitHub issue #13 decision 8, SPEC-Q252; owner ruling 2026-11-19): the `Align` row's settings.
+/// FA-6 (GitHub issue #13 decision 8, SPEC-Q261; owner ruling 2026-11-19): the `Align` row's settings.
 ///
 /// One setting, `lang=` (the codes `Transcribe` already uses, mapped by `ForcedAlignerEngine` to the library's language
 /// names). A missing `lang=` means English, the same as `Transcribe` today. **Any other key, a bare token, or an
