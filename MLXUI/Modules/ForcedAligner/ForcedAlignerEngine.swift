@@ -50,10 +50,14 @@ nonisolated struct AlignedUnit: Sendable, Equatable, Hashable, Identifiable {
 /// - The aligner's `preprocessAudio` calls `MLXAudioCore.computeMelSpectrogram` **without** `melScale: .slaney` and
 ///   `hannPeriodic: true`, which the ASR path (`Qwen3ASR.swift:1056-1064`) passes and which is what the checkpoint's
 ///   WhisperFeatureExtractor applies. Upstream's fix (#247 / bf14ae0c) missed the aligner. The module cannot patch it
-///   (decision 2: report, never patch the pinned package); it is why FA-4's goldens are compared with a tolerance.
+///   (decision 2: report, never patch the pinned package). It is why the parity test gives Chinese its own tolerance.
+///   Owner ruling 2 (Boo, 2026-11-27): "Keep ±80 ms as the contract for English and Japanese. Chinese gets its own
+///   pinned tolerance of ±160 ms, with a comment that names the mel-frontend difference."
 /// - The splitter drops punctuation and whitespace and splits Japanese kana runs/Korean words with the space path
 ///   (Python's reference tokenises them); `ForcedAlignerEngine.libraryTranscript` normalises whitespace so a pasted
 ///   newline cannot merge two English words.
+/// - The mel difference, the Japanese/Korean splitter and the newline split are reported upstream:
+///   https://github.com/Neywa-Labs/mlx-audio-swift/issues/422
 /// - `peakMemoryUsage` is the process-wide `Memory.peakMemory`, not a per-run figure; FA-7's footprint test resets it.
 enum ForcedAlignerEngine {
     /// The model's input rate. The stage resamples; never pass the decoded rate through (trap 5).

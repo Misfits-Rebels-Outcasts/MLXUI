@@ -69,6 +69,9 @@ JAPANESE -- language="Japanese", THE NAME THE SWIFT ENGINE PASSES
   upstream mlx-audio-swift report as the Chinese drift (ruling 2). Chinese stays
   as ruling 2: exact units, ±160 ms."
 
+  That upstream report (the mel drift, the Japanese/Korean splitter and the
+  newline split) is https://github.com/Neywa-Labs/mlx-audio-swift/issues/422.
+
 PROVENANCE
   `mlx-audio` 0.4.4 is installed from a wheel and ships no VCS metadata (no
   `direct_url.json`), so there is no commit to record. golden-ForcedAligner.json records the
@@ -532,9 +535,9 @@ def write_readme(out_dir: Path, golden: dict) -> None:
         "Japanese only, consecutive Swift units whose text exactly makes one "
         "reference unit are joined before the ±80 ms comparison; a join that does "
         "not line up fails. The engine and the app keep the library's split (issue "
-        "#13 decision 4), and `ForcedAlignerEngineTests` pins it. The difference "
-        "belongs in the same upstream mlx-audio-swift report as the Chinese drift "
-        "(owner ruling 2).")
+        "#13 decision 4), and `ForcedAlignerEngineTests` pins it. The difference is "
+        "reported upstream, with the Chinese drift (owner ruling 2), in "
+        "[mlx-audio-swift issue 422](https://github.com/Neywa-Labs/mlx-audio-swift/issues/422).")
     add("  - Owner ruling 1 (Boo, 2026-11-27): \"Accept it only if it matches the "
         "language name the Swift engine passes. Regenerate the Japanese golden with "
         "the library's full name for Japanese. If the units and times are "

@@ -40,6 +40,23 @@ nonisolated enum ForcedAlignerRealLoad {
 
     nonisolated static var goldenFile: URL { fixtureDirectory.appendingPathComponent("golden-ForcedAligner.json") }
 
+    // MARK: - The parity tolerances (owner ruling 2)
+
+    /// The contract, for English and Japanese: ±80 ms, one timestamp class. The epsilon covers float subtraction (a
+    /// 0.080 s gap lands at 0.08000000000000007).
+    nonisolated static let contractTolerance = ForcedAlignerEngine.timestampStepSeconds + 1e-6
+
+    /// Chinese only: ±160 ms, two classes. Owner ruling 2 (Boo, 2026-11-27): "Keep ±80 ms as the contract for English and
+    /// Japanese. Chinese gets its own pinned tolerance of ±160 ms, with a comment that names the mel-frontend difference.
+    /// The units must still match exactly. File the drift upstream on `mlx-audio-swift` with a reproduction. Don't patch
+    /// DerivedData, and don't widen the global tolerance."
+    ///
+    /// **The mel-frontend difference.** The aligner's `preprocessAudio` (`Qwen3ForcedAligner.swift:408-415` @ 5c4c12b)
+    /// calls `computeMelSpectrogram` without `melScale: .slaney` / `hannPeriodic: true`, which the ASR path passes
+    /// (`Qwen3ASR.swift:1056-1064`) and the checkpoint's WhisperFeatureExtractor applies. The upstream fix
+    /// #247 / bf14ae0c covered only ASR. Reported upstream: https://github.com/Neywa-Labs/mlx-audio-swift/issues/422
+    nonisolated static let chineseTolerance = 2 * ForcedAlignerEngine.timestampStepSeconds + 1e-6
+
     /// A model folder the test may write into (the tokenizer side effect). The pointed-at folder is cloned (an APFS clone
     /// on the same volume) into a fresh temp directory and any generated `tokenizer.json` is deleted from the copy, so the
     /// library's write is genuinely exercised. The source is never touched.
@@ -127,7 +144,8 @@ struct ForcedAlignerRealLoadTests {
     }
 
     /// FA-4: the same units in the same order, and every start and end within ±80 ms (one 80 ms class) of the Python
-    /// `mlx-audio` reference. Prints the per-clip maximum difference for the PR.
+    /// `mlx-audio` reference, or ±160 ms for Chinese (`chineseTolerance`, owner ruling 2). Prints the per-clip maximum
+    /// difference for the PR.
     ///
     /// Japanese differs in its units (Python: nagisa words; Swift: kana runs and single kanji). Owner ruling 8 (Boo,
     /// 2026-11-27): "In the parity test only, for Japanese only, join consecutive Swift units whose concatenated text
@@ -141,14 +159,11 @@ struct ForcedAlignerRealLoadTests {
         #expect(golden.hfRepoId == "mlx-community/Qwen3-ForcedAligner-0.6B-8bit")
         #expect(golden.hfRevision == "0e1a68e91d815300c7c9754b2a7639378b23db15")
         #expect(!golden.mlxAudioVersion.isEmpty)
-        // 80 ms, one class. The epsilon covers float subtraction (a 0.080 s gap lands at 0.08000000000000007).
-        let tolerance = ForcedAlignerEngine.timestampStepSeconds + 1e-6
         for clip in golden.clips {
-            // The pinned aligner's mel frontend differs from WhisperFeatureExtractor's Slaney/periodic one (see the engine
-            // comment and the issue comment): measured here, English and Japanese land inside one class and Chinese drifts
-            // by up to TWO (0.160 s). Until upstream fixes the aligner's preprocessAudio, the Chinese clip is pinned at two
-            // classes, honestly, rather than the tolerance being widened everywhere. Owner question on issue #13.
-            let clipTolerance = clip.language == "zh" ? 2 * ForcedAlignerEngine.timestampStepSeconds + 1e-6 : tolerance
+            // Measured 2026-11-27, maximum start / end difference: English 0.000 / 0.080 s, Chinese 0.080 / 0.160 s,
+            // Japanese (on the joined spans) 0.000 / 0.000 s. Only Chinese needs the second class (`chineseTolerance`).
+            let clipTolerance = clip.language == "zh" ? ForcedAlignerRealLoad.chineseTolerance
+                                                      : ForcedAlignerRealLoad.contractTolerance
             let samples = try ForcedAlignerRealLoad.samples(for: clip)
             let units = try await ForcedAlignerEngine.align(samples, transcript: clip.text, language: clip.language,
                                                             modelDirectory: copy.url)
