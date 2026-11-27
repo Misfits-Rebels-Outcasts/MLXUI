@@ -37,8 +37,6 @@ struct ForcedAlignerRunView: View {
     let handedStage: any PipelineStage
 
     @State private var model = AlignRunModel()
-    @State private var audioURL: URL?
-    @State private var transcript = ""
     @State private var languageCode = ForcedAlignerEngine.defaultLanguageCode
     @State private var selection: AlignRunModel.Row.ID?
     @State private var showAudioImporter = false
@@ -63,25 +61,21 @@ struct ForcedAlignerRunView: View {
         .fileImporter(isPresented: $showAudioImporter, allowedContentTypes: [.audio],
                       allowsMultipleSelection: false) { result in
             if case let .success(urls) = result, let url = urls.first {
-                audioURL = url
-                model.reset()
+                model.chooseAudio(url)
             }
         }
         .fileImporter(isPresented: $showTranscriptImporter, allowedContentTypes: [.plainText, .text],
                       allowsMultipleSelection: false) { result in
             if case let .success(urls) = result, let url = urls.first {
-                loadTranscript(url)
+                model.openTranscript(url)
             }
         }
         .dropDestination(for: URL.self) { urls, _ in
-            guard let url = urls.first else { return false }
-            audioURL = url
-            model.reset()
-            return true
-        } isTargeted: { isDropTargeted = $0 }
+            model.dropAudio(urls)
+        } isTargeted: { isDropTargeted = $0 && model.canChangeInputs }
         .onDisappear { model.stop() }   // ruling 12 (see the Done button), however the sheet is closed
         .overlay {
-            if isDropTargeted {
+            if isDropTargeted && model.canChangeInputs {
                 RoundedRectangle(cornerRadius: 10)
                     .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6]))
                     .padding(6)
@@ -108,10 +102,11 @@ struct ForcedAlignerRunView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Button("Choose Audio…") { showAudioImporter = true }
-                Text(audioURL?.lastPathComponent ?? "No audio file selected (or drop one here)")
+                    .disabled(!model.canChangeInputs)
+                Text(model.audioURL?.lastPathComponent ?? "No audio file selected (or drop one here)")
                     .font(.callout).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 Spacer()
-                if let url = audioURL {
+                if let url = model.audioURL {
                     Text(Self.clock(model.audioDuration(of: url)))
                         .font(.caption).foregroundStyle(.secondary).monospacedDigit()
                 }
@@ -119,12 +114,14 @@ struct ForcedAlignerRunView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Transcript").font(.callout.bold())
-                    TextEditor(text: $transcript)
+                    // Stays editable during a run, which holds its own copy (implementer's call, pending owner confirmation).
+                    TextEditor(text: $model.transcript)
                         .font(.callout)
                         .frame(minHeight: 96, maxHeight: 140)
                         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary))
                 }
                 Button("Open…") { showTranscriptImporter = true }
+                    .disabled(!model.canChangeInputs)
                     .help("Open a .txt file as the transcript")
             }
             HStack {
@@ -154,7 +151,7 @@ struct ForcedAlignerRunView: View {
         HStack(spacing: 8) {
             Button(model.runButtonTitle) { run() }
                 .keyboardShortcut(.defaultAction)
-                .disabled(model.isRunning || audioURL == nil)
+                .disabled(!model.canChangeInputs || model.audioURL == nil)
             if model.isRunning {
                 Button("Stop") { model.stop() }.keyboardShortcut(.cancelAction)
             }
@@ -214,10 +211,10 @@ struct ForcedAlignerRunView: View {
     // MARK: - Actions
 
     private func run() {
-        guard let url = audioURL else { return }
+        guard let url = model.audioURL else { return }
         selection = nil   // row ids are positions, so a new result must not inherit the last one's selection
         let modelID = self.modelID
-        let text = transcript
+        let text = model.transcript
         let language = languageCode
         // The per-run stage: the sheet's lease, this run's transcript and language (the cache key ignores the transcript).
         let stage = LeasingStage.perRun(handedStage,
@@ -229,21 +226,10 @@ struct ForcedAlignerRunView: View {
         model.start(audioURL: url, transcript: text, language: language, stage: stage)
     }
 
-    private func loadTranscript(_ url: URL) {
-        let accessed = url.startAccessingSecurityScopedResource()
-        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-        do {
-            transcript = try String(contentsOf: url, encoding: .utf8)
-            model.reset()
-        } catch {
-            model.errorText = "That file isn't readable as text. Save it as UTF-8 .txt and try again."
-        }
-    }
-
     private func export(_ result: AlignRunModel.Result?, as format: ExportFormat) {
         guard let result else { return }
         let panel = NSSavePanel()
-        let base = audioURL?.deletingPathExtension().lastPathComponent ?? "alignment"
+        let base = model.audioURL?.deletingPathExtension().lastPathComponent ?? "alignment"
         panel.nameFieldStringValue = "\(base).\(format.rawValue)"
         panel.allowedContentTypes = [UTType(filenameExtension: format.rawValue) ?? .plainText]
         guard panel.runModal() == .OK, let target = panel.url else { return }
@@ -304,12 +290,15 @@ final class AlignRunModel {
     var progress = 0.0
     var errorText: String?
     var result: Result?
+    /// The transcript box.
+    var transcript = ""
 
     private var player: AVAudioPlayer?
     private(set) var task: Task<Void, Never>?
-    /// The one run that may write this model's state (nil after `reset()`). A replaced run's task is cancelled but ends
-    /// in its own time, because the engine's `generate` can't be interrupted.
-    private var currentRun: UUID?
+    /// The one run that may write this model's state (nil after `reset()`). Since ruling 14 (`canChangeInputs`) nothing
+    /// can replace a run in flight, so the checks against it are a backstop.
+    private(set) var currentRun: UUID?
+    /// The chosen recording (what Align runs on, and what a clicked row plays).
     private(set) var audioURL: URL?
     /// The audio file's length as read from its header, for the view's label (nil until read once; the run replaces it
     /// with the decoded duration).
@@ -326,7 +315,47 @@ final class AlignRunModel {
         return seconds
     }
 
-    func reset() {
+    // MARK: - Inputs
+
+    /// Whether the audio and transcript file may change and a run may start: not while a step is in flight, which
+    /// includes "Stopping…". Every path below, and `start`, asks this.
+    ///
+    /// Owner ruling 14 (Boo, 2026-11-27): "Disable them. While a run is going, including during 'Stopping…', choosing or
+    /// dropping a new audio file and opening a transcript are disabled, along with Align. Add a test that no second run
+    /// can start until the first step has returned."
+    var canChangeInputs: Bool { !isRunning }
+
+    /// A file picked as the recording; false when refused.
+    @discardableResult func chooseAudio(_ url: URL) -> Bool {
+        guard canChangeInputs else { return false }
+        reset()
+        audioURL = url
+        return true
+    }
+
+    /// Files dropped on the screen (the first is the recording); false when refused.
+    @discardableResult func dropAudio(_ urls: [URL]) -> Bool {
+        guard let url = urls.first else { return false }
+        return chooseAudio(url)
+    }
+
+    /// A text file opened as the transcript; false when refused or unreadable.
+    @discardableResult func openTranscript(_ url: URL) -> Bool {
+        guard canChangeInputs else { return false }
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        do {
+            transcript = try String(contentsOf: url, encoding: .utf8)
+            reset()
+            return true
+        } catch {
+            errorText = "That file isn't readable as text. Save it as UTF-8 .txt and try again."
+            return false
+        }
+    }
+
+    /// Clears the last run. Only reached when no step is in flight (the callers check `canChangeInputs`).
+    private func reset() {
         task?.cancel()
         task = nil
         currentRun = nil
@@ -351,6 +380,7 @@ final class AlignRunModel {
     }
 
     func start(audioURL: URL, transcript: String, language: String, stage: any PipelineStage) {
+        guard canChangeInputs else { return }   // one step at a time (ruling 14)
         reset()
         // Refuse with one plain sentence before any model work (owner decision 5): an empty transcript, an unsupported
         // language or an over-long recording never loads the model.
@@ -382,7 +412,7 @@ final class AlignRunModel {
                         Task { @MainActor in self.report(fraction, from: run) }
                     }
                 }
-                // Stop pressed (or a newer run started) during the forward pass: the output is dropped.
+                // Stop pressed during the forward pass, which can't be interrupted: the output is dropped.
                 try Task.checkCancellation()
                 guard case let .text(csv) = output else {
                     throw StageError.kindMismatch(expected: .text, got: output.kind)

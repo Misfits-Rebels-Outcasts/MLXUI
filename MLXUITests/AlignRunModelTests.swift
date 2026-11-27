@@ -155,10 +155,11 @@ struct AlignRunModelTests {
     private static let oldCSV = "text,start,end\nalt,0.100,0.500\n"
     private static let newCSV = "text,start,end\nneu,0.200,0.600\n"
 
-    @Test func aStopDuringTheForwardPassDropsTheResult() async throws {
+    @Test(arguments: [false, true])
+    func aStopDuringTheForwardPassDropsTheResult(stepFails: Bool) async throws {
         let url = try wavURL()
         defer { try? FileManager.default.removeItem(at: url) }
-        let stage = GatedStage(csv: Self.oldCSV)
+        let stage = GatedStage(csv: Self.oldCSV, fails: stepFails)
         let model = AlignRunModel()
         model.start(audioURL: url, transcript: "alt", language: "de", stage: stage)
         try await waitUntilEntered(stage.gate)
@@ -169,48 +170,6 @@ struct AlignRunModelTests {
         #expect(model.errorText == nil, "a stopped run is never an error")
         #expect(!model.isRunning)
         #expect(model.progress == 0)
-    }
-
-    @Test func aReplacedRunDoesNotOverwriteTheNewerResult() async throws {
-        let url = try wavURL()
-        defer { try? FileManager.default.removeItem(at: url) }
-        let old = GatedStage(csv: Self.oldCSV)
-        let model = AlignRunModel()
-        model.start(audioURL: url, transcript: "alt", language: "de", stage: old)
-        try await waitUntilEntered(old.gate)
-        let oldTask = try #require(model.task)
-        model.start(audioURL: url, transcript: "neu", language: "de", stage: TextStubStage(csv: Self.newCSV))
-        await model.task?.value
-        #expect(model.result?.units.map(\.text) == ["neu"])
-        try await release(old.gate, oldTask)
-        #expect(model.result?.units.map(\.text) == ["neu"])
-        #expect(model.result?.transcript == "neu")
-        #expect(model.errorText == nil)
-        #expect(!model.isRunning)
-        #expect(model.progress == 1)
-    }
-
-    @Test(arguments: [false, true])
-    func aReplacedRunLeavesTheRunningOneAlone(oldRunFails: Bool) async throws {
-        let url = try wavURL()
-        defer { try? FileManager.default.removeItem(at: url) }
-        let old = GatedStage(csv: Self.oldCSV, fails: oldRunFails)
-        let new = GatedStage(csv: Self.newCSV)
-        let model = AlignRunModel()
-        model.start(audioURL: url, transcript: "alt", language: "de", stage: old)
-        try await waitUntilEntered(old.gate)
-        let oldTask = try #require(model.task)
-        model.start(audioURL: url, transcript: "neu", language: "de", stage: new)
-        try await waitUntilEntered(new.gate)
-        let newTask = try #require(model.task)
-        try await release(old.gate, oldTask)
-        #expect(model.isRunning, "the newer run is still going")
-        #expect(model.result == nil)
-        #expect(model.errorText == nil)
-        #expect(model.progress == 0)
-        try await release(new.gate, newTask)
-        #expect(model.result?.units.map(\.text) == ["neu"])
-        #expect(!model.isRunning)
     }
 
     // MARK: - Stop, Done and the memory lease (owner rulings 11 and 12, 2026-11-27)
@@ -307,48 +266,108 @@ struct AlignRunModelTests {
         #expect(model.result?.units.map(\.text) == ["neu"], "Done after a run keeps nothing from being exported")
     }
 
-    /// A new file or transcript resets the screen while a stopped step is still in flight, and a new run may start. In
-    /// the same language the two runs share one engine-cache entry (one booking, two holds); in another language each
-    /// has its own. Either way a run's booking stays until its own step returns.
-    @Test(arguments: ["de", "fr"], [true, false])
-    func aNewRunBesideAStoppedOneKeepsBothLeasesUntilTheirStepsReturn(newLanguage: String,
-                                                                     oldReturnsFirst: Bool) async throws {
+    // MARK: - No input change, and no second run, until the step returns (owner ruling 14, 2026-11-27)
+
+    private func attempt(_ path: AlignInputPath, _ model: AlignRunModel, audio: URL, transcript: URL,
+                         stage: any PipelineStage) -> Bool {
+        switch path {
+        case .chooseAudio: return model.chooseAudio(audio)
+        case .dropAudio: return model.dropAudio([audio])
+        case .openTranscript: return model.openTranscript(transcript)
+        case .start:
+            let before = model.currentRun
+            model.start(audioURL: audio, transcript: "neu", language: "de", stage: stage)
+            return model.currentRun != before
+        }
+    }
+
+    @Test(arguments: AlignInputPath.allCases, [false, true])
+    func everyInputPathIsRefusedUntilTheStepReturns(path: AlignInputPath, stopping: Bool) async throws {
+        let url = try wavURL()
+        let other = try wavURL()
+        let text = FileManager.default.temporaryDirectory.appendingPathComponent("fa-model-\(UUID().uuidString).txt")
+        try "neu".write(to: text, atomically: true, encoding: .utf8)
+        defer { for file in [url, other, text] { try? FileManager.default.removeItem(at: file) } }
+        let first = GatedStage(csv: Self.oldCSV)
+        let second = GatedStage(csv: Self.newCSV)
+        let model = AlignRunModel()
+        #expect(model.canChangeInputs)
+        #expect(model.chooseAudio(url))
+        model.transcript = "alt"
+        model.start(audioURL: url, transcript: model.transcript, language: "de", stage: first)
+        try await waitUntilEntered(first.gate)
+        if stopping { model.stop() }
+        model.errorText = "unchanged"   // a reset would clear it
+        let task = try #require(model.task)
+        let run = try #require(model.currentRun)
+
+        #expect(!model.canChangeInputs)
+        #expect(!attempt(path, model, audio: other, transcript: text, stage: second), "refused")
+        #expect(model.task == task && model.currentRun == run)
+        #expect(model.isRunning && model.isStopping == stopping)
+        #expect(model.errorText == "unchanged")
+        #expect(model.audioURL == url && model.transcript == "alt")
+        try await pause()
+        #expect(!second.gate.isEntered, "no second step")
+
+        try await release(first.gate, task)
+        #expect(model.canChangeInputs)
+        #expect(attempt(path, model, audio: other, transcript: text, stage: second), "accepted again")
+        #expect(model.errorText == nil)
+        switch path {
+        case .chooseAudio, .dropAudio:
+            #expect(model.audioURL == other && model.result == nil)
+        case .openTranscript:
+            #expect(model.transcript == "neu" && model.result == nil)
+        case .start:
+            try await waitUntilEntered(second.gate)
+            try await release(second.gate, try #require(model.task))
+            #expect(model.result?.units.map(\.text) == ["neu"])
+        }
+    }
+
+    @Test func noSecondStepStartsUntilTheFirstHasReturned() async throws {
         let url = try wavURL()
         defer { try? FileManager.default.removeItem(at: url) }
         let rig = LeaseRig()
-        let old = GatedStage(csv: Self.oldCSV)
-        let new = GatedStage(csv: Self.newCSV)
+        let step = GatedStage(csv: Self.oldCSV)
+        let next = GatedStage(csv: Self.newCSV)
         let model = AlignRunModel()
-        model.start(audioURL: url, transcript: "alt", language: "de", stage: rig.stage(old, language: "de"))
-        try await waitUntilEntered(old.gate)
-        let oldTask = try #require(model.task)
+        model.start(audioURL: url, transcript: "alt", language: "de", stage: rig.stage(step, language: "de"))
+        try await waitUntilEntered(step.gate)
+        let task = try #require(model.task)
         let one = rig.budget.usedBytes
-        #expect(one > 0)
+        model.start(audioURL: url, transcript: "neu", language: "fr", stage: rig.stage(next, language: "fr"))
         model.stop()
-        model.start(audioURL: url, transcript: "neu", language: newLanguage,
-                    stage: rig.stage(new, language: newLanguage))
-        try await waitUntilEntered(new.gate)
-        let newTask = try #require(model.task)
-        let entries = newLanguage == "de" ? 1 : 2
-        #expect(rig.budget.usedBytes == Int64(entries) * one && rig.budget.inUseCount == entries)
-        #expect(model.isRunning && !model.isStopping, "the new run is not the one being stopped")
+        model.start(audioURL: url, transcript: "neu", language: "fr", stage: rig.stage(next, language: "fr"))
+        try await pause()
+        #expect(step.gate.entries == 1 && next.gate.entries == 0)
+        #expect(rig.budget.usedBytes == one && rig.budget.inUseCount == 1, "one run, one booking")
 
-        if oldReturnsFirst {
-            try await release(old.gate, oldTask)
-            #expect(rig.budget.usedBytes == one && rig.budget.inUseCount == 1, "the new run's lease")
-            #expect(model.isRunning && !model.isStopping)
-            #expect(model.result == nil && model.errorText == nil)
-            try await release(new.gate, newTask)
-        } else {
-            try await release(new.gate, newTask)
-            #expect(rig.budget.usedBytes == one && rig.budget.inUseCount == 1, "the old step has not returned")
-            #expect(model.result?.units.map(\.text) == ["neu"])
-            try await release(old.gate, oldTask)
-        }
-        #expect(rig.budget.usedBytes == 0 && rig.budget.inUseCount == 0 && rig.cache.count == 0)
+        try await release(step.gate, task)
+        #expect(rig.budget.usedBytes == 0)
+        model.start(audioURL: url, transcript: "neu", language: "fr", stage: rig.stage(next, language: "fr"))
+        try await waitUntilEntered(next.gate)
+        #expect(next.gate.entries == 1 && rig.budget.inUseCount == 1)
+        try await release(next.gate, try #require(model.task))
         #expect(model.result?.units.map(\.text) == ["neu"])
-        #expect(model.errorText == nil)
-        #expect(!model.isRunning && !model.isStopping)
+        #expect(rig.budget.usedBytes == 0 && rig.budget.inUseCount == 0)
+    }
+
+    /// The view's half of ruling 14, source-level like the test below.
+    @Test func theViewChangesInputsOnlyThroughTheModel() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let source = try String(contentsOf: root.appendingPathComponent("MLXUI/Modules/ForcedAligner/ForcedAlignerUI.swift"),
+                                encoding: .utf8)
+        #expect(source.contains("model.chooseAudio(url)"))
+        #expect(source.contains("model.dropAudio(urls)"))
+        #expect(source.contains("model.openTranscript(url)"))
+        #expect(source.contains("isDropTargeted = $0 && model.canChangeInputs"))
+        #expect(source.contains("if isDropTargeted && model.canChangeInputs"))
+        #expect(source.components(separatedBy: ".disabled(!model.canChangeInputs").count == 4,
+                "Choose Audio, Open and Align")
+        #expect(!source.contains("model.reset()"))
+        #expect(source.contains("private func reset()"))
     }
 
     /// The view's half of rulings 11-13. Source-level, as `noRunViewBuildsItsOwnStage`: the view's model is private
@@ -383,15 +402,17 @@ struct AlignRunModelTests {
 nonisolated final class AlignRunGate: @unchecked Sendable {
     private let lock = NSLock()
     private var opened = false
-    private var entered = false
+    private var entered = 0
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
-    var isEntered: Bool { lock.lock(); defer { lock.unlock() }; return entered }
+    var isEntered: Bool { entries > 0 }
+    /// How many runs have reached the stage.
+    var entries: Int { lock.lock(); defer { lock.unlock() }; return entered }
 
     func wait() async {
         await withCheckedContinuation { continuation in
             lock.lock()
-            entered = true
+            entered += 1
             let resumeNow = opened
             if !resumeNow { waiters.append(continuation) }
             lock.unlock()
@@ -407,6 +428,11 @@ nonisolated final class AlignRunGate: @unchecked Sendable {
         lock.unlock()
         for continuation in pending { continuation.resume() }
     }
+}
+
+/// The ways a run's inputs can change, or a run can start.
+nonisolated enum AlignInputPath: CaseIterable, Sendable {
+    case chooseAudio, dropAudio, openTranscript, start
 }
 
 nonisolated final class AlignRunCallLog: @unchecked Sendable {
