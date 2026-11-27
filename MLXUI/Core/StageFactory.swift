@@ -40,6 +40,10 @@ nonisolated struct StageConfig: Sendable, Hashable {
     /// FA-5 (issue #13): the transcript an `Align` row times — audio plus the known text in, word timestamps out. Data
     /// from the row's second input, not a weight setting: `weightsOnly` drops it so a new transcript books no second
     /// engine. Only `ForcedAlignerStage`/`ForcedAlignerSDK` read it; every other SDK ignores it.
+    /// Owner ruling 5 (Boo, 2026-11-27): "Accept it, in the shape of `quantize`: optional, `nil` = not set, set only for an
+    /// Align row or the Align Run screen. Add a test that every other stage gets `nil`. Note it in CLAUDE.md's StageConfig
+    /// bullet." So, like `quantize`: `nil` = not set, and it is set only by `RealExecutor.runAlign` and the Align Run
+    /// screen's per-run stage (`ForcedAlignerTranscriptScopeTests`).
     var transcript: String?
     /// BS-6 (R7): the Speak row's `trim_silence=` (Kokoro's manifest declares it, bool). `nil` = not set (the engine does not trim);
     /// `true` trims leading/trailing near-silence; `false` is the explicit no-trim. Set only by `RealExecutor.stageConfig` for a Speak row.
