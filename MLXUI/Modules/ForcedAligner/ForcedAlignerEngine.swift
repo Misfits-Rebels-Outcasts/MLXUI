@@ -38,6 +38,11 @@ nonisolated struct AlignedUnit: Sendable, Equatable, Hashable {
 /// nothing MLX-typed is handed back. `MLXAudioThread` is not used (``usesAudioThread`` is `false`), and the main-actor
 /// probe in `ForcedAlignerRealLoadTests` is the evidence.
 ///
+/// **One call at a time per model (`ForcedAlignerGate`).** The load, the forward pass and the buffer-cache release of
+/// one call finish before the next call for the same model folder starts. `model.generate` is synchronous (no
+/// suspension inside the forward pass); the load before it is async, and the gate's turn is held across it. The input
+/// refusals come before the gate, so they never wait.
+///
 /// **Memory.** The library calls `Memory.clearCache()` after reading the result; the engine returns the buffer cache
 /// again once the model local is released, as `Qwen3ASREngine` and `SortformerEngine` do.
 ///
@@ -67,7 +72,8 @@ enum ForcedAlignerEngine {
     nonisolated static let languageCodes = ["zh", "en", "yue", "fr", "de", "it", "ja", "ko", "pt", "ru", "es"]
     nonisolated static let defaultLanguageCode = "en"
 
-    /// Rule 17's one-line switch (see the type comment). `false`: the engine runs wherever it is awaited.
+    /// Rule 17's one-line switch (see the type comment). `false`: a call runs on the concurrent pool, where the gate
+    /// puts it.
     nonisolated static let usesAudioThread = false
 
     /// Code → the library's language name (`config.json`'s `support_languages`). The name selects the splitter: the
@@ -188,11 +194,25 @@ enum ForcedAlignerEngine {
 
     // MARK: - The run
 
-    /// Align 16 kHz mono float samples against `transcript`. Loads the model per call (matches the other engines).
-    /// Throws ``EngineError`` for the input refusals and `StageError.engineFailure` for a load/run failure.
+    /// The load and the forward pass of one call: what runs inside the gate. Tests pass their own.
+    typealias Step = @Sendable (_ samples: [Float], _ transcript: String, _ language: String,
+                                _ duration: Double, _ modelDirectory: URL) async throws -> [AlignedUnit]
+
+    /// The app's gate: every caller (flow rows and Run sheets) takes its turn here.
+    nonisolated static let sharedGate = ForcedAlignerGate()
+
+    /// The gate's key for a model folder.
+    nonisolated static func gateKey(_ modelDirectory: URL) -> String { modelDirectory.standardizedFileURL.path }
+
+    /// Align 16 kHz mono float samples against `transcript`. Loads the model per call (matches the other engines), one
+    /// call at a time per model folder. Throws ``EngineError`` for the input refusals, `CancellationError` for a
+    /// cancelled call (a waiting one never runs, ruling 20 at `ForcedAlignerGate`) and `StageError.engineFailure` for a
+    /// load/run failure.
     nonisolated static func align(_ samples: [Float], transcript: String,
                                   language languageCode: String = defaultLanguageCode,
-                                  modelDirectory: URL) async throws -> [AlignedUnit] {
+                                  modelDirectory: URL,
+                                  gate: ForcedAlignerGate = sharedGate,
+                                  step: @escaping Step = loadAndGenerate) async throws -> [AlignedUnit] {
         let text = libraryTranscript(transcript)
         guard !samples.isEmpty else { throw EngineError.emptyAudio }
         guard !text.isEmpty else { throw EngineError.emptyTranscript }
@@ -202,23 +222,33 @@ enum ForcedAlignerEngine {
         let seconds = Double(samples.count) / Double(sampleRate)
         try requireWithinLimit(seconds: seconds)
         do {
-            let units = try await perform {
-                try await generate(samples, text: text, language: language,
-                                   duration: seconds, modelDirectory: modelDirectory)
+            return try await gate.run(gateKey(modelDirectory)) {
+                let units = try await step(samples, text, language, seconds, modelDirectory)
+                // The splitter drops punctuation, so a transcript of punctuation alone makes no units. Refuse with a
+                // plain sentence rather than show an empty table.
+                guard !units.isEmpty else { throw EngineError.noWords }
+                // As Qwen3ASREngine / SortformerEngine: return MLX's buffer cache once the result is read, after the
+                // model (a local of `generate`) is released, so its weights don't land in the cache on return.
+                Memory.clearCache()
+                return units
             }
-            // The splitter drops punctuation, so a transcript of punctuation alone makes no units. Refuse with a plain
-            // sentence rather than show an empty table.
-            guard !units.isEmpty else { throw EngineError.noWords }
-            // As Qwen3ASREngine / SortformerEngine: return MLX's buffer cache once the result is read, after the model
-            // (a local of `generate`) is released, so its weights don't land in the cache on return.
-            Memory.clearCache()
-            return units
+        } catch let error as CancellationError {
+            throw error
         } catch let error as EngineError {
             throw error
         } catch let error as StageError {
             throw error
         } catch {
             throw StageError.engineFailure(stage: "Forced aligner", underlying: error)
+        }
+    }
+
+    /// The real ``Step``.
+    nonisolated static func loadAndGenerate(_ samples: [Float], transcript: String, language: String,
+                                            duration: Double, modelDirectory: URL) async throws -> [AlignedUnit] {
+        try await perform {
+            try await generate(samples, text: transcript, language: language,
+                               duration: duration, modelDirectory: modelDirectory)
         }
     }
 

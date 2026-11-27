@@ -58,6 +58,7 @@ struct ForcedAlignerRunView: View {
             caption
             controls
             if model.isRunning { runningRow }
+            if let blocked = model.blockedText { blockedRow(blocked) }
             if let error = model.errorText { RunErrorBar(message: error) }
             if let result = model.result { resultView(result) }
             Spacer(minLength: 0)
@@ -180,6 +181,17 @@ struct ForcedAlignerRunView: View {
         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
     }
 
+    /// Why a reopened sheet is disabled (ruling 21, quoted at `AlignRunModel.blockedText`).
+    private func blockedRow(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            ProgressView().scaleEffect(0.6).frame(width: 16, height: 16)
+            Text(text).font(.callout).foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(10)
+        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+    }
+
     private func resultView(_ result: AlignRunModel.Result) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -293,7 +305,21 @@ final class AlignRunModel {
     /// Stop was pressed and the step in flight hasn't returned yet (`isRunning` stays true until it does).
     private(set) var isStopping = false
     var runButtonTitle: String { isStopping ? "Stopping…" : isRunning ? "Aligning…" : "Align" }
-    var progressText: String { isStopping ? "Stopping…" : "Timing the transcript…" }
+    var progressText: String { isStopping ? "Stopping…" : isWaiting ? Self.waitingText : "Timing the transcript…" }
+    /// Owner ruling 20 (Boo, 2026-11-27): "A run waiting for the engine responds to Stop, to Done and to a flow being
+    /// cancelled, and never starts after it has been cancelled. Test it: start run A, queue run B, cancel B, then A
+    /// finishes and B never runs. The Run screen shows 'Waiting for the last alignment to finish…' while it waits."
+    nonisolated static let waitingText = "Waiting for the last alignment to finish…"
+    /// This run's call is queued behind another alignment of the model (a flow row's, say).
+    private(set) var isWaiting = false
+    private var turnCame = false
+    /// Why this sheet is disabled while an earlier sheet's step is still in flight; nil otherwise. The disabling is
+    /// `canChangeInputs`.
+    ///
+    /// Owner ruling 21 (Boo, 2026-11-27): "Add it: a reopened sheet that is disabled shows 'Waiting for the last
+    /// alignment to finish…'. Also confirmed: the reopened sheet disables choosing, dropping and opening files, per
+    /// ruling 14."
+    var blockedText: String? { !isRunning && tracker.isBusy(modelID) ? Self.waitingText : nil }
     var progress = 0.0
     var errorText: String?
     var result: Result?
@@ -379,6 +405,8 @@ final class AlignRunModel {
         currentRun = nil
         isRunning = false
         isStopping = false
+        isWaiting = false
+        turnCame = false
         progress = 0
         errorText = nil
         result = nil
@@ -427,10 +455,15 @@ final class AlignRunModel {
                 try ForcedAlignerEngine.requireWithinLimit(seconds: duration)
                 // MLX-ERR-2 (see MLXErrorGuard.guardedRun): an MLX error becomes a thrown sentence, and a run in which the
                 // process-wide fallback fired is never reported as successful.
-                let output = try await AlignTranscript.$current.withValue(text) {
-                    try await MLXErrorGuard.guardedRun {
-                        try await Self.runOffMain(stage, .audio(buffer)) { fraction in
-                            Task { @MainActor in self.report(fraction, from: run) }
+                let waiting: @Sendable (Bool) -> Void = { flag in
+                    Task { @MainActor in self.setWaiting(flag, from: run) }
+                }
+                let output = try await AlignWaiting.$report.withValue(waiting) {
+                    try await AlignTranscript.$current.withValue(text) {
+                        try await MLXErrorGuard.guardedRun {
+                            try await Self.runOffMain(stage, .audio(buffer)) { fraction in
+                                Task { @MainActor in self.report(fraction, from: run) }
+                            }
                         }
                     }
                 }
@@ -453,7 +486,16 @@ final class AlignRunModel {
             }
             self.isRunning = false
             self.isStopping = false
+            self.isWaiting = false
         }
+    }
+
+    /// The gate's word on `run`'s call: queued (`true`), then its turn (`false`). The two arrive as separate main-actor
+    /// hops, so a turn already seen is never undone.
+    private func setWaiting(_ waiting: Bool, from run: UUID) {
+        guard currentRun == run, isRunning else { return }
+        if !waiting { turnCame = true }
+        isWaiting = waiting && !turnCame
     }
 
     /// A progress value from `run`'s stage; a stopped or replaced run's is dropped.
@@ -464,7 +506,7 @@ final class AlignRunModel {
 
     /// Runs the stage off the main actor (the DeepFilterNet runOffMain pattern): `SWIFT_APPROACHABLE_CONCURRENCY` would
     /// otherwise run the engine's synchronous `generate` on the main thread. `@concurrent` is a child hop, so the
-    /// `MLXErrorGuard` and `AlignTranscript` task-locals and cancellation carry across.
+    /// `MLXErrorGuard`, `AlignTranscript` and `AlignWaiting` task-locals and cancellation carry across.
     @concurrent nonisolated private static func runOffMain(_ stage: any PipelineStage, _ input: Media,
                                                           progress: @Sendable @escaping (Double) -> Void) async throws -> Media {
         try await stage.run(input, progress: progress)
