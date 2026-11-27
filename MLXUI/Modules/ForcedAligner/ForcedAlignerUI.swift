@@ -40,7 +40,7 @@ struct ForcedAlignerRunView: View {
     @State private var audioURL: URL?
     @State private var transcript = ""
     @State private var languageCode = ForcedAlignerEngine.defaultLanguageCode
-    @State private var selection: AlignedUnit.ID?
+    @State private var selection: AlignRunModel.Row.ID?
     @State private var showAudioImporter = false
     @State private var showTranscriptImporter = false
     @State private var isDropTargeted = false
@@ -180,15 +180,15 @@ struct ForcedAlignerRunView: View {
                     .foregroundStyle(.green).font(.subheadline.bold())
                 Spacer()
             }
-            Table(result.units, selection: $selection) {
-                TableColumn("Text") { unit in Text(unit.text) }
-                TableColumn("Start") { unit in Text(AlignmentExport.seconds(unit.start)).monospacedDigit() }
-                TableColumn("End") { unit in Text(AlignmentExport.seconds(unit.end)).monospacedDigit() }
+            Table(result.rows, selection: $selection) {
+                TableColumn("Text") { row in Text(row.unit.text) }
+                TableColumn("Start") { row in Text(AlignmentExport.seconds(row.unit.start)).monospacedDigit() }
+                TableColumn("End") { row in Text(AlignmentExport.seconds(row.unit.end)).monospacedDigit() }
             }
             .frame(minHeight: 220)
             .onChange(of: selection) { _, newValue in
-                guard let unit = result.units.first(where: { $0.id == newValue }) else { return }
-                model.play(from: unit.start)
+                guard let row = result.rows.first(where: { $0.id == newValue }) else { return }
+                model.play(from: row.unit.start)
             }
             Text("Click a row to play the audio from that word's start.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -197,7 +197,8 @@ struct ForcedAlignerRunView: View {
 
     private func footer(result: AlignRunModel.Result?) -> some View {
         HStack {
-            Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+            // While a run is in progress Esc is Stop's alone (implementer's call, pending owner confirmation).
+            Button("Done") { dismiss() }.keyboardShortcut(model.isRunning ? nil : .cancelAction)
             Spacer()
             Button("Export CSV") { export(result, as: .csv) }.disabled(result == nil)
             Button("Export SRT") { export(result, as: .srt) }.disabled(result == nil)
@@ -209,6 +210,7 @@ struct ForcedAlignerRunView: View {
 
     private func run() {
         guard let url = audioURL else { return }
+        selection = nil   // row ids are positions, so a new result must not inherit the last one's selection
         let modelID = self.modelID
         let text = transcript
         let language = languageCode
@@ -278,6 +280,15 @@ final class AlignRunModel {
         let duration: Double
         /// What this run aligned (the transcript box may have been edited since); the SRT/VTT cues read it.
         let transcript: String
+
+        var rows: [Row] { units.enumerated().map { Row(id: $0.offset, unit: $0.element) } }
+    }
+
+    /// A table row. Its identity is its position: two units can have the same text and times (a repeated word whose
+    /// times the library filled from a neighbour).
+    struct Row: Identifiable, Equatable {
+        let id: Int
+        let unit: AlignedUnit
     }
 
     var isRunning = false
@@ -286,7 +297,10 @@ final class AlignRunModel {
     var result: Result?
 
     private var player: AVAudioPlayer?
-    private var task: Task<Void, Never>?
+    private(set) var task: Task<Void, Never>?
+    /// The one run that may write this model's state (nil after `reset()`). A replaced run's task is cancelled but ends
+    /// in its own time, because the engine's `generate` can't be interrupted.
+    private var currentRun: UUID?
     private(set) var audioURL: URL?
     /// The audio file's length as read from its header, for the view's label (nil until read once; the run replaces it
     /// with the decoded duration).
@@ -306,6 +320,7 @@ final class AlignRunModel {
     func reset() {
         task?.cancel()
         task = nil
+        currentRun = nil
         isRunning = false
         progress = 0
         errorText = nil
@@ -332,6 +347,8 @@ final class AlignRunModel {
         }
         isRunning = true
         self.audioURL = audioURL
+        let run = UUID()
+        currentRun = run
         let accessed = audioURL.startAccessingSecurityScopedResource()
         task = Task {
             defer { if accessed { audioURL.stopAccessingSecurityScopedResource() } }
@@ -344,15 +361,19 @@ final class AlignRunModel {
                 // process-wide fallback fired is never reported as successful.
                 let output = try await MLXErrorGuard.guardedRun {
                     try await Self.runOffMain(stage, .audio(buffer)) { fraction in
-                        Task { @MainActor in self.progress = fraction }
+                        Task { @MainActor in self.report(fraction, from: run) }
                     }
                 }
+                // Stop pressed (or a newer run started) during the forward pass: the output is dropped.
+                try Task.checkCancellation()
                 guard case let .text(csv) = output else {
                     throw StageError.kindMismatch(expected: .text, got: output.kind)
                 }
                 self.result = Result(units: try AlignmentExport.parseCSV(csv), duration: duration, transcript: text)
                 self.progress = 1
             } catch {
+                // A replaced run writes nothing: `reset()` or the newer run owns the state now.
+                guard self.currentRun == run else { return }
                 // A cancelled run (Stop) is never an error, whatever the stage threw (the DeepFilterNet / Sortformer rule).
                 if error is CancellationError || Task.isCancelled {
                     self.progress = 0
@@ -362,6 +383,12 @@ final class AlignRunModel {
             }
             self.isRunning = false
         }
+    }
+
+    /// A progress value from `run`'s stage; a stopped or replaced run's is dropped.
+    private func report(_ fraction: Double, from run: UUID) {
+        guard currentRun == run, task?.isCancelled == false else { return }
+        progress = fraction
     }
 
     /// Runs the stage off the main actor (the DeepFilterNet runOffMain pattern): `SWIFT_APPROACHABLE_CONCURRENCY` would

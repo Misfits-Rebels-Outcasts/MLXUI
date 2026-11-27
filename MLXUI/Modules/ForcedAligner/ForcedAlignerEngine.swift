@@ -8,15 +8,12 @@ import MLXAudioSTT
 /// Decision 4's contract, applied by ``ForcedAlignerEngine/units(from:duration:)``: one item per aligned unit in
 /// transcript order, times rounded to the millisecond and clipped to `[0, audio duration]`, `end >= start`, and starts
 /// never decrease.
-nonisolated struct AlignedUnit: Sendable, Equatable, Hashable, Identifiable {
+nonisolated struct AlignedUnit: Sendable, Equatable, Hashable {
     let text: String
     let start: Double
     let end: Double
 
     var duration: Double { end - start }
-    /// Stable within one result (a click-to-play table's row identity); the library never emits two units with the same
-    /// text and times.
-    var id: String { "\(text)#\(start)#\(end)" }
 }
 
 /// MLX-native forced alignment via mlx-audio-swift's `Qwen3ForcedAlignerModel` (the pinned `mlx-audio-swift` @ `5c4c12b`,
