@@ -241,7 +241,7 @@ struct ForcedAlignerRunView: View {
         panel.allowedContentTypes = [UTType(filenameExtension: format.rawValue) ?? .plainText]
         guard panel.runModal() == .OK, let target = panel.url else { return }
         do {
-            try format.render(result.units).write(to: target, atomically: true, encoding: .utf8)
+            try format.render(result).write(to: target, atomically: true, encoding: .utf8)
         } catch {
             model.errorText = "The \(format.rawValue.uppercased()) file couldn't be saved — choose another folder and try again."
         }
@@ -250,11 +250,12 @@ struct ForcedAlignerRunView: View {
     enum ExportFormat: String {
         case csv, srt, vtt
 
-        func render(_ units: [AlignedUnit]) -> String {
+        /// SRT and VTT end their cues at the sentences of the transcript that run aligned.
+        func render(_ result: AlignRunModel.Result) -> String {
             switch self {
-            case .csv: return AlignmentExport.csv(units)
-            case .srt: return AlignmentExport.srt(units)
-            case .vtt: return AlignmentExport.vtt(units)
+            case .csv: return AlignmentExport.csv(result.units)
+            case .srt: return AlignmentExport.srt(result.units, transcript: result.transcript)
+            case .vtt: return AlignmentExport.vtt(result.units, transcript: result.transcript)
             }
         }
     }
@@ -275,6 +276,8 @@ final class AlignRunModel {
     struct Result: Equatable {
         let units: [AlignedUnit]
         let duration: Double
+        /// What this run aligned (the transcript box may have been edited since); the SRT/VTT cues read it.
+        let transcript: String
     }
 
     var isRunning = false
@@ -347,7 +350,7 @@ final class AlignRunModel {
                 guard case let .text(csv) = output else {
                     throw StageError.kindMismatch(expected: .text, got: output.kind)
                 }
-                self.result = Result(units: try AlignmentExport.parseCSV(csv), duration: duration)
+                self.result = Result(units: try AlignmentExport.parseCSV(csv), duration: duration, transcript: text)
                 self.progress = 1
             } catch {
                 // A cancelled run (Stop) is never an error, whatever the stage threw (the DeepFilterNet / Sortformer rule).

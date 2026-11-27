@@ -95,7 +95,27 @@ struct AlignRunModelTests {
         let result = try #require(model.result)
         #expect(result.units.map(\.text) == ["Hello", "world"])
         #expect(abs(result.duration - 1.0) < 0.01)
+        #expect(result.transcript == "Hello world")
         #expect(model.errorText == nil)
+    }
+
+    /// The Export SRT/VTT buttons end cues at the sentences of the transcript the run aligned.
+    @Test func theExportsUseTheRunsTranscript() async throws {
+        let url = try wavURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let stage = TextStubStage(csv: "text,start,end\nBonjour,0.100,0.400\nÀ,0.400,0.600\ndemain,0.600,0.900\n")
+        let model = AlignRunModel()
+        model.start(audioURL: url, transcript: " Bonjour.\nÀ demain ! ", language: "fr", stage: stage)
+        for _ in 0..<200 where model.isRunning {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        let result = try #require(model.result)
+        #expect(result.transcript == "Bonjour. À demain !", "the text the run aligned")
+        #expect(ForcedAlignerRunView.ExportFormat.srt.render(result)
+                == "1\n00:00:00,100 --> 00:00:00,400\nBonjour\n\n2\n00:00:00,400 --> 00:00:00,900\nÀ demain\n")
+        #expect(ForcedAlignerRunView.ExportFormat.vtt.render(result)
+                == "WEBVTT\n\n00:00:00.100 --> 00:00:00.400\nBonjour\n\n00:00:00.400 --> 00:00:00.900\nÀ demain\n")
+        #expect(ForcedAlignerRunView.ExportFormat.csv.render(result) == AlignmentExport.csv(result.units))
     }
 }
 

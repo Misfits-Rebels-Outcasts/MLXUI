@@ -77,9 +77,12 @@ nonisolated enum AlignmentExport {
     /// would push the cue past 42 characters or 6 seconds (decision 7). The cue's start is the first unit's start and
     /// its end the last unit's end. An empty result is no cues.
     ///
-    /// The pinned library's splitter drops punctuation, so the punctuation branch is a no-op on its own output today —
-    /// it is kept because the rule is part of the contract, and it is what a future unit text with punctuation needs.
+    /// The pinned library's splitter drops punctuation, so on its output the sentence ends come from `sentenceEnds`
+    /// (one mark per unit, from ``sentenceEnds(in:for:)``; a missing mark is false). A unit whose own text ends with the
+    /// punctuation ends a cue too. A cue's text is the units joined by ``cueText(_:)``; the transcript's punctuation is
+    /// not put back (implementer's call, pending owner confirmation).
     static func cues(_ units: [AlignedUnit],
+                     sentenceEnds: [Bool] = [],
                      maxCharacters: Int = cueMaxCharacters,
                      maxSeconds: Double = cueMaxSeconds) -> [Cue] {
         guard !units.isEmpty else { return [] }
@@ -90,10 +93,11 @@ nonisolated enum AlignmentExport {
             cues.append(Cue(start: first.start, end: last.end, text: cueText(current)))
             current = []
         }
-        for unit in units {
+        for (index, unit) in units.enumerated() {
+            let endsHere = endsASentence(unit.text) || (index < sentenceEnds.count && sentenceEnds[index])
             if current.isEmpty {
                 current = [unit]
-                if endsASentence(unit.text) { flush() }
+                if endsHere { flush() }
                 continue
             }
             let candidate = cueText(current + [unit])
@@ -104,16 +108,61 @@ nonisolated enum AlignmentExport {
             } else {
                 current.append(unit)
             }
-            if endsASentence(unit.text) { flush() }
+            if endsHere { flush() }
         }
         flush()
         return cues
     }
 
-    /// A unit's text ends a sentence: the last character is `.`, `!`, `?`, `…` or one of their full-width forms.
+    /// How far past the expected place ``sentenceEnds(in:for:)`` looks for a unit, in letters and digits, so one unit that
+    /// isn't in the transcript can't pull the walk to a far-away match (implementer's call, pending owner confirmation).
+    static let unitSearchWindow = 32
+
+    /// Per unit, whether the transcript has sentence-ending punctuation after it and before the next word or character.
+    ///
+    /// The library's unit is a transcript word with everything but letters, digits and apostrophes removed (CJK text one
+    /// character at a time), so the units are looked for, in order, in the transcript reduced the same way. A unit that
+    /// can't be found gets no mark and the walk carries on. A sentence end *inside* one unit gets no mark either (the
+    /// space splitter joins `mill.Every`, or Japanese kana across a `。`, into one unit).
+    ///
+    /// A `.` between two digits is a decimal point, not a sentence end (the Chinese splitter makes `3.5` two units;
+    /// implementer's call, pending owner confirmation). **Known limitation:** an abbreviation's period (`Dr. Smith`) ends
+    /// a cue; there is no abbreviation list.
+    static func sentenceEnds(in transcript: String, for units: [AlignedUnit]) -> [Bool] {
+        let characters = Array(transcript)
+        let kept = characters.indices.filter { isUnitCharacter(characters[$0]) }
+        var cursor = 0   // the first of `kept` no earlier unit has used
+        return units.map { unit in
+            let target = unit.text.filter(isUnitCharacter).map { $0 }
+            let lastStart = min(cursor + unitSearchWindow, kept.count - target.count)
+            guard !target.isEmpty, cursor <= lastStart,
+                  let start = (cursor...lastStart).first(where: { start in
+                      target.indices.allSatisfy { characters[kept[start + $0]] == target[$0] }
+                  }) else { return false }
+            cursor = start + target.count
+            let afterUnit = kept[cursor - 1] + 1
+            let nextWord = cursor < kept.count ? kept[cursor] : characters.count
+            return (afterUnit..<nextWord).contains { index in
+                guard sentenceEnders.contains(characters[index]) else { return false }
+                let isDecimalPoint = characters[index] == "." && characters[index - 1].isNumber
+                    && index + 1 < characters.count && characters[index + 1].isNumber
+                return !isDecimalPoint
+            }
+        }
+    }
+
+    /// The characters the library's splitter keeps (`ForceAlignProcessor.isKeptChar`).
+    private static func isUnitCharacter(_ character: Character) -> Bool {
+        character == "'" || character.isLetter || character.isNumber
+    }
+
+    /// `.`, `!`, `?`, `…` and their full-width forms.
+    static let sentenceEnders = ".!?…。！？"
+
+    /// A unit's text ends a sentence: its last character is one of ``sentenceEnders``.
     static func endsASentence(_ text: String) -> Bool {
         guard let last = text.last else { return false }
-        return ".!?…。！？".contains(last)
+        return sentenceEnders.contains(last)
     }
 
     /// Units joined as one line: no space between CJK characters, a single space everywhere else.
@@ -160,9 +209,15 @@ nonisolated enum AlignmentExport {
         return String(format: "%02d:%02d:%02d.%03d", h, m, s, ms)
     }
 
+    /// The cues of a run: with its `transcript`, sentences end cues; without one, only a unit's own punctuation does.
+    private static func cues(_ units: [AlignedUnit], transcript: String?) -> [Cue] {
+        cues(units, sentenceEnds: transcript.map { sentenceEnds(in: $0, for: units) } ?? [])
+    }
+
     /// SRT: numbered cues, `start --> end`, the cue's text, a blank line between cues. No units is the empty string.
-    static func srt(_ units: [AlignedUnit]) -> String {
-        let cues = cues(units)
+    /// `transcript` is the text that was aligned (see ``sentenceEnds(in:for:)``).
+    static func srt(_ units: [AlignedUnit], transcript: String? = nil) -> String {
+        let cues = cues(units, transcript: transcript)
         guard !cues.isEmpty else { return "" }
         var blocks: [String] = []
         for (index, cue) in cues.enumerated() {
@@ -173,8 +228,8 @@ nonisolated enum AlignmentExport {
 
     /// WebVTT: the `WEBVTT` header, then cues with `start --> end` and the text, a blank line between cues. No units is
     /// just the header (a valid, empty VTT file).
-    static func vtt(_ units: [AlignedUnit]) -> String {
-        let cues = cues(units)
+    static func vtt(_ units: [AlignedUnit], transcript: String? = nil) -> String {
+        let cues = cues(units, transcript: transcript)
         var blocks = ["WEBVTT"]
         for cue in cues {
             blocks.append("\(vttTimestamp(cue.start)) --> \(vttTimestamp(cue.end))\n\(cue.text)")

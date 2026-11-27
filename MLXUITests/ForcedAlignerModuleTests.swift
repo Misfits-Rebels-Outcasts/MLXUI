@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import AVFoundation
+import MLXAudioSTT
 @testable import MLXUI
 
 /// FA-5 for issue #13: the pure `text,start,end` / SRT / VTT writers and the cue rule (decision 7), and the module
@@ -99,6 +100,80 @@ struct AlignmentExportTests {
         let units = self.units([("Hello.", 0, 0.5), ("Next", 0.5, 1.0), ("one", 1.0, 1.5)])
         let cues = AlignmentExport.cues(units)
         #expect(cues.map(\.text) == ["Hello.", "Next one"])
+    }
+
+    /// The units the pinned library really makes from a transcript (its own splitter: no punctuation), 0.3 s each.
+    private func libraryUnits(_ transcript: String, _ language: String) -> [AlignedUnit] {
+        ForceAlignProcessor().encodeTimestamp(text: transcript, language: language).0.enumerated().map { index, text in
+            AlignedUnit(text: text, start: Double(index) * 0.3, end: Double(index) * 0.3 + 0.3)
+        }
+    }
+
+    /// Decision 7 on real output: the splitter drops the punctuation, so the sentence end comes from the transcript.
+    @Test func anEnglishSentenceEndsItsCueOnLibraryUnits() {
+        let transcript = "The river runs past the mill. Every morning the boats leave."
+        let srt = AlignmentExport.srt(libraryUnits(transcript, "English"), transcript: transcript)
+        #expect(srt == "1\n00:00:00,000 --> 00:00:01,800\nThe river runs past the mill\n\n"
+                + "2\n00:00:01,800 --> 00:00:03,300\nEvery morning the boats leave\n")
+    }
+
+    @Test func aChineseSentenceEndsItsCueOnLibraryUnits() {
+        let transcript = "今天天气很好。我们去公园。"
+        let srt = AlignmentExport.srt(libraryUnits(transcript, "Chinese"), transcript: transcript)
+        #expect(srt == "1\n00:00:00,000 --> 00:00:01,800\n今天天气很好\n\n2\n00:00:01,800 --> 00:00:03,300\n我们去公园\n")
+    }
+
+    @Test func aGermanSentencePairMakesTwoCuesInVTTToo() {
+        let transcript = "Der Zug fährt um acht Uhr ab! Wir warten am Gleis."
+        let vtt = AlignmentExport.vtt(libraryUnits(transcript, "German"), transcript: transcript)
+        #expect(vtt == "WEBVTT\n\n00:00:00.000 --> 00:00:02.100\nDer Zug fährt um acht Uhr ab\n\n"
+                + "00:00:02.100 --> 00:00:03.300\nWir warten am Gleis\n")
+    }
+
+    @Test func aTranscriptWithoutPunctuationChangesNothing() {
+        let transcript = "The river runs past the mill every morning the boats leave"
+        let units = libraryUnits(transcript, "English")
+        #expect(AlignmentExport.sentenceEnds(in: transcript, for: units).allSatisfy { !$0 })
+        #expect(AlignmentExport.srt(units, transcript: transcript) == AlignmentExport.srt(units))
+        #expect(AlignmentExport.vtt(units, transcript: transcript) == AlignmentExport.vtt(units))
+    }
+
+    @Test func theMarksFollowTheUnitsThroughRepeatedWords() {
+        let transcript = "„Ja.“ Ja, gern … Ja"
+        #expect(AlignmentExport.sentenceEnds(in: transcript, for: libraryUnits(transcript, "German"))
+                == [true, false, true, false])
+    }
+
+    @Test func aUnitThatIsNotInTheTranscriptGetsNoMarkAndTheWalkCarriesOn() {
+        let units = self.units([("Guten", 0, 0.3), ("Morgen", 0.3, 0.6), ("Xylophon", 0.6, 0.9),
+                                ("Bis", 0.9, 1.2), ("bald", 1.2, 1.5)])
+        #expect(AlignmentExport.sentenceEnds(in: "Guten Morgen. Bis bald.", for: units) == [false, true, false, false, true])
+        #expect(AlignmentExport.sentenceEnds(in: "", for: units) == [false, false, false, false, false])
+        #expect(AlignmentExport.sentenceEnds(in: "Ja.", for: units) == [false, false, false, false, false])
+        #expect(AlignmentExport.sentenceEnds(in: "Ja.", for: []).isEmpty)
+    }
+
+    /// A match far ahead is not taken: the units after the stray one still find their own places.
+    @Test func aStrayUnitDoesNotJumpToAFarAwayMatch() {
+        let transcript = "Wir gehen. Danach essen wir zusammen im Garten hinter dem alten Haus Brot."
+        let units = self.units([("Wir", 0, 0.3), ("Brot", 0.3, 0.6), ("gehen", 0.6, 0.9), ("Danach", 0.9, 1.2)])
+        #expect(AlignmentExport.sentenceEnds(in: transcript, for: units) == [false, false, true, false])
+    }
+
+    @Test func aDecimalPointIsNotASentenceEnd() {
+        let transcript = "全长3.5公里。"
+        let units = libraryUnits(transcript, "Chinese")
+        #expect(units.map(\.text) == ["全", "长", "3", "5", "公", "里"])
+        #expect(AlignmentExport.sentenceEnds(in: transcript, for: units) == [false, false, false, false, false, true])
+    }
+
+    /// Known limitation: there is no abbreviation list, so an abbreviation's period ends a cue.
+    @Test func anAbbreviationsPeriodEndsACue() {
+        let transcript = "Dr. Schmidt kommt."
+        let cues = AlignmentExport.cues(libraryUnits(transcript, "German"),
+                                        sentenceEnds: AlignmentExport.sentenceEnds(
+                                            in: transcript, for: libraryUnits(transcript, "German")))
+        #expect(cues.map(\.text) == ["Dr", "Schmidt kommt"])
     }
 
     @Test func cjkUnitsJoinWithoutSpaces() {
