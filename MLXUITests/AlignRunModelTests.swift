@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import Observation
 @testable import MLXUI
 
 /// FA-5 (issue #13 decision 7): the Run screen's view-model — Stop, and the two refusals it makes before any work.
@@ -12,6 +13,11 @@ struct AlignRunModelTests {
         let samples = (0..<Int(16_000 * seconds)).map { Float(sin(Double($0) / 16_000.0 * 2 * .pi * 440) * 0.2) }
         try AudioWriter.writeWAV(AudioBuffer(samples: samples, sampleRate: 16_000), to: url)
         return url
+    }
+
+    /// A sheet's model with its own step tracker, so tests running together never see each other's steps.
+    private func newModel(_ modelID: String = "align-test", tracker: AlignStepTracker? = nil) -> AlignRunModel {
+        AlignRunModel(modelID: modelID, tracker: tracker ?? AlignStepTracker())
     }
 
     /// A stage that takes long enough to be stopped, and records that it was entered.
@@ -32,7 +38,7 @@ struct AlignRunModelTests {
         let url = try wavURL()
         defer { try? FileManager.default.removeItem(at: url) }
         let stage = SlowStage()
-        let model = AlignRunModel()
+        let model = newModel()
         model.start(audioURL: url, transcript: "hello", language: "en", stage: stage)
         // Wait until the stage is actually running, then press Stop (the button's call).
         for _ in 0..<200 where stage.calls.count == 0 {
@@ -52,7 +58,7 @@ struct AlignRunModelTests {
         let url = try wavURL()
         defer { try? FileManager.default.removeItem(at: url) }
         let stage = SlowStage()
-        let model = AlignRunModel()
+        let model = newModel()
         model.start(audioURL: url, transcript: " \n\t ", language: "en", stage: stage)
         #expect(!model.isRunning)
         #expect(model.errorText == ForcedAlignerEngine.EngineError.emptyTranscript.errorDescription)
@@ -63,7 +69,7 @@ struct AlignRunModelTests {
         let url = try wavURL()
         defer { try? FileManager.default.removeItem(at: url) }
         let stage = SlowStage()
-        let model = AlignRunModel()
+        let model = newModel()
         model.start(audioURL: url, transcript: "hello", language: "xx", stage: stage)
         #expect(!model.isRunning)
         #expect(model.errorText?.contains("xx") == true)
@@ -87,7 +93,7 @@ struct AlignRunModelTests {
         let url = try wavURL()
         defer { try? FileManager.default.removeItem(at: url) }
         let stage = TextStubStage(csv: "text,start,end\nHello,0.100,0.500\nworld,0.500,1.000\n")
-        let model = AlignRunModel()
+        let model = newModel()
         model.start(audioURL: url, transcript: "Hello world", language: "en", stage: stage)
         for _ in 0..<200 where model.isRunning {
             try await Task.sleep(for: .milliseconds(25))
@@ -104,7 +110,7 @@ struct AlignRunModelTests {
         let url = try wavURL()
         defer { try? FileManager.default.removeItem(at: url) }
         let stage = TextStubStage(csv: "text,start,end\nBonjour,0.100,0.400\nÀ,0.400,0.600\ndemain,0.600,0.900\n")
-        let model = AlignRunModel()
+        let model = newModel()
         model.start(audioURL: url, transcript: " Bonjour.\nÀ demain ! ", language: "fr", stage: stage)
         for _ in 0..<200 where model.isRunning {
             try await Task.sleep(for: .milliseconds(25))
@@ -160,7 +166,7 @@ struct AlignRunModelTests {
         let url = try wavURL()
         defer { try? FileManager.default.removeItem(at: url) }
         let stage = GatedStage(csv: Self.oldCSV, fails: stepFails)
-        let model = AlignRunModel()
+        let model = newModel()
         model.start(audioURL: url, transcript: "alt", language: "de", stage: stage)
         try await waitUntilEntered(stage.gate)
         let task = try #require(model.task)
@@ -200,7 +206,7 @@ struct AlignRunModelTests {
         defer { try? FileManager.default.removeItem(at: url) }
         let rig = LeaseRig()
         let step = GatedStage(csv: Self.oldCSV)
-        let model = AlignRunModel()
+        let model = newModel()
         model.start(audioURL: url, transcript: "alt", language: "de", stage: rig.stage(step, language: "de"))
         try await waitUntilEntered(step.gate)
         let task = try #require(model.task)
@@ -233,7 +239,7 @@ struct AlignRunModelTests {
         defer { try? FileManager.default.removeItem(at: url) }
         let rig = LeaseRig()
         let step = GatedStage(csv: Self.oldCSV)
-        let model = AlignRunModel()
+        let model = newModel()
         model.start(audioURL: url, transcript: "alt", language: "de", stage: rig.stage(step, language: "de"))
         try await waitUntilEntered(step.gate)
         let task = try #require(model.task)
@@ -256,7 +262,7 @@ struct AlignRunModelTests {
     @Test func stopWithNothingRunningDoesNothing() async throws {
         let url = try wavURL()
         defer { try? FileManager.default.removeItem(at: url) }
-        let model = AlignRunModel()
+        let model = newModel()
         model.stop()
         #expect(!model.isStopping && model.runButtonTitle == "Align")
         model.start(audioURL: url, transcript: "neu", language: "de", stage: TextStubStage(csv: Self.newCSV))
@@ -290,7 +296,7 @@ struct AlignRunModelTests {
         defer { for file in [url, other, text] { try? FileManager.default.removeItem(at: file) } }
         let first = GatedStage(csv: Self.oldCSV)
         let second = GatedStage(csv: Self.newCSV)
-        let model = AlignRunModel()
+        let model = newModel()
         #expect(model.canChangeInputs)
         #expect(model.chooseAudio(url))
         model.transcript = "alt"
@@ -332,7 +338,7 @@ struct AlignRunModelTests {
         let rig = LeaseRig()
         let step = GatedStage(csv: Self.oldCSV)
         let next = GatedStage(csv: Self.newCSV)
-        let model = AlignRunModel()
+        let model = newModel()
         model.start(audioURL: url, transcript: "alt", language: "de", stage: rig.stage(step, language: "de"))
         try await waitUntilEntered(step.gate)
         let task = try #require(model.task)
@@ -352,6 +358,134 @@ struct AlignRunModelTests {
         try await release(next.gate, try #require(model.task))
         #expect(model.result?.units.map(\.text) == ["neu"])
         #expect(rig.budget.usedBytes == 0 && rig.budget.inUseCount == 0)
+    }
+
+    // MARK: - One step per model, across sheets (owner ruling 15, 2026-11-27)
+
+    @Test func doneDuringARunKeepsAReopenedSheetDisabledUntilTheStepReturns() async throws {
+        let url = try wavURL()
+        let text = FileManager.default.temporaryDirectory.appendingPathComponent("fa-model-\(UUID().uuidString).txt")
+        try "neu".write(to: text, atomically: true, encoding: .utf8)
+        defer { for file in [url, text] { try? FileManager.default.removeItem(at: file) } }
+        let tracker = AlignStepTracker()
+        let step = GatedStage(csv: Self.oldCSV)
+        let next = GatedStage(csv: Self.newCSV)
+        let first = newModel(tracker: tracker)
+        first.start(audioURL: url, transcript: "alt", language: "de", stage: step)
+        try await waitUntilEntered(step.gate)
+        let task = try #require(first.task)
+        first.stop()   // Done
+
+        let reopened = newModel(tracker: tracker)
+        #expect(!reopened.canChangeInputs, "Align is disabled")
+        #expect(!reopened.isRunning && !reopened.isStopping)
+        #expect(!reopened.chooseAudio(url) && !reopened.dropAudio([url]) && !reopened.openTranscript(text))
+        #expect(reopened.audioURL == nil && reopened.transcript.isEmpty)
+        reopened.start(audioURL: url, transcript: "neu", language: "de", stage: next)
+        #expect(reopened.task == nil && !reopened.isRunning, "start is refused")
+
+        let otherModel = newModel("another-aligner", tracker: tracker)
+        #expect(otherModel.canChangeInputs, "a different model is not blocked")
+        otherModel.start(audioURL: url, transcript: "neu", language: "de", stage: TextStubStage(csv: Self.newCSV))
+        await otherModel.task?.value
+        #expect(otherModel.result?.units.map(\.text) == ["neu"])
+
+        try await pause()
+        // Watch what an open sheet watches (registered after the other model's run, which changes the same set).
+        let changed = AlignRunCallLog()
+        withObservationTracking {
+            #expect(!reopened.canChangeInputs && next.gate.entries == 0, "still waiting for the first step")
+        } onChange: { changed.enter() }
+        #expect(changed.count == 0)
+        try await release(step.gate, task)
+        #expect(changed.count == 1, "an open sheet is told")
+        #expect(reopened.canChangeInputs)
+        #expect(reopened.chooseAudio(url))
+        reopened.start(audioURL: url, transcript: "neu", language: "de", stage: next)
+        try await waitUntilEntered(next.gate)
+        try await release(next.gate, try #require(reopened.task))
+        #expect(reopened.result?.units.map(\.text) == ["neu"])
+    }
+
+    @Test(arguments: [false, true], [false, true])
+    func aReturnedStepFreesTheModelWhateverItsOutcome(stopped: Bool, stepFails: Bool) async throws {
+        let url = try wavURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let tracker = AlignStepTracker()
+        let step = GatedStage(csv: Self.oldCSV, fails: stepFails)
+        let model = newModel(tracker: tracker)
+        model.start(audioURL: url, transcript: "alt", language: "de", stage: step)
+        try await waitUntilEntered(step.gate)
+        if stopped { model.stop() }
+        #expect(tracker.isBusy("align-test"))
+        try await release(step.gate, try #require(model.task))
+        #expect(!tracker.isBusy("align-test"))
+        #expect((model.errorText != nil) == (stepFails && !stopped))
+        #expect(newModel(tracker: tracker).canChangeInputs)
+    }
+
+    @Test func aRunThatNeverReachesTheStageLeavesTheModelFree() async throws {
+        let url = try wavURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let tracker = AlignStepTracker()
+        let stage = GatedStage(csv: Self.oldCSV)
+        let model = newModel(tracker: tracker)
+        model.start(audioURL: url, transcript: "  ", language: "de", stage: stage)
+        #expect(!tracker.isBusy("align-test"), "refused before any work")
+        model.start(audioURL: url.appendingPathExtension("gone"), transcript: "alt", language: "de", stage: stage)
+        await model.task?.value
+        #expect(model.errorText != nil && stage.gate.entries == 0)
+        #expect(!tracker.isBusy("align-test") && model.canChangeInputs, "an unreadable file frees it too")
+    }
+
+    /// Two sheets built as the app builds them (no tracker passed) see each other's steps.
+    @Test func sheetsShareOneTrackerByDefault() async throws {
+        let url = try wavURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let modelID = "align-shared-\(UUID().uuidString)"
+        let step = GatedStage(csv: Self.oldCSV)
+        let first = AlignRunModel(modelID: modelID)
+        first.start(audioURL: url, transcript: "alt", language: "de", stage: step)
+        try await waitUntilEntered(step.gate)
+        let second = AlignRunModel(modelID: modelID)
+        #expect(!second.canChangeInputs)
+        try await release(step.gate, try #require(first.task))
+        #expect(second.canChangeInputs)
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let source = try String(contentsOf: root.appendingPathComponent("MLXUI/Modules/ForcedAligner/ForcedAlignerUI.swift"),
+                                encoding: .utf8)
+        #expect(source.contains("AlignRunModel(modelID: modelID)"), "the view builds its model that way")
+    }
+
+    // MARK: - The boxes stay editable (owner ruling 16, 2026-11-27)
+
+    @Test func editingTheInputsLeavesTheRunsResultAndExportsAlone() async throws {
+        let url = try wavURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let csv = "text,start,end\nGuten,0.100,0.300\nTag,0.300,0.500\nBis,0.500,0.700\nbald,0.700,0.900\n"
+        let step = GatedStage(csv: csv)
+        let model = newModel()
+        model.transcript = "Guten Tag. Bis bald."
+        model.languageCode = "de"
+        model.start(audioURL: url, transcript: model.transcript, language: model.languageCode, stage: step)
+        try await waitUntilEntered(step.gate)
+        model.transcript = "Etwas ganz anderes"
+        model.languageCode = "fr"
+        try await release(step.gate, try #require(model.task))
+        let result = try #require(model.result)
+        #expect(result.transcript == "Guten Tag. Bis bald.")
+        #expect(result.units == (try AlignmentExport.parseCSV(csv)))
+        let srt = "1\n00:00:00,100 --> 00:00:00,500\nGuten Tag\n\n2\n00:00:00,500 --> 00:00:00,900\nBis bald\n"
+        let vtt = "WEBVTT\n\n00:00:00.100 --> 00:00:00.500\nGuten Tag\n\n00:00:00.500 --> 00:00:00.900\nBis bald\n"
+        for edit in ["Etwas ganz anderes", "Guten Tag Bis bald"] {
+            model.transcript = edit
+            model.languageCode = "en"
+            let shown = try #require(model.result)
+            #expect(shown == result)
+            #expect(ForcedAlignerRunView.ExportFormat.srt.render(shown) == srt)
+            #expect(ForcedAlignerRunView.ExportFormat.vtt.render(shown) == vtt)
+            #expect(ForcedAlignerRunView.ExportFormat.csv.render(shown) == csv)
+        }
     }
 
     /// The view's half of ruling 14, source-level like the test below.
@@ -388,7 +522,7 @@ struct AlignRunModelTests {
         let url = try wavURL()
         defer { try? FileManager.default.removeItem(at: url) }
         let stage = TextStubStage(csv: "text,start,end\nthe,0.080,0.080\nthe,0.080,0.080\n")
-        let model = AlignRunModel()
+        let model = newModel()
         model.start(audioURL: url, transcript: "the the", language: "en", stage: stage)
         await model.task?.value
         let result = try #require(model.result)

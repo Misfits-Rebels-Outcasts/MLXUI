@@ -36,12 +36,19 @@ struct ForcedAlignerRunView: View {
     /// language, so the memory lease and the engine-cache key follow the run.
     let handedStage: any PipelineStage
 
-    @State private var model = AlignRunModel()
-    @State private var languageCode = ForcedAlignerEngine.defaultLanguageCode
+    @State private var model: AlignRunModel
     @State private var selection: AlignRunModel.Row.ID?
     @State private var showAudioImporter = false
     @State private var showTranscriptImporter = false
     @State private var isDropTargeted = false
+
+    init(modelDisplayName: String, license: String?, modelID: String, handedStage: any PipelineStage) {
+        self.modelDisplayName = modelDisplayName
+        self.license = license
+        self.modelID = modelID
+        self.handedStage = handedStage
+        _model = State(initialValue: AlignRunModel(modelID: modelID))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -114,7 +121,9 @@ struct ForcedAlignerRunView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Transcript").font(.callout.bold())
-                    // Stays editable during a run, which holds its own copy (implementer's call, pending owner confirmation).
+                    // Owner ruling 16 (Boo, 2026-11-27): "Confirmed: the transcript box and the language picker stay editable
+                    // during a run. The run keeps its own copies. The result table and exports belong to the run that produced
+                    // them."
                     TextEditor(text: $model.transcript)
                         .font(.callout)
                         .frame(minHeight: 96, maxHeight: 140)
@@ -126,7 +135,8 @@ struct ForcedAlignerRunView: View {
             }
             HStack {
                 Text("Language").frame(width: 70, alignment: .leading)
-                Picker("Language", selection: $languageCode) {
+                // Editable during a run too (ruling 16, quoted at the transcript box).
+                Picker("Language", selection: $model.languageCode) {
                     ForEach(ForcedAlignerEngine.languages) { language in
                         Text(language.name).tag(language.code)
                     }
@@ -215,7 +225,7 @@ struct ForcedAlignerRunView: View {
         selection = nil   // row ids are positions, so a new result must not inherit the last one's selection
         let modelID = self.modelID
         let text = model.transcript
-        let language = languageCode
+        let language = model.languageCode
         // The per-run stage: the sheet's lease, this run's transcript and language (the cache key ignores the transcript).
         let stage = LeasingStage.perRun(handedStage,
                                         config: StageConfig(language: language, transcript: text)) { config in
@@ -292,6 +302,16 @@ final class AlignRunModel {
     var result: Result?
     /// The transcript box.
     var transcript = ""
+    /// The language picker.
+    var languageCode = ForcedAlignerEngine.defaultLanguageCode
+    private let modelID: String
+    private let tracker: AlignStepTracker
+
+    /// `tracker` is the app-wide one unless a test passes its own.
+    init(modelID: String, tracker: AlignStepTracker? = nil) {
+        self.modelID = modelID
+        self.tracker = tracker ?? .shared
+    }
 
     private var player: AVAudioPlayer?
     private(set) var task: Task<Void, Never>?
@@ -318,12 +338,13 @@ final class AlignRunModel {
     // MARK: - Inputs
 
     /// Whether the audio and transcript file may change and a run may start: not while a step is in flight, which
-    /// includes "Stopping…". Every path below, and `start`, asks this.
+    /// includes "Stopping…", whether this sheet started it or an earlier sheet of the same model did (ruling 15, see
+    /// `AlignStepTracker`). Every path below, and `start`, asks this.
     ///
     /// Owner ruling 14 (Boo, 2026-11-27): "Disable them. While a run is going, including during 'Stopping…', choosing or
     /// dropping a new audio file and opening a transcript are disabled, along with Align. Add a test that no second run
     /// can start until the first step has returned."
-    var canChangeInputs: Bool { !isRunning }
+    var canChangeInputs: Bool { !isRunning && !tracker.isBusy(modelID) }
 
     /// A file picked as the recording; false when refused.
     @discardableResult func chooseAudio(_ url: URL) -> Bool {
@@ -397,8 +418,10 @@ final class AlignRunModel {
         self.audioURL = audioURL
         let run = UUID()
         currentRun = run
+        tracker.begin(modelID)
         let accessed = audioURL.startAccessingSecurityScopedResource()
         task = Task {
+            defer { self.tracker.end(self.modelID) }   // the step has returned, thrown or been cancelled
             defer { if accessed { audioURL.stopAccessingSecurityScopedResource() } }
             do {
                 // Decode off the main actor; a long recording is many megabytes of samples.
