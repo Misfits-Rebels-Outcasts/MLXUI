@@ -411,9 +411,11 @@ Known inconsistencies in the tree itself — fix or rule on them, don't propagat
 - **WhisperKit is still linked** although the MLX-first guardrail superseded it (A2).
 - **`StageConfig` now carries `seed` / `width` / `height` / `steps`** (CFM-R16-1) and `quantize`
   (MP7-W: `Int?`, `nil` = not set, set only for a FLUX.2 Klein flow row, which resolves it to the
-  manifest default 8 at `makeStage`; every other stage ignores it). Diffusion rows' settings are no
-  longer dropped, but a stage that cannot honour one must refuse by name (as `FluxSDK`,
-  `Flux2KleinSDK` and `RealExecutor.stageConfig` do), never ignore it.
+  manifest default 8 at `makeStage`; every other stage ignores it). It also carries `transcript`
+  (FA-5; owner ruling 5, Boo, 2026-11-27: `String?`, `nil` = not set, set only for an `Align` row
+  (`RealExecutor.runAlign`) or the Align Run screen; every other stage gets `nil`). Diffusion rows'
+  settings are no longer dropped, but a stage that cannot honour one must refuse by name (as
+  `FluxSDK`, `Flux2KleinSDK` and `RealExecutor.stageConfig` do), never ignore it.
 
 ## Conventions (from the project style guide)
 
