@@ -2,18 +2,20 @@ import Foundation
 import Testing
 @testable import MLXUI
 
-/// FA-R7 — `StageConfig.transcript` is set only for an `Align` row (and the Align Run screen); every other stage gets nil.
+/// FA-R16 — the transcript is run input: no `StageConfig` carries it, and no stage but the aligner's sees it.
 ///
-/// Owner ruling 5 (Boo, 2026-11-27): "Accept it, in the shape of `quantize`: optional, `nil` = not set, set only for an
-/// Align row or the Align Run screen. Add a test that every other stage gets `nil`. Note it in CLAUDE.md's StageConfig
-/// bullet."
+/// Owner ruling 17 (Boo, 2026-11-27), quoted in full at `AlignTranscript`: "The transcript must not be part of the engine
+/// cache key. It's run input, not a load setting. […] That supersedes ruling 5". Ruling 5 had accepted a
+/// `StageConfig.transcript` field; the field is gone.
 ///
 /// No weights: each row goes through `RealExecutor` with a `makeModelStage` that records the config and stops there.
 private nonisolated final class TranscriptScopeSeen: @unchecked Sendable {
     private let lock = NSLock()
-    private var configs: [StageConfig] = []
-    func note(_ config: StageConfig) { lock.lock(); configs.append(config); lock.unlock() }
-    var observed: [StageConfig] { lock.lock(); defer { lock.unlock() }; return configs }
+    private var builds: [(config: StageConfig, transcript: String?)] = []
+    func note(_ config: StageConfig, _ transcript: String?) {
+        lock.lock(); builds.append((config, transcript)); lock.unlock()
+    }
+    var observed: [(config: StageConfig, transcript: String?)] { lock.lock(); defer { lock.unlock() }; return builds }
 }
 
 private nonisolated struct StopAtStageBuild: Error {}
@@ -74,9 +76,10 @@ nonisolated struct ForcedAlignerTranscriptScopeTests {
         return try JSONDecoder().decode(BrowserData.self, from: Data(contentsOf: url)).domains.flatMap { $0.allModels }
     }
 
-    /// The configs `RealExecutor` hands to `makeModelStage` for one row; the row ends at the first stage build.
-    private func configs(task: String, model: String, settings: String?, tags: [String]? = nil,
-                         inputs: [Asset]) async throws -> [StageConfig] {
+    /// What `RealExecutor` hands to `makeModelStage` for one row (the config, and `AlignTranscript.current` at that
+    /// moment); the row ends at the first stage build.
+    private func builds(task: String, model: String, settings: String?, tags: [String]? = nil,
+                        inputs: [Asset]) async throws -> [(config: StageConfig, transcript: String?)] {
         let catalog = try loadCatalog()
         let ws = FlowWorkspace(root: FileManager.default.temporaryDirectory
             .appendingPathComponent("fa-transcript-scope-\(UUID().uuidString)"))
@@ -85,7 +88,7 @@ nonisolated struct ForcedAlignerTranscriptScopeTests {
         var executor = RealExecutor(workspace: ws, flowID: "f",
                                     blobDirectory: ws.root.appendingPathComponent("blobs"),
                                     makeModelStage: { _, config in
-                                        seen.note(config)
+                                        seen.note(config, AlignTranscript.current)
                                         throw StopAtStageBuild()
                                     },
                                     installedModelIDs: Set(catalog.map(\.id)), catalog: catalog)
@@ -132,20 +135,27 @@ nonisolated struct ForcedAlignerTranscriptScopeTests {
         #expect(Set(served) == covered)
     }
 
-    @Test func everyOtherStageGetsNoTranscript() async throws {
-        for item in Self.otherRows {
-            let observed = try await configs(task: item.task, model: item.model, settings: item.settings, tags: item.tags,
-                                             inputs: try item.inputs.map { try asset($0) })
-            #expect(observed.count == 1, "\(item.task) (\(item.model)) builds one stage")
-            #expect(observed.allSatisfy { $0.transcript == nil }, "\(item.task) (\(item.model)) must not get a transcript")
-        }
-        #expect(StageConfig.default.transcript == nil)
+    @Test func noStageConfigCarriesATranscript() {
+        let fields = Mirror(reflecting: StageConfig.default).children.compactMap(\.label)
+        #expect(fields.contains("language") && fields.contains("redactOnly"), "the mirror sees the fields")
+        #expect(!fields.contains { $0.lowercased().contains("transcript") }, "\(fields)")
     }
 
-    @Test func theAlignRowsStageGetsTheTranscript() async throws {
+    @Test func everyOtherStageBuildsOnceWithNoTranscriptSet() async throws {
+        for item in Self.otherRows {
+            let observed = try await builds(task: item.task, model: item.model, settings: item.settings, tags: item.tags,
+                                            inputs: try item.inputs.map { try asset($0) })
+            #expect(observed.count == 1, "\(item.task) (\(item.model)) builds one stage")
+            #expect(observed.allSatisfy { $0.transcript == nil }, "\(item.task) (\(item.model)) must not see a transcript")
+        }
+        #expect(AlignTranscript.current == nil)
+    }
+
+    @Test func theAlignRowsStageIsBuiltFromTheLanguageAlone() async throws {
         let words = Asset(items: [Item(kind: .text, value: "Guten Morgen", path: nil, sourceText: nil)])
-        let observed = try await configs(task: "Align", model: "Qwen3 Aligner 0.6B", settings: "lang=de",
-                                         inputs: [try asset(.audio), words])
-        #expect(observed.map(\.transcript) == ["Guten Morgen"])
+        let observed = try await builds(task: "Align", model: "Qwen3 Aligner 0.6B", settings: "lang=de",
+                                        inputs: [try asset(.audio), words])
+        #expect(observed.map(\.config) == [StageConfig(language: "de")])
+        #expect(observed.map(\.transcript) == [nil], "set around the run, not the build")
     }
 }

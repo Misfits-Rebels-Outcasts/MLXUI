@@ -194,7 +194,7 @@ struct AlignRunModelTests {
 
         func stage(_ probe: any PipelineStage, language: String) -> any PipelineStage {
             let handed = LeasingStage(model: model, config: .default, probe: probe, cache: cache, maxWait: .milliseconds(300))
-            return LeasingStage.perRun(handed, config: StageConfig(language: language, transcript: "alt")) { _ in probe }
+            return LeasingStage.perRun(handed, config: StageConfig(language: language)) { _ in probe }
         }
     }
 

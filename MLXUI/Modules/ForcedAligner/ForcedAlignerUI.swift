@@ -226,12 +226,9 @@ struct ForcedAlignerRunView: View {
         let modelID = self.modelID
         let text = model.transcript
         let language = model.languageCode
-        // The per-run stage: the sheet's lease, this run's transcript and language (the cache key ignores the transcript).
-        let stage = LeasingStage.perRun(handedStage,
-                                        config: StageConfig(language: language, transcript: text)) { config in
-            ForcedAlignerStage(modelID: modelID,
-                               transcript: config.transcript ?? text,
-                               language: config.language ?? language)
+        // The per-run stage: the sheet's lease and this run's language. The transcript is run input (`AlignRunModel.start`).
+        let stage = LeasingStage.perRun(handedStage, config: StageConfig(language: language)) { config in
+            ForcedAlignerStage(modelID: modelID, language: config.language ?? language)
         }
         model.start(audioURL: url, transcript: text, language: language, stage: stage)
     }
@@ -430,9 +427,11 @@ final class AlignRunModel {
                 try ForcedAlignerEngine.requireWithinLimit(seconds: duration)
                 // MLX-ERR-2 (see MLXErrorGuard.guardedRun): an MLX error becomes a thrown sentence, and a run in which the
                 // process-wide fallback fired is never reported as successful.
-                let output = try await MLXErrorGuard.guardedRun {
-                    try await Self.runOffMain(stage, .audio(buffer)) { fraction in
-                        Task { @MainActor in self.report(fraction, from: run) }
+                let output = try await AlignTranscript.$current.withValue(text) {
+                    try await MLXErrorGuard.guardedRun {
+                        try await Self.runOffMain(stage, .audio(buffer)) { fraction in
+                            Task { @MainActor in self.report(fraction, from: run) }
+                        }
                     }
                 }
                 // Stop pressed during the forward pass, which can't be interrupted: the output is dropped.
@@ -465,7 +464,7 @@ final class AlignRunModel {
 
     /// Runs the stage off the main actor (the DeepFilterNet runOffMain pattern): `SWIFT_APPROACHABLE_CONCURRENCY` would
     /// otherwise run the engine's synchronous `generate` on the main thread. `@concurrent` is a child hop, so the
-    /// `MLXErrorGuard` task-local and cancellation carry across.
+    /// `MLXErrorGuard` and `AlignTranscript` task-locals and cancellation carry across.
     @concurrent nonisolated private static func runOffMain(_ stage: any PipelineStage, _ input: Media,
                                                           progress: @Sendable @escaping (Double) -> Void) async throws -> Media {
         try await stage.run(input, progress: progress)

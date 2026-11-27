@@ -10,6 +10,10 @@ private nonisolated final class AlignWiringSeenBuild: @unchecked Sendable {
     private let lock = NSLock()
     private var config: StageConfig?
     private var calls = 0
+    private var text: String?
+    func noteRun(_ transcript: String?) { lock.lock(); text = transcript; lock.unlock() }
+    /// `AlignTranscript.current` as the stage saw it when it ran.
+    var transcriptAtRun: String? { lock.lock(); defer { lock.unlock() }; return text }
     func note(_ config: StageConfig) { lock.lock(); self.config = config; calls += 1; lock.unlock() }
     var observed: StageConfig? { lock.lock(); defer { lock.unlock() }; return config }
     var callCount: Int { lock.lock(); defer { lock.unlock() }; return calls }
@@ -188,7 +192,7 @@ nonisolated struct ForcedAlignerWorkflowWiringTests {
                             blobDirectory: ws.root.appendingPathComponent("blobs"),
                             makeModelStage: { _, config in
                                 seen.note(config)
-                                return AlignWiringStubStage(csv: stub())
+                                return AlignWiringStubStage(csv: stub(), onRun: { seen.noteRun($0) })
                             },
                             installedModelIDs: [Self.cardID], catalog: catalog)
     }
@@ -214,7 +218,7 @@ nonisolated struct ForcedAlignerWorkflowWiringTests {
                                         inputs: [try audioAsset(), textAsset("你好世界")],
                                         transcript: nil, context: nil, usedFlowContent: nil)
         let config = try #require(seen.observed)
-        #expect(config.transcript == "你好世界", "the row's second input is the stage's transcript")
+        #expect(seen.transcriptAtRun == "你好世界", "the row's second input is the run's transcript")
         #expect(config.language == "zh", "the row's lang= reaches the stage")
         let item = try #require(out.items.first)
         #expect(item.kind == .table, "Align produces a table asset")
@@ -313,12 +317,14 @@ nonisolated struct ForcedAlignerWorkflowWiringTests {
 /// `text,start,end` table). The real stage is `ForcedAlignerStage`, tested in `ForcedAlignerModuleTests`.
 nonisolated struct AlignWiringStubStage: PipelineStage, @unchecked Sendable {
     let csv: String
+    var onRun: (@Sendable (String?) -> Void)?
     var id: String { "align-stub" }
     var name: String { "Qwen3 Aligner 0.6B" }
     var accepts: MediaKind { .audio }
     var produces: MediaKind { .text }
     func run(_ input: Media, progress: @Sendable @escaping (Double) -> Void) async throws -> Media {
         guard case .audio = input else { throw StageError.kindMismatch(expected: .audio, got: input.kind) }
+        onRun?(AlignTranscript.current)
         progress(1)
         return .text(csv)
     }

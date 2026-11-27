@@ -271,11 +271,13 @@ struct ForcedAlignerModuleTests {
         let buffer = try AudioFileReader.read(url)
         #expect(buffer.sampleRate == 44_100)
         let seen = SampleLog()
-        let stage = ForcedAlignerStage(id: "stub", name: "stub", transcript: "hello", language: "en") { samples, _, _ in
+        let stage = ForcedAlignerStage(id: "stub", name: "stub", language: "en") { samples, _, _ in
             seen.add(samples.count)
             return [AlignedUnit(text: "hello", start: 0.1, end: 0.5)]
         }
-        let output = try await stage.run(.audio(buffer)) { _ in }
+        let output = try await AlignTranscript.$current.withValue("hello") {
+            try await stage.run(.audio(buffer)) { _ in }
+        }
         guard case let .text(csv) = output else { Issue.record("expected text"); return }
         #expect(csv == "text,start,end\nhello,0.100,0.500\n")
         let count = try #require(seen.values.first)
@@ -285,12 +287,12 @@ struct ForcedAlignerModuleTests {
     @Test func theStageRefusesPastTheLimitBeforeTheEngineRuns() async throws {
         let buffer = AudioBuffer(samples: [Float](repeating: 0, count: 16_000 * 301), sampleRate: 16_000)
         let called = SampleLog()
-        let stage = ForcedAlignerStage(id: "stub", name: "stub", transcript: "hello", language: "en") { samples, _, _ in
+        let stage = ForcedAlignerStage(id: "stub", name: "stub", language: "en") { samples, _, _ in
             called.add(samples.count)
             return []
         }
         do {
-            _ = try await stage.run(.audio(buffer)) { _ in }
+            _ = try await AlignTranscript.$current.withValue("hello") { try await stage.run(.audio(buffer)) { _ in } }
             Issue.record("a 301 s recording must be refused")
         } catch let error as ForcedAlignerEngine.EngineError {
             guard case .overLimit = error else {

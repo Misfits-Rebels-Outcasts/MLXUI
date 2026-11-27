@@ -17,10 +17,8 @@ nonisolated struct ForcedAlignerSDK: ModelSDK {
     }
 
     func makeStage(for model: ModelEntry, config: StageConfig) throws -> any PipelineStage {
-        // A Run sheet or a flow row always supplies its own stage (the transcript is per-run data); this is the builder
-        // those two replace, and it refuses an empty transcript on the run with a plain sentence.
+        // Built from the language alone; each run supplies its transcript through `AlignTranscript` (ruling 17).
         ForcedAlignerStage(modelID: model.id,
-                           transcript: config.transcript ?? "",
                            language: config.language ?? ForcedAlignerEngine.defaultLanguageCode)
     }
 }

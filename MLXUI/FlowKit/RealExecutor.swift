@@ -732,9 +732,11 @@ nonisolated struct RealExecutor: FlowExecutor {
         }
         let language = try AlignRowRequest.languageCode(settings: row.settings, rowLabel: path)
         let buffer = try AudioFileReader.read(audioPath)
-        let config = StageConfig(language: language, transcript: transcript)
-        let stage = try await makeModelStage(modelEntry, config)
-        let output = try await stage.run(.audio(buffer)) { _ in }
+        // The transcript is run input, not a load setting (ruling 17, `AlignTranscript`): one engine per language.
+        let stage = try await makeModelStage(modelEntry, StageConfig(language: language))
+        let output = try await AlignTranscript.$current.withValue(transcript) {
+            try await stage.run(.audio(buffer)) { _ in }
+        }
         guard case let .text(csv) = output else {
             throw StageError.kindMismatch(expected: .text, got: output.kind)
         }
