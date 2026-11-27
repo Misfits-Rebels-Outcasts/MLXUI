@@ -221,7 +221,9 @@ nonisolated struct ForcedAlignerWorkflowWiringTests {
         #expect(item.value == Self.csv, "the table also carries its CSV for Save Text")
         let tablePath = try #require(item.path)
         let table = try TableTool.readTable(from: tablePath)
-        #expect(table.columns == ["text", "start", "end"])
+        // Owner ruling 4 (Boo, 2026-11-27): the table has "columns exactly `text`, `start`, `end`".
+        #expect(AlignmentExport.columns == ["text", "start", "end"])
+        #expect(table.columns == AlignmentExport.columns)
         #expect(table.rows.count == 2)
         #expect(table.rows[0][0] as? String == "Hello")
     }

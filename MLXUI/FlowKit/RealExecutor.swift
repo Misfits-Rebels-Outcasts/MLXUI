@@ -701,7 +701,15 @@ nonisolated struct RealExecutor: FlowExecutor {
     /// The result is a file-backed `.table` item in `TableTools.tableItem`'s shape (so `Query Table`, `Table to Text`
     /// and `Save Text`'s siblings read it like any table), and it also carries its CSV in `value`: `Save Text` only
     /// writes inline text, so the row chain the issue names (`Read Audio` → `Read Text` → `Align (1,2)` → `Save Text`)
-    /// writes the CSV without an extra `Table to Text` row. Implementer's call, pending owner confirmation.
+    /// writes the CSV without an extra `Table to Text` row.
+    ///
+    /// Owner ruling 4 (Boo, 2026-11-27): "Accept it if it goes through `TableTool.tableItem(columns:rows:in:)` with
+    /// columns exactly `text`, `start`, `end`. If it doesn't, change it so it does." The condition holds (`tableItem` with
+    /// exactly `text,start,end`), and the CSV in `value` is the PR's described addition the ruling accepted.
+    ///
+    /// The table's `start` and `end` cells are numbers (the Identify Speakers precedent), so `Table to Text format=csv`
+    /// renders them with `TableTool.formatDouble` (e.g. `0.24`, `2`), while the row's `value` CSV, the Run screen and
+    /// Export CSV keep three decimals.
     private func runAlign(_ modelEntry: ModelEntry, row: Row, inputs: [Asset], path: String) async throws -> Asset {
         let expected = "two inputs: the audio first and the transcript second"
         guard inputs.count == 2 else {
