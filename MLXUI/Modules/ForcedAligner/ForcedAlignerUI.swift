@@ -79,6 +79,7 @@ struct ForcedAlignerRunView: View {
             model.reset()
             return true
         } isTargeted: { isDropTargeted = $0 }
+        .onDisappear { model.stop() }   // ruling 12 (see the Done button), however the sheet is closed
         .overlay {
             if isDropTargeted {
                 RoundedRectangle(cornerRadius: 10)
@@ -151,7 +152,7 @@ struct ForcedAlignerRunView: View {
 
     private var controls: some View {
         HStack(spacing: 8) {
-            Button(model.isRunning ? "Aligning…" : "Align") { run() }
+            Button(model.runButtonTitle) { run() }
                 .keyboardShortcut(.defaultAction)
                 .disabled(model.isRunning || audioURL == nil)
             if model.isRunning {
@@ -165,7 +166,7 @@ struct ForcedAlignerRunView: View {
         HStack(spacing: 8) {
             ProgressView().scaleEffect(0.6).frame(width: 16, height: 16)
             ProgressView(value: model.progress).frame(maxWidth: 240)
-            Text("Timing the transcript…").font(.callout).foregroundStyle(.secondary)
+            Text(model.progressText).font(.callout).foregroundStyle(.secondary)
             Spacer()
         }
         .padding(10)
@@ -197,8 +198,12 @@ struct ForcedAlignerRunView: View {
 
     private func footer(result: AlignRunModel.Result?) -> some View {
         HStack {
-            // While a run is in progress Esc is Stop's alone (implementer's call, pending owner confirmation).
-            Button("Done") { dismiss() }.keyboardShortcut(model.isRunning ? nil : .cancelAction)
+            // Owner ruling 12 (Boo, 2026-11-27): "Done cancels the run through the same path as Stop. The lease rule from
+            // ruling 11 applies. Test that Done during a run discards the result and releases the lease only after the step
+            // returns."
+            // Owner ruling 13 (Boo, 2026-11-27): "Confirmed: Done has no keyboard shortcut while a run is going, so the
+            // cancel key always means Stop."
+            Button("Done") { model.stop(); dismiss() }.keyboardShortcut(model.isRunning ? nil : .cancelAction)
             Spacer()
             Button("Export CSV") { export(result, as: .csv) }.disabled(result == nil)
             Button("Export SRT") { export(result, as: .srt) }.disabled(result == nil)
@@ -292,6 +297,10 @@ final class AlignRunModel {
     }
 
     var isRunning = false
+    /// Stop was pressed and the step in flight hasn't returned yet (`isRunning` stays true until it does).
+    private(set) var isStopping = false
+    var runButtonTitle: String { isStopping ? "Stopping…" : isRunning ? "Aligning…" : "Align" }
+    var progressText: String { isStopping ? "Stopping…" : "Timing the transcript…" }
     var progress = 0.0
     var errorText: String?
     var result: Result?
@@ -322,13 +331,22 @@ final class AlignRunModel {
         task = nil
         currentRun = nil
         isRunning = false
+        isStopping = false
         progress = 0
         errorText = nil
         result = nil
         stopPlayback()
     }
 
+    /// The one cancel path: the Stop button, Done, and the sheet disappearing. The run's memory lease is not touched
+    /// here: `LeasingStage.run` returns it when the stage itself returns.
+    ///
+    /// Owner ruling 11 (Boo, 2026-11-27): "Accept that Stop can't interrupt the single alignment pass. But when Stop is
+    /// pressed, the screen shows 'Stopping…' at once instead of 'running', and the MemoryBudget lease is released only
+    /// when the step actually returns, never at the moment Stop is pressed. Test both."
     func stop() {
+        guard isRunning else { return }
+        isStopping = true
         task?.cancel()
     }
 
@@ -382,6 +400,7 @@ final class AlignRunModel {
                 }
             }
             self.isRunning = false
+            self.isStopping = false
         }
     }
 

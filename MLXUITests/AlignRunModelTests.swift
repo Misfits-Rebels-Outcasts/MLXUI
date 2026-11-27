@@ -213,6 +213,157 @@ struct AlignRunModelTests {
         #expect(!model.isRunning)
     }
 
+    // MARK: - Stop, Done and the memory lease (owner rulings 11 and 12, 2026-11-27)
+
+    /// A test-owned budget and engine cache, and the stage the Run view builds on them: `LeasingStage.perRun` over the
+    /// sheet's `LeasingStage`. The ledger is what says whether the lease is still held.
+    private struct LeaseRig {
+        let budget = MemoryBudget(capacityBytes: 20 * 1_073_741_824,
+                                  cacheClearer: MLXCacheClearer(capActive: { false }, clear: {}, delay: .milliseconds(1)))
+        let cache: EngineCache
+        let model = makeEntry(id: "align-lease", modelType: .align, ramGB: 3)
+
+        init() {
+            cache = EngineCache(budget: budget, countsLLMWeights: true)
+        }
+
+        func stage(_ probe: any PipelineStage, language: String) -> any PipelineStage {
+            let handed = LeasingStage(model: model, config: .default, probe: probe, cache: cache, maxWait: .milliseconds(300))
+            return LeasingStage.perRun(handed, config: StageConfig(language: language, transcript: "alt")) { _ in probe }
+        }
+    }
+
+    /// Long enough for a cancellation to unwind anything that would give up early.
+    private func pause() async throws { try await Task.sleep(for: .milliseconds(200)) }
+
+    @Test func stopShowsStoppingAtOnceAndKeepsTheLeaseUntilTheStepReturns() async throws {
+        let url = try wavURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let rig = LeaseRig()
+        let step = GatedStage(csv: Self.oldCSV)
+        let model = AlignRunModel()
+        model.start(audioURL: url, transcript: "alt", language: "de", stage: rig.stage(step, language: "de"))
+        try await waitUntilEntered(step.gate)
+        let task = try #require(model.task)
+        let booked = rig.budget.usedBytes
+        #expect(booked > 0 && rig.budget.inUseCount == 1, "leased while the step runs")
+        #expect(!model.isStopping)
+        #expect(model.runButtonTitle == "Aligning…")
+
+        model.stop()
+        // At once, before the step has had any chance to return.
+        #expect(model.isStopping)
+        #expect(model.runButtonTitle == "Stopping…")
+        #expect(model.progressText == "Stopping…")
+        #expect(rig.budget.usedBytes == booked && rig.budget.inUseCount == 1)
+        try await pause()
+        #expect(model.isStopping && model.isRunning, "the step is still in flight")
+        #expect(rig.budget.usedBytes == booked && rig.budget.inUseCount == 1, "Stop releases nothing")
+
+        try await release(step.gate, task)
+        #expect(rig.budget.usedBytes == 0 && rig.budget.inUseCount == 0 && rig.cache.count == 0)
+        #expect(model.result == nil)
+        #expect(model.errorText == nil)
+        #expect(!model.isRunning && !model.isStopping)
+        #expect(model.runButtonTitle == "Align")
+    }
+
+    /// Done calls `stop()` and dismisses, and the sheet disappearing calls it again.
+    @Test func doneDuringARunDiscardsTheResultAndReleasesOnlyAfterTheStep() async throws {
+        let url = try wavURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let rig = LeaseRig()
+        let step = GatedStage(csv: Self.oldCSV)
+        let model = AlignRunModel()
+        model.start(audioURL: url, transcript: "alt", language: "de", stage: rig.stage(step, language: "de"))
+        try await waitUntilEntered(step.gate)
+        let task = try #require(model.task)
+        let booked = rig.budget.usedBytes
+        #expect(booked > 0 && rig.budget.inUseCount == 1)
+
+        model.stop()   // the Done button
+        model.stop()   // onDisappear
+        #expect(model.isStopping)
+        try await pause()
+        #expect(rig.budget.usedBytes == booked && rig.budget.inUseCount == 1, "held while the step runs")
+
+        try await release(step.gate, task)
+        #expect(rig.budget.usedBytes == 0 && rig.budget.inUseCount == 0 && rig.cache.count == 0)
+        #expect(model.result == nil, "the result is discarded")
+        #expect(model.errorText == nil)
+        #expect(!model.isRunning && !model.isStopping)
+    }
+
+    @Test func stopWithNothingRunningDoesNothing() async throws {
+        let url = try wavURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let model = AlignRunModel()
+        model.stop()
+        #expect(!model.isStopping && model.runButtonTitle == "Align")
+        model.start(audioURL: url, transcript: "neu", language: "de", stage: TextStubStage(csv: Self.newCSV))
+        await model.task?.value
+        model.stop()
+        #expect(!model.isStopping)
+        #expect(model.result?.units.map(\.text) == ["neu"], "Done after a run keeps nothing from being exported")
+    }
+
+    /// A new file or transcript resets the screen while a stopped step is still in flight, and a new run may start. In
+    /// the same language the two runs share one engine-cache entry (one booking, two holds); in another language each
+    /// has its own. Either way a run's booking stays until its own step returns.
+    @Test(arguments: ["de", "fr"], [true, false])
+    func aNewRunBesideAStoppedOneKeepsBothLeasesUntilTheirStepsReturn(newLanguage: String,
+                                                                     oldReturnsFirst: Bool) async throws {
+        let url = try wavURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let rig = LeaseRig()
+        let old = GatedStage(csv: Self.oldCSV)
+        let new = GatedStage(csv: Self.newCSV)
+        let model = AlignRunModel()
+        model.start(audioURL: url, transcript: "alt", language: "de", stage: rig.stage(old, language: "de"))
+        try await waitUntilEntered(old.gate)
+        let oldTask = try #require(model.task)
+        let one = rig.budget.usedBytes
+        #expect(one > 0)
+        model.stop()
+        model.start(audioURL: url, transcript: "neu", language: newLanguage,
+                    stage: rig.stage(new, language: newLanguage))
+        try await waitUntilEntered(new.gate)
+        let newTask = try #require(model.task)
+        let entries = newLanguage == "de" ? 1 : 2
+        #expect(rig.budget.usedBytes == Int64(entries) * one && rig.budget.inUseCount == entries)
+        #expect(model.isRunning && !model.isStopping, "the new run is not the one being stopped")
+
+        if oldReturnsFirst {
+            try await release(old.gate, oldTask)
+            #expect(rig.budget.usedBytes == one && rig.budget.inUseCount == 1, "the new run's lease")
+            #expect(model.isRunning && !model.isStopping)
+            #expect(model.result == nil && model.errorText == nil)
+            try await release(new.gate, newTask)
+        } else {
+            try await release(new.gate, newTask)
+            #expect(rig.budget.usedBytes == one && rig.budget.inUseCount == 1, "the old step has not returned")
+            #expect(model.result?.units.map(\.text) == ["neu"])
+            try await release(old.gate, oldTask)
+        }
+        #expect(rig.budget.usedBytes == 0 && rig.budget.inUseCount == 0 && rig.cache.count == 0)
+        #expect(model.result?.units.map(\.text) == ["neu"])
+        #expect(model.errorText == nil)
+        #expect(!model.isRunning && !model.isStopping)
+    }
+
+    /// The view's half of rulings 11-13. Source-level, as `noRunViewBuildsItsOwnStage`: the view's model is private
+    /// SwiftUI state.
+    @Test func theViewSendsDoneAndDisappearThroughStop() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let source = try String(contentsOf: root.appendingPathComponent("MLXUI/Modules/ForcedAligner/ForcedAlignerUI.swift"),
+                                encoding: .utf8)
+        #expect(source.contains(#"Button("Done") { model.stop(); dismiss() }"#))
+        #expect(source.contains(".onDisappear { model.stop() }"))
+        #expect(source.contains(".keyboardShortcut(model.isRunning ? nil : .cancelAction)"))
+        #expect(source.contains("Button(model.runButtonTitle)"))
+        #expect(source.contains("Text(model.progressText)"))
+    }
+
     /// The library's neighbour fill can give a repeated word equal times; the table's rows still need their own ids.
     @Test func repeatedUnitsGetDistinctRowIDs() async throws {
         let url = try wavURL()
