@@ -409,6 +409,9 @@ Known inconsistencies in the tree itself — fix or rule on them, don't propagat
   when the Advance Gallery returns.
 - **Flow 17 (Story From a Photo) holds two resident copies of Gemma 4 E4B at once** (`VLMEngine`'s `ModelContainerPool.vlm` and `ModelContainerPool.shared`, separate pools keyed by directory): ~4 GiB extra, so it needs ~12.5 GiB peak (smoke limit 13 GiB). Follow-up item in `RSI/backlog.md`.
 - **WhisperKit is still linked** although the MLX-first guardrail superseded it (A2).
+- **Qwen3-ASR and the forced aligner abort under Xcode with Metal API Validation on** (an MLX bug, fixed in mlx
+  0.32.4); turn validation off in the scheme (Run → Diagnostics) to debug them. The upgrade is its own stream (owner
+  ruling 46, Boo, 2026-11-28: "The mlx-swift 0.33 / mlx-swift-lm upgrade is not approved now.").
 - **`StageConfig` now carries `seed` / `width` / `height` / `steps`** (CFM-R16-1) and `quantize`
   (MP7-W: `Int?`, `nil` = not set, set only for a FLUX.2 Klein flow row, which resolves it to the
   manifest default 8 at `makeStage`; every other stage ignores it). Diffusion rows' settings are no
