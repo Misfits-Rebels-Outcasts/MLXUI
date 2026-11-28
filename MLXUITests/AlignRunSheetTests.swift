@@ -75,19 +75,51 @@ struct AlignRunSheetTests {
 
         rig.stage.gate.open()
         try await rig.wait("the step to return") { !presented.model.isRunning }
-        #expect(presented.model.runButtonTitle == "Align")
-        #expect(presented.model.canChangeInputs)
+        try await rig.wait("the sheet to show Align and enable its inputs") {
+            let shown = rig.shown(presented.sheet)
+            return shown.buttons["Align"] == true && shown.buttons["Choose Audio…"] == true && shown.buttons["Open…"] == true
+        }
         #expect(presented.model.result == nil)
         #expect(presented.model.errorText == nil)
         #expect(rig.isShowing(presented.sheet))
 
-        // SwiftUI takes a moment after a run ends to give Done its key back, and an Esc inside that moment can go
-        // unanswered (seen once, `.eventQueue` with nothing focused, with no wait here).
         // Owner ruling 45 (Boo, 2026-11-28): "Confirmed: the step log records the model id only, never audio or
-        // transcript content. Confirmed: an Esc landing the instant a run ends may do nothing."
+        // transcript content. Confirmed: an Esc landing the instant a run ends may do nothing." So the case waits.
         try await Task.sleep(for: .seconds(1))
         try await rig.pressEscape(presented.sheet, by: route)
         try await rig.wait("Esc to close the idle sheet") { !rig.isShowing(presented.sheet) }
+    }
+
+    /// An Esc that lands before the sheet has redrawn for the new run. Nothing here may suspend between Align and Esc:
+    /// the point is the instant in which the buttons still look as they did before the run.
+    @Test(arguments: EscRoute.allCases, [FocusSpot.transcript, .nowhere])
+    func escRightAfterAlignStopsAndKeepsTheSheet(route: EscRoute, spot: FocusSpot) async throws {
+        let rig = try SheetRig()
+        defer { rig.close() }
+        let presented = try await rig.present()
+        try rig.focus(presented.sheet, on: spot)
+        try await rig.offer("\r", 36, to: presented.sheet)
+        try #require(presented.model.isRunning)
+        let escape = try rig.key("\u{1b}", 53, in: presented.sheet)
+        switch route {
+        case .keyEquivalent: #expect(presented.sheet.performKeyEquivalent(with: escape), "a button takes Esc")
+        case .eventQueue: NSApp.sendEvent(escape)
+        }
+        try await rig.wait("the run to reach the stage") { rig.stage.gate.isEntered }
+        try await rig.expectStopping(presented, for: .seconds(1))
+    }
+
+    /// The other way Esc arrives: the focused view is sent `cancelOperation:`, which a sheet answers by closing unless
+    /// its view takes it (ruling 41's case, from the transcript box). Sent directly, so the case doesn't depend on
+    /// how the app's event dispatch routes a key in a test host.
+    @Test func theCancelCommandFromTheTranscriptStopsAndKeepsTheSheet() async throws {
+        let rig = try SheetRig()
+        defer { rig.close() }
+        let presented = try await rig.present()
+        try await rig.pressReturnToAlign(presented)
+        try rig.focus(presented.sheet, on: .transcript)
+        try #require(presented.sheet.firstResponder as? NSTextView).doCommand(by: #selector(NSResponder.cancelOperation(_:)))
+        try await rig.expectStopping(presented, for: .seconds(1))
     }
 
     @Test(arguments: EscRoute.allCases, [FocusSpot.transcript, .nowhere])
@@ -156,6 +188,11 @@ private final class SheetRig {
         window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(rootView: SheetParent(host: host) { [weak self] in self?.view(for: $0) })
         window.makeKeyAndOrderFront(nil)
+        Self.accessibility(true)   // SwiftUI builds the tree `shown` reads only for an accessibility client
+    }
+
+    private static func accessibility(_ on: Bool) {
+        NSApp.accessibilitySetValue(on, forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
     }
 
     private func view(for presentation: SheetPresentation) -> ForcedAlignerRunView {
@@ -251,15 +288,45 @@ private final class SheetRig {
         return sheet.contentView.map { all($0) } ?? []
     }
 
-    /// The sheet stays and shows "Stopping…", with ruling 14's controls disabled, for all of `duration`.
+    /// The sheet's buttons by label (whether each is enabled) and its texts, as accessibility reads the rendered view.
+    func shown(_ sheet: NSWindow) -> (buttons: [String: Bool], texts: Set<String>) {
+        var buttons: [String: Bool] = [:]
+        var texts: Set<String> = []
+        func value(_ element: NSObject, _ key: String) -> Any? {
+            element.responds(to: NSSelectorFromString(key)) ? element.value(forKey: key) : nil
+        }
+        func walk(_ element: Any) {
+            guard let element = element as? NSObject else { return }
+            switch value(element, "accessibilityRole") as? String {
+            case NSAccessibility.Role.button.rawValue:
+                if let label = value(element, "accessibilityLabel") as? String {
+                    buttons[label] = value(element, "isAccessibilityEnabled") as? Bool
+                }
+            case NSAccessibility.Role.staticText.rawValue:
+                if let text = value(element, "accessibilityValue") as? String { texts.insert(text) }
+            default: break
+            }
+            (value(element, "accessibilityChildren") as? [Any])?.forEach(walk)
+        }
+        if let content = sheet.contentView { walk(content) }
+        return (buttons, texts)
+    }
+
+    /// The sheet stays and shows "Stopping…", with ruling 14's controls disabled, for all of `duration`: in the model
+    /// and on screen.
     func expectStopping(_ presented: Presented, for duration: Duration) async throws {
         let model = presented.model
+        try await wait("the sheet to show Stopping…") { !isShowing(presented.sheet) || shown(presented.sheet).buttons["Stopping…"] != nil }
         let until = ContinuousClock.now + duration
         repeat {
             try #require(isShowing(presented.sheet), "the sheet stays")
             try #require(stage.gate.isEntered && model.isRunning && model.isStopping, "Esc is Stop, and it stays Stop")
             try #require(model.runButtonTitle == "Stopping…" && model.progressText == "Stopping…")
             try #require(!model.canChangeInputs, "Choose Audio…, Open…, drop and Align all ask this")
+            let onScreen = shown(presented.sheet)
+            try #require(onScreen.buttons["Stopping…"] == false && onScreen.buttons["Choose Audio…"] == false
+                         && onScreen.buttons["Open…"] == false, "shown: \(onScreen.buttons)")
+            try #require(onScreen.texts.contains("Stopping…"))
             try await Task.sleep(for: .milliseconds(50))
         } while ContinuousClock.now < until
     }
@@ -286,10 +353,11 @@ private final class SheetRig {
             if condition() { return }
             try await Task.sleep(for: .milliseconds(25))
         }
-        try #require(Bool(false), "timed out waiting for \(what)")
+        try #require(condition(), "timed out waiting for \(what)")
     }
 
     func close() {
+        Self.accessibility(false)
         stage.gate.open()
         host.item = nil
         if let sheet = window.attachedSheet { window.endSheet(sheet) }

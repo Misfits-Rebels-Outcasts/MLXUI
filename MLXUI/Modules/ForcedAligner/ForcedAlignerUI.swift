@@ -93,12 +93,25 @@ struct ForcedAlignerRunView: View {
             model.dropAudio(urls)
         } isTargeted: { isDropTargeted = $0 && model.canChangeInputs }
         .onDisappear { model.stop() }   // ruling 12 (see the Done button), when SwiftUI reports the sheet gone
-        // Esc reaches the sheet either as the Stop / Done button's key equivalent or up the responder chain (from the
-        // transcript box, say), where a sheet left to itself closes, run and all.
+        // Esc has one meaning, decided as it arrives (`escape`). It comes as a key equivalent, answered by the button
+        // below, or up the responder chain (from the transcript box, say), where a sheet left to itself closes, run and
+        // all. The button is always there and no other holds the cancel key: while Stop and Done traded the shortcut as
+        // a run began, Done still had it for an instant after Align, and an Esc then stopped the run and closed the
+        // sheet.
         //
         // Owner ruling 41 (Boo, 2026-11-28): "Esc during a run closes the sheet instead of acting as Stop (ruling 13).
         // Make Esc while running mean Stop, and test it."
-        .onExitCommand { if model.isRunning { model.stop() } else { dismiss() } }
+        // Owner ruling 44 (Boo, 2026-11-28): "Fix step 4 on fa-f: Esc during a run must go through exactly the path the
+        // Stop button uses, wherever keyboard focus is (button, transcript, nothing)".
+        .background {
+            Button("Cancel", action: escape)
+                .keyboardShortcut(.cancelAction)
+                .opacity(0)
+                .allowsHitTesting(false)
+                .focusable(false)
+                .accessibilityHidden(true)
+        }
+        .onExitCommand { escape() }
         .overlay {
             if isDropTargeted && model.canChangeInputs {
                 RoundedRectangle(cornerRadius: 10)
@@ -181,7 +194,7 @@ struct ForcedAlignerRunView: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(!model.canChangeInputs || model.audioURL == nil)
             if model.isRunning {
-                Button("Stop") { model.stop() }.keyboardShortcut(.cancelAction)
+                Button("Stop") { model.stop() }
             }
             Spacer()
         }
@@ -239,7 +252,9 @@ struct ForcedAlignerRunView: View {
             // returns."
             // Owner ruling 13 (Boo, 2026-11-27): "Confirmed: Done has no keyboard shortcut while a run is going, so the
             // cancel key always means Stop."
-            Button("Done") { model.stop(); dismiss() }.keyboardShortcut(model.isRunning ? nil : .cancelAction)
+            // Done holds no shortcut at all, running or not: Esc is `escape`'s, which closes an idle sheet.
+            // *Implementer's call, pending owner confirmation.*
+            Button("Done") { model.stop(); dismiss() }
             Spacer()
             Button("Export CSV") { export(result, as: .csv) }.disabled(result == nil)
             Button("Export SRT") { export(result, as: .srt) }.disabled(result == nil)
@@ -248,6 +263,9 @@ struct ForcedAlignerRunView: View {
     }
 
     // MARK: - Actions
+
+    /// Esc: Stop while a run is going (the Stop button's own call), otherwise close.
+    private func escape() { if model.isRunning { model.stop() } else { dismiss() } }
 
     private func run() {
         guard let url = model.audioURL else { return }

@@ -13,8 +13,9 @@ import os
 /// Owner ruling 45 (Boo, 2026-11-28): "Confirmed: the step log records the model id only, never audio or transcript
 /// content. Confirmed: an Esc landing the instant a run ends may do nothing."
 ///
-/// A Stop that reaches a running sheet (the button, Esc, Done) is logged too, the model id only, so the log shows when
-/// it arrived against the step's start and end. *Implementer's call, pending owner confirmation.*
+/// A Stop that reaches a running sheet (the button, Esc, Done, the sheet disappearing) is logged too, the model id
+/// only, so the log shows when it arrived against the step's start and end. The line doesn't say which of these it
+/// was, and Done may log it twice. *Implementer's call, pending owner confirmation.*
 ///
 /// Owner ruling 15 (Boo, 2026-11-27): "Close it. The aligner module tracks the running step per model, across sheets,
 /// and keeps Align disabled in every sheet until that step returns. Test: Done during a run, reopen the sheet, Align is
