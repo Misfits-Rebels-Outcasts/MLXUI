@@ -512,7 +512,9 @@ struct AlignRunModelTests {
                                 encoding: .utf8)
         #expect(source.contains(#"Button("Done") { model.stop(); dismiss() }"#))
         #expect(source.contains(".onDisappear { model.stop() }"))
-        #expect(source.contains(".keyboardShortcut(model.isRunning ? nil : .cancelAction)"))
+        // Rulings 13 and 44: one cancel key in the sheet, which asks the model as it is pressed (Done and Stop hold none).
+        #expect(source.components(separatedBy: ".keyboardShortcut(.cancelAction)").count == 2)
+        #expect(source.contains("private func escape() { if model.isRunning { model.stop() } else { dismiss() } }"))
         #expect(source.contains("Button(model.runButtonTitle)"))
         #expect(source.contains("Text(model.progressText)"))
     }

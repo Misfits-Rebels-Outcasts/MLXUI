@@ -65,6 +65,18 @@ nonisolated struct AlignedUnit: Sendable, Equatable, Hashable {
 /// - The mel difference, the Japanese/Korean splitter and the newline split are reported upstream:
 ///   https://github.com/Neywa-Labs/mlx-audio-swift/issues/422
 /// - `peakMemoryUsage` is the process-wide `Memory.peakMemory`, not a per-run figure; FA-7's footprint test resets it.
+/// - **With Metal API validation on** (the default for an Xcode Run; `MTL_DEBUG_LAYER=1`) the first alignment aborts:
+///   `setBytes: bytes argument cannot be nil`. The library's `inputFeatures[i]` (`Qwen3ASR.swift:501`) is an integer index
+///   of a transposed array, and MLX core 0.32.2 (mlx-swift 0.32.3) then passes an empty shape vector's nil pointer in
+///   `Gather::eval_gpu`. Qwen3-ASR takes the same line and aborts the same way. The cause is not this engine's input, and
+///   not the thread-bound gather of trap 4 (it reproduces on one thread with a 12-element array); without validation
+///   it does not happen. MLX 0.32.4 and mlx-swift 0.33.0 contain a fix (ml-explore/mlx#4622), untested here. Taking it
+///   means moving mlx-swift and mlx-swift-lm together (mlx-swift-lm 3.32.3 allows mlx-swift 0.32.x only), which needs
+///   the owner's approval. Until then, turn API validation off in the scheme to run either model from Xcode. Reported
+///   on the issue linked above.
+///   Owner ruling 39 (Boo, 2026-11-28): "Fix it in our engine if the cause is our input (for example an empty array
+///   passed in). Otherwise add it to the upstream mlx-audio-swift report with the stack. Not a release blocker unless it
+///   reproduces without validation."
 enum ForcedAlignerEngine {
     /// The model's input rate. The stage resamples; never pass the decoded rate through (trap 5).
     nonisolated static let sampleRate = 16_000

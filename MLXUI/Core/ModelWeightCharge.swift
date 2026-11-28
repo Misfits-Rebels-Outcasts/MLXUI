@@ -159,7 +159,9 @@ nonisolated enum ModelLoadProfile {
         // not the weights, so it is a per-call working set (the `.enhance` row's form): files x 1.10 (1.399 GB) + 5.25 GB
         // = 6.649 GB. 5.25 GB is 6.400 GB less the files' charge (5.001 GB) rounded up to the next 0.05, plus the ~1/50
         // the quadratic attention still gains going from the measured 297.1 s to the 300 s ceiling. Never under the highest
-        // peak. Implementer's call, pending owner confirmation.
+        // peak.
+        // Owner ruling 33 (Boo, 2026-11-28): "Confirmed: the 5.25 GB working-memory figure in ModelWeightCharge.swift.
+        // Replace "pending owner confirmation" with this ruling and its measurement (peak 6.538 GB, booking 6.649 GB)."
         // The lead's runs of the same test: 2026-11-27 (b838d47) load + 5 s 3.005 GB, 60 s 4.842 GB, 300 s worst case
         // (297.1 s, 990 units) **6.538 GB**; 2026-11-28 (7ea0651) 2.855 / 4.722 / 6.351 GB. Owner ruling 7 (Boo,
         // 2026-11-27): "Set it from your own FA-7 run: the highest measured peak rounded up to 0.1 GB. Keep the `.align`

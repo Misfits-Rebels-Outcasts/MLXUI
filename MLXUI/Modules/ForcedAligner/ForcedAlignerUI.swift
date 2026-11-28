@@ -45,14 +45,20 @@ struct ForcedAlignerRunView: View {
     @State private var showTranscriptImporter = false
     @State private var isDropTargeted = false
 
+    /// The stage of one run; nil in the app, which builds ``ForcedAlignerStage``. `AlignRunSheetTests` passes a stub.
+    private let runStage: (@MainActor (StageConfig) -> any PipelineStage)?
+
+    /// `model` and `runStage` are for the sheet tests; the app leaves both nil, and the sheet makes its own model.
     init(modelDisplayName: String, license: String?, modelID: String, footprintBytes: Int64,
-         handedStage: any PipelineStage) {
+         handedStage: any PipelineStage, model: AlignRunModel? = nil,
+         runStage: (@MainActor (StageConfig) -> any PipelineStage)? = nil) {
+        self.runStage = runStage
         self.modelDisplayName = modelDisplayName
         self.license = license
         self.modelID = modelID
         self.footprintBytes = footprintBytes
         self.handedStage = handedStage
-        _model = State(initialValue: AlignRunModel(modelID: modelID))
+        _model = State(initialValue: model ?? AlignRunModel(modelID: modelID))
     }
 
     var body: some View {
@@ -86,7 +92,26 @@ struct ForcedAlignerRunView: View {
         .dropDestination(for: URL.self) { urls, _ in
             model.dropAudio(urls)
         } isTargeted: { isDropTargeted = $0 && model.canChangeInputs }
-        .onDisappear { model.stop() }   // ruling 12 (see the Done button), however the sheet is closed
+        .onDisappear { model.stop() }   // ruling 12 (see the Done button), when SwiftUI reports the sheet gone
+        // Esc has one meaning, decided as it arrives (`escape`). It comes as a key equivalent, answered by the button
+        // below, or up the responder chain (from the transcript box, say), where a sheet left to itself closes, run and
+        // all. The button is always there and no other holds the cancel key: while Stop and Done traded the shortcut as
+        // a run began, Done still had it for an instant after Align, and an Esc then stopped the run and closed the
+        // sheet.
+        //
+        // Owner ruling 41 (Boo, 2026-11-28): "Esc during a run closes the sheet instead of acting as Stop (ruling 13).
+        // Make Esc while running mean Stop, and test it."
+        // Owner ruling 44 (Boo, 2026-11-28): "Fix step 4 on fa-f: Esc during a run must go through exactly the path the
+        // Stop button uses, wherever keyboard focus is (button, transcript, nothing)".
+        .background {
+            Button("Cancel", action: escape)
+                .keyboardShortcut(.cancelAction)
+                .opacity(0)
+                .allowsHitTesting(false)
+                .focusable(false)
+                .accessibilityHidden(true)
+        }
+        .onExitCommand { escape() }
         .overlay {
             if isDropTargeted && model.canChangeInputs {
                 RoundedRectangle(cornerRadius: 10)
@@ -169,7 +194,7 @@ struct ForcedAlignerRunView: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(!model.canChangeInputs || model.audioURL == nil)
             if model.isRunning {
-                Button("Stop") { model.stop() }.keyboardShortcut(.cancelAction)
+                Button("Stop") { model.stop() }
             }
             Spacer()
         }
@@ -227,7 +252,9 @@ struct ForcedAlignerRunView: View {
             // returns."
             // Owner ruling 13 (Boo, 2026-11-27): "Confirmed: Done has no keyboard shortcut while a run is going, so the
             // cancel key always means Stop."
-            Button("Done") { model.stop(); dismiss() }.keyboardShortcut(model.isRunning ? nil : .cancelAction)
+            // Done holds no shortcut at all, running or not: Esc is `escape`'s, which closes an idle sheet.
+            // Owner ruling 51 (Boo, 2026-11-28): "Confirmed: … Done has no keyboard shortcut".
+            Button("Done") { model.stop(); dismiss() }
             Spacer()
             Button("Export CSV") { export(result, as: .csv) }.disabled(result == nil)
             Button("Export SRT") { export(result, as: .srt) }.disabled(result == nil)
@@ -237,6 +264,13 @@ struct ForcedAlignerRunView: View {
 
     // MARK: - Actions
 
+    /// Esc: Stop while a run is going (the Stop button's own call), otherwise close.
+    ///
+    /// Owner ruling 50 (Boo, 2026-11-28): "Confirmed: an Esc landing the instant a run ends closes the idle sheet. No
+    /// grace period." The result that has just arrived goes with the sheet. This supersedes ruling 45's "may do
+    /// nothing".
+    private func escape() { if model.isRunning { model.stop() } else { dismiss() } }
+
     private func run() {
         guard let url = model.audioURL else { return }
         selection = nil   // row ids are positions, so a new result must not inherit the last one's selection
@@ -245,8 +279,11 @@ struct ForcedAlignerRunView: View {
         let text = model.transcript
         let language = model.languageCode
         // The per-run stage: the sheet's lease and this run's language. The transcript is run input (`AlignRunModel.start`).
+        let runStage = self.runStage
         let stage = LeasingStage.perRun(handedStage, config: StageConfig(language: language)) { config in
-            ForcedAlignerStage(modelID: modelID, language: config.language ?? language, footprintBytes: footprintBytes)
+            runStage?(config)
+                ?? ForcedAlignerStage(modelID: modelID, language: config.language ?? language,
+                                      footprintBytes: footprintBytes)
         }
         model.start(audioURL: url, transcript: text, language: language, stage: stage)
     }
@@ -428,6 +465,7 @@ final class AlignRunModel {
     func stop() {
         guard isRunning else { return }
         isStopping = true
+        tracker.stopRequested(modelID)
         task?.cancel()
     }
 
