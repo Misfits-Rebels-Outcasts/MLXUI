@@ -46,6 +46,10 @@ nonisolated struct AlignedUnit: Sendable, Equatable, Hashable {
 /// **Memory.** The library calls `Memory.clearCache()` after reading the result; the engine returns the buffer cache
 /// again once the model local is released, as `Qwen3ASREngine` and `SortformerEngine` do.
 ///
+/// **The booking (FA-R20).** Each call books the `.align` row's whole figure (files x 1.10 plus the per-call working set,
+/// ``charge(directory:catalogFallback:)``) on the shared `MemoryBudget` before the load, inside the gate, and gives it
+/// back when the call ends. `ForcedAlignerSDK` is `StageBooksOwnWeights`, so `EngineCache` books 0 for the stage.
+///
 /// **Library findings worth knowing (read from the pinned checkout; reported on issue #13).**
 /// - The 300 s limit and the input refusals are app-side: the library has no length limit and no chunking, and its
 ///   timestamp head allows up to about 400 s (5,000 classes x 80 ms) whatever the clip's length.
@@ -117,6 +121,8 @@ enum ForcedAlignerEngine {
         case noWords
         case overLimit(seconds: Double)
         case unsupportedLanguage(code: String)
+        /// No room on the memory ledger within the wait: who was in the way, if the ledger knew.
+        case memoryBusy(MemoryBudget.Blocker?)
 
         var errorDescription: String? {
             switch self {
@@ -132,6 +138,11 @@ enum ForcedAlignerEngine {
             case .unsupportedLanguage(let code):
                 return "The language code '\(code)' isn't one this model supports. Use one of "
                     + ForcedAlignerEngine.languageCodes.joined(separator: ", ") + "."
+            case .memoryBusy(let blocker):
+                let who = blocker.map { blocker in
+                    "\(blocker.model) is in use" + (blocker.holder.map { " by \($0.phrase)" } ?? "")
+                } ?? "another model is still loading or in use"
+                return "There isn't room in memory to align yet because \(who), so try again when it finishes."
             }
         }
     }
@@ -192,6 +203,49 @@ enum ForcedAlignerEngine {
         return (seconds * 1000).rounded() / 1000
     }
 
+    // MARK: - The memory booking
+
+    /// What one call books: the model's resident charge (files x 1.10, or `catalogFallback` — the catalog's `ramGB` in
+    /// bytes — with no files to measure) plus the `.align` row's per-call working set.
+    nonisolated static func charge(directory: URL, catalogFallback: Int64? = nil) -> Int64 {
+        ModelLoadProfile.charge(kind: .align, directory: directory, catalogFallback: catalogFallback)
+            + ModelLoadProfile.workingSetBytes(for: .align)
+    }
+
+    /// The budget's view of the aligner: nothing stays resident between calls, so there is never anything to evict.
+    private nonisolated final class RunBooking: MemoryBudgetParticipant {
+        func evictLeastRecentlyUsed() async -> Bool { false }
+    }
+
+    nonisolated private static let bookingOwner = RunBooking()
+
+    /// Books `bytes` for one call, **held** (so another load waits for it rather than going over budget), under the
+    /// holder the call runs under. The budget may evict other caches' idle engines to make room. Waits at most
+    /// `maxWait`, then ``EngineError/memoryBusy(_:)``; a call cancelled while it waits is a `CancellationError`
+    /// (ruling 20). The caller ends it with `budget.release(reservation)`.
+    ///
+    /// Owner ruling 7 (Boo, 2026-11-27): "Set it from your own FA-7 run: the highest measured peak rounded up to 0.1 GB.
+    /// Keep the `.align` booking at or above that peak." The booking has to be on the ledger to keep that, so it is
+    /// reserved here for the length of the call. This design (a transient reservation by the engine, `EngineCache`
+    /// booking 0) is the implementer's call, pending owner confirmation.
+    nonisolated private static func book(_ bytes: Int64, for modelDirectory: URL, in budget: MemoryBudget,
+                                         maxWait: Duration) async throws
+        -> (reservation: MemoryBudget.Reservation, hold: MemoryBudget.Hold) {
+        let holder = MemoryBudget.RunWindowScope.holder ?? .flow
+        let label = modelDirectory.path
+        let reservation: MemoryBudget.Reservation
+        do {
+            reservation = try await budget.reserveBounded(bytes: bytes, for: bookingOwner, label: label,
+                                                          maxWait: maxWait, pinned: .access(for: holder))
+        } catch let error as MemoryBudget.WaitError {
+            try Task.checkCancellation()
+            throw EngineError.memoryBusy(error.blockers.first)
+        }
+        let hold = budget.hold(reservation, label: label, holder: holder)   // held before it is committed
+        budget.commit(reservation)
+        return (reservation, hold)
+    }
+
     // MARK: - The run
 
     /// The load and the forward pass of one call: what runs inside the gate. Tests pass their own.
@@ -205,12 +259,16 @@ enum ForcedAlignerEngine {
     nonisolated static func gateKey(_ modelDirectory: URL) -> String { modelDirectory.standardizedFileURL.path }
 
     /// Align 16 kHz mono float samples against `transcript`. Loads the model per call (matches the other engines), one
-    /// call at a time per model folder. Throws ``EngineError`` for the input refusals, `CancellationError` for a
-    /// cancelled call (a waiting one never runs, ruling 20 at `ForcedAlignerGate`) and `StageError.engineFailure` for a
-    /// load/run failure.
+    /// call at a time per model folder, with ``charge(directory:catalogFallback:)`` booked on `budget` for that call.
+    /// Throws ``EngineError`` for the input refusals and for no room in memory, `CancellationError` for a cancelled call
+    /// (a waiting one never runs, ruling 20 at `ForcedAlignerGate`) and `StageError.engineFailure` for a load/run
+    /// failure.
     nonisolated static func align(_ samples: [Float], transcript: String,
                                   language languageCode: String = defaultLanguageCode,
                                   modelDirectory: URL,
+                                  catalogFallback: Int64? = nil,
+                                  budget: MemoryBudget = .shared,
+                                  maxWait: Duration = MemoryBudget.defaultMaxWait,
                                   gate: ForcedAlignerGate = sharedGate,
                                   step: @escaping Step = loadAndGenerate) async throws -> [AlignedUnit] {
         let text = libraryTranscript(transcript)
@@ -223,13 +281,20 @@ enum ForcedAlignerEngine {
         try requireWithinLimit(seconds: seconds)
         do {
             return try await gate.run(gateKey(modelDirectory)) {
+                // Inside the gate, so one model never has two bookings; before the load.
+                let booking = try await book(charge(directory: modelDirectory, catalogFallback: catalogFallback),
+                                             for: modelDirectory, in: budget, maxWait: maxWait)
+                // Every exit: the model (a local of `generate`) is gone with `step`; return MLX's buffer cache, as
+                // Qwen3ASREngine / SortformerEngine do, then give the booking back.
+                defer {
+                    Memory.clearCache()
+                    budget.release(booking.reservation)   // first: one step, holds included
+                    booking.hold.release()                // nothing left to do; keeps the hold alive until here
+                }
                 let units = try await step(samples, text, language, seconds, modelDirectory)
                 // The splitter drops punctuation, so a transcript of punctuation alone makes no units. Refuse with a
                 // plain sentence rather than show an empty table.
                 guard !units.isEmpty else { throw EngineError.noWords }
-                // As Qwen3ASREngine / SortformerEngine: return MLX's buffer cache once the result is read, after the
-                // model (a local of `generate`) is released, so its weights don't land in the cache on return.
-                Memory.clearCache()
                 return units
             }
         } catch let error as CancellationError {

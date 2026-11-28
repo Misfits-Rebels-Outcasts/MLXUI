@@ -20,6 +20,7 @@ struct ForcedAlignerUI: ModelUI {
         AnyView(ForcedAlignerRunView(modelDisplayName: model.displayName,
                                      license: model.license,
                                      modelID: model.id,
+                                     footprintBytes: ForcedAlignerSDK.footprintBytes(for: model),
                                      handedStage: stage))
     }
 }
@@ -32,6 +33,8 @@ struct ForcedAlignerRunView: View {
     let modelDisplayName: String
     let license: String?
     let modelID: String
+    /// The catalog's figure for the run's memory booking.
+    let footprintBytes: Int64
     /// SC-5c: the stage the Run sheet handed (a `LeasingStage`); every run rebuilds it with this run's transcript and
     /// language, so the memory lease and the engine-cache key follow the run.
     let handedStage: any PipelineStage
@@ -42,10 +45,12 @@ struct ForcedAlignerRunView: View {
     @State private var showTranscriptImporter = false
     @State private var isDropTargeted = false
 
-    init(modelDisplayName: String, license: String?, modelID: String, handedStage: any PipelineStage) {
+    init(modelDisplayName: String, license: String?, modelID: String, footprintBytes: Int64,
+         handedStage: any PipelineStage) {
         self.modelDisplayName = modelDisplayName
         self.license = license
         self.modelID = modelID
+        self.footprintBytes = footprintBytes
         self.handedStage = handedStage
         _model = State(initialValue: AlignRunModel(modelID: modelID))
     }
@@ -236,11 +241,12 @@ struct ForcedAlignerRunView: View {
         guard let url = model.audioURL else { return }
         selection = nil   // row ids are positions, so a new result must not inherit the last one's selection
         let modelID = self.modelID
+        let footprintBytes = self.footprintBytes
         let text = model.transcript
         let language = model.languageCode
         // The per-run stage: the sheet's lease and this run's language. The transcript is run input (`AlignRunModel.start`).
         let stage = LeasingStage.perRun(handedStage, config: StageConfig(language: language)) { config in
-            ForcedAlignerStage(modelID: modelID, language: config.language ?? language)
+            ForcedAlignerStage(modelID: modelID, language: config.language ?? language, footprintBytes: footprintBytes)
         }
         model.start(audioURL: url, transcript: text, language: language, stage: stage)
     }

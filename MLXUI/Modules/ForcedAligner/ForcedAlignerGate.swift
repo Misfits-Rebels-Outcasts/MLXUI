@@ -8,8 +8,7 @@ nonisolated enum AlignWaiting {
 }
 
 /// One alignment at a time per key (the model folder), first come first served. The engine loads the model inside every
-/// call and a flow row and a Run sheet in one language share one memory booking, so two calls at once would hold two
-/// resident copies under it.
+/// call, so two calls at once would hold two resident copies; each call books its memory inside its turn.
 ///
 /// A turn is a flag held across the body's suspensions (not this actor's isolation), so a second call cannot start its
 /// load while the first is suspended in its own. The body runs off the actor, which stays free to queue and to drop

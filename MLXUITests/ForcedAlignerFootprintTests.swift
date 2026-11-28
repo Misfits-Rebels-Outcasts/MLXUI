@@ -94,7 +94,7 @@ struct ForcedAlignerFootprintTests {
         print(line)
         // What the `.align` booking says, for the one line the PR needs: does it cover the measured peak?
         let files = ModelWeightCharge.safetensorsBytes(in: dir)
-        // The engine cache books the weights' charge plus the kind's per-call working set (EngineCache.footprint).
+        // The engine books the weights' charge plus the kind's per-call working set for each run (ForcedAlignerEngine.charge).
         let booked = ModelLoadProfile.charge(kind: .align, directory: dir, catalogFallback: nil)
             + ModelLoadProfile.workingSetBytes(for: .align)
         let booking = String(format: "FAFOOTPRINT booking rows=align filesGB=%.3f bookedGB=%.3f peakGB=%.3f covered=%@",

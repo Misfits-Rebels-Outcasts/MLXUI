@@ -61,6 +61,9 @@ private nonisolated struct GateRig {
                             modelDirectory: { _ in URL(fileURLWithPath: "/nonexistent-fa") })
     }
 
+    /// Stands in for the files' charge (no files here); with the 5.25 GB working set, a call books 6.649 GB.
+    static let filesCharge: Int64 = 1_399_000_000
+
     var key: String { ForcedAlignerEngine.gateKey(directory) }
     var queued: Int { get async { await gate.queuedCount(key) } }
 
@@ -69,7 +72,7 @@ private nonisolated struct GateRig {
         let steps = self.steps
         return try await ForcedAlignerEngine.align(
             [Float](repeating: 0, count: 1_600), transcript: transcript, language: language,
-            modelDirectory: other ?? directory, gate: gate,
+            modelDirectory: other ?? directory, catalogFallback: Self.filesCharge, budget: budget, gate: gate,
             step: { _, text, _, _, _ in try await steps.run(text) })
     }
 
@@ -84,10 +87,13 @@ private nonisolated struct GateRig {
         { _, config in stage(language: config.language ?? "en") }
     }
 
+    /// As the app derives it from the SDK (`AppFlowExecutorFactory`, the Run sheet).
+    var booksWeights: Bool { !((ForcedAlignerSDK() as any ModelSDK) is StageBooksOwnWeights) }
+
     /// The stage the Run view builds: `LeasingStage.perRun` over the sheet's `LeasingStage`.
     func sheetStage(_ card: ModelEntry, language: String) -> any PipelineStage {
         let handed = LeasingStage(model: card, config: .default, probe: stage(language: language),
-                                  cache: cache, maxWait: .milliseconds(300))
+                                  booksWeights: booksWeights, cache: cache, maxWait: .milliseconds(300))
         return LeasingStage.perRun(handed, config: StageConfig(language: language)) { _ in stage(language: language) }
     }
 
@@ -117,7 +123,8 @@ struct ForcedAlignerGateTests {
     private static let cardID = "mlx-community--Qwen3-ForcedAligner-0.6B-8bit"
     private static let sentence = "Waiting for the last alignment to finish…"
     /// The card's booking with no files to measure: `ramGB` 6.6 x 1,073,741,824.
-    private static let oneBooking: Int64 = 7_086_696_038
+    /// FA-R20: what one call books, on the engine's own reservation: the rig's files charge + 5.25 GB.
+    private static let oneBooking: Int64 = 6_649_000_000
 
     private func loadCatalog() throws -> [ModelEntry] {
         let repoRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
@@ -145,7 +152,7 @@ struct ForcedAlignerGateTests {
     private func executor(_ rig: GateRig, _ ws: FlowWorkspace, flowID: String = "f") throws -> RealExecutor {
         RealExecutor(workspace: ws, flowID: flowID, blobDirectory: ws.root.appendingPathComponent("blobs"),
                      makeModelStage: { model, config in
-                         try await rig.cache.leasedStage(for: model, config: config, booksWeights: true,
+                         try await rig.cache.leasedStage(for: model, config: config, booksWeights: rig.booksWeights,
                                                          builder: rig.builder)
                      },
                      installedModelIDs: [Self.cardID], catalog: try loadCatalog())
@@ -204,12 +211,12 @@ struct ForcedAlignerGateTests {
         let samples = [Float](repeating: 0, count: 1_600)
         await #expect(throws: StageError.self) {
             _ = try await ForcedAlignerEngine.align(samples, transcript: "eins", language: "de",
-                                                    modelDirectory: rig.directory, gate: rig.gate,
+                                                    modelDirectory: rig.directory, budget: rig.budget, gate: rig.gate,
                                                     step: { _, _, _, _, _ in throw CocoaError(.fileNoSuchFile) })
         }
         await #expect(throws: ForcedAlignerEngine.EngineError.noWords) {
             _ = try await ForcedAlignerEngine.align(samples, transcript: "…", language: "de",
-                                                    modelDirectory: rig.directory, gate: rig.gate,
+                                                    modelDirectory: rig.directory, budget: rig.budget, gate: rig.gate,
                                                     step: { _, _, _, _, _ in [] })
         }
         #expect(try await rig.align("zwei").map(\.text) == ["zwei"])
@@ -294,7 +301,8 @@ struct ForcedAlignerGateTests {
         #expect(model.result == nil && model.errorText == nil)
         #expect(!model.isRunning && !model.isStopping && !model.isWaiting)
         #expect(!tracker.isBusy(Self.cardID))
-        #expect(rig.budget.usedBytes == 0 && rig.budget.inUseCount == 0, "its lease went back")
+        #expect(rig.budget.usedBytes == Self.oneBooking && rig.budget.inUseCount == 1,
+                "only the running call's booking; the waiting run never booked")
         #expect(await rig.queued == 0)
 
         first.open()
@@ -321,13 +329,14 @@ struct ForcedAlignerGateTests {
                 transcript: nil, context: nil, usedFlowContent: nil)
         }
         try await waitUntil("the row never queued") { await rig.queued == 1 }
-        #expect(rig.budget.inUseCount == 1, "leased while it waits")
+        #expect(rig.budget.inUseCount == 1 && rig.budget.usedBytes == Self.oneBooking, "a waiting row books nothing")
 
         row.cancel()
         await #expect(throws: CancellationError.self) { _ = try await row.value }
-        #expect(rig.budget.inUseCount == 0)
+        #expect(rig.budget.inUseCount == 1 && rig.budget.usedBytes == Self.oneBooking)
         first.open()
         _ = try await a.value
+        #expect(rig.budget.inUseCount == 0 && rig.budget.usedBytes == 0)
         #expect(rig.steps.started == ["eins"])
     }
 
@@ -360,9 +369,10 @@ struct ForcedAlignerGateTests {
 
         run.cancel()
         try await waitUntil("the row stayed queued") { await rig.queued == 0 }
-        try await waitUntil("the row kept its lease") { rig.budget.inUseCount == 0 }
+        #expect(rig.budget.inUseCount == 1 && rig.budget.usedBytes == Self.oneBooking, "the running call's alone")
         first.open()
         _ = try await a.value
+        try await waitUntil("a booking was left behind") { rig.budget.usedBytes == 0 }
         try await Task.sleep(for: .milliseconds(100))
         #expect(rig.steps.started == ["eins"])
     }
@@ -447,7 +457,7 @@ struct ForcedAlignerGateTests {
     private func flowRow(_ rig: GateRig, _ card: ModelEntry, transcript: String, language: String) -> Task<Media, any Error> {
         Task {
             let leased = try await rig.cache.leasedStage(for: card, config: StageConfig(language: language),
-                                                         booksWeights: true, builder: rig.builder)
+                                                         booksWeights: rig.booksWeights, builder: rig.builder)
             let buffer = AudioBuffer(samples: [Float](repeating: 0, count: 16_000), sampleRate: 16_000)
             return try await AlignTranscript.$current.withValue(transcript) {
                 try await leased.run(.audio(buffer)) { _ in }
@@ -455,19 +465,18 @@ struct ForcedAlignerGateTests {
         }
     }
 
-    /// Observed, same language ("en"), 1 booking of 7,086,696,038 bytes throughout both runs:
-    /// - both in flight: 1 cache entry, 1 booking, 2 holds (flow + Run window), 1 resident load
-    /// - flow first, flow done: 1 cache entry, 1 booking, 1 hold (Run window)
-    /// - sheet first, sheet done: 0 cache entries (the sheet drops its entry), the booking stays for the flow's 1 hold
+    /// FA-R20, same language ("en"): 1 booking of 6,649,000,000 bytes, the running call's; the queued one books nothing.
+    /// - flow first: held by the flow, then by the Run window; the flow's 0-byte entry is the sheet's too, and the sheet
+    ///   drops it when its run ends
+    /// - sheet first: held by the Run window (which drops the entry), then by the flow
     /// - both done: 0 entries, 0 bytes
     @Test(arguments: [true, false])
-    func oneLanguageIsOneEntryOneBookingTwoHoldsAndOneResidentLoad(flowFirst: Bool) async throws {
+    func oneLanguageIsOneEntryOneBookingAtATimeAndOneResidentLoad(flowFirst: Bool) async throws {
         let rig = GateRig()
         let card = try card()
         let ws = try temporaryWorkspace()
         defer { try? FileManager.default.removeItem(at: ws.root) }
         let audio = try wav(in: ws.root)
-        #expect(rig.cache.footprint(of: card) == Self.oneBooking)
         let flowStep = rig.steps.hold("Morgen")
         let sheetStep = rig.steps.hold("Abend")
         let model = AlignRunModel(modelID: card.id, tracker: AlignStepTracker())
@@ -488,10 +497,10 @@ struct ForcedAlignerGateTests {
         }
         try await waitUntil("the second call never queued") { await rig.queued == 1 }
 
-        #expect(rig.cache.count == 1)
+        #expect(rig.cache.count == 1 && rig.cache.totalCachedBytes == 0)
         #expect(rig.budget.heldCount == 1 && rig.budget.usedBytes == Self.oneBooking)
         #expect(rig.budget.inUseCount == 1)
-        #expect(await rig.holders() == (flowFirst ? [.flow, .runWindow] : [.runWindow, .flow]))
+        #expect(await rig.holders() == (flowFirst ? [.flow] : [.runWindow]))
         #expect(rig.steps.started.count == 1)
 
         if flowFirst {
@@ -518,13 +527,11 @@ struct ForcedAlignerGateTests {
         #expect(rig.steps.peak == 1, "one resident load at a time")
     }
 
-    /// Observed, "en" flow row + "de" Run sheet:
-    /// - both in flight: 2 cache entries, 2 bookings (14,173,392,076 bytes), 1 hold each, 1 resident load (one model
-    ///   folder, one turn)
-    /// - flow done: 2 entries, 2 bookings, 1 hold (Run window)
-    /// - both done: 1 entry, 1 booking of 7,086,696,038 bytes, 0 holds (the flow's entry stays warm and evictable; the
-    ///   sheet drops its own)
-    @Test func twoLanguagesAreTwoEntriesTwoBookingsAndStillOneResidentLoad() async throws {
+    /// FA-R20, "en" flow row + "de" Run sheet:
+    /// - both in flight: 2 cache entries of 0 bytes, 1 booking (the flow's), 1 resident load (one model folder, one turn)
+    /// - flow done: 2 entries, 1 booking (the Run window's)
+    /// - both done: 1 entry (the flow's stays cached; the sheet drops its own), 0 bytes
+    @Test func twoLanguagesAreTwoEntriesOneBookingAtATimeAndOneResidentLoad() async throws {
         let rig = GateRig()
         let card = try card()
         let ws = try temporaryWorkspace()
@@ -539,23 +546,23 @@ struct ForcedAlignerGateTests {
         model.start(audioURL: audio, transcript: "Abend", language: "de", stage: rig.sheetStage(card, language: "de"))
         try await waitUntil("the sheet never queued") { await rig.queued == 1 }
 
-        #expect(rig.cache.count == 2)
-        #expect(rig.budget.heldCount == 2 && rig.budget.usedBytes == 2 * Self.oneBooking)
-        #expect(rig.budget.inUseCount == 2)
-        let holders = await rig.holders()
-        #expect(holders.count == 2 && holders.contains(.flow) && holders.contains(.runWindow))
+        #expect(rig.cache.count == 2 && rig.cache.totalCachedBytes == 0)
+        #expect(rig.budget.heldCount == 1 && rig.budget.usedBytes == Self.oneBooking)
+        #expect(rig.budget.inUseCount == 1)
+        #expect(await rig.holders() == [.flow])
         #expect(!sheetStep.isEntered)
 
         flowStep.open()
         _ = try await flow.value
         try await entered(sheetStep)
-        #expect(rig.cache.count == 2, "the flow's entry stays warm")
-        #expect(rig.budget.usedBytes == 2 * Self.oneBooking && rig.budget.inUseCount == 1)
+        #expect(rig.cache.count == 2, "the flow's entry stays cached")
+        #expect(rig.budget.usedBytes == Self.oneBooking && rig.budget.inUseCount == 1)
+        #expect(await rig.holders() == [.runWindow])
 
         sheetStep.open()
         await model.task?.value
-        #expect(rig.cache.count == 1 && rig.budget.usedBytes == Self.oneBooking && rig.budget.inUseCount == 0,
-                "the sheet's entry is dropped; the flow's is warm and evictable")
+        #expect(rig.cache.count == 1 && rig.budget.usedBytes == 0 && rig.budget.inUseCount == 0,
+                "the sheet's entry is dropped; nothing stays booked between runs")
         #expect(rig.steps.peak == 1, "one resident load at a time")
     }
 }

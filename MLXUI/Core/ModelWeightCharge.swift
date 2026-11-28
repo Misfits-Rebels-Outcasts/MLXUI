@@ -164,8 +164,7 @@ nonisolated enum ModelLoadProfile {
         // (297.1 s, 990 units) **6.538 GB**; 2026-11-28 (7ea0651) 2.855 / 4.722 / 6.351 GB. Owner ruling 7 (Boo,
         // 2026-11-27): "Set it from your own FA-7 run: the highest measured peak rounded up to 0.1 GB. Keep the `.align`
         // booking at or above that peak." So the catalog `ramGB` is 6.6. This row's 6.649 GB is above the 6.538 GB peak and
-        // is unchanged. Note: the 6.649 GB is the row's sum; `EngineCache.footprint(of:)` books only files x 1.10 for this
-        // kind and nothing reserves its working set on the ledger.
+        // is unchanged. `ForcedAlignerEngine` reserves that sum on the ledger for each run (FA-R20); `EngineCache` books 0.
         case .align:    return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 5_250_000_000, measured: true)
         default:        return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 0, measured: false)
         }

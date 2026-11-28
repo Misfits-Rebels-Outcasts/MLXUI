@@ -20,13 +20,21 @@ private nonisolated final class EngineSeam: @unchecked Sendable {
     var calls: [Call] { lock.lock(); defer { lock.unlock() }; return recorded }
 }
 
-/// A test-owned budget and engine cache, and the real `ForcedAlignerStage` with its engine replaced by a recorder that
-/// echoes the transcript back as the one unit.
+/// A test-owned budget and engine cache, and the real `ForcedAlignerStage` calling the real `ForcedAlignerEngine.align`,
+/// with only the load and forward pass replaced by a recorder that echoes the transcript back as the one unit.
 private nonisolated struct RunInputRig {
     let budget = MemoryBudget(capacityBytes: 20 * 1_073_741_824,
                               cacheClearer: MLXCacheClearer(capActive: { false }, clear: {}, delay: .milliseconds(1)))
     let cache: EngineCache
     let seam = EngineSeam()
+    let gate = ForcedAlignerGate()
+    let directory = URL(fileURLWithPath: "/nonexistent-fa-input-\(UUID().uuidString)")
+    /// Stands in for the files' charge (no files here); with the 5.25 GB working set, a call books 6.649 GB.
+    static let filesCharge: Int64 = 1_399_000_000
+    static let oneBooking: Int64 = 6_649_000_000
+
+    /// As the app derives it from the SDK (`AppFlowExecutorFactory`, the Run sheet).
+    var booksWeights: Bool { !((ForcedAlignerSDK() as any ModelSDK) is StageBooksOwnWeights) }
 
     init() {
         cache = EngineCache(budget: budget, countsLLMWeights: true,
@@ -34,11 +42,16 @@ private nonisolated struct RunInputRig {
     }
 
     func stage(language: String) -> ForcedAlignerStage {
-        let budget = self.budget, seam = self.seam
-        return ForcedAlignerStage(id: "seam", name: "Qwen3 Aligner 0.6B", language: language) { _, text, language in
-            seam.note(.init(transcript: text, language: language, entries: budget.heldCount,
-                            held: budget.inUseCount, bytes: budget.usedBytes))
-            return [AlignedUnit(text: text, start: 0.1, end: 0.5)]
+        let budget = self.budget, seam = self.seam, gate = self.gate, directory = self.directory
+        return ForcedAlignerStage(id: "seam", name: "Qwen3 Aligner 0.6B", language: language) { samples, text, language in
+            try await ForcedAlignerEngine.align(
+                samples, transcript: text, language: language, modelDirectory: directory,
+                catalogFallback: Self.filesCharge, budget: budget, gate: gate,
+                step: { _, text, _, _, _ in
+                    seam.note(.init(transcript: text, language: language, entries: budget.heldCount,
+                                    held: budget.inUseCount, bytes: budget.usedBytes))
+                    return [AlignedUnit(text: text, start: 0.1, end: 0.5)]
+                })
         }
     }
 
@@ -85,7 +98,7 @@ struct ForcedAlignerRunInputTests {
     private func executor(_ rig: RunInputRig, _ ws: FlowWorkspace) throws -> RealExecutor {
         RealExecutor(workspace: ws, flowID: "f", blobDirectory: ws.root.appendingPathComponent("blobs"),
                      makeModelStage: { model, config in
-                         try await rig.cache.leasedStage(for: model, config: config, booksWeights: true,
+                         try await rig.cache.leasedStage(for: model, config: config, booksWeights: rig.booksWeights,
                                                          builder: rig.builder)
                      },
                      installedModelIDs: [Self.cardID], catalog: try loadCatalog())
@@ -107,15 +120,15 @@ struct ForcedAlignerRunInputTests {
         defer { try? FileManager.default.removeItem(at: ws.root) }
         let flow = try executor(rig, ws)
         let audio = try wav(in: ws.root)
-        let one = rig.cache.footprint(of: try card())
-        #expect(one > 0)
+        let one = RunInputRig.oneBooking
 
         let first = try await alignRow(flow, audio: audio, transcript: "Morgen")
         let second = try await alignRow(flow, audio: audio, transcript: "Abend")
 
         #expect(rig.cache.count == 1, "one cache entry")
         #expect(rig.seam.builds == 1, "one stage built, reused by the second row")
-        #expect(rig.budget.heldCount == 1 && rig.budget.usedBytes == one, "one booking")
+        #expect(rig.cache.totalCachedBytes == 0, "the cached stage books nothing (FA-R20)")
+        #expect(rig.budget.heldCount == 0 && rig.budget.usedBytes == 0, "nothing booked between rows")
         #expect(rig.budget.inUseCount == 0, "no lease outlives its row")
         // Each row's own transcript reached the engine, inside the lease.
         #expect(rig.seam.calls == ["Morgen", "Abend"].map {
@@ -152,7 +165,7 @@ struct ForcedAlignerRunInputTests {
         let rig = RunInputRig()
         let buffer = AudioBuffer(samples: [Float](repeating: 0, count: 16_000), sampleRate: 16_000)
         let leased = try await rig.cache.leasedStage(for: try card(), config: StageConfig(language: "de"),
-                                                     booksWeights: true, builder: rig.builder)
+                                                     booksWeights: rig.booksWeights, builder: rig.builder)
         await #expect(throws: AlignTranscript.Missing.self) { _ = try await leased.run(.audio(buffer)) { _ in } }
         #expect(rig.seam.calls.isEmpty, "the engine is never called")
 
@@ -167,7 +180,7 @@ struct ForcedAlignerRunInputTests {
     @Test func aRunWindowRunWithoutATranscriptIsRefusedAndHoldsNothing() async throws {
         let rig = RunInputRig()
         let handed = LeasingStage(model: try card(), config: .default, probe: rig.stage(language: "de"),
-                                  cache: rig.cache, maxWait: .milliseconds(300))
+                                  booksWeights: rig.booksWeights, cache: rig.cache, maxWait: .milliseconds(300))
         let stage = LeasingStage.perRun(handed, config: StageConfig(language: "de")) { _ in rig.stage(language: "de") }
         let buffer = AudioBuffer(samples: [Float](repeating: 0, count: 16_000), sampleRate: 16_000)
         await #expect(throws: AlignTranscript.Missing.self) { _ = try await stage.run(.audio(buffer)) { _ in } }
@@ -184,12 +197,12 @@ struct ForcedAlignerRunInputTests {
         let ws = try temporaryWorkspace()
         defer { try? FileManager.default.removeItem(at: ws.root) }
         let audio = try wav(in: ws.root)
-        let one = rig.cache.footprint(of: card)
+        let one = RunInputRig.oneBooking
         let model = AlignRunModel(modelID: card.id, tracker: AlignStepTracker())
 
         func runScreen(_ transcript: String) async throws {
             let handed = LeasingStage(model: card, config: .default, probe: rig.stage(language: "de"),
-                                      cache: rig.cache, maxWait: .milliseconds(300))
+                                      booksWeights: rig.booksWeights, cache: rig.cache, maxWait: .milliseconds(300))
             let stage = LeasingStage.perRun(handed, config: StageConfig(language: "de")) { _ in rig.stage(language: "de") }
             model.start(audioURL: audio, transcript: transcript, language: "de", stage: stage)
             await model.task?.value
@@ -201,7 +214,7 @@ struct ForcedAlignerRunInputTests {
         #expect(rig.cache.count == 0 && rig.budget.usedBytes == 0 && rig.budget.inUseCount == 0, "released after the run")
 
         _ = try await alignRow(try executor(rig, ws), audio: audio, transcript: "Mittag")
-        #expect(rig.cache.count == 1 && rig.budget.usedBytes == one && rig.budget.inUseCount == 0, "warm, not held")
+        #expect(rig.cache.count == 1 && rig.budget.usedBytes == 0 && rig.budget.inUseCount == 0, "cached, nothing booked")
         try await runScreen("Abend")
         #expect(rig.seam.builds == 1, "the Run screen reused the flow's entry")
         #expect(rig.budget.usedBytes == 0 && rig.budget.inUseCount == 0)

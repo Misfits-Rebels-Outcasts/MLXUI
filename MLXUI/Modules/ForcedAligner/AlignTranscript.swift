@@ -22,9 +22,10 @@ import Foundation
 /// doesn't, use the task-local value with both of the lead's guards, and say in the commit message why the explicit
 /// argument didn't work. Either way, StageConfig.transcript goes, and the CLAUDE.md note is updated to match."
 ///
-/// The explicit argument did not work: the cache returns a lease wrapper, not a `ForcedAlignerStage`. A flow row gets a
-/// `LeasedStage`; the Run screen runs a `LeasingStage`, which takes its hold inside `run` and keeps the stage private,
-/// so calling the aligner with an argument would run it outside the lease unless `EngineCache.swift` changed.
+/// The explicit argument did not work: the cache returns a lease wrapper, not a `ForcedAlignerStage`. The Run screen runs
+/// a `LeasingStage`, which takes its hold inside `run` and keeps the stage private, so calling the aligner with an
+/// argument would run it outside the lease unless `EngineCache.swift` changed. (A flow row's stage books 0 there since
+/// FA-R20 and comes back unwrapped.)
 nonisolated enum AlignTranscript {
     @TaskLocal static var current: String?
 

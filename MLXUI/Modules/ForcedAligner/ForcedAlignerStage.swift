@@ -28,11 +28,15 @@ nonisolated struct ForcedAlignerStage: PipelineStage {
     }
 
     /// The real engine on the installed folder of `modelID`, timing in `language` (a code from
-    /// `ForcedAlignerEngine.languageCodes`).
-    init(modelID: String, language: String = ForcedAlignerEngine.defaultLanguageCode) {
+    /// `ForcedAlignerEngine.languageCodes`). `footprintBytes` is the catalog's figure for the booking (see
+    /// `ForcedAlignerEngine.charge`); tests pass their own `budget` and `step`.
+    init(modelID: String, language: String = ForcedAlignerEngine.defaultLanguageCode,
+         footprintBytes: Int64?, budget: MemoryBudget = .shared,
+         step: @escaping ForcedAlignerEngine.Step = ForcedAlignerEngine.loadAndGenerate) {
         let directory = ForcedAlignerEngine.installedModelDirectory(id: modelID)
         self.init(id: "forced-aligner.\(modelID)", name: "Qwen3 Aligner", language: language) { samples, text, language in
-            try await ForcedAlignerEngine.align(samples, transcript: text, language: language, modelDirectory: directory)
+            try await ForcedAlignerEngine.align(samples, transcript: text, language: language, modelDirectory: directory,
+                                                catalogFallback: footprintBytes, budget: budget, step: step)
         }
     }
 
