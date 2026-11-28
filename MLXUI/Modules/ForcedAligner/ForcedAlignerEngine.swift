@@ -121,8 +121,6 @@ enum ForcedAlignerEngine {
         case noWords
         case overLimit(seconds: Double)
         case unsupportedLanguage(code: String)
-        /// No room on the memory ledger within the wait: who was in the way, if the ledger knew.
-        case memoryBusy(MemoryBudget.Blocker?)
 
         var errorDescription: String? {
             switch self {
@@ -138,11 +136,6 @@ enum ForcedAlignerEngine {
             case .unsupportedLanguage(let code):
                 return "The language code '\(code)' isn't one this model supports. Use one of "
                     + ForcedAlignerEngine.languageCodes.joined(separator: ", ") + "."
-            case .memoryBusy(let blocker):
-                let who = blocker.map { blocker in
-                    "\(blocker.model) is in use" + (blocker.holder.map { " by \($0.phrase)" } ?? "")
-                } ?? "another model is still loading or in use"
-                return "There isn't room in memory to align yet because \(who), so try again when it finishes."
             }
         }
     }
@@ -221,13 +214,22 @@ enum ForcedAlignerEngine {
 
     /// Books `bytes` for one call, **held** (so another load waits for it rather than going over budget), under the
     /// holder the call runs under. The budget may evict other caches' idle engines to make room. Waits at most
-    /// `maxWait`, then ``EngineError/memoryBusy(_:)``; a call cancelled while it waits is a `CancellationError`
-    /// (ruling 20). The caller ends it with `budget.release(reservation)`.
+    /// `maxWait`, then throws the budget's own `MemoryBudget.WaitError`; a call cancelled while it waits is a
+    /// `CancellationError` (ruling 20). The caller ends it with `budget.release(reservation)`.
     ///
     /// Owner ruling 7 (Boo, 2026-11-27): "Set it from your own FA-7 run: the highest measured peak rounded up to 0.1 GB.
     /// Keep the `.align` booking at or above that peak." The booking has to be on the ledger to keep that, so it is
-    /// reserved here for the length of the call. This design (a transient reservation by the engine, `EngineCache`
-    /// booking 0) is the implementer's call, pending owner confirmation.
+    /// reserved here for the length of the call (a transient reservation by the engine, `EngineCache` booking 0).
+    ///
+    /// Owner ruling 27 (Boo, 2026-11-28): "Accepted: ruling 17's 'one booking' means one booking while each run is
+    /// active, with nothing held between runs, because the aligner unloads the model after every run."
+    ///
+    /// Owner ruling 30 (Boo, 2026-11-28): "Keep the worst-case booking (6.649 GB) for every clip in this PR. Add a
+    /// follow-up: book by clip length using FA-7's measured phases (5 s, 60 s, 300 s), rounded up, so short clips don't
+    /// wait behind other models."
+    ///
+    /// Owner ruling 28 (Boo, 2026-11-28): "Use the app's standard memory-refusal message, not a new sentence for the
+    /// aligner."
     nonisolated private static func book(_ bytes: Int64, for modelDirectory: URL, in budget: MemoryBudget,
                                          maxWait: Duration) async throws
         -> (reservation: MemoryBudget.Reservation, hold: MemoryBudget.Hold) {
@@ -238,8 +240,8 @@ enum ForcedAlignerEngine {
             reservation = try await budget.reserveBounded(bytes: bytes, for: bookingOwner, label: label,
                                                           maxWait: maxWait, pinned: .access(for: holder))
         } catch let error as MemoryBudget.WaitError {
-            try Task.checkCancellation()
-            throw EngineError.memoryBusy(error.blockers.first)
+            try Task.checkCancellation()   // a cancelled wait is a cancellation, not a refusal
+            throw error
         }
         let hold = budget.hold(reservation, label: label, holder: holder)   // held before it is committed
         budget.commit(reservation)
@@ -260,9 +262,9 @@ enum ForcedAlignerEngine {
 
     /// Align 16 kHz mono float samples against `transcript`. Loads the model per call (matches the other engines), one
     /// call at a time per model folder, with ``charge(directory:catalogFallback:)`` booked on `budget` for that call.
-    /// Throws ``EngineError`` for the input refusals and for no room in memory, `CancellationError` for a cancelled call
-    /// (a waiting one never runs, ruling 20 at `ForcedAlignerGate`) and `StageError.engineFailure` for a load/run
-    /// failure.
+    /// Throws ``EngineError`` for the input refusals, `MemoryBudget.WaitError` for no room in memory (ruling 28),
+    /// `CancellationError` for a cancelled call (a waiting one never runs, ruling 20 at `ForcedAlignerGate`) and
+    /// `StageError.engineFailure` for a load/run failure.
     nonisolated static func align(_ samples: [Float], transcript: String,
                                   language languageCode: String = defaultLanguageCode,
                                   modelDirectory: URL,
@@ -301,6 +303,8 @@ enum ForcedAlignerEngine {
             throw error
         } catch let error as EngineError {
             throw error
+        } catch let error as MemoryBudget.WaitError {
+            throw error          // the app's standard memory sentence (ruling 28)
         } catch let error as StageError {
             throw error
         } catch {

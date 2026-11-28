@@ -51,6 +51,9 @@ private nonisolated final class Bystander: MemoryBudgetParticipant {
 ///
 /// Owner ruling 7 (Boo, 2026-11-27): "Set it from your own FA-7 run: the highest measured peak rounded up to 0.1 GB.
 /// Keep the `.align` booking at or above that peak."
+///
+/// Owner ruling 28 (Boo, 2026-11-28): "Use the app's standard memory-refusal message, not a new sentence for the
+/// aligner."
 @MainActor
 struct ForcedAlignerBookingTests {
 
@@ -65,6 +68,8 @@ struct ForcedAlignerBookingTests {
     private nonisolated static let fallback: Int64 = 7_086_696_038
     private nonisolated static let fallbackBooking: Int64 = 12_336_696_038
     private nonisolated static let samples = [Float](repeating: 0, count: 1_600)
+    /// `MemoryBudget.waitSentence` for the other model `occupy` books (ruling 28).
+    private nonisolated static let refusal = "Waiting for memory: Other-Model is in use by Chat. Try again when it finishes."
 
     private nonisolated static func newBudget(_ capacity: Int64 = 40 * 1_073_741_824) -> MemoryBudget {
         MemoryBudget(capacityBytes: capacity,
@@ -239,23 +244,25 @@ struct ForcedAlignerBookingTests {
 
     // MARK: - (d) No room
 
-    @Test func noRoomIsAOneSentenceRefusalAndTheStepNeverRuns() async throws {
+    @Test func noRoomIsTheAppsStandardMemoryRefusalAndTheStepNeverRuns() async throws {
         let directory = try modelFolder()
         defer { try? FileManager.default.removeItem(at: directory.deletingLastPathComponent()) }
         let budget = Self.newBudget(6_000_000_000), seam = BookingSeam(), gate = ForcedAlignerGate(), other = Bystander()
         let (reservation, hold) = await occupy(budget, bytes: 2_000_000_000, owner: other)
         let blocker = MemoryBudget.Blocker(model: "Other-Model", holder: .chat)
 
-        await #expect(throws: ForcedAlignerEngine.EngineError.memoryBusy(blocker)) {
+        do {
             _ = try await align("eins", directory, budget, seam, gate: gate, maxWait: .milliseconds(100))
+            Issue.record("expected a refusal: there is no room")
+        } catch let error as MemoryBudget.WaitError {
+            #expect(error.blockers == [blocker])
+            #expect(error.description == MemoryBudget.waitSentence([blocker]))
+            #expect(MLXErrorGuard.sentence(for: error) == Self.refusal)
+        } catch {
+            Issue.record("expected MemoryBudget.WaitError, got \(error)")
         }
         #expect(seam.readings.isEmpty, "the step never runs")
         #expect(budget.heldCount == 1 && budget.usedBytes == 2_000_000_000, "nothing of the aligner's is left booked")
-        let error: any Error = ForcedAlignerEngine.EngineError.memoryBusy(blocker)
-        #expect(MLXErrorGuard.sentence(for: error)
-                == "There isn't room in memory to align yet because Other-Model is in use by Chat, so try again when it finishes.")
-        #expect(ForcedAlignerEngine.EngineError.memoryBusy(nil).errorDescription
-                == "There isn't room in memory to align yet because another model is still loading or in use, so try again when it finishes.")
 
         budget.release(reservation)
         hold.release()
@@ -323,10 +330,20 @@ struct ForcedAlignerBookingTests {
                                 modelDirectory: { _ in URL(fileURLWithPath: "/nonexistent-fa-booking") })
         }
 
-        func stage(_ language: String) -> ForcedAlignerStage {
-            ForcedAlignerStage(modelID: modelID, language: language,
-                               footprintBytes: ForcedAlignerBookingTests.fallback,
-                               budget: budget, step: seam.step(budget, cache: cache))
+        /// The app's stage; with a `maxWait`, the same engine call with that wait instead of the app's 60 s.
+        func stage(_ language: String, maxWait: Duration? = nil) -> ForcedAlignerStage {
+            let step = seam.step(budget, cache: cache), budget = budget, modelID = modelID
+            guard let maxWait else {
+                return ForcedAlignerStage(modelID: modelID, language: language,
+                                          footprintBytes: ForcedAlignerBookingTests.fallback, budget: budget, step: step)
+            }
+            return ForcedAlignerStage(id: "forced-aligner.\(modelID)", name: "Qwen3 Aligner",
+                                      language: language) { samples, text, language in
+                try await ForcedAlignerEngine.align(
+                    samples, transcript: text, language: language,
+                    modelDirectory: ForcedAlignerEngine.installedModelDirectory(id: modelID),
+                    catalogFallback: ForcedAlignerBookingTests.fallback, budget: budget, maxWait: maxWait, step: step)
+            }
         }
     }
 
@@ -339,12 +356,13 @@ struct ForcedAlignerBookingTests {
         return (ws, wav)
     }
 
-    private func alignRow(_ rig: AppRig, _ ws: FlowWorkspace, _ audio: URL) async throws -> Asset {
+    private func alignRow(_ rig: AppRig, _ ws: FlowWorkspace, _ audio: URL,
+                          maxWait: Duration? = nil) async throws -> Asset {
         let books = try booksWeights(try card())
         let executor = RealExecutor(workspace: ws, flowID: "f", blobDirectory: ws.root.appendingPathComponent("blobs"),
                                     makeModelStage: { model, config in
                                         try await rig.cache.leasedStage(for: model, config: config, booksWeights: books) { _, config in
-                                            rig.stage(config.language ?? "en")
+                                            rig.stage(config.language ?? "en", maxWait: maxWait)
                                         }
                                     },
                                     installedModelIDs: [Self.cardID], catalog: try loadCatalog())
@@ -386,6 +404,53 @@ struct ForcedAlignerBookingTests {
         rig.budget.release(reservation)
         hold.release()
         #expect(rig.budget.usedBytes == 0)
+    }
+
+    /// Ruling 28 on a flow row: the error `RealExecutor` throws reads as the app's standard sentence, both as the
+    /// interpreter reports a failed row (`String(describing:)`) and as `MLXErrorGuard` voices it.
+    @Test func aFlowRowWithNoRoomFailsWithTheAppsStandardMemorySentence() async throws {
+        let rig = AppRig()
+        let (ws, audio) = try workspace()
+        defer { try? FileManager.default.removeItem(at: ws.root) }
+        let other = Bystander()
+        let (reservation, hold) = await occupy(rig.budget, bytes: rig.budget.capacityBytes - 1_000, owner: other)
+        do {
+            _ = try await alignRow(rig, ws, audio, maxWait: .milliseconds(100))
+            Issue.record("expected the row to be refused: there is no room")
+        } catch {
+            #expect(error is MemoryBudget.WaitError, "got \(error)")
+            #expect(String(describing: error) == Self.refusal)
+            #expect(MLXErrorGuard.sentence(for: error) == Self.refusal)
+        }
+        #expect(rig.seam.readings.isEmpty, "the step never runs")
+        rig.budget.release(reservation)
+        hold.release()
+        #expect(rig.budget.usedBytes == 0)
+    }
+
+    /// Ruling 28 on the Run screen: the error bar shows exactly the app's standard sentence.
+    @Test func theRunScreenWithNoRoomShowsTheAppsStandardMemorySentence() async throws {
+        let rig = AppRig()
+        let card = try card()
+        let (ws, audio) = try workspace()
+        defer { try? FileManager.default.removeItem(at: ws.root) }
+        let other = Bystander()
+        let (reservation, hold) = await occupy(rig.budget, bytes: rig.budget.capacityBytes - 1_000, owner: other)
+        let wait = Duration.milliseconds(100)
+        let handed = LeasingStage(model: card, config: .default, probe: rig.stage("de", maxWait: wait),
+                                  booksWeights: try booksWeights(card), cache: rig.cache, maxWait: .milliseconds(300))
+        let stage = LeasingStage.perRun(handed, config: StageConfig(language: "de")) { _ in
+            rig.stage("de", maxWait: wait)
+        }
+        let model = AlignRunModel(modelID: card.id, tracker: AlignStepTracker())
+        model.start(audioURL: audio, transcript: "Abend", language: "de", stage: stage)
+        await model.task?.value
+        #expect(model.errorText == Self.refusal)
+        #expect(model.result == nil && !model.isRunning)
+        #expect(rig.seam.readings.isEmpty, "the step never runs")
+        rig.budget.release(reservation)
+        hold.release()
+        #expect(rig.budget.usedBytes == 0 && rig.cache.count == 0)
     }
 
     /// Ruling 11 with the engine's booking: Stop releases nothing until the step returns.
