@@ -45,14 +45,20 @@ struct ForcedAlignerRunView: View {
     @State private var showTranscriptImporter = false
     @State private var isDropTargeted = false
 
+    /// The stage of one run; nil in the app, which builds ``ForcedAlignerStage``. `AlignRunSheetTests` passes a stub.
+    private let runStage: (@MainActor (StageConfig) -> any PipelineStage)?
+
+    /// `model` and `runStage` are for the sheet tests; the app leaves both nil, and the sheet makes its own model.
     init(modelDisplayName: String, license: String?, modelID: String, footprintBytes: Int64,
-         handedStage: any PipelineStage) {
+         handedStage: any PipelineStage, model: AlignRunModel? = nil,
+         runStage: (@MainActor (StageConfig) -> any PipelineStage)? = nil) {
+        self.runStage = runStage
         self.modelDisplayName = modelDisplayName
         self.license = license
         self.modelID = modelID
         self.footprintBytes = footprintBytes
         self.handedStage = handedStage
-        _model = State(initialValue: AlignRunModel(modelID: modelID))
+        _model = State(initialValue: model ?? AlignRunModel(modelID: modelID))
     }
 
     var body: some View {
@@ -245,8 +251,11 @@ struct ForcedAlignerRunView: View {
         let text = model.transcript
         let language = model.languageCode
         // The per-run stage: the sheet's lease and this run's language. The transcript is run input (`AlignRunModel.start`).
+        let runStage = self.runStage
         let stage = LeasingStage.perRun(handedStage, config: StageConfig(language: language)) { config in
-            ForcedAlignerStage(modelID: modelID, language: config.language ?? language, footprintBytes: footprintBytes)
+            runStage?(config)
+                ?? ForcedAlignerStage(modelID: modelID, language: config.language ?? language,
+                                      footprintBytes: footprintBytes)
         }
         model.start(audioURL: url, transcript: text, language: language, stage: stage)
     }
