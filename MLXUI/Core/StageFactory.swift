@@ -127,7 +127,7 @@ enum StageFactory {
         }
 
         switch model.runnerKind {
-        case .llm, .asr, .tts, .embedding, .vision, .ocr, .image, .music, .segmentation, .video, .upscale, .rerank, .decision, .diarization, .enhance, .voice, .interpolate, .separate, .translate, .depth, .redact, .unsupported:
+        case .llm, .asr, .tts, .embedding, .vision, .ocr, .image, .music, .segmentation, .video, .upscale, .rerank, .decision, .diarization, .enhance, .voice, .interpolate, .separate, .translate, .depth, .redact, .align, .unsupported:
             throw StageError.unsupportedModel(id: model.id, kind: model.runnerKind)
         }
     }

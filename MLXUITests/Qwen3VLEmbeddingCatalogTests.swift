@@ -26,7 +26,8 @@ struct Qwen3VLEmbeddingCatalogTests {
 
     @Test func catalogDecodesWithTheEntry() throws {
         let all = try catalog().domains.flatMap { $0.allModels }
-        #expect(all.count == 60, "every MC4-1/MC4-8 step appends one entry (MC5-3a: 58 → 59; PF-1: 59 → 60); the count guard lives in CatFlowChatModuleTests")
+        // FA-1 (issue #13 decision 1, trap 8): + Qwen3 Aligner 0.6B, 60 → 61
+        #expect(all.count == 61, "every MC4-1/MC4-8 step appends one entry (MC5-3a: 58 → 59; PF-1: 59 → 60; FA-1: 60 → 61); the count guard lives in CatFlowChatModuleTests")
         #expect(try entry().id == "mlx-community--Qwen3-VL-Embedding-2B-4bit")
     }
 

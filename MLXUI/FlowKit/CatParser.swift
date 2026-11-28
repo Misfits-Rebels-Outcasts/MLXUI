@@ -58,6 +58,8 @@ nonisolated enum CatParser {
         "Improvise",
         // SPEC-Q252 (PF-9, owner ruling 2026-11-18): the new `Redact` text task.
         "Redact",
+        // FA-6 (issue #13 decision 8): the Align row's task name (single word).
+        "Align",
     ]
 
     static let taskNamesByLen: [String] = taskNames.sorted { $0.count > $1.count }

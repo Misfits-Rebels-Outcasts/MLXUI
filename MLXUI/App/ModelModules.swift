@@ -65,5 +65,9 @@ let installedModules: [ModelModule.Type] = [
     // PF-7: OpenAI Privacy Filter — the only `.redact` module; claims `privacy-filter`-family entries only. Before
     // `ChatModule` like every other model module (Chat stays last so its `.llm` claim never moves a resolution).
     PrivacyFilterModule.self,
+    // FA-5 (issue #13): Qwen3-ForcedAligner 0.6B — the only `.align` module; claims the `Qwen3-ForcedAligner`
+    // family only, so the Qwen3-ASR SDK's `qwen3-asr` claim never takes it (and this one takes nothing else).
+    // Before `ChatModule`, which stays last.
+    ForcedAlignerModule.self,
     ChatModule.self,
 ]

@@ -150,6 +150,22 @@ nonisolated enum ModelLoadProfile {
         // 1.5x figure): PF-8 says the maintainers set it from their own smoke run — note the measured worst-case peak is above
         // that provisional ramGB, so the catalog figure under-states this kind until the owner's own run replaces it.
         case .redact:   return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 4_600_000_000, measured: true)
+        // FA-7 (GitHub issue #13): Qwen3 Aligner 0.6B, whole-process `phys_footprint` peak through the Run path's align
+        // (16 kHz decode/resample, model load, the mel + text attention over audio+transcript tokens, the units) at the
+        // worst case decision 5 allows, a 297.1 s clip with its 990-unit full transcript: **6,103 MiB = 6.400 GB**,
+        // 2026-11-19 (`ForcedAlignerFootprintTests`, AM-T, 20 ms sampler, test-host baseline included). The smaller phases:
+        // load + 5.4 s 2.937 GB, 59.4 s 4.727 GB. The growth over the 1.272 GB of weights is the text model's attention
+        // over the audio+transcript sequence (MLX's own peak is 2.812 GB; the head's [tokens x 5,000] logits are the rest),
+        // not the weights, so it is a per-call working set (the `.enhance` row's form): files x 1.10 (1.399 GB) + 5.25 GB
+        // = 6.649 GB. 5.25 GB is 6.400 GB less the files' charge (5.001 GB) rounded up to the next 0.05, plus the ~1/50
+        // the quadratic attention still gains going from the measured 297.1 s to the 300 s ceiling. Never under the highest
+        // peak. Implementer's call, pending owner confirmation.
+        // The lead's runs of the same test: 2026-11-27 (b838d47) load + 5 s 3.005 GB, 60 s 4.842 GB, 300 s worst case
+        // (297.1 s, 990 units) **6.538 GB**; 2026-11-28 (7ea0651) 2.855 / 4.722 / 6.351 GB. Owner ruling 7 (Boo,
+        // 2026-11-27): "Set it from your own FA-7 run: the highest measured peak rounded up to 0.1 GB. Keep the `.align`
+        // booking at or above that peak." So the catalog `ramGB` is 6.6. This row's 6.649 GB is above the 6.538 GB peak and
+        // is unchanged. `ForcedAlignerEngine` reserves that sum on the ledger for each run (FA-R20); `EngineCache` books 0.
+        case .align:    return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 5_250_000_000, measured: true)
         default:        return Entry(factor: ModelWeightCharge.loadFactor, workingSetBytes: 0, measured: false)
         }
     }

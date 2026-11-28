@@ -413,7 +413,13 @@ Known inconsistencies in the tree itself — fix or rule on them, don't propagat
   (MP7-W: `Int?`, `nil` = not set, set only for a FLUX.2 Klein flow row, which resolves it to the
   manifest default 8 at `makeStage`; every other stage ignores it). Diffusion rows' settings are no
   longer dropped, but a stage that cannot honour one must refuse by name (as `FluxSDK`,
-  `Flux2KleinSDK` and `RealExecutor.stageConfig` do), never ignore it.
+  `Flux2KleinSDK` and `RealExecutor.stageConfig` do), never ignore it. `StageConfig` carries **no
+  transcript** (owner ruling 17, Boo, 2026-11-27, superseding ruling 5): the `Align` transcript is
+  run input, not part of the engine-cache key. It travels in the task-local `AlignTranscript.current`
+  (`Modules/ForcedAligner/AlignTranscript.swift`), set with `withValue` around `stage.run` by
+  `RealExecutor.runAlign` and `AlignRunModel.start` and read by `ForcedAlignerStage.run`, which
+  refuses with `AlignTranscript.Missing` when it is unset; a new `Task {}` or `Task.detached` between
+  the two would lose or detach it.
 
 ## Conventions (from the project style guide)
 

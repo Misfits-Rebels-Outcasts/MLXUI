@@ -128,6 +128,7 @@ nonisolated struct InstalledModelIndex: Sendable {
         case "separate":      return .separate
         case "depth":         return .depth
         case "redact":        return .redact       // PF-1: PII detection + redaction (engine in Modules/PrivacyFilter)
+        case "align":         return .align   // FA-1: Qwen3-ForcedAligner (see ModelEntry.runnerKind)
         default:              return .unsupported  // video / unknown
         }
     }

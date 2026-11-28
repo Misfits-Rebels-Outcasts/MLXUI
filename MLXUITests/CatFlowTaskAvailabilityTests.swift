@@ -262,6 +262,9 @@ struct CatFlowTaskAvailabilityTests {
             // ER-10 (SPEC-Q238 / SPEC-Q239, owner rulings R1 and R11, 2026-11-22): the two audio rows are served by the
             // Sortformer (`.diarization`) and DeepFilterNet (`.enhance`) stages, so each has a claimable model.
             "Identify Speakers": .available, "Clean Audio": .available,
+            // FA-6 (issue #13 decision 8, SPEC-Q261): `Align` is served — `taskKinds["Align"] = .align`, its
+            // `engines.asr.` refName prefix was already allowed, and the Qwen3 Aligner 0.6B entry is claimable.
+            "Align": .available,
             "Load Checkpoint": .needsNewerSupport, "Blend": .needsNewerSupport,
             "Bake LoRA": .needsNewerSupport, "Pin Model": .needsNewerSupport,
         ]
