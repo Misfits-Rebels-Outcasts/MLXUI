@@ -83,15 +83,20 @@ struct AlignRunSheetTests {
         #expect(presented.model.errorText == nil)
         #expect(rig.isShowing(presented.sheet))
 
-        // Owner ruling 45 (Boo, 2026-11-28): "Confirmed: the step log records the model id only, never audio or
-        // transcript content. Confirmed: an Esc landing the instant a run ends may do nothing." So the case waits.
+        // Owner ruling 45 (Boo, 2026-11-28): "Confirmed: an Esc landing the instant a run ends may do nothing." Since
+        // FA-F7 such an Esc finds the sheet idle and closes it (open question, see `escape`). The wait keeps this case
+        // clear of that instant, so it pins neither answer.
         try await Task.sleep(for: .seconds(1))
         try await rig.pressEscape(presented.sheet, by: route)
         try await rig.wait("Esc to close the idle sheet") { !rig.isShowing(presented.sheet) }
     }
 
     /// An Esc that lands before the sheet has redrawn for the new run. Nothing here may suspend between Align and Esc:
-    /// the point is the instant in which the buttons still look as they did before the run.
+    /// the point is the instant in which the buttons still look as they did before the run. The case guards that the
+    /// sheet stays and the press acts as Stop. The second of "Stopping…" it then watches comes from the stub stage,
+    /// which ignores cancellation: the real gate and engine check for it on entry, so in the app a step stopped this
+    /// early may end within milliseconds and "Stopping…" only flashes. A cancellation check added on the sheet's own
+    /// path would need this case changed.
     @Test(arguments: EscRoute.allCases, [FocusSpot.transcript, .nowhere])
     func escRightAfterAlignStopsAndKeepsTheSheet(route: EscRoute, spot: FocusSpot) async throws {
         let rig = try SheetRig()

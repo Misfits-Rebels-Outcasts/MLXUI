@@ -265,6 +265,10 @@ struct ForcedAlignerRunView: View {
     // MARK: - Actions
 
     /// Esc: Stop while a run is going (the Stop button's own call), otherwise close.
+    ///
+    /// Owner ruling 45 (Boo, 2026-11-28): "Confirmed: an Esc landing the instant a run ends may do nothing." Here it
+    /// does something: the sheet is already idle, so it closes, and the result that has just arrived goes with it.
+    /// *Implementer's call, pending owner confirmation*: no grace period, since its length would be arbitrary.
     private func escape() { if model.isRunning { model.stop() } else { dismiss() } }
 
     private func run() {
