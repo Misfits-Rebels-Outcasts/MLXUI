@@ -153,9 +153,16 @@ struct ForcedAlignerCatalogTests {
         #expect(e.lastUpdated.flatMap { day.date(from: $0) } != nil)
     }
 
-    /// Trap 2: the repo's siblings at the pinned revision, from the fixture. `ModelFileSelector` must take exactly the
-    /// weights, the index and the metadata/tokenizer files the loader reads; `README.md` and `.gitattributes` are not
-    /// downloaded, and nothing is added to `metadataNames` speculatively.
+    /// Trap 2: the repo's siblings at the pinned revision, from the fixture. `ModelFileSelector` takes every file the
+    /// loader reads, plus three it does not read, which the selector's earlier rules pick for any repo that has them.
+    /// `README.md` and `.gitattributes` are not downloaded, and nothing was added to `metadataNames` for this model.
+    ///
+    /// What `Qwen3ForcedAlignerModel.fromModelDirectory` reads (mlx-audio-swift @ 5c4c12b, swift-transformers 1.3.3):
+    /// - `Qwen3ForcedAligner.swift:557-558` `config.json`, and `:572-577` every `*.safetensors`;
+    /// - `:566` `generateTokenizerJSONIfMissing` (`Qwen3ASR.swift:1662-1696`): `vocab.json`, `merges.txt` and
+    ///   `tokenizer_config.json`, from which it writes `tokenizer.json`;
+    /// - `:569` `AutoTokenizer.from(modelFolder:)` (swift-transformers `Hub.swift:247-290`): `config.json`, that
+    ///   `tokenizer.json`, `tokenizer_config.json`, and `chat_template.jinja` or, without one (this repo), `chat_template.json`.
     @Test func selectorTakesTheWeightsAndMetadataOnly() throws {
         let url = Self.fixtureDirectory.appendingPathComponent("repo-files-ForcedAligner.json")
         let object = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
@@ -165,9 +172,14 @@ struct ForcedAlignerCatalogTests {
                              "merges.txt", "model.safetensors", "model.safetensors.index.json",
                              "preprocessor_config.json", "tokenizer_config.json", "vocab.json"])
         let selected = Set(ModelFileSelector.filesToDownload(siblings: siblings))
-        #expect(selected == ["chat_template.json", "config.json", "generation_config.json", "merges.txt",
-                             "model.safetensors", "model.safetensors.index.json", "preprocessor_config.json",
-                             "tokenizer_config.json", "vocab.json"])
+        let loaderReads: Set<String> = ["config.json", "model.safetensors", "vocab.json", "merges.txt",
+                                        "tokenizer_config.json", "chat_template.json"]
+        #expect(loaderReads.isSubset(of: selected), "missing: \(loaderReads.subtracting(selected).sorted())")
+        // Not read by the aligner. They come from rules that existed before this model: `metadataNames` in
+        // `ModelFileSelector.swift` (line 20 `generation_config.json`, line 23 `preprocessor_config.json`) and the
+        // sharded-index rule (line 224 `model.safetensors.index.json`).
+        #expect(selected.subtracting(loaderReads)
+                == ["generation_config.json", "preprocessor_config.json", "model.safetensors.index.json"])
         #expect(!selected.contains("tokenizer.json"), "the repo ships none; the library writes one on first load")
         #expect(files.first { $0["path"] as? String == "model.safetensors" }?["size"] as? Int == 1271924386)
     }
