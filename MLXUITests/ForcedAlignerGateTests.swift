@@ -116,8 +116,8 @@ struct ForcedAlignerGateTests {
 
     private static let cardID = "mlx-community--Qwen3-ForcedAligner-0.6B-8bit"
     private static let sentence = "Waiting for the last alignment to finish…"
-    /// The card's booking with no files to measure: `ramGB` 1.91 x 1,073,741,824.
-    private static let oneBooking: Int64 = 2_050_846_883
+    /// The card's booking with no files to measure: `ramGB` 6.6 x 1,073,741,824.
+    private static let oneBooking: Int64 = 7_086_696_038
 
     private func loadCatalog() throws -> [ModelEntry] {
         let repoRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
@@ -455,7 +455,7 @@ struct ForcedAlignerGateTests {
         }
     }
 
-    /// Observed, same language ("en"), 1 booking of 2,050,846,883 bytes throughout both runs:
+    /// Observed, same language ("en"), 1 booking of 7,086,696,038 bytes throughout both runs:
     /// - both in flight: 1 cache entry, 1 booking, 2 holds (flow + Run window), 1 resident load
     /// - flow first, flow done: 1 cache entry, 1 booking, 1 hold (Run window)
     /// - sheet first, sheet done: 0 cache entries (the sheet drops its entry), the booking stays for the flow's 1 hold
@@ -519,10 +519,10 @@ struct ForcedAlignerGateTests {
     }
 
     /// Observed, "en" flow row + "de" Run sheet:
-    /// - both in flight: 2 cache entries, 2 bookings (4,101,693,766 bytes), 1 hold each, 1 resident load (one model
+    /// - both in flight: 2 cache entries, 2 bookings (14,173,392,076 bytes), 1 hold each, 1 resident load (one model
     ///   folder, one turn)
     /// - flow done: 2 entries, 2 bookings, 1 hold (Run window)
-    /// - both done: 1 entry, 1 booking of 2,050,846,883 bytes, 0 holds (the flow's entry stays warm and evictable; the
+    /// - both done: 1 entry, 1 booking of 7,086,696,038 bytes, 0 holds (the flow's entry stays warm and evictable; the
     ///   sheet drops its own)
     @Test func twoLanguagesAreTwoEntriesTwoBookingsAndStillOneResidentLoad() async throws {
         let rig = GateRig()

@@ -59,8 +59,8 @@ struct ForcedAlignerCatalogTests {
         #expect(e.licenseUrl == "https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B")
         // 1,276,475,979 bytes for the 11 files = 1.28 GB; the weights alone are 1,271,924,386 bytes.
         #expect(e.downloadSizeGB == 1.28)
-        // FA-1's provisional figure, 1.5 x the weights: see the About text's closing line.
-        #expect(e.ramGB == 1.91)
+        // Measured (owner ruling 7, 2026-11-27): the 6.538 GB peak rounded up to 0.1; see the About text's closing line.
+        #expect(e.ramGB == 6.6)
         #expect(e.paramCountB == 0.6)
         #expect(e.paramSize == "0.6B")
         #expect(e.contextWindow == nil, "an aligner has no token context window")
@@ -112,7 +112,7 @@ struct ForcedAlignerCatalogTests {
     }
 
     /// The About text: what it does, the 11 languages, the 300 s limit, the 80 ms steps, "the transcript must match the
-    /// audio", the attribution and the provisional RAM note. No accuracy claim the card doesn't make.
+    /// audio", the attribution and the measured RAM note. No accuracy claim the card doesn't make.
     @Test func descriptionStatesTheContractTheLimitsAndTheLicence() throws {
         let d = try #require(try aligner().description)
         #expect(d.contains("forced-alignment"))
@@ -128,8 +128,9 @@ struct ForcedAlignerCatalogTests {
         for banned in ["state-of-the-art", "SOTA", "best ", "outperforms", "WER", "accuracy of"] {
             #expect(!d.contains(banned), "unsupported claim: \(banned)")
         }
-        // FA-1's provisional ramGB carries a note saying it is an estimate.
-        #expect(d.lowercased().contains("provisional estimate"))
+        // The measured ramGB carries a note saying so, and no estimate wording remains.
+        #expect(d.contains("RAM figure: 6.6 GB, measured."))
+        #expect(!d.lowercased().contains("provisional"))
     }
 
     /// Every field `ModelDetailView` and `ComparisonTableView` render, pinned so the only dashes are the sanctioned
