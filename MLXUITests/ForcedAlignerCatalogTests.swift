@@ -163,6 +163,14 @@ struct ForcedAlignerCatalogTests {
     ///   `tokenizer_config.json`, from which it writes `tokenizer.json`;
     /// - `:569` `AutoTokenizer.from(modelFolder:)` (swift-transformers `Hub.swift:247-290`): `config.json`, that
     ///   `tokenizer.json`, `tokenizer_config.json`, and `chat_template.jinja` or, without one (this repo), `chat_template.json`.
+    ///
+    /// `preprocessor_config.json`: the pinned aligner (mlx-audio-swift @ 5c4c12b) does **not** read it.
+    /// `preprocessAudio` in `Qwen3ForcedAligner.swift` hard-codes 16 kHz, nFft 400 and hop 160, and takes the mel-bin
+    /// count from `config.json`. The existing `metadataNames` rule in `ModelFileSelector.swift` still downloads it.
+    /// This differs from issue #13 trap 2, which lists it among the files the loader reads.
+    /// Owner ruling 24 (Boo, 2026-11-28): "Keep the download as it is, because the selection rule is shared and out of
+    /// scope here. Change the file-list test's comment to say the pinned aligner doesn't read the file and the existing
+    /// rule still downloads it. Note the difference from issue #13 in the PR description. [...]"
     @Test func selectorTakesTheWeightsAndMetadataOnly() throws {
         let url = Self.fixtureDirectory.appendingPathComponent("repo-files-ForcedAligner.json")
         let object = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
