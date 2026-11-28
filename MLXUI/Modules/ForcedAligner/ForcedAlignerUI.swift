@@ -253,7 +253,7 @@ struct ForcedAlignerRunView: View {
             // Owner ruling 13 (Boo, 2026-11-27): "Confirmed: Done has no keyboard shortcut while a run is going, so the
             // cancel key always means Stop."
             // Done holds no shortcut at all, running or not: Esc is `escape`'s, which closes an idle sheet.
-            // *Implementer's call, pending owner confirmation.*
+            // Owner ruling 51 (Boo, 2026-11-28): "Confirmed: … Done has no keyboard shortcut".
             Button("Done") { model.stop(); dismiss() }
             Spacer()
             Button("Export CSV") { export(result, as: .csv) }.disabled(result == nil)
@@ -266,9 +266,9 @@ struct ForcedAlignerRunView: View {
 
     /// Esc: Stop while a run is going (the Stop button's own call), otherwise close.
     ///
-    /// Owner ruling 45 (Boo, 2026-11-28): "Confirmed: an Esc landing the instant a run ends may do nothing." Here it
-    /// does something: the sheet is already idle, so it closes, and the result that has just arrived goes with it.
-    /// *Implementer's call, pending owner confirmation*: no grace period, since its length would be arbitrary.
+    /// Owner ruling 50 (Boo, 2026-11-28): "Confirmed: an Esc landing the instant a run ends closes the idle sheet. No
+    /// grace period." The result that has just arrived goes with the sheet. This supersedes ruling 45's "may do
+    /// nothing".
     private func escape() { if model.isRunning { model.stop() } else { dismiss() } }
 
     private func run() {

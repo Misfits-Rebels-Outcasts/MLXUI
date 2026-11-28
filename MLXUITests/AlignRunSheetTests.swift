@@ -52,8 +52,9 @@ struct AlignRunSheetTests {
     /// on the Align button, in the transcript, and nowhere."
     ///
     /// "Every control" is read as the ones ruling 14 disables (choosing, dropping and opening files, and Align), which
-    /// `canChangeInputs` decides; the transcript box and the language picker stay editable (ruling 16). *Implementer's
-    /// call, pending owner confirmation.*
+    /// `canChangeInputs` decides; the transcript box and the language picker stay editable (ruling 16).
+    /// Owner ruling 51 (Boo, 2026-11-28): "Confirmed: … ruling 44's "every control" means ruling 14's controls
+    /// (transcript and language stay editable per ruling 16)".
     @Test(arguments: EscRoute.allCases, FocusSpot.allCases)
     func escDuringARunStopsAndStaysStoppingUntilTheStepReturns(route: EscRoute, spot: FocusSpot) async throws {
         // A button takes the focus only with the system's keyboard navigation on; the test reports it on.
@@ -83,9 +84,8 @@ struct AlignRunSheetTests {
         #expect(presented.model.errorText == nil)
         #expect(rig.isShowing(presented.sheet))
 
-        // Owner ruling 45 (Boo, 2026-11-28): "Confirmed: an Esc landing the instant a run ends may do nothing." Since
-        // FA-F7 such an Esc finds the sheet idle and closes it (open question, see `escape`). The wait keeps this case
-        // clear of that instant, so it pins neither answer.
+        // Owner ruling 50 (Boo, 2026-11-28): "Confirmed: an Esc landing the instant a run ends closes the idle sheet.
+        // No grace period." This case presses a sheet that has been idle for a second, not one in that instant.
         try await Task.sleep(for: .seconds(1))
         try await rig.pressEscape(presented.sheet, by: route)
         try await rig.wait("Esc to close the idle sheet") { !rig.isShowing(presented.sheet) }
@@ -157,6 +157,8 @@ nonisolated enum FocusSpot: CaseIterable, Sendable {
 
 /// Makes AppKit report keyboard navigation as on, in this process, until the returned closure runs. Nothing is written
 /// to any preference.
+/// Owner ruling 51 (Boo, 2026-11-28): "Confirmed: … the Align-focus test may turn on keyboard navigation inside the
+/// test."
 @MainActor private func forceKeyboardNavigation() throws -> () -> Void {
     let method = try #require(class_getInstanceMethod(
         NSApplication.self, #selector(getter: NSApplication.isFullKeyboardAccessEnabled)))
