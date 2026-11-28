@@ -45,41 +45,57 @@ struct AlignRunSheetTests {
 
     /// Owner ruling 41 (Boo, 2026-11-28): "Esc during a run closes the sheet instead of acting as Stop (ruling 13).
     /// Make Esc while running mean Stop, and test it."
-    @Test(arguments: EscRoute.allCases, [true, false])
-    func escDuringARunStopsAndKeepsTheSheet(route: EscRoute, editorFocused: Bool) async throws {
+    ///
+    /// Owner ruling 44 (Boo, 2026-11-28): "Fix step 4 on fa-f: Esc during a run must go through exactly the path the Stop
+    /// button uses, wherever keyboard focus is (button, transcript, nothing): "Stopping…" stays and every control stays
+    /// disabled until the step returns (rulings 11 and 14). Find which handler made the sheet look idle. Test with focus
+    /// on the Align button, in the transcript, and nowhere."
+    ///
+    /// "Every control" is read as the ones ruling 14 disables (choosing, dropping and opening files, and Align), which
+    /// `canChangeInputs` decides; the transcript box and the language picker stay editable (ruling 16). *Implementer's
+    /// call, pending owner confirmation.*
+    @Test(arguments: EscRoute.allCases, FocusSpot.allCases)
+    func escDuringARunStopsAndStaysStoppingUntilTheStepReturns(route: EscRoute, spot: FocusSpot) async throws {
+        // A button takes the focus only with the system's keyboard navigation on; the test reports it on.
+        let restore = spot == .alignButton ? try forceKeyboardNavigation() : {}
+        defer { restore() }
         let rig = try SheetRig()
         defer { rig.close() }
         let presented = try await rig.present()
+        if spot == .alignButton { try rig.focus(presented.sheet, on: spot) }   // as a person who tabbed to Align
         try await rig.pressReturnToAlign(presented)
-        try rig.focus(presented.sheet, editor: editorFocused)
+        if spot != .alignButton { try rig.focus(presented.sheet, on: spot) }
+        #expect(rig.focused(presented.sheet) == spot, "the focus is where the case says when Esc is pressed")
 
         try await rig.pressEscape(presented.sheet, by: route)
-        #expect(rig.isShowing(presented.sheet), "the sheet stays")
-        #expect(presented.model.isStopping, "Esc is Stop")
+        try await rig.expectStopping(presented, for: .seconds(1))
 
         try await rig.pressEscape(presented.sheet, by: route)
-        #expect(rig.isShowing(presented.sheet), "Esc while stopping keeps the sheet too")
+        try await rig.expectStopping(presented, for: .milliseconds(300))
 
         rig.stage.gate.open()
         try await rig.wait("the step to return") { !presented.model.isRunning }
+        #expect(presented.model.runButtonTitle == "Align")
+        #expect(presented.model.canChangeInputs)
         #expect(presented.model.result == nil)
         #expect(presented.model.errorText == nil)
         #expect(rig.isShowing(presented.sheet))
 
         // SwiftUI takes a moment after a run ends to give Done its key back, and an Esc inside that moment can go
-        // unanswered (seen once, `.eventQueue` with nothing focused, with no wait here). *Implementer's call, pending
-        // owner confirmation*: left as it is; a second Esc closes the sheet.
+        // unanswered (seen once, `.eventQueue` with nothing focused, with no wait here).
+        // Owner ruling 45 (Boo, 2026-11-28): "Confirmed: the step log records the model id only, never audio or
+        // transcript content. Confirmed: an Esc landing the instant a run ends may do nothing."
         try await Task.sleep(for: .seconds(1))
         try await rig.pressEscape(presented.sheet, by: route)
         try await rig.wait("Esc to close the idle sheet") { !rig.isShowing(presented.sheet) }
     }
 
-    @Test(arguments: EscRoute.allCases, [true, false])
-    func escClosesASheetThatHasRunNothing(route: EscRoute, editorFocused: Bool) async throws {
+    @Test(arguments: EscRoute.allCases, [FocusSpot.transcript, .nowhere])
+    func escClosesASheetThatHasRunNothing(route: EscRoute, spot: FocusSpot) async throws {
         let rig = try SheetRig()
         defer { rig.close() }
         let presented = try await rig.present()
-        try rig.focus(presented.sheet, editor: editorFocused)
+        try rig.focus(presented.sheet, on: spot)
         try await rig.pressEscape(presented.sheet, by: route)
         try await rig.wait("Esc to close the idle sheet") { !rig.isShowing(presented.sheet) }
         #expect(!rig.stage.gate.isEntered)
@@ -95,7 +111,22 @@ nonisolated enum EscRoute: CaseIterable, Sendable {
     case eventQueue
 }
 
+/// Where the keyboard focus is when Esc is pressed.
+nonisolated enum FocusSpot: CaseIterable, Sendable {
+    case alignButton, transcript, nowhere
+}
+
 // MARK: - The harness
+
+/// Makes AppKit report keyboard navigation as on, in this process, until the returned closure runs. Nothing is written
+/// to any preference.
+@MainActor private func forceKeyboardNavigation() throws -> () -> Void {
+    let method = try #require(class_getInstanceMethod(
+        NSApplication.self, #selector(getter: NSApplication.isFullKeyboardAccessEnabled)))
+    let on: @convention(block) (AnyObject) -> Bool = { _ in true }
+    let original = method_setImplementation(method, imp_implementationWithBlock(on))
+    return { method_setImplementation(method, original) }
+}
 
 /// A window that presents the aligner's sheet as `MLXUIApp` does, and the events a person would send it.
 @MainActor
@@ -187,13 +218,50 @@ private final class SheetRig {
 
     func isShowing(_ sheet: NSWindow) -> Bool { window.attachedSheet === sheet }
 
-    /// The transcript box (where the sheet puts the focus) or nothing.
-    func focus(_ sheet: NSWindow, editor: Bool) throws {
-        func textView(in view: NSView) -> NSTextView? {
-            (view as? NSTextView) ?? view.subviews.lazy.compactMap { textView(in: $0) }.first
+    func focus(_ sheet: NSWindow, on spot: FocusSpot) throws {
+        let target: NSView? = switch spot {
+        case .alignButton: try #require(alignFocusView(in: sheet))
+        case .transcript: try #require(views(in: sheet).first { $0 is NSTextView })
+        case .nowhere: nil
         }
-        let target = editor ? try #require(sheet.contentView.flatMap { textView(in: $0) }) : nil
         #expect(sheet.makeFirstResponder(target))
+    }
+
+    /// Which of the three spots holds the focus, if any.
+    func focused(_ sheet: NSWindow) -> FocusSpot? {
+        if sheet.firstResponder === sheet { return .nowhere }
+        if sheet.firstResponder is NSTextView { return .transcript }
+        if let align = alignFocusView(in: sheet), sheet.firstResponder === align { return .alignButton }
+        return nil
+    }
+
+    /// The view SwiftUI focuses for the Align button. It carries no title, so it is found by place: the one button's
+    /// focus view on the left, below the language picker and above the footer.
+    private func alignFocusView(in sheet: NSWindow) -> NSView? {
+        let found = views(in: sheet).filter { view in
+            let frame = view.convert(view.bounds, to: nil)
+            return String(describing: type(of: view)) == "KeyViewProxy" && frame.minX < 20 && frame.width < 100
+                && frame.minY > 100 && frame.minY < 450
+        }
+        return found.count == 1 ? found[0] : nil
+    }
+
+    private func views(in sheet: NSWindow) -> [NSView] {
+        func all(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap { all($0) } }
+        return sheet.contentView.map { all($0) } ?? []
+    }
+
+    /// The sheet stays and shows "Stopping…", with ruling 14's controls disabled, for all of `duration`.
+    func expectStopping(_ presented: Presented, for duration: Duration) async throws {
+        let model = presented.model
+        let until = ContinuousClock.now + duration
+        repeat {
+            try #require(isShowing(presented.sheet), "the sheet stays")
+            try #require(stage.gate.isEntered && model.isRunning && model.isStopping, "Esc is Stop, and it stays Stop")
+            try #require(model.runButtonTitle == "Stopping…" && model.progressText == "Stopping…")
+            try #require(!model.canChangeInputs, "Choose Audio…, Open…, drop and Align all ask this")
+            try await Task.sleep(for: .milliseconds(50))
+        } while ContinuousClock.now < until
     }
 
     /// Sends Esc and gives the sheet time to answer (a closing sheet animates away).
@@ -212,9 +280,13 @@ private final class SheetRig {
                                       charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code))
     }
 
+    /// Returns at the first `true` and asks no more: `offer`'s condition sends a key each time it is asked.
     func wait(_ what: String, until condition: () -> Bool) async throws {
-        for _ in 0..<400 where !condition() { try await Task.sleep(for: .milliseconds(25)) }
-        try #require(condition(), "timed out waiting for \(what)")
+        for _ in 0..<400 {
+            if condition() { return }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        try #require(Bool(false), "timed out waiting for \(what)")
     }
 
     func close() {

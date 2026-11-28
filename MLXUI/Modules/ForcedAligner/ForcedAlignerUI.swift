@@ -443,6 +443,7 @@ final class AlignRunModel {
     func stop() {
         guard isRunning else { return }
         isStopping = true
+        tracker.stopRequested(modelID)
         task?.cancel()
     }
 
