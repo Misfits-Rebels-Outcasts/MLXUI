@@ -40,6 +40,59 @@ struct AlignRunSheetTests {
         #expect(first.model.result == nil, "the stopped run shows no result")
         #expect(rig.stage.gate.entries == 1, "no second step ran")
     }
+
+    // MARK: - Esc (owner rulings 13 and 41)
+
+    /// Owner ruling 41 (Boo, 2026-11-28): "Esc during a run closes the sheet instead of acting as Stop (ruling 13).
+    /// Make Esc while running mean Stop, and test it."
+    @Test(arguments: EscRoute.allCases, [true, false])
+    func escDuringARunStopsAndKeepsTheSheet(route: EscRoute, editorFocused: Bool) async throws {
+        let rig = try SheetRig()
+        defer { rig.close() }
+        let presented = try await rig.present()
+        try await rig.pressReturnToAlign(presented)
+        try rig.focus(presented.sheet, editor: editorFocused)
+
+        try await rig.pressEscape(presented.sheet, by: route)
+        #expect(rig.isShowing(presented.sheet), "the sheet stays")
+        #expect(presented.model.isStopping, "Esc is Stop")
+
+        try await rig.pressEscape(presented.sheet, by: route)
+        #expect(rig.isShowing(presented.sheet), "Esc while stopping keeps the sheet too")
+
+        rig.stage.gate.open()
+        try await rig.wait("the step to return") { !presented.model.isRunning }
+        #expect(presented.model.result == nil)
+        #expect(presented.model.errorText == nil)
+        #expect(rig.isShowing(presented.sheet))
+
+        // SwiftUI takes a moment after a run ends to give Done its key back, and an Esc inside that moment can go
+        // unanswered (seen once, `.eventQueue` with nothing focused, with no wait here). *Implementer's call, pending
+        // owner confirmation*: left as it is; a second Esc closes the sheet.
+        try await Task.sleep(for: .seconds(1))
+        try await rig.pressEscape(presented.sheet, by: route)
+        try await rig.wait("Esc to close the idle sheet") { !rig.isShowing(presented.sheet) }
+    }
+
+    @Test(arguments: EscRoute.allCases, [true, false])
+    func escClosesASheetThatHasRunNothing(route: EscRoute, editorFocused: Bool) async throws {
+        let rig = try SheetRig()
+        defer { rig.close() }
+        let presented = try await rig.present()
+        try rig.focus(presented.sheet, editor: editorFocused)
+        try await rig.pressEscape(presented.sheet, by: route)
+        try await rig.wait("Esc to close the idle sheet") { !rig.isShowing(presented.sheet) }
+        #expect(!rig.stage.gate.isEntered)
+    }
+}
+
+/// The two ways Esc reaches a sheet.
+nonisolated enum EscRoute: CaseIterable, Sendable {
+    /// Offered to the window as a key equivalent: the Stop or Done button answers it.
+    case keyEquivalent
+    /// Delivered by the app's event dispatch. In a test host that isn't the active app it travels the responder chain
+    /// as `cancelOperation:`, which a sheet answers by closing unless its view takes it.
+    case eventQueue
 }
 
 // MARK: - The harness
@@ -130,6 +183,26 @@ private final class SheetRig {
     func offer(_ characters: String, _ code: UInt16, to sheet: NSWindow) async throws {
         let event = try key(characters, code, in: sheet)
         try await wait("a button to take key \(code)") { sheet.performKeyEquivalent(with: event) }
+    }
+
+    func isShowing(_ sheet: NSWindow) -> Bool { window.attachedSheet === sheet }
+
+    /// The transcript box (where the sheet puts the focus) or nothing.
+    func focus(_ sheet: NSWindow, editor: Bool) throws {
+        func textView(in view: NSView) -> NSTextView? {
+            (view as? NSTextView) ?? view.subviews.lazy.compactMap { textView(in: $0) }.first
+        }
+        let target = editor ? try #require(sheet.contentView.flatMap { textView(in: $0) }) : nil
+        #expect(sheet.makeFirstResponder(target))
+    }
+
+    /// Sends Esc and gives the sheet time to answer (a closing sheet animates away).
+    func pressEscape(_ sheet: NSWindow, by route: EscRoute) async throws {
+        switch route {
+        case .keyEquivalent: try await offer("\u{1b}", 53, to: sheet)
+        case .eventQueue: NSApp.sendEvent(try key("\u{1b}", 53, in: sheet))
+        }
+        try await Task.sleep(for: .milliseconds(800))
     }
 
     func key(_ characters: String, _ code: UInt16, in window: NSWindow) throws -> NSEvent {

@@ -92,7 +92,13 @@ struct ForcedAlignerRunView: View {
         .dropDestination(for: URL.self) { urls, _ in
             model.dropAudio(urls)
         } isTargeted: { isDropTargeted = $0 && model.canChangeInputs }
-        .onDisappear { model.stop() }   // ruling 12 (see the Done button), however the sheet is closed
+        .onDisappear { model.stop() }   // ruling 12 (see the Done button), when SwiftUI reports the sheet gone
+        // Esc reaches the sheet either as the Stop / Done button's key equivalent or up the responder chain (from the
+        // transcript box, say), where a sheet left to itself closes, run and all.
+        //
+        // Owner ruling 41 (Boo, 2026-11-28): "Esc during a run closes the sheet instead of acting as Stop (ruling 13).
+        // Make Esc while running mean Stop, and test it."
+        .onExitCommand { if model.isRunning { model.stop() } else { dismiss() } }
         .overlay {
             if isDropTargeted && model.canChangeInputs {
                 RoundedRectangle(cornerRadius: 10)
